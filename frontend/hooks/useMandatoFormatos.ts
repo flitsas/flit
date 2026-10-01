@@ -20,8 +20,9 @@ export function useMandatoFormatos(): MandatoFormatosState {
 
   useEffect(() => {
     const ctrl = new AbortController();
+    // Una recarga con datos a la vista (tras editar un formato) es silenciosa: no vuelve a "loading".
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
-    setStatus("loading");
+    setStatus((s) => (s === "ready" ? s : "loading"));
     listMandatoFormats(ctrl.signal)
       .then((items) => {
         if (ctrl.signal.aborted) return;

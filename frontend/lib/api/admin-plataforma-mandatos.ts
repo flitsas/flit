@@ -238,6 +238,13 @@ export interface MandatoFormatView {
   baseRedaction: string | null;
   selectableAsRedaction: boolean;
   delegatesToOfficeTemplate: boolean;
+  /** HU #13175 — número de la versión vigente de la plantilla (0 = la de fábrica). */
+  currentVersion: number;
+  hasCustomTemplate: boolean;
+  /** Control de concurrencia del PUT; null mientras el formato no tenga fila propia. */
+  rowVersion: number | null;
+  /** Última edición (ISO) o null si nunca se editó. */
+  updatedAt: string | null;
 }
 
 function mapFormat(raw: Record<string, unknown>): MandatoFormatView {
@@ -249,6 +256,117 @@ function mapFormat(raw: Record<string, unknown>): MandatoFormatView {
     baseRedaction,
     selectableAsRedaction: raw.selectableAsRedaction === true || baseRedaction !== null,
     delegatesToOfficeTemplate: raw.delegatesToOfficeTemplate === true,
+    currentVersion: typeof raw.currentVersion === "number" ? raw.currentVersion : 0,
+    hasCustomTemplate: raw.hasCustomTemplate === true,
+    rowVersion: parseRowVersion(raw.rowVersion),
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+  };
+}
+
+/** Versión publicada de la plantilla de un formato (sin el texto). */
+export interface MandatoFormatVersionInfo {
+  versionNumber: number;
+  sha256: string;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+export interface MandatoFormatDetail {
+  format: MandatoFormatView;
+  /** Texto de la versión vigente, o null si el formato usa la redacción de fábrica. */
+  body: string | null;
+  versions: MandatoFormatVersionInfo[];
+}
+
+function mapVersion(raw: Record<string, unknown>): MandatoFormatVersionInfo {
+  return {
+    versionNumber: Number(raw.versionNumber ?? 0),
+    sha256: String(raw.sha256 ?? ""),
+    createdAt: String(raw.createdAt ?? ""),
+    createdBy: typeof raw.createdBy === "string" ? raw.createdBy : null,
+  };
+}
+
+export async function getMandatoFormat(code: string, signal?: AbortSignal): Promise<MandatoFormatDetail> {
+  const data = await apiFetch<Record<string, unknown>>(`${base}/formatos/${encodeURIComponent(code)}`, { signal });
+  const versions = Array.isArray(data.versions) ? (data.versions as Record<string, unknown>[]) : [];
+  return {
+    format: mapFormat((data.format ?? {}) as Record<string, unknown>),
+    body: typeof data.body === "string" ? data.body : null,
+    versions: versions.map(mapVersion),
+  };
+}
+
+export async function getMandatoFormatVersion(
+  code: string,
+  versionNumber: number,
+  signal?: AbortSignal,
+): Promise<MandatoFormatVersionInfo & { body: string }> {
+  const data = await apiFetch<Record<string, unknown>>(
+    `${base}/formatos/${encodeURIComponent(code)}/versions/${versionNumber}`,
+    { signal },
+  );
+  return { ...mapVersion(data), body: String(data.body ?? "") };
+}
+
+/** Campo ausente = no tocar; `body` publica una versión nueva de la plantilla. */
+export interface UpdateMandatoFormatBody {
+  rowVersion: number | null;
+  name?: string;
+  assignmentMode?: string;
+  body?: string;
+}
+
+export interface UpdateMandatoFormatResult {
+  format: MandatoFormatView;
+  changed: boolean;
+  publishedVersion: number | null;
+}
+
+export async function updateMandatoFormat(
+  code: string,
+  body: UpdateMandatoFormatBody,
+  signal?: AbortSignal,
+): Promise<UpdateMandatoFormatResult> {
+  const data = await apiFetch<Record<string, unknown>>(`${base}/formatos/${encodeURIComponent(code)}`, {
+    method: "PUT",
+    body,
+    signal,
+  });
+  return {
+    format: mapFormat((data.format ?? {}) as Record<string, unknown>),
+    changed: data.changed === true,
+    publishedVersion: typeof data.publishedVersion === "number" ? data.publishedVersion : null,
+  };
+}
+
+/** Vista previa (PDF de muestra) de la plantilla en borrador; no publica ninguna versión. */
+export async function previewMandatoFormatDraft(
+  code: string,
+  body: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return postPdf(`${base}/formatos/${encodeURIComponent(code)}/preview`, { body }, signal);
+}
+
+/** Variable desconocida que devuelve el API al guardar o previsualizar (400 plantilla_variable_invalida). */
+export interface MandatoUnknownVariable {
+  name: string;
+  line?: number;
+  column?: number;
+}
+
+/** Extrae `{ error, unknownVariables }` del cuerpo de un ApiError del editor de formatos. */
+export function readFormatError(body: unknown): { error: string | null; unknownVariables: MandatoUnknownVariable[] } {
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const vars = Array.isArray(raw.unknownVariables) ? (raw.unknownVariables as Record<string, unknown>[]) : [];
+  return {
+    error: typeof raw.error === "string" ? raw.error : null,
+    unknownVariables: vars.map((v) => ({
+      name: String(v.name ?? ""),
+      line: typeof v.line === "number" ? v.line : undefined,
+      column: typeof v.column === "number" ? v.column : undefined,
+    })),
   };
 }
 

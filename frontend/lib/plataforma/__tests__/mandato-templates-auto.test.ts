@@ -13,7 +13,7 @@ const FORMATOS: MandatoFormatView[] = [
     assignmentMode: "signer",
     baseRedaction: null,
     selectableAsRedaction: false,
-    delegatesToOfficeTemplate: true,
+    delegatesToOfficeTemplate: true, currentVersion: 0, hasCustomTemplate: false, rowVersion: 1, updatedAt: null,
   },
   {
     code: "generico",
@@ -21,7 +21,7 @@ const FORMATOS: MandatoFormatView[] = [
     assignmentMode: "signer",
     baseRedaction: "generico",
     selectableAsRedaction: true,
-    delegatesToOfficeTemplate: false,
+    delegatesToOfficeTemplate: false, currentVersion: 0, hasCustomTemplate: false, rowVersion: 1, updatedAt: null,
   },
 ];
 

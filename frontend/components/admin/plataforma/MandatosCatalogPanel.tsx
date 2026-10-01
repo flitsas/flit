@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, FileText, RotateCcw, Search, Users } from "lucide-react";
+import { AlertTriangle, FileText, RotateCcw, Search, Users } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -11,6 +11,8 @@ import {
   MandatoOtConfigForm,
   type MandatoOtConfigPanelMode,
 } from "@/components/admin/plataforma/MandatoOtConfigForm";
+import { MandatoFormatoEditor } from "@/components/admin/plataforma/MandatoFormatoEditor";
+import { MandatosFormatosTable } from "@/components/admin/plataforma/MandatosFormatosTable";
 import { MandatoSimuladorPanel } from "@/components/admin/plataforma/MandatoSimuladorPanel";
 import {
   deleteMandateOtConfig,
@@ -23,8 +25,6 @@ import { useMandatoFormatos } from "@/hooks/useMandatoFormatos";
 import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import {
   mandatoFormatName,
-  resolveTipoNegocio,
-  tipoNegocioLabel,
 } from "@/lib/plataforma/mandato-templates";
 import { useToast } from "@/components/admin/Toast";
 
@@ -40,6 +40,8 @@ export function MandatosCatalogPanel() {
   const [rows, setRows] = useState<MandateOtConfigView[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewing, setPreviewing] = useState<string | null>(null);
+  // HU #13175 — formato abierto en el editor (nombre, tipo y plantilla).
+  const [editingFormat, setEditingFormat] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   // HU #13153 — confirmación detallada antes de restablecer.
   const [resetTarget, setResetTarget] = useState<MandateOtConfigView | null>(null);
@@ -231,18 +233,12 @@ export function MandatosCatalogPanel() {
             </button>
           </div>
         ) : (
-          <ul className="grid gap-3 md:grid-cols-3">
-            {formatos.formatos.map((formato) => (
-              <li key={formato.code}>
-                <TemplateCard
-                  format={formato}
-                  busy={previewing === formato.code}
-                  disabled={previewing !== null}
-                  onPreview={handlePreviewTemplate}
-                />
-              </li>
-            ))}
-          </ul>
+          <MandatosFormatosTable
+            formatos={formatos.formatos}
+            previewing={previewing}
+            onEdit={setEditingFormat}
+            onPreview={handlePreviewTemplate}
+          />
         )}
       </section>
 
@@ -302,6 +298,28 @@ export function MandatosCatalogPanel() {
           busy={actingId !== null}
           onConfirm={() => void handleReset(resetTarget)}
           onCancel={() => setResetTarget(null)}
+        />
+      ) : null}
+
+      {editingFormat ? (
+        <MandatoFormatoEditor
+          code={editingFormat}
+          onClose={() => setEditingFormat(null)}
+          onConflict={formatos.reload}
+          onSaved={(format, info) => {
+            setEditingFormat(null);
+            formatos.reload();
+            // Las filas por organismo muestran el nombre del formato: se recargan con el catálogo.
+            void load();
+            showToast(
+              info.published
+                ? `Se publicó la versión ${info.published} de «${format.name}».`
+                : info.changed
+                  ? `Se guardó el formato «${format.name}».`
+                  : `No había cambios en «${format.name}».`,
+              "success",
+            );
+          }}
         />
       ) : null}
 
@@ -402,59 +420,5 @@ function ResetConfirmDialog({
         </div>
       </div>
     </Modal>
-  );
-}
-
-function TemplateCard({
-  format,
-  busy,
-  disabled,
-  onPreview,
-}: {
-  format: MandatoFormatView;
-  busy: boolean;
-  disabled: boolean;
-  onPreview: (code: string) => void;
-}) {
-  return (
-    <article
-      className="flex h-full flex-col gap-3 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
-      data-testid={`mandato-template-${format.code}`}
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#557EFF]/10"
-          style={{ color: "#557EFF" }}
-          aria-hidden="true"
-        >
-          <FileText className="h-5 w-5" strokeWidth={1.8} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">{format.name}</h3>
-          <p className="font-mono text-[11px] text-[#59677D] dark:text-white/55">{format.code}</p>
-        </div>
-      </div>
-      <p className="text-[11px] text-[#59677D] dark:text-white/55">
-        Tipo por defecto: {tipoNegocioLabel(resolveTipoNegocio(format.assignmentMode))}
-      </p>
-      {format.selectableAsRedaction ? (
-        <button
-          type="button"
-          onClick={() => onPreview(format.code)}
-          disabled={disabled}
-          aria-busy={busy}
-          aria-label={`Ver documento de mandato ${format.name} en una pestaña nueva`}
-          className="mt-auto inline-flex w-full items-center justify-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
-          style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
-        >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-          {busy ? "Abriendo…" : "Ver documento"}
-        </button>
-      ) : (
-        <p className="mt-auto text-[11px] text-[#59677D] dark:text-white/55">
-          Usa la redacción propia de cada organismo.
-        </p>
-      )}
-    </article>
   );
 }

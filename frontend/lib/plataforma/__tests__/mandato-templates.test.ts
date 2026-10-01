@@ -17,7 +17,7 @@ const fmt = (code: string, name: string, assignmentMode = "signer"): MandatoForm
   assignmentMode,
   baseRedaction: code === "auto" ? null : code,
   selectableAsRedaction: code !== "auto",
-  delegatesToOfficeTemplate: code === "auto",
+  delegatesToOfficeTemplate: code === "auto", currentVersion: 0, hasCustomTemplate: false, rowVersion: 1, updatedAt: null,
 });
 const FORMATOS: MandatoFormatView[] = [
   fmt("auto", "Automática"),

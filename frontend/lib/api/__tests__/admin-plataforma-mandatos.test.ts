@@ -21,6 +21,10 @@ import {
   extractMandateConfigFromFile,
   fetchMandateOtPreview,
   listMandatoFormats,
+  updateMandatoFormat,
+  getMandatoFormat,
+  previewMandatoFormatDraft,
+  readFormatError,
 } from "../admin-plataforma-mandatos";
 
 const originalFetch = global.fetch;
@@ -172,5 +176,55 @@ describe("listMandatoFormats (HU #13174)", () => {
       new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
     ) as never;
     expect(await listMandatoFormats()).toEqual([]);
+  });
+});
+
+describe("edición de formatos (HU #13175)", () => {
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+
+  it("updateMandatoFormat hace PUT con rowVersion y devuelve el formato y la versión publicada", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      json({ format: { code: "bello", name: "Bello 2", rowVersion: 5, currentVersion: 3 }, changed: true, publishedVersion: 3 }),
+    );
+    global.fetch = fetchMock as never;
+    const r = await updateMandatoFormat("bello", { rowVersion: 4, name: "Bello 2" });
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/mandatos/formatos/bello");
+    expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ rowVersion: 4, name: "Bello 2" });
+    expect(r).toMatchObject({ changed: true, publishedVersion: 3 });
+    expect(r.format).toMatchObject({ rowVersion: 5, currentVersion: 3 });
+  });
+
+  it("un 409 llega como ApiError con el cuerpo", async () => {
+    global.fetch = vi.fn().mockResolvedValue(json({ error: "row_version_conflict" }, 409)) as never;
+    await expect(updateMandatoFormat("bello", { rowVersion: 1 })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("getMandatoFormat mapea cuerpo y versiones", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      json({
+        format: { code: "bello", name: "Bello" },
+        body: "texto",
+        versions: [{ versionNumber: 1, sha256: "a", createdAt: "2026-09-01T00:00:00Z", createdBy: "u" }],
+      }),
+    ) as never;
+    const d = await getMandatoFormat("bello");
+    expect(d.body).toBe("texto");
+    expect(d.versions[0]).toMatchObject({ versionNumber: 1, createdBy: "u" });
+  });
+
+  it("previewMandatoFormatDraft envía el borrador por POST y falla con el cuerpo del error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      json({ error: "plantilla_variable_invalida", unknownVariables: [{ name: "x", line: 1, column: 2 }] }, 400),
+    );
+    global.fetch = fetchMock as never;
+    const err = await previewMandatoFormatDraft("bello", "{{x}}").catch((e) => e);
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ body: "{{x}}" });
+    expect(readFormatError(err.body)).toEqual({
+      error: "plantilla_variable_invalida",
+      unknownVariables: [{ name: "x", line: 1, column: 2 }],
+    });
   });
 });
