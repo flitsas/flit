@@ -448,6 +448,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           editing={editingSigner}
           restrictToOfficeIds={[transitOfficeId]}
           // HU #13181c — la propia compañía del mandatario no se ofrece como asociada (igual que en el alta).
+          ownerCompanyIds={editingSigner.companyTenantIds}
           overlayClassName="z-[80]"
           onCancel={() => setEditingSigner(null)}
           onSubmit={async (input: CompanyMandateSignerInput) => {
@@ -464,6 +465,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
               validFrom: input.validFrom,
               validTo: input.validTo,
               // HU #13181c — las compañías asociadas viajan también al editar (antes se descartaban).
+              officeCompanies: input.officeCompanies,
             });
             setEditingSigner(null);
             show("Mandatario actualizado.", "success");
