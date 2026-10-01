@@ -25,6 +25,8 @@
          AdminGeneracionDocumentalEndpoints para verificar el contrato de respuesta
          ({ id, status } en application/json, nunca application/pdf). -->
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <!-- Bug #13194 — Bug13194UsersEmailUnicoSoloVivosTests ejecuta ResolveIctCreatorAsync contra PostgreSQL. -->
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
   </ItemGroup>
 
   <ItemGroup>
