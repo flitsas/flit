@@ -78,8 +78,11 @@ internal static class MandateSignerValidation
         IReadOnlyList<Guid> requestedCompanyIds,
         IReadOnlyList<OtCompanyOption> otCompanies,
         IReadOnlyList<MandateSignerCompanyResolution> activeResolutions,
-        Guid? currentSignerId)
+        Guid? currentSignerId,
+        string configuredByScope = "organismo")
     {
+        // HU #13195 — un activo por compañía, organismo y GRUPO DE ORIGEN (organismo+super_admin | compania).
+        var actorGroup = GroupOf(configuredByScope);
         var companyById = otCompanies.ToDictionary(c => c.CompanyTenantId);
 
         foreach (var companyId in requestedCompanyIds.Distinct())
@@ -93,9 +96,19 @@ internal static class MandateSignerValidation
                     companyId.ToString()));
             }
 
+            // Al editar, el mandatario conserva el grupo de origen de su vínculo vigente (HU #13195c); el
+            // origen del actor solo cuenta para vínculos nuevos.
+            var originGroup = currentSignerId is { } current
+                ? activeResolutions
+                    .Where(r => r.CompanyTenantId == companyId && r.MandateSignerId == current)
+                    .Select(r => GroupOf(r.OriginGroup))
+                    .DefaultIfEmpty(actorGroup)
+                    .First()
+                : actorGroup;
             var taken = activeResolutions.FirstOrDefault(r =>
                 r.CompanyTenantId == companyId
-                && r.MandateSignerId != currentSignerId);
+                && r.MandateSignerId != currentSignerId
+                && GroupOf(r.OriginGroup) == originGroup);
             if (taken is not null)
             {
                 errors.Add(new MandateSignerValidationError(
@@ -105,6 +118,9 @@ internal static class MandateSignerValidation
             }
         }
     }
+
+    private static string GroupOf(string? scope) =>
+        string.Equals(scope, "compania", StringComparison.OrdinalIgnoreCase) ? "compania" : "organismo";
 
     /// <summary>
     /// Compañías a validar en un organismo: las del puente por OT, o las del comando si no hay puente.
