@@ -362,27 +362,23 @@ services:
     restart: *restart
     logging: *default-logging
 
-  # ── core-identity (HU #13226, Epic #13217) — CORE_IDENTITY_PORT ──────────────
-  # El MISMO programa de core-api con Flit__HostRole=identity: solo el login (/connect, /.well-known, /api/v1/auth,
-  # /api/v1/platform, /api/v1/public/branding), sin migraciones, seeder, gRPC ni procesos de negocio. Así el login
-  # sigue en pie cuando core-api se cae, se reinicia o se despliega. Ver docs/suite/identidad-frontera.md.
+  # ── core-identity (Epic #13217, HU #13233) — CORE_IDENTITY_PORT ──────────────
+  # El servicio de identidad de la FLIT Suite, con su propia imagen (services/core-identity): login (el de siempre y
+  # OIDC del hub), recuperación de cuenta, productos de la empresa y marca pública. No carga Trámites ni corre procesos
+  # de negocio ni migraciones (las corre core-api). Ver docs/suite/identidad-frontera.md.
   # Perfil "identity": no arranca si no se pide (COMPOSE_PROFILES=identity), y aun arrancado no recibe tráfico hasta
   # que el gateway tenga FLIT_IDENTITY_CLUSTER_ENABLED=true. Volver atrás = apagar esa bandera.
   # Sin depends_on de core-api a propósito: tiene que poder arrancar aunque core-api esté caído.
   core-identity:
     profiles: ["identity"]
-    image: ghcr.io/flitsas/flitdev/core-api:${CORE_IDENTITY_TAG:-${CORE_API_TAG:-latest}}
-    command: ["dotnet", "/app/api/Flit.Api.dll"]
-    working_dir: /app/api
+    image: ghcr.io/flitsas/flitdev/core-identity:${CORE_IDENTITY_TAG:-latest}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      # Mismo bloque de variables que core-api (ancla): llave de firma, clientes OIDC, correo, base. Lo que cambie allá
+      # cambia aquí; si difirieran, un proceso rechazaría los tokens del otro.
       <<: *core-api-env
-      Flit__HostRole: identity
       ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4004}
-      # Las migraciones y el seeder son de core-api (el papel identity ya no los corre; esto lo deja explícito).
-      # /health/ready falla si a la base le faltan migraciones que trae este código.
-      Database__AutoMigrate: "false"
     volumes:
       # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
       - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
