@@ -18,7 +18,6 @@ export type ValidityStatus = "inactivo" | "vencido" | "no_vigente" | "por_vencer
 export type SignatureInvalidReason =
   | "mandatario_fuera_de_vigencia"
   | "mandatario_inactivo"
-  | "biometria_vencida"
   | "sin_validacion_aprobada";
 
 /** Un mandatario asignado a una compañía (ADR-0036: multiplicidad ⇒ una compañía puede tener varios). */

@@ -31,7 +31,7 @@ public sealed class PhysicalSignatureMigrationReportTests
     private const string DocSolo = "1111111111";
     private const string DocBaul = "2222222222";
     private const string DocBio = "3333333333";
-    private const string DocBioVencida = "4444444444";
+    private const string DocBioSinValidacion = "4444444444";
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
     private static FlitDbContext NewContext() =>
@@ -51,7 +51,7 @@ public sealed class PhysicalSignatureMigrationReportTests
         AddSigner(ctx, "Solo Fisica", DocSolo, Ot1, CompanyA);
         AddSigner(ctx, "Con Baul", DocBaul, Ot1, CompanyA);
         AddSigner(ctx, "Con Biometria", DocBio, Ot1, CompanyA);
-        AddSigner(ctx, "Biometria Vencida", DocBioVencida, Ot2, CompanyB, method: "biometria");
+        AddSigner(ctx, "Biometria Sin Validacion", DocBioSinValidacion, Ot2, CompanyB, method: "biometria");
 
         if (conMandatariosExtra)
         {
@@ -169,14 +169,13 @@ public sealed class PhysicalSignatureMigrationReportTests
             ctx,
             new Dictionary<string, ProcedureInstanceBiometricValidation>
             {
-                [DocBio] = Validacion(DocBio, 3),
-                [DocBioVencida] = Validacion(DocBioVencida, 50),
+                [DocBio] = Validacion(DocBio, 50), // HU #13130b: aprobada hace 50 días ya cuenta (sin renovación)
             },
             DocBaul);
 
         var rows = await reader.ListAsync(null, TestContext.Current.CancellationToken);
 
-        rows.Select(r => r.FullName).Should().BeEquivalentTo(["Solo Fisica", "Biometria Vencida"]);
+        rows.Select(r => r.FullName).Should().BeEquivalentTo(["Solo Fisica", "Biometria Sin Validacion"]);
 
         var solo = rows.Single(r => r.FullName == "Solo Fisica");
         solo.CompanyTenantId.Should().Be(CompanyA);
@@ -187,9 +186,9 @@ public sealed class PhysicalSignatureMigrationReportTests
         solo.DeclaredSignatureMethod.Should().BeNull();
         solo.MissingData.Should().Be(PhysicalSignatureMigrationMissing.BaulOBiometria);
 
-        var vencida = rows.Single(r => r.FullName == "Biometria Vencida");
-        vencida.DeclaredSignatureMethod.Should().Be("biometria");
-        vencida.MissingData.Should().Be(PhysicalSignatureMigrationMissing.ValidacionBiometricaVigente);
+        var sinValidacion = rows.Single(r => r.FullName == "Biometria Sin Validacion");
+        sinValidacion.DeclaredSignatureMethod.Should().Be("biometria");
+        sinValidacion.MissingData.Should().Be(PhysicalSignatureMigrationMissing.ValidacionBiometrica);
     }
 
     [Fact]
@@ -201,7 +200,7 @@ public sealed class PhysicalSignatureMigrationReportTests
         var soloOt2 = await reader.ListAsync(Ot2, TestContext.Current.CancellationToken);
 
         soloOt2.Should().OnlyContain(r => r.TransitOfficeId == Ot2);
-        soloOt2.Select(r => r.FullName).Should().BeEquivalentTo(["Biometria Vencida"]);
+        soloOt2.Select(r => r.FullName).Should().BeEquivalentTo(["Biometria Sin Validacion"]);
     }
 
     [Fact]
@@ -259,7 +258,7 @@ public sealed class PhysicalSignatureMigrationReportTests
                 || n.Contains("Email", StringComparison.OrdinalIgnoreCase));
 
         var csv = PhysicalSignatureMigrationCsv.Build(rows);
-        csv.Should().NotContain(DocSolo).And.NotContain(DocBioVencida).And.NotContain("@privado.test");
+        csv.Should().NotContain(DocSolo).And.NotContain(DocBioSinValidacion).And.NotContain("@privado.test");
         csv.Should().StartWith("mandatario_id,mandatario,compania_id,compania,organismo_id");
         csv.Should().Contain("Solo Fisica").And.Contain("firma_fisica").And.Contain("firma_baul_o_validacion_biometrica");
     }

@@ -33,14 +33,14 @@ public sealed class MandatarioFirmaValidezTests
     [Theory]
     [InlineData(MandateValidityStatus.Vigente, AdminIdentityVigencia.Valid, true, null)]
     [InlineData(MandateValidityStatus.PorVencer, AdminIdentityVigencia.Valid, true, null)]
-    [InlineData(MandateValidityStatus.Vigente, AdminIdentityVigencia.Expired, false, MandateSignerFirmaValidez.MotivoBiometriaVencida)]
+    [InlineData(MandateValidityStatus.Vigente, AdminIdentityVigencia.Expired, false, MandateSignerFirmaValidez.MotivoSinValidacionAprobada)]
     [InlineData(MandateValidityStatus.Vencido, AdminIdentityVigencia.Valid, false, MandateSignerFirmaValidez.MotivoFueraDeVigencia)]
     [InlineData(MandateValidityStatus.NoVigente, AdminIdentityVigencia.Valid, false, MandateSignerFirmaValidez.MotivoFueraDeVigencia)]
     [InlineData(MandateValidityStatus.Vigente, AdminIdentityVigencia.None, false, MandateSignerFirmaValidez.MotivoSinValidacionAprobada)]
     [InlineData(MandateValidityStatus.Vigente, AdminIdentityVigencia.Pending, false, MandateSignerFirmaValidez.MotivoSinValidacionAprobada)]
     [InlineData(MandateValidityStatus.Vencido, AdminIdentityVigencia.Expired, false, MandateSignerFirmaValidez.MotivoFueraDeVigencia)]
     [InlineData(MandateValidityStatus.Inactivo, AdminIdentityVigencia.Valid, false, MandateSignerFirmaValidez.MotivoInactivo)]
-    public void Biometria_ExigeLasDosVigencias(string vigencia, string identidad, bool valida, string? motivo)
+    public void Biometria_ExigeVigenciaPropiaYUnaAprobacion(string vigencia, string identidad, bool valida, string? motivo)
     {
         var r = MandateSignerFirmaValidez.Evaluar(
             MandateSignerModels.Natural, MandateSignatureMethods.Biometria, vigencia, identidad, false);
@@ -65,7 +65,7 @@ public sealed class MandatarioFirmaValidezTests
         MandateSignerFirmaValidez.Evaluar("natural", null, MandateValidityStatus.Vigente, AdminIdentityVigencia.None, true)!
             .Value.Valida.Should().BeTrue();
         MandateSignerFirmaValidez.Evaluar("natural", null, MandateValidityStatus.Vigente, AdminIdentityVigencia.Expired, false)!
-            .Value.Motivo.Should().Be(MandateSignerFirmaValidez.MotivoBiometriaVencida);
+            .Value.Motivo.Should().Be(MandateSignerFirmaValidez.MotivoSinValidacionAprobada);
     }
 
     [Theory]
@@ -90,7 +90,19 @@ public sealed class MandatarioFirmaValidezTests
         };
 
         item.ValidityStatusOn(Hoy).Should().Be(MandateValidityStatus.PorVencer);
-        item.FirmaValidezOn(Hoy)!.Value.Motivo.Should().Be(MandateSignerFirmaValidez.MotivoBiometriaVencida);
+        item.FirmaValidezOn(Hoy)!.Value.Motivo.Should().Be(MandateSignerFirmaValidez.MotivoSinValidacionAprobada);
+
+        var aprobado = new MandateSignerItem
+        {
+            SignerModel = "natural",
+            SignatureMethod = "biometria",
+            ValidityKind = "range",
+            ValidFrom = Hoy.AddDays(-20),
+            ValidTo = Hoy.AddDays(3),
+            IsActive = true,
+            IdentityStatus = AdminIdentityVigencia.Valid,
+        };
+        aprobado.FirmaValidezOn(Hoy)!.Value.Valida.Should().BeTrue();
     }
 
     // ---- Directorio de trámites: el candidato lleva FirmaValida y el motivo ----
@@ -185,16 +197,30 @@ public sealed class MandatarioFirmaValidezTests
     }
 
     [Fact]
-    public async Task AC3_VigenciaPropiaActivaYBiometriaVencida_SinFirmaConMotivoBiometriaVencida()
+    public async Task AC3_VigenciaPropiaActivaYBiometriaAprobadaHace40Dias_FirmaValidaSinRenovacion()
     {
+        // HU #13130b (decisión del PO, 01-oct): el mandatario no renueva su identidad.
         await using var ctx = await SeedAsync("biometria", "fixed", null, null);
 
-        var c = (await Directorio(ctx, Aprobada(45)).GetCandidatesAsync(Ot, Gestora, null, TestContext.Current.CancellationToken))
+        var c = (await Directorio(ctx, Aprobada(40)).GetCandidatesAsync(Ot, Gestora, null, TestContext.Current.CancellationToken))
+            .Should().ContainSingle().Subject;
+
+        c.FirmaValida.Should().BeTrue();
+        c.MotivoSinFirma.Should().BeNull();
+        c.IdentityVigente.Should().BeTrue();
+        c.CertificadoIdentidad.Should().Be("hash-mandatario");
+    }
+
+    [Fact]
+    public async Task AC3b_BiometriaAprobadaHace40DiasPeroVigenciaPropiaVencida_FueraDeVigencia()
+    {
+        await using var ctx = await SeedAsync("biometria", "range", Hoy.AddDays(-60), Hoy.AddDays(-1));
+
+        var c = (await Directorio(ctx, Aprobada(40)).GetCandidatesAsync(Ot, Gestora, null, TestContext.Current.CancellationToken))
             .Should().ContainSingle().Subject;
 
         c.FirmaValida.Should().BeFalse();
-        c.MotivoSinFirma.Should().Be(MandateSignerFirmaValidez.MotivoBiometriaVencida);
-        c.CertificadoIdentidad.Should().BeNull();
+        c.MotivoSinFirma.Should().Be(MandateSignerFirmaValidez.MotivoFueraDeVigencia);
     }
 
     [Fact]
@@ -251,6 +277,8 @@ public sealed class MandatarioFirmaValidezTests
         BiometricRules.VigenciaDias.Should().Be(30);
 
         BiometricRules.EsAprobadaVigente(Aprobada(29), Now).Should().BeTrue();
-        BiometricRules.EsAprobadaVigente(Aprobada(31), Now).Should().BeFalse();
+        BiometricRules.EsAprobadaVigente(Aprobada(31), Now).Should().BeFalse(
+            "el trámite sigue exigiendo la ventana de 30 días; solo el mandatario queda exento (HU #13130b)");
+        IdentityVigenciaClassifier.Classify(Aprobada(40), Now).Should().Be(IdentityVigenciaEstados.Vencida);
     }
 }

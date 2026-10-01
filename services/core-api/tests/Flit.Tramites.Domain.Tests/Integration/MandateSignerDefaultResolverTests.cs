@@ -116,7 +116,7 @@ public sealed class MandateSignerDefaultResolverTests
     public void Ac3_EleccionDeOtSobreUnMandatarioDescartado_ExigeElegirOtraVez()
     {
         var r = MandateSignerDefaultResolver.Resolve(
-            [Cand(IdOt, firmaValida: false, motivo: "biometria_vencida")], null, eleccionOt: IdOt, guardado: null);
+            [Cand(IdOt, firmaValida: false, motivo: "sin_validacion_aprobada")], null, eleccionOt: IdOt, guardado: null);
 
         r.EleccionInvalida.Should().BeTrue();
     }
@@ -156,7 +156,6 @@ public sealed class MandateSignerDefaultResolverTests
     [Theory]
     [InlineData("mandatario_fuera_de_vigencia")]
     [InlineData("mandatario_inactivo")]
-    [InlineData("biometria_vencida")]
     [InlineData("sin_validacion_aprobada")]
     public void Ac4_MandatarioDelOtSinFirmaValida_SeDescartaYContinuaConElSiguienteNivel(string motivo)
     {

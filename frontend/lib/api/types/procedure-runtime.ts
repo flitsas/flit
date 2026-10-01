@@ -2582,6 +2582,7 @@ export interface MandateSignerPrevisto {
   nombre?: string | null;
   /** Solo con `estado = valido`. */
   formaFirma?: 'baul' | 'biometria' | null;
+<<<<<<< HEAD
   /**
    * HU #13180/#13183 — nivel de la prelación que eligió al mandatario (solo con `estado = valido`):
    * `explicita`, `ot_para_compania`, `propio_de_compania`, `asociado_de_otra_compania` o
@@ -2589,6 +2590,9 @@ export interface MandateSignerPrevisto {
    */
   nivel?: MandateSignerNivel | null;
   /** Vocabulario estable de ADR-0066 (p. ej. `biometria_vencida`). */
+=======
+  /** Vocabulario estable de ADR-0066 (p. ej. `sin_validacion_aprobada`). */
+>>>>>>> feature/AB-13116-mandatarios-prelacion-y-validacion
   motivo?: string | null;
   /** Modo vigente de la validación al radicar. */
   modo: 'block' | 'warn' | 'off';

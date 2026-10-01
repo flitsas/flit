@@ -28,10 +28,10 @@ public sealed record MandateSignerOptionDto(
     /// vías anteriores: el documento le deja la línea.
     /// </summary>
     bool FirmaFisica = false,
-    /// <summary>HU #13130 — firma válida: vigencia propia activa Y, con biometría, validación biométrica vigente (30 días).</summary>
+    /// <summary>HU #13130 — firma válida: vigencia propia activa Y, con biometría, validación biométrica aprobada (sin ventana de 30 días, HU #13130b).</summary>
     bool FirmaValida = true,
     /// <summary>HU #13130 — motivo cuando <c>FirmaValida</c> es falso (mandatario_fuera_de_vigencia, mandatario_inactivo,
-    /// biometria_vencida, sin_validacion_aprobada).</summary>
+    /// sin_validacion_aprobada).</summary>
     string? MotivoSinFirma = null);
 
 /// <summary>
