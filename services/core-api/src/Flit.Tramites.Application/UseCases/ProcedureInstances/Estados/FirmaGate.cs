@@ -89,6 +89,21 @@ public static class FirmaGate
     }
 
     /// <summary>
+    /// Mismo mensaje con el estado de la notificación por parte, en formato estable:
+    /// <c>… de: comprador (notificación: enviada), vendedor (notificación: fallida).</c>
+    /// </summary>
+    public static string Detalle(IReadOnlyList<ParteSinFirma> partesSinFirma) =>
+        "No se permite enviar al organismo de tránsito un trámite sin firmar. Falta la firma "
+        + "(identidad aprobada y vigente) de: " + PartesConNotificacion(partesSinFirma) + ".";
+
+    /// <summary><c>comprador (notificación: enviada), vendedor (notificación: fallida)</c>.</summary>
+    public static string PartesConNotificacion(IReadOnlyList<ParteSinFirma> partesSinFirma)
+    {
+        ArgumentNullException.ThrowIfNull(partesSinFirma);
+        return string.Join(", ", partesSinFirma.Select(p => $"{p.Parte} (notificación: {p.Notificacion})"));
+    }
+
+    /// <summary>
     /// ¿La transición exige el gate de firma? Toda llegada a <c>preparado</c>, <c>preasignacion</c> o
     /// <c>entregado</c> pedida por el gestor o el sistema (incluidas re-radicaciones y «Enviar al OT»).
     /// Quedan fuera las del OT (liberar placa: el trámite ya está en el organismo) y la de Quipux (el
@@ -99,6 +114,24 @@ public static class FirmaGate
     public static bool Aplica(string toStatus, TramiteActor actor) =>
         toStatus is TramiteEstado.Preparado or TramiteEstado.Preasignacion or TramiteEstado.Entregado
         && actor is not (TramiteActor.Ot or TramiteActor.Quipux);
+}
+
+/// <summary>
+/// Bug #13194 (P4, D2) — adaptador de <see cref="IFirmaPendienteNotifier"/> sobre
+/// <see cref="EnsureIdentityAndNotifyHandler"/>: asegura la identidad de la parte y dispara el correo de
+/// validación solo si hace falta (idempotente: una validación en curso responde <c>ya_en_curso</c>).
+/// Con 2+ actores en el rol notifica al principal (documento null), el default del handler.
+/// </summary>
+public sealed class EnsureIdentityFirmaPendienteNotifier(EnsureIdentityAndNotifyHandler handler)
+    : IFirmaPendienteNotifier
+{
+    public async Task<string> NotificarAsync(
+        Guid instanceId, Guid tenantId, string parte, CancellationToken ct = default)
+    {
+        var (result, _) = await handler.HandleAsync(instanceId, tenantId, parte, documento: null, ct)
+            .ConfigureAwait(false);
+        return result?.Notificacion ?? FirmaNotificacionEstados.Fallida;
+    }
 }
 
 /// <summary>
