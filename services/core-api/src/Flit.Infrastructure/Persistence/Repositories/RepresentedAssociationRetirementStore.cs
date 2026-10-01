@@ -70,14 +70,14 @@ internal sealed class RepresentedAssociationRetirementStore : IRepresentedAssoci
             .ConfigureAwait(false);
 
         var signers = await _context.MandateSigners.AsNoTracking()
-            .Where(s => signerIds.Contains(s.Id) && s.IsActive && s.DeletedAt == null)
+            .Where(s => signerIds.Contains(s.Id))
             .Select(s => new { s.Id, s.FullName })
             .ToDictionaryAsync(s => s.Id, s => s.FullName, cancellationToken)
             .ConfigureAwait(false);
 
         var links = await _context.MandateSignerCompanies.AsNoTracking()
-            .Where(c => signerIds.Contains(c.MandateSignerId) && officeIds.Contains(c.TransitOfficeId) && c.IsActive)
-            .Select(c => new { c.MandateSignerId, c.TransitOfficeId, c.CompanyTenantId })
+            .Where(c => signerIds.Contains(c.MandateSignerId) && officeIds.Contains(c.TransitOfficeId))
+            .Select(c => new { c.MandateSignerId, c.TransitOfficeId, c.CompanyTenantId, c.IsActive })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -94,37 +94,50 @@ internal sealed class RepresentedAssociationRetirementStore : IRepresentedAssoci
             .ToDictionaryAsync(o => o.Id, o => o.Name, cancellationToken)
             .ConfigureAwait(false);
 
+        // HU #13176b (D2) — el reporte lista EXACTAMENTE lo que el retiro borra: toda fila activa de asociación,
+        // sin filtrar por estado del mandatario ni exigir vínculo activo ni NIT resuelto. Se agrupa por
+        // mandatario y organismo; la compañía sale del vínculo (activo primero) o queda vacía si ya no hay.
         var result = new List<RepresentedAssociationImpactRow>();
-        foreach (var link in links)
+        foreach (var group in assoc.GroupBy(a => new { a.MandateSignerId, a.TransitOfficeId }))
         {
-            if (!signers.TryGetValue(link.MandateSignerId, out var signerName))
-            {
-                continue;
-            }
-
-            var empresas = assoc
-                .Where(a => a.MandateSignerId == link.MandateSignerId && a.TransitOfficeId == link.TransitOfficeId)
-                .Select(a => nits.GetValueOrDefault(a.RepresentedCompanyId)?.Trim())
+            var represented = group.Select(a => a.RepresentedCompanyId).Distinct().ToList();
+            var empresas = represented
+                .Select(id => nits.GetValueOrDefault(id)?.Trim())
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Select(n => n!)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(n => n, StringComparer.Ordinal)
                 .ToList();
 
-            if (empresas.Count == 0)
+            var groupLinks = links
+                .Where(l => l.MandateSignerId == group.Key.MandateSignerId && l.TransitOfficeId == group.Key.TransitOfficeId)
+                .ToList();
+            var companyIds = groupLinks
+                .OrderByDescending(l => l.IsActive)
+                .Select(l => l.CompanyTenantId)
+                .Distinct()
+                .ToList();
+            if (companyIds.Count == 0)
             {
-                continue;
+                companyIds.Add(Guid.Empty);
+            }
+            else if (groupLinks.Any(l => l.IsActive))
+            {
+                companyIds = [.. groupLinks.Where(l => l.IsActive).Select(l => l.CompanyTenantId).Distinct()];
             }
 
-            result.Add(new RepresentedAssociationImpactRow(
-                link.CompanyTenantId,
-                tenantNames.GetValueOrDefault(link.CompanyTenantId) ?? string.Empty,
-                link.TransitOfficeId,
-                officeNames.GetValueOrDefault(link.TransitOfficeId) ?? string.Empty,
-                link.MandateSignerId,
-                signerName,
-                empresas.Count,
-                empresas));
+            foreach (var companyId in companyIds)
+            {
+                result.Add(new RepresentedAssociationImpactRow(
+                    companyId,
+                    tenantNames.GetValueOrDefault(companyId) ?? string.Empty,
+                    group.Key.TransitOfficeId,
+                    officeNames.GetValueOrDefault(group.Key.TransitOfficeId) ?? string.Empty,
+                    group.Key.MandateSignerId,
+                    signers.GetValueOrDefault(group.Key.MandateSignerId) ?? string.Empty,
+                    represented.Count,
+                    empresas));
+            }
         }
 
         return result;

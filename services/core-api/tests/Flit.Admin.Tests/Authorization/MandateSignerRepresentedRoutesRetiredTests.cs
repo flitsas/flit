@@ -30,7 +30,15 @@ public sealed class MandateSignerRepresentedRoutesRetiredTests : IClassFixture<W
     [Fact]
     public void AC6_LasRutasRepresentedCompaniesDeMandatarios_NoExisten()
     {
-        Routes().Should().NotContain(r => r.Contains("mandate-signers/represented-companies", StringComparison.Ordinal));
+        // HU #13179b — solo existe la lápida (404, sin handler de negocio): marcada con RetiredRouteMarker.
+        var endpoints = _factory.Services.GetServices<EndpointDataSource>()
+            .SelectMany(d => d.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Where(e => (e.RoutePattern.RawText ?? string.Empty)
+                .Contains("mandate-signers/represented-companies", StringComparison.Ordinal))
+            .ToList();
+        endpoints.Should().NotBeEmpty("la lápida evita el 405");
+        endpoints.Should().OnlyContain(e => e.Metadata.Any(m => m.GetType().Name == "RetiredRouteMarker"));
     }
 
     [Fact]

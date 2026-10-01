@@ -218,12 +218,14 @@ export function MandatoOtConfigForm({
                 companyName: lockedCompany.name,
                 companyTaxId: lockedCompany.nit,
                 companyCode: null,
-                assignmentMode: "open",
-                mandataryFamily: "individuo",
-                institutionalMandataryName: null,
-                institutionalMandataryNit: null,
-                chamberCity: null,
-                mandatarySigla: null,
+                // HU #13182b (H17): sin regla propia la compañía hereda el tipo REAL del organismo (el OT
+                // nace como Persona natural), no «Mandato abierto».
+                assignmentMode: office.assignmentMode || "signer",
+                mandataryFamily: office.mandataryFamily || "individuo",
+                institutionalMandataryName: office.institutionalMandataryName ?? null,
+                institutionalMandataryNit: office.institutionalMandataryNit ?? null,
+                chamberCity: office.chamberCity ?? null,
+                mandatarySigla: office.mandatarySigla ?? null,
                 hasExplicitRule: false,
                 defaultMandateSignerId: null,
                 defaultMandateSignerName: null,
@@ -258,7 +260,8 @@ export function MandatoOtConfigForm({
         setError("No se pudieron cargar las compañías. Reintentar.");
       }
     }
-  }, [office.officeId, highlightCompanyId, lockedCompany]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cambian con el organismo o su modo
+  }, [office.officeId, office.assignmentMode, highlightCompanyId, lockedCompany]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API

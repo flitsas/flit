@@ -51,6 +51,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         group.MapPut("/{mandateSignerId:guid}", UpdateMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateChildMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateChildMandateSignerAsync);
+        group.MapRetiredRepresentedCompanies(); // HU #13179b: ruta retirada → 404 (no 405)
         // HU #13135 — eliminación (baja lógica) e impacto, también desde la cabeza de red sobre sus hijas.
         group.MapDelete("/{mandateSignerId:guid}", DeleteChildMandateSignerAsync);
         group.MapGet("/{mandateSignerId:guid}/impact", ImpactChildMandateSignerAsync);

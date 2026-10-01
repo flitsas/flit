@@ -144,7 +144,8 @@ public sealed class UpdateMandateSignerHandler
                     command.MandateSignerId,
                     command.CompanyVisibility,
                     cancellationToken,
-                    command.ConfiguredByScope)
+                    associable: _associable,
+                    configuredByScope: command.ConfiguredByScope)
                 .ConfigureAwait(false);
         }
 
