@@ -82,6 +82,8 @@ const MODULE_OPTIONS: { value: '' | AdminAuditModule; label: string }[] = [
   { value: 'config', label: 'Configuración' },
   // Epic #12543 — aceptación de Términos y Condiciones al crear trámite.
   { value: 'tramites', label: 'Trámites' },
+  // HU #13138 — ciclo de vida de mandatarios.
+  { value: 'mandatarios', label: 'Mandatarios' },
 ];
 
 const RESULT_OPTIONS: { value: '' | AdminAuditResult; label: string }[] = [

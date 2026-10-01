@@ -16,6 +16,7 @@ const MODULE_LABEL: Record<AdminAuditModule, string> = {
   security: "Seguridad",
   config: "Configuración",
   tramites: "Trámites",
+  mandatarios: "Mandatarios",
 };
 
 /**
@@ -43,6 +44,11 @@ const OPERATION_LABEL: Record<string, string> = {
   activate_account: "Activó la cuenta",
   // Epic #12543 — aceptación de T&C antes de crear un trámite.
   accept_terms: "Aceptó los Términos y Condiciones para crear un trámite",
+  // HU #13138 — ciclo de vida de mandatarios (deactivate/delete ya tienen texto arriba o genérico).
+  deactivate: "Dio de baja el registro",
+  reactivate: "Reactivó el mandatario",
+  remove_default: "Retiró el mandatario por defecto",
+  reassign_procedure: "Reasignó un trámite a otro mandatario",
 };
 
 /** Etiquetas legibles de los campos que viajan en el detalle del cambio. */

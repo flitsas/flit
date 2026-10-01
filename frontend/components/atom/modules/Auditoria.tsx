@@ -43,6 +43,7 @@ const MODULE_LABEL: Record<AdminAuditModule, string> = {
   security: 'Seguridad',
   config: 'Configuración',
   tramites: 'Trámites',
+  mandatarios: 'Mandatarios',
 };
 
 const TENANT_TYPE_LABEL: Record<AdminAuditTenantType, string> = {
