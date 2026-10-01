@@ -56,8 +56,10 @@ internal static class IdentityHosting
     }
 
     /// <summary>
-    /// <c>/health/ready</c>: la base responde y no tiene migraciones pendientes. <c>core-identity</c> no migra, así que
-    /// con un esquema más nuevo que su código no se declara listo. <c>/health</c> sigue siendo solo «vivo».
+    /// <c>/health/ready</c>: la base responde y no le faltan migraciones que este código trae. <c>core-identity</c> no
+    /// migra: con código más nuevo que el esquema (core-api aún no migró) no se declara listo y el gateway manda el login
+    /// a core-api. Al revés (esquema más nuevo, lo normal en un despliegue por servicio) sí atiende: las migraciones son
+    /// aditivas. <c>/health</c> sigue siendo solo «vivo».
     /// </summary>
     public static IEndpointRouteBuilder MapReadiness(this IEndpointRouteBuilder app)
     {

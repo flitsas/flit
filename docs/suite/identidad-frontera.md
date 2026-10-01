@@ -88,8 +88,12 @@ usuarios y roles). Pasan a identidad junto con B-12 o en el Epic siguiente; move
 - **Mismo usuario de base en esta entrega.** Un usuario nuevo sin `BYPASSRLS` vería cero asignaciones de rol, cero
   invitaciones y cero productos (sección 2). La decisión 2 del plan se ajusta: el usuario propio de identidad llega
   junto con el mínimo privilegio, cuando se muevan las 12 escrituras cruzadas.
-- **Migraciones solo en `core-api`.** `core-identity` expone `/health/ready`, que falla si la base tiene migraciones
-  pendientes: no atiende con un esquema que no conoce.
+- **Migraciones solo en `core-api`.** `core-identity` expone `/health/ready`, que falla si a la base le faltan
+  migraciones que trae su código (por ejemplo, identidad nueva antes de que `core-api` migre). Al revés, código viejo
+  sobre un esquema más nuevo, sí atiende: es lo normal en un despliegue por servicio y las migraciones son aditivas.
+- **El gateway consulta esa salud.** Las rutas del login van a un grupo con dos destinos: `core-identity` primero y
+  `core-api` de respaldo (atiende las mismas rutas). Si identidad se cae o no está lista, el login sigue en `core-api`;
+  si `core-api` se cae, sigue en identidad. Así el login tampoco se cae mientras identidad se reinicia.
 - **Escrituras cruzadas que se quedan en `core-api`:**
 
 | # | Sitio | Qué escribe |

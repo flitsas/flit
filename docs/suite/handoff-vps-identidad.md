@@ -89,6 +89,10 @@ docker compose -f docker-compose.prod.yml start core-api
 # recargar: los datos aparecen sin volver a iniciar sesión
 ```
 
+Con la bandera encendida, el gateway revisa `/health/ready` de `core-identity` y de `core-api` cada 5 s: si identidad
+se cae o no está lista, el login pasa solo a `core-api` (y vuelve cuando identidad se recupera). Para verlo:
+`docker compose -f docker-compose.prod.yml stop core-identity`, iniciar sesión (funciona) y `start core-identity`.
+
 **Volver atrás:** `FLIT_IDENTITY_CLUSTER_ENABLED=false` y `up -d --no-deps gateway`. Todo vuelve a `core-api` al
 instante; las sesiones abiertas siguen sirviendo (llaves y sesiones viven en la base).
 

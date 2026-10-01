@@ -82,6 +82,29 @@ public sealed class IdentityClusterRoutingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task BanderaEncendida_SiCoreIdentityCae_ElLoginSigueEnCoreApi()
+    {
+        using var gateway = Gateway(identityClusterEnabled: true);
+        var client = gateway.CreateClient();
+        (await BackendFor(client, "/api/v1/auth/login")).Should().Be("core-identity");
+
+        await _coreIdentity!.DisposeAsync();
+        _coreIdentity = null;
+
+        // El chequeo activo (/health/ready cada segundo en la prueba) saca a core-identity tras dos fallos seguidos.
+        string backend = "";
+        for (var i = 0; i < 20 && backend != "core-api"; i++)
+        {
+            await Task.Delay(500, TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("/api/v1/auth/login", TestContext.Current.CancellationToken);
+            backend = response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken) : "";
+        }
+
+        backend.Should().Be("core-api", "core-api atiende las mismas rutas del login y queda de respaldo");
+        (await BackendFor(client, "/connect/authorize")).Should().Be("core-api");
+    }
+
+    [Fact]
     public void BanderaEncendida_SoloCambiaElDestino_NoLaPolitica()
     {
         using var off = Gateway(identityClusterEnabled: false);
@@ -108,7 +131,9 @@ public sealed class IdentityClusterRoutingTests : IAsyncLifetime
             b.UseSetting("Gateway:DisableJwtPolicy", "false");
             b.UseSetting(IdentityClusterProxyConfigFilter.EnabledKey, identityClusterEnabled ? "true" : "false");
             b.UseSetting("ReverseProxy:Clusters:core-api-cluster:Destinations:core-api-1:Address", Address(_coreApi!));
-            b.UseSetting("ReverseProxy:Clusters:core-identity-cluster:Destinations:core-identity-1:Address", Address(_coreIdentity!));
+            b.UseSetting("ReverseProxy:Clusters:core-identity-cluster:Destinations:a-core-identity:Address", Address(_coreIdentity!));
+            b.UseSetting("ReverseProxy:Clusters:core-identity-cluster:Destinations:b-core-api:Address", Address(_coreApi!));
+            b.UseSetting("ReverseProxy:Clusters:core-identity-cluster:HealthCheck:Active:Interval", "00:00:01");
         });
 
     private static async Task<string> BackendFor(HttpClient client, string path)
