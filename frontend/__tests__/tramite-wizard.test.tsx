@@ -1912,12 +1912,12 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
   it('AC3: en warn la alerta es advertencia y se puede radicar', async () => {
     mocks.getMandateSigner.mockResolvedValue({
       estado: 'firma_invalida',
-      motivo: 'biometria_vencida',
+      motivo: 'sin_validacion_aprobada',
       modo: 'warn',
     });
     await abrirResumen();
     expect(await screen.findByText('Mandatario sin firma válida')).toBeInTheDocument();
-    expect(screen.getByTestId('mandatario-firma-aviso')).toHaveTextContent(/biometría del mandatario está vencida.*Puedes radicar/);
+    expect(screen.getByTestId('mandatario-firma-aviso')).toHaveTextContent(/no tiene una validación de identidad aprobada.*Puedes radicar/);
     expect(screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
   });
 

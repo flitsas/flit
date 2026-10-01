@@ -213,7 +213,7 @@ public sealed class CreateMandateSignerHandler
     /// (solo Persona natural).
     /// <para>
     /// <b>Biometría:</b> se guarda sin exigir una validación aprobada; la origina y vigila el módulo
-    /// Identidad (30 días, HU #13130). <b>Baúl:</b> con <c>SignatureVaultId</c> se valida esa firma contra el
+    /// Identidad (HU #13130; una aprobación basta, sin ventana de 30 días, HU #13130b). <b>Baúl:</b> con <c>SignatureVaultId</c> se valida esa firma contra el
     /// tenant de la compañía (existe, es de esa persona, activa y vigente); sin él, el backend resuelve la
     /// firma vigente de la persona (tipo + número) en el baúl de la compañía destino (el OT no ve el baúl).
     /// Sin firma ⇒ 422 <c>signatureVaultId</c>. Con varias compañías y sin vault ⇒ 422. La firma física

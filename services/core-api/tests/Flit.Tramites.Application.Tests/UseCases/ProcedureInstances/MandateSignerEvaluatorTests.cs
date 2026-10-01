@@ -173,12 +173,12 @@ public sealed class MandateSignerEvaluatorTests
     public async Task DescartadosPorFirma_FirmaInvalida_ConCodigoYMotivo()
     {
         Config();
-        Candidates(Signer(firmaValida: false, motivo: "biometria_vencida"));
+        Candidates(Signer(firmaValida: false, motivo: "sin_validacion_aprobada"));
 
         var r = await Evaluate(Instance());
 
         r.Estado.Should().Be(MandateSignerEstado.FirmaInvalida);
-        r.Motivo.Should().Be("biometria_vencida");
+        r.Motivo.Should().Be("sin_validacion_aprobada");
         r.CodigoDeError.Should().Be("mandatario_firma_invalida");
         r.MensajeDeError.Should().Contain("baúl").And.Contain("biométrica");
     }

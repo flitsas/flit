@@ -88,7 +88,54 @@ public sealed class MandateSignerIdentityVigenciaTests
 
         item.Should().NotBeNull();
         item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
-        item.IdentityValidUntil.Should().Be(Now.AddDays(29));
+        item.IdentityValidUntil.Should().BeNull("el mandatario no renueva su identidad (HU #13130b)");
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_AprobadaHace40Dias_SigueValid_SinRenovacion()
+    {
+        // HU #13130b (decisión del PO, 01-oct): el mandatario no renueva; la ventana de 30 días es del trámite.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        var vieja = Aprobada(OtTenant);
+        vieja.ValidatedAt = Now.AddDays(-40);
+        vieja.ValidUntil = Now.AddDays(-10);
+        vieja.CreatedAt = Now.AddDays(-40);
+        ctx.ProcedureInstanceBiometricValidations.Add(vieja);
+        await ctx.SaveChangesAsync(ct);
+
+        var item = await new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant)).GetByIdAsync(Signer, ct);
+
+        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_AprobadaAntiguaYNuevaValidacionEnCurso_SigueValid()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        var vieja = Aprobada(OtTenant);
+        vieja.ValidatedAt = Now.AddDays(-60);
+        vieja.ValidUntil = Now.AddDays(-30);
+        vieja.CreatedAt = Now.AddDays(-60);
+        ctx.ProcedureInstanceBiometricValidations.Add(vieja);
+        ctx.ProcedureInstanceBiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = OtTenant,
+            DocumentType = "CC",
+            DocumentNumber = Documento,
+            Status = BiometricEstados.EnProceso,
+            Provider = BiometricProviders.Kyverum,
+            TokenHash = "hash-2",
+            ExpiresAt = Now.AddHours(1),
+            CreatedAt = Now.AddDays(-1),
+        });
+        await ctx.SaveChangesAsync(ct);
+
+        var item = await new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant)).GetByIdAsync(Signer, ct);
+
+        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
     }
 
     [Fact]
@@ -184,7 +231,7 @@ public sealed class MandateSignerIdentityVigenciaTests
         var item = await reader.GetByIdAsync(Signer, ct);
 
         item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
-        item.IdentityValidUntil.Should().Be(Now.AddDays(29));
+        item.IdentityValidUntil.Should().BeNull("el mandatario no renueva su identidad (HU #13130b)");
     }
 
     [Fact]
