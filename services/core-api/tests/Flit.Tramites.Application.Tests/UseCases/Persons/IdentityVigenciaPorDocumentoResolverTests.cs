@@ -163,6 +163,94 @@ public sealed class IdentityVigenciaPorDocumentoResolverTests
         result.Status.Should().Be(IdentityVigenciaEstados.Vencida);
     }
 
+    // ── Variante del mandatario (HU #13130b): una aprobación cuenta sin ventana de 30 días ─────────
+
+    [Fact]
+    public async Task ResolveMandatarioAsync_AprobadaHace40Dias_AprobadaVigenteSinFechaDeFin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var v = Aprobada(Now.AddDays(-40), Now.AddDays(-10));
+        v.CertificateHash = "hash-abc";
+        _repo.ListBiometricValidationsByPersonAsync(
+                tenantId, "CC", "123", 0, 1, Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<ProcedureInstanceBiometricValidation>)[v], 1, false));
+
+        var result = await new IdentityVigenciaPorDocumentoResolver(_repo)
+            .ResolveMandatarioAsync(tenantId, "CC", "123", Now, ct);
+
+        result.Status.Should().Be(IdentityVigenciaEstados.AprobadaVigente);
+        result.CertificateHash.Should().Be("hash-abc");
+        result.ValidUntil.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveMandatarioAsync_AprobadaAntiguaBajoUnaValidacionEnCurso_BuscaLaAprobacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var enCurso = new ProcedureInstanceBiometricValidation { Status = BiometricEstados.EnProceso };
+        var vieja = Aprobada(Now.AddDays(-60), Now.AddDays(-30));
+        _repo.ListBiometricValidationsByPersonAsync(
+                tenantId, "CC", "123", 0, 1, Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<ProcedureInstanceBiometricValidation>)[enCurso], 2, true));
+        _repo.ListBiometricValidationsByPersonAsync(
+                tenantId, "CC", "123", 0, 100, Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<ProcedureInstanceBiometricValidation>)[enCurso, vieja], 2, true));
+
+        var result = await new IdentityVigenciaPorDocumentoResolver(_repo)
+            .ResolveMandatarioAsync(tenantId, "CC", "123", Now, ct);
+
+        result.Status.Should().Be(IdentityVigenciaEstados.AprobadaVigente);
+    }
+
+    [Fact]
+    public async Task ResolveMandatarioAsync_SinAprobacion_ClasificaComoSiempre()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var enCurso = new ProcedureInstanceBiometricValidation { Status = BiometricEstados.EnProceso };
+        var rechazada = new ProcedureInstanceBiometricValidation { Status = BiometricEstados.Rechazado };
+        _repo.ListBiometricValidationsByPersonAsync(
+                tenantId, "CC", "123", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<ProcedureInstanceBiometricValidation>)[enCurso, rechazada], 2, true));
+
+        var resolver = new IdentityVigenciaPorDocumentoResolver(_repo);
+        (await resolver.ResolveMandatarioAsync(tenantId, "CC", "123", Now, ct))
+            .Status.Should().Be(IdentityVigenciaEstados.EnCurso);
+
+        _repo.ListBiometricValidationsByPersonAsync(
+                tenantId, "CC", "456", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<ProcedureInstanceBiometricValidation>)[], 0, false));
+        (await resolver.ResolveMandatarioAsync(tenantId, "CC", "456", Now, ct))
+            .Status.Should().Be(IdentityVigenciaEstados.SinValidacion);
+    }
+
+    [Fact]
+    public async Task ResolveManyBatchedMandatarioAsync_AprobadaHace40Dias_Vigente_YElTramiteSigueEnVencida()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var v = Aprobada(Now.AddDays(-40), Now.AddDays(-10));
+        v.DocumentType = "CC";
+        v.DocumentNumber = "123";
+        _repo.ListLatestBiometricValidationsByPersonsAsync(
+                tenantId,
+                Arg.Any<IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)>>(),
+                Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<ProcedureInstanceBiometricValidation>)[v]);
+
+        var resolver = new IdentityVigenciaPorDocumentoResolver(_repo);
+        var key = Flit.Tramites.Domain.Identity.DocumentCanonicalNormalization.IdentidadKey(tenantId, "CC", "123");
+
+        (await resolver.ResolveManyBatchedMandatarioAsync(tenantId, [("CC", "123")], Now, ct))[key]
+            .Status.Should().Be(IdentityVigenciaEstados.AprobadaVigente);
+        // La resolución del trámite NO cambia: la ventana de 30 días sigue vigente.
+        (await resolver.ResolveManyBatchedAsync(tenantId, [("CC", "123")], Now, ct))[key]
+            .Status.Should().Be(IdentityVigenciaEstados.Vencida);
+        BiometricRules.VigenciaDias.Should().Be(30);
+    }
+
     // ── ResolveManyAsync (HU #11752) ────────────────────────────────────────
 
     [Fact]

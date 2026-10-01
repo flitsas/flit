@@ -96,7 +96,7 @@ public sealed class MandatarioFirmaResolverSelloIdentidadTests
         resultado.Sello.Should().BeNull();
     }
     [Theory]
-    [InlineData("biometria_vencida")]
+    [InlineData("mandatario_inactivo")]
     [InlineData("mandatario_fuera_de_vigencia")]
     [InlineData("sin_validacion_aprobada")]
     public async Task HU13130_SinFirmaValida_NoEstampaSelloAunqueLaIdentidadSeaVigente(string motivo)
