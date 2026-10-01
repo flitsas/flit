@@ -731,7 +731,16 @@ public sealed class IctOrchestrationService(
     /// TODO(ICT-SERVICE-USER): aprovisionar este usuario en el alta del cliente de integración y
     /// asignarle un rol de solo-lectura, en vez de crearlo perezosamente aquí.
     /// </summary>
-    private async Task<Guid> ResolveIctCreatorAsync(string requestedUserId, Guid tenantId, CancellationToken ct)
+    private Task<Guid> ResolveIctCreatorAsync(string requestedUserId, Guid tenantId, CancellationToken ct) =>
+        ResolveIctCreatorAsync(db, requestedUserId, tenantId, ct);
+
+    /// <summary>
+    /// Núcleo de <see cref="ResolveIctCreatorAsync(string, Guid, CancellationToken)"/> sobre un
+    /// <see cref="FlitDbContext"/> explícito: <c>internal</c> para probarlo contra PostgreSQL real
+    /// (Bug #13194 — el índice parcial de <c>uq_users_email</c>).
+    /// </summary>
+    internal static async Task<Guid> ResolveIctCreatorAsync(
+        FlitDbContext db, string requestedUserId, Guid tenantId, CancellationToken ct)
     {
         if (Guid.TryParse(requestedUserId, out var requested) && requested != Guid.Empty)
         {
@@ -748,11 +757,13 @@ public sealed class IctOrchestrationService(
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO identity.users (id, email, display_name, status, created_at, home_tenant_id)
             VALUES (uuidv7(), {email}, 'Integración ICT', 'active', now(), {tenantId})
-            ON CONFLICT (email) DO NOTHING
+            ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
             """, ct);
 
+        // Bug #13194 — uq_users_email es parcial (deleted_at IS NULL): el árbitro del ON CONFLICT debe
+        // repetir el predicado (sin él, 42P10) y la lectura solo puede devolver el usuario VIVO.
         return await db.Database
-            .SqlQuery<Guid>($"SELECT id AS \"Value\" FROM identity.users WHERE email = {email}")
+            .SqlQuery<Guid>($"SELECT id AS \"Value\" FROM identity.users WHERE email = {email} AND deleted_at IS NULL")
             .FirstAsync(ct);
     }
 }

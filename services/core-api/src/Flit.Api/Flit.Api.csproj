@@ -28,6 +28,8 @@
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
     <!-- HU #12922 — DrFlitEndpointsTests invoca el delegate interno del chat. -->
     <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <!-- Bug #13194 — Bug13194UsersEmailUnicoSoloVivosTests ejecuta ResolveIctCreatorAsync contra PostgreSQL. -->
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
   </ItemGroup>
 
   <ItemGroup>
