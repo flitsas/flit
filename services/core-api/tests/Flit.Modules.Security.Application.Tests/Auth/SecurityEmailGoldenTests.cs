@@ -48,7 +48,6 @@ public sealed class SecurityEmailGoldenTests
     public async Task Invitacion_conserva_asunto_y_cuerpo()
     {
         var repo = Substitute.For<IInvitationRepository>();
-        var userManagement = Substitute.For<IUserManagementRepository>();
         var tokenGen = Substitute.For<ISecureTokenGenerator>();
         var email = Substitute.For<IEmailSender>();
         var tenantId = Guid.NewGuid();
@@ -60,8 +59,6 @@ public sealed class SecurityEmailGoldenTests
         repo.CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>()).Returns(Guid.NewGuid());
         repo.RoleExistsInTenantAsync(tenantId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
         repo.ExistsPendingAsync(tenantId, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
-        userManagement.FindByEmailIncludingDeletedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((ExistingUserByEmail?)null);
 
         var urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
         urlBaseResolver
@@ -70,7 +67,6 @@ public sealed class SecurityEmailGoldenTests
 
         var handler = new CreateInvitationHandler(
             repo,
-            userManagement,
             tokenGen,
             email,
             new InvitationOptions { ActivateUrlBase = ActivateUrlBase },
