@@ -140,6 +140,45 @@ public sealed class ProcedureSyncReadRepositoryTests(PostgresDatabaseFixture fix
     }
 
     [PostgresFact]
+    public async Task LaVentanaCortaLaPaginaEnElPrimerCambioInestableYNoLoSalta()
+    {
+        await SembrarCompaniasAsync();
+        var largo = await RadicadoAsync(CompaniaA, 1);
+        var corto = await RadicadoAsync(CompaniaB, 2);
+        var cursor = (await LeerAsync(new(null, null, 100, SinVentana)))[^1].Position;
+        var ventana = TimeSpan.FromSeconds(2);
+
+        // La larga empieza ya (sync_changed_at = su inicio) pero escribe al final: sella con una
+        // transacción MAYOR que la corta, que empieza después y queda dentro de la ventana.
+        await using var connLarga = await Fixture.OpenConnectionAsync();
+        await using var txLarga = await connLarga.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        await using (var cmd = new NpgsqlCommand("SELECT 1", connLarga, txLarga))
+        {
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await Task.Delay(ventana + TimeSpan.FromSeconds(0.5), TestContext.Current.CancellationToken);
+        await EjecutarAsync("UPDATE tramites.procedure_instances SET status = status WHERE id = @id", corto);
+        await using (var cmd = new NpgsqlCommand(
+            "UPDATE tramites.procedure_instances SET status = status WHERE id = @id", connLarga, txLarga))
+        {
+            cmd.Parameters.AddWithValue("id", largo);
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await txLarga.CommitAsync(TestContext.Current.CancellationToken);
+
+        // La larga ya es estable y la corta no, pero la corta va antes en el cursor: entregar la larga
+        // adelantaría el cursor por encima de la corta y esta no llegaría nunca.
+        (await LeerAsync(ProcedureSyncPageRequest.FromCursor(cursor, 100, ventana))).Should().BeEmpty();
+
+        await Task.Delay(ventana + TimeSpan.FromSeconds(0.5), TestContext.Current.CancellationToken);
+
+        (await LeerAsync(ProcedureSyncPageRequest.FromCursor(cursor, 100, ventana)))
+            .Select(c => c.ProcedureInstanceId).Should().Equal(corto, largo);
+    }
+
+    [PostgresFact]
     public async Task ElArranquePorFechaSoloEntregaLoCambiadoDesdeEntonces()
     {
         await SembrarCompaniasAsync();
