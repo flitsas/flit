@@ -85,3 +85,23 @@ describe("ConfiguracionEmpresaTab — HU12851", () => {
     expect(document.getElementById("preasignacionPlacaActiva")).toBeNull();
   });
 });
+
+// Bug #13194 P3 — el switch validarSoatConRunt conserva binding y semántica (ON = continúa con
+// advertencia, OFF = bloquea); solo cambia el texto, que antes sugería ON = bloquea.
+describe("ConfiguracionEmpresaTab — Bug #13194 P3", () => {
+  it("el switch de SOAT se rotula como permiso para enviar sin SOAT vigente y explica ambos estados", async () => {
+    await abrirConfiguracionEmpresa();
+
+    const sw = screen.getByRole("switch", {
+      name: "Permitir enviar al OT sin SOAT vigente en el RUNT",
+    });
+    expect(sw).toHaveAttribute("id", "validarSoatConRunt");
+    expect(sw).not.toBeChecked();
+    expect(
+      screen.getByText(
+        "Activo: se consulta el RUNT y, si no reporta SOAT vigente, el trámite continúa con una advertencia. Inactivo: sin SOAT vigente en el RUNT, el envío al OT se bloquea.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Validar SOAT ante el RUNT al enviar al OT")).not.toBeInTheDocument();
+  });
+});
