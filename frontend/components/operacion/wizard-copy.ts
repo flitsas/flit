@@ -132,6 +132,9 @@ const BLOCKER_COPY: Record<string, string> = {
   documentos_incompletos: 'Faltan documentos obligatorios',
   // N 03 (RF03) — gate Borrador→Preparado: identidad del comprador aprobada y vigente.
   identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada',
+  // Bug #13194 (P4) — gate de firma hacia el OT: ninguna parte puede llegar al organismo sin firmar.
+  firma_pendiente:
+    'Falta la validación de identidad o firma de una de las partes: complétala en el paso 4 «Validación de Identidad»',
   actores_incompletos: 'Faltan datos de los participantes',
   comercial_incompleto: 'Faltan datos comerciales',
   identidad_pendiente: 'Validación biométrica pendiente',
