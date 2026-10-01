@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Theme;
@@ -97,6 +98,8 @@ public sealed class EmailThemeByClassTests(PostgresDatabaseFixture fixture) : Po
         var services = new ServiceCollection();
         services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
         services.AddScoped(_ => Fixture.CreateDbContext());
+        // HU #13231: los escritores resuelven IIdentityDb en su propio scope, como en producción.
+        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
         await using var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 

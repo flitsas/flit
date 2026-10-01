@@ -27,7 +27,7 @@ internal sealed class DeedRepository : IDeedRepository
         }
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             data.TenantId,
             async () =>
             {
@@ -67,7 +67,7 @@ internal sealed class DeedRepository : IDeedRepository
         }
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             data.TenantId,
             async () =>
             {
@@ -111,7 +111,7 @@ internal sealed class DeedRepository : IDeedRepository
         Guid? changedBy,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

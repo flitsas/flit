@@ -26,10 +26,10 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
     private readonly IAuditContextAccessor _auditContext;
 
-    public TenantSettingsRepository(FlitDbContext context, IAuditContextAccessor auditContext)
+    public TenantSettingsRepository(IIdentityDb context, IAuditContextAccessor auditContext)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));

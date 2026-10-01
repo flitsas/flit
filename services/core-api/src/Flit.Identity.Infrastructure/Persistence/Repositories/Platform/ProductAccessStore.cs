@@ -13,9 +13,9 @@ internal sealed class ProductAccessStore : IProductAccessStore
     /// <summary>Tope de niveles al subir por <c>parent_tenant_id</c>: corta un ciclo por datos corruptos.</summary>
     private const int MaxHierarchyDepth = 8;
 
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
 
-    public ProductAccessStore(FlitDbContext context)
+    public ProductAccessStore(IIdentityDb context)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }

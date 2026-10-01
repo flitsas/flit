@@ -4,7 +4,7 @@ using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class UserActivationRepository(FlitDbContext db) : IUserActivationRepository
+public sealed class UserActivationRepository(IIdentityDb db) : IUserActivationRepository
 {
     public async Task ActivateAsync(ActivationData data, CancellationToken cancellationToken)
     {

@@ -22,7 +22,7 @@ internal sealed class NotificationDeliveryLogRepository : INotificationDeliveryL
     public Task<IReadOnlyList<NotificationDeliveryLogRecord>> ListByTenantAsync(
         Guid tenantId, int skip, int take, CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

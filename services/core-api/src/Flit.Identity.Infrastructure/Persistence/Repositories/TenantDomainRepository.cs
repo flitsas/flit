@@ -22,11 +22,11 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class TenantDomainRepository : ITenantDomainRepository
 {
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
     private readonly IAuditContextAccessor _auditContext;
     private readonly IMemoryCache? _cache;
 
-    public TenantDomainRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null, IMemoryCache? cache = null)
+    public TenantDomainRepository(IIdentityDb context, IAuditContextAccessor? auditContext = null, IMemoryCache? cache = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? NullAuditContextAccessor.Instance;

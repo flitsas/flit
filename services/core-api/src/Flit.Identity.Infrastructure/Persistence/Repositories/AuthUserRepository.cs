@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepository userRoleAssignmentRepository) : IAuthUserRepository
+public sealed class AuthUserRepository(IIdentityDb db, IUserRoleAssignmentRepository userRoleAssignmentRepository) : IAuthUserRepository
 {
     public async Task<UserAuthSnapshot?> FindByEmailAsync(string email, CancellationToken cancellationToken)
     {

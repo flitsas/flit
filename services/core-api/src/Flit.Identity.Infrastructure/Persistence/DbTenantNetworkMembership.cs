@@ -15,10 +15,10 @@ namespace Flit.Infrastructure.Persistence;
 /// <c>CachedTenantDomainResolver</c>.
 /// </summary>
 internal sealed partial class DbTenantNetworkMembership(
-    FlitDbContext db,
+    IIdentityDb db,
     ILogger<DbTenantNetworkMembership> logger) : ITenantNetworkMembership
 {
-    private readonly FlitDbContext _db = db ?? throw new ArgumentNullException(nameof(db));
+    private readonly IIdentityDb _db = db ?? throw new ArgumentNullException(nameof(db));
     private readonly ILogger<DbTenantNetworkMembership> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public async Task<NetworkMembership> ResolveAsync(Guid tenantId, CancellationToken cancellationToken = default)

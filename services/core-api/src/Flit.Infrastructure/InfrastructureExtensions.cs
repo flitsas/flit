@@ -75,6 +75,8 @@ public static class InfrastructureExtensions
         // Mismas convenciones que el contexto de core-identity (HU #13231): NpgsqlConventions.
         services.AddDbContext<FlitDbContext>((serviceProvider, opts) =>
             NpgsqlConventions.Apply(opts, connectionString));
+        // Epic #13217 (HU #13231): los repositorios de identidad dependen de IIdentityDb; en core-api es el mismo contexto.
+        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();

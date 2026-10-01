@@ -19,9 +19,9 @@ internal sealed class ProductManifestStore : IProductManifestStore
     /// </summary>
     private const string ManifestHttpMethod = "ANY";
 
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
 
-    public ProductManifestStore(FlitDbContext context)
+    public ProductManifestStore(IIdentityDb context)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }

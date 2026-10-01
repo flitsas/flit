@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -8,30 +9,31 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// transacción — mismo patrón que <see cref="SignatureVaultRepository"/>/
 /// <see cref="DbSignatureVaultReader"/>. En proveedor InMemory (tests) delega directo, sin
 /// transacción ni set_config. Extraído para no duplicar el bloque en los repos/readers del
-/// directorio de representantes legales (HU #10900).
+/// directorio de representantes legales (HU #10900). Recibe el <see cref="DatabaseFacade"/> y no un contexto concreto
+/// (HU #13231): lo usan los repositorios de negocio de core-api y los de identidad, compartidos con core-identity.
 /// </summary>
 internal static class TenantRlsScope
 {
     public static async Task<T> ExecuteAsync<T>(
-        FlitDbContext context,
+        DatabaseFacade database,
         Guid tenantId,
         Func<Task<T>> operation,
         CancellationToken cancellationToken)
     {
-        if (!context.Database.IsRelational())
+        if (!database.IsRelational())
         {
             return await operation().ConfigureAwait(false);
         }
 
-        var strategy = context.Database.CreateExecutionStrategy();
+        var strategy = database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
-            var transaction = await context.Database
+            var transaction = await database
                 .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
             await using (transaction.ConfigureAwait(false))
             {
-                await context.Database.ExecuteSqlInterpolatedAsync(
+                await database.ExecuteSqlInterpolatedAsync(
                     $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
                     cancellationToken).ConfigureAwait(false);
 

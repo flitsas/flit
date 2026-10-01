@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class PasswordResetTokenRepository(FlitDbContext db) : IPasswordResetTokenRepository
+public sealed class PasswordResetTokenRepository(IIdentityDb db) : IPasswordResetTokenRepository
 {
     public async Task CreateAsync(
         Guid userId,

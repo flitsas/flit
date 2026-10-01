@@ -30,7 +30,7 @@ internal sealed class AdminAuditWriter : IAdminAuditWriter
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+            var context = scope.ServiceProvider.GetRequiredService<IIdentityDb>();
 
             var row = new TenantConfigAuditLog
             {

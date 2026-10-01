@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Persistence.Entities.Admin;
@@ -128,6 +129,8 @@ public sealed class DeliveryLogThemeTests(PostgresDatabaseFixture fixture) : Pos
         var services = new ServiceCollection();
         services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
         services.AddScoped(_ => NewContext());
+        // HU #13231: los escritores resuelven IIdentityDb en su propio scope, como en producción.
+        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
         await using var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
@@ -169,6 +172,8 @@ public sealed class DeliveryLogThemeTests(PostgresDatabaseFixture fixture) : Pos
         var services = new ServiceCollection();
         services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
         services.AddScoped(_ => NewContext());
+        // HU #13231: los escritores resuelven IIdentityDb en su propio scope, como en producción.
+        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
         await using var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 

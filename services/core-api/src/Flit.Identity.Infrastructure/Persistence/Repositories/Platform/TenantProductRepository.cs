@@ -19,11 +19,11 @@ internal sealed class TenantProductRepository : ITenantProductRepository
     private const string AuditEntityName = "TenantProduct";
     private const string AuditTargetType = "TENANT_PRODUCT";
 
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
     private readonly IAuditContextAccessor _auditContext;
     private readonly TimeProvider _clock;
 
-    public TenantProductRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null, TimeProvider? clock = null)
+    public TenantProductRepository(IIdentityDb context, IAuditContextAccessor? auditContext = null, TimeProvider? clock = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? NullAuditContextAccessor.Instance;

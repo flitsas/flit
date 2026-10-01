@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class UserRoleAssignmentRepository(FlitDbContext db) : IUserRoleAssignmentRepository
+public sealed class UserRoleAssignmentRepository(IIdentityDb db) : IUserRoleAssignmentRepository
 {
     public async Task<bool> UserBelongsToTenantAsync(Guid userId, Guid tenantId, CancellationToken ct)
     {

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class UserAccountRepository(FlitDbContext db) : IUserAccountRepository
+public sealed class UserAccountRepository(IIdentityDb db) : IUserAccountRepository
 {
     public async Task<PasswordRecoveryUser?> FindActiveByEmailAsync(string email, CancellationToken cancellationToken)
     {

@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class InvitationRepository(FlitDbContext db) : IInvitationRepository
+public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
 {
     public Task<bool> ExistsPendingAsync(Guid tenantId, string email, CancellationToken cancellationToken) =>
         db.UserInvitations.AnyAsync(

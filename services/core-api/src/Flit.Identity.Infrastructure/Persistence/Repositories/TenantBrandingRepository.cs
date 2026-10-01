@@ -26,10 +26,10 @@ internal sealed class TenantBrandingRepository : ITenantBrandingRepository
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
     private readonly IAuditContextAccessor _auditContext;
 
-    public TenantBrandingRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null)
+    public TenantBrandingRepository(IIdentityDb context, IAuditContextAccessor? auditContext = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? NullAuditContextAccessor.Instance;

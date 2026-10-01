@@ -21,7 +21,7 @@ public static class PersistentJwtSigningKeyStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keyId);
         using var scope = services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<IIdentityDb>();
         var protector = scope.ServiceProvider.GetRequiredService<IDataProtectionProvider>().CreateProtector(Purpose);
 
         var stored = Read(db, keyId);
@@ -39,7 +39,7 @@ public static class PersistentJwtSigningKeyStore
         return rsa;
     }
 
-    private static string? Read(FlitDbContext db, string keyId) =>
+    private static string? Read(IIdentityDb db, string keyId) =>
         db.Database
             .SqlQuery<string>($"SELECT protected_private_key AS \"Value\" FROM security.jwt_signing_keys WHERE key_id = {keyId}")
             .AsEnumerable()

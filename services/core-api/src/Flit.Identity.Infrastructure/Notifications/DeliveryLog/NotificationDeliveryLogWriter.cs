@@ -12,14 +12,14 @@ namespace Flit.Infrastructure.Notifications.DeliveryLog;
 /// que esto es defensa en profundidad, no la garantía de aislamiento (esa es AC3 en la consulta,
 /// con <c>WHERE tenant_id</c> explícito).
 /// </summary>
-internal sealed class NotificationDeliveryLogWriter(FlitDbContext db) : INotificationDeliveryLogWriter
+internal sealed class NotificationDeliveryLogWriter(IIdentityDb db) : INotificationDeliveryLogWriter
 {
     public Task WriteAsync(NotificationDeliveryLogEntry entry, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
         return TenantRlsScope.ExecuteAsync(
-            db,
+            db.Database,
             entry.TenantId,
             async () =>
             {

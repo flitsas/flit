@@ -12,9 +12,9 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class BrandingTenantLookupRepository : IBrandingTenantLookup
 {
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
 
-    public BrandingTenantLookupRepository(FlitDbContext context)
+    public BrandingTenantLookupRepository(IIdentityDb context)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }

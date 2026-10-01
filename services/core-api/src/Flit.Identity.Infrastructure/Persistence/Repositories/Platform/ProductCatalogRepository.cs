@@ -10,9 +10,9 @@ namespace Flit.Infrastructure.Persistence.Repositories.Platform;
 /// </summary>
 internal sealed class ProductCatalogRepository : IProductCatalog
 {
-    private readonly FlitDbContext _context;
+    private readonly IIdentityDb _context;
 
-    public ProductCatalogRepository(FlitDbContext context)
+    public ProductCatalogRepository(IIdentityDb context)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }
