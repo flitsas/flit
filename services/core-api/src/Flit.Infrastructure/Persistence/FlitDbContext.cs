@@ -16,8 +16,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace Flit.Infrastructure.Persistence;
 
 public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
-    : DbContext(options), IDataProtectionKeyContext
+    : DbContext(options), IDataProtectionKeyContext, IIdentityDb
 {
+    // Epic #13217 (HU #13231): en core-api, los repositorios de identidad usan este mismo contexto vía IIdentityDb.
+    DbSet<Entities.Admin.NotificationDeliveryLogEntity> IIdentityDb.NotificationDeliveryLogs => NotificationDeliveryLogs;
+
     /// <summary>
     /// HU #12797 (F2) — acciones diferidas al fin de la transacción ambiente gestionada (borrados del
     /// reemplazo seguro del consolidado, bitácora de fallos). No es un mapeo: EF no lo toca.

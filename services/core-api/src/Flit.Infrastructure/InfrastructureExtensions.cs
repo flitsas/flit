@@ -72,23 +72,9 @@ public static class InfrastructureExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
+        // Mismas convenciones que el contexto de core-identity (HU #13231): NpgsqlConventions.
         services.AddDbContext<FlitDbContext>((serviceProvider, opts) =>
-            opts.UseNpgsql(
-                connectionString,
-                npgsql =>
-                {
-                    npgsql.EnableRetryOnFailure(
-                        maxRetryCount: 3,
-                        maxRetryDelay: TimeSpan.FromSeconds(5),
-                        errorCodesToAdd: null);
-                })
-            .UseSnakeCaseNamingConvention()
-            .EnableSensitiveDataLogging(false)
-            .EnableDetailedErrors(false)
-            // HU10175: UserInvitation se crea con SQL crudo en HU10147_Invitations; el snapshot
-            // no la registra, así que EF lanza PendingModelChangesWarning. Se ignora porque
-            // la tabla existe y la migración ya fue aplicada vía SQL.
-            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
+            NpgsqlConventions.Apply(opts, connectionString));
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
