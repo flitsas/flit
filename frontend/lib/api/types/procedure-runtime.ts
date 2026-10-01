@@ -1471,6 +1471,13 @@ export interface WizardState {
    * el trámite). Ausente ⇒ se trata como obligatorio.
    */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda»: hay gravamen RUNT y la
+   * familia lo admite (Matrícula Inicial siempre; Traspaso y el resto solo con el certificado de
+   * prenda opcional en el OT, CF-06). El front no replica la regla: solo lee este booleano.
+   * Ausente ⇒ compatibilidad con clientes previos (traspaso: `!prendaDocumentRequired`; matrícula: no).
+   */
+  prendaOmitAllowed?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──

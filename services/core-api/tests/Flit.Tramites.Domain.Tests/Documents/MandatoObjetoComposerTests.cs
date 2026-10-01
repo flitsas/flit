@@ -154,4 +154,24 @@ public sealed class MandatoObjetoComposerTests
                 "PRENDA_INSCRIPCION")
             .Should().Be("INSCRIBIR PRENDA");
     }
+    // ── Feature #13110 — «Omitir prenda» (PrendaMarking = Ninguna) ────────────────────────────
+
+    [Fact]
+    public void MatriculaInicial_PrendaNinguna_SinComplemento()
+    {
+        MandatoObjetoComposer.Componer(
+                "MATRÍCULA INICIAL", null, PrendaDecision.ToFurMarking(PrendaDecision.Omitir), "MATRICULA_NUEVA")
+            .Should().Be("MATRÍCULA INICIAL");
+    }
+
+    [Fact]
+    public void TraspasoPrendaNingunaConColor_SoloTransformacion()
+    {
+        MandatoObjetoComposer.Componer(
+                "TRASPASO",
+                [MandatoObjetoComposer.CambioColor],
+                PrendaDecision.ToFurMarking(PrendaDecision.Omitir),
+                "TRASPASO_STANDARD")
+            .Should().Be("TRASPASO CON CAMBIO DE COLOR");
+    }
 }

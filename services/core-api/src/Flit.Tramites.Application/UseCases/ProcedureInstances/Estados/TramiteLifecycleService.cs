@@ -462,7 +462,7 @@ public sealed class TramiteLifecycleService(
 
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
         // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
-        // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
+        // «Omitir prenda» (decisión válida sin documento). Solo con el repo cableado.
         return await EvaluarPrendaGateAsync(instance, ct).ConfigureAwait(false);
     }
 

@@ -105,6 +105,16 @@ public sealed record WizardStateDto(
     public bool PrendaDocumentRequired { get; init; } = true;
 
     /// <summary>
+    /// Feature #13110 — el wizard puede ofrecer «Omitir prenda» (<c>omitir</c>). <c>true</c> solo si la
+    /// decisión de prenda aplica al trámite (<see cref="WizardCapabilitiesDto.HasPrendaGate"/>: tipo
+    /// prendario o gravamen reportado por el RUNT) y <see cref="PrendaDecision.OmitirAdmitido"/> la
+    /// admite: en la familia Matrículas siempre; en Traspaso y el resto, solo con el certificado de prenda
+    /// opcional en el OT (<see cref="PrendaDocumentRequired"/> = <c>false</c>). Es la misma regla que
+    /// aplica el PUT de prenda: el asistente recibe la respuesta y no la replica.
+    /// </summary>
+    public bool PrendaOmitAllowed { get; init; }
+
+    /// <summary>
     /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
     /// titule el trámite que se está haciendo. Sin esto, el frontend solo tenía la familia y
     /// rotulaba «Matrícula Inicial» cualquier cosa que no fuera un traspaso.
@@ -428,23 +438,40 @@ public sealed class GetWizardStateHandler(
                         IdentityValidationEnabled = identityRequired,
                         RnmcEnabled = rnmcEnabled,
                         PrendaDocumentRequired = prendaDocumentRequired,
+                        PrendaOmitAllowed = ResolvePrendaOmitAllowed(
+                            dynamicState, instance, prendaDocumentRequired),
                     },
                     instance), null);
             }
         }
 
+        var staticState = ComputeState(
+            instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
+            runtExigido);
         var state = AnnotateInstanceFlags(
-            ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
-                runtExigido) with
+            staticState with
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
                 PrendaDocumentRequired = prendaDocumentRequired,
+                PrendaOmitAllowed = ResolvePrendaOmitAllowed(
+                    staticState, instance, prendaDocumentRequired),
             },
             instance);
         return (state, null);
     }
+
+    /// <summary>
+    /// Feature #13110 — <see cref="WizardStateDto.PrendaOmitAllowed"/>: la decisión de prenda aplica (el
+    /// <c>HasPrendaGate</c> que ya viaja en las capacidades, derivado del tipo y del gravamen RUNT) y
+    /// <see cref="PrendaDecision.OmitirAdmitido"/> lo permite para la familia y la política del OT. La
+    /// familia se lee null-safe: sin el tipo cargado cae a OTROS (no es matrícula), igual que el PUT.
+    /// </summary>
+    private static bool ResolvePrendaOmitAllowed(
+        WizardStateDto state, ProcedureInstance instance, bool prendaDocumentRequired) =>
+        (state.Capabilities?.HasPrendaGate ?? false)
+        && PrendaDecision.OmitirAdmitido(
+            ProcedureFamilyCodes.FromCodeOrOtros(instance.ProcedureType?.Family), prendaDocumentRequired);
 
     /// <summary>
     /// Política compañía+OT del certificado de prenda (snapshot al <see cref="ProcedureInstance.CreatedAt"/>).
@@ -705,7 +732,7 @@ public sealed class GetWizardStateHandler(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
             DocumentRequirements = documentRequirements,
             PrendaVigente = prendaVigente,
-            RuntReportaGravamen = RuntReportaGravamen(fv),
+            RuntReportaGravamen = RuntReportaGravamen(instance),
             TypeCode = instance.ProcedureType?.Code,
             FamilyCode = instance.ProcedureType?.Family,
             AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
@@ -885,22 +912,13 @@ public sealed class GetWizardStateHandler(
     /// (Kyverum, Verifik, Intempo) en <c>field_values</c>, que es también de donde el asistente saca
     /// la alerta amarilla y el detalle del acreedor: pantalla y gate leen el MISMO dato.
     ///
-    /// <para>El RUNT contesta «SI»/«NO» en texto. Se acepta cualquier variante afirmativa razonable y
-    /// se ignora el resto: un dato ausente o ilegible NO inventa un gravamen —eso convertiría cada
-    /// consulta fallida en un bloqueo— pero tampoco lo oculta cuando sí vino.</para>
+    /// <para>Bug #13203 — la regla vive en <see cref="RuntGravamenSignal"/>: banderas afirmativas O
+    /// <c>runt_gravamenes</c> con al menos una garantía (el RUNT puede decir «NO»/«NO» y traer una
+    /// garantía mobiliaria del RNGM). Se evalúa sobre la instancia y no sobre el diccionario de
+    /// <c>ValueText</c>, porque el detalle vive en <c>ValueJson</c>.</para>
     /// </summary>
-    private static bool RuntReportaGravamen(Dictionary<string, string?> fv) =>
-        EsAfirmativo(Get(fv, "runt_tiene_prendas")) || EsAfirmativo(Get(fv, "runt_tiene_gravamenes"));
-
-    /// <inheritdoc cref="RuntReportaGravamen(Dictionary{string, string})"/>
     private static bool RuntReportaGravamen(ProcedureInstance instance) =>
-        instance.FieldValues.Any(f =>
-            (string.Equals(f.FieldKey, "runt_tiene_prendas", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(f.FieldKey, "runt_tiene_gravamenes", StringComparison.OrdinalIgnoreCase))
-            && EsAfirmativo(f.ValueText));
-
-    private static bool EsAfirmativo(string? valor) =>
-        valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
+        RuntGravamenSignal.Reporta(instance.FieldValues);
 
     private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
         string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);

@@ -293,10 +293,14 @@ public static class RuntVehicleSnapshotParser
             {
                 if (g.ValueKind != JsonValueKind.Object)
                     continue;
+                // Bug #13203 — el RUNT usa dos vocabularios para el mismo ítem: el de prendas (acreedor,
+                // numeroDocumentoAcreedor, fechaInscripcion) y el de garantías mobiliarias del RNGM
+                // (entidad, numeroDocumentoEntidad, fechaRegistro dd/MM/yyyy). El primero manda; el
+                // segundo es respaldo, sin él el refuerzo GarantiaInscrita nunca veía la garantía.
                 list.Add(new RuntGarantia(
-                    Str(g, "acreedor"),
-                    Str(g, "numeroDocumentoAcreedor"),
-                    RuntText.ParseDay(Str(g, "fechaInscripcion"))));
+                    Str(g, "acreedor") ?? Str(g, "nombreAcreedor") ?? Str(g, "entidad"),
+                    Str(g, "numeroDocumentoAcreedor") ?? Str(g, "numeroDocumentoEntidad"),
+                    RuntText.ParseDay(Str(g, "fechaInscripcion") ?? Str(g, "fechaRegistro"))));
             }
         }
 

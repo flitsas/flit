@@ -12,26 +12,21 @@ import {
 import { soatEstadoLabel } from "./ot-detalle-pendientes";
 import { formatOtDate } from "../ot-utils";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { PRENDA_DECISION_LABELS } from "@/components/operacion/prenda-decision-labels";
+import type { PrendaDecision } from "@/lib/api/types/procedure-runtime";
 
 /**
- * Catálogo cerrado de decisiones de prenda, el mismo que captura el gestor.
- *
- * Llega aquí desde la desaparecida sección «Datos comerciales»: el prototipo pone la prenda en la
- * ficha del vehículo —es un gravamen sobre el bien, no una condición de la compraventa— y ese es
- * también el único dato de aquella sección que el organismo necesita para decidir.
+ * La decisión de prenda se rotula con la fuente única (`prenda-decision-labels.ts`, HU #13112): el
+ * mismo catálogo que captura el gestor. Llega aquí desde la desaparecida sección «Datos
+ * comerciales»: el prototipo pone la prenda en la ficha del vehículo —es un gravamen sobre el bien,
+ * no una condición de la compraventa— y es el único dato de aquella sección que el organismo
+ * necesita para decidir. Un código fuera del catálogo se muestra tal cual.
  */
-const PRENDA_DECISION_LABELS: Record<string, string> = {
-  solicitar: "Solicitar constitución de prenda",
-  registrar: "Registrar prenda",
-  levantar: "Levantar gravamen",
-  omitir: "Continuar sin gestionar (riesgo asumido)",
-  sin_prenda: "Sin prenda",
-};
-
 function prendaTexto(procedure: OtClientProcedure): string {
   const prenda = procedure.prenda;
   if (!prenda?.decision) return "";
-  const decision = PRENDA_DECISION_LABELS[prenda.decision] ?? prenda.decision;
+  const decision =
+    PRENDA_DECISION_LABELS[prenda.decision as PrendaDecision] ?? prenda.decision;
   // El acreedor solo se nombra si lo hay: en `sin_prenda` y `levantar` puede no existir.
   return [decision, prenda.acreedorNombre?.trim()].filter(Boolean).join(" · ");
 }
