@@ -133,7 +133,7 @@ los productos.
 4. Gateway: las rutas de la sección 4 llevan una marca `FlitIdentity` y conservan su política actual; un filtro de
    configuración las manda a `core-identity-cluster` solo con `Gateway:IdentityCluster:Enabled`. Apagado, el gateway
    se comporta igual que hoy.
-5. Compose: servicio `core-identity` con la misma imagen, perfil `identity` (no arranca si no se pide), ancla de
+5. Compose: servicio `core-identity` (puerto `4004`/`5004`/`6004`) con la misma imagen, perfil `identity` (no arranca si no se pide), ancla de
    variables compartidas, `/health/ready` como healthcheck y sin `depends_on` de `core-api` (tiene que poder arrancar
    aunque `core-api` esté caído).
 6. Pruebas:
@@ -153,7 +153,7 @@ los productos.
 | Etiqueta propia | `CORE_IDENTITY_TAG`, por defecto la de `core-api` | Poder dejar identidad en una versión mientras `core-api` cambia |
 | Memoria | Límite de memoria a `core-api` y `oom_score_adj` para que identidad sea lo último que el sistema mate | Un `core-api` sin memoria en el mismo VPS puede llevarse cualquier proceso |
 | Conexiones a la base | Tope del pool de `core-api` y conexiones reservadas para identidad | Si `core-api` agota `max_connections`, identidad no puede entrar a la base |
-| CORS del gateway | `Internal:ApiBaseUrl` apuntando a identidad (atiende el mismo endpoint) | Hoy el gateway lee los dominios activos desde `core-api` |
+| CORS del gateway | Se queda leyendo los dominios activos de `core-api` (`/internal/domains`, ruta de negocio) | Si el gateway se reinicia con `core-api` caído, cae a la lista fija de orígenes; el hub y Trámites no se afectan porque llaman a la API desde su servidor |
 
 ## 10. Riesgos que quedan y cómo se cubren
 

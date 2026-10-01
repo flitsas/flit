@@ -126,7 +126,9 @@ services:
     working_dir: /app/api
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
+    # HU #13226: ancla — core-identity reusa TODO este bloque (misma llave de firma, clientes OIDC, correo, base), así
+    # los dos procesos no pueden quedar con valores distintos. Lo que cambie aquí cambia en los dos.
+    environment: &core-api-env
       # HU #12895 (FLIT Suite A-02) — nombre del ambiente .NET, igual en core-api, core-ict y gateway. Sin la variable
       # sigue en Development, como hoy. Tiene nombre propio (no ASPNETCORE_ENVIRONMENT) para que otra variable del .env
       # no lo cambie sin querer. Qué depende del nombre: docs/suite/frentes/a-inventario-ambientes.md.
@@ -360,6 +362,41 @@ services:
     restart: *restart
     logging: *default-logging
 
+  # ── core-identity (HU #13226, Epic #13217) — CORE_IDENTITY_PORT ──────────────
+  # El MISMO programa de core-api con Flit__HostRole=identity: solo el login (/connect, /.well-known, /api/v1/auth,
+  # /api/v1/platform, /api/v1/public/branding), sin migraciones, seeder, gRPC ni procesos de negocio. Así el login
+  # sigue en pie cuando core-api se cae, se reinicia o se despliega. Ver docs/suite/identidad-frontera.md.
+  # Perfil "identity": no arranca si no se pide (COMPOSE_PROFILES=identity), y aun arrancado no recibe tráfico hasta
+  # que el gateway tenga FLIT_IDENTITY_CLUSTER_ENABLED=true. Volver atrás = apagar esa bandera.
+  # Sin depends_on de core-api a propósito: tiene que poder arrancar aunque core-api esté caído.
+  core-identity:
+    profiles: ["identity"]
+    image: ghcr.io/flitsas/flitdev/core-api:${CORE_IDENTITY_TAG:-${CORE_API_TAG:-latest}}
+    command: ["dotnet", "/app/api/Flit.Api.dll"]
+    working_dir: /app/api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      <<: *core-api-env
+      Flit__HostRole: identity
+      ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4004}
+      # Las migraciones y el seeder son de core-api; /health/ready avisa si el esquema va por delante.
+      Database__AutoMigrate: "false"
+    volumes:
+      # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
+    ports:
+      - "127.0.0.1:${CORE_IDENTITY_PORT:-4004}:${CORE_IDENTITY_PORT:-4004}"
+    healthcheck:
+      # Listo = base alcanzable y sin migraciones pendientes (no solo «vivo»).
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_IDENTITY_PORT:-4004}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    logging: *default-logging
+
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
   core-ict:
     image: ghcr.io/flitsas/flitdev/core-ict:${CORE_ICT_TAG:-latest}
@@ -521,6 +558,10 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
+      # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
+      # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
+      Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}
+      ReverseProxy__Clusters__core-identity-cluster__Destinations__core-identity-1__Address: http://core-identity:${CORE_IDENTITY_PORT:-4004}/
       # MISMA variable que el ASPNETCORE_URLS de migracion-api. appsettings.json trae
       # el 4030 de DEV/local; sin este override, en QA/PDN el gateway apunta a un
       # puerto donde nadie escucha y responde 502 sin cuerpo.

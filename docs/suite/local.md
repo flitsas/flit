@@ -66,6 +66,32 @@ npx next dev -H 127.0.0.1 -p 3000
 - `FLIT_SESSION_SECRET` no hace falta en `next dev`: se usa una clave fija de desarrollo. En un build de producción es
   obligatoria (mínimo 32 caracteres).
 
+## 4. (Opcional) Identidad en su propio proceso
+
+Para probar la suite con `core-identity` aparte (Epic #13217, [identidad-frontera.md](identidad-frontera.md)): el mismo
+`Flit.Api.dll` con `Flit__HostRole=identity` en otro puerto. Se arranca **después** de la API (ella migra).
+
+```bash
+cd services/core-api/src/Flit.Api
+Flit__HostRole=identity Database__AutoMigrate=false \
+ConnectionStrings__Core="<la misma de la API>" \
+ASPNETCORE_URLS=http://127.0.0.1:4905 ASPNETCORE_ENVIRONMENT=Development \
+Suite__Oidc__Enabled=true \
+Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4040 \
+Suite__Hosts__Overrides__tramites=http://127.0.0.1:3000 \
+dotnet bin/Debug/net10.0/Flit.Api.dll
+```
+
+- El **hub** habla solo con identidad: `CORE_API_ORIGIN` y `BRANDING_INTERNAL_API_URL` a `http://127.0.0.1:4905`.
+- **Trámites** sigue con `CORE_API_ORIGIN=http://127.0.0.1:4903`: su login pasa por el hub, que ya va a identidad.
+- `curl http://127.0.0.1:4905/health/ready` responde `ready`; una ruta de negocio (por ejemplo
+  `/api/v1/public/banners/active`) responde 404 en 4905 y 200 en 4903.
+- **La prueba que importa:** apaga la API (4903) y entra por `127.0.0.1:3000`. El login funciona y Trámites abre con la
+  sesión; solo fallan sus datos. Al volver a levantar la API, recarga: los datos aparecen sin volver a iniciar sesión.
+
+En el servidor esto no se arma a mano: es el servicio `core-identity` del compose (perfil `identity`) y la bandera
+`FLIT_IDENTITY_CLUSTER_ENABLED` del gateway.
+
 ## Qué probar
 
 Usuarios de las semillas (`DevelopmentAuthSeeder.cs`): `demo@flit.local` (SuperAdmin), `admin@empresa.local`

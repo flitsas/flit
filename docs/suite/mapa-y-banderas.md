@@ -17,7 +17,8 @@ Para levantarla en local, ver [local.md](local.md). Para lo que cambia cuando la
 | **@flit/shell** | `packages/shell/` | dentro de cada front | Barra común (`SuiteShell`): menú de productos, menú de cuenta y dock desde un catálogo (`NavCatalog`). |
 | **@flit/brand** | `packages/brand/` | dentro de cada front | Decide la marca por host (FLIT o Marca Blanca) con `FLIT_HOSTS`. |
 | **Gateway** | `services/core-api/src/Flit.Gateway` (YARP) | interno, puerto `4002` | Reparte `/api`, `/connect`, `/.well-known`, `/hubs`, `/ml`. Sella el dominio (`X-Flit-Domain`) solo si la petición viene de la red interna. No valida tokens. |
-| **core-api** | `services/core-api/src/Flit.Api` | interno, puerto `4003` | Hoy es a la vez la API de negocio **y** la identidad: login de siempre, servidor OIDC (`Flit.Api/Identity`), usuarios, empresas, roles, productos. Valida los tokens. |
+| **core-api** | `services/core-api/src/Flit.Api` | interno, puerto `4003` | La API de negocio. Hoy también atiende la identidad (login, OIDC, usuarios, roles, productos) y valida los tokens. |
+| **core-identity** | el mismo `Flit.Api` con `Flit__HostRole=identity` | interno, puerto `4004` (perfil `identity`) | Solo el login: `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform`, `/api/v1/public/branding`. Recibe tráfico solo con `FLIT_IDENTITY_CLUSTER_ENABLED`. |
 | **Postgres** | — | host del VPS | Una base. Las tablas de la suite: `platform.*`, `identity.oidc_*`, `security.jwt_signing_keys`, el anillo de Data Protection. |
 
 ## 2. Qué viaja entre ellas
@@ -104,6 +105,19 @@ servidor, las variables van en el `.env` del VPS y `docker-compose.prod.yml` las
 | `COMPOSE_PROFILES=suite` | — | (compose) | El contenedor `frontend-hub` no se levanta. | Se levanta el hub. |
 | `FLIT_TRAMITES_HOST_ENABLED` | — | frontend-hub | El hub no redirige nada. | Las rutas de Trámites en el host del hub responden 308 a `TRAMITES_URL`. |
 | — | `Suite:ProductAccess:Enforce` | core-api | `RequireProduct` solo registra en el log si la empresa no tiene el producto. | Responde 403 `PRODUCT_NOT_ENABLED`. No tiene variable en el compose todavía. |
+
+### Las del servicio de identidad aparte (Epic #13217)
+
+| Variable (`.env`) | Configuración | Contenedor | Apagada / vacía (hoy) | Encendida |
+|---|---|---|---|---|
+| `COMPOSE_PROFILES=identity` | — | (compose) | `core-identity` no se levanta. | Se levanta `core-identity` (el mismo `core-api` con `Flit__HostRole=identity`). |
+| `FLIT_IDENTITY_CLUSTER_ENABLED` | `Gateway:IdentityCluster:Enabled` | gateway | `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform` y `/api/v1/public/branding` van a `core-api`. | Esas rutas van a `core-identity`; el resto sigue en `core-api`. Volver atrás = `false`. |
+| — | `Flit:HostRole` | core-identity | — | `identity`: sin migraciones, seeder, gRPC ni procesos de negocio; solo las rutas del login. |
+| `CORE_IDENTITY_PORT` | — | core-identity, gateway | `4004` | Puerto interno de `core-identity` (por ambiente, como los demás). |
+| `CORE_IDENTITY_TAG` | — | core-identity | la de `core-api` | Fijar identidad a una versión mientras `core-api` cambia. |
+
+`/health/ready` (en los dos procesos) responde 503 si la base no responde o tiene migraciones pendientes;
+`core-identity` lo usa como healthcheck.
 
 ### Las que dicen dónde está cada cosa
 
