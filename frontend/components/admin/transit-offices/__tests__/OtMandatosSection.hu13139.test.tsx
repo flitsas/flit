@@ -30,6 +30,7 @@ const fetchMandateOtConfig = vi.fn();
 const listCompanyOtMandateRules = vi.fn();
 const fetchMandateSigners = vi.fn();
 const updateMandateSigner = vi.fn();
+const fetchOtAssociableCompanies = vi.fn();
 
 vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   fetchMandateOtConfig: (...a: unknown[]) => fetchMandateOtConfig(...a),
@@ -49,6 +50,7 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
     .fn()
     .mockResolvedValue([{ transitOfficeId: "ot-1", code: "11001000", name: "OT Bogotá" }]),
   fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
+  fetchOtAssociableCompanies: (...a: unknown[]) => fetchOtAssociableCompanies(...a),
 }));
 vi.mock("@/lib/api/admin-signature-vault", () => ({
   fetchSignatureVaultByDocument: vi.fn().mockResolvedValue([]),
@@ -145,6 +147,7 @@ describe("HU #13139 — hub del OT", () => {
     listCompanyOtMandateRules.mockReset().mockResolvedValue([]);
     fetchMandateSigners.mockReset().mockResolvedValue([]);
     updateMandateSigner.mockReset();
+    fetchOtAssociableCompanies.mockReset().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, aplicaSoloASuCompania: false });
     window.localStorage.clear();
     loginAs("ot_admin");
   });
@@ -185,13 +188,23 @@ describe("HU #13139 — hub del OT", () => {
 
   it("AC4: la compañía sin mandatario activo en el organismo se marca «Sin mandatario»", async () => {
     listCompanyOtMandateRules.mockResolvedValue([
-      companyRow({ companyTenantId: "cia-1", companyName: "Sin Nadie S.A.S." }),
       companyRow({ companyTenantId: "cia-2", companyName: "Con Default S.A.S.", defaultMandateSignerName: "Carlos Pérez" }),
-      companyRow({ companyTenantId: "cia-3", companyName: "Con Vinculado S.A.S." }),
     ]);
+    // HU #13182 — la lista de compañías sale de las asociables (nombre y NIT); el default viene de las reglas.
+    fetchOtAssociableCompanies.mockResolvedValue({
+      items: [
+        { id: "cia-1", name: "Sin Nadie S.A.S.", nit: "900000001" },
+        { id: "cia-2", name: "Con Default S.A.S.", nit: "900000002" },
+        { id: "cia-3", name: "Con Vinculado S.A.S.", nit: "900000003" },
+      ],
+      total: 3,
+      page: 1,
+      pageSize: 10,
+      aplicaSoloASuCompania: false,
+    });
     fetchMandateSigners.mockResolvedValue([signer({ companyTenantIds: ["cia-3"] })]);
     renderSection();
-    const tabla = await screen.findByRole("table", { name: /empresas que radican/i });
+    const tabla = await screen.findByRole("table", { name: "Compañías activas" });
     const fila = (n: string) => within(tabla).getByText(n).closest("tr") as HTMLElement;
     expect(within(fila("Sin Nadie S.A.S.")).getByTestId("ot-mandatos-sin-mandatario")).toHaveTextContent(
       "Sin mandatario",

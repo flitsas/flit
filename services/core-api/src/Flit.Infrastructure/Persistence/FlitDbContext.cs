@@ -122,6 +122,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<MandateSignerRepresentedCompany> MandateSignerRepresentedCompanies =>
         Set<MandateSignerRepresentedCompany>();
 
+    /// <summary>HU #13177 — compañías de FLIT (por tenant) a las que se asocia cada mandatario, por organismo.</summary>
+    public DbSet<MandateSignerAssociatedCompany> MandateSignerAssociatedCompanies =>
+        Set<MandateSignerAssociatedCompany>();
+
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();

@@ -41,7 +41,7 @@ public sealed record MandateSignerCandidate(
     string? MotivoSinFirma = null,
     /// <summary>
     /// HU #13142 (ADR-0066) — origen del vínculo con la compañía gestora: <c>organismo</c> | <c>super_admin</c> |
-    /// <c>compania</c> | <c>asociado</c> (este último lo llena F7 #13180). Decide el nivel de la prelación.
+    /// <c>compania</c> | <c>asociado</c> (el mandatario de otra compañía asociado a la del trámite, HU #13180). Decide el nivel de la prelación.
     /// El default <c>organismo</c> es el de la columna <c>configured_by_scope</c>.
     /// </summary>
     string Origen = MandateSignerOrigins.Organismo,
@@ -61,7 +61,22 @@ public sealed record MandateSignerCandidate(
     bool BaulVigente = false,
     /// <summary>HU #13142 — baja lógica (<c>deleted_at</c>). Solo llega en <c>true</c> al pedir la referencia
     /// de un trámite ya firmado con <c>incluirEliminados</c>; la prelación lo descarta.</summary>
-    bool Eliminado = false);
+    bool Eliminado = false,
+    /// <summary>
+    /// HU #13180b (Feature #13119) — tenants de las compañías a las que el mandatario está vinculado (vínculos
+    /// activos): ahí pueden vivir su firma del baúl y su validación biométrica, que NO siempre están en el tenant de
+    /// la compañía del trámite (un asociado de otra compañía, o el default del OT). Nulo o vacío ⇒ solo se busca en
+    /// el tenant del trámite. Ver <see cref="VaultTenants"/>.
+    /// </summary>
+    IReadOnlyList<Guid>? VaultTenantIds = null)
+{
+    /// <summary>
+    /// Tenants donde buscar su firma del baúl, en orden: primero el de la compañía del trámite (comportamiento
+    /// histórico) y luego los de sus compañías vinculadas. Sin repetidos.
+    /// </summary>
+    public IReadOnlyList<Guid> VaultTenants(Guid tenantDelTramite) =>
+        [tenantDelTramite, .. (VaultTenantIds ?? []).Where(t => t != tenantDelTramite && t != Guid.Empty).Distinct()];
+}
 
 /// <summary>Valores del origen y del modelo del mandatario que usa la prelación (ADR-0066, ADR-0061).</summary>
 public static class MandateSignerOrigins
@@ -93,12 +108,10 @@ public interface IMandateSignerDirectory
     /// Lista vacía si el OT/compañía no tiene mandatarios configurados.
     /// </summary>
     /// <param name="nitMandante">
-    /// NIT de la empresa que otorga el mandato. Cuando viene, la lista se acota a los mandatarios
-    /// asociados a ESA empresa en ese organismo, más los que no tienen ninguna asociada.
-    ///
-    /// <para>La ausencia de asociación significa "aplica a todas" a propósito: los mandatarios
-    /// registrados antes de esta acotación no tienen ninguna, y sin esa regla desaparecerían de todos
-    /// los trámites al desplegar.</para>
+    /// OBSOLETO E IGNORADO (HU #13179, Feature #13119): la resolución ya no compara el NIT del mandante ni
+    /// consulta <c>mandate_signer_represented_companies</c>. El candidato de la compañía propietaria se incluye
+    /// siempre; la asociación entre compañías va por tenant (HU #13180). Se conserva el parámetro para no
+    /// romper a los llamadores.
     /// </param>
     Task<IReadOnlyList<MandateSignerCandidate>> GetCandidatesAsync(
         Guid transitOfficeId,

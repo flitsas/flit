@@ -31,4 +31,9 @@ public sealed record CreateMandateSignerRequest(
     /// <summary>HU #13129 — inicio del rango (date, <c>yyyy-MM-dd</c>); solo con <c>range</c>.</summary>
     DateOnly? ValidFrom = null,
     /// <summary>HU #13129 — fin del rango (date); solo con <c>range</c>.</summary>
-    DateOnly? ValidTo = null);
+    DateOnly? ValidTo = null,
+    /// <summary>
+    /// HU #13179 — compañías de FLIT (por tenant) a las que se asocia el mandatario, por organismo. Ausente o
+    /// vacío ⇒ solo aplica a su propia compañía. El OT solo puede asociar compañías que operan en su organismo.
+    /// </summary>
+    IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.MandateSignerOfficeCompanies>? OfficeCompanies = null);

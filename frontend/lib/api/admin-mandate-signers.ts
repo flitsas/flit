@@ -61,7 +61,7 @@ export interface MandateSigner {
    * (deprecado): esta lista es la que dice dónde puede firmar.
    */
   transitOfficeIds?: string[];
-  /** Empresas representadas por organismo; vacío para un organismo ⇒ aplica a todas allí. */
+  /** HU #13179 — compañías asociadas por organismo; vacío ⇒ aplica solo a su propia compañía. */
   officeCompanies?: MandateSignerOfficeCompanies[];
   /** HU #13129 — ausente en respuestas anteriores al cambio ⇒ Persona natural. */
   signerModel?: SignerModel;
@@ -127,6 +127,8 @@ export interface MandateSignerInput extends MandateSignerProfileFields {
   transitOfficeIds?: string[];
   /** HU #13123 — id de la firma del baúl; el OT no lista el baúl, solo enviaría el id. */
   signatureVaultId?: string | null;
+  /** HU #13179 — compañías asociadas por organismo (el OT ya puede enviarlas). */
+  officeCompanies?: MandateSignerOfficeCompanies[];
 }
 
 export interface MandateSignerSaved {
@@ -231,6 +233,57 @@ export async function fetchMandateSigners(
 ): Promise<MandateSigner[]> {
   const result = await apiFetch<{ data: MandateSigner[] }>(base(transitOfficeId), { signal });
   return result.data;
+}
+
+/** HU #13178 — compañía asociable a un mandatario: solo id de tenant, nombre y NIT (Ley 1581). */
+export interface AssociableCompany {
+  id: string;
+  name: string;
+  nit: string;
+}
+
+export interface AssociableCompaniesQuery {
+  /** Nombre o NIT; el servidor exige mínimo 2 caracteres (422 si trae menos). */
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AssociableCompaniesPage {
+  items: AssociableCompany[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Verdadero si quien consulta no tiene red: no hay lista y el mandatario aplica solo a su compañía. */
+  aplicaSoloASuCompania: boolean;
+}
+
+function normalizarAsociables(r: Partial<AssociableCompaniesPage> | null | undefined): AssociableCompaniesPage {
+  const items = Array.isArray(r?.items) ? r!.items : [];
+  return {
+    items,
+    total: r?.total ?? items.length,
+    page: r?.page ?? 1,
+    pageSize: r?.pageSize ?? items.length,
+    aplicaSoloASuCompania: r?.aplicaSoloASuCompania === true,
+  };
+}
+
+/**
+ * GET /associable-companies — HU #13178/#13182: todas las compañías gestoras activas (sin duplicados
+ * por NIT), con búsqueda por nombre y NIT y paginación de servidor. Solo OT admin y SuperAdmin (403
+ * al resto). No altera la visibilidad de la bandeja de trámites.
+ */
+export async function fetchOtAssociableCompanies(
+  transitOfficeId: string,
+  query: AssociableCompaniesQuery = {},
+  signal?: AbortSignal,
+): Promise<AssociableCompaniesPage> {
+  const r = await apiFetch<AssociableCompaniesPage>(`${base(transitOfficeId)}/associable-companies`, {
+    query: { search: query.search, page: query.page, pageSize: query.pageSize },
+    signal,
+  });
+  return normalizarAsociables(r);
 }
 
 /** GET /companies — compañías del OT con sus mandatarios asignados (RF34 + multiselect). */
@@ -389,40 +442,44 @@ export interface CompanyMandateSignerInput extends MandateSignerProfileFields {
    */
   signatureVaultId?: string | null;
   /**
-   * Empresas representadas por organismo. Omitir la entrada de un organismo ⇒ el mandatario aplica a
-   * todas las empresas allí.
+   * Compañías asociadas por organismo. En la edición cada organismo presente REEMPLAZA su conjunto
+   * (lista vacía = retirar); ausente no toca nada.
    */
   officeCompanies?: MandateSignerOfficeCompanies[];
 }
 
-/** Empresa representada de la compañía: las que se dan de alta en el formulario del representante. */
-export interface RepresentedCompanyOption {
-  id: string;
-  /** NIT. Es lo que distingue dos empresas con la misma razón social. */
-  documentNumber: string;
-  name: string;
-}
-
 /**
- * Empresas representadas para las que el mandatario firma en un organismo. Lista vacía ⇒ aplica a
- * TODAS las de ese organismo, que es como se comportan los mandatarios que ya existen.
+ * HU #13179 — compañías de FLIT (por id de tenant) a las que se asocia el mandatario en un organismo.
+ * Lista vacía o ausente ⇒ aplica solo a su propia compañía. Reemplaza a las «empresas representadas».
  */
 export interface MandateSignerOfficeCompanies {
   transitOfficeId: string;
-  representedCompanyIds: string[];
+  associatedCompanyTenantIds: string[];
+  /** Nombre y NIT de las asociadas (solo esos datos); ausente en respuestas antiguas. */
+  associatedCompanies?: MandateSignerAssociatedCompany[];
 }
 
-/** GET — empresas representadas de la compañía. Ya vienen únicas por NIT. */
-export async function fetchRepresentedCompanies(
+export interface MandateSignerAssociatedCompany {
+  id: string;
+  name: string;
+  nit: string;
+}
+
+/**
+ * GET /associable-companies — HU #13178/#13181: lo que el Admin de Compañía puede asociar (solo sus
+ * hijas directas activas). Sin red: `items` vacío y `aplicaSoloASuCompania` verdadero.
+ */
+export async function fetchCompanyAssociableCompanies(
   tenantId: string,
+  query: AssociableCompaniesQuery = {},
   signal?: AbortSignal,
   networkHeadId?: string | null,
-): Promise<RepresentedCompanyOption[]> {
-  const r = await apiFetch<{ items: RepresentedCompanyOption[] }>(
-    `${companyBase(tenantId, networkHeadId)}/represented-companies`,
-    { signal },
+): Promise<AssociableCompaniesPage> {
+  const r = await apiFetch<AssociableCompaniesPage>(
+    `${companyBase(tenantId, networkHeadId)}/associable-companies`,
+    { query: { search: query.search, page: query.page, pageSize: query.pageSize }, signal },
   );
-  return r?.items ?? [];
+  return normalizarAsociables(r);
 }
 
 // HU #11757 (ADR-0050) — se retira `mandateSignerIdentityAction` (send/resend/link desde el

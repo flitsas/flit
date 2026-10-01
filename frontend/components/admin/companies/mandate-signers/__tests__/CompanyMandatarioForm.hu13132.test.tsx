@@ -7,6 +7,14 @@ import userEvent from "@testing-library/user-event";
 import { ApiValidationError } from "@/lib/api/types";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 
+// HU #13181 — el formulario consulta las compañías asociables; aquí el Admin de Compañía no tiene red.
+vi.mock("@/lib/api/admin-mandate-signers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/admin-mandate-signers")>()),
+  fetchCompanyAssociableCompanies: vi
+    .fn()
+    .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100, aplicaSoloASuCompania: true }),
+}));
+
 vi.mock("@/lib/api/admin-signature-vault", () => ({
   fetchSignatureVaultByDocument: vi.fn().mockResolvedValue([]),
   createSignatureVaultEntry: vi.fn(),

@@ -541,6 +541,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       "vigencia del mandatario",
       "por vencer",
       "empresas que radican",
+      "compañías activas",
       "ver firma",
       "vista previa de la firma",
       "registrar mandatario",
@@ -561,7 +562,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         bullets: [
           "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, forma de firma); registrar personas nuevas es solo del Admin OT.",
           "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su modelo (Persona natural, Persona jurídica o Formato en blanco), su tipo de firma (baúl de firmas o validación de identidad) y una etiqueta de vigencia: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» cuando el rango todavía no empieza. La etiqueta siempre lleva el estado escrito, no depende del color. Persona jurídica y Formato en blanco no tienen vigencia: muestran un guion. Con el lápiz editas un mandatario (Admin OT); el Operador OT no ve esa acción. Con los iconos de desactivar (o reactivar) y eliminar das de baja a un mandatario: antes se te muestra qué compañías y defaults quedarían sin mandatario y cuántos trámites radicados sin aprobar se reasignan con la prelación; si no queda nadie, decides tú al aprobar. Eliminar conserva el historial, y reactivar no desplaza al mandatario vigente. El botón «Ver firma» (solo en Persona natural) abre una vista previa de la firma registrada, para comprobar cuál quedará estampada antes de usarla en un mandato. La firma física ya no existe. Un mandatario eliminado no aparece en la lista.",
-          "Empresas que radican en este organismo: busca por razón social o NIT y revisa qué mandatario aplica por defecto a cada una. Si una empresa no tiene ningún mandatario activo en el organismo (ni propio ni general), su fila muestra en naranja «Sin mandatario»: regístrale uno para que sus trámites puedan radicarse.",
+          "Compañías: aquí ves todas las compañías activas, también las que aún no te han radicado ningún trámite. Busca por nombre o NIT (mínimo 2 caracteres), cambia las «Filas por página» y revisa qué mandatario aplica por defecto a cada una; «Sin definir» significa que aún no tiene. «Sin mandatario» (en naranja) indica que la compañía no tiene ningún mandatario activo en el organismo (ni propio ni general): regístrale uno para que sus trámites puedan radicarse. Solo se muestran nombre y NIT. La bandeja de trámites y las métricas no cambian: siguen mostrando solo las compañías que te radican.",
         ],
         callouts: [
           {
@@ -577,9 +578,10 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Solo el administrador del organismo (Admin OT) puede registrar mandatarios; el Operador OT no ve el botón.",
         ],
         bullets: [
-          "Desde «Empresas que radican», o desde el panel del mandatario general, pulsa «Registrar mandatario». Si eliges el general y hay varias empresas, indica cuál empresa registra a la persona.",
+          "Desde «Compañías», o desde el panel del mandatario general, pulsa «Registrar mandatario». Si eliges el general y hay varias empresas, indica cuál empresa registra a la persona.",
           "Elige el modelo: Persona natural (nombre completo, tipo y número de documento, correo opcional, forma de firma y vigencia), Persona jurídica (nombre y NIT de la entidad) o Formato en blanco (sin datos: el sistema solo entrega el PDF sin firma). El organismo queda fijo: es el tuyo.",
           "En Persona natural elige la forma de firma: Baúl de firmas (se usa la firma vigente que la persona tenga en el baúl de la empresa) o Validación de identidad. Luego la vigencia: Fija, o Rango de fechas con inicio y fin (el fin no puede ser anterior al inicio).",
+          "Compañías asociadas (opcional): busca por nombre o NIT (mínimo 2 caracteres), marca las compañías de FLIT a las que también aplica el mandatario y revisa las marcadas debajo de la lista; puedes marcar varias y quitarlas con la «x». Solo se muestran nombre y NIT. Sin marcar ninguna, el mandatario aplica solo a la compañía elegida. Si una compañía no se puede asociar (por ejemplo, está inactiva), el formulario te dice el motivo junto a ella y conservas lo escrito.",
           "Pulsa «Guardar». Verás el aviso «Mandatario registrado» y la persona queda lista para elegirla como general o como default de la empresa.",
         ],
         callouts: [

@@ -8,7 +8,9 @@ using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.PhysicalSignatureMigration;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.RepresentedAssociations;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
+using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -122,6 +124,21 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13178 (Feature #13119 F7) — directorio de compañías asociables para el OT y el Super Admin: TODAS las
+        // compañías gestoras activas (búsqueda por nombre y NIT), solo id, nombre y NIT. Política más estricta que
+        // OtModule: un Gestor del OT recibe 403. No toca la visibilidad de la bandeja (Bug #12912).
+        app.MapGroup("/api/v1/admin/transit-offices/{transitOfficeId:guid}/mandate-signers")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .AddEndpointFilter<TransitOfficeScopeFilter>()
+            .WithTags("Admin · Mandatarios")
+            .MapGet("/associable-companies", AssociableCompaniesAsync)
+            .WithName("AdminMandateSignersAssociableCompanies")
+            .WithSummary("Compañías gestoras activas a las que se puede asociar un mandatario (OT y Super Admin)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         // HU #13131 (ADR-0061) — reporte de migración de la firma física. SOLO Super Admin (403 al resto):
         // cruza compañías y organismos, y un ot_admin no debe ver datos de otros tenants.
         app.MapGroup("/api/v1/admin/mandate-signers")
@@ -145,6 +162,28 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
+
+        // HU #13176 (Feature #13119 F7) — reporte de mandatarios impactados por el retiro de las asociaciones por
+        // Representante Legal y retiro controlado. SOLO Super Admin (403 al resto). Orden de despliegue por
+        // ambiente: reporte, aviso a los clientes, retiro.
+        var representedGroup = app.MapGroup("/api/v1/admin/mandate-signers/represented-associations")
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Mandatarios");
+
+        representedGroup.MapGet("/impact-report", RepresentedAssociationImpactReportAsync)
+            .WithName("AdminMandateSignersRepresentedAssociationImpactReport")
+            .WithSummary("Mandatarios que dependen de una asociación por Representante Legal (JSON o ?format=csv)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        representedGroup.MapPost("/retire", RetireRepresentedAssociationsAsync)
+            .WithName("AdminMandateSignersRepresentedAssociationRetire")
+            .WithSummary("Retira las asociaciones por Representante Legal; exige confirmaAvisoEnviado=true (409 aviso_no_confirmado)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -171,6 +210,68 @@ public static class AdminMandateSignersEndpoints
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>HU #13178 — <c>?search=</c> (mínimo 2 caracteres), <c>?page=</c>, <c>?pageSize=</c>.</summary>
+    private static async Task<IResult> AssociableCompaniesAsync(
+        [FromQuery] string? search,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromServices] IMandatarioAssociableCompanies service,
+        CancellationToken cancellationToken)
+    {
+        var result = await service
+            .ListForOtAsync(search, page ?? 1, pageSize ?? 0, cancellationToken)
+            .ConfigureAwait(false);
+        return AssociableCompaniesHttp.ToResult(result);
+    }
+
+    /// <summary>
+    /// HU #13176 — reporte de impactados; <c>?format=csv</c> descarga el archivo para el aviso a los clientes.
+    /// Sin documento ni ruta de firma; nada de esto se escribe en logs.
+    /// </summary>
+    private static async Task<IResult> RepresentedAssociationImpactReportAsync(
+        [FromQuery] string? format,
+        [FromServices] GetRepresentedAssociationImpactReportHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var rows = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+
+        if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            var csv = RepresentedAssociationImpactCsv.Build(rows);
+            return Results.File(
+                System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray(),
+                "text/csv; charset=utf-8",
+                RepresentedAssociationImpactCsv.FileName);
+        }
+
+        return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>HU #13176 — el cuerpo puede faltar: sin <c>confirmaAvisoEnviado</c> verdadero responde 409.</summary>
+    private static async Task<IResult> RetireRepresentedAssociationsAsync(
+        HttpContext httpContext,
+        [FromBody] RetireRepresentedAssociationsRequest? request,
+        [FromServices] RetireRepresentedAssociationsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await handler.HandleAsync(
+                request?.ConfirmaAvisoEnviado == true,
+                MandateEndpointHelpers.ResolveUserId(httpContext.User),
+                httpContext.User.FindFirst("role")?.Value ?? AdminAuthorization.SuperAdminRole,
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { filasRetiradas = result.RetiredRows, fecha = result.ExecutedAt });
+        }
+        catch (RepresentedAssociationNoticeNotConfirmedException ex)
+        {
+            return Results.Json(
+                new { code = RepresentedAssociationNoticeNotConfirmedException.Code, error = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     /// <summary>HU #13195 — <c>?transitOfficeId=</c> filtra por organismo. No modifica datos.</summary>
@@ -233,7 +334,8 @@ public static class AdminMandateSignersEndpoints
         [FromServices] CreateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
-        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(
+                httpContext.User, transitOfficeId, OficinasDelCuerpo(request.TransitOfficeIds, request.OfficeCompanies)))
         {
             return TransitOfficeScopeFilter.Forbidden();
         }
@@ -258,6 +360,8 @@ public static class AdminMandateSignersEndpoints
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
             ValidateSigningMeans = true,
+            // HU #13179 — compañías de FLIT a las que se asocia el mandatario, por organismo.
+            OfficeCompanies = request.OfficeCompanies,
             CreatedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             // HU #13195 — origen del vínculo: Super Admin → super_admin; ot_admin → organismo.
             ConfiguredByScope = OrigenDelActor(httpContext.User),
@@ -291,7 +395,8 @@ public static class AdminMandateSignersEndpoints
         [FromServices] UpdateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
-        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(
+                httpContext.User, transitOfficeId, OficinasDelCuerpo(request.TransitOfficeIds, request.OfficeCompanies)))
         {
             return TransitOfficeScopeFilter.Forbidden();
         }
@@ -313,6 +418,8 @@ public static class AdminMandateSignersEndpoints
             ValidityKind = request.ValidityKind,
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
+            // HU #13179 — ausente ⇒ no se tocan; cada organismo presente reemplaza su conjunto.
+            OfficeCompanies = request.OfficeCompanies,
             UpdatedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
@@ -436,7 +543,22 @@ public static class AdminMandateSignersEndpoints
             new { errors = errors.Select(e => new { field = e.Field, message = e.Message, value = e.Value }) },
             statusCode: StatusCodes.Status422UnprocessableEntity);
 
+    /// <summary>
+    /// HU #13179 — organismos que nombra el cuerpo: los de <c>transitOfficeIds</c> y los de las compañías asociadas.
+    /// Un ot_admin no puede escribir sobre organismos distintos al de su ruta.
+    /// </summary>
+    private static IReadOnlyList<Guid>? OficinasDelCuerpo(
+        IReadOnlyList<Guid>? transitOfficeIds,
+        IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.MandateSignerOfficeCompanies>? officeCompanies) =>
+        officeCompanies is null
+            ? transitOfficeIds
+            : [.. (transitOfficeIds ?? []), .. officeCompanies.Select(o => o.TransitOfficeId)];
+
     /// <summary>HU #13195 — origen de configuración según quien actúa en la ruta del OT.</summary>
     private static string OrigenDelActor(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "organismo";
 }
+
+/// <summary>HU #13176 — cuerpo del retiro. El aviso a los clientes lo envía el PO o soporte; aquí solo se confirma.</summary>
+/// <param name="ConfirmaAvisoEnviado">Verdadero solo si el aviso a los clientes ya salió.</param>
+public sealed record RetireRepresentedAssociationsRequest(bool? ConfirmaAvisoEnviado);

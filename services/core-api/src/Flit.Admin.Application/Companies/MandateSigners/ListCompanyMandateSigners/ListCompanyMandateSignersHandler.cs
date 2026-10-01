@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.MandateSigners.AssociableCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Queries.Domain.Time;
@@ -15,10 +16,12 @@ public sealed record CompanyTransitOfficeResponse(Guid TransitOfficeId, string C
 public sealed class ListCompanyMandateSignersHandler
 {
     private readonly IMandateSignerReader _reader;
+    private readonly IManagingCompanyDirectory? _companies;
 
-    public ListCompanyMandateSignersHandler(IMandateSignerReader reader)
+    public ListCompanyMandateSignersHandler(IMandateSignerReader reader, IManagingCompanyDirectory? companies = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _companies = companies;
     }
 
     public Task<IReadOnlyList<MandateSignerResponse>> HandleAsync(
@@ -37,6 +40,10 @@ public sealed class ListCompanyMandateSignersHandler
     {
         var signers = await _reader
             .ListByCompanyAsync(companyTenantId, cancellationToken).ConfigureAwait(false);
+
+        // HU #13179b — id, nombre y NIT de las asociadas, en una sola consulta (sin N+1).
+        var officeCompanies = await AssociatedCompaniesEnricher
+            .EnrichAsync(signers, _companies, cancellationToken).ConfigureAwait(false);
 
         var today = ColombiaTime.Today(TimeProvider.System);
 
@@ -58,7 +65,7 @@ public sealed class ListCompanyMandateSignersHandler
                 s.CompanyTenantIds,
                 s.TransitOfficeIds,
                 s.PhysicalSignatureOfficeIds,
-                s.OfficeCompanies,
+                officeCompanies[s.Id],
                 s.SignerModel,
                 s.SignatureMethod,
                 s.ValidityKind,

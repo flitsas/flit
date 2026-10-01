@@ -32,6 +32,24 @@ namespace Flit.Infrastructure.OtRules;
 /// </summary>
 internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 {
+    /// <summary>Fila de un mandatario candidato (propio o asociado) antes de resolver identidad y firma.</summary>
+    private sealed class SignerRow
+    {
+        public Guid Id { get; init; }
+        public string FullName { get; init; } = string.Empty;
+        public string? DocumentNumber { get; init; }
+        public Guid? UserId { get; init; }
+        public Guid? SignatureVaultId { get; init; }
+        public string DocumentType { get; init; } = string.Empty;
+        public string SignerModel { get; init; } = string.Empty;
+        public string? SignatureMethod { get; init; }
+        public string ValidityKind { get; init; } = string.Empty;
+        public DateOnly? ValidFrom { get; init; }
+        public DateOnly? ValidTo { get; init; }
+        public bool IsActive { get; init; }
+        public string Origen { get; init; } = string.Empty;
+    }
+
     /// <summary>Identidad de un mandatario: su estado (ADR-0050), certificado y hasta cuándo vale.</summary>
     private sealed record IdentidadResuelta(string Status, string? Certificado, DateTimeOffset? ValidUntil)
     {
@@ -65,7 +83,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         // Solo el tenant del trámite: la cabeza de red no presta mandatarios a las hijas
         // (Epic #12235). Cada compañía firma con su propio directorio.
-        var signers = await (
+        var propios = await (
             from s in _context.MandateSigners.AsNoTracking()
             join c in _context.MandateSignerCompanies.AsNoTracking() on s.Id equals c.MandateSignerId
             where c.TransitOfficeId == transitOfficeId
@@ -73,20 +91,62 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                 && c.IsActive
                 && s.IsActive
                 && s.DeletedAt == null
-            select new
+            select new SignerRow
             {
-                s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType, s.SignerModel,
-                s.SignatureMethod, s.ValidityKind, s.ValidFrom, s.ValidTo, s.IsActive,
+                Id = s.Id, FullName = s.FullName, DocumentNumber = s.DocumentNumber, UserId = s.UserId,
+                SignatureVaultId = s.SignatureVaultId, DocumentType = s.DocumentType, SignerModel = s.SignerModel,
+                SignatureMethod = s.SignatureMethod, ValidityKind = s.ValidityKind, ValidFrom = s.ValidFrom,
+                ValidTo = s.ValidTo, IsActive = s.IsActive,
                 // HU #13142 — el origen del vínculo decide el nivel de la prelación (ADR-0066).
                 Origen = c.ConfiguredByScope,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        // HU #13180 — nivel 3: mandatarios de OTRAS compañías asociados (por tenant) a la del trámite en este
+        // organismo. Solo asociaciones activas de mandatarios activos, sin baja lógica y aplicables aquí (vínculo
+        // propio activo en el organismo). Si el mandatario ya es propio de esta compañía manda su vínculo.
+        var asociados = await (
+            from a in _context.MandateSignerAssociatedCompanies.AsNoTracking()
+            join s in _context.MandateSigners.AsNoTracking() on a.MandateSignerId equals s.Id
+            join c in _context.MandateSignerCompanies.AsNoTracking() on s.Id equals c.MandateSignerId
+            where a.TransitOfficeId == transitOfficeId
+                && a.AssociatedCompanyTenantId == companyTenantId
+                && a.IsActive
+                && c.TransitOfficeId == transitOfficeId
+                && c.IsActive
+                && c.CompanyTenantId != companyTenantId
+                && s.IsActive
+                && s.DeletedAt == null
+                && !_context.MandateSignerCompanies.Any(x =>
+                    x.MandateSignerId == s.Id
+                    && x.TransitOfficeId == transitOfficeId
+                    && x.CompanyTenantId == companyTenantId
+                    && x.IsActive)
+            select new SignerRow
+            {
+                Id = s.Id, FullName = s.FullName, DocumentNumber = s.DocumentNumber, UserId = s.UserId,
+                SignatureVaultId = s.SignatureVaultId, DocumentType = s.DocumentType, SignerModel = s.SignerModel,
+                SignatureMethod = s.SignatureMethod, ValidityKind = s.ValidityKind, ValidFrom = s.ValidFrom,
+                ValidTo = s.ValidTo, IsActive = s.IsActive,
+                Origen = MandateSignerOrigins.Asociado,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var signers = propios
+            .Concat(asociados.DistinctBy(x => x.Id))
+            .ToList();
+
         if (signers.Count == 0)
         {
             return [];
         }
+
+        // HU #13180b — compañías vinculadas de cada mandatario: ahí puede vivir su firma del baúl (asociado de
+        // otra compañía, default del OT), que no siempre está en el tenant de la compañía del trámite.
+        var tenantsVinculados = await LoadLinkedTenantsAsync(
+            [.. signers.Select(s => s.Id).Distinct()], cancellationToken).ConfigureAwait(false);
 
         var identidades = await LoadIdentitiesAsync(
             transitOfficeId,
@@ -105,15 +165,11 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             .ConfigureAwait(false);
         var firmanAMano = fisicos.ToHashSet();
 
-        var admitidos = await ResolverPorEmpresaAsync(
-            transitOfficeId, nitMandante, [.. signers.Select(s => s.Id)], cancellationToken)
-            .ConfigureAwait(false);
-
         var today = ColombiaTime.Today(TimeProvider.System);
 
         return
         [
-            .. signers.Where(s => admitidos.Contains(s.Id)).Select(s =>
+            .. signers.Select(s =>
             {
                 var firma = EvaluarFirma(
                     s.SignerModel, s.SignatureMethod, s.IsActive, s.ValidityKind, s.ValidFrom, s.ValidTo,
@@ -124,7 +180,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
                     firmanAMano.Contains(s.Id),
                     firma?.Valida ?? true, firma?.Motivo,
-                    s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId));
+                    s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId),
+                    VaultTenantIds: tenantsVinculados.GetValueOrDefault(s.Id));
             }),
         ];
     }
@@ -185,7 +242,33 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             // El default del OT no viene de un vínculo con la compañía: su origen es el del organismo.
             Origen: MandateSignerOrigins.Organismo, SignerModel: signer.SignerModel,
             SignatureMethod: MetodoEfectivo(signer.SignerModel, signer.SignatureMethod, signer.SignatureVaultId),
-            Eliminado: signer.Eliminado);
+            Eliminado: signer.Eliminado,
+            // HU #13180b — el default del OT no está vinculado a la compañía del trámite: su baúl vive en sus propias compañías.
+            VaultTenantIds: (await LoadLinkedTenantsAsync([signer.Id], cancellationToken).ConfigureAwait(false))
+                .GetValueOrDefault(signer.Id));
+    }
+
+    /// <summary>
+    /// HU #13180b — tenants de las compañías con vínculo ACTIVO de cada mandatario (en cualquier organismo): mismo
+    /// criterio de compañías que usa <see cref="MandateSignerIdentityTenantResolver"/> para su identidad.
+    /// </summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<Guid>>> LoadLinkedTenantsAsync(
+        List<Guid> signerIds, CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var links = await _context.MandateSignerCompanies.AsNoTracking()
+            .Where(c => signerIds.Contains(c.MandateSignerId) && c.IsActive)
+            .Select(c => new { c.MandateSignerId, c.CompanyTenantId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return links
+            .GroupBy(l => l.MandateSignerId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(l => l.CompanyTenantId).Distinct()]);
     }
 
     /// <summary>
@@ -251,48 +334,5 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         }
 
         return map;
-    }
-
-    /// <summary>
-    /// Mandatarios admitidos para la empresa que otorga el mandato: los asociados a ESA empresa en el
-    /// organismo, más los que no tienen ninguna asociada.
-    ///
-    /// <para>La ausencia significa "aplica a todas" a propósito: los mandatarios registrados antes de
-    /// esta acotación no tienen filas, y sin esa regla desaparecerían de todos los trámites al
-    /// desplegar. Sin NIT del mandante tampoco se acota: no hay contra qué comparar.</para>
-    /// </summary>
-    private async Task<HashSet<Guid>> ResolverPorEmpresaAsync(
-        Guid transitOfficeId,
-        string? nitMandante,
-        List<Guid> signerIds,
-        CancellationToken cancellationToken)
-    {
-        var todos = signerIds.ToHashSet();
-        if (string.IsNullOrWhiteSpace(nitMandante) || signerIds.Count == 0)
-        {
-            return todos;
-        }
-
-        var nit = nitMandante.Trim();
-
-        var filas = await (
-            from a in _context.MandateSignerRepresentedCompanies.AsNoTracking()
-            join e in _context.RepresentedCompanies.AsNoTracking()
-                on a.RepresentedCompanyId equals e.Id
-            where a.TransitOfficeId == transitOfficeId
-                && a.IsActive
-                && signerIds.Contains(a.MandateSignerId)
-            select new { a.MandateSignerId, e.DocumentNumber })
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        // Con asociaciones: solo pasan los de esta empresa. Sin ninguna: pasa igual.
-        var conAsociacion = filas.Select(f => f.MandateSignerId).ToHashSet();
-        var deLaEmpresa = filas
-            .Where(f => string.Equals(f.DocumentNumber?.Trim(), nit, StringComparison.Ordinal))
-            .Select(f => f.MandateSignerId)
-            .ToHashSet();
-
-        return [.. todos.Where(id => !conAsociacion.Contains(id) || deLaEmpresa.Contains(id))];
     }
 }

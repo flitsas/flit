@@ -106,17 +106,4 @@ internal static class MandateSignerValidation
         }
     }
 
-    /// <summary>
-    /// Compañías a validar en un organismo: las del puente por OT, o las del comando si no hay puente.
-    /// </summary>
-    public static IReadOnlyList<Guid> CompaniesForOffice(
-        IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
-        Guid transitOfficeId,
-        IReadOnlyList<Guid> fallbackCompanyIds)
-    {
-        var match = officeCompanies?.FirstOrDefault(o => o.TransitOfficeId == transitOfficeId);
-        if (match is null || match.RepresentedCompanyIds.Count == 0)
-            return fallbackCompanyIds;
-        return match.RepresentedCompanyIds;
-    }
 }

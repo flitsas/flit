@@ -30,6 +30,7 @@ const fetchMandateOtConfig = vi.fn();
 const listCompanyOtMandateRules = vi.fn();
 const fetchCompanyTransitOffices = vi.fn();
 const fetchRepresentedCompanies = vi.fn();
+const fetchOtAssociableCompanies = vi.fn();
 const createMandateSigner = vi.fn();
 const fetchMandateSigners = vi.fn();
 const fetchMandateSignerSignatureImage = vi.fn();
@@ -51,6 +52,7 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchCompanyTransitOffices: (...a: unknown[]) => fetchCompanyTransitOffices(...a),
   fetchRepresentedCompanies: (...a: unknown[]) => fetchRepresentedCompanies(...a),
   createMandateSigner: (...a: unknown[]) => createMandateSigner(...a),
+  fetchOtAssociableCompanies: (...a: unknown[]) => fetchOtAssociableCompanies(...a),
 }));
 
 vi.mock("@/lib/api/admin-signature-vault", () => ({
@@ -84,6 +86,15 @@ const office = {
   defaultMandateSignerIntegrityHash: null,
 };
 
+function pagina(
+  items: { id: string; name: string; nit: string }[],
+  total = items.length,
+) {
+  return { items, total, page: 1, pageSize: 10, aplicaSoloASuCompania: false };
+}
+
+const GESTORA = { id: "cia-1", name: "Gestora de Prueba S.A.S.", nit: "900123456" };
+
 function companyRow(overrides: Partial<CompanyOtMandateRuleView> = {}): CompanyOtMandateRuleView {
   return {
     companyTenantId: "cia-1",
@@ -115,6 +126,8 @@ describe("OtMandatosSection", () => {
     fetchMandateSignerSignatureImage.mockReset();
     fetchCompanyTransitOffices.mockReset();
     fetchRepresentedCompanies.mockReset();
+    fetchOtAssociableCompanies.mockReset();
+    fetchOtAssociableCompanies.mockResolvedValue(pagina([GESTORA]));
     createMandateSigner.mockReset();
     window.localStorage.clear();
     loginAs("ot_admin");
@@ -149,7 +162,7 @@ describe("OtMandatosSection", () => {
       </ToastProvider>,
     );
     expect(await screen.findByTestId("ot-mandatos-company-table")).toBeInTheDocument();
-    expect(screen.getByText("Gestora de Prueba S.A.S.")).toBeInTheDocument();
+    expect(await screen.findByText("Gestora de Prueba S.A.S.")).toBeInTheDocument();
     expect(screen.getByText("900123456")).toBeInTheDocument();
     expect(screen.queryByText("CIA-1")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /^código$/i })).not.toBeInTheDocument();
@@ -311,17 +324,100 @@ describe("OtMandatosSection", () => {
     expect(listCompanyOtMandateRules.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("muestra vacío cuando no hay empresas con el OT habilitado", async () => {
+  it("muestra vacío cuando no hay compañías activas", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
+    fetchOtAssociableCompanies.mockResolvedValue(pagina([]));
     render(
       <ToastProvider>
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    expect(
-      await screen.findByText(/no hay empresas con este organismo habilitado/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/no hay compañías activas/i)).toBeInTheDocument();
     expect(screen.getByText(/no hay mandatarios creados en este organismo/i)).toBeInTheDocument();
+  });
+
+  it("HU #13182 AC1/AC2: lista compañías sin trámites con nombre y NIT, sin mandatario definido, y abre su configuración", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([]);
+    fetchOtAssociableCompanies.mockResolvedValue(
+      pagina([GESTORA, { id: "cia-2", name: "Nunca Radicó Ltda.", nit: "800555111" }], 2),
+    );
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    const tabla = await screen.findByRole("table", { name: "Compañías activas" });
+    expect(within(tabla).getByText("Nunca Radicó Ltda.")).toBeInTheDocument();
+    expect(within(tabla).getByText("800555111")).toBeInTheDocument();
+    // Sin reglas, sin general ni mandatarios activos: HU #13139 la marca «Sin mandatario».
+    expect(within(tabla).getAllByTestId("ot-mandatos-sin-mandatario")).toHaveLength(2);
+    expect(fetchOtAssociableCompanies).toHaveBeenCalledWith(
+      "ot-1",
+      expect.objectContaining({ page: 1, pageSize: 10 }),
+      expect.anything(),
+    );
+    // «Filas por página» del modelo de trámites.
+    expect(screen.getAllByText(/filas por página/i).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /editar mandatario de nunca radicó ltda/i }));
+    expect(await screen.findByTestId("mandato-ot-config-form")).toHaveAttribute("data-mode", "mandatario");
+    expect((await screen.findAllByText("Nunca Radicó Ltda.")).length).toBeGreaterThan(0);
+  });
+
+  it("HU #13182 AC1: busca por nombre o NIT en el servidor (mínimo 2 caracteres) y vuelve a la página 1", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await screen.findByRole("table", { name: "Compañías activas" });
+    fetchOtAssociableCompanies.mockClear();
+    const buscador = screen.getByTestId("ot-mandatos-company-search");
+    await user.type(buscador, "9");
+    expect(await screen.findByTestId("ot-mandatos-busqueda-ayuda")).toHaveTextContent(/al menos 2/i);
+    await user.type(buscador, "00");
+    await waitFor(() =>
+      expect(fetchOtAssociableCompanies).toHaveBeenCalledWith(
+        "ot-1",
+        expect.objectContaining({ search: "900", page: 1 }),
+        expect.anything(),
+      ),
+    );
+    // Nunca se envía una búsqueda de un solo carácter (el servidor respondería 422).
+    expect(
+      fetchOtAssociableCompanies.mock.calls.some(([, q]) => (q as { search?: string }).search === "9"),
+    ).toBe(false);
+  });
+
+  it("HU #13182 AC4: sin coincidencias muestra «Sin resultados»", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await screen.findByRole("table", { name: "Compañías activas" });
+    fetchOtAssociableCompanies.mockResolvedValue(pagina([]));
+    await user.type(screen.getByTestId("ot-mandatos-company-search"), "zzz");
+    expect(await screen.findByText("Sin resultados")).toBeInTheDocument();
+  });
+
+  it("HU #13182 AC4: un fallo de consulta muestra el error con reintento, no una lista vacía", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    fetchOtAssociableCompanies.mockRejectedValueOnce(new ApiError(500, "boom"));
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    expect(await screen.findByText("No se pudieron cargar las compañías.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /reintentar/i }));
+    expect(await screen.findByRole("table", { name: "Compañías activas" })).toBeInTheDocument();
   });
 
   it("lista mandatarios creados con tipo de firma y permite verla", async () => {

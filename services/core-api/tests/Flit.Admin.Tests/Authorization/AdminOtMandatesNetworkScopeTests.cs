@@ -324,6 +324,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
         var signerIds = db.MandateSigners.Where(m => m.TransitOfficeId == _officeA || m.TransitOfficeId == _officeB)
             .Select(m => m.Id).ToList();
         db.MandateSignerRepresentedCompanies.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
+        db.MandateSignerAssociatedCompanies.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSignerCompanies.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSignerTransitOffices.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSigners.Where(m => signerIds.Contains(m.Id)).ExecuteDelete();

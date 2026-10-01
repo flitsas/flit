@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -111,10 +112,9 @@ internal static class MandateSignerPrelacionLoader
                 && c.SignatureMethod == MandateSignerOrigins.FormaBaul
                 && !string.IsNullOrWhiteSpace(c.Documento))
             {
-                var tipoDoc = string.IsNullOrWhiteSpace(c.TipoDocumento) ? "CC" : c.TipoDocumento.Trim();
-                var match = await policy
-                    .ResolveMandatarioAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
-                    .ConfigureAwait(false);
+                // HU #13180/#13180b — el asociado de otra compañía y el default del OT tienen su firma en el baúl de
+                // SU compañía: se busca primero en el tenant del trámite y luego en los de sus compañías vinculadas.
+                var match = await MandatarioBaulLookup.ResolveAsync(policy, c, tenantId, ct).ConfigureAwait(false);
                 resultado.Add(c with { BaulVigente = match is not null });
             }
             else

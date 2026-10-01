@@ -46,7 +46,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
     {
         group.MapGet("", ListMandateSignersAsync);
         group.MapGet("/transit-offices", ListChildTransitOfficesAsync);
-        group.MapGet("/represented-companies", ListChildRepresentedCompaniesAsync);
+        group.MapGet("/associable-companies", ListChildAssociableCompaniesAsync);
         group.MapPost("", CreateMandateSignerAsync);
         group.MapPut("/{mandateSignerId:guid}", UpdateMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateChildMandateSignerAsync);
@@ -628,12 +628,16 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         return Results.Ok(new { data = result });
     }
 
-    private static async Task<IResult> ListChildRepresentedCompaniesAsync(
+    /// <summary>HU #13178 — hijas del cliente hijo (por jerarquía no tiene: lista vacía y aplica solo a su compañía).</summary>
+    private static async Task<IResult> ListChildAssociableCompaniesAsync(
         Guid headTenantId,
         Guid childTenantId,
         ClaimsPrincipal user,
+        [FromQuery] string? search,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         [FromServices] ICompanyHierarchyRepository hierarchy,
-        [FromServices] ILegalRepresentativeReader reader,
+        [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
         CancellationToken ct)
     {
         var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
@@ -642,11 +646,8 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
             return forbid;
         }
 
-        var empresas = await reader.ListRepresentedCompaniesAsync(childTenantId, ct).ConfigureAwait(false);
-        return Results.Ok(new
-        {
-            items = empresas.Select(e => new { id = e.Id, documentNumber = e.DocumentNumber, name = e.Name }),
-        });
+        return AssociableCompaniesHttp.ToResult(
+            await service.ListForCompanyAsync(childTenantId, search, page ?? 1, pageSize ?? 0, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> InactivateChildMandateSignerAsync(

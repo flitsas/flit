@@ -145,7 +145,7 @@ internal sealed partial class MandateSignerRepository : IMandateSignerRepository
             }
         }
 
-        EscribirEmpresasRepresentadas(signerId, data.OfficeCompanies, now);
+        EscribirCompaniasAsociadas(signerId, data.OfficeCompanies, now);
 
         AddAudit(
             data.OtTenantId,
@@ -263,8 +263,8 @@ internal sealed partial class MandateSignerRepository : IMandateSignerRepository
             _context.MandateSignerCompanies.Add(NewAssignment(signer.Id, officeId, companyId, now, data.ConfiguredByScope));
         }
 
-        await ReemplazarEmpresasRepresentadasAsync(
-            signer.Id, data.OfficeCompanies, now, cancellationToken).ConfigureAwait(false);
+        await ReemplazarCompaniasAsociadasAsync(
+            signer.Id, data.OfficeCompanies, organismos, now, cancellationToken).ConfigureAwait(false);
 
         AddAudit(
             data.OtTenantId,
@@ -332,6 +332,18 @@ internal sealed partial class MandateSignerRepository : IMandateSignerRepository
         foreach (var assignment in assignments)
         {
             assignment.IsActive = false;
+        }
+
+        // HU #13179 — las compañías asociadas siguen la suerte del mandatario: dado de baja no firma por nadie y
+        // reactivarlo no las restaura (se reasignan a mano, igual que las compañías propias).
+        var asociadas = await _context.MandateSignerAssociatedCompanies
+            .Where(a => a.MandateSignerId == signer.Id && a.IsActive)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var asociada in asociadas)
+        {
+            asociada.IsActive = false;
         }
 
         // HU #11201 — los organismos siguen la suerte del mandatario: uno inactivo no puede seguir
@@ -562,73 +574,82 @@ internal sealed partial class MandateSignerRepository : IMandateSignerRepository
     }
 
     /// <summary>
-    /// Empresas representadas por organismo en el ALTA. Sin lista no se escribe nada, y esa ausencia
-    /// significa "aplica a todas": es como se comportan los mandatarios que ya existen.
+    /// HU #13179 — compañías asociadas (por tenant) por organismo en el ALTA. Sin lista no se escribe nada:
+    /// el mandatario aplica solo a su propia compañía.
     /// </summary>
-    private void EscribirEmpresasRepresentadas(
+    private void EscribirCompaniasAsociadas(
         Guid signerId, IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies, DateTimeOffset now)
     {
         foreach (var porOrganismo in officeCompanies ?? [])
         {
-            foreach (var companyId in Distinct(porOrganismo.RepresentedCompanyIds))
+            foreach (var companyId in Distinct(porOrganismo.AssociatedCompanyTenantIds ?? []))
             {
-                _context.MandateSignerRepresentedCompanies.Add(new MandateSignerRepresentedCompany
-                {
-                    Id = Guid.NewGuid(),
-                    MandateSignerId = signerId,
-                    TransitOfficeId = porOrganismo.TransitOfficeId,
-                    RepresentedCompanyId = companyId,
-                    IsActive = true,
-                    CreatedAt = now,
-                });
+                _context.MandateSignerAssociatedCompanies.Add(NewAssociation(signerId, porOrganismo.TransitOfficeId, companyId, now));
             }
         }
     }
 
     /// <summary>
-    /// Reemplaza las empresas representadas del mandatario. <c>null</c> ⇒ no se tocan (la edición desde
-    /// el perfil del organismo no gestiona este campo, y escribir sobre él le borraría a la compañía lo
-    /// que acaba de elegir). Una lista reemplaza el conjunto: lo que no venga se retira con baja lógica.
+    /// HU #13179 — reemplaza las compañías asociadas del mandatario. <c>null</c> ⇒ no se tocan. Cada organismo
+    /// presente en la lista reemplaza SU conjunto (lista vacía las retira con baja lógica); los organismos que no
+    /// vienen se conservan, salvo los que el mandatario deja de tener (<paramref name="organismosVigentes"/>):
+    /// allí ya no firma, así que sus asociaciones se dan de baja. Nunca duplica filas activas.
     /// </summary>
-    private async Task ReemplazarEmpresasRepresentadasAsync(
+    private async Task ReemplazarCompaniasAsociadasAsync(
         Guid signerId,
         IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
+        IReadOnlyCollection<Guid> organismosVigentes,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var existentes = await _context.MandateSignerAssociatedCompanies
+            .Where(x => x.MandateSignerId == signerId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // Organismos que el mandatario ya no tiene: baja lógica de sus asociaciones, venga o no la lista.
+        foreach (var fila in existentes.Where(x => x.IsActive && !organismosVigentes.Contains(x.TransitOfficeId)))
+        {
+            fila.IsActive = false;
+        }
+
         if (officeCompanies is null)
         {
             return;
         }
 
-        var deseadas = officeCompanies
-            .SelectMany(o => Distinct(o.RepresentedCompanyIds).Select(c => (o.TransitOfficeId, Company: c)))
-            .ToHashSet();
-
-        var existentes = await _context.MandateSignerRepresentedCompanies
-            .Where(x => x.MandateSignerId == signerId)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var fila in existentes)
+        foreach (var porOrganismo in officeCompanies.GroupBy(o => o.TransitOfficeId))
         {
-            fila.IsActive = deseadas.Contains((fila.TransitOfficeId, fila.RepresentedCompanyId));
-        }
+            var officeId = porOrganismo.Key;
+            var deseadas = porOrganismo
+                .SelectMany(o => Distinct(o.AssociatedCompanyTenantIds ?? []))
+                .ToHashSet();
 
-        var yaExistentes = existentes.Select(x => (x.TransitOfficeId, Company: x.RepresentedCompanyId)).ToHashSet();
-        foreach (var (officeId, companyId) in deseadas.Where(p => !yaExistentes.Contains(p)))
-        {
-            _context.MandateSignerRepresentedCompanies.Add(new MandateSignerRepresentedCompany
+            var delOrganismo = existentes.Where(x => x.TransitOfficeId == officeId).ToList();
+            foreach (var fila in delOrganismo)
             {
-                Id = Guid.NewGuid(),
-                MandateSignerId = signerId,
-                TransitOfficeId = officeId,
-                RepresentedCompanyId = companyId,
-                IsActive = true,
-                CreatedAt = now,
-            });
+                fila.IsActive = deseadas.Contains(fila.AssociatedCompanyTenantId);
+            }
+
+            var yaExistentes = delOrganismo.Select(x => x.AssociatedCompanyTenantId).ToHashSet();
+            foreach (var companyId in deseadas.Where(c => !yaExistentes.Contains(c)))
+            {
+                _context.MandateSignerAssociatedCompanies.Add(NewAssociation(signerId, officeId, companyId, now));
+            }
         }
     }
+
+    private static MandateSignerAssociatedCompany NewAssociation(
+        Guid signerId, Guid transitOfficeId, Guid companyTenantId, DateTimeOffset now) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = signerId,
+            TransitOfficeId = transitOfficeId,
+            AssociatedCompanyTenantId = companyTenantId,
+            IsActive = true,
+            CreatedAt = now,
+        };
 
     private static MandateSignerTransitOffice NewOffice(
         Guid signerId, Guid transitOfficeId, DateTimeOffset now) =>

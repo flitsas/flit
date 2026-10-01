@@ -244,6 +244,8 @@ public static class AdminInfrastructureExtensions
         // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
         services.AddScoped<IPhysicalSignatureMigrationReader, DbPhysicalSignatureMigrationReader>();
         services.AddScoped<IMandateSignerLinkCollapseReader, DbMandateSignerLinkCollapseReader>();
+        services.AddScoped<IRepresentedAssociationRetirementStore, RepresentedAssociationRetirementStore>();
+        services.AddScoped<IManagingCompanyDirectory, ManagingCompanyDirectory>();
 
         // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
         services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();

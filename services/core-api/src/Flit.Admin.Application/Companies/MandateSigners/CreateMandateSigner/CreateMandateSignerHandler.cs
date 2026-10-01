@@ -27,6 +27,7 @@ public sealed class CreateMandateSignerHandler
     private readonly IMandateSignerRepository _repository;
     private readonly ISignatureVaultReader? _vaultReader;
     private readonly IMandateSignerBiometricApprovalReader? _biometricReader;
+    private readonly IMandatarioAssociableCompanies? _associable;
 
     /// <summary>Medio de firma resuelto en el alta desde el OT (solo el nombre, sin datos del baúl).</summary>
     public const string MeansVault = "baul";
@@ -49,8 +50,10 @@ public sealed class CreateMandateSignerHandler
         IMandateSignerReader reader,
         IMandateSignerRepository repository,
         ISignatureVaultReader? vaultReader = null,
-        IMandateSignerBiometricApprovalReader? biometricReader = null)
+        IMandateSignerBiometricApprovalReader? biometricReader = null,
+        IMandatarioAssociableCompanies? associable = null)
     {
+        _associable = associable;
         _vaultReader = vaultReader;
         _biometricReader = biometricReader;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
@@ -65,6 +68,16 @@ public sealed class CreateMandateSignerHandler
         ArgumentNullException.ThrowIfNull(command);
 
         var companyIds = command.CompanyTenantIds ?? [];
+
+        // HU #13179 — compañías asociadas: 403 si el Admin de Compañía envía una que no es su hija (nada se
+        // guarda); 422 por elemento para propia, inactiva o inexistente; RF33 para el OT.
+        var mandatarioOffices = command.TransitOfficeIds is { Count: > 0 }
+            ? command.TransitOfficeIds.ToHashSet()
+            : [command.TransitOfficeId];
+        var associationErrors = await MandateSignerAssociationRules.ValidateAsync(
+                _associable, _reader, command.OfficeCompanies, companyIds, mandatarioOffices,
+                command.ConfiguredByScope, cancellationToken)
+            .ConfigureAwait(false);
 
         var otStatus = await _otStatus
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
@@ -120,6 +133,8 @@ public sealed class CreateMandateSignerHandler
             errors.AddRange(profileErrors);
         }
 
+        errors.AddRange(associationErrors);
+
         if (otTenantId is not null && companyIds.Count > 0)
         {
             await AddExclusiveSlotErrorsAsync(
@@ -128,7 +143,6 @@ public sealed class CreateMandateSignerHandler
                     command.TransitOfficeId,
                     companyIds,
                     command.TransitOfficeIds,
-                    command.OfficeCompanies,
                     currentSignerId: null,
                     command.CompanyVisibility,
                     cancellationToken)
@@ -309,7 +323,6 @@ public sealed class CreateMandateSignerHandler
         Guid primaryOfficeId,
         IReadOnlyList<Guid> companyIds,
         IReadOnlyList<Guid>? transitOfficeIds,
-        IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
         Guid? currentSignerId,
         OtCompanyVisibility companyVisibility,
         CancellationToken cancellationToken)
@@ -328,10 +341,10 @@ public sealed class CreateMandateSignerHandler
             var resolutions = await reader
                 .ListActiveCompanyResolutionsAsync(officeId, cancellationToken)
                 .ConfigureAwait(false);
-            var companiesForOffice = MandateSignerValidation.CompaniesForOffice(
-                officeCompanies, officeId, companyIds);
+            // HU #13179 — solo las compañías PROPIETARIAS entran en la exclusividad y RF33; las asociadas se
+            // validan aparte (MandateSignerAssociationRules) y no ocupan el cupo de nadie.
             MandateSignerValidation.ValidateCompanies(
-                errors, companiesForOffice, otCompanies, resolutions, currentSignerId);
+                errors, companyIds, otCompanies, resolutions, currentSignerId);
         }
     }
 }

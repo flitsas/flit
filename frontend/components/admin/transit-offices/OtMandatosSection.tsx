@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
+import { Eye, Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
 import { MandatoOtConfigForm, type MandatoOtConfigPanelMode } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { OtCompaniasMandatarioTable } from "@/components/admin/transit-offices/OtCompaniasMandatarioTable";
 import { RowActions } from "@/components/atom/RowActions";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -26,6 +27,7 @@ import {
   reactivateMandateSigner,
   updateMandateSigner,
   type CompanyMandateSignerInput,
+  type AssociableCompany,
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
 import { getToken } from "@/lib/api/client";
@@ -37,7 +39,6 @@ import {
 } from "@/lib/plataforma/mandatario-firma";
 import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
 import { MandatarioCandado } from "@/components/admin/companies/mandate-signers/MandatarioCandado";
-import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioBajaDialog } from "@/components/admin/companies/mandate-signers/MandatarioBajaDialog";
 import { puedeEditarMandatario, puedeEliminarMandatario } from "@/lib/plataforma/mandatario-permisos";
 import {
@@ -57,15 +58,13 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   const [companies, setCompanies] = useState<CompanyOtMandateRuleView[]>([]);
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [previewSigner, setPreviewSigner] = useState<MandateSigner | null>(null);
-  const [search, setSearch] = useState("");
-  // Bug #13055 — tablas homologadas con el modelo de trámites: paginación en cliente con filas por
-  // página. El mandatario general es una sola fila fija y no pagina.
-  const pgCompanies = usePaginacion();
-  const { setPage: setCompanyPage } = pgCompanies;
+  // Bug #13055 — tablas homologadas con el modelo de trámites: «Filas por página». El mandatario
+  // general es una sola fila fija y no pagina; las compañías paginan en servidor (HU #13182).
   const pgSigners = usePaginacion();
   const [panel, setPanel] = useState<{
     mode: MandatoOtConfigPanelMode;
     companyId: string | null;
+    company?: AssociableCompany | null;
   } | null>(null);
   const [signerEpoch, setSignerEpoch] = useState(0);
   const [lastCreatedSignerId, setLastCreatedSignerId] = useState<string | null>(null);
@@ -112,90 +111,28 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     void load();
   }, [load]);
 
-  const filteredCompanies = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return companies;
-    return companies.filter((row) => {
-      const haystack = [
-        row.companyName,
-        row.companyTaxId,
-        row.defaultMandateSignerName,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [companies, search]);
-
-  useEffect(() => {
-    // Reinicia la página al buscar: no es fetch, solo índice de paginación.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de paginación al cambiar filtro
-    setCompanyPage(1);
-  }, [search, setCompanyPage]);
-
-  /**
-   * HU #13139 — «Sin mandatario»: la compañía no tiene default propio, ni mandatario activo
-   * vinculado, ni el organismo tiene uno general al que recurrir en la prelación.
-   */
-  const sinMandatario = (row: CompanyOtMandateRuleView): boolean =>
-    !row.defaultMandateSignerName?.trim() &&
-    !office?.defaultMandateSignerName?.trim() &&
-    !signers.some((sg) => sg.isActive && sg.companyTenantIds.includes(row.companyTenantId));
-
-  const columns: DataTableColumn<CompanyOtMandateRuleView>[] = useMemo(
-    () => [
-      {
-        key: "nit",
-        header: "NIT",
-        cellClassName: "font-mono",
-        render: (row) => dash(row.companyTaxId),
-      },
-      {
-        key: "name",
-        header: "Empresa",
-        cellClassName: "font-semibold",
-        render: (row) => row.companyName,
-      },
-      {
-        key: "signer",
-        header: "Mandatario",
-        render: (row) =>
-          sinMandatario(row) ? (
-            <StatusBadge
-              tone="warning"
-              ariaLabel="Sin mandatario"
-              label={
-                <span className="inline-flex items-center gap-1" data-testid="ot-mandatos-sin-mandatario">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden={true} />
-                  Sin mandatario
-                </span>
-              }
-            />
-          ) : (
-            signerCell(row.defaultMandateSignerName)
-          ),
-      },
-      {
-        key: "actions",
-        header: "Acción",
-        align: "right",
-        render: (row) => (
-          <RowActions
-            actions={[
-              {
-                icon: Pencil,
-                label: `Editar mandatario de ${row.companyName}`,
-                tone: "primary",
-                onClick: () => setPanel({ mode: "mandatario", companyId: row.companyTenantId }),
-              },
-            ]}
-          />
-        ),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sinMandatario lee office/signers; se recalcula al cambiar
-    [office?.defaultMandateSignerName, signers],
+  // Mandatario por defecto ya configurado por compañía (reglas del OT); las compañías sin regla
+  // (p. ej. que nunca radicaron) quedan «Sin definir».
+  const signerNameByCompany = useMemo(
+    () => new Map(companies.map((r) => [r.companyTenantId, r.defaultMandateSignerName])),
+    [companies],
+  );
+  const signerNameOf = useCallback(
+    (companyTenantId: string) => signerNameByCompany.get(companyTenantId),
+    [signerNameByCompany],
+  );
+  // HU #13139 — «Sin mandatario»: sin default propio, sin mandatario activo vinculado y sin general del organismo.
+  const sinMandatarioOf = useCallback(
+    (companyTenantId: string) =>
+      !signerNameByCompany.get(companyTenantId)?.trim() &&
+      !office?.defaultMandateSignerName?.trim() &&
+      !signers.some((sg) => sg.isActive && sg.companyTenantIds.includes(companyTenantId)),
+    [signerNameByCompany, office?.defaultMandateSignerName, signers],
+  );
+  const editCompany = useCallback(
+    (company: AssociableCompany) =>
+      setPanel({ mode: "mandatario", companyId: company.id, company }),
+    [],
   );
 
   if (status === "loading") {
@@ -408,45 +345,12 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         />
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">
-            Empresas que radican
-          </h3>
-          <label className="min-w-[12rem] flex-1 sm:max-w-xs">
-            <span className="sr-only">Buscar empresa</span>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar empresa o NIT…"
-              className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
-              data-testid="ot-mandatos-company-search"
-            />
-          </label>
-        </div>
-
-        <div data-testid="ot-mandatos-company-table">
-          <DataTable
-            columns={columns}
-            rows={pgCompanies.paginar(filteredCompanies)}
-            getRowKey={(row) => row.companyTenantId}
-            ariaLabel="Empresas que radican en este organismo"
-            minWidth={720}
-            emptyMessage={
-              companies.length === 0
-                ? "No hay empresas con este organismo habilitado. Habilita el OT en la ficha de la compañía para que aparezca aquí y puedas registrar su mandato."
-                : "Ninguna empresa coincide con la búsqueda."
-            }
-            pagination={{
-              page: pgCompanies.page,
-              pageSize: pgCompanies.pageSize,
-              totalCount: filteredCompanies.length,
-              onPageChange: pgCompanies.setPage,
-              onPageSizeChange: pgCompanies.setPageSize,
-            }}
-          />
-        </div>
-      </div>
+      <OtCompaniasMandatarioTable
+        transitOfficeId={transitOfficeId}
+        signerNameOf={signerNameOf}
+        sinMandatarioOf={sinMandatarioOf}
+        onEdit={editCompany}
+      />
 
       <div className="flex flex-col gap-3" data-testid="ot-mandatos-signers-card">
         <div>
@@ -479,6 +383,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           mode={panel.mode}
           highlightCompanyId={panel.companyId}
           lockToCompanyId={panel.companyId}
+          lockedCompany={panel.company ?? null}
           signersRevision={signerEpoch}
           lastCreatedSignerId={lastCreatedSignerId}
           onRegisterSigner={canRegisterSigner ? (companyId) => setSignerCompanyId(companyId) : undefined}
@@ -501,6 +406,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           editing={null}
           initialOfficeIds={[transitOfficeId]}
           restrictToOfficeIds={[transitOfficeId]}
+          ownerCompanyIds={[signerCompanyId]}
           overlayClassName="z-[80]"
           onCancel={() => setSignerCompanyId(null)}
           onSubmit={async (input: CompanyMandateSignerInput) => {
@@ -517,6 +423,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
               validityKind: input.validityKind,
               validFrom: input.validFrom,
               validTo: input.validTo,
+              // HU #13181 — compañías asociadas elegidas en el formulario.
+              officeCompanies: input.officeCompanies,
             });
             setSignerCompanyId(null);
             setLastCreatedSignerId(saved.id);

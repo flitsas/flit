@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners;
-using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
@@ -96,27 +95,27 @@ public static class AdminCompanyMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
-        // Empresas representadas de la compañía: las que se dan de alta dentro del formulario del
-        // representante legal. Son la lista que el formulario del mandatario ofrece para acotar para
-        // quién firma en cada organismo. Ya vienen únicas por (tenant, NIT).
-        group.MapGet("/represented-companies", async (
+        // HU #13178 — compañías a las que el Admin de Compañía puede asociar su mandatario: solo sus hijas directas
+        // activas. Sin red: lista vacía y aplicaSoloASuCompania verdadero. La lista completa NUNCA sale por aquí.
+        group.MapGet("/associable-companies", async (
                 Guid tenantId,
-                [FromServices] ILegalRepresentativeReader reader,
+                [FromQuery] string? search,
+                [FromQuery] int? page,
+                [FromQuery] int? pageSize,
+                [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
                 CancellationToken ct) =>
-            {
-                var empresas = await reader.ListRepresentedCompaniesAsync(tenantId, ct).ConfigureAwait(false);
-                return Results.Ok(new
-                {
-                    items = empresas.Select(e => new
-                    {
-                        id = e.Id,
-                        documentNumber = e.DocumentNumber,
-                        name = e.Name,
-                    }),
-                });
-            })
-            .WithName("AdminCompanyMandateSignerRepresentedCompanies")
-            .WithSummary("Empresas representadas de la compañía, para acotar para quién firma el mandatario");
+                AssociableCompaniesHttp.ToResult(
+                    await service.ListForCompanyAsync(tenantId, search, page ?? 1, pageSize ?? 0, ct)
+                        .ConfigureAwait(false)))
+            .WithName("AdminCompanyMandateSignersAssociableCompanies")
+            .WithSummary("Compañías hijas a las que el Admin de Compañía puede asociar su mandatario")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // HU #13179 — la ruta represented-companies de mandatarios se RETIRA: la lista del formulario ya no sale de las
+        // fichas de Representantes Legales sino de associable-companies (HU #13178). ListRepresentedCompaniesAsync
+        // se conserva: lo usa el flujo de escrituras (admin-deeds).
 
         // HU #11758 (ADR-0050) — las tres rutas de identidad del mandatario desde el configurador de la
         // COMPAÑÍA (send/resend/link) se RETIRAN: el módulo Identidad es la única fuente que puede

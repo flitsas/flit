@@ -17,7 +17,12 @@ import {
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
 import { MandatarioIdentidadBlock } from "./MandatarioIdentidadBlock";
-import type { RepresentedCompanyOption } from "@/lib/api/admin-mandate-signers";
+import {
+  MandatarioCompaniasAsociadas,
+  type AsociadaSeleccionada,
+  type FuenteAsociadas,
+  precargarAsociadas,
+} from "./MandatarioCompaniasAsociadas";
 import type {
   CompanyMandateSignerInput,
   CompanyTransitOfficeOption,
@@ -40,7 +45,8 @@ export function CompanyMandatarioForm({
   tenantId,
   networkHeadId,
   offices,
-  companies = [],
+  asociadas,
+  ownerCompanyIds = [],
   editing,
   initialOfficeIds,
   restrictToOfficeIds,
@@ -49,16 +55,22 @@ export function CompanyMandatarioForm({
   onSubmit,
 }: {
   /**
-   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía (baúl ni empresas
-   * representadas: sin selector del baúl, el servidor resuelve la firma) y el organismo queda fijo.
+   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía (sin selector del
+   * baúl, el servidor resuelve la firma) y el organismo queda fijo.
    * HU #13132: modelo, forma de firma y vigencia igual que en la compañía.
    */
   variant?: "company" | "hub";
   tenantId?: string;
   networkHeadId?: string | null;
   offices: CompanyTransitOfficeOption[];
-  /** Empresas representadas de la compañía, para acotar para quién firma en cada organismo. */
-  companies?: RepresentedCompanyOption[];
+  /**
+   * HU #13181 — de dónde salen las compañías asociables según el perfil: `ot` (OT y Super Admin:
+   * todas, con búsqueda) o `hijas` (Admin de Compañía: solo las suyas). Por defecto: el hub usa `ot`
+   * con su organismo y la compañía usa `hijas`.
+   */
+  asociadas?: FuenteAsociadas;
+  /** Compañía propia del mandatario: no se ofrece en la lista (el servidor la rechazaría). */
+  ownerCompanyIds?: string[];
   editing: MandateSigner | null;
   /** En alta desde el hub OT, premarca este organismo. */
   initialOfficeIds?: string[];
@@ -90,28 +102,13 @@ export function CompanyMandatarioForm({
   const [validTo, setValidTo] = useState(inicial.validTo);
   // Firma del baúl del mandatario (solo con forma «baúl»).
   const [signatureVaultId, setSignatureVaultId] = useState<string | null>(inicial.signatureVaultId);
-  // Empresas por organismo. La ausencia de entrada para un organismo significa "todas": es como se
-  // comportan los mandatarios que ya existen, y por eso el estado arranca solo con lo que hay guardado.
-  const [empresasPorOt, setEmpresasPorOt] = useState<Record<string, string[]>>(() =>
-    Object.fromEntries(
-      (editing?.officeCompanies ?? []).map((o) => [o.transitOfficeId, o.representedCompanyIds]),
-    ),
+  // HU #13181 — compañías asociadas (una sola selección que aplica a los organismos elegidos).
+  const [asociadasSel, setAsociadasSel] = useState<Record<string, AsociadaSeleccionada>>(() =>
+    precargarAsociadas(editing?.officeCompanies),
   );
-
-  const toggleEmpresa = (officeId: string, companyId: string) => {
-    setEmpresasPorOt((prev) => {
-      const actuales = prev[officeId] ?? [];
-      const siguientes = actuales.includes(companyId)
-        ? actuales.filter((x) => x !== companyId)
-        : [...actuales, companyId];
-      // Sin ninguna marcada se borra la entrada: la ausencia es lo que significa "todas", y dejar un
-      // arreglo vacío diría "ninguna", que dejaría al mandatario sin poder firmar nada.
-      const next = { ...prev };
-      if (siguientes.length === 0) delete next[officeId];
-      else next[officeId] = siguientes;
-      return next;
-    });
-  };
+  const [erroresAsociadas, setErroresAsociadas] = useState<Record<string, string>>({});
+  // Verdadero cuando el Admin de Compañía no tiene hijas: no hay lista y el mandatario es solo suyo.
+  const [sinRed, setSinRed] = useState(false);
   const isHub = variant === "hub";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,17 +133,20 @@ export function CompanyMandatarioForm({
     setError(null);
     setSelected((prev) => {
       const quitando = prev.includes(id);
-      // Al retirar el organismo se retira también su acotación por empresa.
-      if (quitando) {
-        setEmpresasPorOt((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-      }
       return quitando ? prev.filter((x) => x !== id) : [...prev, id];
     });
   };
+
+  const fuenteAsociadas: FuenteAsociadas | null =
+    asociadas ??
+    (isHub
+      ? (() => {
+          const ot = restrictToOfficeIds?.[0] ?? initialOfficeIds?.[0];
+          return ot ? { modo: "ot" as const, transitOfficeId: ot } : null;
+        })()
+      : tenantId
+        ? { modo: "hijas" as const, tenantId, networkHeadId }
+        : null);
 
   const visibleOffices =
     restrictToOfficeIds && restrictToOfficeIds.length > 0
@@ -182,6 +182,7 @@ export function CompanyMandatarioForm({
     );
     setFieldErrors(errores);
     setError(null);
+    setErroresAsociadas({});
     if (Object.keys(errores).length > 0) return;
 
     const formatoBlanco = signerModel === "formato_blanco";
@@ -204,19 +205,19 @@ export function CompanyMandatarioForm({
           signatureVaultId,
         }),
         signatureVaultId: isHub ? undefined : conBaul ? signatureVaultId : null,
-        officeCompanies: isHub
-          ? undefined
-          : Object.entries(empresasPorOt)
-          // Solo de los organismos que siguen elegidos: retirar uno se lleva su acotación.
-          .filter(([officeId]) => selected.includes(officeId))
-          .map(([transitOfficeId, representedCompanyIds]) => ({
-            transitOfficeId,
-            representedCompanyIds,
-          })),
+        // Sin lista (Admin de Compañía sin red) no se envía nada: aplica solo a su compañía.
+        officeCompanies:
+          fuenteAsociadas && !sinRed
+            ? selected.map((transitOfficeId) => ({
+                transitOfficeId,
+                associatedCompanyTenantIds: Object.keys(asociadasSel),
+              }))
+            : undefined,
       });
     } catch (err) {
-      const { campos, general } = repartirError(err, isHub);
+      const { campos, general, porCompania } = repartirError(err, isHub);
       setFieldErrors(campos);
+      setErroresAsociadas(porCompania);
       setError(general);
     } finally {
       setSaving(false);
@@ -506,40 +507,6 @@ export function CompanyMandatarioForm({
                       {o.code && <span className="opacity-70"> · {o.code}</span>}
                     </span>
                   </label>
-                  {/* Acotación por empresa, solo donde el mandatario aplica. Sin ninguna marcada
-                      firma para TODAS las empresas de ese organismo. */}
-                  {!isHub &&
-                  selected.includes(o.transitOfficeId) &&
-                  companies.length > 0 &&
-                  !restrictToOfficeIds ? (
-                    <div className="mt-1 ml-6">
-                      <p className="text-[11px] opacity-70">
-                        {(empresasPorOt[o.transitOfficeId]?.length ?? 0) === 0
-                          ? "Firma para todas las empresas de este organismo."
-                          : `Firma solo para ${empresasPorOt[o.transitOfficeId]!.length} empresa(s):`}
-                      </p>
-                      <div className="mt-1 space-y-1">
-                        {companies.map((e) => (
-                          <label
-                            key={`${o.transitOfficeId}-${e.id}`}
-                            className="flex items-center gap-2 text-[11px]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={(empresasPorOt[o.transitOfficeId] ?? []).includes(e.id)}
-                              onChange={() => toggleEmpresa(o.transitOfficeId, e.id)}
-                              aria-label={`${e.name} (${e.documentNumber}) en ${o.name}`}
-                            />
-                            <span>
-                              {e.name}
-                              <span className="opacity-70"> · NIT {e.documentNumber}</span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
                 </div>
               ))}
             </div>
@@ -553,6 +520,24 @@ export function CompanyMandatarioForm({
 
             <FieldError id="mandatario-offices-error" message={fieldErrors.offices} />
           </fieldset>
+
+          {fuenteAsociadas ? (
+            <fieldset>
+              <legend className="mb-1.5 block text-xs font-semibold">Compañías asociadas</legend>
+              <MandatarioCompaniasAsociadas
+                fuente={fuenteAsociadas}
+                seleccion={asociadasSel}
+                onChange={(next) => {
+                  setAsociadasSel(next);
+                  setErroresAsociadas({});
+                  setError(null);
+                }}
+                excluirIds={ownerCompanyIds}
+                errores={erroresAsociadas}
+                onSinRed={setSinRed}
+              />
+            </fieldset>
+          ) : null}
 
           {error && (
             <p className="text-[11px] leading-tight" style={{ color: "#E5484D" }} role="alert">
@@ -628,34 +613,56 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 function repartirError(
   err: unknown,
   isHub: boolean,
-): { campos: ErroresMandatario; general: string | null } {
+): { campos: ErroresMandatario; general: string | null; porCompania: Record<string, string> } {
   const campos: ErroresMandatario = {};
+  const porCompania: Record<string, string> = {};
   if (err instanceof ApiValidationError) {
     const generales: string[] = [];
     for (const e of err.errors) {
+      // HU #13179 — el 422 de una compañía asociada trae su id de tenant en `value`.
+      if (e.field?.replace(/[^a-z]/gi, "").toLowerCase() === "associatedcompanytenantids" && e.value) {
+        porCompania[e.value] = e.message;
+        continue;
+      }
       const campo = campoDeError(e.field);
       if (campo && !campos[campo]) campos[campo] = e.message;
       else generales.push(e.message);
     }
     const msg = generales.join(" ").trim();
-    if (Object.keys(campos).length > 0) return { campos, general: msg || null };
+    if (Object.keys(campos).length > 0 || Object.keys(porCompania).length > 0) {
+      return { campos, general: msg || null, porCompania };
+    }
     return {
       campos,
+      porCompania,
       general: msg || "No se pudo guardar el mandatario. Revisa los datos e intenta de nuevo.",
     };
   }
   if (err instanceof ApiError) {
+    // HU #13179 — el Admin de Compañía envió una compañía que no es su hija: no se guardó nada.
+    if (
+      err.status === 403 &&
+      (err.body as { code?: string } | undefined)?.code === "compania_asociada_fuera_de_alcance"
+    ) {
+      return {
+        campos,
+        porCompania,
+        general: err.message || "Una de las compañías no está dentro de tu alcance. No se guardó nada.",
+      };
+    }
     if (err.status === 403) {
       return {
         campos,
+        porCompania,
         general:
           "No tienes permiso para registrar mandatarios. Solo el administrador del organismo puede hacerlo.",
       };
     }
-    if (err.status === 422 && err.message.trim()) return { campos, general: err.message };
+    if (err.status === 422 && err.message.trim()) return { campos, porCompania, general: err.message };
   }
   return {
     campos,
+    porCompania,
     general: isHub
       ? "No se pudo registrar el mandatario. Intenta de nuevo."
       : "No se pudo guardar el mandatario.",

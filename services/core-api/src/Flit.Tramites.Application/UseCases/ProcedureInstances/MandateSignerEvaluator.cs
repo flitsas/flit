@@ -31,6 +31,27 @@ public enum MandateSignerEstado
     PendienteEleccionOt,
 }
 
+/// <summary>HU #13180 — vocabulario estable de los niveles de la prelación en la API (firmante previsto, indicador «Firmará»).</summary>
+public static class MandateSignerLevelCodes
+{
+    public const string Explicita = "explicita";
+    public const string OtParaCompania = "ot_para_compania";
+    public const string PropioDeCompania = "propio_de_compania";
+    public const string AsociadoDeOtraCompania = "asociado_de_otra_compania";
+    public const string DefaultDelOt = "default_del_ot";
+    public const string Ninguno = "ninguno";
+
+    public static string ToCode(MandateSignerLevel level) => level switch
+    {
+        MandateSignerLevel.Explicita => Explicita,
+        MandateSignerLevel.OtParaCompania => OtParaCompania,
+        MandateSignerLevel.PropioDeCompania => PropioDeCompania,
+        MandateSignerLevel.AsociadoDeOtraCompania => AsociadoDeOtraCompania,
+        MandateSignerLevel.DefaultDelOt => DefaultDelOt,
+        _ => Ninguno,
+    };
+}
+
 /// <summary>Vocabulario estable de los estados del evaluador en la API (#13145) y en los metadatos del gate.</summary>
 public static class MandateSignerEstados
 {

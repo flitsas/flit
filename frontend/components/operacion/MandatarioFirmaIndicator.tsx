@@ -129,6 +129,15 @@ export function MandatarioFirmaIndicator({
         <span>
           <span className="font-semibold">Firmará:</span> {data.nombre}
           {forma ? ` / ${forma}` : ''}
+          {/* HU #13183 — solo el origen, nunca el nombre de la otra compañía ni su documento. */}
+          {data.nivel === 'asociado_de_otra_compania' ? (
+            <span
+              className="ml-2 opacity-70"
+              data-testid="mandatario-firma-asociado"
+            >
+              Mandatario asociado
+            </span>
+          ) : null}
         </span>
       </div>
     );
