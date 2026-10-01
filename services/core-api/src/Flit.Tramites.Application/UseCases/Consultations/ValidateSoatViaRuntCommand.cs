@@ -1,8 +1,11 @@
+using System.Globalization;
 using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
@@ -24,16 +27,37 @@ public sealed record ValidateSoatResult(
 /// salir del estado <c>asignado</c>. A diferencia de <see cref="RunConsultationHandler"/>, NO hidrata
 /// todos los campos del vehículo (el trigger de inmutabilidad solo permite escribir <c>soat_estado</c>
 /// fuera de borrador): únicamente deriva y persiste <c>soat_estado</c> a partir del check <c>soat</c>.
+///
+/// <para>Bug #13194 — un RUNT que NO reporta SOAT (<c>unknown</c>) no degrada un <c>soat_estado</c>
+/// vigente que vino de un soporte manual (PDF leído por OCR o captura del usuario) cuyo vencimiento no
+/// pasó: el RUNT no dijo que no hubiera SOAT, solo que no lo reporta. Un vencido explícito del RUNT
+/// (<c>fail</c>) sí manda: es la fuente oficial afirmando lo contrario del documento.</para>
+///
+/// <para>Bug #13194 — si el proveedor lanza, se loguea y se devuelve <see cref="ProviderError"/>
+/// («la consulta no respondió»): «Enviar al OT» sigue, como cuando falta la plantilla.</para>
 /// </summary>
 public sealed class ValidateSoatViaRuntHandler(
     IProcedureInstanceRepository instanceRepo,
     ICatalogRepository catalogRepo,
     IConsultationProviderRegistry registry,
-    Certifications.ICertificationIngestionService? certificationIngestion = null)
+    Certifications.ICertificationIngestionService? certificationIngestion = null,
+    ILogger<ValidateSoatViaRuntHandler>? logger = null)
 {
+    /// <summary>El proveedor RUNT lanzó: la consulta no respondió (no es un SOAT no vigente).</summary>
+    public const string ProviderError = "provider_error";
+
     private const string TemplateCode = "RUNT_VEHICLE";
     private const string SoatCheckKey = "soat";
     private const string ConsultationSource = "consultation";
+    private const string SoatVencimientoKey = "soat_vencimiento";
+
+    /// <summary>Orígenes de un soporte manual del SOAT: OCR del PDF cargado o captura del usuario.</summary>
+    private static readonly string[] ManualSources = ["ocr", "user"];
+
+    private static readonly string[] FormatosFecha = ["yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy", "yyyy/MM/dd", "dd-MM-yyyy"];
+
+    private readonly ILogger<ValidateSoatViaRuntHandler> _logger =
+        logger ?? NullLogger<ValidateSoatViaRuntHandler>.Instance;
 
     public async Task<(ValidateSoatResult? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -64,15 +88,33 @@ public sealed class ValidateSoatViaRuntHandler(
         var fieldValues = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
 
-        var result = await provider.ConsultAsync(
-            new ConsultationContext(instance.Id, instance.TenantId, TemplateCode, fieldValues), ct);
+        ConsultationResult result;
+        try
+        {
+            result = await provider.ConsultAsync(
+                new ConsultationContext(instance.Id, instance.TenantId, TemplateCode, fieldValues), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ValidateSoatLog.ProveedorFallo(_logger, ex, instanceId, providerKey);
+            return (null, ProviderError);
+        }
 
         var soatCheck = result.Checks.FirstOrDefault(c =>
             string.Equals(c.Key, SoatCheckKey, StringComparison.OrdinalIgnoreCase));
         var soatEstado = MapSoatEstado(soatCheck?.Status);
 
-        UpsertSoatEstado(instance, tenantId, instanceRepo, soatEstado);
-        await instanceRepo.SaveChangesAsync(ct);
+        // Bug #13194 — «el RUNT no lo reporta» no es «no hay SOAT»: se conserva el soporte manual vigente.
+        var conservaSoporteManual = soatEstado == SoatGate.Unknown && TieneSoporteManualVigente(instance);
+        if (conservaSoporteManual)
+        {
+            soatEstado = SoatGate.Vigente;
+        }
+        else
+        {
+            UpsertSoatEstado(instance, tenantId, instanceRepo, soatEstado);
+            await instanceRepo.SaveChangesAsync(ct);
+        }
 
         // HU #11304 — esta consulta trae la póliza completa y hasta ahora se tiraba entera salvo el
         // estado: fuera de borrador el trigger de inmutabilidad de field_values solo deja escribir
@@ -85,6 +127,8 @@ public sealed class ValidateSoatViaRuntHandler(
 
         var message = soatEstado switch
         {
+            SoatGate.Vigente when conservaSoporteManual =>
+                "El RUNT no reporta el SOAT, pero el soporte cargado está vigente: se conserva.",
             SoatGate.Vigente =>
                 "SOAT vigente según el RUNT. El trámite queda listo para la recepción y aprobación del OT.",
             SoatGate.Vencido =>
@@ -133,6 +177,46 @@ public sealed class ValidateSoatViaRuntHandler(
         {
             // Silencio acotado: ver RunConsultationHandler.IngestCertificationsAsync.
         }
+    }
+
+    /// <summary>
+    /// ¿El trámite ya tiene el SOAT vigente por un soporte manual? <c>soat_estado=vigente</c> escrito por
+    /// el OCR del PDF o por el usuario (no por una consulta) y, si se leyó la fecha de vencimiento, que no
+    /// haya pasado. Sin fecha legible se confía en el estado que el propio documento declaró.
+    /// </summary>
+    private static bool TieneSoporteManualVigente(ProcedureInstance instance)
+    {
+        var estado = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, SoatGate.FieldKey, StringComparison.OrdinalIgnoreCase));
+        if (estado is null
+            || !SoatGate.IsSatisfied(estado.ValueText)
+            || !ManualSources.Contains(estado.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var vencimiento = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, SoatVencimientoKey, StringComparison.OrdinalIgnoreCase))?.ValueText?.Trim();
+        if (string.IsNullOrEmpty(vencimiento))
+            return true;
+
+        DateOnly fecha;
+        if (DateOnly.TryParseExact(
+                vencimiento, FormatosFecha, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exacta))
+        {
+            fecha = exacta;
+        }
+        else if (DateTimeOffset.TryParse(
+                     vencimiento, CultureInfo.InvariantCulture, DateTimeStyles.None, out var conHora))
+        {
+            fecha = DateOnly.FromDateTime(conHora.Date);
+        }
+        else
+        {
+            return true;
+        }
+
+        return fecha >= DateOnly.FromDateTime(DateTime.UtcNow);
     }
 
     private static void UpsertSoatEstado(
@@ -191,4 +275,14 @@ public sealed class ValidateSoatViaRuntHandler(
 
         return null;
     }
+}
+
+/// <summary>Logging source-generado (CA1848) de la validación del SOAT. NUNCA incluye PII.</summary>
+internal static partial class ValidateSoatLog
+{
+    [LoggerMessage(
+        EventId = 13194,
+        Level = LogLevel.Warning,
+        Message = "El proveedor RUNT {ProviderKey} falló al validar el SOAT del trámite {InstanceId}; se trata como consulta sin respuesta.")]
+    public static partial void ProveedorFallo(ILogger logger, Exception ex, Guid instanceId, string providerKey);
 }
