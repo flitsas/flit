@@ -37,7 +37,7 @@ public sealed class OrganismoPorCodigoYCorteDocumentosSqlTests
     [Fact]
     public void P1_ElSpDeNegocioGuardaElIdDelOrganismoConElMismoJoinDelGrant()
     {
-        var start = Business.IndexOf("SET transit_office_id", StringComparison.Ordinal);
+        var start = Business.IndexOf("SET (transit_office_id", StringComparison.Ordinal);
         start.Should().BeGreaterThan(0, "el SP de negocio debe escribir el id que resolvió por código");
         var end = Business.IndexOf(';', start);
         var statement = Business[start..end];
@@ -48,6 +48,40 @@ public sealed class OrganismoPorCodigoYCorteDocumentosSqlTests
         statement.Should().Contain("g.is_enabled = true");
         statement.Should().Contain("ts.code = eim.traffic_secretary_code");
         statement.Should().Contain("ts.is_active = true");
+    }
+
+    [Fact]
+    public void P1_ElMasterTieneColumnasParaNombreYMunicipioDelOrganismo()
+    {
+        var ddl = EmbeddedDdl.LoadUp("25-ICT-master-transit-office-name.sql");
+
+        ddl.Should().Contain("ADD COLUMN IF NOT EXISTS transit_office_name varchar(200)");
+        ddl.Should().Contain("ADD COLUMN IF NOT EXISTS transit_office_city_code varchar(10)");
+        ddl.Should().Contain("COMMENT ON COLUMN ict.external_integration_master.transit_office_name");
+        ddl.Should().Contain("COMMENT ON COLUMN ict.external_integration_master.transit_office_city_code");
+        var orden = EmbeddedDdl.AllScriptsInOrder().ToList();
+        orden.Should().Contain("25-ICT-master-transit-office-name.sql");
+        orden.IndexOf("25-ICT-master-transit-office-name.sql").Should()
+            .BeGreaterThan(orden.IndexOf("24-ICT-master-transit-office-id.sql"));
+    }
+
+    [Fact]
+    public void P1_ElSpGuardaIdNombreYMunicipioDeLaMismaFilaDelCatalogo()
+    {
+        // Asignación por fila: los tres salen del MISMO SELECT, así que no pueden desalinearse, y si el
+        // código no se resuelve (sin fila) Postgres deja los tres en NULL.
+        var start = Business.IndexOf("SET (transit_office_id", StringComparison.Ordinal);
+        start.Should().BeGreaterThan(0);
+        var end = Business.IndexOf(';', start);
+        var statement = Business[start..end];
+
+        statement.Should().Contain("SET (transit_office_id, transit_office_name, transit_office_city_code) = (");
+        statement.Should().Contain("SELECT ts.id, ts.name, ts.city_code");
+        statement.Should().Contain("LIMIT 1)");
+        System.Text.RegularExpressions.Regex.Count(statement, "SELECT").Should().Be(1,
+            "una sola subconsulta: nombre y municipio no se resuelven aparte del id");
+        Business.Should().NotContain("SET transit_office_id =",
+            "no queda una asignación suelta del id que pueda divergir del nombre");
     }
 
     [Fact]
