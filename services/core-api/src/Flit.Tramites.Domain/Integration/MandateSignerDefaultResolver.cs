@@ -28,12 +28,11 @@ public enum MandateSignerLevel
 /// <summary>Un mandatario descartado por el resolver, con el motivo (vocabulario estable de ADR-0066).</summary>
 public sealed record MandateSignerDiscard(Guid SignerId, MandateSignerLevel Level, string Motivo);
 
-/// <summary>Motivos de descarte: los cuatro de ADR-0061 más los tres de ADR-0066.</summary>
+/// <summary>Motivos de descarte: los tres de ADR-0061 más los tres de ADR-0066.</summary>
 public static class MandateSignerDiscardReasons
 {
     public const string FueraDeVigencia = "mandatario_fuera_de_vigencia";
     public const string Inactivo = "mandatario_inactivo";
-    public const string BiometriaVencida = "biometria_vencida";
     public const string SinValidacionAprobada = "sin_validacion_aprobada";
     public const string BaulSinFirmaVigente = "baul_sin_firma_vigente";
     public const string FirmaFisicaSinMigrar = "firma_fisica_sin_migrar";
@@ -41,7 +40,7 @@ public static class MandateSignerDiscardReasons
 
     /// <summary>Motivos que hablan de la FIRMA (no de la vigencia o el estado del mandatario).</summary>
     public static bool EsDeFirma(string motivo) =>
-        motivo is BiometriaVencida or SinValidacionAprobada or BaulSinFirmaVigente or FirmaFisicaSinMigrar;
+        motivo is SinValidacionAprobada or BaulSinFirmaVigente or FirmaFisicaSinMigrar;
 }
 
 /// <summary>

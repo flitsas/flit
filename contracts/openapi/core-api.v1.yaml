@@ -688,8 +688,8 @@ paths:
       summary: Reporte de migración de la firma física (HU #13131)
       description: >
         Mandatarios Persona natural activos que dependen SOLO de la firma física (`signs_physically`
-        verdadero), sin firma del baúl y sin validación biométrica aprobada y vigente (regla de 30 días del
-        módulo Identidad). Cada fila trae compañía, organismo, forma de firma actual, forma declarada y el
+        verdadero), sin firma del baúl y sin validación biométrica aprobada (el mandatario no renueva su
+        identidad: una aprobación basta). Cada fila trae compañía, organismo, forma de firma actual, forma declarada y el
         dato que le falta. Un mandatario al que se le vincula una firma del baúl o se le aprueba la validación
         sale del reporte en la siguiente consulta. NO incluye documento ni correo (Ley 1581). Solo SuperAdmin.
         Con `format=csv` se exporta como `text/csv`.
@@ -12007,12 +12007,12 @@ components:
           type: boolean
           description: >
             Firma válida del mandatario (HU #13130): su vigencia propia está activa Y, si firma con
-            biometría, su validación biométrica está vigente (regla de 30 días del módulo Identidad).
-            Las dos vigencias conviven. Si es false no se estampa firma ni sello.
+            biometría, tiene una validación biométrica aprobada, sin renovación (HU #13130b: la
+            ventana de 30 días rige solo el trámite). Las dos condiciones conviven. Si es false no se estampa firma ni sello.
         motivoSinFirma:
           type: string
           nullable: true
-          enum: [mandatario_fuera_de_vigencia, mandatario_inactivo, biometria_vencida, sin_validacion_aprobada]
+          enum: [mandatario_fuera_de_vigencia, mandatario_inactivo, sin_validacion_aprobada]
           description: "Motivo cuando `firmaValida` es false."
     MandateSignerImpact:
       type: object

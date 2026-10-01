@@ -33,9 +33,9 @@ describe("mandatario-firma (HU #11716/#11717)", () => {
     expect(organismosSinMedioDeFirma([FUNZA], { email: "x@y.com" })).toEqual([FUNZA]);
   });
 
-  it("una identidad vencida no alcanza", () => {
+  it("una identidad expirada (no aprobada) no alcanza", () => {
     expect(organismosSinMedioDeFirma([FUNZA], { identityStatus: "expired" })).toEqual([FUNZA]);
-    expect(motivoSinFirma({ identityStatus: "expired" })).toContain("vencida");
+    expect(motivoSinFirma({ identityStatus: "expired" })).toContain("validación de identidad aprobada");
   });
 
   it("HU #13133: la firma física ya no exime a ningún organismo", () => {

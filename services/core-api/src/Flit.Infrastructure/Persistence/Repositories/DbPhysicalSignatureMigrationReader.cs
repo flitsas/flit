@@ -97,7 +97,7 @@ internal sealed class DbPhysicalSignatureMigrationReader : IPhysicalSignatureMig
                 .Select(g => g.First())
                 .Select(c => new MandateSignerIdentityTenantResolver.SignerRef(
                     c.Id, c.TransitOfficeId, c.DocumentType, c.DocumentNumber!))],
-            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedAsync(
+            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedMandatarioAsync(
                 tenantId, documentos, DateTimeOffset.UtcNow, ct),
             cancellationToken).ConfigureAwait(false);
 
@@ -123,7 +123,7 @@ internal sealed class DbPhysicalSignatureMigrationReader : IPhysicalSignatureMig
                 continue; // migrado por baúl
             }
 
-            var faltante = FaltaPara(c.SignatureMethod, identidad.Status);
+            var faltante = FaltaPara(c.SignatureMethod);
             var oficina = offices.GetValueOrDefault(c.TransitOfficeId);
             var codigo = oficina?.Code ?? string.Empty;
             var nombreOficina = oficina?.Name ?? string.Empty;
@@ -147,14 +147,9 @@ internal sealed class DbPhysicalSignatureMigrationReader : IPhysicalSignatureMig
         return rows;
     }
 
-    private static string FaltaPara(string? signatureMethod, string identityStatus)
+    private static string FaltaPara(string? signatureMethod)
     {
-        // Con biometría aprobada pero vencida el dato que falta es la renovación, no una validación nueva.
-        if (identityStatus == IdentityVigenciaEstados.Vencida)
-        {
-            return PhysicalSignatureMigrationMissing.ValidacionBiometricaVigente;
-        }
-
+        // HU #13130b: el mandatario no renueva su identidad (una aprobación basta); sin ella falta la validación.
         return signatureMethod switch
         {
             MandateSignatureMethods.Baul => PhysicalSignatureMigrationMissing.FirmaBaul,

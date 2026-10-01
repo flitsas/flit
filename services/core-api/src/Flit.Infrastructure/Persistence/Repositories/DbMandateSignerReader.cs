@@ -757,7 +757,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             _otStatus,
             [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
                 s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber!))],
-            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedAsync(tenantId, documentos, now, ct),
+            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedMandatarioAsync(tenantId, documentos, now, ct),
             cancellationToken).ConfigureAwait(false);
 
         foreach (var (signerId, resultado) in resueltos)
