@@ -109,6 +109,14 @@ public sealed class TramiteLifecycleServiceTests
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
                 CreatedAt = DateTimeOffset.UtcNow,
             });
+            // Bug #13194 (D4) — fail-closed: la validación solo aprueba al actor de su MISMO documento.
+            i.Actors.Add(ActorNatural(i, "comprador", "1"));
+        }
+        else if (status != TramiteEstado.Borrador)
+        {
+            // Bug #13194 (D2) — un trámite que ya pasó de borrador estaba firmado al prepararse; el gate
+            // de firma corre en toda llegada a preparado/preasignacion/entregado.
+            FirmaFixture.Firmar(i);
         }
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(i);
         _typeRepo.GetByIdAsync(i.ProcedureTypeId, Arg.Any<CancellationToken>()).Returns(new ProcedureType
@@ -654,6 +662,8 @@ public sealed class TramiteLifecycleServiceTests
 
         foreach (var parte in new[] { "comprador", "vendedor" })
         {
+            // Bug #13194 (D4) — fail-closed: cada validación necesita su actor del MISMO documento.
+            i.Actors.Add(ActorNatural(i, parte, parte == "comprador" ? "1" : "2"));
             i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
             {
                 Id = Guid.NewGuid(),
@@ -1138,4 +1148,17 @@ public sealed class TramiteLifecycleServiceTests
         await _repo.DidNotReceive().FindVigenteApprovedByDocumentAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
+
+    /// <summary>Actor persona natural con documento CC (Bug #13194: el resolutor exige actor con documento).</summary>
+    private static ProcedureInstanceActor ActorNatural(ProcedureInstance i, string parte, string documento) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = i.TenantId,
+        ProcedureInstanceId = i.Id,
+        ActorType = parte,
+        DocumentType = "CC",
+        DocumentNumber = documento,
+        FullName = $"Persona {parte}",
+        PersonType = "natural",
+    };
 }

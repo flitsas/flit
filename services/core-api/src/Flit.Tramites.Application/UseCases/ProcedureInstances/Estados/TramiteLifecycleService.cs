@@ -30,7 +30,9 @@ public sealed class TramiteLifecycleService(
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
     ITramiteTransitionPublisher publisher,
+#pragma warning disable CS9113 // Bug #13194 (D2): se conserva la firma (DI y llamadores posicionales); ya no relaja la identidad.
     IIdentityValidationPolicy? identityPolicy = null,
+#pragma warning restore CS9113
     IProcedureInstancePrendaRepository? prendaRepo = null,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
@@ -56,10 +58,9 @@ public sealed class TramiteLifecycleService(
     private readonly TramiteValidationPolicy _validationPolicy =
         validationPolicy ?? TramiteValidationPolicy.BlockAll;
 
-    // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
-    // Default permisivo (siempre exige) cuando no hay política cableada (tests).
-    private readonly IIdentityValidationPolicy _identityPolicy =
-        identityPolicy ?? NullIdentityValidationPolicy.Instance;
+    // Bug #13194 (P4, D2) — la política de identidad por OT (HU #10548) YA NO relaja ningún gate: «no se
+    // permite enviar al OT trámites sin firmar», tampoco en un OT con la validación deshabilitada. El
+    // parámetro `identityPolicy` se conserva sin uso para no romper la composición ni los llamadores.
 
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → SubmitGate estático).
     private readonly IDynamicProceduresPolicy _dynamicPolicy =
@@ -157,6 +158,20 @@ public sealed class TramiteLifecycleService(
             var gatePreparacionError = await EvaluarGatePreparacionAsync(instance, command, ct).ConfigureAwait(false);
             if (gatePreparacionError is var (code, detail) && code is not null)
                 return TramiteTransitionOutcome.Fail(code, detail);
+        }
+
+        // Bug #13194 (P4, D2) — gate de FIRMA único: «no se permite enviar al OT trámites sin firmar».
+        // Corre en TODA llegada a preparado / preasignacion / entregado del gestor o el sistema (preparar,
+        // radicar, re-radicar, «Enviar al OT», cambio de estado admin), sin relajación por OT. Va después
+        // del gate de preparación para que borrador→preparado siga reportando su lista completa
+        // (identidad_no_aprobada incluida) y antes de los gates de entrega, que promueven el OT.
+        if (FirmaGate.Aplica(command.ToStatus, command.Actor))
+        {
+            var sinFirma = await FirmaGate
+                .PartesSinFirmaAsync(repo, instance, _vaultPolicy, DateTimeOffset.UtcNow, ct)
+                .ConfigureAwait(false);
+            if (sinFirma.Count > 0)
+                return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(sinFirma));
         }
 
         // Gates OT de entrega (heredados del submit HU #10217/#2). HU #10872 (AC1) — este es el GATE
@@ -340,14 +355,10 @@ public sealed class TramiteLifecycleService(
         // (HU #10350 rediseño #87): fila propia del trámite O identidad vigente de la persona
         // en otro trámite del tenant, sin clonar. HU #10872 (AC2) — es la MISMA resolución de siempre:
         // no dispara ninguna solicitud nueva, solo consulta vigencia de lo ya validado.
+        // Bug #13194 (P4, D2) — sin relajación por OT: un OT con la validación de identidad deshabilitada
+        // (HU #10548) ya no da la identidad por satisfecha.
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy).ConfigureAwait(false);
-        // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
-        // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
-        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
-            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct).ConfigureAwait(false);
-        if (!identityRequired)
-            identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
 
         // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
         var docsCompletos = matrixCompleteness is null
@@ -492,18 +503,6 @@ public sealed class TramiteLifecycleService(
     /// <c>transit_office_id</c> (lo persiste el wizard al seleccionar). <c>null</c> si no hay
     /// selección o no es un GUID válido (p. ej. instancias previas a la persistencia del id).
     /// </summary>
-    /// <summary>
-    /// Marca la identidad de ambas partes (comprador y vendedor) como satisfecha, uniéndolas al set
-    /// aprobado. Se usa cuando el OT destino deshabilita la validación de identidad (HU #10548): así
-    /// el <see cref="SubmitGate"/> no exige identidad sin tocar su firma.
-    /// </summary>
-    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
-        new(approved, StringComparer.OrdinalIgnoreCase)
-        {
-            BiometricRules.ParteComprador,
-            BiometricRules.ParteVendedor,
-        };
-
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
     {
         var raw = instance.FieldValues.FirstOrDefault(f =>
