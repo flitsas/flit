@@ -55,7 +55,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
   it("AC1 — perfil Gestor y rol Administrador de Compañía en celdas separadas", () => {
     renderTable();
     const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
-    expect(within(fila).getByText("Gestor")).toBeInTheDocument();
+    expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();
     const rol = within(fila).getByText("Administrador de Compañía");
     expect(rol).toBeInTheDocument();
     // La celda de rol ya no lleva la opacidad reducida que la hacía ilegible.
@@ -82,7 +82,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
     expect(within(filaFlit).getByText("Super Administrador")).toBeInTheDocument();
 
     const filaOt = screen.getByText("Beto Ruiz").closest("div.grid") as HTMLElement;
-    expect(within(filaOt).getByText("OT")).toBeInTheDocument();
+    expect(within(filaOt).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(filaOt).getByText("Administrador OT")).toBeInTheDocument();
   });
 
@@ -189,5 +189,42 @@ describe("UsersTable — estados", () => {
 
     rerender(<UsersTable rows={[]} error="Falló" actionsFor={() => []} />);
     expect(screen.getByTestId("ui-error")).toBeInTheDocument();
+  });
+});
+
+// Bug #13055 — con la columna Acciones fija en 108 px, 4 acciones de 40 px se desbordaban bajo la
+// celda Fecha y el clic en «Editar» caía en la fecha. El ancho sale de la fila con más acciones
+// y es el mismo en cabecera y filas (grids separados que deben compartir plantilla).
+describe("UsersTable — columna Acciones a la medida de sus botones (Bug #13055)", () => {
+  const cuatro = (r: UserRow) =>
+    ["Editar", "Restablecer", "Suspender", "Desactivar"].map((a) => ({
+      icon: Pencil,
+      label: `${a} ${r.fullName}`,
+      onClick: vi.fn(),
+    }));
+
+  function columnas(el: HTMLElement) {
+    return el.style.gridTemplateColumns.trim().split(/\s+/);
+  }
+
+  it("reserva 44 px por acción: 4 acciones → 176 px, igual en cabecera y filas", () => {
+    renderTable({ actionsFor: cuatro });
+    const cabecera = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
+
+    expect(columnas(cabecera).at(-1)).toBe("176px");
+    expect(columnas(fila)).toEqual(columnas(cabecera));
+  });
+
+  it("suma el hueco de la acción extra (reenviar/reactivar invitación)", () => {
+    renderTable({ actionsFor: cuatro, extraActionsFor: (r) => (r.id === "u1" ? <button type="button">Reenviar</button> : null) });
+    const cabecera = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(columnas(cabecera).at(-1)).toBe("220px");
+  });
+
+  it("la celda de acciones queda por encima de la vecina", () => {
+    renderTable({ actionsFor: cuatro });
+    const editar = screen.getByRole("button", { name: "Editar Ana Torres" });
+    expect(editar.closest("div.grid > div:last-child")?.className).toContain("z-[1]");
   });
 });

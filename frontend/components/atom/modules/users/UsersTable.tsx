@@ -87,6 +87,9 @@ const STATUS_BADGE: Record<UserRow["status"], { label: string; tone: StatusTone 
   cancelled: { label: "Cancelada", tone: "neutral" },
 };
 
+/** Ancho por acción en la columna Acciones: objetivo de 40 px (ICON_BUTTON_HIT_AREA) + 4 px de separación. */
+const ACTION_SLOT_PX = 44;
+
 const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado", tone: "danger" };
 
 const STATUS_OPTIONS: { value: Exclude<UserStatusFilter, "">; label: string }[] = [
@@ -149,9 +152,25 @@ export function UsersTable({
   // Perfil y Rol viven en columnas separadas (HU #11551): antes se apilaban en una sola celda
   // y el chip de Perfil (siempre "Gestor" para cualquier usuario de compañía) eclipsaba el rol
   // real, dando la impresión de que todos los usuarios tenían el mismo rol.
+  //
+  // Bug #13055 — la columna Acciones medía 108 px fijos, pero cada acción es un objetivo de 40 px
+  // (ICON_BUTTON_HIT_AREA): con 4 acciones (172 px) los botones se desbordaban hacia la celda
+  // Fecha, que se pintaba ENCIMA (su opacity crea contexto de apilamiento) y se tragaba el clic —
+  // el centro del lápiz de «Editar» caía en la fecha. El ancho sale ahora de la fila con más
+  // acciones (+1 si trae la acción extra de invitación), igual para cabecera y filas, que son
+  // grids separados y deben compartir plantilla.
+  const maxAcciones = useMemo(
+    () =>
+      rows.reduce(
+        (max, row) => Math.max(max, actionsFor(row).length + (extraActionsFor?.(row) ? 1 : 0)),
+        1,
+      ),
+    [rows, actionsFor, extraActionsFor],
+  );
+  const accionesPx = maxAcciones * ACTION_SLOT_PX;
   const gridTemplate = showTenantColumn
-    ? "2.2fr 1.3fr 0.8fr 1.4fr 1.0fr 1.2fr 108px"
-    : "2.4fr 0.8fr 1.5fr 1.1fr 1.3fr 108px";
+    ? `2.2fr 1.3fr 0.8fr 1.4fr 1.0fr 1.2fr ${accionesPx}px`
+    : `2.4fr 0.8fr 1.5fr 1.1fr 1.3fr ${accionesPx}px`;
   const minWidth = showTenantColumn ? "min-w-[980px]" : "min-w-[860px]";
 
   const roleOptions = useMemo(() => {
@@ -354,7 +373,8 @@ export function UsersTable({
                     <StatusBadge label={badge.label} tone={badge.tone} />
                   </div>
                   <div className="opacity-70">{formatDateTime(row.createdAt)}</div>
-                  <div className="flex items-center justify-end gap-1">
+                  {/* `relative z-[1]`: aunque algo se desborde, las acciones quedan por encima de la celda vecina. */}
+                  <div className="relative z-[1] flex items-center justify-end gap-1">
                     {extraActionsFor?.(row)}
                     <RowActions actions={actionsFor(row)} />
                   </div>

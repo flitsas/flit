@@ -704,7 +704,8 @@ public sealed class GetBiometriaByTokenHandler(IProcedureInstanceRepository repo
             return (null, "not_found");
 
         var now = DateTimeOffset.UtcNow;
-        if (IsExpirable(v) && now > v.ExpiresAt)
+        // Bug #13055 — abrir el enlace de un trámite anulado o revocado no cambia la validación.
+        if (IsExpirable(v) && now > v.ExpiresAt && !v.CongeladaPorTramite)
         {
             v.Status = BiometricEstados.Expirado;
             v.UpdatedAt = now;
@@ -744,6 +745,11 @@ public sealed class CompletarBiometriaHandler(
         var v = await repo.GetBiometricByTokenHashAsync(BiometricToken.Hash(token), ct);
         if (v is null)
             return (null, "not_found");
+
+        // Bug #13055 — trámite anulado o revocado: el enlace ya no admite intentos y la validación
+        // conserva su estado.
+        if (v.CongeladaPorTramite)
+            return (null, "tramite_inactivo");
 
         var now = DateTimeOffset.UtcNow;
 
@@ -849,6 +855,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
         var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "instance_not_found");
+
+        // Bug #13055 — sobre un trámite anulado o revocado no se aprueba ninguna identidad.
+        if (TramiteEstado.CongelaValidacionIdentidad(instance.Status))
+            return (null, "tramite_inactivo");
 
         var now = DateTimeOffset.UtcNow;
 

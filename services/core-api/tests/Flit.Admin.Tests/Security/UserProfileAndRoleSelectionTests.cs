@@ -455,6 +455,21 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             "el rastro debe identificar al actor por nombre y no solo por su UUID");
     }
 
+    [Fact] // Bug #13055 — la columna Fecha salía vacía: el listado enviaba createdAt null a todo usuario real.
+    public async Task ListUsers_AsSuperAdmin_ExposesUserCreatedAt()
+    {
+        var response = await _client.GetAsync("/api/v1/security/users", TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        using var doc = JsonDocument.Parse(payload);
+        var email = $"sin-home-{_userWithoutHomeTenantId:N}@flit.local";
+        var row = doc.RootElement.EnumerateArray().Single(r => r.GetProperty("email").GetString() == email);
+
+        row.GetProperty("createdAt").ValueKind.Should().Be(JsonValueKind.String);
+        row.GetProperty("createdAt").GetDateTimeOffset().Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromHours(1));
+    }
+
     private static string? ProfileOf(List<JsonElement> rows, string email) =>
         rows.Where(r => r.GetProperty("email").GetString() == email)
             .Select(r => r.GetProperty("profile").GetString())

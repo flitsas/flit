@@ -1463,6 +1463,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
+            .Include(x => x.ProcedureInstance) // Bug #13055 — CongeladaPorTramite necesita el estado del trámite.
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>

@@ -5,7 +5,11 @@ import { Lock } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Pagination } from "@/components/atom/Pagination";
 import { useToast } from "@/components/admin/Toast";
-import { OTConfigTable, type OtOperationalInfo } from "@/components/admin/companies/OTConfigTable";
+import {
+  OTConfigTable,
+  officeMatchesSearch,
+  type OtOperationalInfo,
+} from "@/components/admin/companies/OTConfigTable";
 import { OTConfigModal } from "@/components/admin/companies/OTConfigModal";
 import { OtScopeConfirmDialog } from "@/components/admin/companies/OtScopeConfirmDialog";
 import { TransitBlocksReadOnlySection } from "@/components/admin/companies/panels/TransitBlocksReadOnlySection";
@@ -86,6 +90,7 @@ export function OTConfigTablePanel({
   const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>([]);
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
   const [pendingGrant, setPendingGrant] = useState<PendingGrantAction | null>(null);
   const [grantBusy, setGrantBusy] = useState(false);
   const [grantConfirmResolver, setGrantConfirmResolver] = useState<{
@@ -231,13 +236,25 @@ export function OTConfigTablePanel({
     return grantedIds;
   }, [showMarcaBlocks, visibleOffices, inheritedOnly, grantedIds]);
 
-  const lastPage = Math.max(1, Math.ceil(visibleOffices.length / OT_PAGE_SIZE));
+  // Bug #13055 — la búsqueda filtra la lista COMPLETA antes de paginar; antes filtraba solo las
+  // 10 filas de la página visible.
+  const searchedOffices = useMemo(
+    () => visibleOffices.filter((office) => officeMatchesSearch(office, search)),
+    [visibleOffices, search],
+  );
+
+  const lastPage = Math.max(1, Math.ceil(searchedOffices.length / OT_PAGE_SIZE));
   const safePage = Math.min(page, lastPage);
 
   const pageOffices = useMemo(
-    () => visibleOffices.slice((safePage - 1) * OT_PAGE_SIZE, safePage * OT_PAGE_SIZE),
-    [visibleOffices, safePage],
+    () => searchedOffices.slice((safePage - 1) * OT_PAGE_SIZE, safePage * OT_PAGE_SIZE),
+    [searchedOffices, safePage],
   );
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
 
   const handleToggleBlocking = async (
     transitOfficeId: string,
@@ -308,11 +325,13 @@ export function OTConfigTablePanel({
           onOpenConfig={readOnly ? () => {} : (office) => setConfigOffice(office)}
           onError={(message) => show(message, "error")}
           readOnly={readOnly}
+          search={search}
+          onSearchChange={handleSearchChange}
         />
         <Pagination
           page={safePage}
           pageSize={OT_PAGE_SIZE}
-          totalCount={visibleOffices.length}
+          totalCount={searchedOffices.length}
           onPageChange={setPage}
         />
       </UiStateBoundary>

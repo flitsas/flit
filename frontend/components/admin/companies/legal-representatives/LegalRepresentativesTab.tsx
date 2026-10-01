@@ -165,7 +165,7 @@ export function LegalRepresentativesTab({
 
     if (wasCreate) {
       show(
-        "Representante registrado. Usa «Empresas» en el listado para asociar NITs y escrituras.",
+        "Representante registrado. Usa el ícono de empresas (el edificio) de su fila para asociar NITs y escrituras.",
         "success",
       );
       closePanel();

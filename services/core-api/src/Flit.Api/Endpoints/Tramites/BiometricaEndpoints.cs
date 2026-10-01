@@ -328,6 +328,7 @@ internal static class BiometricaEndpoints
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                 "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de simular la biométrica."),
+                "tramite_inactivo" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está anulado o revocado: no admite validaciones de identidad."),
                 _ => Results.Ok(result),
             };
         })
