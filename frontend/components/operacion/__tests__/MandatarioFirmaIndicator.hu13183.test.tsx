@@ -25,7 +25,7 @@ describe('HU #13183 AC1 — muestra al mandatario asociado', () => {
       />,
     );
     const indicador = screen.getByTestId('mandatario-firma-valido');
-    expect(indicador).toHaveTextContent('Firmará: Ana Restrepo / Firma del baúl');
+    expect(indicador).toHaveTextContent('Firmará: Ana Restrepo / Baúl de firmas');
     expect(screen.getByTestId('mandatario-firma-asociado')).toHaveTextContent('Mandatario asociado');
     expect(indicador.querySelectorAll('button, input, select, a')).toHaveLength(0);
   });
@@ -38,7 +38,7 @@ describe('HU #13183 AC1 — muestra al mandatario asociado', () => {
       />,
     );
     expect(screen.getByTestId('mandatario-firma-valido')).toHaveTextContent(
-      'Firmará: Ana Restrepo / Biometría',
+      'Firmará: Ana Restrepo / Validación de identidad',
     );
   });
 });
@@ -67,7 +67,7 @@ describe('HU #13183 AC3 — otros niveles sin cambio', () => {
   ] as const)('nivel %s: sin nota de mandatario asociado', (nivel) => {
     render(<MandatarioFirmaIndicator data={previsto({ nivel })} loading={false} />);
     expect(screen.getByTestId('mandatario-firma-valido')).toHaveTextContent(
-      'Firmará: Ana Restrepo / Firma del baúl',
+      'Firmará: Ana Restrepo / Baúl de firmas',
     );
     expect(screen.queryByTestId('mandatario-firma-asociado')).not.toBeInTheDocument();
   });
