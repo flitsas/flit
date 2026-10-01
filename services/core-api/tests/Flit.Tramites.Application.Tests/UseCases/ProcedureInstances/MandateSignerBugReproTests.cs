@@ -22,7 +22,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 ///
 /// <para>Este test fija EXACTAMENTE ese escenario: con un default del OT configurado (módulo Mandatos) y
 /// SIN elección explícita del gestor (<c>instance.MandateSignerId</c> nulo), lo que pinta el listado de
-/// pantalla (<see cref="ListMandateSignerOptionsHandler"/>) y lo que firma el documento
+/// pantalla (firmante previsto, <c>GetMandateSignerPrevistoHandler</c>) y lo que firma el documento
 /// (<see cref="GenerarFurHandler"/> → <c>TryGenerateMandatoAsync</c>) deben coincidir en el MISMO
 /// mandatario.</para>
 ///
@@ -175,18 +175,7 @@ public sealed class MandateSignerBugReproTests
         policy.ResolveAsync("11001000", Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(DefaultCarlosConfig());
 
-        // ---- 1) Lo que se muestra en pantalla ----------------------------------------------------
-        var pantallaInstance = NewInstance();
-        _repo.GetByIdWithDetailsAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(pantallaInstance);
-
-        var pantalla = new ListMandateSignerOptionsHandler(_repo, directorio, mandatePolicy: policy);
-        var (resultPantalla, errorPantalla) = await pantalla.HandleAsync(InstanceId, TenantId, ct);
-
-        errorPantalla.Should().BeNull();
-        resultPantalla!.ElegidoId.Should().Be(
-            Carlos, "el default parametrizado del OT (Carlos) se sugiere en pantalla sin elección explícita");
-
-        // ---- 2) Lo que usa el documento -----------------------------------------------------------
+        // ---- Lo que usa el documento -----------------------------------------------------------
         var documentoInstance = NewInstance();
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(documentoInstance);
 
@@ -218,7 +207,7 @@ public sealed class MandateSignerBugReproTests
             "222000222",
             "el mandato debe firmarlo el MISMO mandatario (Carlos) que el listado de pantalla marca como elegido");
 
-        // ---- 3) La instancia queda con la resolución REGISTRADA (no recalculada cada vez) --------
+        // ---- La instancia queda con la resolución REGISTRADA (no recalculada cada vez) --------
         documentoInstance.MandateSignerId.Should().Be(
             Carlos, "el mandato es un documento legal: quién lo firmó debe quedar persistido, no recalculado");
     }

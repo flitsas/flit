@@ -426,23 +426,6 @@ internal static class ProcedureInstanceEndpoints
             return Results.Ok(new { items });
         }).WithName("ListEnabledTransitOffices");
 
-        // HU #11203 — mandatarios que pueden firmar el mandato de este trámite, con su documento y la
-        // vigencia de su identidad, más cuál está elegido. Se consulta al registrar, no al aprobar.
-        group.MapGet("/instances/{id:guid}/mandate-signers", async (
-            Guid id,
-            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            ListMandateSignerOptionsHandler handler,
-            CancellationToken ct) =>
-        {
-            if (tenantId is null || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
-
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
-            return error is "not_found"
-                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
-                : Results.Ok(result);
-        }).WithName("ListProcedureInstanceMandateSigners");
-
         // HU #13145 (ADR-0066) — el firmante PREVISTO, de solo lectura: estado (valido, sin_mandatario,
         // firma_invalida, no_aplica, pendiente_organismo, pendiente_eleccion_ot), nombre y forma de firma
         // (solo con valido) y el modo vigente de la validación. Reutiliza el evaluador del gate de radicación.
@@ -462,45 +445,6 @@ internal static class ProcedureInstanceEndpoints
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
         }).WithName("GetProcedureInstanceMandateSigner");
-
-        // HU #11203 (AC4/AC5) — fija quién firma. Solo en borrador o subsanación.
-        // HU #13145 (AC4) — y solo el OT / Super Admin: el usuario de la compañía gestora recibe 403.
-        group.MapPut("/instances/{id:guid}/mandate-signer", async (
-            Guid id,
-            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            SetMandateSignerBody body,
-            HttpContext http,
-            SetMandateSignerHandler handler,
-            CancellationToken ct) =>
-        {
-            if (tenantId is null || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
-
-            if (!MandateSignerEditPolicy.CanSet(http.User))
-                return Results.Problem(
-                    statusCode: 403,
-                    title: MandateSignerEditPolicy.ErrorCode,
-                    detail: MandateSignerEditPolicy.ForbiddenMessage);
-
-            var error = await handler.HandleAsync(id, tenantId.Value, body.MandateSignerId, ct);
-            return error switch
-            {
-                null => Results.NoContent(),
-                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(
-                    statusCode: 409,
-                    title: "Conflict",
-                    detail: "El trámite ya salió de borrador: el mandatario que firma no puede cambiarse."),
-                "sin_organismo" => Results.Problem(
-                    statusCode: 409,
-                    title: "Conflict",
-                    detail: "El trámite todavía no tiene organismo de tránsito."),
-                _ => Results.Problem(
-                    statusCode: 422,
-                    title: "Unprocessable Entity",
-                    detail: "El mandatario no está habilitado para el organismo de tránsito del trámite."),
-            };
-        }).WithName("SetProcedureInstanceMandateSigner");
 
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
@@ -1352,9 +1296,6 @@ internal sealed record EnviarAlOtResponse(
 /// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin
 /// <c>X-Tenant-Id</c>; para un usuario de compañía el backend lo impone desde el JWT.
 /// </summary>
-/// <summary>HU #11203 — cuerpo de la elección del mandatario que firma el mandato del trámite.</summary>
-internal sealed record SetMandateSignerBody(Guid MandateSignerId);
-
 internal sealed record PreflightPreviewBody(
     Guid TenantId,
     string Modalidad,

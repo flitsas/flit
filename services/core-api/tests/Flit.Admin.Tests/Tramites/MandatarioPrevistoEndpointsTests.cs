@@ -13,11 +13,10 @@ using Xunit;
 namespace Flit.Admin.Tests.Tramites;
 
 /// <summary>
-/// HU #13145 (ADR-0066) — contrato HTTP del firmante previsto y de la restricción del PUT. Host real sin
+/// HU #13145 (ADR-0066) — contrato HTTP del firmante previsto. Host real sin
 /// PostgreSQL con el repositorio sustituido (mismo patrón que <see cref="EntregarConsolidadoEndpointTests"/>):
 /// <c>GET /api/v1/tramites/instances/{id}/mandate-signer</c> busca el trámite con el tenant del JWT (otro
-/// tenant = 404) y <c>PUT</c> responde 403 <c>mandatario_no_editable_por_gestor</c> a un usuario de la compañía
-/// SIN tocar el repositorio (el trámite no cambia).
+/// tenant = 404) y las rutas retiradas por la HU #13156 (lista de candidatos y PUT del mandatario) ya no se atienden.
 /// </summary>
 public sealed class MandatarioPrevistoEndpointsTests : IClassFixture<AdminTramitesTenantScopeTests.RepoSubstituteFactory>
 {
@@ -46,7 +45,19 @@ public sealed class MandatarioPrevistoEndpointsTests : IClassFixture<AdminTramit
     }
 
     [Fact]
-    public async Task Ac4_PutDeUsuarioDeLaCompania_Responde403_ConElCodigo_YNoTocaElTramite()
+    public async Task HU13156_Ac1_GetDeLaListaDeMandatarios_Responde404()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+
+        var response = await ClientFor(TenantA).GetAsync($"/api/v1/tramites/instances/{id}/mandate-signers", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        await _factory.Repo.DidNotReceiveWithAnyArgs().GetByIdWithDetailsAsync(default, default(Guid), default);
+    }
+
+    [Fact]
+    public async Task HU13156_Ac1_PutQueFijabaElMandatario_YaNoSeAtiende_YNoTocaElTramite()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -54,8 +65,8 @@ public sealed class MandatarioPrevistoEndpointsTests : IClassFixture<AdminTramit
         var response = await ClientFor(TenantA).PutAsJsonAsync(
             $"/api/v1/tramites/instances/{id}/mandate-signer", new { mandateSignerId = Guid.NewGuid() }, ct);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("mandatario_no_editable_por_gestor");
+        // La ruta sigue existiendo solo para GET (firmante previsto): un PUT ya no llega a ningún handler.
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed);
         await _factory.Repo.DidNotReceiveWithAnyArgs().GetByIdWithDetailsAsync(default, default(Guid), default);
         await _factory.Repo.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
     }

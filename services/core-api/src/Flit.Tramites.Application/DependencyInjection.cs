@@ -144,8 +144,6 @@ public static class DependencyInjection
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
-        services.AddScoped<ListMandateSignerOptionsHandler>();
-        services.AddScoped<SetMandateSignerHandler>();
         // HU #13144/#13145 (ADR-0066) — evaluador único del mandatario y firmante previsto de solo lectura.
         services.AddScoped<MandateSignerEvaluator>();
         services.AddScoped<GetMandateSignerPrevistoHandler>();

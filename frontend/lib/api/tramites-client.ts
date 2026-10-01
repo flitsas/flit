@@ -1104,8 +1104,8 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
-  // HU #13146 — quién firmará el mandato (solo lectura). No existe PUT para la compañía: el OT o el
-  // Super Admin fijan el mandatario (la compañía recibe 403 `mandatario_no_editable_por_gestor`).
+  // HU #13146 — quién firmará el mandato (solo lectura). La elección la hace la prelación y, cuando hace
+  // falta, el OT al aprobar: no existe PUT para fijarlo.
   getMandateSigner: (id: string, tenantId?: string) =>
     request<MandateSignerPrevisto>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
       headers: tenantHeader(tenantId),

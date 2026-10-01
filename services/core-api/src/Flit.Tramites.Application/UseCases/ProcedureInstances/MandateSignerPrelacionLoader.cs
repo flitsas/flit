@@ -4,7 +4,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// HU #13142 (ADR-0066) — punto ÚNICO que arma los insumos de <see cref="MandateSignerDefaultResolver"/> y
-/// decide el resultado. Lo usan la pantalla (<c>ListMandateSignerOptionsHandler</c>), el PDF
+/// decide el resultado. Lo usan el firmante previsto (<c>MandateSignerEvaluator</c>), el PDF
 /// (<c>FurCommand</c>), la aprobación (<c>MandatoApprovalHandler</c> y <c>TramiteLifecycleService</c>) y, en
 /// #13144/#13145, el evaluador del gate, así que el firmante es el mismo en todos.
 /// </summary>
