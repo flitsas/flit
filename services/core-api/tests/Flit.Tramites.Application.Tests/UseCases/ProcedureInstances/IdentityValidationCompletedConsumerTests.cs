@@ -95,7 +95,7 @@ public sealed class IdentityValidationCompletedConsumerTests
             Score = 95,
         };
 
-    /// <summary>Instancia "lean" como la devuelve ListDraftFinalizedByActorAsync (id + modalidad + ref).</summary>
+    /// <summary>Instancia "lean" como la devuelve ListPendientesDeFirmaPorSujetoAsync (id + modalidad + ref).</summary>
     private static ProcedureInstance Lean(Guid id, Guid tenant, string reference, bool traspaso)
     {
         var i = new ProcedureInstance
@@ -193,7 +193,7 @@ public sealed class IdentityValidationCompletedConsumerTests
         var idA = Guid.NewGuid();
         var idB = Guid.NewGuid();
         // Orden determinista garantizado por el repo: A (más antiguo) antes que B.
-        _repo.ListDraftFinalizedByActorAsync(tenant, "comprador", TipoDoc, Documento, ct)
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
             .Returns(new List<ProcedureInstance> { Lean(idA, tenant, "TRM-2026-000001", true), Lean(idB, tenant, "TRM-2026-000002", true) });
         var fullA = StubTraspasoGraph(idA, tenant);
         var fullB = StubTraspasoGraph(idB, tenant);
@@ -223,7 +223,7 @@ public sealed class IdentityValidationCompletedConsumerTests
         AprobadaValidation(validationId, tenant);
 
         var id = Guid.NewGuid();
-        _repo.ListDraftFinalizedByActorAsync(tenant, "comprador", TipoDoc, Documento, ct)
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
             .Returns(new List<ProcedureInstance> { Lean(id, tenant, "TRM-2026-000001", true) });
         // Ya existe una firma activa de compraventa para (comprador) → debe reusarse.
         var existing = new ProcedureInstanceSignature
@@ -256,7 +256,7 @@ public sealed class IdentityValidationCompletedConsumerTests
         AprobadaValidation(validationId, tenant);
 
         var id = Guid.NewGuid();
-        _repo.ListDraftFinalizedByActorAsync(tenant, "comprador", TipoDoc, Documento, ct)
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
             .Returns(new List<ProcedureInstance> { Lean(id, tenant, "TRM-2026-000001", false) });
         var full = StubMatriculaGraph(id, tenant);
 
@@ -285,7 +285,7 @@ public sealed class IdentityValidationCompletedConsumerTests
         AprobadaValidation(validationId, tenant, "vendedor");
 
         var id = Guid.NewGuid();
-        _repo.ListDraftFinalizedByActorAsync(tenant, "vendedor", TipoDoc, Documento, ct)
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
             .Returns(new List<ProcedureInstance> { LeanUnilateral(id, tenant) });
         var full = StubUnilateralGraph(id, tenant);
 
@@ -383,8 +383,8 @@ public sealed class IdentityValidationCompletedConsumerTests
         var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
 
         result.Matched.Should().Be(0);
-        await _repo.DidNotReceive().ListDraftFinalizedByActorAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().ListPendientesDeFirmaPorSujetoAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -394,7 +394,7 @@ public sealed class IdentityValidationCompletedConsumerTests
         var tenant = Guid.NewGuid();
         var validationId = Guid.NewGuid();
         AprobadaValidation(validationId, tenant);
-        _repo.ListDraftFinalizedByActorAsync(tenant, "comprador", TipoDoc, Documento, ct)
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
             .Returns(new List<ProcedureInstance>());
 
         var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
@@ -402,5 +402,113 @@ public sealed class IdentityValidationCompletedConsumerTests
         result.Matched.Should().Be(0);
         result.Processed.Should().Be(0);
         _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceSignature>());
+    }
+
+    // ── Bug #13194 (punto 4) — fan-out por sujeto, estados pendientes e idempotencia ─────────────
+
+    /// <summary>Traspaso en <paramref name="status"/> donde el sujeto validado es el RL de un comprador PJ.</summary>
+    private ProcedureInstance StubTraspasoPjGraph(Guid id, Guid tenant, string status)
+    {
+        var i = Lean(id, tenant, "TRM-2026-013194", traspaso: true);
+        i.Status = status;
+        i.DraftFinalizedAt = null;
+        i.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "NIT",
+            DocumentNumber = "900123456",
+            PersonType = "juridical",
+            FullName = "Empresa de Prueba SAS",
+            Metadata = "{\"representanteLegal\":{\"tipoDocumento\":\"" + TipoDoc + "\",\"numeroDocumento\":\"" + Documento + "\"}}",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        i.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "vendedor",
+            DocumentType = TipoDoc,
+            DocumentNumber = "5550001",
+            FullName = "Vendedor de Prueba",
+            Metadata = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(i);
+        return i;
+    }
+
+    [Fact]
+    public async Task Bug13194_PersonaJuridicaEnTramiteAsignado_FirmaLaParteDelRepresentante()
+    {
+        // La validación se hizo como "vendedor" en OTRO trámite; aquí la persona es el RL del comprador PJ.
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        AprobadaValidation(validationId, tenant, parte: "vendedor");
+        var id = Guid.NewGuid();
+        var graph = StubTraspasoPjGraph(id, tenant, TramiteEstado.Asignado);
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { graph });
+        _repo.ListInstanceIdsConEventoDeValidacionAsync(tenant, "firma_auto_solicitada", validationId, ct)
+            .Returns(new HashSet<Guid>());
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant, "vendedor"), ct);
+
+        result.Processed.Should().Be(1);
+        result.Skipped.Should().BeEmpty();
+        graph.Signatures.Should().ContainSingle(s => s.Parte == "comprador" && s.DocTipo == SignatureDocTipos.Compraventa,
+            "se firma la parte donde la persona es sujeto de identidad (RL del comprador PJ), no la validada");
+        _repo.Received(1).Add(Arg.Is<ProcedureInstanceEvent>(e =>
+            e.Tipo == "firma_auto_solicitada" && e.Payload.Contains("\"estado\":\"asignado\"")));
+    }
+
+    [Fact]
+    public async Task Bug13194_ReEntregaDelEvento_NoVuelveAFirmarLoYaAplicado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        AprobadaValidation(validationId, tenant);
+        var id = Guid.NewGuid();
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { Lean(id, tenant, "TRM-2026-000013", traspaso: true) });
+        _repo.ListInstanceIdsConEventoDeValidacionAsync(tenant, "firma_auto_solicitada", validationId, ct)
+            .Returns(new HashSet<Guid> { id });
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Matched.Should().Be(1);
+        result.Processed.Should().Be(0);
+        result.Skipped.Should().ContainSingle().Which.Should().EndWith(":ya_aplicado");
+        await _repo.DidNotReceive().GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>());
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceEvent>());
+    }
+
+    [Fact]
+    public async Task Bug13194_TramiteEntregado_NoSeFirma_DefensaEnProfundidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        AprobadaValidation(validationId, tenant);
+        var id = Guid.NewGuid();
+        var entregado = Lean(id, tenant, "TRM-2026-000014", traspaso: true);
+        entregado.Status = TramiteEstado.Entregado;
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { entregado });
+        _repo.ListInstanceIdsConEventoDeValidacionAsync(tenant, "firma_auto_solicitada", validationId, ct)
+            .Returns(new HashSet<Guid>());
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Processed.Should().Be(0);
+        result.Skipped.Should().ContainSingle().Which.Should().EndWith(":estado_entregado");
+        await _repo.DidNotReceive().GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>());
     }
 }
