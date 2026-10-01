@@ -132,6 +132,13 @@ if (builder.Configuration.GetValue("Gateway:DisableJwtPolicy", builder.Environme
     reverseProxyBuilder.AddConfigFilter<DevelopmentNoJwtProxyConfigFilter>();
 }
 
+// HU #13225 (Epic #13217): las rutas del login van a core-identity solo con esta bandera; apagada, todo a core-api.
+if (builder.Configuration.GetValue<bool>(IdentityClusterProxyConfigFilter.EnabledKey))
+{
+    Log.Information("Rutas de identidad hacia {Cluster} ({Flag}).", IdentityClusterProxyConfigFilter.ClusterId, IdentityClusterProxyConfigFilter.EnabledKey);
+    reverseProxyBuilder.AddConfigFilter<IdentityClusterProxyConfigFilter>();
+}
+
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient();
 
@@ -175,3 +182,6 @@ app.MapHealthEndpoints();
 app.MapReverseProxy();
 
 app.Run();
+
+/// <summary>Punto de entrada expuesto para pruebas (WebApplicationFactory, HU #13225).</summary>
+public partial class Program;
