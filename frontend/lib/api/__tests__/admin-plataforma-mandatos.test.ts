@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { ApiError } from "../types";
 
-// Mock del cliente para controlar el token sin tocar cookies/storage. Las tres funciones bajo
-// prueba (`uploadMandateOtPdfTemplate`, `extractMandateConfigFromFile`, `fetchMandateOtPreview`)
+// Mock del cliente para controlar el token sin tocar cookies/storage. Las dos funciones bajo
+// prueba (`uploadMandateOtPdfTemplate`, `fetchMandateOtPreview`)
 // usan fetch directo (multipart/binario) y no pasan por `apiFetch` — `friendlyErrorMessage` real.
 const mocks = vi.hoisted(() => ({ getToken: vi.fn(() => "jwt-token") }));
 vi.mock("../client", async (importOriginal) => {
@@ -14,11 +14,10 @@ vi.mock("../client", async (importOriginal) => {
 // Uso de ejemplo:
 // await uploadMandateOtPdfTemplate("office-1", file) → MandateOtConfigView
 // Ante 4xx/5xx no-ok lanza ApiError cuyo mensaje sale del ProblemDetails del backend, nunca de
-// "Error {status} al subir plantilla" / "al extraer mandato" / "al previsualizar mandato" (Bug #11626).
+// "Error {status} al subir plantilla" / "al previsualizar mandato" (Bug #11626).
 import {
   mapCompanyRule,
   uploadMandateOtPdfTemplate,
-  extractMandateConfigFromFile,
   fetchMandateOtPreview,
 } from "../admin-plataforma-mandatos";
 
@@ -68,36 +67,6 @@ describe("uploadMandateOtPdfTemplate — errores no-ok (Bug #11626)", () => {
       status: 500,
       message: "No se pudo completar la solicitud. Inténtalo de nuevo.",
     });
-  });
-});
-
-describe("extractMandateConfigFromFile — errores no-ok (Bug #11626)", () => {
-  it("happy path: 200 devuelve el resultado extraído", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ suggestedTemplateCode: "generico" }), { status: 200 }),
-    ) as never;
-
-    const result = await extractMandateConfigFromFile(new File(["x"], "mandato.pdf"));
-
-    expect(result.suggestedTemplateCode).toBe("generico");
-  });
-
-  it("edge case — 422 con title (sin detail): usa el title, sin 'al extraer mandato'", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ title: "No se pudo leer el PDF." }), { status: 422 }),
-    ) as never;
-
-    let caught: unknown;
-    try {
-      await extractMandateConfigFromFile(new File(["x"], "mandato.pdf"));
-    } catch (e) {
-      caught = e;
-    }
-
-    expect(caught).toBeInstanceOf(ApiError);
-    const err = caught as ApiError;
-    expect(err.message).toBe("No se pudo leer el PDF.");
-    expect(err.message).not.toMatch(/al extraer mandato/);
   });
 });
 

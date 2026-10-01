@@ -45,7 +45,6 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
     private readonly FlitDbContext _db;
     private readonly ITransitOfficeCatalog _catalog;
     private readonly ITransitOfficeOperationalStatusReader _operationalStatus;
-    private readonly IDocumentOcrAnalyzer _ocr;
     private readonly IMandateTemplateStorage _templateStorage;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
@@ -60,7 +59,9 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _operationalStatus = operationalStatus ?? throw new ArgumentNullException(nameof(operationalStatus));
-        _ocr = ocr ?? throw new ArgumentNullException(nameof(ocr));
+        // HU #13158: el extract del documento se retiró; el parámetro se conserva para no alterar los puntos
+        // de construcción (deuda: retirarlo cuando F6 y F7 estén integradas).
+        ArgumentNullException.ThrowIfNull(ocr);
         _templateStorage = templateStorage ?? throw new ArgumentNullException(nameof(templateStorage));
 
         // Bug #12912 — compañías por OT según la lista efectiva de red. Opcional: sin él (tests que
@@ -216,29 +217,6 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         _db.TransitOfficeMandateConfigs.Remove(entity);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return MandateConfigWriteStatus.Ok;
-    }
-
-    public async Task<MandateConfigExtractResult> ExtractAsync(
-        ReadOnlyMemory<byte> content,
-        string mediaType,
-        CancellationToken ct = default)
-    {
-        var analysis = await _ocr
-            .AnalyzeAsync(MandatoConfigOcr.Tipo, content, mediaType, ct)
-            .ConfigureAwait(false);
-
-        if (!analysis.Ok || analysis.Data is null)
-        {
-            return new MandateConfigExtractResult(
-                MandatoTemplateResolver.Generico,
-                false,
-                MandatoFamiliaCodes.Individuo,
-                null, null, null, null,
-                analysis.Message ?? "No se pudo extraer información del documento.",
-                MandatoAssignmentModeCodes.Signer);
-        }
-
-        return MandatoConfigOcr.Parse(analysis.Data);
     }
 
     public async Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> UploadPdfTemplateAsync(
@@ -1263,82 +1241,4 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 
     private static string? NullIfEmpty(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-}
-
-/// <summary>Tipo OCR dedicado a extract de config (no entra al lote de trámites).</summary>
-internal static class MandatoConfigOcr
-{
-    public const string Tipo = "mandato_config";
-
-    public static MandateConfigExtractResult Parse(System.Text.Json.Nodes.JsonObject data)
-    {
-        static string Str(System.Text.Json.Nodes.JsonObject obj, string key)
-        {
-            if (obj[key] is System.Text.Json.Nodes.JsonValue jv
-                && jv.TryGetValue<string>(out var s)
-                && !string.IsNullOrWhiteSpace(s))
-            {
-                return s.Trim();
-            }
-
-            return obj[key]?.ToString()?.Trim() ?? string.Empty;
-        }
-
-        var suggested = Str(data, "suggestedTemplateCode").ToLowerInvariant();
-        if (suggested is not (MandatoTemplateResolver.Generico or MandatoTemplateResolver.Sabaneta
-            or MandatoTemplateResolver.Bello or MandatoTemplateResolver.Municipio))
-        {
-            suggested = InferTemplate(
-                Str(data, "institutionalMandataryName"),
-                Str(data, "mandatarySigla"),
-                Str(data, "notes"));
-        }
-
-        var family = Str(data, "mandataryFamily").ToLowerInvariant();
-        if (family is not (MandatoFamiliaCodes.Individuo or MandatoFamiliaCodes.OrganismoTransito))
-        {
-            family = suggested is MandatoTemplateResolver.Sabaneta or MandatoTemplateResolver.Bello
-                ? MandatoFamiliaCodes.OrganismoTransito
-                : MandatoFamiliaCodes.Individuo;
-        }
-
-        var assignmentMode = Str(data, "assignmentMode").ToLowerInvariant();
-        if (assignmentMode is not (MandatoAssignmentModeCodes.Signer
-            or MandatoAssignmentModeCodes.Institutional
-            or MandatoAssignmentModeCodes.Open))
-        {
-            assignmentMode = suggested == MandatoTemplateResolver.Sabaneta
-                ? MandatoAssignmentModeCodes.Institutional
-                : MandatoAssignmentModeCodes.Signer;
-        }
-
-        static string? EmptyToNull(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
-
-        return new MandateConfigExtractResult(
-            suggested,
-            RequiresForNaturalPerson: true,
-            family,
-            EmptyToNull(Str(data, "institutionalMandataryName")),
-            EmptyToNull(Str(data, "institutionalMandataryNit")),
-            EmptyToNull(Str(data, "chamberCity")),
-            EmptyToNull(Str(data, "mandatarySigla")),
-            EmptyToNull(Str(data, "notes")),
-            assignmentMode);
-    }
-
-    private static string InferTemplate(string name, string sigla, string notes)
-    {
-        var blob = $"{name} {sigla} {notes}".ToUpperInvariant();
-        if (blob.Contains("SETSA", StringComparison.Ordinal) || blob.Contains("SABANETA", StringComparison.Ordinal))
-            return MandatoTemplateResolver.Sabaneta;
-        if (blob.Contains("MAB", StringComparison.Ordinal) || blob.Contains("BELLO", StringComparison.Ordinal))
-            return MandatoTemplateResolver.Bello;
-        if (blob.Contains("ENVIGADO", StringComparison.Ordinal)
-            || blob.Contains("FUNZA", StringComparison.Ordinal)
-            || blob.Contains("MEDELLIN", StringComparison.Ordinal)
-            || blob.Contains("MEDELLÍN", StringComparison.Ordinal)
-            || blob.Contains("MUNICIPIO", StringComparison.Ordinal))
-            return MandatoTemplateResolver.Municipio;
-        return MandatoTemplateResolver.Generico;
-    }
 }

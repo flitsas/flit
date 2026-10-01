@@ -284,10 +284,6 @@ public sealed class MandateSimulatorServiceTests
         public Task<MandateConfigWriteStatus> DeleteAsync(Guid officeId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<MandateConfigExtractResult> ExtractAsync(
-            ReadOnlyMemory<byte> content, string mediaType, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> UploadPdfTemplateAsync(
             Guid officeId, Stream content, string fileName, Guid? userId, CancellationToken ct = default) =>
             throw new NotSupportedException();

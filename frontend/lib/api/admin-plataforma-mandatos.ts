@@ -58,18 +58,6 @@ export interface UpsertMandateOtConfigBody {
   defaultMandateSignerId?: string | null;
 }
 
-export interface MandateConfigExtractResult {
-  suggestedTemplateCode: string;
-  requiresForNaturalPerson: boolean;
-  mandataryFamily: string;
-  assignmentMode: string;
-  institutionalMandataryName: string | null;
-  institutionalMandataryNit: string | null;
-  chamberCity: string | null;
-  mandatarySigla: string | null;
-  notes: string | null;
-}
-
 function mapView(raw: Record<string, unknown>): MandateOtConfigView {
   return {
     officeId: String(raw.officeId ?? raw.OfficeId ?? ""),
@@ -397,56 +385,6 @@ export async function deleteCompanyOtMandateRule(
     method: "DELETE",
     signal,
   });
-}
-
-export async function extractMandateConfigFromFile(
-  file: File,
-  signal?: AbortSignal,
-): Promise<MandateConfigExtractResult> {
-  const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
-  const url = new URL(`${base}/extract`, baseUrl);
-  const token = getToken();
-  const form = new FormData();
-  form.append("file", file);
-
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch(url.toString(), { method: "POST", headers, body: form, signal });
-  if (!response.ok) {
-    let detail: unknown = null;
-    try {
-      detail = await response.json();
-    } catch {
-      /* ignore */
-    }
-    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
-    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
-  }
-
-  const raw = (await response.json()) as Record<string, unknown>;
-  return {
-    suggestedTemplateCode: String(raw.suggestedTemplateCode ?? raw.SuggestedTemplateCode ?? "generico"),
-    requiresForNaturalPerson: Boolean(
-      raw.requiresForNaturalPerson ?? raw.RequiresForNaturalPerson,
-    ),
-    mandataryFamily: String(raw.mandataryFamily ?? raw.MandataryFamily ?? "individuo"),
-    assignmentMode: String(raw.assignmentMode ?? raw.AssignmentMode ?? "signer"),
-    institutionalMandataryName:
-      (raw.institutionalMandataryName as string | null) ??
-      (raw.InstitutionalMandataryName as string | null) ??
-      null,
-    institutionalMandataryNit:
-      (raw.institutionalMandataryNit as string | null) ??
-      (raw.InstitutionalMandataryNit as string | null) ??
-      null,
-    chamberCity:
-      (raw.chamberCity as string | null) ?? (raw.ChamberCity as string | null) ?? null,
-    mandatarySigla:
-      (raw.mandatarySigla as string | null) ?? (raw.MandatarySigla as string | null) ?? null,
-    notes: (raw.notes as string | null) ?? (raw.Notes as string | null) ?? null,
-  };
 }
 
 /** Escenario del simulador (HU #11707). */

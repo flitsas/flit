@@ -114,12 +114,6 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status502BadGateway);
 
-        group.MapPost("/extract", ExtractAsync)
-            .WithName("AdminPlataformaMandatosExtract")
-            .DisableAntiforgery()
-            .Produces<MandateConfigExtractResult>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status400BadRequest);
-
         group.MapGet("/ot/{officeId:guid}/company-rules", ListCompanyRulesAsync)
             .WithName("AdminPlataformaMandatosListCompanyRules")
             .Produces(StatusCodes.Status200OK)
@@ -379,40 +373,6 @@ public static class AdminPlataformaMandatosEndpoints
             statusCode: StatusCodes.Status502BadGateway),
         _ => Results.BadRequest(new { error = "simulacion_invalida", message = result.Message }),
     };
-
-    private static async Task<IResult> ExtractAsync(
-        HttpRequest http,
-        [FromServices] IMandateConfigAdminService service,
-        CancellationToken ct)
-    {
-        if (!http.HasFormContentType)
-            return Results.BadRequest(new { error = "multipart_requerido" });
-
-        var form = await http.ReadFormAsync(ct).ConfigureAwait(false);
-        var file = form.Files.GetFile("file");
-        if (file is null && form.Files.Count > 0)
-            file = form.Files[0];
-        if (file is null || file.Length == 0)
-            return Results.BadRequest(new { error = "archivo_requerido" });
-
-        if (file.Length > 10 * 1024 * 1024)
-            return Results.BadRequest(new { error = "archivo_demasiado_grande" });
-
-        await using var stream = file.OpenReadStream();
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
-
-        var mediaType = file.ContentType?.Trim() ?? "application/octet-stream";
-        if (string.IsNullOrWhiteSpace(mediaType) || mediaType == "application/octet-stream")
-        {
-            mediaType = file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
-                ? "application/pdf"
-                : "image/png";
-        }
-
-        var result = await service.ExtractAsync(ms.ToArray(), mediaType, ct).ConfigureAwait(false);
-        return Results.Ok(result);
-    }
 
     private static async Task<IResult> ListCompanyRulesAsync(
         Guid officeId,

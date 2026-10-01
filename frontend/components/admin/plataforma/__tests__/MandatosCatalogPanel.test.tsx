@@ -15,7 +15,6 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   fetchMandatoTemplatePreview: (...a: unknown[]) => fetchMandatoTemplatePreview(...a),
   fetchMandateOtPreview: vi.fn(),
   upsertMandateOtConfig: vi.fn(),
-  extractMandateConfigFromFile: vi.fn(),
   uploadMandateOtPdfTemplate: vi.fn(),
   saveMandateOtEditorBody: vi.fn(),
   deleteMandateOtCustomTemplate: vi.fn(),

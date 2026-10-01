@@ -66,17 +66,6 @@ public sealed record SaveMandateEditorBodyRequest(
     string Body,
     long? RowVersion);
 
-public sealed record MandateConfigExtractResult(
-    string SuggestedTemplateCode,
-    bool RequiresForNaturalPerson,
-    string MandataryFamily,
-    string? InstitutionalMandataryName,
-    string? InstitutionalMandataryNit,
-    string? ChamberCity,
-    string? MandatarySigla,
-    string? Notes,
-    string AssignmentMode = "signer");
-
 public enum MandateConfigWriteStatus
 {
     Ok,
@@ -178,11 +167,6 @@ public interface IMandateConfigAdminService
         CancellationToken ct = default);
 
     Task<MandateConfigWriteStatus> DeleteAsync(Guid officeId, CancellationToken ct = default);
-
-    Task<MandateConfigExtractResult> ExtractAsync(
-        ReadOnlyMemory<byte> content,
-        string mediaType,
-        CancellationToken ct = default);
 
     Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> UploadPdfTemplateAsync(
         Guid officeId,
