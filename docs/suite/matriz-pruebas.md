@@ -25,7 +25,7 @@ Estado: **OK** probado y funciona · **Falla** probado y no funciona (ver hallaz
 |---|---|---|---|
 | B1 | `core-api` apagado → login, autorización y token funcionan; Trámites abre sin datos | OK (2026-10-01) | — |
 | B2 | `core-api` vuelve → los datos aparecen sin volver a iniciar sesión | OK (2026-10-01) | — |
-| B3 | `core-identity` apagado con la bandera encendida → el gateway pasa el login a `core-api` en segundos | OK en pruebas del gateway | — |
+| B3 | `core-identity` apagado con la bandera encendida → el gateway pasa el login a `core-api` en segundos | OK (2026-10-01, gateway real: el login vuelve en ~3 s con chequeo cada 2 s) | — |
 | B4 | Bandera del gateway apagada → todo como antes (vuelta atrás) | — | — |
 | B5 | Desplegar `core-api` (por servicio) con gente dentro → el login no se cae | — | — |
 | B6 | Login de siempre (`FLIT_SESSION_MODE=legacy`) con la bandera encendida | — | — |
