@@ -59,6 +59,21 @@ public sealed class BuildClosureTests
         }
     }
 
+    [Fact]
+    public void ElCdReconstruyeCoreIdentityCuandoCambiaCualquierParteDeSuArbol()
+    {
+        // El job build-core-identity reutiliza la imagen si nada de esta lista cambió: tiene que cubrir todo el árbol.
+        var cd = File.ReadAllText(Path.Combine(ServiceRoot(), "..", "..", ".github", "workflows", "cd.yml"));
+        var job = cd[cd.IndexOf("build-core-identity:", StringComparison.Ordinal)..];
+
+        job.Should().Contain("services/core-identity\n");
+        foreach (var name in Closure(HostProject()).Where(p => p.Contains($"{Path.DirectorySeparatorChar}core-api{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                     .Select(Path.GetFileNameWithoutExtension))
+        {
+            job.Should().Contain($"services/core-api/src/{name}\n", $"el CD tiene que reconstruir core-identity si cambia {name}");
+        }
+    }
+
     internal static string ServiceRoot([CallerFilePath] string here = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", ".."));
 

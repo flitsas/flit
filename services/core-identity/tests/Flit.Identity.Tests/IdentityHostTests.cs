@@ -79,6 +79,17 @@ public sealed class IdentityHostTests : IClassFixture<IdentityHostTests.Host>
     }
 
     [Fact]
+    public void LeeLaConfiguracionBaseDeCoreApi()
+    {
+        // appsettings.json de core-api, enlazado: sin él no habría emisor, dominios reservados ni clientes OIDC.
+        var configuration = _identity.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+
+        configuration["Jwt:Issuer"].Should().NotBeNullOrEmpty();
+        configuration["Suite:Hosts:Root"].Should().Be("flitsas.online");
+        configuration["Suite:Oidc:SigningKeyId"].Should().Be("flit-oidc-signing-v1");
+    }
+
+    [Fact]
     public void ElServidorOidcEstaEncendido()
     {
         _identity.Services.GetRequiredService<IOptions<OidcOptions>>().Value.Enabled.Should().BeTrue();

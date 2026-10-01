@@ -135,58 +135,17 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag | subnet: $internal_subnet"
 
-  # ── Qué cambió (Epic #13217, HU #13234) ──────────────────────────────────────
-  # core-api y core-identity solo se reconstruyen si cambió algo que compilan. Si no, su job reetiqueta la imagen
-  # anterior con el commit nuevo (sin compilar), así el despliegue siempre encuentra su etiqueta. Un despliegue manual
-  # (workflow_dispatch) reconstruye todo. Las rutas de core-identity son su árbol de dependencias (ver
-  # services/core-identity/tests/Flit.Identity.Tests/BuildClosureTests.cs).
-  changes:
-    name: Detect changed services
-    runs-on: ubuntu-latest
-    outputs:
-      core_api: ${{ github.event_name != 'push' || steps.filter.outputs.core_api == 'true' }}
-      core_identity: ${{ github.event_name != 'push' || steps.filter.outputs.core_identity == 'true' }}
-    steps:
-      - name: Checkout
-        if: github.event_name == 'push'
-        uses: actions/checkout@v4
-      - name: Filter paths
-        id: filter
-        if: github.event_name == 'push'
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            core_api:
-              - 'services/core-api/**'
-              - 'services/core-ict/src/Flit.Ict.Grpc.Contracts/**'
-              # Transición (hasta el corte, HU #13235): core-api todavía referencia estos proyectos de identidad.
-              - 'services/core-identity/Directory.*.props'
-              - 'services/core-identity/src/Flit.Identity.Application/**'
-              - 'services/core-identity/src/Flit.Identity.Web/**'
-            core_identity:
-              - 'services/core-identity/**'
-              - 'services/core-api/global.json'
-              - 'services/core-api/Directory.*.props'
-              - 'services/core-api/src/Flit.Api/appsettings*.json'
-              - 'services/core-api/src/Flit.Admin.Application/**'
-              - 'services/core-api/src/Flit.Admin.Domain/**'
-              - 'services/core-api/src/Flit.Identity.Infrastructure/**'
-              - 'services/core-api/src/Flit.Modules.Improntas.Domain/**'
-              - 'services/core-api/src/Flit.Modules.Platform/**'
-              - 'services/core-api/src/Flit.Modules.Security.Application/**'
-              - 'services/core-api/src/Flit.Modules.Security.Domain/**'
-              - 'services/core-api/src/Flit.Queries.Domain/**'
-              - 'services/core-api/src/Flit.Suite.AspNetCore/**'
-
   build-core-api:
     name: Build & push core-api (.NET) image
-    needs: [setup, changes]
+    needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -212,21 +171,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Epic #13217 (HU #13234): sin cambios en lo que compila core-api, se reetiqueta la imagen del ambiente con este
-      # commit en vez de reconstruirla. Si no hay imagen previa, se construye.
+      # Epic #13217 (HU #13234): si nada de lo que compila core-api cambió desde la imagen vigente del ambiente, se
+      # reetiqueta esa imagen con este commit en vez de reconstruirla. La comparación es contra el commit con que se
+      # construyó (etiqueta org.opencontainers.image.revision), no contra otra rama: si un build anterior falló, sus
+      # cambios siguen pendientes y se construye. Sin etiqueta, sin historial o en un despliegue manual, se construye.
       - name: Reuse previous core-api image when unchanged
         id: reuse
-        if: needs.changes.outputs.core_api != 'true'
         run: |
+          set -euo pipefail
           src="${{ env.CORE_API_IMAGE }}:${{ needs.setup.outputs.image_tag }}"
-          if docker buildx imagetools inspect "$src" > /dev/null 2>&1; then
+          # Lo que compila la imagen de core-api (ver su Dockerfile).
+          paths=(
+            services/core-api
+            services/core-ict/Directory.Build.props
+            services/core-ict/Directory.Packages.props
+            services/core-ict/src/Flit.Ict.Grpc.Contracts
+            # Transición (hasta el corte, HU #13235): core-api todavía compila estos proyectos de identidad.
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Identity.Application
+            services/core-identity/src/Flit.Identity.Web
+          )
+          rev=$(docker buildx imagetools inspect "$src" --format '{{ json .Image }}' 2>/dev/null \
+            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] // empty else ([to_entries[] | select(.key != "unknown/unknown")][0].value.config.Labels["org.opencontainers.image.revision"] // empty) end' || true)
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$rev" ] && git cat-file -e "$rev^{commit}" 2>/dev/null \
+             && git diff --quiet "$rev" "$GITHUB_SHA" -- "${paths[@]}"; then
             tags=(-t "${{ env.CORE_API_IMAGE }}:sha-${GITHUB_SHA}")
             if [ "${{ github.ref_name }}" = "release" ]; then tags+=(-t "${{ env.CORE_API_IMAGE }}:latest"); fi
             docker buildx imagetools create "${tags[@]}" "$src"
             echo "reused=true" >> "$GITHUB_OUTPUT"
-            echo "core-api sin cambios: se reutiliza $src"
+            echo "core-api sin cambios desde $rev: se reutiliza $src"
           else
             echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "core-api: se construye (cambios desde '${rev:-sin etiqueta}' o despliegue manual)"
           fi
 
       - name: Extract metadata — core-api
@@ -255,13 +232,15 @@ jobs:
 
   build-core-identity:
     name: Build & push core-identity (.NET) image
-    needs: [setup, changes]
+    needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
         run: |
@@ -284,20 +263,45 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Sin cambios en el árbol de core-identity: se reetiqueta su imagen con este commit (no se compila nada).
+      # Epic #13217 (HU #13234): si nada de lo que compila core-identity cambió desde la imagen vigente del ambiente, se
+      # reetiqueta esa imagen con este commit en vez de reconstruirla. La comparación es contra el commit con que se
+      # construyó (etiqueta org.opencontainers.image.revision), no contra otra rama: si un build anterior falló, sus
+      # cambios siguen pendientes y se construye. Sin etiqueta, sin historial o en un despliegue manual, se construye.
       - name: Reuse previous core-identity image when unchanged
         id: reuse
-        if: needs.changes.outputs.core_identity != 'true'
         run: |
+          set -euo pipefail
           src="${{ env.CORE_IDENTITY_IMAGE }}:${{ needs.setup.outputs.image_tag }}"
-          if docker buildx imagetools inspect "$src" > /dev/null 2>&1; then
+          # El árbol de core-identity (BuildClosureTests exige que esta lista lo cubra).
+          paths=(
+            services/core-identity
+            services/core-api/global.json
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Api/appsettings.json
+            services/core-api/src/Flit.Api/appsettings.Development.json
+            services/core-api/src/Flit.Admin.Application
+            services/core-api/src/Flit.Admin.Domain
+            services/core-api/src/Flit.Identity.Infrastructure
+            services/core-api/src/Flit.Modules.Improntas.Domain
+            services/core-api/src/Flit.Modules.Platform
+            services/core-api/src/Flit.Modules.Security.Application
+            services/core-api/src/Flit.Modules.Security.Domain
+            services/core-api/src/Flit.Queries.Domain
+            services/core-api/src/Flit.Suite.AspNetCore
+          )
+          rev=$(docker buildx imagetools inspect "$src" --format '{{ json .Image }}' 2>/dev/null \
+            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] // empty else ([to_entries[] | select(.key != "unknown/unknown")][0].value.config.Labels["org.opencontainers.image.revision"] // empty) end' || true)
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$rev" ] && git cat-file -e "$rev^{commit}" 2>/dev/null \
+             && git diff --quiet "$rev" "$GITHUB_SHA" -- "${paths[@]}"; then
             tags=(-t "${{ env.CORE_IDENTITY_IMAGE }}:sha-${GITHUB_SHA}")
             if [ "${{ github.ref_name }}" = "release" ]; then tags+=(-t "${{ env.CORE_IDENTITY_IMAGE }}:latest"); fi
             docker buildx imagetools create "${tags[@]}" "$src"
             echo "reused=true" >> "$GITHUB_OUTPUT"
-            echo "core-identity sin cambios: se reutiliza $src"
+            echo "core-identity sin cambios desde $rev: se reutiliza $src"
           else
             echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "core-identity: se construye (cambios desde '${rev:-sin etiqueta}' o despliegue manual)"
           fi
 
       - name: Extract metadata — core-identity

@@ -28,6 +28,7 @@ public static class Program
     internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
     {
         var builder = WebApplication.CreateBuilder(args);
+        UseSharedBaseSettings(builder);
         configure?.Invoke(builder);
 
         // Igual que core-api: el contenedor se valida al arrancar, no en la primera petición.
@@ -44,6 +45,34 @@ public static class Program
         var app = builder.Build();
         UseIdentityPipeline(app);
         return app;
+    }
+
+    /// <summary>
+    /// La configuración base es el <c>appsettings.json</c> de core-api, enlazado: se copia junto al binario pero no a la
+    /// carpeta del proyecto. En el contenedor la raíz de contenido es esa carpeta del binario; en pruebas y al correrlo
+    /// desde el proyecto no lo es, y sin esto core-identity arrancaría sin dominios, hosts, clientes OIDC ni correo. Se
+    /// conserva el orden de precedencia (los archivos siguen debajo de variables de ambiente y argumentos).
+    /// </summary>
+    private static void UseSharedBaseSettings(WebApplicationBuilder builder)
+    {
+        var sources = builder.Configuration.Sources;
+        var baseDirectory = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(AppContext.BaseDirectory);
+        for (var i = 0; i < sources.Count; i++)
+        {
+            if (sources[i] is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource { Path: { } path } json
+                && path.StartsWith("appsettings", StringComparison.Ordinal)
+                && !File.Exists(Path.Combine(builder.Environment.ContentRootPath, path))
+                && baseDirectory.GetFileInfo(path).Exists)
+            {
+                sources[i] = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+                {
+                    Path = path,
+                    Optional = json.Optional,
+                    ReloadOnChange = false,
+                    FileProvider = baseDirectory,
+                };
+            }
+        }
     }
 
     internal static void AddIdentityServices(
@@ -72,6 +101,7 @@ public static class Program
         services.AddFlitSessionExpiredResponses();
         services.AddAuthorizationBuilder()
             .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy.RequireSuperAdmin());
+        services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, PlatformForbiddenResultHandler>();
         services.AddFlitOidcAcceptance<IdentityDbContext>(configuration);
         services.AddFlitOidcServer(configuration);
 
