@@ -72,6 +72,12 @@ describe('BiometricStep — un solo método visible por parte', () => {
   });
 
   it('cubierta por el baúl: solo firma electrónica activa (sin columna biométrica)', async () => {
+    // Bug #13194 (P4) — la cobertura la confirma el servidor; la prop sola ya no basta.
+    vi.mocked(tramitesClient.getBiometricState).mockResolvedValue({
+      validations: [],
+      provider: 'mock',
+      firmaBaulPartes: ['comprador'],
+    } as never);
     renderStep({ modalidad: 'matricula_inicial', vaultCoveredPartes: ['comprador'] });
 
     const compradorGrupo = await screen.findByRole('group', { name: 'Biométrica Comprador' });
