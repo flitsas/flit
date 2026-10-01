@@ -61,7 +61,7 @@ public static class MandateSignerSigningCapability
         ArgumentNullException.ThrowIfNull(offices);
 
         // HU #13129 — con forma de firma explícita no hay caída de un medio al otro (ADR-0061).
-        // Biometría: la validación la origina y la vigila el módulo Identidad (30 días, HU #13130), no
+        // Biometría: la validación la origina y la vigila el módulo Identidad (HU #13130; sin ventana de 30 días, HU #13130b), no
         // se exige aprobada para guardar. Baúl: exige la firma elegida.
         if (signatureMethod == MandateSignatureMethods.Biometria)
         {

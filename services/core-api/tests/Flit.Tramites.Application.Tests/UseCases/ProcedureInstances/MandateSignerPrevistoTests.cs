@@ -144,12 +144,12 @@ public sealed class MandateSignerPrevistoTests
     public async Task Ac2_SinFirmaValida_DevuelveFirmaInvalidaConMotivo_SinNombre()
     {
         var i = Seed();
-        Candidates(Signer(firmaValida: false, motivo: "biometria_vencida"));
+        Candidates(Signer(firmaValida: false, motivo: "sin_validacion_aprobada"));
 
         var dto = await Consultar(i);
 
         dto.Estado.Should().Be("firma_invalida");
-        dto.Motivo.Should().Be("biometria_vencida");
+        dto.Motivo.Should().Be("sin_validacion_aprobada");
         dto.Nombre.Should().BeNull("solo el firmante válido se nombra");
         dto.Modo.Should().Be("warn");
     }

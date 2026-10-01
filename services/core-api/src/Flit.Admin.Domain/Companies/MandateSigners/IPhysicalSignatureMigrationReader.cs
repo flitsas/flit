@@ -46,7 +46,7 @@ public static class PhysicalSignatureMigrationMissing
     /// <summary>Declaró biometría y no tiene ninguna validación aprobada.</summary>
     public const string ValidacionBiometrica = "validacion_biometrica";
 
-    /// <summary>Tiene validación aprobada pero ya pasó la ventana de 30 días: falta renovarla.</summary>
+    /// <summary>En desuso desde HU #13130b: el mandatario no renueva su identidad (una aprobación basta).</summary>
     public const string ValidacionBiometricaVigente = "validacion_biometrica_vigente";
 }
 

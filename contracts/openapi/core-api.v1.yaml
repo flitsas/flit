@@ -688,8 +688,8 @@ paths:
       summary: Reporte de migración de la firma física (HU #13131)
       description: >
         Mandatarios Persona natural activos que dependen SOLO de la firma física (`signs_physically`
-        verdadero), sin firma del baúl y sin validación biométrica aprobada y vigente (regla de 30 días del
-        módulo Identidad). Cada fila trae compañía, organismo, forma de firma actual, forma declarada y el
+        verdadero), sin firma del baúl y sin validación biométrica aprobada (el mandatario no renueva su
+        identidad: una aprobación basta). Cada fila trae compañía, organismo, forma de firma actual, forma declarada y el
         dato que le falta. Un mandatario al que se le vincula una firma del baúl o se le aprueba la validación
         sale del reporte en la siguiente consulta. NO incluye documento ni correo (Ley 1581). Solo SuperAdmin.
         Con `format=csv` se exporta como `text/csv`.
@@ -11992,7 +11992,7 @@ components:
           nullable: true
           description: >
             Vocabulario estable de ADR-0066: sin_mandatario_configurado, mandatario_fuera_de_vigencia,
-            mandatario_inactivo, mandatario_eliminado, biometria_vencida, sin_validacion_aprobada,
+            mandatario_inactivo, mandatario_eliminado, sin_validacion_aprobada,
             baul_sin_firma_vigente, firma_fisica_sin_migrar (y, con `no_aplica`, mandato_sin_firmante_persona o
             mandato_personalizado_de_compania).
         modo:

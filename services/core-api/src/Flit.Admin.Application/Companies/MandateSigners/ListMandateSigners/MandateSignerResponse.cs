@@ -52,13 +52,13 @@ public sealed record MandateSignerResponse(
     /// </summary>
     string ValidityStatus = MandateValidityStatus.Vigente,
     /// <summary>
-    /// HU #13130 — firma válida: vigencia propia activa Y, con biometría, validación biométrica vigente
-    /// (30 días). Nulo si el modelo no es Persona natural.
+    /// HU #13130 — firma válida: vigencia propia activa Y, con biometría, validación biométrica aprobada
+    /// (sin renovación, HU #13130b). Nulo si el modelo no es Persona natural.
     /// </summary>
     bool? SignatureValid = null,
     /// <summary>
     /// HU #13130 — motivo cuando <c>SignatureValid</c> es falso: <c>mandatario_fuera_de_vigencia</c>,
-    /// <c>mandatario_inactivo</c>, <c>biometria_vencida</c> o <c>sin_validacion_aprobada</c>.
+    /// <c>mandatario_inactivo</c> o <c>sin_validacion_aprobada</c>.
     /// </summary>
     string? SignatureInvalidReason = null,
     /// <summary>

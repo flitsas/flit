@@ -180,7 +180,7 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
         var candidato = candidatos.Should().ContainSingle().Subject;
         candidato.IdentityVigente.Should().BeTrue();
         candidato.CertificadoIdentidad.Should().Be("hash-mandatario");
-        candidato.IdentityValidUntil.Should().Be(aprobada.ValidUntil);
+        candidato.IdentityValidUntil.Should().BeNull("el mandatario no renueva su identidad (HU #13130b): no hay fecha de fin");
     }
 
     [Fact]
@@ -200,10 +200,10 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
     }
 
     [Fact]
-    public async Task GetCandidatesAsync_AprobadaPeroVencida_NoCuentaComoVigente()
+    public async Task GetCandidatesAsync_AprobadaHace40Dias_CuentaComoVigenteParaElMandatario()
     {
-        // La clasificación "vencida" (HU #11751) no debe apalancar la firma: es exactamente el defecto
-        // que el ADR-0050 quiere evitar.
+        // HU #13130b (decisión del PO, 01-oct): la ventana de 30 días del trámite no aplica al mandatario;
+        // una aprobación basta mientras su vigencia propia esté activa.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
         var vencida = new ProcedureInstanceBiometricValidation
@@ -220,7 +220,7 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
 
         var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
 
-        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeFalse();
+        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeTrue();
     }
 
     [Fact]

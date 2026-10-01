@@ -19,8 +19,10 @@ export interface MedioDeFirma {
 }
 
 /**
- * `expired` NO cuenta: una validación vencida no estampa sello y renovarla es una acción explícita
- * del gestor. `pending` sí — la validación va en camino y el mandatario podrá firmar cuando llegue.
+ * `valid` = el mandatario tiene una validación biométrica APROBADA, sin renovación mientras su vigencia
+ * propia esté activa (HU #13130b: la ventana de 30 días rige solo el trámite). `expired` ya no significa
+ * «aprobada hace más de 30 días» y NO cuenta. `pending` sí — la validación va en camino y el mandatario
+ * podrá firmar cuando llegue.
  */
 const IDENTIDAD_RESUELTA_O_EN_CURSO: readonly string[] = ["valid", "pending"];
 
@@ -50,10 +52,8 @@ export function organismosSinMedioDeFirma(
 }
 
 /** Qué le falta al mandatario, para decírselo al gestor en vez de un «no se pudo guardar». */
-export function motivoSinFirma(medio: MedioDeFirma): string {
-  return medio.identityStatus === "expired"
-    ? "Su validación de identidad está vencida y no tiene firma en el baúl."
-    : "No tiene firma en el baúl ni validación de identidad.";
+export function motivoSinFirma(_medio: MedioDeFirma): string {
+  return "No tiene firma en el baúl ni validación de identidad aprobada.";
 }
 
 /** Cómo se presenta el medio de firma del mandatario en listados del OT. */
