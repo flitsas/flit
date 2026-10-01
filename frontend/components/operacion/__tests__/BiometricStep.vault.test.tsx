@@ -48,7 +48,14 @@ describe('BiometricStep — cobertura por baúl (HU #10646)', () => {
     });
   });
 
+  // Bug #13194 (P4) — la cobertura por baúl sale SOLO del servidor (`firmaBaulPartes`/`firmaBaulActores`):
+  // la señal optimista del registro (`vaultCoveredPartes`) ya no basta para rotular una parte como firmada.
   it('presenta la parte NIT como "Firma electrónica (baúl)" sin botones de biométrica', async () => {
+    vi.mocked(tramitesClient.getBiometricState).mockResolvedValue({
+      validations: [],
+      provider: 'mock',
+      firmaBaulPartes: ['comprador'],
+    } as never);
     renderStep(['comprador']);
 
     const compradorCard = await screen.findByRole('group', { name: /Biométrica Comprador/i });
@@ -60,6 +67,11 @@ describe('BiometricStep — cobertura por baúl (HU #10646)', () => {
   });
 
   it('no altera a las partes no cubiertas: el vendedor sigue con su acción de validación', async () => {
+    vi.mocked(tramitesClient.getBiometricState).mockResolvedValue({
+      validations: [],
+      provider: 'mock',
+      firmaBaulPartes: ['comprador'],
+    } as never);
     renderStep(['comprador']);
 
     const vendedorCard = await screen.findByRole('group', { name: /Biométrica Vendedor/i });
@@ -67,6 +79,17 @@ describe('BiometricStep — cobertura por baúl (HU #10646)', () => {
     expect(within(vendedorCard).queryByText('Firma electrónica (baúl)')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(within(vendedorCard).getByText(/Aún no se ha iniciado la validación/i)).toBeInTheDocument(),
+    );
+  });
+
+  it('Bug #13194 — la señal del registro sin respaldo del servidor NO cubre la parte (fail-closed)', async () => {
+    renderStep(['comprador']);
+
+    const compradorCard = await screen.findByRole('group', { name: /Biométrica Comprador/i });
+    await waitFor(() => expect(tramitesClient.getBiometricState).toHaveBeenCalled());
+    expect(within(compradorCard).queryByText('Firma electrónica (baúl)')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(compradorCard).getByText(/Aún no se ha iniciado la validación/i)).toBeInTheDocument(),
     );
   });
 
