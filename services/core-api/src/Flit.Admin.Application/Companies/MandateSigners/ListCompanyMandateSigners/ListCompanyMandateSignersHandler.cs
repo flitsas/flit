@@ -51,7 +51,6 @@ public sealed class ListCompanyMandateSignersHandler
                 s.IntegrityHash,
                 s.Email,
                 s.UserId,
-                s.IdentityValidationRef,
                 s.SignatureVaultId,
                 s.IdentityStatus,
                 s.RegisteredAt,

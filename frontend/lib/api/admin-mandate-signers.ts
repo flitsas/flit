@@ -42,8 +42,6 @@ export interface MandateSigner {
   email: string | null;
   /** Cuenta de usuario de OT del mandatario (ADR-0036 §D9): cotejo del firmante al aprobar. */
   userId: string | null;
-  /** Validación de identidad admin vigente vinculada (ADR-0034/0036): `null` = sin validar. */
-  identityValidationRef: string | null;
   /**
    * Estado de la validación de identidad (HU #10994): `"valid"` (aprobada y vigente),
    * `"expired"` (vencida/rechazada ⇒ se puede renovar), `"pending"` (enviada/en proceso) o `"none"`.

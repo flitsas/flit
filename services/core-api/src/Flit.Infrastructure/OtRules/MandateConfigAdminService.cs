@@ -336,7 +336,6 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         entity.CustomTemplateSha256 = null;
         entity.CustomTemplateFileName = null;
         entity.CustomTemplateBody = null;
-        entity.CustomFieldManifest = null;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = userId;
 

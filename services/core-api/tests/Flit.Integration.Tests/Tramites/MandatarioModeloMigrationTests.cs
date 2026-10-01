@@ -21,7 +21,7 @@ namespace Flit.Integration.Tests.Tramites;
 /// <code>
 /// await MigrateToPreviousAsync();          // esquema sin las columnas nuevas
 /// await SeedLegacyAsync(cn);               // mandatarios, vínculos, reglas y config heredados
-/// await MigrateToLatestAsync();            // aplica el DDL 122 y su backfill
+/// await MigrateToHu13128Async();          // aplica el DDL 122 y su backfill
 /// </code>
 /// </summary>
 public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
@@ -67,6 +67,14 @@ public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixtu
     {
         if (_downgraded && PostgresAvailability.IsAvailable)
         {
+            // HU #13160: la migración de limpieza (DDL 127) aborta si identity_validation_ref tiene datos. Las filas
+            // heredadas de estas pruebas se limpian antes de volver a la última migración.
+            await using (var cn = await Fixture.OpenConnectionAsync())
+            {
+                await ExecAsync(cn,
+                    "UPDATE admin.mandate_signers SET identity_validation_ref = NULL WHERE identity_validation_ref IS NOT NULL");
+            }
+
             await MigrateToLatestAsync();
         }
 
@@ -79,6 +87,16 @@ public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixtu
         var previous = await PreviousMigrationAsync();
         await using var ctx = NewContext();
         await ctx.GetService<IMigrator>().MigrateAsync(previous, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// Aplica solo hasta la migración HU13128 (no hasta la última): las pruebas de esta clase siembran y leen
+    /// <c>identity_validation_ref</c>, columna que la migración de limpieza HU13160 elimina después.
+    /// </summary>
+    private async Task MigrateToHu13128Async()
+    {
+        await using var ctx = NewContext();
+        await ctx.GetService<IMigrator>().MigrateAsync(MigrationId, TestContext.Current.CancellationToken);
     }
 
     private async Task MigrateToLatestAsync()
@@ -162,17 +180,30 @@ public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixtu
             ("a", CompanyA), ("uc", UserCompany), ("rr", RoleOther));
     }
 
+    /// <summary>
+    /// Inserta un mandatario «heredado». <c>identity_validation_ref</c> solo se escribe si se pide: la columna existe
+    /// hasta la migración HU13128 y la limpieza HU13160 la elimina, así que con el esquema final no se puede nombrar.
+    /// </summary>
     private static Task InsertLegacySignerAsync(
         NpgsqlConnection cn, Guid id, string documentNumber, Guid? createdBy,
         Guid? vaultId = null, Guid? identityRef = null) =>
-        ExecAsync(cn,
-            """
-            INSERT INTO admin.mandate_signers
-              (id, transit_office_id, full_name, document_type, document_number, integrity_hash, registered_at,
-               created_at, created_by, signature_vault_id, identity_validation_ref)
-            VALUES (@id, @ot, 'Mandatario de prueba', 'CC', @doc, 'h', now(), now(), @cb, @v, @r)
-            """,
-            ("id", id), ("ot", Ot1), ("doc", documentNumber), ("cb", createdBy), ("v", vaultId), ("r", identityRef));
+        identityRef is null
+            ? ExecAsync(cn,
+                """
+                INSERT INTO admin.mandate_signers
+                  (id, transit_office_id, full_name, document_type, document_number, integrity_hash, registered_at,
+                   created_at, created_by, signature_vault_id)
+                VALUES (@id, @ot, 'Mandatario de prueba', 'CC', @doc, 'h', now(), now(), @cb, @v)
+                """,
+                ("id", id), ("ot", Ot1), ("doc", documentNumber), ("cb", createdBy), ("v", vaultId))
+            : ExecAsync(cn,
+                """
+                INSERT INTO admin.mandate_signers
+                  (id, transit_office_id, full_name, document_type, document_number, integrity_hash, registered_at,
+                   created_at, created_by, signature_vault_id, identity_validation_ref)
+                VALUES (@id, @ot, 'Mandatario de prueba', 'CC', @doc, 'h', now(), now(), @cb, @v, @r)
+                """,
+                ("id", id), ("ot", Ot1), ("doc", documentNumber), ("cb", createdBy), ("v", vaultId), ("r", identityRef));
 
     private static Task LinkAsync(NpgsqlConnection cn, Guid signerId, Guid company) =>
         ExecAsync(cn,
@@ -311,7 +342,7 @@ public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixtu
         (await ColumnsAsync(cn, "mandate_signers")).Should().NotContain("signature_method", "esquema previo a la migración");
         await SeedLegacyAsync(cn);
 
-        await MigrateToLatestAsync();
+        await MigrateToHu13128Async();
 
         var m = await SignatureMethodsAsync(cn);
         m[S1Baul].Should().Be("baul", "el baúl gana aunque tenga biometría aprobada");
@@ -336,7 +367,7 @@ public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixtu
         await using var cn = await Fixture.OpenConnectionAsync();
         await SeedLegacyAsync(cn);
 
-        await MigrateToLatestAsync();
+        await MigrateToHu13128Async();
 
         var rules = await ScopesAsync(cn,
             "SELECT company_tenant_id::text || '|' || transit_office_id::text, configured_by_scope FROM admin.company_ot_mandate_rules");
@@ -487,7 +518,7 @@ public sealed class MandatarioModeloMigrationTests(PostgresDatabaseFixture fixtu
         await MigrateToPreviousAsync();
         await using var cn = await Fixture.OpenConnectionAsync();
         await SeedLegacyAsync(cn);
-        await MigrateToLatestAsync();
+        await MigrateToHu13128Async();
 
         // Un cambio posterior de la aplicación no debe ser pisado por el backfill al re-ejecutar.
         await ExecAsync(cn, "UPDATE admin.mandate_signers SET signature_method='baul' WHERE id=@id", ("id", S5Nada));

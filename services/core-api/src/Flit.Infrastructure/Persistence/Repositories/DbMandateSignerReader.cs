@@ -133,7 +133,6 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             IntegrityHash = s.IntegrityHash,
             Email = s.Email,
             SignatureVaultId = s.SignatureVaultId,
-            IdentityValidationRef = s.IdentityValidationRef,
             IdentityStatus = s.IdentityStatus,
             IdentityValidUntil = s.IdentityValidUntil,
             UserId = s.UserId,
@@ -204,7 +203,6 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     IntegrityHash = signer.IntegrityHash,
                     Email = signer.Email,
                     SignatureVaultId = signer.SignatureVaultId,
-                    IdentityValidationRef = signer.IdentityValidationRef,
                     IdentityStatus = vigenciaBySigner
                         .GetValueOrDefault(signer.Id, new AdminIdentityVigencia.Resultado(
                             AdminIdentityVigencia.None, null)).Status,
@@ -684,7 +682,6 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             IntegrityHash = signer.IntegrityHash,
             Email = signer.Email,
             SignatureVaultId = signer.SignatureVaultId,
-            IdentityValidationRef = signer.IdentityValidationRef,
             IdentityStatus = vigencia.Status,
             IdentityValidUntil = vigencia.ValidUntil,
             UserId = signer.UserId,

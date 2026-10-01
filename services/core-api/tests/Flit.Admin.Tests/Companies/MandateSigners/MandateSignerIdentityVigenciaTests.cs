@@ -282,38 +282,6 @@ public sealed class MandateSignerIdentityVigenciaTests
     }
 
     [Fact]
-    public async Task NingunaConsultaVaHaciaAdminIdentityValidations()
-    {
-        // Guardrail explícito del AC de la HU #11765: no debe quedar ninguna lectura de
-        // admin.admin_identity_validations en la ficha admin de mandatarios.
-        var ct = TestContext.Current.CancellationToken;
-        await using var ctx = await SeedAsync();
-        ctx.AdminIdentityValidations.Add(new AdminIdentityValidationEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = OtTenant,
-            SubjectType = "mandate_signer",
-            SubjectRef = Signer,
-            Name = "Ana Restrepo",
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            Email = "sin-correo@flit.local",
-            Status = "aprobado",
-            ValidUntil = Now.AddDays(60),
-            CreatedAt = Now,
-            UpdatedAt = Now,
-        });
-        await ctx.SaveChangesAsync(ct);
-
-        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
-        var item = await reader.GetByIdAsync(Signer, ct);
-
-        item.Should().NotBeNull();
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.None,
-            "el rótulo admin ya no debe leer la fila de la tabla abandonada");
-    }
-
-    [Fact]
     public async Task ListByOtAsync_ConStatusReaderReal_NoRevientaPorTransaccionAnidada()
     {
         // GET /mandate-signers: ListByOtAsync abre tx y LoadIdentityVigenciaAsync llama

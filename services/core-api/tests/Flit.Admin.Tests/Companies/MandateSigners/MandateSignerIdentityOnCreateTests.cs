@@ -30,12 +30,8 @@ public sealed class MandateSignerIdentityOnCreateTests
         result.IsValid.Should().BeTrue();
         result.Identity.Should().Be(MandateSignerIdentityOutcome.NotAttempted);
 
-        var validaciones = await ctx.AdminIdentityValidations.AsNoTracking().CountAsync(Ct);
-        validaciones.Should().Be(0);
-
         var signer = await ctx.MandateSigners.AsNoTracking()
             .FirstAsync(s => s.Id == result.MandateSignerId!.Value, Ct);
-        signer.IdentityValidationRef.Should().BeNull();
         // El correo se sigue capturando como dato de contacto (no se retira la persistencia del campo).
         signer.Email.Should().Be("mandatario@x.co");
     }
@@ -51,12 +47,8 @@ public sealed class MandateSignerIdentityOnCreateTests
         result.IsValid.Should().BeTrue();
         result.Identity.Should().Be(MandateSignerIdentityOutcome.NotAttempted);
 
-        var validaciones = await ctx.AdminIdentityValidations.AsNoTracking().CountAsync(Ct);
-        validaciones.Should().Be(0);
-
         var signer = await ctx.MandateSigners.AsNoTracking()
             .FirstAsync(s => s.Id == result.MandateSignerId!.Value, Ct);
-        signer.IdentityValidationRef.Should().BeNull();
         signer.Email.Should().BeNull();
     }
 

@@ -20,7 +20,6 @@ function signer(overrides: Partial<MandateSigner> = {}): MandateSigner {
     integrityHash: "a".repeat(64),
     email: "ana@ejemplo.com",
     userId: null,
-    identityValidationRef: null,
     identityStatus: "none",
     identityValidUntil: null,
     signatureVaultId: null,

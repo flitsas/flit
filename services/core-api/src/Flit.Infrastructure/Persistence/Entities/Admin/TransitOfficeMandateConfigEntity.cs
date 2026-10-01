@@ -62,9 +62,6 @@ public sealed class TransitOfficeMandateConfigEntity
     /// <summary>Cuerpo del editor (texto/HTML simple con placeholders). Sin firmas.</summary>
     public string? CustomTemplateBody { get; set; }
 
-    /// <summary>Manifest de coordenadas overlay (JSON); opcional.</summary>
-    public string? CustomFieldManifest { get; set; }
-
     /// <summary>
     /// HU #13128 (ADR-0061) — origen de la configuración: <c>organismo</c> | <c>compania</c> | <c>super_admin</c>.
     /// </summary>

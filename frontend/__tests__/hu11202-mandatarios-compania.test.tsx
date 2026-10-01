@@ -51,7 +51,6 @@ const MANDATARIO = {
   integrityHash: "a".repeat(64),
   email: "ana@ejemplo.com",
   userId: null,
-  identityValidationRef: null,
   identityStatus: "none" as const,
   signatureVaultId: null,
   registeredAt: "2026-08-01T10:00:00Z",

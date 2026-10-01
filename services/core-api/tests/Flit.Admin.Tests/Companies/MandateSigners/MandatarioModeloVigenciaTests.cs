@@ -237,8 +237,6 @@ public sealed class MandatarioModeloVigenciaTests
         fila.SignatureMethod.Should().BeNull();
         fila.SignatureVaultId.Should().BeNull();
         fila.ValidityKind.Should().Be("fixed");
-        fila.IdentityValidationRef.Should().BeNull();
-        (await ctx.AdminIdentityValidations.CountAsync(Ct)).Should().Be(0);
 
         var respuesta = (await ListAsync(ctx)).Single();
         respuesta.IdentityStatus.Should().Be("none");
@@ -260,9 +258,7 @@ public sealed class MandatarioModeloVigenciaTests
         fila.SignatureMethod.Should().BeNull();
         fila.ValidityKind.Should().Be("fixed");
         fila.ValidFrom.Should().BeNull();
-        fila.IdentityValidationRef.Should().BeNull();
         fila.IntegrityHash.Should().NotBeNullOrEmpty();
-        (await ctx.AdminIdentityValidations.CountAsync(Ct)).Should().Be(0);
 
         var respuesta = (await ListAsync(ctx)).Single();
         respuesta.FullName.Should().Be("Formato en blanco");

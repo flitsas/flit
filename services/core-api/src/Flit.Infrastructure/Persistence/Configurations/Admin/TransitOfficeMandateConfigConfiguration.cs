@@ -44,7 +44,6 @@ internal sealed class TransitOfficeMandateConfigConfiguration : IEntityTypeConfi
         builder.Property(x => x.CustomTemplateSha256).HasMaxLength(64);
         builder.Property(x => x.CustomTemplateFileName).HasMaxLength(260);
         builder.Property(x => x.CustomTemplateBody);
-        builder.Property(x => x.CustomFieldManifest).HasColumnType("jsonb");
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.ConfiguredByScope).HasMaxLength(20).IsRequired().HasDefaultValue("organismo");

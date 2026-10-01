@@ -165,10 +165,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<ActiveNetworkDomainView> ActiveNetworkDomains => Set<ActiveNetworkDomainView>();
 
-    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
-    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
-        Set<AdminIdentityValidationEntity>();
-
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();

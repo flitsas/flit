@@ -15,7 +15,6 @@ public sealed record MandateSignerResponse(
     string IntegrityHash,
     string? Email,
     Guid? UserId,
-    Guid? IdentityValidationRef,
     Guid? SignatureVaultId,
     string IdentityStatus,
     DateTimeOffset RegisteredAt,

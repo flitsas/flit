@@ -261,39 +261,4 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
         signer!.IdentityVigente.Should().BeTrue();
         signer.CertificadoIdentidad.Should().Be("hash-mandatario");
     }
-
-    [Fact]
-    public async Task NingunaConsultaVaHaciaAdminIdentityValidations()
-    {
-        // Guardrail explícito del AC de la HU #11752: no debe quedar ninguna lectura de
-        // admin.admin_identity_validations en la cascada del directorio.
-        var ct = TestContext.Current.CancellationToken;
-        await using var ctx = await SeedAsync();
-        ctx.AdminIdentityValidations.Add(new AdminIdentityValidationEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = OtTenant,
-            SubjectType = "mandate_signer",
-            SubjectRef = Signer,
-            Name = "Ana Restrepo",
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            Email = "sin-correo@flit.local",
-            Status = "aprobado",
-            ValidUntil = Now.AddDays(60),
-            CreatedAt = Now,
-            UpdatedAt = Now,
-        });
-        await ctx.SaveChangesAsync(ct);
-
-        // El resolver de Identidad no ve NINGUNA validación (fuente única, HU #11751): aunque la tabla
-        // admin diga "aprobado y vigente", el candidato debe salir SIN vigencia.
-        var directorio = new MandateSignerDirectory(
-            ctx, ReaderConTenant(OtTenant),
-            new IdentityVigenciaPorDocumentoResolver(RepoStub(null)));
-
-        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
-
-        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeFalse();
-    }
 }

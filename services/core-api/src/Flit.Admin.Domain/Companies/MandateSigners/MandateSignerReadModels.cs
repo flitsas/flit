@@ -25,9 +25,6 @@ public sealed class MandateSignerItem
     /// <summary>Firma del baúl vinculada (ADR-0025), si está resuelta.</summary>
     public Guid? SignatureVaultId { get; init; }
 
-    /// <summary>Validación de identidad admin vigente vinculada (ADR-0034), si está resuelta.</summary>
-    public Guid? IdentityValidationRef { get; init; }
-
     /// <summary>
     /// Estado de la validación de identidad del mandatario (HU #10994) para la UI de gestión:
     /// <c>"valid"</c> (aprobada y vigente), <c>"expired"</c> (aprobada pero vencida / rechazada / expirada

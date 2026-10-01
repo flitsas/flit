@@ -31,9 +31,6 @@ public sealed class MandateSigner
     /// </summary>
     public Guid? SignatureVaultId { get; set; }
 
-    /// <summary>Validación de identidad admin vigente vinculada (ADR-0034), si está resuelta.</summary>
-    public Guid? IdentityValidationRef { get; set; }
-
     /// <summary>
     /// Cuenta de usuario de OT del mandatario (ADR-0036 §D9): llave del cotejo del firmante al aprobar
     /// (<c>user_id == usuario autenticado</c>). <c>ON DELETE SET NULL</c>: al borrar el usuario el

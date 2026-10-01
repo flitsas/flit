@@ -22,7 +22,6 @@ internal sealed class MandateSignerConfiguration : IEntityTypeConfiguration<Mand
         builder.Property(x => x.IntegrityHash).HasMaxLength(64).IsRequired();
         builder.Property(x => x.Email).HasMaxLength(200);
         builder.Property(x => x.SignatureVaultId);
-        builder.Property(x => x.IdentityValidationRef);
         builder.Property(x => x.UserId);
         builder.Property(x => x.RegisteredAt).IsRequired();
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);

@@ -53,7 +53,6 @@ function signer(overrides: Partial<MandateSigner> = {}): MandateSigner {
     integrityHash: "a".repeat(64),
     email: null,
     userId: null,
-    identityValidationRef: null,
     identityStatus: "valid",
     signatureVaultId: "v-1",
     registeredAt: "2026-08-01T10:00:00Z",
