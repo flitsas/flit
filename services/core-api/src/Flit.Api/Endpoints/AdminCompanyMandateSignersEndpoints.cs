@@ -146,7 +146,8 @@ public static class AdminCompanyMandateSignersEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler
-            .HandleAsync(tenantId, request, ResolveUserId(httpContext.User), cancellationToken)
+            .HandleAsync(
+                tenantId, request, ResolveUserId(httpContext.User), OrigenDeLaCompania(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
 
         return result.IsValid
@@ -170,7 +171,8 @@ public static class AdminCompanyMandateSignersEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler
-            .HandleAsync(tenantId, mandateSignerId, request, ResolveUserId(httpContext.User), cancellationToken)
+            .HandleAsync(
+                tenantId, mandateSignerId, request, ResolveUserId(httpContext.User), OrigenDeLaCompania(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
 
         return result.Outcome switch
@@ -267,4 +269,8 @@ public static class AdminCompanyMandateSignersEndpoints
             ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(raw, out var id) ? id : null;
     }
+
+    /// <summary>HU #13195c — origen del vínculo: Super Admin → super_admin; Admin de Compañía → compania.</summary>
+    internal static string OrigenDeLaCompania(System.Security.Claims.ClaimsPrincipal user) =>
+        user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "compania";
 }
