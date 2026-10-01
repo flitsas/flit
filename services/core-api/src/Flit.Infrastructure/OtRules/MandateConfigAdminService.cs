@@ -18,17 +18,6 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 {
     private const long MaxPdfBytes = 10 * 1024 * 1024;
 
-    private static readonly HashSet<string> Templates = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // "auto" no es una redacción: delega en la plantilla de sistema del organismo. Es la forma de
-        // devolverle la decisión al builtin ahora que la elección explícita le gana (HU #11703).
-        MandatoTemplateResolver.Auto,
-        MandatoTemplateResolver.Generico,
-        MandatoTemplateResolver.Sabaneta,
-        MandatoTemplateResolver.Bello,
-        MandatoTemplateResolver.Municipio,
-    };
-
     private static readonly HashSet<string> Families = new(StringComparer.OrdinalIgnoreCase)
     {
         MandatoFamiliaCodes.Individuo,
@@ -111,16 +100,20 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (office is null) return (MandateConfigWriteStatus.OfficeNotFound, null);
 
         var template = (request.TemplateCode ?? string.Empty).Trim().ToLowerInvariant();
-        if (!Templates.Contains(template))
+        if (!MandatoTemplateResolver.IsAcceptedTemplateCode(template))
             return (MandateConfigWriteStatus.InvalidTemplate, null);
 
         var family = (request.MandataryFamily ?? string.Empty).Trim().ToLowerInvariant();
         if (!Families.Contains(family))
             return (MandateConfigWriteStatus.InvalidFamily, null);
 
-        var assignmentMode = MandatoAssignmentModeCodes.Resolve(request.AssignmentMode);
-        if (!AssignmentModes.Contains(assignmentMode))
+        // HU #13161 — se valida el valor ENVIADO: Resolve() convierte cualquier texto desconocido en «signer», así
+        // que validar después de resolver aceptaba un tipo inventado y lo guardaba como Persona natural. Un
+        // valor ausente sigue significando «signer» (clientes anteriores que no lo envían).
+        var rawAssignmentMode = request.AssignmentMode?.Trim();
+        if (!string.IsNullOrEmpty(rawAssignmentMode) && !AssignmentModes.Contains(rawAssignmentMode))
             return (MandateConfigWriteStatus.InvalidAssignmentMode, null);
+        var assignmentMode = MandatoAssignmentModeCodes.Resolve(rawAssignmentMode);
 
         // Datos institucionales del OT (texto de plantilla); el tipo de negocio vive en company_ot_mandate_rules.
         if (string.Equals(family, MandatoFamiliaCodes.OrganismoTransito, StringComparison.OrdinalIgnoreCase)

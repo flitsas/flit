@@ -69,9 +69,9 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var (status, view) = await service
-            .SetOtDefaultSignerAsync(officeId, request, ResolveUserId(user), ct)
+            .SetOtDefaultSignerAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> PreviewOtAsync(
@@ -138,7 +138,7 @@ public static class AdminOtMandatosEndpoints
 
         var (status, view) = await service
             .SetCompanyDefaultSignerAsync(
-                officeId, companyTenantId, request, ResolveUserId(user), OtCompanyVisibilityPolicy.For(user), ct)
+                officeId, companyTenantId, request, MandateEndpointHelpers.ResolveUserId(user), OtCompanyVisibilityPolicy.For(user), ct)
             .ConfigureAwait(false);
         return status switch
         {
@@ -193,12 +193,8 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var code = templateCode?.Trim() ?? string.Empty;
-        if (code is not (
-            MandatoTemplateResolver.Generico or MandatoTemplateResolver.Sabaneta
-            or MandatoTemplateResolver.Bello or MandatoTemplateResolver.Municipio))
-        {
-            return Results.BadRequest(new { error = "template_code_invalido" });
-        }
+        if (!MandatoTemplateResolver.IsRedaction(code))
+            return MandateEndpointHelpers.InvalidTemplateCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
         return Results.File(doc.Content, contentType: "application/pdf");
@@ -225,29 +221,5 @@ public static class AdminOtMandatosEndpoints
         return Results.Json(
             new { code = "TRANSIT_OFFICE_FORBIDDEN" },
             statusCode: StatusCodes.Status403Forbidden);
-    }
-
-    private static IResult MapWrite(MandateConfigWriteStatus status, MandateOtConfigView? view) =>
-        status switch
-        {
-            MandateConfigWriteStatus.Ok => Results.Ok(view),
-            MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
-            MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
-            MandateConfigWriteStatus.InvalidAssignmentMode =>
-                Results.BadRequest(new { error = "assignment_mode_invalido" }),
-            MandateConfigWriteStatus.InstitutionalRequired =>
-                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
-            MandateConfigWriteStatus.InvalidDefaultSigner =>
-                Results.BadRequest(new { error = "mandatario_default_invalido" }),
-            _ => Results.BadRequest(),
-        };
-
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
     }
 }

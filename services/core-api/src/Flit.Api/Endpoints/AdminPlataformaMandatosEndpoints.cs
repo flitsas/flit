@@ -16,19 +16,6 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 public static class AdminPlataformaMandatosEndpoints
 {
-    /// <summary>
-    /// Redacciones previsualizables por código. <c>auto</c> NO entra: no es una redacción sino una
-    /// delegación en la plantilla de sistema del organismo, y sin organismo no hay nada que resolver
-    /// (para eso está la vista previa por OT).
-    /// </summary>
-    private static readonly HashSet<string> AllowedTemplates = new(StringComparer.OrdinalIgnoreCase)
-    {
-        MandatoTemplateResolver.Generico,
-        MandatoTemplateResolver.Sabaneta,
-        MandatoTemplateResolver.Bello,
-        MandatoTemplateResolver.Municipio,
-    };
-
     public static IEndpointRouteBuilder MapAdminPlataformaMandatosEndpoints(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
@@ -167,10 +154,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .UpsertAsync(officeId, request, ResolveUserId(user), ct)
+            .UpsertAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> SetDefaultSignerAsync(
@@ -181,10 +168,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .SetOtDefaultSignerAsync(officeId, request, ResolveUserId(user), ct)
+            .SetOtDefaultSignerAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> DeleteAsync(
@@ -215,10 +202,10 @@ public static class AdminPlataformaMandatosEndpoints
 
         await using var stream = file.OpenReadStream();
         var (status, view) = await service
-            .UploadPdfTemplateAsync(officeId, stream, file.FileName, ResolveUserId(user), ct)
+            .UploadPdfTemplateAsync(officeId, stream, file.FileName, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> SaveEditorAsync(
@@ -229,10 +216,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .SaveEditorBodyAsync(officeId, request, ResolveUserId(user), ct)
+            .SaveEditorBodyAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> DeleteTemplateAsync(
@@ -242,10 +229,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .DeleteCustomTemplateAsync(officeId, ResolveUserId(user), ct)
+            .DeleteCustomTemplateAsync(officeId, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static IResult PreviewTemplateAsync(
@@ -253,12 +240,8 @@ public static class AdminPlataformaMandatosEndpoints
         [FromServices] IMandatoGenerator generator)
     {
         var code = templateCode?.Trim() ?? string.Empty;
-        if (!AllowedTemplates.Contains(code))
-        {
-            return Results.Json(
-                new { error = "template_code_invalido", allowed = AllowedTemplates.OrderBy(x => x) },
-                statusCode: StatusCodes.Status400BadRequest);
-        }
+        if (!MandatoTemplateResolver.IsRedaction(code))
+            return MandateEndpointHelpers.InvalidTemplateCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
         return Results.File(doc.Content, contentType: "application/pdf");
@@ -400,7 +383,7 @@ public static class AdminPlataformaMandatosEndpoints
     {
         var change = new MandateRuleTypeChange();
         var (status, view) = await service
-            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, ResolveUserId(user), change, ct)
+            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, MandateEndpointHelpers.ResolveUserId(user), change, ct)
             .ConfigureAwait(false);
 
         // HU #13149 — bitácora del cambio de tipo (éxito con cambio real) o del intento fallido (con su código).
@@ -461,7 +444,7 @@ public static class AdminPlataformaMandatosEndpoints
     {
         var (status, view) = await service
             .SetCompanyDefaultSignerAsync(
-                officeId, companyTenantId, request, ResolveUserId(user), OtCompanyVisibility.WholeNetwork, ct)
+                officeId, companyTenantId, request, MandateEndpointHelpers.ResolveUserId(user), OtCompanyVisibility.WholeNetwork, ct)
             .ConfigureAwait(false);
 
         return status switch
@@ -511,35 +494,5 @@ public static class AdminPlataformaMandatosEndpoints
             MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.NotFound(),
         };
-    }
-
-    private static IResult MapWrite(MandateConfigWriteStatus status, MandateOtConfigView? view) =>
-        status switch
-        {
-            MandateConfigWriteStatus.Ok => Results.Ok(view),
-            MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
-            MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
-            MandateConfigWriteStatus.InvalidAssignmentMode =>
-                Results.BadRequest(new { error = "assignment_mode_invalido" }),
-            MandateConfigWriteStatus.InstitutionalRequired =>
-                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
-            MandateConfigWriteStatus.InvalidTemplateFile =>
-                Results.BadRequest(new { error = "plantilla_pdf_invalida" }),
-            MandateConfigWriteStatus.InvalidEditorBody =>
-                Results.BadRequest(new { error = "editor_cuerpo_invalido" }),
-            // HU #13126 — mismo código que la ruta del OT (MapCompanyWrite): el default no es válido.
-            MandateConfigWriteStatus.InvalidDefaultSigner =>
-                Results.BadRequest(new { error = "mandatario_default_invalido" }),
-            _ => Results.BadRequest(),
-        };
-
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirst("sub")?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
     }
 }

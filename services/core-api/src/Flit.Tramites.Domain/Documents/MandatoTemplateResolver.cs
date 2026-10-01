@@ -166,6 +166,21 @@ public static class MandatoTemplateResolver
     /// </summary>
     public const string Auto = "auto";
 
+    /// <summary>
+    /// Redacciones reales (única definición, HU #13161): las que se previsualizan por código. <see cref="Auto"/> NO
+    /// entra: no es una redacción sino una delegación en la plantilla de sistema del organismo.
+    /// </summary>
+    public static IReadOnlyList<string> PreviewableRedactions { get; } = [Generico, Sabaneta, Bello, Municipio];
+
+    /// <summary>True si <paramref name="templateCode"/> es una redacción real (sin <see cref="Auto"/>), sin distinguir mayúsculas.</summary>
+    public static bool IsRedaction(string? templateCode) =>
+        PreviewableRedactions.Contains(templateCode?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>True si el código se acepta al configurar el OT: una redacción real o <see cref="Auto"/>.</summary>
+    public static bool IsAcceptedTemplateCode(string? templateCode) =>
+        IsRedaction(templateCode)
+        || string.Equals(templateCode?.Trim(), Auto, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>True si el código NO fija redacción (ausente, en blanco o <see cref="Auto"/>).</summary>
     public static bool IsAuto(string? templateCode) =>
         string.IsNullOrWhiteSpace(templateCode)

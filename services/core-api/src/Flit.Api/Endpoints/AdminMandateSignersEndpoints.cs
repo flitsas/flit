@@ -258,7 +258,7 @@ public static class AdminMandateSignersEndpoints
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
             ValidateSigningMeans = true,
-            CreatedBy = ResolveUserId(httpContext.User),
+            CreatedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             // HU #13195 — origen del vínculo: Super Admin → super_admin; ot_admin → organismo.
             ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
@@ -313,7 +313,7 @@ public static class AdminMandateSignersEndpoints
             ValidityKind = request.ValidityKind,
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
-            UpdatedBy = ResolveUserId(httpContext.User),
+            UpdatedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };
@@ -341,7 +341,7 @@ public static class AdminMandateSignersEndpoints
         {
             TransitOfficeId = transitOfficeId,
             MandateSignerId = mandateSignerId,
-            ChangedBy = ResolveUserId(httpContext.User),
+            ChangedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             ActorKind = MandateSignerActors.ForHub(httpContext.User),
         };
 
@@ -361,7 +361,7 @@ public static class AdminMandateSignersEndpoints
         {
             TransitOfficeId = transitOfficeId,
             MandateSignerId = mandateSignerId,
-            ChangedBy = ResolveUserId(httpContext.User),
+            ChangedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             ActorKind = MandateSignerActors.ForHub(httpContext.User),
         };
 
@@ -384,7 +384,7 @@ public static class AdminMandateSignersEndpoints
                 TransitOfficeId = transitOfficeId,
                 MandateSignerId = mandateSignerId,
                 ConfirmImpact = confirmarImpacto ?? false,
-                ChangedBy = ResolveUserId(httpContext.User),
+                ChangedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
                 ActorKind = MandateSignerActors.ForHub(httpContext.User),
             },
             cancellationToken).ConfigureAwait(false);
@@ -439,11 +439,4 @@ public static class AdminMandateSignersEndpoints
     /// <summary>HU #13195 — origen de configuración según quien actúa en la ruta del OT.</summary>
     private static string OrigenDelActor(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "organismo";
-
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirst("sub")?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
-    }
 }
