@@ -12,6 +12,7 @@ import {
   CompanyVolverDefaultModal,
   type CompanyTipoMandatoValues,
 } from "@/components/admin/plataforma/CompanyTipoMandatoModal";
+import type { MandatoFormatosState } from "@/hooks/useMandatoFormatos";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
   deleteCompanyOtMandateRule,
@@ -33,12 +34,14 @@ import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate
 import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
-  assignmentModeFromTemplateCode,
-  mandatoTemplateOptions,
+  MANDATO_TEMPLATE_AUTO_CODE,
+  assignmentModeFromFormat,
+  findMandatoFormat,
+  formatoNombraMandatarioInstitucional,
+  mandatoFormatName,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
-  systemTemplateLabel,
   tipoNegocioLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
@@ -86,9 +89,16 @@ export interface MandatoOtConfigFormProps {
   signersRevision?: number;
   /** Mandatario recién creado: se preselecciona como default del OT. */
   lastCreatedSignerId?: string | null;
+  /**
+   * HU #13174 — catálogo de formatos del backend (lo carga el contenedor; el hub OT no muestra el
+   * selector de redacción, por eso es opcional).
+   */
+  formatos?: MandatoFormatosState;
   onClose: () => void;
   onSaved: (view: MandateOtConfigView) => void;
 }
+
+const SIN_FORMATOS: MandatoFormatosState = { formatos: [], status: "ready", reload: () => {} };
 
 export function MandatoOtConfigForm({
   office,
@@ -99,6 +109,7 @@ export function MandatoOtConfigForm({
   editableCompanyType = false,
   signersRevision = 0,
   lastCreatedSignerId,
+  formatos = SIN_FORMATOS,
   onClose,
   onSaved,
 }: MandatoOtConfigFormProps) {
@@ -144,10 +155,18 @@ export function MandatoOtConfigForm({
   const terceroAjeno = terceroAjenoEnPlantilla(templateCode, office.code);
   // HU #13152 — sigue la redacción SELECCIONADA (antes de guardar); con "auto" usa la efectiva.
   const selectedTemplate = templateCode === "auto" ? effectiveTemplate : templateCode;
+  // HU #13174 — sin comparar códigos: la familia institucional sale del formato que trae el catálogo
+  // (tipo «Persona jurídica») o de la familia ya guardada del organismo.
   const showInstitutionalMeta =
-    selectedTemplate === "sabaneta" ||
-    selectedTemplate === "bello" ||
+    findMandatoFormat(formatos.formatos, selectedTemplate)?.assignmentMode === "institutional" ||
+    formatoNombraMandatarioInstitucional(selectedTemplate) ||
     family === "organismo_transito";
+  const effectiveTemplateName = mandatoFormatName(formatos.formatos, effectiveTemplate);
+  const selectedFormat = findMandatoFormat(formatos.formatos, templateCode);
+  const savedCodeUnknown =
+    formatos.status === "ready" &&
+    templateCode !== MANDATO_TEMPLATE_AUTO_CODE &&
+    selectedFormat === undefined;
 
   const filteredCompanyRules = useMemo(() => {
     const scoped = lockToCompanyId
@@ -246,7 +265,8 @@ export function MandatoOtConfigForm({
     templateCode,
     requiresForNaturalPerson: true,
     mandataryFamily: family,
-    assignmentMode: assignmentModeFromTemplateCode(
+    assignmentMode: assignmentModeFromFormat(
+      formatos.formatos,
       templateCode === "auto" ? effectiveTemplate : templateCode,
     ),
     institutionalMandataryName: showInstitutionalMeta ? instName || null : null,
@@ -721,27 +741,60 @@ export function MandatoOtConfigForm({
               Plantilla del mandato (por OT)
             </h3>
 
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-[#162244] dark:text-white">
-                Redacción que aplica este OT
-              </span>
-              <select
-                value={templateCode}
-                onChange={(e) => setTemplateCode(e.target.value)}
-                disabled={busy}
-                data-testid="mandato-template-select"
-                className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            {formatos.status === "loading" ? (
+              <p
+                role="status"
+                aria-live="polite"
+                data-testid="mandato-formatos-loading"
+                className="text-xs text-[#59677D] dark:text-white/65"
               >
-                {mandatoTemplateOptions().map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                {mandatoTemplateOptions().find((o) => o.code === templateCode)?.summary ?? ""}
-              </span>
-            </label>
+                Cargando formatos de contrato…
+              </p>
+            ) : formatos.status === "error" ? (
+              <div
+                role="alert"
+                data-testid="mandato-formatos-error"
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+              >
+                <span>No se pudo cargar la lista de formatos de contrato.</span>
+                <button
+                  type="button"
+                  onClick={formatos.reload}
+                  className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                  Redacción que aplica este OT
+                </span>
+                <select
+                  value={templateCode}
+                  onChange={(e) => setTemplateCode(e.target.value)}
+                  disabled={busy}
+                  data-testid="mandato-template-select"
+                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                >
+                  {savedCodeUnknown ? (
+                    <option value={templateCode}>{templateCode} (ya no está en el catálogo)</option>
+                  ) : null}
+                  {formatos.formatos.map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                  {selectedFormat?.delegatesToOfficeTemplate
+                    ? "El organismo usa la redacción que el sistema tiene asignada a su código. Si no tiene ninguna, usa el Genérico."
+                    : selectedFormat
+                      ? `Tipo de mandato por defecto: ${tipoNegocioLabel(resolveTipoNegocio(selectedFormat.assignmentMode))}.`
+                      : ""}
+                </span>
+              </label>
+            )}
 
             {/* HU #11718 — la redacción elegida puede nombrar a un tercero ajeno al organismo:
                 las plantillas del sistema llevan su municipio y su mandatario institucional
@@ -776,13 +829,13 @@ export function MandatoOtConfigForm({
                     Sistema
                   </span>
                   <span className="inline-flex items-center rounded-full border border-[#557EFF]/35 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-[#162244] dark:border-[#00DBD5]/40 dark:bg-white/10 dark:text-white">
-                    {systemTemplateLabel(effectiveTemplate)}
+                    {effectiveTemplateName}
                   </span>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
                   En automática, este OT emite hoy la redacción{" "}
                   <span className="font-semibold text-[#162244] dark:text-white">
-                    {systemTemplateLabel(effectiveTemplate)}
+                    {effectiveTemplateName}
                   </span>{" "}
                   para todas las compañías.
                 </p>
@@ -816,7 +869,7 @@ export function MandatoOtConfigForm({
                   className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF4E00] disabled:opacity-50"
                 >
                   <Trash2 className="h-3 w-3" aria-hidden="true" />
-                  Quitar y volver a {systemTemplateLabel(effectiveTemplate)}
+                  Quitar y volver a {effectiveTemplateName}
                 </button>
               </div>
             ) : null}

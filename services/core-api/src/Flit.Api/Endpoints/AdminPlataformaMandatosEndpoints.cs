@@ -7,6 +7,7 @@ using Flit.Api.Endpoints.Auditing;
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -72,6 +73,36 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13168 — catálogo único de formatos (solo lectura: sin POST ni DELETE, el equipo FLIT gestiona la lista).
+        group.MapGet("/formatos", ListFormatsAsync)
+            .WithName("AdminPlataformaMandatosFormats")
+            .Produces(StatusCodes.Status200OK);
+
+        // HU #13171 — el Super Admin edita nombre, tipo y plantilla de un formato EXISTENTE (sin POST ni DELETE: 405;
+        // un código nuevo: 404). RowVersion obligatorio; bitácora en admin.tenant_config_audit_logs.
+        group.MapGet("/formatos/{code}", GetFormatAsync)
+            .WithName("AdminPlataformaMandatosFormatGet")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/formatos/{code}/versions/{versionNumber:int}", GetFormatVersionAsync)
+            .WithName("AdminPlataformaMandatosFormatVersion")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/formatos/{code}", UpdateFormatAsync)
+            .WithName("AdminPlataformaMandatosFormatUpdate")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // HU #13173 — vista previa de la plantilla EN BORRADOR de un formato: valida y genera el PDF de muestra sin guardar nada.
+        group.MapPost("/formatos/{code}/preview", PreviewDraftAsync)
+            .WithName("AdminPlataformaMandatosFormatDraftPreview")
+            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+            .Produces(StatusCodes.Status400BadRequest);
+
         group.MapGet("/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminPlataformaMandatosPreview")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
@@ -135,6 +166,87 @@ public static class AdminPlataformaMandatosEndpoints
     {
         var items = await service.ListAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { items });
+    }
+
+    private static async Task<IResult> ListFormatsAsync(
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var items = await formats.ListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { items = items.Select(MandatoFormatResponses.Describe).ToList() });
+    }
+
+    private static async Task<IResult> GetFormatAsync(
+        [FromRoute] string code,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var detail = await formats.GetAsync(code, ct).ConfigureAwait(false);
+        if (detail is null)
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            format = MandatoFormatResponses.Describe(detail.Format),
+            body = detail.CurrentBody,
+            versions = detail.Versions.Select(v => new
+            {
+                versionNumber = v.VersionNumber,
+                sha256 = v.BodySha256,
+                createdAt = v.CreatedAt,
+                createdBy = v.CreatedBy,
+            }),
+        });
+    }
+
+    private static async Task<IResult> GetFormatVersionAsync(
+        [FromRoute] string code,
+        [FromRoute] int versionNumber,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var found = await formats.GetVersionAsync(code, versionNumber, ct).ConfigureAwait(false);
+        if (found is not { } v)
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            versionNumber = v.Info.VersionNumber,
+            sha256 = v.Info.BodySha256,
+            createdAt = v.Info.CreatedAt,
+            createdBy = v.Info.CreatedBy,
+            body = v.Body,
+        });
+    }
+
+    private static async Task<IResult> UpdateFormatAsync(
+        [FromRoute] string code,
+        [FromBody] UpdateMandateFormatRequest request,
+        HttpContext http,
+        ClaimsPrincipal user,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var result = await formats.UpdateAsync(code, request, MandateEndpointHelpers.ResolveUserId(user), ct).ConfigureAwait(false);
+
+        // HU #13171 — bitácora de éxito, sin cambio real y fallo (con su código); sin cuerpo de plantilla.
+        await MandateFormatAudit.WriteAsync(http, code?.Trim().ToLowerInvariant() ?? string.Empty, request, result)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            MandateFormatUpdateStatus.Ok => Results.Ok(new
+            {
+                format = MandatoFormatResponses.Describe(result.Current!),
+                changed = result.Changed,
+                publishedVersion = result.PublishedVersion,
+            }),
+            MandateFormatUpdateStatus.NotFound => Results.NotFound(),
+            MandateFormatUpdateStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.Json(
+                new { error = result.ErrorCode, unknownVariables = result.UnknownVariables },
+                statusCode: StatusCodes.Status400BadRequest),
+        };
     }
 
     private static async Task<IResult> GetAsync(
@@ -235,15 +347,72 @@ public static class AdminPlataformaMandatosEndpoints
         return MandateEndpointHelpers.MapWrite(status, view);
     }
 
-    private static IResult PreviewTemplateAsync(
+    private static async Task<IResult> PreviewTemplateAsync(
         [FromRoute] string templateCode,
-        [FromServices] IMandatoGenerator generator)
+        [FromQuery] Guid? officeId,
+        [FromServices] IMandatoGenerator generator,
+        [FromServices] IMandateConfigAdminService service,
+        [FromServices] IMandateFormatTemplateProvider formatTemplates,
+        CancellationToken ct)
     {
         var code = templateCode?.Trim() ?? string.Empty;
-        if (!MandatoTemplateResolver.IsRedaction(code))
-            return MandateEndpointHelpers.InvalidTemplateCode();
+
+        // HU #13173 — auto no es una redacción, pero con un organismo SÍ tiene vista previa: la redacción efectiva
+        // de ese organismo (la misma de su vista previa propia). Sin organismo no hay nada que resolver.
+        if (string.Equals(code, MandatoTemplateResolver.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            if (officeId is null)
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = "organismo_requerido",
+                        message = "La redacción automática depende del organismo: envía officeId o usa la vista previa del organismo (GET /mandatos/ot/{officeId}/preview).",
+                    },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return await PreviewOtAsync(officeId.Value, service, generator, formatTemplates, ct).ConfigureAwait(false);
+        }
+
+        if (!MandatoFormatCatalog.IsRedaction(code))
+            return MandatoFormatResponses.InvalidPreviewCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
+        return Results.File(doc.Content, contentType: "application/pdf");
+    }
+
+    /// <summary>Cuerpo de <c>POST /formatos/{code}/preview</c>: la plantilla en borrador.</summary>
+    public sealed record FormatDraftPreviewRequest(string? Body);
+
+    private static IResult PreviewDraftAsync(
+        [FromRoute] string code,
+        [FromBody] FormatDraftPreviewRequest request,
+        [FromServices] IMandatoGenerator generator)
+    {
+        var formatCode = code?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!MandatoFormatCatalog.IsRedaction(formatCode))
+            return MandatoFormatResponses.InvalidPreviewCode();
+
+        var body = request?.Body?.Trim() ?? string.Empty;
+        if (body.Length > MandatoFormatResponses.MaxTemplateBodyLength)
+        {
+            return Results.Json(
+                new { error = "plantilla_demasiado_larga", maxLength = MandatoFormatResponses.MaxTemplateBodyLength },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var validation = MandatoTemplateValidator.Validate(body);
+        if (!validation.IsValid)
+            return MandatoFormatResponses.InvalidTemplateBody(validation);
+
+        // Muestra ficticia (MandatoPreviewSample): ninguna persona real, y nada se persiste.
+        var sample = MandatoPreviewSample.Build(formatCode, datosDeMuestra: true) with
+        {
+            CustomTemplateKind = MandatoCustomTemplateKindCodes.Editor,
+            CustomTemplateBody = body,
+        };
+        var doc = generator.GenerateMandato(sample);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
 
@@ -251,6 +420,7 @@ public static class AdminPlataformaMandatosEndpoints
         Guid officeId,
         [FromServices] IMandateConfigAdminService service,
         [FromServices] IMandatoGenerator generator,
+        [FromServices] IMandateFormatTemplateProvider formatTemplates,
         CancellationToken ct)
     {
         var view = await service.GetAsync(officeId, ct).ConfigureAwait(false);
@@ -260,7 +430,11 @@ public static class AdminPlataformaMandatosEndpoints
         if (view.CustomTemplateKind == MandatoCustomTemplateKindCodes.Pdf)
             customPdf = await service.OpenCustomPdfAsync(officeId, ct).ConfigureAwait(false);
 
-        var doc = generator.GenerateMandato(BuildOtPreviewData(view, customPdf));
+        // HU #13172 — la vista previa del organismo muestra lo que recibirá un trámite nuevo: la plantilla vigente del formato.
+        var applied = await MandatoFormatTemplateApplier
+            .ApplyAsync(BuildOtPreviewData(view, customPdf), formatTemplates, null, ct)
+            .ConfigureAwait(false);
+        var doc = generator.GenerateMandato(applied.Data);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
 

@@ -100,7 +100,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (office is null) return (MandateConfigWriteStatus.OfficeNotFound, null);
 
         var template = (request.TemplateCode ?? string.Empty).Trim().ToLowerInvariant();
-        if (!MandatoTemplateResolver.IsAcceptedTemplateCode(template))
+        if (!MandatoFormatCatalog.Contains(template))
             return (MandateConfigWriteStatus.InvalidTemplate, null);
 
         var family = (request.MandataryFamily ?? string.Empty).Trim().ToLowerInvariant();

@@ -170,11 +170,11 @@ public static class MandatoTemplateResolver
     /// Redacciones reales (única definición, HU #13161): las que se previsualizan por código. <see cref="Auto"/> NO
     /// entra: no es una redacción sino una delegación en la plantilla de sistema del organismo.
     /// </summary>
-    public static IReadOnlyList<string> PreviewableRedactions { get; } = [Generico, Sabaneta, Bello, Municipio];
+    public static IReadOnlyList<string> PreviewableRedactions => MandatoFormatCatalog.RedactionCodes;
 
     /// <summary>True si <paramref name="templateCode"/> es una redacción real (sin <see cref="Auto"/>), sin distinguir mayúsculas.</summary>
     public static bool IsRedaction(string? templateCode) =>
-        PreviewableRedactions.Contains(templateCode?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        MandatoFormatCatalog.IsRedaction(templateCode);
 
     /// <summary>True si el código se acepta al configurar el OT: una redacción real o <see cref="Auto"/>.</summary>
     public static bool IsAcceptedTemplateCode(string? templateCode) =>
@@ -186,15 +186,12 @@ public static class MandatoTemplateResolver
         string.IsNullOrWhiteSpace(templateCode)
         || string.Equals(templateCode.Trim(), Auto, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Mapea el <paramref name="templateCode"/> del OT a su variante; desconocido ⇒ genérico.</summary>
+    /// <summary>
+    /// Mapea el <paramref name="templateCode"/> del OT a su variante (según <see cref="MandatoFormatCatalog"/>);
+    /// desconocido o <c>auto</c> ⇒ genérico.
+    /// </summary>
     public static MandatoVariante Resolve(string? templateCode) =>
-        (templateCode?.Trim().ToLowerInvariant()) switch
-        {
-            Sabaneta => MandatoVariante.Sabaneta,
-            Bello => MandatoVariante.Bello,
-            Municipio => MandatoVariante.Municipio,
-            _ => MandatoVariante.Generico,
-        };
+        MandatoFormatCatalog.Find(templateCode)?.Variante ?? MandatoVariante.Generico;
 
     /// <summary>
     /// Modo de asignación que nace de la redacción: Sabaneta es institucional;

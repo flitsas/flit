@@ -105,7 +105,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         }).ToList();
     }
 
-    private static string MandanteNombrePlaceholder(MandatoData data, DocumentParte? parte)
+    internal static string MandanteNombrePlaceholder(MandatoData data, DocumentParte? parte)
     {
         var otorgantes = OtorgantesEnCuerpo(data);
         if (FurCompraventaCopropiedad.EsMultiple(otorgantes))
@@ -113,7 +113,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         return Val(parte?.Nombre, "___");
     }
 
-    private static string MandanteDocumentoPlaceholder(MandatoData data, DocumentParte? parte)
+    internal static string MandanteDocumentoPlaceholder(MandatoData data, DocumentParte? parte)
     {
         var otorgantes = OtorgantesEnCuerpo(data);
         if (FurCompraventaCopropiedad.EsMultiple(otorgantes))
@@ -376,29 +376,20 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// busca la SINTAXIS del placeholder, no el VALOR que reemplazó a un placeholder en un trámite
     /// anterior.</para>
     /// </summary>
-    private static List<IReadOnlyList<ParrafoSegmento>> ApplyPlaceholdersSegmented(string body, MandatoData data)
+    internal static List<IReadOnlyList<ParrafoSegmento>> ApplyPlaceholdersSegmented(string body, MandatoData data)
     {
         var tramite = data.Tramite;
         var parte = ParteEnCuerpo(data);
         var nombreTramite = ComponerObjeto(data);
         var (mandNombre, mandDoc) = MandatarioTexto(MandatarioEnCuerpo(data));
 
-        var reemplazos = new (string Token, string Valor)[]
-        {
-            ("{{placa}}", Val(tramite.Placa, string.Empty)),
-            ("{{tramite}}", nombreTramite),
-            ("{{organismo}}", Val(tramite.Organismo.Nombre, "___")),
-            ("{{ciudad}}", tramite.Organismo.Ciudad?.Trim() ?? string.Empty),
-            ("{{fecha}}", FormatFechaEs(tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5))),
-            ("{{mandante_nombre}}", MandanteNombrePlaceholder(data, parte)),
-            ("{{mandante_documento}}", MandanteDocumentoPlaceholder(data, parte)),
-            ("{{mandatario_nombre}}", mandNombre),
-            ("{{mandatario_documento}}", mandDoc),
-            ("{{mandatario_institucional}}", Val(
-                data.PartesVisibles ? data.InstitutionalMandataryName : null, "___")),
-            ("{{mandatario_nit}}", Val(
-                data.PartesVisibles ? data.InstitutionalMandataryNit : null, "___")),
-        };
+        var ctx = new MandatoVariableContext(
+            data, parte, mandNombre, mandDoc, nombreTramite,
+            tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
+        // Una sola definición: el registro de variables decide qué se sustituye (y qué acepta el validador).
+        var reemplazos = MandatoTemplateVariables.All
+            .SelectMany(v => v.Aliases.Prepend(v.Name).Select(n => (Token: "{{" + n + "}}", Valor: v.Resolve(ctx))))
+            .ToArray();
 
         return body.Split('\n')
             .Select(linea => (IReadOnlyList<ParrafoSegmento>)SplitPlaceholders(linea.TrimEnd(), reemplazos))
@@ -1006,8 +997,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
     ];
 
-    private static string FormatFechaEs(DateTime fecha) =>
+    internal static string FormatFechaEs(DateTime fecha) =>
         $"{fecha.Day} de {MesesEs[fecha.Month - 1]} de {fecha.Year}";
+
+    /// <summary>DD/MM/YYYY HH:mm (formato de fecha y hora de la Épica #12552).</summary>
+    internal static string FormatFechaHora(DateTime fecha) =>
+        fecha.ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string MapDoc(string? code) => (code?.Trim().ToUpperInvariant()) switch
     {
@@ -1020,7 +1015,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         _ => code!.Trim(),
     };
 
-    private static string Val(string? value, string fallback) =>
+    internal static string Val(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 
     // El guion se conserva: desde la HU #12371 el radicado es FT1-0000012 y el archivo tiene que

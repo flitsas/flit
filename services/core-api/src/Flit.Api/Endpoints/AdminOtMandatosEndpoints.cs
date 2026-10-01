@@ -193,8 +193,8 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var code = templateCode?.Trim() ?? string.Empty;
-        if (!MandatoTemplateResolver.IsRedaction(code))
-            return MandateEndpointHelpers.InvalidTemplateCode();
+        if (!MandatoFormatCatalog.IsRedaction(code))
+            return MandatoFormatResponses.InvalidPreviewCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
         return Results.File(doc.Content, contentType: "application/pdf");

@@ -274,6 +274,14 @@ public static class AdminInfrastructureExtensions
         // Plataforma → Mandatos: CRUD SuperAdmin de config por OT + extract OCR de referencia.
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateConfigAdminService,
             Flit.Infrastructure.OtRules.MandateConfigAdminService>();
+        // HU #13169 — personalización y versiones inmutables de cada formato de contrato de mandato.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatRepository,
+            Flit.Infrastructure.OtRules.MandateFormatRepository>();
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatAdminService,
+            Flit.Infrastructure.OtRules.MandateFormatAdminService>();
+        // HU #13172 — plantilla publicada de cada formato para generar el contrato (y el simulador).
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateFormatTemplateProvider,
+            Flit.Infrastructure.OtRules.MandateFormatTemplateProvider>();
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
             Flit.Infrastructure.Storage.MandateTemplateStorage>();
         // Simulador de mandatos (HU #11706): reusa la política del trámite, no una propia.

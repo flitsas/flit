@@ -166,7 +166,55 @@ public sealed class MandateSimulatorServiceTests
         result.Message.Should().NotContainAny("smtp", "Host", "password");
     }
 
-    private static (MandateSimulatorService Service, FakeEmailSender Sender) Build(bool conMandatario)
+    // HU #13172 (Feature #13118) — el simulador sigue el mismo camino que el trámite: usa la plantilla vigente del formato.
+    [Fact]
+    public async Task HU13172_PreviewAsync_UsaLaPlantillaVigenteDelFormato_ComoElTramite()
+    {
+        var provider = Substitute.For<IMandateFormatTemplateProvider>();
+        provider.ResolveAsync(MandatoTemplateResolver.Municipio, null, Arg.Any<CancellationToken>())
+            .Returns(new MandateFormatTemplate(MandatoTemplateResolver.Municipio, 3, "Plantilla v3 {{placa}}"));
+        var capturing = new CapturingGenerator();
+        var (service, _) = Build(conMandatario: false, provider, capturing);
+
+        var result = await service.PreviewAsync(
+            new MandateSimulationRequest(Funza, "juridica", null, null, "traspaso_standard"), Ct);
+
+        result.Success.Should().BeTrue();
+        capturing.Captured!.CustomTemplateKind.Should().Be(MandatoCustomTemplateKindCodes.Editor);
+        capturing.Captured.CustomTemplateBody.Should().Be("Plantilla v3 {{placa}}");
+    }
+
+    [Fact]
+    public async Task HU13172_PreviewAsync_SinPlantillaPublicada_UsaLaRedaccionDelGenerador()
+    {
+        var provider = Substitute.For<IMandateFormatTemplateProvider>();
+        provider.ResolveAsync(Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new MandateFormatTemplate(MandatoTemplateResolver.Municipio, 0, null));
+        var capturing = new CapturingGenerator();
+        var (service, _) = Build(conMandatario: false, provider, capturing);
+
+        var result = await service.PreviewAsync(
+            new MandateSimulationRequest(Funza, "juridica", null, null, "traspaso_standard"), Ct);
+
+        result.Success.Should().BeTrue();
+        capturing.Captured!.CustomTemplateKind.Should().Be(MandatoCustomTemplateKindCodes.None);
+    }
+
+    private sealed class CapturingGenerator : IMandatoGenerator
+    {
+        public MandatoData? Captured { get; private set; }
+
+        public GeneratedDocument GenerateMandato(MandatoData data)
+        {
+            Captured = data;
+            return new MandatoPdfGenerator().GenerateMandato(data);
+        }
+    }
+
+    private static (MandateSimulatorService Service, FakeEmailSender Sender) Build(
+        bool conMandatario,
+        IMandateFormatTemplateProvider? formatTemplates = null,
+        IMandatoGenerator? generator = null)
     {
         var db = new FlitDbContext(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase($"flit-mandate-sim-{Guid.NewGuid()}")
@@ -241,11 +289,12 @@ public sealed class MandateSimulatorServiceTests
             new FakeCatalog(),
             new MandateRequirementPolicy(db),
             new MandateSignerDirectory(db, otStatusReader, identityResolver),
-            new MandatoPdfGenerator(),
+            generator ?? new MandatoPdfGenerator(),
             new FakeConfigService(),
             NullSignatureVaultPolicy.Instance,
             new FakeStorage(),
-            sender);
+            sender,
+            formatTemplates);
 
         return (service, sender);
     }

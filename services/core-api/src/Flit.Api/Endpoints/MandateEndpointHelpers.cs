@@ -28,7 +28,7 @@ internal static class MandateEndpointHelpers
             MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
             MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
             MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
+            MandateConfigWriteStatus.InvalidTemplate => MandatoFormatResponses.InvalidTemplateCode(),
             MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
             MandateConfigWriteStatus.InvalidAssignmentMode =>
                 Results.BadRequest(new { error = "assignment_mode_invalido" }),
@@ -43,13 +43,4 @@ internal static class MandateEndpointHelpers
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
             _ => Results.BadRequest(),
         };
-
-    /// <summary>
-    /// 400 de la vista previa por código de redacción: la lista permitida sale de
-    /// <see cref="MandatoTemplateResolver.PreviewableRedactions"/>, la misma para Plataforma y el OT.
-    /// </summary>
-    internal static IResult InvalidTemplateCode() =>
-        Results.Json(
-            new { error = "template_code_invalido", allowed = MandatoTemplateResolver.PreviewableRedactions.OrderBy(x => x) },
-            statusCode: StatusCodes.Status400BadRequest);
 }

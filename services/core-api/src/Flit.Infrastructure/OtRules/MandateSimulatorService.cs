@@ -48,6 +48,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
     private readonly ISignatureVaultPolicy _vaultPolicy;
     private readonly IAttachmentStorage _storage;
     private readonly IEmailSender _emailSender;
+    private readonly IMandateFormatTemplateProvider? _formatTemplates;
 
     public MandateSimulatorService(
         FlitDbContext db,
@@ -58,7 +59,8 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         IMandateConfigAdminService configService,
         ISignatureVaultPolicy vaultPolicy,
         IAttachmentStorage storage,
-        IEmailSender emailSender)
+        IEmailSender emailSender,
+        IMandateFormatTemplateProvider? formatTemplates = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -69,6 +71,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         _vaultPolicy = vaultPolicy ?? throw new ArgumentNullException(nameof(vaultPolicy));
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _emailSender = emailSender ?? throw new ArgumentNullException(nameof(emailSender));
+        _formatTemplates = formatTemplates;
     }
 
     /// <summary>
@@ -314,7 +317,11 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
             CustomTemplatePdf = customPdf,
         };
 
-        var doc = _generator.GenerateMandato(data);
+        // HU #13172 — mismo camino que el trámite: la plantilla publicada del formato (la vigente) y, si no hay, la
+        // redacción del generador.
+        var aplicado = await MandatoFormatTemplateApplier.ApplyAsync(data, _formatTemplates, null, ct)
+            .ConfigureAwait(false);
+        var doc = _generator.GenerateMandato(aplicado.Data);
         var sufijoTramite = MandatoTramiteIdentity.EsTraspaso(
             resolved.Code, resolved.Family, tipologia, null)
             ? "traspaso"

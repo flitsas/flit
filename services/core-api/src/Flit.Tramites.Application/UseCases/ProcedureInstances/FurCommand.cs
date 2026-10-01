@@ -62,7 +62,8 @@ public sealed class GenerarFurHandler(
     IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null,
     ITransitOfficeResolver? transitOfficeResolver = null,
     IIdentitySignatureCapture? identitySignatureCapture = null,
-    IIdentitySignatureExtractor? identitySignatureExtractor = null)
+    IIdentitySignatureExtractor? identitySignatureExtractor = null,
+    IMandateFormatTemplateProvider? mandateFormatTemplates = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // Bug #11613 — respaldo del gate de organismo: resuelve el OT habilitado por id para rellenar los
@@ -99,6 +100,10 @@ public sealed class GenerarFurHandler(
     // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
     // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // HU #13172 (Feature #13118) — plantilla publicada de cada formato de mandato. Opcional: sin él (tests y DI que no
+    // lo ejercitan) el mandato se emite con la redacción del generador, como antes.
+    private readonly IMandateFormatTemplateProvider? _mandateFormatTemplates = mandateFormatTemplates;
 
     // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
     // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
@@ -368,7 +373,7 @@ public sealed class GenerarFurHandler(
 
         // ADR-0036 (HU #10915) — Contrato de mandato. El firmante se resuelve YA en borrador (HU-L8/L9):
         // default OT, default compañía o elección del wizard. Sin esos, el recuadro sale «Sin firmar».
-        var mandato = await TryGenerateMandatoAsync(
+        var mandatoEmitido = await TryGenerateMandatoAsync(
             instance,
             data,
             Get(fv, TransitOfficeFieldKeys.Code),
@@ -376,9 +381,9 @@ public sealed class GenerarFurHandler(
             Get(fv, TransitOfficeFieldKeys.CityName) ?? Get(fv, TransitOfficeFieldKeys.City),
             TransformacionesActivas(fv, data),
             ct);
-        if (mandato is not null)
+        if (mandatoEmitido is not null)
         {
-            generated.Add(mandato);
+            generated.Add(mandatoEmitido.Document);
         }
         else
         {
@@ -692,6 +697,16 @@ public sealed class GenerarFurHandler(
                 // HU #11316 — traza la versión personalizada usada; null en cualquier otro adjunto.
                 SourcePersonalizedDocumentId = esPersonalizado ? personalizado!.PersonalizedDocumentId : null,
             };
+            // HU #13172 — el contrato de mandato del sistema registra con qué formato y versión de plantilla se emitió,
+            // para que regenerarlo reproduzca esa versión y publicar una nueva no altere lo ya emitido.
+            if (!esPersonalizado
+                && mandatoEmitido is not null
+                && string.Equals(doc.Tipo, "mandato", StringComparison.OrdinalIgnoreCase))
+            {
+                attachment.MandateFormatCode = mandatoEmitido.FormatCode;
+                attachment.MandateFormatVersion = mandatoEmitido.FormatVersion;
+            }
+
             instance.Attachments.Add(attachment);
             repo.Add(attachment);
 
@@ -1239,7 +1254,7 @@ public sealed class GenerarFurHandler(
         return [.. keys];
     }
 
-    private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
+    private async Task<MandatoEmitido?> TryGenerateMandatoAsync(
         ProcedureInstance instance,
         FurDocumentData data,
         string? transitOfficeCode,
@@ -1381,8 +1396,26 @@ public sealed class GenerarFurHandler(
             config?.CustomTemplateBody,
             customPdf);
 
-        return _mandatoGenerator.GenerateMandato(mandatoData);
+        // HU #13172 — plantilla publicada del formato. Regenerar un mandato ya emitido reproduce la versión registrada en su
+        // adjunto (si es del mismo formato); un trámite sin mandato previo toma la vigente. Es el mismo camino del simulador.
+        var previo = instance.Attachments.FirstOrDefault(a =>
+            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase));
+        int? versionRegistrada = previo?.MandateFormatVersion is { } v
+            && (string.IsNullOrEmpty(previo.MandateFormatCode)
+                || string.Equals(previo.MandateFormatCode, templateCode, StringComparison.OrdinalIgnoreCase))
+            ? v
+            : null;
+        var aplicado = await MandatoFormatTemplateApplier
+            .ApplyAsync(mandatoData, _mandateFormatTemplates, versionRegistrada, ct)
+            .ConfigureAwait(false);
+
+        return new MandatoEmitido(
+            _mandatoGenerator.GenerateMandato(aplicado.Data), aplicado.FormatCode, aplicado.FormatVersion);
     }
+
+    /// <summary>Contrato de mandato generado y el formato/versión de plantilla con que salió (HU #13172).</summary>
+    private sealed record MandatoEmitido(GeneratedDocument Document, string? FormatCode, int? FormatVersion);
 
     /// <summary>
     /// HU #10589 / HU #10990 — Genera UN certificado RUES por cada actor persona jurídica del trámite.

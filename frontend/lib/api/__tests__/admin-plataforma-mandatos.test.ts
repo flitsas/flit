@@ -19,6 +19,11 @@ import {
   mapCompanyRule,
   uploadMandateOtPdfTemplate,
   fetchMandateOtPreview,
+  listMandatoFormats,
+  updateMandatoFormat,
+  getMandatoFormat,
+  previewMandatoFormatDraft,
+  readFormatError,
 } from "../admin-plataforma-mandatos";
 
 const originalFetch = global.fetch;
@@ -109,5 +114,86 @@ describe("mapCompanyRule — rowVersion (HU #13150)", () => {
   it("es null cuando la compañía hereda (sin regla)", () => {
     expect(mapCompanyRule({ companyTenantId: "a", rowVersion: null }).rowVersion).toBeNull();
     expect(mapCompanyRule({ companyTenantId: "a" }).rowVersion).toBeNull();
+  });
+});
+
+describe("listMandatoFormats (HU #13174)", () => {
+  it("pide /mandatos/formatos y mapea el catálogo", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [
+            { code: "auto", name: "Automática", assignmentMode: "signer", baseRedaction: null, selectableAsRedaction: false, delegatesToOfficeTemplate: true },
+            { code: "bello", name: "Bello", assignmentMode: "signer", baseRedaction: "bello", selectableAsRedaction: true, delegatesToOfficeTemplate: false },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock as never;
+
+    const result = await listMandatoFormats();
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/v1/admin/plataforma/mandatos/formatos");
+    expect(result.map((f) => f.code)).toEqual(["auto", "bello"]);
+    expect(result[0]).toMatchObject({ baseRedaction: null, delegatesToOfficeTemplate: true });
+    expect(result[1].selectableAsRedaction).toBe(true);
+  });
+
+  it("sin items devuelve una lista vacía", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+    ) as never;
+    expect(await listMandatoFormats()).toEqual([]);
+  });
+});
+
+describe("edición de formatos (HU #13175)", () => {
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+
+  it("updateMandatoFormat hace PUT con rowVersion y devuelve el formato y la versión publicada", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      json({ format: { code: "bello", name: "Bello 2", rowVersion: 5, currentVersion: 3 }, changed: true, publishedVersion: 3 }),
+    );
+    global.fetch = fetchMock as never;
+    const r = await updateMandatoFormat("bello", { rowVersion: 4, name: "Bello 2" });
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/mandatos/formatos/bello");
+    expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ rowVersion: 4, name: "Bello 2" });
+    expect(r).toMatchObject({ changed: true, publishedVersion: 3 });
+    expect(r.format).toMatchObject({ rowVersion: 5, currentVersion: 3 });
+  });
+
+  it("un 409 llega como ApiError con el cuerpo", async () => {
+    global.fetch = vi.fn().mockResolvedValue(json({ error: "row_version_conflict" }, 409)) as never;
+    await expect(updateMandatoFormat("bello", { rowVersion: 1 })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("getMandatoFormat mapea cuerpo y versiones", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      json({
+        format: { code: "bello", name: "Bello" },
+        body: "texto",
+        versions: [{ versionNumber: 1, sha256: "a", createdAt: "2026-09-01T00:00:00Z", createdBy: "u" }],
+      }),
+    ) as never;
+    const d = await getMandatoFormat("bello");
+    expect(d.body).toBe("texto");
+    expect(d.versions[0]).toMatchObject({ versionNumber: 1, createdBy: "u" });
+  });
+
+  it("previewMandatoFormatDraft envía el borrador por POST y falla con el cuerpo del error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      json({ error: "plantilla_variable_invalida", unknownVariables: [{ name: "x", line: 1, column: 2 }] }, 400),
+    );
+    global.fetch = fetchMock as never;
+    const err = await previewMandatoFormatDraft("bello", "{{x}}").catch((e) => e);
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ body: "{{x}}" });
+    expect(readFormatError(err.body)).toEqual({
+      error: "plantilla_variable_invalida",
+      unknownVariables: [{ name: "x", line: 1, column: 2 }],
+    });
   });
 });

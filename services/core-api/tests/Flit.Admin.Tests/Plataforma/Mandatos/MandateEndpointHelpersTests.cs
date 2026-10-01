@@ -99,7 +99,7 @@ public sealed class MandateEndpointHelpersTests
     [Fact]
     public void RedaccionInvalida_PlataformaYOtResponden400ConLaMismaListaPermitida()
     {
-        var result = MandateEndpointHelpers.InvalidTemplateCode();
+        var result = MandatoFormatResponses.InvalidPreviewCode();
 
         result.Should().BeAssignableTo<IStatusCodeHttpResult>().Which.StatusCode.Should().Be(400);
         var json = JsonSerializer.Serialize(((IValueHttpResult)result).Value);
