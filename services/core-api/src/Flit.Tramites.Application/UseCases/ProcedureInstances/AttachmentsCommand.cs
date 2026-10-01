@@ -618,16 +618,7 @@ public sealed class DeleteAttachmentHandler(
             return "attachment_not_found";
 
         var tipo = attachment.Tipo;
-        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);
-        if (!preservePaths.Contains(attachment.StoragePath))
-            storage.Delete(attachment.StoragePath);
-        instance.Attachments.Remove(attachment);
-        repo.RemoveAttachment(attachment);
-
-        // Simétrico al AutoMark de la subida: si ya no queda ningún adjunto de ese tipo, se
-        // des-marca el ítem de checklist que se había auto-marcado. Sin esto, borrar un documento
-        // dejaba el ítem "satisfecho" y el gate seguía pasando sin el documento.
-        ChecklistEstadoJson.AutoUnmark(instance, tipo);
+        AttachmentRetiro.Retirar(instance, [attachment], repo, storage, imprintAudit);
 
         // HU #12776 — la fecha de expedición que el OCR leyó del certificado de Cámara de Comercio se
         // va con el certificado. Si se quedara, el siguiente certificado cuyo OCR no lea la fecha
@@ -642,6 +633,44 @@ public sealed class DeleteAttachmentHandler(
         await repo.SaveChangesAsync(ct);
 
         return null;
+    }
+}
+
+/// <summary>
+/// Retiro de adjuntos del gestor con las reglas de <see cref="DeleteAttachmentHandler"/>, compartido con
+/// quien retira de rebote un documento que dejó de exigirse (Bug #13240: <see cref="RegistrarPrendaHandler"/>
+/// al cambiar la decisión de prenda). No valida el estado del trámite ni llama a <c>SaveChanges</c>: eso
+/// es de cada caso de uso. La invalidación del consolidado no se hace aquí: el
+/// <c>ConsolidadoVigenciaTracker</c> la deriva del adjunto borrado al guardar.
+/// </summary>
+internal static class AttachmentRetiro
+{
+    /// <summary>
+    /// Retira los adjuntos: soft-delete de la auditoría de impronta (conserva el blob firmado), borra el
+    /// blob, quita la fila y des-marca el checklist (simétrico al AutoMark de la subida: sin esto el ítem
+    /// seguía "satisfecho" y el gate pasaba sin el documento).
+    /// </summary>
+    public static void Retirar(
+        ProcedureInstance instance,
+        IReadOnlyList<ProcedureInstanceAttachment> adjuntos,
+        IProcedureInstanceRepository repo,
+        IAttachmentStorage storage,
+        IVehicleSignatureImprintRepository? imprintAudit)
+    {
+        if (adjuntos.Count == 0)
+            return;
+
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(adjuntos, imprintAudit);
+        foreach (var attachment in adjuntos)
+        {
+            if (!preservePaths.Contains(attachment.StoragePath))
+                storage.Delete(attachment.StoragePath);
+            instance.Attachments.Remove(attachment);
+            repo.RemoveAttachment(attachment);
+        }
+
+        foreach (var tipo in adjuntos.Select(a => a.Tipo).Distinct(StringComparer.OrdinalIgnoreCase))
+            ChecklistEstadoJson.AutoUnmark(instance, tipo);
     }
 }
 
