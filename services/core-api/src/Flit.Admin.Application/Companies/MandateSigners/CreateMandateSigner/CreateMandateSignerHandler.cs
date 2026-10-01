@@ -145,7 +145,9 @@ public sealed class CreateMandateSignerHandler
                     command.TransitOfficeIds,
                     currentSignerId: null,
                     command.CompanyVisibility,
-                    cancellationToken)
+                    cancellationToken,
+                    associable: _associable,
+                    configuredByScope: command.ConfiguredByScope)
                 .ConfigureAwait(false);
         }
 
@@ -325,8 +327,23 @@ public sealed class CreateMandateSignerHandler
         IReadOnlyList<Guid>? transitOfficeIds,
         Guid? currentSignerId,
         OtCompanyVisibility companyVisibility,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IMandatarioAssociableCompanies? associable = null,
+        string configuredByScope = "organismo")
     {
+        // HU #13182b (D3, P7 del PO) — el OT / Super Admin registra el mandatario de CUALQUIER compañía gestora
+        // activa aunque no esté habilitada en el organismo; la inexistente o inactiva se sigue rechazando. El Admin
+        // de Compañía (origen «compania») conserva RF33 con el grant del organismo.
+        HashSet<Guid>? validas = null;
+        if (associable is not null
+            && !string.Equals(configuredByScope, "compania", StringComparison.Ordinal))
+        {
+            var rechazos = await associable
+                .RejectionsAsync(null, [], companyIds.Distinct().ToList(), cancellationToken)
+                .ConfigureAwait(false);
+            validas = [.. companyIds.Where(id => !rechazos.ContainsKey(id))];
+        }
+
         var offices = new HashSet<Guid> { primaryOfficeId };
         if (transitOfficeIds is { Count: > 0 })
         {
@@ -344,7 +361,7 @@ public sealed class CreateMandateSignerHandler
             // HU #13179 — solo las compañías PROPIETARIAS entran en la exclusividad y RF33; las asociadas se
             // validan aparte (MandateSignerAssociationRules) y no ocupan el cupo de nadie.
             MandateSignerValidation.ValidateCompanies(
-                errors, companyIds, otCompanies, resolutions, currentSignerId);
+                errors, companyIds, otCompanies, resolutions, currentSignerId, configuredByScope, validas);
         }
     }
 }

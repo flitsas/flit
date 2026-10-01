@@ -143,7 +143,8 @@ public sealed class UpdateMandateSignerHandler
                     transitOfficeIds,
                     command.MandateSignerId,
                     command.CompanyVisibility,
-                    cancellationToken)
+                    cancellationToken,
+                    command.ConfiguredByScope)
                 .ConfigureAwait(false);
         }
 

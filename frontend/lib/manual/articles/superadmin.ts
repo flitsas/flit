@@ -382,7 +382,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "auditoria",
         title: "3. Auditoría",
         paragraphs: [
-          "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only).",
+          "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only).",
         ],
       },
     ],

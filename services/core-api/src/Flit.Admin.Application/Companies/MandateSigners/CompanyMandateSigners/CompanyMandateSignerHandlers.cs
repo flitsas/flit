@@ -74,10 +74,19 @@ public sealed class CreateCompanyMandateSignerHandler
         _vaultReader = vaultReader;
     }
 
+    public Task<CreateMandateSignerResult> HandleAsync(
+        Guid companyTenantId,
+        CompanyMandateSignerRequest request,
+        Guid? createdBy,
+        CancellationToken cancellationToken = default) =>
+        HandleAsync(companyTenantId, request, createdBy, "compania", cancellationToken);
+
+    /// <param name="configuredByScope">HU #13195c — origen según el actor: <c>super_admin</c> o <c>compania</c>.</param>
     public async Task<CreateMandateSignerResult> HandleAsync(
         Guid companyTenantId,
         CompanyMandateSignerRequest request,
         Guid? createdBy,
+        string configuredByScope,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -139,8 +148,8 @@ public sealed class CreateCompanyMandateSignerHandler
                 ValidFrom = request.ValidFrom,
                 ValidTo = request.ValidTo,
                 CreatedBy = createdBy,
-                // HU #13195 — la compañía configura: su vínculo es del grupo de origen «compania».
-                ConfiguredByScope = "compania",
+                // HU #13195c — origen según el actor (Super Admin → super_admin; compañía → compania).
+                ConfiguredByScope = configuredByScope,
                 // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },
@@ -261,11 +270,21 @@ public sealed class UpdateCompanyMandateSignerHandler
         _vaultReader = vaultReader;
     }
 
+    public Task<UpdateMandateSignerResult> HandleAsync(
+        Guid companyTenantId,
+        Guid mandateSignerId,
+        CompanyMandateSignerRequest request,
+        Guid? updatedBy,
+        CancellationToken cancellationToken = default) =>
+        HandleAsync(companyTenantId, mandateSignerId, request, updatedBy, "compania", cancellationToken);
+
+    /// <param name="configuredByScope">HU #13195c — origen de los vínculos NUEVOS; los existentes conservan el suyo.</param>
     public async Task<UpdateMandateSignerResult> HandleAsync(
         Guid companyTenantId,
         Guid mandateSignerId,
         CompanyMandateSignerRequest request,
         Guid? updatedBy,
+        string configuredByScope,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -349,7 +368,7 @@ public sealed class UpdateCompanyMandateSignerHandler
                 // El configurador de la compañía SÍ gestiona la firma: su null significa "quítala".
                 ActualizaFirma = true,
                 UpdatedBy = updatedBy,
-                ConfiguredByScope = "compania",
+                ConfiguredByScope = configuredByScope,
                 // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },

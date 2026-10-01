@@ -78,14 +78,22 @@ internal static class MandateSignerValidation
         IReadOnlyList<Guid> requestedCompanyIds,
         IReadOnlyList<OtCompanyOption> otCompanies,
         IReadOnlyList<MandateSignerCompanyResolution> activeResolutions,
-        Guid? currentSignerId)
+        Guid? currentSignerId,
+        string configuredByScope = "organismo",
+        IReadOnlySet<Guid>? validCompanyIds = null)
     {
+        // HU #13195 — un activo por compañía, organismo y GRUPO DE ORIGEN (organismo+super_admin | compania).
+        var actorGroup = GroupOf(configuredByScope);
         var companyById = otCompanies.ToDictionary(c => c.CompanyTenantId);
 
         foreach (var companyId in requestedCompanyIds.Distinct())
         {
             // RF33: la compañía debe tener grant habilitado y estar activa en el OT.
-            if (!companyById.TryGetValue(companyId, out var company) || !company.IsEnabled || !company.IsActive)
+            // HU #13182b: con <paramref name="validCompanyIds"/> (OT / Super Admin) basta con que sea una compañía activa.
+            var invalida = validCompanyIds is not null
+                ? !validCompanyIds.Contains(companyId)
+                : !companyById.TryGetValue(companyId, out var company) || !company.IsEnabled || !company.IsActive;
+            if (invalida)
             {
                 errors.Add(new MandateSignerValidationError(
                     "companyTenantIds",
@@ -93,9 +101,19 @@ internal static class MandateSignerValidation
                     companyId.ToString()));
             }
 
+            // Al editar, el mandatario conserva el grupo de origen de su vínculo vigente (HU #13195c); el
+            // origen del actor solo cuenta para vínculos nuevos.
+            var originGroup = currentSignerId is { } current
+                ? activeResolutions
+                    .Where(r => r.CompanyTenantId == companyId && r.MandateSignerId == current)
+                    .Select(r => GroupOf(r.OriginGroup))
+                    .DefaultIfEmpty(actorGroup)
+                    .First()
+                : actorGroup;
             var taken = activeResolutions.FirstOrDefault(r =>
                 r.CompanyTenantId == companyId
-                && r.MandateSignerId != currentSignerId);
+                && r.MandateSignerId != currentSignerId
+                && GroupOf(r.OriginGroup) == originGroup);
             if (taken is not null)
             {
                 errors.Add(new MandateSignerValidationError(
@@ -106,4 +124,6 @@ internal static class MandateSignerValidation
         }
     }
 
+    private static string GroupOf(string? scope) =>
+        string.Equals(scope, "compania", StringComparison.OrdinalIgnoreCase) ? "compania" : "organismo";
 }
