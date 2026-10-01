@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
+import { Eye, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
 import { MandatoOtConfigForm, type MandatoOtConfigPanelMode } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
@@ -25,6 +25,7 @@ import {
   fetchMandateSigners,
   inactivateMandateSigner,
   reactivateMandateSigner,
+  resendMandateSignerIdentity,
   updateMandateSigner,
   type CompanyMandateSignerInput,
   type AssociableCompany,
@@ -47,6 +48,15 @@ import {
   mensajeResultadoReactivar,
   type AccionBaja,
 } from "@/lib/plataforma/mandatario-baja";
+import {
+  mensajeErrorReenvio,
+  mensajeReenvio,
+  mensajeValidacionTrasGuardar,
+  presentarValidacion,
+  puedeReenviarValidacion,
+  requiereValidacionPropia,
+} from "@/lib/plataforma/mandatario-validacion";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 
 
@@ -211,6 +221,23 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     }
   };
 
+  // HU #13248 — «Reenviar validación» desde la ficha y desde la fila.
+  const reenviarValidacion = (signer: MandateSigner) =>
+    resendMandateSignerIdentity(transitOfficeId, signer.id);
+
+  const reenviarDesdeFila = async (signer: MandateSigner) => {
+    setBusySignerId(signer.id);
+    try {
+      const result = await reenviarValidacion(signer);
+      show(mensajeReenvio(result, signer.email), "success");
+      await load({ silent: true });
+    } catch (err) {
+      show(mensajeErrorReenvio(err), "error");
+    } finally {
+      setBusySignerId(null);
+    }
+  };
+
   const ejecutarBaja = async (signer: MandateSigner, accion: AccionBaja, confirmarImpacto: boolean) => {
     const outcome =
       accion === "eliminar"
@@ -264,6 +291,20 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       render: (row) => <MandatarioVigenciaBadge signer={row} />,
     },
     {
+      key: "validacion",
+      header: "Validación",
+      render: (row) =>
+        requiereValidacionPropia(row) ? (
+          <StatusBadge
+            tone={presentarValidacion(row.identityStatus).tone}
+            label={presentarValidacion(row.identityStatus).texto}
+            ariaLabel={`Validación: ${presentarValidacion(row.identityStatus).texto}`}
+          />
+        ) : (
+          "—"
+        ),
+    },
+    {
       key: "actions",
       header: "Acción",
       align: "right",
@@ -295,6 +336,16 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
                       disabled: busySignerId === row.id,
                       onClick: () => void reactivar(row),
                     },
+              ]
+            : []),
+          ...(canRegisterSigner && puedeEditarMandatario(row) && puedeReenviarValidacion(row)
+            ? [
+                {
+                  icon: Send,
+                  label: `Reenviar validación a ${row.fullName}`,
+                  disabled: busySignerId === row.id,
+                  onClick: () => void reenviarDesdeFila(row),
+                },
               ]
             : []),
           ...(canRegisterSigner && puedeEliminarMandatario(row)
@@ -429,12 +480,12 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
             setSignerCompanyId(null);
             setLastCreatedSignerId(saved.id);
             setSignerEpoch((n) => n + 1);
-            show(
+            const base =
               panel?.mode === "mandatario" && !panel.companyId
                 ? "Mandatario registrado. Quedó preseleccionado como general del OT; guarda el firmante para fijarlo."
-                : "Mandatario registrado. Ya puedes asociarlo como default de la empresa.",
-              "success",
-            );
+                : "Mandatario registrado. Ya puedes asociarlo como default de la empresa.";
+            const validacion = mensajeValidacionTrasGuardar(saved, input.email);
+            show(validacion ? `${base} ${validacion}` : base, saved.identity === "failed" ? "error" : "success");
             void load();
             return saved;
           }}
@@ -451,6 +502,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           ownerCompanyIds={editingSigner.companyTenantIds}
           overlayClassName="z-[80]"
           onCancel={() => setEditingSigner(null)}
+          onResend={reenviarValidacion}
           onSubmit={async (input: CompanyMandateSignerInput) => {
             const saved = await updateMandateSigner(transitOfficeId, editingSigner.id, {
               fullName: input.fullName,
@@ -468,7 +520,11 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
               officeCompanies: input.officeCompanies,
             });
             setEditingSigner(null);
-            show("Mandatario actualizado.", "success");
+            const validacion = mensajeValidacionTrasGuardar(saved, input.email);
+            show(
+              validacion ? `Mandatario actualizado. ${validacion}` : "Mandatario actualizado.",
+              saved.identity === "failed" ? "error" : "success",
+            );
             void load();
             return saved;
           }}

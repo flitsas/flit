@@ -24,8 +24,25 @@ describe("mandatario-firma (HU #11716/#11717)", () => {
     expect(organismosSinMedioDeFirma([FUNZA], { identityStatus: "valid" })).toEqual([]);
   });
 
-  it("la identidad en camino basta", () => {
-    expect(organismosSinMedioDeFirma([FUNZA], { identityStatus: "pending" })).toEqual([]);
+  it("HU #13248: la identidad en curso NO basta (solo la validación aprobada firma)", () => {
+    expect(organismosSinMedioDeFirma([FUNZA], { identityStatus: "pending" })).toEqual([FUNZA]);
+  });
+
+  it("HU #13248: con validación de identidad una firma de baúl suelta no cuenta", () => {
+    expect(
+      puedeFirmarElectronicamente({ signatureMethod: "biometria", signatureVaultId: "f1", identityStatus: "none" }),
+    ).toBe(false);
+    expect(
+      puedeFirmarElectronicamente({ signatureMethod: "biometria", signatureVaultId: "f1", identityStatus: "valid" }),
+    ).toBe(true);
+    expect(tipoDeFirmaMandatario({ signatureMethod: "biometria", signatureVaultId: "f1" })).toBe("identidad_sin_validar");
+    expect(etiquetaTipoFirma("identidad_sin_validar")).toBe("Validación pendiente");
+    expect(motivoSinFirma({ signatureMethod: "biometria" })).toMatch(/Pendiente de validación/);
+  });
+
+  it("HU #13248: el veredicto del servidor (signatureValid) manda", () => {
+    expect(puedeFirmarElectronicamente({ signatureValid: false, identityStatus: "valid" })).toBe(false);
+    expect(puedeFirmarElectronicamente({ signatureValid: true })).toBe(true);
   });
 
   it("HU #13132: el correo ya no cuenta como medio de firma", () => {

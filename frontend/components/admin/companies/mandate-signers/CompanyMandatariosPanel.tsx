@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
+import { Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -22,6 +22,7 @@ import {
   fetchCompanyTransitOffices,
   inactivateCompanyMandateSigner,
   reactivateCompanyMandateSigner,
+  resendCompanyMandateSignerIdentity,
   updateCompanyMandateSigner,
   type CompanyMandateSignerInput,
   type CompanyTransitOfficeOption,
@@ -47,6 +48,15 @@ import {
   mensajeResultadoReactivar,
   type AccionBaja,
 } from "@/lib/plataforma/mandatario-baja";
+import {
+  mensajeErrorReenvio,
+  mensajeReenvio,
+  mensajeValidacionTrasGuardar,
+  presentarValidacion,
+  puedeReenviarValidacion,
+  requiereValidacionPropia,
+} from "@/lib/plataforma/mandatario-validacion";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
 import { MandatarioBajaDialog } from "./MandatarioBajaDialog";
@@ -123,7 +133,9 @@ export function CompanyMandatariosPanel({
       : await createCompanyMandateSigner(tenantId, input, networkHeadId);
     setFormOpen(false);
     setEditing(null);
-    show(editing ? "Mandatario actualizado." : "Mandatario registrado.", "success");
+    const base = editing ? "Mandatario actualizado." : "Mandatario registrado.";
+    const validacion = mensajeValidacionTrasGuardar(saved, input.email);
+    show(validacion ? `${base} ${validacion}` : base, saved.identity === "failed" ? "error" : "success");
     await load();
     return saved;
   };
@@ -146,6 +158,23 @@ export function CompanyMandatariosPanel({
       await load();
     } catch (err) {
       show(mensajeErrorAccion(err), "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #13248 — «Reenviar validación»: la ficha y la fila usan la misma llamada.
+  const reenviarValidacion = (signer: MandateSigner) =>
+    resendCompanyMandateSignerIdentity(tenantId, signer.id, networkHeadId);
+
+  const handleReenviarFila = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      const result = await reenviarValidacion(signer);
+      show(mensajeReenvio(result, signer.email), "success");
+      await load();
+    } catch (err) {
+      show(mensajeErrorReenvio(err), "error");
     } finally {
       setBusyId(null);
     }
@@ -256,6 +285,13 @@ export function CompanyMandatariosPanel({
                   className={`${TABLA_HEADER_CELL_CLS}`}
                   style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                 >
+                  Validación
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
                   Organismos
                 </th>
                 <th
@@ -291,6 +327,17 @@ export function CompanyMandatariosPanel({
                   <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                     <MandatarioVigenciaBadge signer={signer} />
                   </td>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }} data-testid="mandatario-validacion-celda">
+                    {requiereValidacionPropia(signer) ? (
+                      <StatusBadge
+                        tone={presentarValidacion(signer.identityStatus).tone}
+                        label={presentarValidacion(signer.identityStatus).texto}
+                        ariaLabel={`Validación: ${presentarValidacion(signer.identityStatus).texto}`}
+                      />
+                    ) : (
+                      <span aria-label="No aplica">—</span>
+                    )}
+                  </td>
                   <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {(signer.transitOfficeIds ?? []).length === 0
                       ? "—"
@@ -325,6 +372,16 @@ export function CompanyMandatariosPanel({
                           },
                           tone: "primary",
                         },
+                        ...(puedeReenviarValidacion(signer)
+                          ? [
+                              {
+                                icon: Send,
+                                label: `Reenviar validación a ${signer.fullName}`,
+                                onClick: () => void handleReenviarFila(signer),
+                                disabled: busyId === signer.id,
+                              },
+                            ]
+                          : []),
                         signer.isActive
                           ? {
                               icon: UserX,
@@ -398,6 +455,7 @@ export function CompanyMandatariosPanel({
             setEditing(null);
           }}
           onSubmit={handleSubmit}
+          onResend={reenviarValidacion}
         />
       )}
     </div>

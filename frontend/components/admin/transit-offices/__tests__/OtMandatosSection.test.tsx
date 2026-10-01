@@ -190,6 +190,8 @@ describe("OtMandatosSection", () => {
   async function diligenciar(user: ReturnType<typeof userEvent.setup>) {
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Mandataria");
     await user.type(screen.getByLabelText("Número de documento"), "52123456");
+    // HU #13248: con validación de identidad el correo es obligatorio.
+    await user.type(screen.getByLabelText(/^Correo/), "ana@ot.test");
     // HU #13132: la Persona natural exige forma de firma.
     await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
   }

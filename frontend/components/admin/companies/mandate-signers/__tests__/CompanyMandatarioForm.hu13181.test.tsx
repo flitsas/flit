@@ -68,6 +68,7 @@ function renderCompania() {
 async function diligenciar(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
   await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+  await user.type(screen.getByLabelText(/^Correo/), "ana@ejemplo.com");
   await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
 }
 

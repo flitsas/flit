@@ -72,6 +72,8 @@ beforeEach(() => {
 async function llenarNatural(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
   await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+  // HU #13248 - con validación de identidad el correo es obligatorio: se escribe siempre.
+  await user.type(screen.getByLabelText(/^Correo/), "ana@ejemplo.com");
 }
 
 describe("HU #13132 AC1 — Persona natural", () => {

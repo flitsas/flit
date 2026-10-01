@@ -140,7 +140,7 @@ export interface MandateSignerSaved {
    * proveedor falló; el mandatario quedó creado) o `"notattempted"` (se registró sin correo).
    * Solo viaja en el POST de alta.
    */
-  identity?: "sent" | "reused" | "failed" | "notattempted";
+  identity?: "sent" | "queued" | "reused" | "failed" | "notattempted";
 }
 
 /** HU #13135 — dónde es el único activo, qué defaults perdería y cuántos trámites sin aprobar lo usan. */
@@ -304,6 +304,27 @@ export function createMandateSigner(
   body: MandateSignerInput,
 ): Promise<MandateSignerSaved> {
   return apiFetch<MandateSignerSaved>(base(transitOfficeId), { method: "POST", body });
+}
+
+/** HU #13248 — respuesta del reenvío: `sent` (enlace enviado) o `queued` (se reintenta solo). */
+export interface MandateSignerIdentityResend {
+  identity: "sent" | "queued";
+  validationId?: string;
+}
+
+/**
+ * POST /{signerId}/identity-validation/resend — «Reenviar validación» desde el hub del OT. Solo
+ * ot_admin y SuperAdmin. 409 si el mandatario no requiere validación, 422 `email` si no tiene correo,
+ * 502 si el proveedor rechaza el envío.
+ */
+export function resendMandateSignerIdentity(
+  transitOfficeId: string,
+  mandateSignerId: string,
+): Promise<MandateSignerIdentityResend> {
+  return apiFetch<MandateSignerIdentityResend>(
+    `${base(transitOfficeId)}/${mandateSignerId}/identity-validation/resend`,
+    { method: "POST" },
+  );
 }
 
 /** PUT /{signerId} — edición (RF23, regenera la huella). */
@@ -536,6 +557,18 @@ export function updateCompanyMandateSigner(
     method: "PUT",
     body,
   });
+}
+
+/** HU #13248 — «Reenviar validación» desde la compañía (mismas respuestas que el hub del OT). */
+export function resendCompanyMandateSignerIdentity(
+  tenantId: string,
+  mandateSignerId: string,
+  networkHeadId?: string | null,
+): Promise<MandateSignerIdentityResend> {
+  return apiFetch<MandateSignerIdentityResend>(
+    `${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/identity-validation/resend`,
+    { method: "POST" },
+  );
 }
 
 /** POST /{signerId}/inactivate — baja lógica del mandatario; informa los trámites reasignados. */

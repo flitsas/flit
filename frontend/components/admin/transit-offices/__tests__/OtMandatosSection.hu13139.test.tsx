@@ -114,7 +114,7 @@ function signer(overrides: Partial<MandateSigner> = {}): MandateSigner {
     documentType: "CC",
     documentNumber: "1020304050",
     integrityHash: "h".repeat(64),
-    email: null,
+    email: "mandatario@ot.test",
     userId: null,
     identityStatus: "valid",
     signatureVaultId: "v-1",
@@ -223,7 +223,7 @@ describe("HU #13139 — hub del OT", () => {
     renderSection();
     const tabla = await screen.findByRole("table", { name: "Mandatarios del organismo" });
     const color = (n: string) =>
-      (within(within(tabla).getByText(n).closest("tr") as HTMLElement).getByRole("status") as HTMLElement).style.color;
+      (within(within(within(tabla).getByText(n).closest("tr") as HTMLElement).getByTestId("mandatario-vigencia")).getByRole("status") as HTMLElement).style.color;
     expect(["Ana Vigente", "Beto Porvencer", "Carla Vencida", "Dario Inactivo"].map(color)).toEqual([
       "var(--badge-success-fg)",
       "var(--badge-warning-fg)",

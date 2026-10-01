@@ -114,7 +114,7 @@ function signer(overrides: Partial<MandateSigner> = {}): MandateSigner {
     documentType: "CC",
     documentNumber: "1020304050",
     integrityHash: "h".repeat(64),
-    email: null,
+    email: "mandatario@ot.test",
     userId: null,
     identityStatus: "valid",
     signatureVaultId: "v-1",

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { avisoDeNuevaValidacion } from "@/lib/plataforma/mandatario-validacion";
 import {
   FORMAS_DE_FIRMA,
   MODELOS_MANDATARIO,
@@ -27,6 +28,7 @@ import type {
   CompanyMandateSignerInput,
   CompanyTransitOfficeOption,
   MandateSigner,
+  MandateSignerIdentityResend,
   MandateSignerSaved,
   SignatureMethod,
   SignerModel,
@@ -53,6 +55,7 @@ export function CompanyMandatarioForm({
   overlayClassName = "z-50",
   onCancel,
   onSubmit,
+  onResend,
 }: {
   /**
    * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía (sin selector del
@@ -83,6 +86,8 @@ export function CompanyMandatarioForm({
   overlayClassName?: string;
   onCancel: () => void;
   onSubmit: (input: CompanyMandateSignerInput) => Promise<MandateSignerSaved>;
+  /** HU #13248 — «Reenviar validación» de la ficha (al editar). Sin esta prop no se ofrece el botón. */
+  onResend?: (signer: MandateSigner) => Promise<MandateSignerIdentityResend>;
 }) {
   const inicial = perfilInicial(editing);
   const [signerModel, setSignerModel] = useState<SignerModel>(inicial.model);
@@ -118,6 +123,15 @@ export function CompanyMandatarioForm({
   const esJuridica = signerModel === "juridica";
   // AC5: se avisa antes de guardar que cambiar de Persona natural descarta forma de firma y vigencia.
   const descartaDatos = editing != null && (editing.signerModel ?? "natural") === "natural" && !esNatural;
+
+  const conBiometria = esNatural && signatureMethod === "biometria";
+  const avisoValidacion = avisoDeNuevaValidacion({
+    editing,
+    metodo: signatureMethod,
+    esNatural,
+    tipoDocumento: documentType,
+    numeroDocumento: documentNumber,
+  });
 
   const clearField = (campo: CampoMandatario) => {
     setError(null);
@@ -162,6 +176,10 @@ export function CompanyMandatarioForm({
       if (!documentNumber.trim()) {
         errores.documentNumber = esJuridica ? "Escribe el NIT." : "Escribe el número de documento.";
       }
+    }
+    // HU #13248 — con validación de identidad el enlace se envía al correo: es obligatorio.
+    if (esNatural && signatureMethod === "biometria" && !email.trim()) {
+      errores.email = "Escribe el correo: ahí enviamos el enlace de validación.";
     }
     if (selected.length === 0) {
       errores.offices = "Elige al menos un organismo de tránsito donde aplique el mandatario.";
@@ -346,11 +364,13 @@ export function CompanyMandatarioForm({
             <>
               <div>
                 <label htmlFor="mandatario-email" className="mb-1.5 block text-xs font-semibold">
-                  Correo
+                  Correo{conBiometria ? " (obligatorio)" : " (opcional)"}
                 </label>
                 <input
                   id="mandatario-email"
                   type="email"
+                  required={conBiometria}
+                  aria-required={conBiometria ? true : undefined}
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
@@ -362,13 +382,19 @@ export function CompanyMandatarioForm({
                 />
                 <FieldError id="mandatario-email-error" message={fieldErrors.email} />
                 <p className="mt-1 text-[11px] leading-tight opacity-70">
-                  Solo es un dato de contacto. La validación de identidad se origina desde el módulo
-                  Identidad (ADR-0050).
+                  {conBiometria
+                    ? "Aquí enviamos el enlace para que la persona valide su identidad."
+                    : "Es un dato de contacto."}
                 </p>
               </div>
 
               {/* Solo al EDITAR: en el alta el mandatario aún no tiene id contra el que consultar. */}
-              {editing && <MandatarioIdentidadBlock signer={editing} />}
+              {editing && (
+                <MandatarioIdentidadBlock
+                  signer={editing}
+                  onResend={onResend ? () => onResend(editing) : undefined}
+                />
+              )}
 
               <fieldset>
                 <legend className="mb-1.5 block text-xs font-semibold">Forma de firma</legend>
@@ -390,7 +416,17 @@ export function CompanyMandatarioForm({
                 <FieldError id="mandatario-forma-firma-error" message={fieldErrors.signatureMethod} />
                 {signatureMethod === "biometria" && (
                   <p className="mt-1 text-[11px] leading-tight opacity-70">
-                    La persona valida su identidad en el módulo Identidad.
+                    La persona valida su identidad con un enlace que le llega al correo.
+                  </p>
+                )}
+                {avisoValidacion && (
+                  <p
+                    className="mt-1 text-[11px] leading-tight"
+                    style={{ color: "#8a6000" }}
+                    role="status"
+                    data-testid="mandatario-aviso-validacion"
+                  >
+                    {avisoValidacion}
                   </p>
                 )}
                 {signatureMethod === "baul" && isHub && (
@@ -656,6 +692,21 @@ function repartirError(
         porCompania,
         general:
           "No tienes permiso para registrar mandatarios. Solo el administrador del organismo puede hacerlo.",
+      };
+    }
+    // HU #13248 — errores propios de la validación de identidad: el formulario conserva lo escrito.
+    if ((err.body as { code?: string } | undefined)?.code === "mandatario_no_requiere_validacion") {
+      return {
+        campos,
+        porCompania,
+        general: "Este mandatario no requiere validación de identidad. Revisa la forma de firma.",
+      };
+    }
+    if (err.status === 502) {
+      return {
+        campos,
+        porCompania,
+        general: "No pudimos enviar la validación de identidad. Revisa el correo e intenta de nuevo.",
       };
     }
     if (err.status === 422 && err.message.trim()) return { campos, porCompania, general: err.message };

@@ -33,6 +33,7 @@ function renderEditando(officeCompanies: unknown) {
     fullName: "Ana Restrepo",
     documentType: "CC",
     documentNumber: "1020304050",
+    email: "ana@ejemplo.com",
     signatureMethod: "biometria",
     transitOfficeIds: ["ot-1"],
     officeCompanies,
