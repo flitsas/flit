@@ -415,4 +415,83 @@ public sealed class EnviarAlOtSoatSoporteManualTests
         result.Should().BeNull();
         error.Should().Be(ValidateSoatViaRuntHandler.ProviderError);
     }
+
+    // ── P3-09: el RUNT no responde (5xx del gateway, timeout, red) SIN lanzar ───────────────────────
+
+    /// <summary>
+    /// Lo que devuelven los proveedores ante un 5xx/timeout/red: check <c>provider</c> en <c>error</c> y
+    /// ningún check de SOAT (ver <c>VerifikConsultationProvider.ProviderUnavailable</c>).
+    /// </summary>
+    private void RuntNoDisponible() =>
+        _provider.ConsultAsync(Arg.Any<ConsultationContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ConsultationResult(
+                ProviderKey, "red",
+                [new ConsultationCheck("provider", "Consulta de vehículo", "error", ProviderKey, "no disponible")], []));
+
+    /// <summary>P3-09: APAGADA + RUNT caído + sin soporte ⇒ el envío continúa (no es «respondió sin SOAT»).</summary>
+    [Fact]
+    public async Task P3_09_Apagada_runtNoDisponible_sinSoporte_continua()
+    {
+        Opcion(activa: false);
+        RuntNoDisponible();
+        var instance = Asignado();
+
+        var (result, error, warning) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().BeNull();
+        warning.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == SoatGate.FieldKey);
+    }
+
+    /// <summary>P3-09 edge: RUNT caído no degrada el soporte manual vigente (sigue vigente/ocr).</summary>
+    [Fact]
+    public async Task P3_09_Apagada_runtNoDisponible_conSoporteManual_noLoDegrada()
+    {
+        Opcion(activa: false);
+        RuntNoDisponible();
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", Futuro, "ocr")]);
+
+        var (result, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        Soat(instance).ValueText.Should().Be(SoatGate.Vigente);
+        Soat(instance).Source.Should().Be("ocr");
+    }
+
+    /// <summary>P3-09 con la opción ACTIVA: RUNT caído ⇒ continúa SIN advertencia (no se sabe si hay SOAT).</summary>
+    [Fact]
+    public async Task P3_09_Activa_runtNoDisponible_continuaSinAdvertencia()
+    {
+        Opcion(activa: true);
+        RuntNoDisponible();
+        var instance = Asignado();
+
+        var (result, error, warning) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().BeNull();
+        warning.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
+    /// <summary>Contrato del validador (validate-runt ⇒ 502): RUNT caído ⇒ <c>provider_error</c>, sin escribir.</summary>
+    [Fact]
+    public async Task P3_09_Validador_runtNoDisponible_devuelveProviderErrorSinEscribir()
+    {
+        RuntNoDisponible();
+        var instance = Asignado((SoatGate.FieldKey, SoatGate.Vigente, "consultation"));
+
+        var (result, error) = await new ValidateSoatViaRuntHandler(_repo, _catalog, _registry)
+            .HandleAsync(instance.Id, instance.TenantId, Ct);
+
+        result.Should().BeNull();
+        error.Should().Be(ValidateSoatViaRuntHandler.ProviderError);
+        Soat(instance).ValueText.Should().Be(SoatGate.Vigente);
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }
