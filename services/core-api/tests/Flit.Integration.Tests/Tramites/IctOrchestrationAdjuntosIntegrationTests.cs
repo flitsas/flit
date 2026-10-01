@@ -126,7 +126,7 @@ public sealed class IctOrchestrationAdjuntosIntegrationTests(PostgresDatabaseFix
             Origin = "ict",
             ExternalRef = externalRef,
         };
-        request.FieldValues.Add(new FieldValue { FieldKey = "it_b13109_marker", ValueText = "x" });
+        request.FieldValues.Add(new FieldValue { FieldKey = "marcador", ValueText = "x" });
         // Tipos CON ítem de checklist en TRASPASO_STANDARD: fuerzan el AutoMark (UPDATE de la instancia).
         request.Attachments.Add(Attachment("soat", "a1"));
         request.Attachments.Add(Attachment("cedulas", "b2"));
