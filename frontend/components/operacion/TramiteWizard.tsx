@@ -1380,8 +1380,8 @@ export function TramiteWizard(props: Props) {
     (activeStep?.key === 'consulta_vin' && !secretariaListaGateOk) ||
     // Trámites simultáneos incompletos (valor vacío o sin soporte): no Continuar.
     (isPrendaStep && !simultaneosGateOk) ||
-    // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos; si el tipo es PÚBLICO,
-    // tampoco hasta que la consulta devuelva la razón social de la empresa vinculadora (casilla 19).
+    // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos. La empresa vinculadora
+    // (casilla 19) es opcional con PÚBLICO desde el Bug #13194 (aviso normativo, no bloquea).
     // ADR-0050 — se ata a `caps.entraPorVin` (trámites que matriculan), no a «no es traspaso».
     (activeStep?.key === 'documentos' && caps.entraPorVin && !tipoServicioGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
@@ -4607,7 +4607,7 @@ function StepBody({
   /** HU #10536 — marca de prioridad del paso 1; se aplica al crear el trámite. */
   prioritario?: boolean;
   onPrioritarioChange?: (value: boolean) => void;
-  /** Gate Continuar: tipo de servicio (+ empresa vinculadora si es PÚBLICO) completo en requisitos. */
+  /** Gate Continuar: tipo de servicio elegido en requisitos (empresa vinculadora opcional, Bug #13194). */
   onTipoServicioGateChange?: (ok: boolean) => void;
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;

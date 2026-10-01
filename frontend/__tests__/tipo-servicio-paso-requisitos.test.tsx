@@ -130,18 +130,53 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     expect(screen.queryByLabelText('NIT empresa vinculadora')).not.toBeInTheDocument();
   });
 
-  it('con PUBLICO sigue gateado hasta que la consulta devuelva la razón social', async () => {
+  // Bug #13194 punto 2 — decisión de producto: con PUBLICO la empresa vinculadora pasa a ser
+  // OPCIONAL (antes bloqueaba Continuar). Se sigue exigiendo el tipo de servicio y se muestra un
+  // aviso normativo no bloqueante mientras no haya empresa consultada.
+  it('con PUBLICO y sin empresa vinculadora el gate queda OK y se muestra el aviso normativo (Bug #13194)', async () => {
     const user = userEvent.setup();
     const onGate = renderDeclaraciones();
 
     await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), 'PUBLICO');
 
     expect(await screen.findByLabelText('NIT empresa vinculadora')).toBeInTheDocument();
-    await waitFor(() => expect(gateVigente(onGate)).toBe(false));
+    await waitFor(() => expect(gateVigente(onGate)).toBe(true));
+    const aviso = screen.getByRole('note');
+    expect(aviso).toHaveTextContent(
+      'Si el vehículo es de servicio público de pasajeros o mixto (colectivo, taxi, especial, mixto o por carretera), el organismo de tránsito exige la empresa vinculadora (Res. 20233040017145, art. 5.3.1.2). Para servicio público de carga es opcional.',
+    );
 
+    // Variante oscura (Feature #10491): #8a6000 no da AA sobre fondo oscuro.
+    expect(aviso).toHaveClass('text-[#8a6000]', 'dark:text-amber-300', 'dark:bg-amber-500/10');
+
+    // Escribir el NIT sin consultar no cambia nada: sigue OK y el aviso sigue visible.
     await user.type(screen.getByLabelText('NIT empresa vinculadora'), NIT_EMPRESA);
-    // Sin consultar todavía: sigue gateado.
-    expect(gateVigente(onGate)).toBe(false);
+    expect(gateVigente(onGate)).toBe(true);
+    expect(screen.getByRole('note')).toBeInTheDocument();
+  });
+
+  it('con PUBLICO y empresa vinculadora consultada no se muestra el aviso (Bug #13194)', async () => {
+    mocks.ruesPreview.mockResolvedValue({ found: true, nit: NIT_EMPRESA, razonSocial: 'TRANSPORTES SAS' });
+    const user = userEvent.setup();
+    const onGate = renderDeclaraciones();
+
+    await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), 'PUBLICO');
+    await user.type(await screen.findByLabelText('NIT empresa vinculadora'), NIT_EMPRESA);
+    await user.click(screen.getByRole('button', { name: 'Buscar empresa en RUES' }));
+
+    expect(await screen.findByLabelText('Razón social')).toHaveTextContent(/^TRANSPORTES SAS$/);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    await waitFor(() => expect(gateVigente(onGate)).toBe(true));
+  });
+
+  it('el aviso no aparece con un tipo de servicio distinto de PUBLICO (Bug #13194)', async () => {
+    const user = userEvent.setup();
+    renderDeclaraciones();
+
+    await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), 'PARTICULAR');
+
+    await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
   });
 
   it('si la empresa está en el directorio, igual consulta RUES y usa esa razón social', async () => {
@@ -225,7 +260,8 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     ).toBeInTheDocument();
     // Distinto del mensaje de fallo transitorio (503): no se ofrece "Reintentar".
     expect(screen.queryByRole('button', { name: /Reintentar/i })).not.toBeInTheDocument();
-    expect(gateVigente(onGate)).toBe(false);
+    // Bug #13194 punto 2: la empresa vinculadora es opcional, un NIT inexistente no bloquea Continuar.
+    expect(gateVigente(onGate)).toBe(true);
   });
 
   /**
@@ -275,7 +311,8 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     expect(await screen.findByText(/El RUES no respondió/)).toBeInTheDocument();
     // Mensaje distinto del "no encontrado": aquí sí se ofrece reintentar.
     expect(screen.queryByText(/No se encontró una empresa con ese NIT/)).not.toBeInTheDocument();
-    expect(gateVigente(onGate)).toBe(false);
+    // Bug #13194 punto 2: la empresa es opcional, un RUES caído no bloquea Continuar.
+    expect(gateVigente(onGate)).toBe(true);
 
     await user.click(screen.getByRole('button', { name: /Reintentar/i }));
 
