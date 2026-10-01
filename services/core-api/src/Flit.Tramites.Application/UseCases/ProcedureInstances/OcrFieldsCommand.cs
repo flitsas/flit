@@ -36,8 +36,19 @@ public sealed record PersistOcrFieldsResult(
 /// <para><b>Alcance por tipo de documento:</b> un OCR de <c>soat</c> solo puede escribir llaves de SOAT.
 /// Sin esta whitelist, el analizador de un documento cualquiera podría reescribir el vehículo entero.</para>
 ///
-/// <para><b>Estado:</b> solo <c>borrador</c> y <c>subsanacion</c>, mismo criterio que
+/// <para><b>Estado:</b> <c>borrador</c> y <c>subsanacion</c>, mismo criterio que
 /// <see cref="PatchFieldValuesHandler"/> y que el trigger <c>trg_field_value_immutable</c>.</para>
+///
+/// <para><b>Bug #13194 — soporte del SOAT en <c>asignado</c>.</b> Con la compañía exigiendo SOAT vigente y
+/// un RUNT que no lo reporta, «Enviar al OT» pide cargar el PDF: el adjunto ya se podía subir en
+/// <c>asignado</c>, pero su lectura no tenía dónde quedar y el gestor no tenía salida. Ahí se admite SOLO
+/// el OCR de tipo <c>soat</c> y SOLO <c>soat_estado</c> + <c>soat_vencimiento</c> (lo que el gate necesita
+/// y lo único que el trigger deja escribir en ese estado); el resto del payload se ignora. Exige un
+/// adjunto de SOAT no histórico en el trámite (sin PDF no hay soporte que leer). Precedencia: el OCR pisa
+/// un <c>unknown</c> de la consulta («el RUNT no lo reporta»), nunca un <c>vencido</c> ni un <c>vigente</c>
+/// afirmados por el RUNT. Que la lectura cuente como soporte lo sigue decidiendo
+/// <c>ValidateSoatViaRuntHandler</c> (adjunto + fecha legible no vencida). El PATCH de esas llaves sigue
+/// rechazado (<see cref="PatchFieldValuesHandler.ClaveDeSistemaError"/>).</para>
 /// </summary>
 public sealed class PersistOcrFieldsHandler(
     IProcedureInstanceRepository repo,
@@ -95,6 +106,24 @@ public sealed class PersistOcrFieldsHandler(
             },
         };
 
+    /// <summary>
+    /// Bug #13194 — en <c>asignado</c> no hay adjunto de SOAT vigente en el trámite: la lectura no tiene
+    /// documento que la respalde y no se registra.
+    /// </summary>
+    public const string SoporteSoatRequeridoError = "soporte_soat_requerido";
+
+    /// <summary>Tipo de OCR admitido en <c>asignado</c> (Bug #13194).</summary>
+    private const string SoatTipo = "soat";
+
+    private const string SoatVencimientoKey = "soat_vencimiento";
+
+    /// <summary>
+    /// Bug #13194 — únicas llaves que el OCR del SOAT escribe en <c>asignado</c>. Espejo de la allowlist del
+    /// trigger <c>trg_field_value_immutable</c> para ese estado (DDL 129-BUG13194).
+    /// </summary>
+    private static readonly HashSet<string> LlavesSoatEnAsignado =
+        new(StringComparer.OrdinalIgnoreCase) { SoatGate.FieldKey, SoatVencimientoKey };
+
     /// <summary>¿El tipo de documento tiene campos persistibles por OCR?</summary>
     public static bool SoportaPersistencia(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && Whitelist.ContainsKey(tipo);
@@ -116,11 +145,25 @@ public sealed class PersistOcrFieldsHandler(
             return (null, "not_found");
 
         // Misma puerta que PatchFieldValuesHandler: fuera de borrador/subsanación activa el trigger
-        // de la BD rechazaría la escritura.
+        // de la BD rechazaría la escritura. Excepción (Bug #13194): el soporte del SOAT en 'asignado'.
+        var soporteSoatEnAsignado = false;
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
         {
-            return (null, "not_draft");
+            if (!string.Equals(instance.Status, TramiteEstado.Asignado, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(request.Tipo.Trim(), SoatTipo, StringComparison.OrdinalIgnoreCase))
+            {
+                return (null, "not_draft");
+            }
+
+            if (!await TieneAdjuntoSoatVigenteAsync(instance.Id, tenantId, ct))
+                return (null, SoporteSoatRequeridoError);
+
+            soporteSoatEnAsignado = true;
         }
+
+        // Bug #13194 — se decide UNA vez, antes de escribir: si el RUNT afirmó el SOAT (vigente o vencido),
+        // el PDF no registra nada en 'asignado'; si no lo reportó, el OCR reemplaza lo de la consulta.
+        var runtAfirmoSoat = soporteSoatEnAsignado && !RuntNoReportaSoat(instance);
 
         var now = DateTimeOffset.UtcNow;
         var persistidos = 0;
@@ -141,6 +184,19 @@ public sealed class PersistOcrFieldsHandler(
                 continue;
             }
 
+            // Bug #13194 — en 'asignado' solo entran estado y vencimiento; lo demás se reporta ignorado.
+            if (soporteSoatEnAsignado && !LlavesSoatEnAsignado.Contains(fieldKey))
+            {
+                ignorados.Add(ocrKey);
+                continue;
+            }
+
+            if (runtAfirmoSoat)
+            {
+                omitidos.Add(fieldKey);
+                continue;
+            }
+
             var value = Normalizar(fieldKey, rawValue);
             if (string.IsNullOrWhiteSpace(value))
                 continue; // valor ausente ⇒ NO se escribe la llave ⇒ celda en blanco (regla HU #10856).
@@ -156,8 +212,10 @@ public sealed class PersistOcrFieldsHandler(
                 // Precedencia: el OCR solo puede pisar lo que él mismo escribió. Un valor de consulta
                 // (fuente oficial) o digitado por el usuario manda sobre lo que diga un PDF. Se
                 // comprueba por lista blanca de origen y no por lista negra: cualquier fuente futura
-                // queda protegida por defecto, que es el lado seguro del error.
-                if (!string.Equals(existing.Source, OcrSource, StringComparison.OrdinalIgnoreCase))
+                // queda protegida por defecto, que es el lado seguro del error. Excepción (Bug #13194): en
+                // 'asignado' ya se comprobó arriba que el RUNT no afirmó el SOAT (runtAfirmoSoat).
+                if (!string.Equals(existing.Source, OcrSource, StringComparison.OrdinalIgnoreCase)
+                    && !soporteSoatEnAsignado)
                 {
                     omitidos.Add(fieldKey);
                     continue;
@@ -208,6 +266,29 @@ public sealed class PersistOcrFieldsHandler(
             await IngestCertificationsAsync(id, tenantId, request.Tipo!, instance, now, ct);
 
         return (new PersistOcrFieldsResult(persistidos, omitidos, ignorados), null);
+    }
+
+    /// <summary>
+    /// Bug #13194 — en <c>asignado</c> el OCR solo puede reemplazar lo que dejó la consulta si el RUNT NO
+    /// reportó el SOAT (<c>soat_estado=unknown</c> de origen <c>consultation</c>) o si aún no hay estado. Un
+    /// <c>vencido</c> o un <c>vigente</c> afirmados por el RUNT mandan sobre el PDF.
+    /// </summary>
+    private static bool RuntNoReportaSoat(ProcedureInstance instance)
+    {
+        var estado = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, SoatGate.FieldKey, StringComparison.OrdinalIgnoreCase));
+        return estado is null
+            || !string.Equals(estado.Source, "consultation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(estado.ValueText, SoatGate.Unknown, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(estado.ValueText);
+    }
+
+    /// <summary>¿El trámite tiene un adjunto de SOAT (<c>soat</c>/<c>soat_manual</c>) no histórico?</summary>
+    private async Task<bool> TieneAdjuntoSoatVigenteAsync(Guid instanceId, Guid tenantId, CancellationToken ct)
+    {
+        var conAdjuntos = await repo.GetByIdWithAttachmentsAsync(instanceId, tenantId, ct);
+        return conAdjuntos?.Attachments.Any(a =>
+            !a.IsHistorico && AttachmentRules.IsSoatEvidenceTipo(a.Tipo)) == true;
     }
 
     /// <summary>
