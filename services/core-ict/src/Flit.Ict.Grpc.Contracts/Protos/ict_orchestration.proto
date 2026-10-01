@@ -38,6 +38,10 @@ message CreateDraftFromIctRequest {
   CommercialData commercial        = 9;
   repeated AttachmentRef attachments = 10;
   string transit_office_name       = 11;  // organismo RUNT (traspaso): core-api lo resuelve a transit_office_id
+  // Bug #13109 — con transit_office_id resuelto por el código de la transacción, código y city_code del
+  // MISMO organismo (transit_office_name lleva su nombre del catálogo): core-api siembra los field_values.
+  string transit_office_code       = 12;
+  string transit_office_city       = 13;  // city_code DANE del organismo
 }
 
 message FieldValue {

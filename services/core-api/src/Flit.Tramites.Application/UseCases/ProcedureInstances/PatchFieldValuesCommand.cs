@@ -18,11 +18,33 @@ public sealed record PatchFieldValuesRequest(IReadOnlyList<FieldValueInput> Item
 
 public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 {
-    public async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
+    public Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         PatchFieldValuesRequest request,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: false, ct);
+
+    /// <summary>
+    /// Siembra de SISTEMA al materializar un borrador (Bug #13109): mismo escritor que el PATCH del
+    /// gestor, salvo B11. B11 protege el OT del traspaso frente al USUARIO; aquí no hay usuario, sino el
+    /// organismo que core-ict ya resolvió por el código de la transacción (activo + grant del tenant).
+    /// Las demás reglas (complementos, edición solo en borrador) siguen aplicando. No lo expone ningún
+    /// endpoint HTTP: solo lo invoca la orquestación gRPC de ICT.
+    /// </summary>
+    public Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleSystemSeedAsync(
+        Guid id,
+        Guid tenantId,
+        PatchFieldValuesRequest request,
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: true, ct);
+
+    private async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleCoreAsync(
+        Guid id,
+        Guid tenantId,
+        PatchFieldValuesRequest request,
+        bool semillaDeSistema,
+        CancellationToken ct)
     {
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
@@ -31,8 +53,10 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         // B11 (HU #10659) — en TRASPASO el OT lo fija el RUNT (auto-bind en preflight) y NO es
         // editable por el usuario: cualquier PATCH de claves transit_office_* se rechaza. La excepción
         // post-submit (IsPostSubmitTransitOfficeKey) NO aplica en traspaso. Matrícula: sin cambios.
+        // La siembra de sistema (HandleSystemSeedAsync) no es una edición del usuario y no pasa por aquí.
         var tipologia = instance.TypeCode;
-        if (string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal)
+        if (!semillaDeSistema
+            && string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal)
             && request.Items.Any(i => IsTransitOfficeKey(i.FieldKey)))
         {
             return (null, "ot_traspaso_no_modificable");
