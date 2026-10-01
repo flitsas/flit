@@ -25,8 +25,8 @@ public sealed class CreateMandateSignerResult
     public IReadOnlyList<MandateSignerValidationError> Errors { get; }
 
     /// <summary>
-    /// Desenlace de la validación de identidad disparada por el alta (HU #11000). El alta NUNCA falla por
-    /// esto (best-effort); el desenlace viaja al cliente para que el aviso al usuario sea veraz.
+    /// Desenlace de la validación de identidad PROPIA disparada por el alta (HU #11000, HU #13246). El alta NUNCA falla
+    /// por esto (best-effort); el desenlace viaja al cliente para que el aviso al usuario sea veraz.
     /// </summary>
     public MandateSignerIdentityOutcome Identity { get; }
 
@@ -61,4 +61,10 @@ public enum MandateSignerIdentityOutcome
 
     /// <summary>El proveedor de identidad falló: el mandatario quedó creado y el reenvío queda disponible.</summary>
     Failed,
+
+    /// <summary>
+    /// HU #13246 — el proveedor falló de forma transitoria: el mandatario quedó guardado y la validación encolada para
+    /// reintento automático (la respuesta lo indica).
+    /// </summary>
+    Queued,
 }

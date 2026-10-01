@@ -727,6 +727,98 @@ paths:
         "403":
           description: Autenticado pero sin rol SuperAdmin (no se entregan datos de otros tenants).
 
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}/identity-validation/resend:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersIdentityValidationResend
+      summary: Reenvía la validación de identidad propia del mandatario (HU #13246)
+      description: >
+        HU #13246 (Feature #13245, Épica #13090). Desde el hub OT (ot_admin o Super Admin). Lanza una validación de identidad NUEVA para el mandatario
+        (party_role `mandatario` + referencia a su ficha), con el mismo flujo del trámite (Kyverum: enlace al correo,
+        captura y webhook; mock en local), registrada en el tenant de la COMPAÑÍA del mandatario. La anterior en vuelo se
+        cierra y, por contar solo la más reciente, una aprobación anterior deja de contar hasta que la nueva se apruebe.
+        Dos reenvíos simultáneos dejan una sola validación activa. Solo aplica a Persona natural con forma de firma
+        `biometria`. Las rutas `identity/send`, `identity/resend` e `identity/link` siguen respondiendo 410.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Validación lanzada. `identity` = `sent` (enlace enviado) o `queued` (proveedor caído; reintento automático).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerIdentityResend" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no es de ese organismo o compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Persona jurídica, Formato en blanco o forma de firma baúl (`code = mandatario_no_requiere_validacion`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: La ficha no tiene correo (obligatorio con biometría); `errors[].field = email`.
+        "502":
+          description: El proveedor rechazó el envío de forma definitiva (`code = proveedor_error`).
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}/identity-validation/resend:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersIdentityValidationResend
+      summary: Reenvía la validación de identidad propia del mandatario (HU #13246)
+      description: >
+        HU #13246 (Feature #13245, Épica #13090). Desde la compañía (mismo candado por origen que editar). Lanza una validación de identidad NUEVA para el mandatario
+        (party_role `mandatario` + referencia a su ficha), con el mismo flujo del trámite (Kyverum: enlace al correo,
+        captura y webhook; mock en local), registrada en el tenant de la COMPAÑÍA del mandatario. La anterior en vuelo se
+        cierra y, por contar solo la más reciente, una aprobación anterior deja de contar hasta que la nueva se apruebe.
+        Dos reenvíos simultáneos dejan una sola validación activa. Solo aplica a Persona natural con forma de firma
+        `biometria`. Las rutas `identity/send`, `identity/resend` e `identity/link` siguen respondiendo 410.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Validación lanzada. `identity` = `sent` (enlace enviado) o `queued` (proveedor caído; reintento automático).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerIdentityResend" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no es de ese organismo o compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Persona jurídica, Formato en blanco o forma de firma baúl (`code = mandatario_no_requiere_validacion`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: La ficha no tiene correo (obligatorio con biometría); `errors[].field = email`.
+        "502":
+          description: El proveedor rechazó el envío de forma definitiva (`code = proveedor_error`).
+
   /api/v1/admin/mandate-signers/represented-associations/impact-report:
     get:
       tags: [Admin · Mandatarios]
@@ -12294,6 +12386,19 @@ components:
             indicador «Firmará» lo usa para mostrar si viene del OT, de la compañía, de otra compañía asociada o
             del default del OT. Prelación: explícita, OT para la compañía, propio de la compañía, asociado de otra
             compañía, default del OT, bloqueo.
+    MandateSignerIdentityResend:
+      type: object
+      description: HU #13246. Respuesta de «Reenviar validación» del mandatario.
+      required: [identity]
+      properties:
+        identity:
+          type: string
+          enum: [sent, queued]
+          description: "`sent` = enlace enviado al correo; `queued` = proveedor caído, la validación quedó encolada para reintento."
+        validationId:
+          type: string
+          format: uuid
+          nullable: true
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object

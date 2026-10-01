@@ -206,6 +206,8 @@ public static class DependencyInjection
         services.AddScoped<UpdateMandateSignerHandler>();
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ReactivateMandateSignerHandler>();
+        // HU #13246 (Feature #13245) — «Reenviar validación» de la identidad propia del mandatario.
+        services.AddScoped<Companies.MandateSigners.IdentityValidation.ResendMandateSignerIdentityHandler>();
         // HU #13134/#13135 — permisos por origen y rol; eliminación (baja lógica) e impacto previo.
         services.AddScoped<Companies.MandateSigners.MandateSignerAccessGuard>();
         services.AddScoped<DeleteMandateSignerHandler>();

@@ -9,11 +9,8 @@ namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 /// huella con la fecha de registro original y persiste con auditoría atómica (RF28). Los
 /// mandatos ya emitidos conservan su huella previa (no se tocan).
 ///
-/// HU #11764 (ADR-0050) — la edición YA NO dispara la validación de identidad, se agregue o no el
-/// correo por primera vez: el módulo Identidad es la única fuente que puede originar una fila de
-/// validación (y el único disparador de ese correo). El disparo que existía aquí desde la HU
-/// #10993 (<c>IAdminIdentityValidationService.ResendAsync</c>, best-effort) se retira; el correo
-/// se sigue capturando y persistiendo como dato de contacto.
+/// HU #11764 (ADR-0050) retiró el disparo antiguo de la edición. HU #13246 (Feature #13245) lo restablece acotado: solo
+/// el cambio de tipo o número de documento y el paso de baúl a biometría lanzan una validación propia nueva.
 /// </summary>
 public sealed class UpdateMandateSignerHandler
 {
@@ -21,13 +18,16 @@ public sealed class UpdateMandateSignerHandler
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
     private readonly IMandatarioAssociableCompanies? _associable;
+    private readonly IMandateSignerIdentityLauncher? _identityLauncher;
 
     public UpdateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
         IMandateSignerRepository repository,
-        IMandatarioAssociableCompanies? associable = null)
+        IMandatarioAssociableCompanies? associable = null,
+        IMandateSignerIdentityLauncher? identityLauncher = null)
     {
+        _identityLauncher = identityLauncher;
         _associable = associable;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
@@ -197,8 +197,31 @@ public sealed class UpdateMandateSignerHandler
                 ConfiguredByScope: command.ConfiguredByScope),
             cancellationToken).ConfigureAwait(false);
 
-        return updated
-            ? UpdateMandateSignerResult.Updated(integrityHash)
-            : UpdateMandateSignerResult.NotFound();
+        if (!updated)
+        {
+            return UpdateMandateSignerResult.NotFound();
+        }
+
+        // HU #13246 (decisión 3 del Líder Técnico) — nueva validación propia cuando cambia el tipo o el número de documento
+        // (la anterior deja de contar) o la forma de firma pasa de baúl a biometría. Editar sin esos cambios no la dispara,
+        // y reactivar tampoco. El tenant es el de la compañía del mandatario.
+        var identity = MandateSignerIdentityOutcome.NotAttempted;
+        if (MandateSignerIdentityLaunch.RequiresValidation(profile.Model, profile.SignatureMethod))
+        {
+            var documentChanged = !MandateSignerIdentityLaunch.SameDocument(
+                signer.DocumentType, signer.DocumentNumber, documentType, documentNumber);
+            var toBiometria = MandateSignerIdentityLaunch.EffectiveMethod(signer) != MandateSignatureMethods.Biometria;
+            if (documentChanged || toBiometria)
+            {
+                var launchTenant = companyIds.Count > 0 ? companyIds[0] : otTenantId!.Value;
+                identity = await MandateSignerIdentityLaunch
+                    .TryLaunchAsync(
+                        _identityLauncher, command.MandateSignerId, launchTenant, documentType, documentNumber,
+                        fullName, email, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return UpdateMandateSignerResult.Updated(integrityHash, identity);
     }
 }

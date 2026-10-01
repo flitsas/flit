@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
+using Flit.Admin.Application.Companies.MandateSigners.IdentityValidation;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
@@ -116,6 +117,20 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13246 — «Reenviar validación» de la identidad propia del mandatario (ruta NUEVA; identity/send|resend|link
+        // siguen en 410). Mismo permiso de gestión que editar: ot_admin o Super Admin.
+        group.MapPost("/{mandateSignerId:guid}/identity-validation/resend", ResendIdentityAsync)
+            .WithName("AdminMandateSignersIdentityValidationResend")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .WithSummary("Reenvía la validación de identidad propia del mandatario (Persona natural con biometría)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .Produces(StatusCodes.Status502BadGateway);
+
         group.MapGet("/{mandateSignerId:guid}/signature-image", GetSignatureImageAsync)
             .WithName("AdminMandateSignerSignatureImage")
             .WithSummary("Devuelve el PNG de la firma del baúl del mandatario")
@@ -210,6 +225,18 @@ public static class AdminMandateSignersEndpoints
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    private static async Task<IResult> ResendIdentityAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        [FromServices] ResendMandateSignerIdentityHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(mandateSignerId, transitOfficeId, null, cancellationToken)
+            .ConfigureAwait(false);
+        return MandateSignerIdentityHttp.ToResult(result, mandateSignerId);
     }
 
     /// <summary>HU #13178 — <c>?search=</c> (mínimo 2 caracteres), <c>?page=</c>, <c>?pageSize=</c>.</summary>
@@ -430,7 +457,14 @@ public static class AdminMandateSignersEndpoints
         return result.Outcome switch
         {
             UpdateMandateSignerOutcome.Updated =>
-                Results.Ok(new { id = mandateSignerId, integrityHash = result.IntegrityHash }),
+                Results.Ok(new
+                {
+                    id = mandateSignerId,
+                    integrityHash = result.IntegrityHash,
+                    // HU #13246 — sent | queued | failed cuando la edición lanzó una validación propia nueva (cambio de
+                    // documento o paso de baúl a biometría); notattempted si no.
+                    identity = result.Identity.ToString().ToLowerInvariant(),
+                }),
             UpdateMandateSignerOutcome.NotFound =>
                 Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." }),
             _ => ValidationProblem(result.Errors),

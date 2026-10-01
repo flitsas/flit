@@ -290,6 +290,7 @@ public sealed class MandatarioCompaniasAsociadasTests
                 FullName = "Ana Restrepo",
                 DocumentNumber = "1020304050",
                 CompanyTenantIds = [Gestora],
+                Email = "ana@x.com",
                 SignatureMethod = "biometria",
                 OfficeCompanies = [new MandateSignerOfficeCompanies(Ot, [])],
                 ConfiguredByScope = "organismo",
@@ -377,7 +378,7 @@ public sealed class MandatarioCompaniasAsociadasTests
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
 
     private static CompanyMandateSignerRequest Alta(params MandateSignerOfficeCompanies[] officeCompanies) =>
-        new("Ana Restrepo", "1020304050", [Ot], "CC", null,
+        new("Ana Restrepo", "1020304050", [Ot], "CC", "ana@x.com",
             SignatureMethod: "biometria",
             OfficeCompanies: officeCompanies.Length == 0 ? null : officeCompanies);
 
@@ -418,6 +419,7 @@ public sealed class MandatarioCompaniasAsociadasTests
                     FullName = "Ana Restrepo",
                     DocumentNumber = documento,
                     CompanyTenantIds = propietarias ?? [Gestora],
+                    Email = "ana@x.com",
                     SignatureMethod = "biometria",
                     OfficeCompanies = officeCompanies,
                     ConfiguredByScope = origen,

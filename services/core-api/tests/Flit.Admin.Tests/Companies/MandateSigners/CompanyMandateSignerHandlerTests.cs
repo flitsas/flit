@@ -215,6 +215,7 @@ public sealed class CompanyMandateSignerHandlerTests
                 FullName = "Ana Restrepo",
                 DocumentNumber = "1020304050",
                 CompanyTenantIds = [Compania],
+                Email = "ana@x.com",
                 SignatureMethod = "biometria",
                 ValidateSigningMeans = false,
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
@@ -545,7 +546,7 @@ public sealed class CompanyMandateSignerHandlerTests
 
         var result = await Editor(ctx).HandleAsync(
             Compania, id, new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtEnvigado], "CC", null),
+                "Ana Restrepo", "1020304050", [OtEnvigado], "CC", "ana@x.com"),
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
@@ -570,7 +571,7 @@ public sealed class CompanyMandateSignerHandlerTests
 
         var result = await Editor(ctx).HandleAsync(
             Guid.NewGuid(), id, new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null),
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@x.com"),
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.NotFound);
@@ -634,7 +635,7 @@ public sealed class CompanyMandateSignerHandlerTests
         var result = await create.HandleAsync(
             Compania,
             new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@x.com",
                 PhysicalSignatureOfficeIds: [OtMedellin],
                 SignatureMethod: "biometria"),
             null,
@@ -655,7 +656,7 @@ public sealed class CompanyMandateSignerHandlerTests
         await create.HandleAsync(
             Compania,
             new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@x.com",
                 SignatureMethod: "biometria"),
             null,
             ct);
@@ -683,7 +684,7 @@ public sealed class CompanyMandateSignerHandlerTests
         await create.HandleAsync(
             Compania,
             new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@x.com",
                 SignatureMethod: "biometria"),
             null,
             ct);
@@ -691,10 +692,11 @@ public sealed class CompanyMandateSignerHandlerTests
 
         var result = await Editor(ctx).HandleAsync(
             Compania, id,
-            new CompanyMandateSignerRequest("Ana Restrepo Gómez", "1020304050", [OtMedellin], "CC", null),
+            new CompanyMandateSignerRequest("Ana Restrepo Gómez", "1020304050", [OtMedellin], "CC", "ana@x.com"),
             null, ct);
 
-        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+        result.Outcome.Should().Be(
+            UpdateMandateSignerOutcome.Updated, string.Join(";", result.Errors.Select(e => $"{e.Field}:{e.Message}")));
     }
 
     // ── HU #13122 — el correo ya no cuenta como medio de firma ────────────────

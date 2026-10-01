@@ -212,6 +212,7 @@ public sealed class MandateSignerHandlerTests
             MandateSignerId = created.MandateSignerId!.Value,
             FullName = "Samuel Alberto Cárdenas",
             DocumentNumber = "123456",
+            Email = "mandatario@flit.test",
             CompanyTenantIds = [CompanyA, CompanyB],
             UpdatedBy = Operator,
         }, Ct);
@@ -240,6 +241,7 @@ public sealed class MandateSignerHandlerTests
             MandateSignerId = created.MandateSignerId!.Value,
             FullName = "Samuel",
             DocumentNumber = "111",
+            Email = "mandatario@flit.test",
             CompanyTenantIds = [CompanyA, CompanyB],
             UpdatedBy = Operator,
         }, Ct);
@@ -274,6 +276,7 @@ public sealed class MandateSignerHandlerTests
             FullName = fullName,
             DocumentNumber = documentNumber,
             CompanyTenantIds = companies,
+            Email = "mandatario@flit.test",
             SignatureMethod = "biometria",
             CreatedBy = Operator,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,

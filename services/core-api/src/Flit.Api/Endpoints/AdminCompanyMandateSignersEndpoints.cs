@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
+using Flit.Admin.Application.Companies.MandateSigners.IdentityValidation;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
@@ -87,6 +88,18 @@ public static class AdminCompanyMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        // HU #13246 — «Reenviar validación» de la identidad propia del mandatario (ruta NUEVA; identity/send|resend|link
+        // siguen en 410). Mismo candado por origen que editar: la compañía no reenvía lo que configuró el organismo.
+        group.MapPost("/{mandateSignerId:guid}/identity-validation/resend", ResendIdentityAsync)
+            .WithName("AdminCompanyMandateSignersIdentityValidationResend")
+            .WithSummary("Reenvía la validación de identidad propia del mandatario (Persona natural con biometría)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .Produces(StatusCodes.Status502BadGateway);
 
         group.MapGet("/{mandateSignerId:guid}/impact", ImpactAsync)
             .WithName("AdminCompanyMandateSignersImpact")
@@ -182,6 +195,7 @@ public static class AdminCompanyMandateSignersEndpoints
                 {
                     id = result.MandateSignerId,
                     integrityHash = result.IntegrityHash,
+                    // HU #13246 — sent | queued (proveedor caído: encolada para reintento) | failed | notattempted.
                     identity = result.Identity.ToString().ToLowerInvariant(),
                 })
             : ValidationProblem(result.Errors);
@@ -212,11 +226,38 @@ public static class AdminCompanyMandateSignersEndpoints
 
         return result.Outcome switch
         {
-            UpdateMandateSignerOutcome.Updated => Results.Ok(new { integrityHash = result.IntegrityHash }),
+            UpdateMandateSignerOutcome.Updated => Results.Ok(new
+            {
+                integrityHash = result.IntegrityHash,
+                // HU #13246 — desenlace de la validación propia lanzada por la edición (cambio de documento o baúl a biometría).
+                identity = result.Identity.ToString().ToLowerInvariant(),
+            }),
             UpdateMandateSignerOutcome.NotFound =>
                 Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId}." }),
             _ => ValidationProblem(result.Errors),
         };
+    }
+
+    private static async Task<IResult> ResendIdentityAsync(
+        Guid tenantId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
+        [FromServices] ResendMandateSignerIdentityHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
+        var result = await handler
+            .HandleAsync(mandateSignerId, null, tenantId, cancellationToken)
+            .ConfigureAwait(false);
+        return MandateSignerIdentityHttp.ToResult(result, mandateSignerId);
     }
 
     private static Task<IResult> InactivateAsync(

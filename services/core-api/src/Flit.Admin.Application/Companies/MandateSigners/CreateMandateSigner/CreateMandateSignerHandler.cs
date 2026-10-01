@@ -11,11 +11,10 @@ namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 /// activas/no bloqueadas), autogenera la huella de integridad y persiste con auditoría atómica
 /// (RF28).
 ///
-/// HU #11757 (ADR-0050) — el alta YA NO dispara la validación de identidad, tenga o no correo:
-/// el módulo Identidad es la única fuente que puede originar una fila de validación (y el único
-/// disparador de ese correo). El disparo que existía aquí desde la HU #10911/#11000
-/// (<c>IAdminIdentityValidationService.EnsureAsync</c>, best-effort) se retira; el resultado del
-/// alta siempre reporta <see cref="MandateSignerIdentityOutcome.NotAttempted"/>.
+/// HU #11757 (ADR-0050) retiró el disparo antiguo (<c>IAdminIdentityValidationService.EnsureAsync</c>). HU #13246
+/// (Feature #13245) lo restablece de forma acotada y por el flujo del trámite: un mandatario Persona natural con forma de
+/// firma biometría recibe SU validación de identidad (party_role mandatario + referencia a la ficha) al crearse, desde
+/// la compañía y desde el hub OT; el resultado reporta <see cref="MandateSignerIdentityOutcome"/>.
 ///
 /// HU #13129 (ADR-0061) — el alta valida el modelo del mandatario (natural, jurídica, formato en blanco),
 /// la forma de firma (baúl o biometría) y la vigencia propia (fija o por rango) con 422 por campo.
@@ -26,7 +25,7 @@ public sealed class CreateMandateSignerHandler
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
     private readonly ISignatureVaultReader? _vaultReader;
-    private readonly IMandateSignerBiometricApprovalReader? _biometricReader;
+    private readonly IMandateSignerIdentityLauncher? _identityLauncher;
     private readonly IMandatarioAssociableCompanies? _associable;
 
     /// <summary>Medio de firma resuelto en el alta desde el OT (solo el nombre, sin datos del baúl).</summary>
@@ -35,8 +34,8 @@ public sealed class CreateMandateSignerHandler
     public const string MeansBiometric = "biometria";
 
     public const string SinMedioParaOtMessage =
-        "El mandatario no está en condiciones de firmar: la persona necesita una firma vigente en el baúl "
-        + "de su compañía o una validación biométrica aprobada y vigente.";
+        "El mandatario no está en condiciones de firmar: elija la forma de firma validación de identidad "
+        + "o cargue su firma vigente en el baúl de su compañía.";
 
     public const string SinBaulParaOtMessage =
         "El mandatario no tiene una firma vigente en el baúl de su compañía. Elija la forma de firma "
@@ -50,12 +49,12 @@ public sealed class CreateMandateSignerHandler
         IMandateSignerReader reader,
         IMandateSignerRepository repository,
         ISignatureVaultReader? vaultReader = null,
-        IMandateSignerBiometricApprovalReader? biometricReader = null,
+        IMandateSignerIdentityLauncher? identityLauncher = null,
         IMandatarioAssociableCompanies? associable = null)
     {
         _associable = associable;
         _vaultReader = vaultReader;
-        _biometricReader = biometricReader;
+        _identityLauncher = identityLauncher;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -83,7 +82,8 @@ public sealed class CreateMandateSignerHandler
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
 
         // Alta del OT sin forma de firma explícita (natural): se conserva la resolución en servidor de
-        // HU #13123 (baúl vigente o biometría aprobada y vigente) y se fija la forma con el medio hallado.
+        // HU #13123 (baúl vigente; desde la HU #13246 la biometría debe elegirse explícita: ninguna aprobación previa del documento
+        // la habilita) y se fija la forma con el medio hallado.
         var method = command.SignatureMethod;
         SigningResolution? inferred = null;
         var modelRaw = command.SignerModel?.Trim().ToLowerInvariant();
@@ -211,13 +211,22 @@ public sealed class CreateMandateSignerHandler
                 command.ConfiguredByScope),
             cancellationToken).ConfigureAwait(false);
 
-        // HU #11757 (ADR-0050) — el alta de un mandatario NO genera fila de validación ni correo,
-        // tenga o no correo registrado: el módulo Identidad es la única fuente que puede originarla.
-        // `email` se sigue capturando y persistiendo (dato de contacto del mandatario), solo se retiró
-        // el disparo. El desenlace siempre es `NotAttempted` — se conserva el campo en la respuesta por
-        // compatibilidad con el cliente, que ya lo tipa como uno de los cuatro valores del enum.
-        return CreateMandateSignerResult.Success(
-            signerId, integrityHash, MandateSignerIdentityOutcome.NotAttempted, signingMeans);
+        // HU #13246 (decisión 2 del Líder Técnico) — Persona natural con forma de firma biometría: se lanza SU validación de
+        // identidad por el flujo del trámite, en el tenant de la COMPAÑÍA del mandatario (también cuando lo crea el OT; sin
+        // compañías vinculadas, el del organismo como respaldo). Si el proveedor falla de forma transitoria el mandatario ya
+        // está guardado y la validación queda encolada; nunca se revierte el alta.
+        var identity = MandateSignerIdentityOutcome.NotAttempted;
+        if (MandateSignerIdentityLaunch.RequiresValidation(profile.Model, profile.SignatureMethod ?? signingMeans))
+        {
+            var launchTenant = companyIds.Count > 0 ? companyIds[0] : otTenantId!.Value;
+            identity = await MandateSignerIdentityLaunch
+                .TryLaunchAsync(
+                    _identityLauncher, signerId, launchTenant, documentType, documentNumber, fullName, email,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return CreateMandateSignerResult.Success(signerId, integrityHash, identity, signingMeans);
     }
 
 
@@ -278,6 +287,13 @@ public sealed class CreateMandateSignerHandler
                 : new SigningResolution(null, vaultId, MeansVault);
         }
 
+        // HU #13246 — con biometría no se exige nada previo: la validación propia se lanza tras guardar y la
+        // aprobación de un comprador, un vendedor o una prevalidación con el mismo documento NO cuenta.
+        if (method == MandateSignatureMethods.Biometria)
+        {
+            return new SigningResolution(null, null, MeansBiometric);
+        }
+
         if (distinctCompanies.Count != 1)
         {
             return new SigningResolution(
@@ -299,15 +315,6 @@ public sealed class CreateMandateSignerHandler
             {
                 return new SigningResolution(null, firma.Id, MeansVault);
             }
-        }
-
-        if (method != MandateSignatureMethods.Baul
-            && _biometricReader is not null
-            && await _biometricReader
-                .HasApprovedValidAsync(companyTenant, profile.DocumentType, documentNumber, cancellationToken)
-                .ConfigureAwait(false))
-        {
-            return new SigningResolution(null, null, MeansBiometric);
         }
 
         return method == MandateSignatureMethods.Baul

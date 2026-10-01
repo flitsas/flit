@@ -31,7 +31,10 @@ internal static class BiometricDocumentMatchQuery
         string? documentNumber)
     {
         var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
-        return query.Where(v => v.DocumentType.Trim().ToUpper() == tipo
+        // HU #13246 — la validación del mandatario es EXCLUSIVA de su ficha: nunca cuenta como identidad del
+        // comprador, el vendedor, el representante legal ni la prevalidación con el mismo documento.
+        return query.Where(v => v.MandateSignerId == null
+            && v.DocumentType.Trim().ToUpper() == tipo
             && v.DocumentNumber.Trim().ToUpper() == numero);
     }
 

@@ -1,4 +1,4 @@
-using Flit.Admin.Application.Companies.MandateSigners;
+﻿using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
@@ -69,7 +69,7 @@ public sealed class MandatarioModeloVigenciaTests
             new DbMandateSignerReader(ctx),
             new MandateSignerRepository(ctx),
             new DbSignatureVaultReader(ctx),
-            new DbMandateSignerBiometricApprovalReader(ctx));
+            identityLauncher: new StubMandateSignerIdentityLauncher());
 
     private static UpdateMandateSignerHandler Updater(FlitDbContext ctx) =>
         new(
@@ -118,6 +118,7 @@ public sealed class MandatarioModeloVigenciaTests
             FullName = "Ana Restrepo",
             DocumentNumber = documento,
             DocumentType = "CC",
+            Email = "ana@flit.test", // HU #13246: obligatorio con biometría; con baúl es opcional
             CompanyTenantIds = [CompanyA],
             TransitOfficeIds = [Office],
             SignerModel = "natural",
@@ -293,15 +294,31 @@ public sealed class MandatarioModeloVigenciaTests
     }
 
     [Fact]
-    public async Task AltaOt_SinFormaDeFirma_ResuelveEnServidor_YFijaLaFormaConElMedioHallado()
+    public async Task AltaOt_SinFormaDeFirma_ConFirmaEnElBaul_ResuelveEnServidor_YFijaBaul()
     {
+        // HU #13246: la inferencia en servidor solo hallaba el baúl; la biometría se elige explícita (una aprobación previa
+        // del documento ya no habilita nada).
         await using var ctx = NewCtx();
+        var firma = await SeedFirmaAsync(ctx, "1020304050");
 
         var result = await Creator(ctx).HandleAsync(Natural(null), Ct);
 
         result.IsValid.Should().BeTrue(string.Join(";", result.Errors.Select(e => e.Message)));
-        result.SigningMeans.Should().Be("biometria");
-        (await ctx.MandateSigners.AsNoTracking().SingleAsync(Ct)).SignatureMethod.Should().Be("biometria");
+        result.SigningMeans.Should().Be("baul");
+        var fila = await ctx.MandateSigners.AsNoTracking().SingleAsync(Ct);
+        fila.SignatureMethod.Should().Be("baul");
+        fila.SignatureVaultId.Should().Be(firma);
+    }
+
+    [Fact]
+    public async Task AltaOt_SinFormaDeFirma_AunConBiometriaAprobadaDeOtroRol_422_PorqueNoSeInfiereLaBiometria()
+    {
+        await using var ctx = NewCtx(conBiometria: true);
+
+        var result = await Creator(ctx).HandleAsync(Natural(null), Ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Message.Should().Be(CreateMandateSignerHandler.SinMedioParaOtMessage);
     }
 
     [Fact]
@@ -470,6 +487,7 @@ public sealed class MandatarioModeloVigenciaTests
             MandateSignerId = id,
             FullName = nombre,
             DocumentNumber = documento,
+            Email = modelo is null or "natural" ? "ana@flit.test" : null,
             CompanyTenantIds = [CompanyA],
             SignerModel = modelo,
             SignatureMethod = metodo,

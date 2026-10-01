@@ -42,6 +42,10 @@ public static class MandateSignerModelRules
     public const string MetodoRequeridoMessage =
         "Elija la forma de firma del mandatario: baúl de firmas o validación de identidad.";
 
+    /// <summary>HU #13246 — con biometría el enlace de captura viaja por correo: sin correo no hay validación posible.</summary>
+    public const string CorreoRequeridoConBiometriaMessage =
+        "El correo es obligatorio con la forma de firma validación de identidad: ahí se envía el enlace de captura.";
+
     public const string FechaInicioRequeridaMessage =
         "La fecha de inicio es obligatoria para la vigencia por rango.";
 
@@ -118,7 +122,7 @@ public static class MandateSignerModelRules
 
         if (natural)
         {
-            ValidateNatural(errors, method, kind, from, to);
+            ValidateNatural(errors, method, kind, from, to, input.Email);
         }
         else
         {
@@ -156,8 +160,15 @@ public static class MandateSignerModelRules
         string? method,
         string kind,
         DateOnly? from,
-        DateOnly? to)
+        DateOnly? to,
+        string? email)
     {
+        // HU #13246 — correo obligatorio con biometría (con baúl es opcional).
+        if (method == MandateSignatureMethods.Biometria && string.IsNullOrWhiteSpace(email))
+        {
+            errors.Add(new MandateSignerValidationError("email", CorreoRequeridoConBiometriaMessage, null));
+        }
+
         // Un método inválido ya se reportó arriba; aquí solo falta cuando no hay ninguno.
         if (method is null && !errors.Any(e => e.Field == "signatureMethod"))
         {

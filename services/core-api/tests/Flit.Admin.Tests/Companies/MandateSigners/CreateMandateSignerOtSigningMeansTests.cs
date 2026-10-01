@@ -1,4 +1,4 @@
-using Flit.Admin.Application.Companies.MandateSigners;
+﻿using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Tramites.Domain.Entities;
@@ -31,7 +31,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
             new DbMandateSignerReader(ctx),
             new MandateSignerRepository(ctx),
             new DbSignatureVaultReader(ctx),
-            new DbMandateSignerBiometricApprovalReader(ctx));
+            identityLauncher: new StubMandateSignerIdentityLauncher());
 
     private static async Task<Guid> SeedFirmaAsync(
         FlitDbContext ctx, Guid tenant, string documento, string estado = "activa")
@@ -199,10 +199,10 @@ public sealed class CreateMandateSignerOtSigningMeansTests
     }
 
     [Fact]
-    public async Task SinVault_ConBiometriaAprobadaVigenteDeLaCompania_SeRegistraSinFirmaEnBaul()
+    public async Task ConBiometria_SeRegistraSinFirmaEnBaul_SinExigirAprobacionPrevia()
     {
+        // HU #13246 — la biometría se elige explícita y no exige aprobación previa: la validación propia se lanza al guardar.
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.Aprobado);
 
         var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
 
@@ -213,40 +213,24 @@ public sealed class CreateMandateSignerOtSigningMeansTests
     }
 
     [Fact]
-    public async Task ConBiometria_AprobadaHace45Dias_SeAceptaEnElAltaDelOt_SinRenovacion()
+    public async Task ConBiometria_LaAprobacionDeOtroRolConElMismoDocumento_NoCambiaNada_YSiempreSeLanzaLaPropia()
     {
-        // HU #13130b (decisión del PO, 01-oct): al mandatario basta una validación aprobada, sin ventana de 30 días.
+        // HU #13246/#13247 — una aprobación previa del documento (comprador, vendedor, prevalidación) ya no habilita ni
+        // se reutiliza: se lanza SU validación.
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.Aprobado, diasDesdeAprobacion: 45);
+        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.Aprobado);
+        var launcher = new StubMandateSignerIdentityLauncher();
+        var handler = new CreateMandateSignerHandler(
+            new DbTransitOfficeOperationalStatusReader(ctx),
+            new DbMandateSignerReader(ctx),
+            new MandateSignerRepository(ctx),
+            new DbSignatureVaultReader(ctx),
+            launcher);
 
-        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
+        var result = await handler.HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
 
         result.IsValid.Should().BeTrue();
-        result.SigningMeans.Should().Be("biometria");
-    }
-
-    [Theory]
-    [InlineData(BiometricEstados.EnProceso, 0)]
-    public async Task ConBiometria_EnCurso_SeRechazaEnElAltaDelOt(string estado, int dias)
-    {
-        // El alta del OT (HU #13123) exige validacion APROBADA; una en curso no cuenta.
-        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", estado, diasDesdeAprobacion: dias == 0 ? 1 : dias);
-
-        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
-
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().ContainSingle().Which.Message.Should().Be(CreateMandateSignerHandler.SinMedioParaOtMessage);
-    }
-
-    [Fact]
-    public async Task ConBiometria_AprobadaEnOtraCompania_SeRechazaEnElAltaDelOt()
-    {
-        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyB, "1020304050", BiometricEstados.Aprobado);
-
-        (await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct))
-            .IsValid.Should().BeFalse();
+        launcher.Calls.Should().ContainSingle().Which.TenantId.Should().Be(CompanyA);
     }
 
     [Fact]

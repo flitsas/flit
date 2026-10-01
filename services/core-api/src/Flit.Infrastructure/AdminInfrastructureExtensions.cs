@@ -239,8 +239,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IMandateSignerImpactReader, DbMandateSignerImpactReader>();
         // HU #13137 — reasignación de trámites radicados sin aprobar al dar de baja un mandatario (prelación ADR-0066).
         services.AddScoped<IMandateSignerProcedureReassigner, Flit.Infrastructure.OtRules.MandateSignerProcedureReassigner>();
-        // Ajuste HU #13123 — identidad aprobada y vigente en el tenant de la compañía (alta desde el OT).
-        services.AddScoped<IMandateSignerBiometricApprovalReader, DbMandateSignerBiometricApprovalReader>();
+        // HU #13246 (Feature #13245) — lanza la validación de identidad PROPIA del mandatario por el flujo del trámite
+        // (Kyverum; mock en local). Sustituye al lector de aprobación por documento de la HU #13123.
+        services.AddScoped<IMandateSignerIdentityLauncher, Persistence.Repositories.MandateSignerIdentityLauncher>();
         // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
         services.AddScoped<IPhysicalSignatureMigrationReader, DbPhysicalSignatureMigrationReader>();
         services.AddScoped<IMandateSignerLinkCollapseReader, DbMandateSignerLinkCollapseReader>();
