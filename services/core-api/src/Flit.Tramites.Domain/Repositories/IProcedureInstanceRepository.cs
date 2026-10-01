@@ -326,14 +326,24 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
-    /// Lista los borradores FINALIZADOS del tenant (status=draft, <c>draft_finalized_at</c> NOT NULL, no
-    /// eliminados) donde el sujeto (<paramref name="tipoDoc"/> + <paramref name="documento"/>) es actor de
-    /// la <paramref name="parte"/> indicada. Orden determinista: <c>draft_finalized_at</c> ASC, luego
-    /// <c>reference_number</c> (HU #10349, AC5). Incluye los actores para resolver la parte; el resto del
-    /// grafo lo recargan los handlers de firma/FUR por id. Solo lectura.
+    /// Bug #13194 (punto 4) — trámites del tenant PENDIENTES DE FIRMA
+    /// (<see cref="Tramites.Estados.TramiteFirmaPendiente.EntraEnLoteDeFirma"/>) donde la persona
+    /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) es el SUJETO DE IDENTIDAD de una parte
+    /// comprador/vendedor: el propio actor si es persona natural, o el representante legal embebido en
+    /// <c>actor.metadata</c> si es persona jurídica (el NIT no se biometriza). Solo el tenant indicado:
+    /// la identidad nunca se reutiliza entre tenants. Incluye el tipo y los actores; el resto del grafo
+    /// lo recargan los handlers de firma/FUR. Orden determinista: <c>draft_finalized_at</c>, consecutivo.
     /// </summary>
-    Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
-        Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct = default);
+    Task<IReadOnlyList<ProcedureInstance>> ListPendientesDeFirmaPorSujetoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bug #13194 (punto 4) — ids de los trámites del tenant que ya tienen un evento de bitácora
+    /// <paramref name="tipo"/> correlacionado con <paramref name="validationId"/> (<c>payload.validation_id</c>).
+    /// Base de la idempotencia del lote de firma frente a re-entregas del mismo evento.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> ListInstanceIdsConEventoDeValidacionAsync(
+        Guid tenantId, string tipo, Guid validationId, CancellationToken ct = default);
 
     /// <summary>
     /// Carga la instancia con TODO el grafo necesario para generar el FUR (Slice 7): actores,
