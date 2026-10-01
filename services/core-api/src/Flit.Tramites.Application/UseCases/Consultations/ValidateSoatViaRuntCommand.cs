@@ -40,8 +40,9 @@ public sealed record ValidateSoatResult(
 /// Sin adjunto, sin fecha o con fecha ilegible NO hay soporte (fail-closed): el origen <c>user</c>/<c>ocr</c>
 /// del campo lo escribe el cliente y por sí solo no prueba nada.</para>
 ///
-/// <para>Bug #13194 — si el proveedor lanza, se loguea y se devuelve <see cref="ProviderError"/>
-/// («la consulta no respondió»): «Enviar al OT» sigue, como cuando falta la plantilla.</para>
+/// <para>Bug #13194 — si el proveedor lanza, o devuelve el check <c>provider</c> en <c>error</c> (5xx del
+/// gateway, timeout, red), se loguea y se devuelve <see cref="ProviderError"/> («la consulta no respondió»):
+/// «Enviar al OT» sigue, como cuando falta la plantilla.</para>
 /// </summary>
 public sealed class ValidateSoatViaRuntHandler(
     IProcedureInstanceRepository instanceRepo,
@@ -56,6 +57,8 @@ public sealed class ValidateSoatViaRuntHandler(
 
     private const string TemplateCode = "RUNT_VEHICLE";
     private const string SoatCheckKey = "soat";
+    private const string ProviderCheckKey = "provider";
+    private const string ErrorStatus = "error";
     private const string ConsultationSource = "consultation";
     private const string SoatVencimientoKey = "soat_vencimiento";
 
@@ -112,6 +115,16 @@ public sealed class ValidateSoatViaRuntHandler(
             return (null, ProviderError);
         }
 
+        // Bug #13194 (P3-09) — los proveedores no lanzan ante un 5xx del gateway, un timeout o un error de
+        // red: devuelven un resultado con el check «provider» en «error» y SIN check de SOAT. Eso no es «el
+        // RUNT respondió sin SOAT» (unknown) sino «el RUNT no respondió»: mismo trato que la excepción, sin
+        // escribir soat_estado (no se degrada un soporte manual vigente).
+        if (ProveedorNoRespondio(result))
+        {
+            ValidateSoatLog.ProveedorSinRespuesta(_logger, instanceId, providerKey);
+            return (null, ProviderError);
+        }
+
         var soatCheck = result.Checks.FirstOrDefault(c =>
             string.Equals(c.Key, SoatCheckKey, StringComparison.OrdinalIgnoreCase));
         var soatEstado = MapSoatEstado(soatCheck?.Status);
@@ -157,6 +170,15 @@ public sealed class ValidateSoatViaRuntHandler(
             Aseguradora: aseguradora,
             Message: message), null);
     }
+
+    /// <summary>
+    /// Convención de los proveedores de consulta: el check <c>provider</c> con estado <c>error</c> marca
+    /// que no hubo respuesta utilizable (no-2xx, timeout, red, JSON ilegible).
+    /// </summary>
+    internal static bool ProveedorNoRespondio(ConsultationResult result) =>
+        result.Checks.Any(c =>
+            string.Equals(c.Key, ProviderCheckKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(c.Status, ErrorStatus, StringComparison.OrdinalIgnoreCase));
 
     // El check SOAT de los mappers de vehículo: ok=vigente, fail=vencido, resto=unknown.
     private static string MapSoatEstado(string? checkStatus) => checkStatus?.ToLowerInvariant() switch
@@ -315,4 +337,11 @@ internal static partial class ValidateSoatLog
         Level = LogLevel.Error,
         Message = "El proveedor RUNT {ProviderKey} falló ({ExceptionType}) al validar el SOAT del trámite {InstanceId}; se trata como consulta sin respuesta.")]
     public static partial void ProveedorFallo(ILogger logger, Guid instanceId, string providerKey, string exceptionType);
+
+    // Mismo nivel que la excepción: el RUNT no respondió (5xx del gateway, timeout, red) y el gate quedó sin dato.
+    [LoggerMessage(
+        EventId = 13195,
+        Level = LogLevel.Error,
+        Message = "El proveedor RUNT {ProviderKey} no respondió al validar el SOAT del trámite {InstanceId}; se trata como consulta sin respuesta.")]
+    public static partial void ProveedorSinRespuesta(ILogger logger, Guid instanceId, string providerKey);
 }
