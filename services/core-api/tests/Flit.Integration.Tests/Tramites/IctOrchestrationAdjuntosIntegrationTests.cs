@@ -1,13 +1,17 @@
 using Flit.Api.Grpc;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Integration.Tests.MarcaBlanca;
 using Flit.Integration.Tests.Postgres;
+using Flit.Integration.Tests.Tenancy;
+using Flit.Integration.Tests.TransitOffices;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
@@ -99,6 +103,164 @@ public sealed class IctOrchestrationAdjuntosIntegrationTests(PostgresDatabaseFix
 
         reply.ProcedureInstanceId.Should().Be(SeededInstanceId.ToString(), "el borrador ya existe: no se pierde");
         reply.ErrorCode.Should().Be("attachments_warning:exception");
+    }
+
+    // ── Bug #13109 punto 1: organismo en field_values ────────────────────────
+    // El escenario de jerarquía siembra Ot1 (activa, con perfil de organismo y grant hacia C1) y la
+    // cabeza P recibe el grant: es el OT que core-ict habría resuelto por el código de la transacción.
+
+    [PostgresFact]
+    public async Task CreateDraftFromIct_MatriculaConOrganismoResueltoPorIct_SiembraLosFieldValuesYDesbloqueaElGateDeOrganismo()
+    {
+        await SeedOrganismoAsync();
+
+        var reply = await InvokeAsync(RequestConOrganismo("ict-b13109-ot-matricula", "MATRICULA_NUEVA"));
+
+        reply.ProcedureInstanceId.Should().NotBeNullOrEmpty("warnings: {0}", reply.ErrorCode);
+        (reply.ErrorCode ?? string.Empty).Should().NotContain("seed_warning");
+        var instance = await LoadInstanceAsync(Guid.Parse(reply.ProcedureInstanceId));
+
+        instance.TransitOfficeId.Should().Be(HierarchyScenario.Ot1);
+        AfirmarOrganismoSembrado(instance);
+        FinalizeDraftGate.Evaluate(instance).Should().NotContain(FinalizeDraftGate.OrganismoRequerido,
+            "con transit_office_code sembrado el borrador ya no falla por organismo");
+    }
+
+    [PostgresFact]
+    public async Task CreateDraftFromIct_TraspasoEstandarConOrganismoResuelto_B11NoSeLlevaElPatchGeneralYElOtQuedaSembrado()
+    {
+        await SeedOrganismoAsync();
+
+        var reply = await InvokeAsync(RequestConOrganismo(
+            "ict-b13109-ot-traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard));
+
+        reply.ProcedureInstanceId.Should().NotBeNullOrEmpty("warnings: {0}", reply.ErrorCode);
+        (reply.ErrorCode ?? string.Empty).Should().NotContain("seed_warning",
+            "ni el patch general ni la siembra del OT deben chocar con B11 (ot_traspaso_no_modificable)");
+        var instance = await LoadInstanceAsync(Guid.Parse(reply.ProcedureInstanceId));
+
+        // El patch general (marcador + defaults del traspaso) sobrevive: B11 no lo rechazó entero.
+        Valor(instance, "marcador").Should().Be("x");
+        Valor(instance, "es_leasing").Should().Be("false");
+        AfirmarOrganismoSembrado(instance);
+        SubmitGateOrganismo(instance).Should().BeTrue();
+    }
+
+    [PostgresFact]
+    public async Task CreateDraftFromIct_TraspasoSinCodigoConNombreRunt_SiembraElOtResueltoPorNombre()
+    {
+        // Rama RUNT: core-ict no resolvió código y manda el nombre del organismo que dio la consulta VEHICLE.
+        await SeedOrganismoAsync();
+        await using (var ctx = NewContext())
+        {
+            var ot1 = await ctx.TransitOffices.SingleAsync(o => o.Id == HierarchyScenario.Ot1);
+            ot1.CityName = "BOGOTA D.C.";
+            await ctx.SaveChangesAsync();
+        }
+
+        var request = RequestConOrganismo("ict-b13109-ot-runt", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        request.TransitOfficeId = string.Empty;
+        request.TransitOfficeCode = string.Empty;
+        request.TransitOfficeCity = string.Empty;
+        request.TransitOfficeName = "secretaria de movilidad de bogota";
+
+        var reply = await InvokeAsync(request);
+
+        reply.ProcedureInstanceId.Should().NotBeNullOrEmpty("warnings: {0}", reply.ErrorCode);
+        (reply.ErrorCode ?? string.Empty).Should().NotContain("seed_warning");
+        var instance = await LoadInstanceAsync(Guid.Parse(reply.ProcedureInstanceId));
+
+        instance.TransitOfficeId.Should().Be(HierarchyScenario.Ot1);
+        Valor(instance, "marcador").Should().Be("x", "el patch general no lo rechazó B11");
+        Valor(instance, "es_leasing").Should().Be("false");
+        Valor(instance, TransitOfficeFieldKeys.Id).Should().Be(HierarchyScenario.Ot1.ToString());
+        Valor(instance, TransitOfficeFieldKeys.Code).Should().Be("11001000");
+        Valor(instance, TransitOfficeFieldKeys.Name).Should().Be("SECRETARIA DE MOVILIDAD DE BOGOTA",
+            "se siembra el nombre canónico del catálogo, no el texto del RUNT");
+        Valor(instance, TransitOfficeFieldKeys.City).Should().Be("11001");
+        Valor(instance, TransitOfficeFieldKeys.CityName).Should().Be("BOGOTA D.C.", "el resolver por nombre sí lo trae");
+        SubmitGateOrganismo(instance).Should().BeTrue();
+    }
+
+    [PostgresFact]
+    public async Task CreateDraftFromIct_IdSinCodigo_NoSiembraOrganismoNiAvisa()
+    {
+        // Un core-ict anterior al cambio solo manda el id: el borrador nace igual (columna) y sin warning.
+        await SeedOrganismoAsync();
+        var request = RequestConOrganismo("ict-b13109-ot-sin-codigo", "MATRICULA_NUEVA");
+        request.TransitOfficeCode = string.Empty;
+
+        var reply = await InvokeAsync(request);
+
+        (reply.ErrorCode ?? string.Empty).Should().NotContain("seed_warning");
+        var instance = await LoadInstanceAsync(Guid.Parse(reply.ProcedureInstanceId));
+        instance.TransitOfficeId.Should().Be(HierarchyScenario.Ot1);
+        Valor(instance, TransitOfficeFieldKeys.Code).Should().BeNull();
+    }
+
+    private async Task SeedOrganismoAsync()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await using var ctx = NewContext();
+        await TransitNetworkSeed.SetHeadGrantsAsync(ctx, HierarchyScenario.P, HierarchyScenario.Ot1);
+        // Sin política la familia MATRICULAS nace bloqueada (procedure_family_blocked).
+        ctx.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+        {
+            Id = Guid.NewGuid(),
+            TenantId = HierarchyScenario.C1,
+            AllowInitialRegistration = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    private static CreateDraftFromIctRequest RequestConOrganismo(string externalRef, string tipo)
+    {
+        // Sin placa/VIN: no corre el preflight (ni su auto-bind del RUNT), así que lo que se lee es
+        // exactamente lo que sembró la materialización.
+        var request = new CreateDraftFromIctRequest
+        {
+            TenantId = HierarchyScenario.C1.ToString(),
+            ProcedureTypeCode = tipo,
+            Origin = "ict",
+            ExternalRef = externalRef,
+            TransitOfficeId = HierarchyScenario.Ot1.ToString(),
+            TransitOfficeCode = "11001000",
+            TransitOfficeName = "SECRETARIA DE MOVILIDAD DE BOGOTA",
+            TransitOfficeCity = "11001",
+        };
+        request.FieldValues.Add(new FieldValue { FieldKey = "marcador", ValueText = "x" });
+        return request;
+    }
+
+    private static void AfirmarOrganismoSembrado(ProcedureInstance instance)
+    {
+        Valor(instance, TransitOfficeFieldKeys.Id).Should().Be(HierarchyScenario.Ot1.ToString());
+        Valor(instance, TransitOfficeFieldKeys.Code).Should().Be("11001000");
+        Valor(instance, TransitOfficeFieldKeys.Name).Should().Be("SECRETARIA DE MOVILIDAD DE BOGOTA");
+        Valor(instance, TransitOfficeFieldKeys.City).Should().Be("11001");
+        Valor(instance, TransitOfficeSelectionPolicy.OrigenFieldKey).Should().Be(TransitOfficeSelectionPolicy.OrigenPasoUno);
+        Valor(instance, TransitOfficeFieldKeys.CityName).Should().BeNull("el nombre del municipio no viaja por ICT");
+    }
+
+    /// <summary>Mismo criterio que <c>SubmitGate.OrganismoSeleccionado</c> (internal), vía el gate público.</summary>
+    private static bool SubmitGateOrganismo(ProcedureInstance instance) =>
+        !FinalizeDraftGate.Evaluate(instance).Contains(FinalizeDraftGate.OrganismoRequerido);
+
+    private static string? Valor(ProcedureInstance instance, string key) =>
+        instance.FieldValues.FirstOrDefault(f => f.FieldKey == key)?.ValueText;
+
+    private async Task<ProcedureInstance> LoadInstanceAsync(Guid id)
+    {
+        await using var ctx = NewContext();
+        return await ctx.ProcedureInstances
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Include(p => p.ProcedureType)
+            .Include(p => p.FieldValues)
+            .Include(p => p.Actors)
+            .Include(p => p.Attachments)
+            .SingleAsync(p => p.Id == id);
     }
 
     // ── invocación ───────────────────────────────────────────────────────────

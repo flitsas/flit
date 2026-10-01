@@ -300,9 +300,11 @@ BEGIN
         -- en el master para que el borrador nazca con él. Se recalcula en cada pasada (NULL si no hay código
         -- o no se resuelve): una edición del código seguida de reproceso no deja el id viejo. En traspaso el
         -- código es opcional; si viene y se resuelve, gana sobre el nombre del RUNT.
+        -- Nombre y city_code (DDL 25) salen de la MISMA fila que el id (asignación por fila): core-api siembra
+        -- con ellos los field_values del OT sin volver al catálogo. Sin fila, los tres quedan en NULL.
         UPDATE ict.external_integration_master eim
-        SET transit_office_id = (
-                SELECT ts.id
+        SET (transit_office_id, transit_office_name, transit_office_city_code) = (
+                SELECT ts.id, ts.name, ts.city_code
                 FROM catalogs.transit_offices ts
                 JOIN admin.tenant_transit_office_grants g
                   ON g.transit_office_id = ts.id

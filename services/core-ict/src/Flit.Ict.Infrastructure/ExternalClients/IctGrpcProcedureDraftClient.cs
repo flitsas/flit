@@ -86,9 +86,14 @@ public sealed partial class IctGrpcProcedureDraftClient(
         // hay tipos cuyo organismo lo fija el RUNT (paridad v1 de traspaso): se envía el nombre que capturó
         // el orquestador de la consulta VEHICLE y core-api lo resuelve por nombre. En los demás va vacío y lo
         // asigna el gestor. Quién resuelve por RUNT lo declara el mapeo, no el texto del código (ADR-0050).
+        // Con el id viajan el código ya validado y el nombre/city_code de la misma fila del catálogo: core-api
+        // siembra con ellos los field_values del OT que exigen sus gates (finalizar, radicar, mandato).
         if (master.TransitOfficeId is { } transitOfficeId && transitOfficeId != Guid.Empty)
         {
             request.TransitOfficeId = transitOfficeId.ToString();
+            request.TransitOfficeCode = master.TrafficSecretaryCode ?? string.Empty;
+            request.TransitOfficeName = master.TransitOfficeName ?? string.Empty;
+            request.TransitOfficeCity = master.TransitOfficeCityCode ?? string.Empty;
         }
         else if (procedureType.ResolvesTransitOfficeFromRunt && !string.IsNullOrWhiteSpace(master.RuntTransitOfficeName))
         {

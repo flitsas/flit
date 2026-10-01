@@ -61,6 +61,18 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
     /// </summary>
     public Guid? TransitOfficeId { get; set; }
 
+    /// <summary>
+    /// Nombre del organismo de la misma fila del catálogo que <see cref="TransitOfficeId"/> (Bug #13109).
+    /// Lo escribe el SP de negocio junto con el id; null si el código no se resolvió.
+    /// </summary>
+    public string? TransitOfficeName { get; set; }
+
+    /// <summary>
+    /// <c>city_code</c> DANE del organismo de la misma fila que <see cref="TransitOfficeId"/> (Bug #13109).
+    /// core-api lo siembra como <c>transit_office_city</c>; null si el código no se resolvió.
+    /// </summary>
+    public string? TransitOfficeCityCode { get; set; }
+
     public string UrlWebHook { get; set; } = string.Empty;
 
     public bool ClosedDocument { get; set; }
