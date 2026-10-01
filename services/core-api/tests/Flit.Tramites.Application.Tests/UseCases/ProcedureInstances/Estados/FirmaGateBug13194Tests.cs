@@ -58,10 +58,11 @@ public sealed class FirmaGateBug13194Tests
         return policy;
     }
 
-    private TramiteLifecycleService Sut(ISignatureVaultPolicy? vault = null) =>
+    private TramiteLifecycleService Sut(ISignatureVaultPolicy? vault = null, IFirmaPendienteNotifier? notifier = null) =>
         new(_repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
             identityPolicy: OtSinVid(),
-            vaultPolicy: vault);
+            vaultPolicy: vault,
+            firmaNotifier: notifier);
 
     private ProcedureInstance Wire(string status, string tipo = "matricula_inicial", bool subsanacion = false)
     {
@@ -338,6 +339,90 @@ public sealed class FirmaGateBug13194Tests
         var outcome = await Transition(i, TramiteEstado.Entregado);
 
         outcome.Success.Should().BeTrue();
+    }
+
+    // ── Paso 2: el bloqueo dispara el correo de validación de cada parte sin firma ──
+
+    [Fact]
+    public async Task Bloqueo_NotificaCadaParteSinFirma_YLasExponeConSuEstado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Wire(TramiteEstado.Asignado, TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso");
+        i.Actors.Add(Natural(i, "comprador", "9000000601"));
+        i.Actors.Add(Natural(i, "vendedor", "9000000602"));
+        var notifier = Substitute.For<IFirmaPendienteNotifier>();
+        notifier.NotificarAsync(i.Id, i.TenantId, "comprador", Arg.Any<CancellationToken>())
+            .Returns(FirmaNotificacionEstados.Enviada);
+        notifier.NotificarAsync(i.Id, i.TenantId, "vendedor", Arg.Any<CancellationToken>())
+            .Returns(FirmaNotificacionEstados.YaEnCurso);
+
+        var outcome = await Sut(notifier: notifier).TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Entregado, null, null), ct);
+
+        AssertBloqueadoSinEfectos(outcome, i, TramiteEstado.Asignado);
+        outcome.PartesSinFirma.Should().BeEquivalentTo(
+        [
+            new ParteSinFirma("comprador", FirmaNotificacionEstados.Enviada),
+            new ParteSinFirma("vendedor", FirmaNotificacionEstados.YaEnCurso),
+        ]);
+        outcome.ErrorDetail.Should().Contain("comprador (notificación: enviada)")
+            .And.Contain("vendedor (notificación: ya_en_curso)");
+        await notifier.Received(2).NotificarAsync(i.Id, i.TenantId, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NotificadorQueFalla_NoCambiaEl409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Wire(TramiteEstado.Preparado);
+        i.Actors.Add(Natural(i, "comprador", "9000000603"));
+        var notifier = Substitute.For<IFirmaPendienteNotifier>();
+        notifier.NotificarAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new InvalidOperationException("proveedor caído"));
+
+        var outcome = await Sut(notifier: notifier).TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Entregado, null, null), ct);
+
+        AssertBloqueadoSinEfectos(outcome, i, TramiteEstado.Preparado);
+        outcome.PartesSinFirma.Should().ContainSingle()
+            .Which.Should().Be(new ParteSinFirma("comprador", FirmaNotificacionEstados.Fallida));
+    }
+
+    [Fact]
+    public async Task Preparar_BorradorBloqueado_SinFirma_NotificaYConservaElCodigoDelGate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Wire(TramiteEstado.Borrador);
+        i.Actors.Add(Natural(i, "comprador", "9000000604"));
+        var notifier = Substitute.For<IFirmaPendienteNotifier>();
+        notifier.NotificarAsync(i.Id, i.TenantId, "comprador", Arg.Any<CancellationToken>())
+            .Returns(FirmaNotificacionEstados.Enviada);
+
+        var outcome = await Sut(notifier: notifier).TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null), ct);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.FirmaPendiente, "el gate de preparación conserva su código");
+        outcome.PartesSinFirma.Should().ContainSingle()
+            .Which.Should().Be(new ParteSinFirma("comprador", FirmaNotificacionEstados.Enviada));
+        outcome.ErrorDetail.Should().Contain("Firma pendiente de: comprador (notificación: enviada)");
+    }
+
+    [Fact]
+    public async Task ConFirmaVigente_NoNotifica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Wire(TramiteEstado.Preparado);
+        FirmaFixture.Firmar(i);
+        var notifier = Substitute.For<IFirmaPendienteNotifier>();
+
+        var outcome = await Sut(notifier: notifier).TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Entregado, null, null), ct);
+
+        outcome.Success.Should().BeTrue();
+        outcome.PartesSinFirma.Should().BeNull();
+        await notifier.DidNotReceive().NotificarAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // ── A quién aplica el gate ──
