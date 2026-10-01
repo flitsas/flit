@@ -32,8 +32,6 @@ const mocks = vi.hoisted(() => ({
   listTransitOffices: vi.fn(),
   runRnmc: vi.fn(),
   getPrenda: vi.fn(),
-  getFirmaPosterior: vi.fn(),
-  marcarFirmaPosterior: vi.fn(),
   getActors: vi.fn(),
   getChecklist: vi.fn(),
 }));
@@ -63,8 +61,6 @@ vi.mock('@/lib/api/tramites-client', () => ({
     listTransitOffices: mocks.listTransitOffices,
     runRnmc: mocks.runRnmc,
     getPrenda: mocks.getPrenda,
-    getFirmaPosterior: mocks.getFirmaPosterior,
-    marcarFirmaPosterior: mocks.marcarFirmaPosterior,
     getActors: mocks.getActors,
     getChecklist: mocks.getChecklist,
   },
@@ -197,12 +193,6 @@ beforeEach(() => {
       ciudad: 'Bogotá',
     },
   ]);
-  mocks.getFirmaPosterior.mockResolvedValue({
-    aplica: false,
-    marcado: false,
-    representanteNombre: null,
-    marcadoAt: null,
-  });
   // HU #11052 — el consolidado es el único disparador de generación del paso FUR.
   mocks.entregarConsolidado.mockResolvedValue({
     attachmentId: 'att-consolidado',

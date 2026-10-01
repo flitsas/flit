@@ -10166,16 +10166,14 @@ paths:
       description: >
         HU #11197 (AC1/AC2/AC4). `aplica` es true solo cuando el firmante de esa parte tiene la identidad
         Y la firma del baúl vencidas: con cualquiera de las dos vigente el trámite puede firmarse ya y la
-        opción no se ofrece. En persona natural, o sin mandatario elegido, responde
-        `{aplica:false, marcado:false}`, no un error.
-        `mandatario` es el firmante del contrato de mandato: su identidad vive en la configuración del
-        organismo, así que su marca no la cierra el lote por validación sino la regeneración del
-        expediente al entregar o aprobar.
+        opción no se ofrece. En persona natural o sin representante responde
+        `{aplica:false, marcado:false}`, no un error. HU #13157: la parte `mandatario` se retiró y responde
+        400 `parte_invalida` (use comprador|vendedor).
       parameters:
         - name: parte
           in: query
           required: true
-          schema: { type: string, enum: [comprador, vendedor, mandatario] }
+          schema: { type: string, enum: [comprador, vendedor] }
         - name: documento
           in: query
           required: false
@@ -10204,8 +10202,7 @@ paths:
         HU #11196 (AC1). Idempotente: volver a marcar no crea una segunda marca ni mueve la fecha
         original. Para comprador/vendedor, cuando esa persona apruebe su validación TODOS sus trámites
         marcados del tenant que sigan en borrador o subsanación se firman de una (el estado se revalida al
-        aplicar, no al marcar). Para `mandatario` la marca se cierra al regenerarse el expediente en la
-        entrega o la aprobación, que es cuando recoge la firma del baúl o la identidad que tenga entonces.
+        aplicar, no al marcar). HU #13157: la parte `mandatario` ya no se acepta (400 `parte_invalida`).
       requestBody:
         required: true
         content:
@@ -10213,7 +10210,7 @@ paths:
             schema:
               type: object
               properties:
-                parte: { type: string, enum: [comprador, vendedor, mandatario] }
+                parte: { type: string, enum: [comprador, vendedor] }
                 documento:
                   type: string
                   nullable: true
@@ -10237,8 +10234,7 @@ paths:
         "422":
           description: >
             no_aplica (la parte no es persona jurídica), sin_representante (el representante declarado no
-            tiene documento con el que validar), sin_mandatario (el trámite no tiene mandatario elegido
-            con documento registrado) o firma_disponible (ya puede firmarse ahora).
+            tiene documento con el que validar) o firma_disponible (ya puede firmarse ahora).
 
   /api/v1/tramites/instances/{id}/mandate-signer:
     parameters:
