@@ -75,6 +75,9 @@ interface Props {
    * biométrico, que desde la HU #11014 lo expone por parte y desde el Bug #11141 respeta además el
    * mecanismo elegido por el gestor. Se unen porque durante el registro la respuesta del servidor puede
    * ir un paso por detrás del outcome que el wizard acaba de recibir.</p>
+   *
+   * @deprecated Bug #13194 (P4) — ya no se lee: la cobertura por baúl sale solo del servidor
+   * (`firmaBaulPartes`/`firmaBaulActores`), fail-closed. Se conserva para no romper a los llamadores.
    */
   vaultCoveredPartes?: BiometricParte[];
   /**
@@ -271,7 +274,6 @@ export function BiometricStep({
   onlyPartes,
   heading,
   headingSubtitle,
-  vaultCoveredPartes = [],
   embedded = false,
   onIrAActores,
   onlyOwnerOrdinal,
@@ -451,10 +453,14 @@ export function BiometricStep({
                 // (`firmaBaulServidor`/`vaultCoveredPartes`) es IMPRECISO A PROPÓSITO con 2+ actores
                 // (ver doc de `firmaBaulActores`), así que solo se admite para el actor ordinal=1 —
                 // el mismo caso que ya cubría antes de esta HU (regresión cero).
+                //
+                // Bug #13194 (P4) — fail-closed: solo cuenta lo que reporta el SERVIDOR. La señal del
+                // registro (`vaultCoveredPartes`) ya no basta: rotulaba como firmada por el baúl una
+                // parte que el backend no daba por cubierta (p. ej. interruptor del baúl apagado) y
+                // el gestor no veía que le faltaba validar la identidad.
                 const vaultCovered =
                   isCoveredByVaultForActor(firmaBaulActores, parte, ordinal) ||
-                  (ordinal === 1 &&
-                    (firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)));
+                  (ordinal === 1 && firmaBaulServidor.includes(parte));
                 const badge = parteBadge(validation, vaultCovered);
                 const titulo = multiple
                   ? `Validación del ${PARTE_LABEL[parte]} ${ordinal}`
