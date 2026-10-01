@@ -174,6 +174,8 @@ public static class DependencyInjection
         // Bug #13194 (punto 4) — asegurar identidad + disparar el correo de validación (reutilizable por
         // ICT y por el gate de envío al organismo) y completar el RL de una PJ desde el directorio.
         services.AddScoped<EnsureIdentityAndNotifyHandler>();
+        // Bug #13194 (P4, D2) — el gate de firma notifica cada parte sin firma vía este adaptador.
+        services.AddScoped<IFirmaPendienteNotifier, EnsureIdentityFirmaPendienteNotifier>();
         services.AddScoped<RepresentanteLegalDesdeDirectorio>();
 
         // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de

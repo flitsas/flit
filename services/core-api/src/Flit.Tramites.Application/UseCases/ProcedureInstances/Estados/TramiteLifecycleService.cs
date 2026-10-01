@@ -9,6 +9,8 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
@@ -43,8 +45,15 @@ public sealed class TramiteLifecycleService(
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
     // HU #10970 — se añade AL FINAL, después de los parámetros que traía develop, para no desplazar
     // ninguna posición existente (varios call sites pasan estos opcionales por posición).
-    TramiteValidationPolicy? validationPolicy = null) : ITramiteLifecycleService
+    TramiteValidationPolicy? validationPolicy = null,
+    // Bug #13194 — logger del gate de firma (fallo al notificar). Null en tests: NullLogger.
+    ILogger<TramiteLifecycleService>? logger = null,
+    // Bug #13194 (P4, D2) — al final por la misma razón. Null ⇒ el gate bloquea igual, sin notificar.
+    IFirmaPendienteNotifier? firmaNotifier = null) : ITramiteLifecycleService
 {
+    private readonly ILogger<TramiteLifecycleService> _logger =
+        logger ?? NullLogger<TramiteLifecycleService>.Instance;
+
     // ADR-0036 (HU #10912/#10916) — config de mandato del OT (plantilla / exige a PN). Default seguro
     // (NUNCA resuelve ⇒ solo PJ, plantilla genérica) en tests que no lo ejercitan.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
@@ -157,7 +166,26 @@ public sealed class TramiteLifecycleService(
         {
             var gatePreparacionError = await EvaluarGatePreparacionAsync(instance, command, ct).ConfigureAwait(false);
             if (gatePreparacionError is var (code, detail) && code is not null)
+            {
+                // Bug #13194 (P4, D2) — borrador→preparado bloqueado: si además faltan firmas, se dispara el
+                // correo de validación de cada parte (idempotente). El código del gate no cambia.
+                if (from == TramiteEstado.Borrador && FirmaGate.Aplica(command.ToStatus, command.Actor))
+                {
+                    var faltantes = await FirmaGate
+                        .PartesSinFirmaAsync(repo, instance, _vaultPolicy, DateTimeOffset.UtcNow, ct)
+                        .ConfigureAwait(false);
+                    if (faltantes.Count > 0)
+                    {
+                        var notificadas = await NotificarPartesSinFirmaAsync(instance, faltantes, ct)
+                            .ConfigureAwait(false);
+                        return TramiteTransitionOutcome.Fail(
+                                code, $"{detail} Firma pendiente de: {FirmaGate.PartesConNotificacion(notificadas)}.")
+                            with { PartesSinFirma = notificadas };
+                    }
+                }
+
                 return TramiteTransitionOutcome.Fail(code, detail);
+            }
         }
 
         // Bug #13194 (P4, D2) — gate de FIRMA único: «no se permite enviar al OT trámites sin firmar».
@@ -171,7 +199,13 @@ public sealed class TramiteLifecycleService(
                 .PartesSinFirmaAsync(repo, instance, _vaultPolicy, DateTimeOffset.UtcNow, ct)
                 .ConfigureAwait(false);
             if (sinFirma.Count > 0)
-                return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(sinFirma));
+            {
+                // Cada parte sin firma (baúl o VID ausentes o vencidos) recibe el correo de validación. Un
+                // fallo de la notificación no cambia el 409: queda como estado «fallida» de esa parte.
+                var notificadas = await NotificarPartesSinFirmaAsync(instance, sinFirma, ct).ConfigureAwait(false);
+                return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(notificadas))
+                    with { PartesSinFirma = notificadas };
+            }
         }
 
         // Gates OT de entrega (heredados del submit HU #10217/#2). HU #10872 (AC1) — este es el GATE
@@ -248,6 +282,41 @@ public sealed class TramiteLifecycleService(
                 "El trámite fue modificado por otro proceso. Recargue el trámite e intente de nuevo.");
 
         return TramiteTransitionOutcome.Ok(instance);
+    }
+
+    /// <summary>
+    /// Bug #13194 (P4, D2) — notifica (correo de validación) cada parte sin firma. Nunca lanza: una excepción
+    /// del notificador se registra sin PII y la parte queda en <see cref="FirmaNotificacionEstados.Fallida"/>.
+    /// </summary>
+    private async Task<IReadOnlyList<ParteSinFirma>> NotificarPartesSinFirmaAsync(
+        ProcedureInstance instance, IReadOnlyList<string> partes, CancellationToken ct)
+    {
+        var resultado = new List<ParteSinFirma>(partes.Count);
+        foreach (var parte in partes)
+        {
+            string estado;
+            if (firmaNotifier is null)
+            {
+                estado = FirmaNotificacionEstados.NoConfigurada;
+            }
+            else
+            {
+                try
+                {
+                    estado = await firmaNotifier.NotificarAsync(instance.Id, instance.TenantId, parte, ct)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    TramiteLifecycleLog.NotificacionFirmaFallida(_logger, ex.GetType().Name, instance.Id, parte);
+                    estado = FirmaNotificacionEstados.Fallida;
+                }
+            }
+
+            resultado.Add(new ParteSinFirma(parte, estado));
+        }
+
+        return resultado;
     }
 
     /// <summary>
@@ -838,4 +907,12 @@ public sealed class TramiteLifecycleService(
         return false;
     }
 
+}
+
+/// <summary>Logging source-generated (CA1848) del ciclo de vida. Sin PII.</summary>
+internal static partial class TramiteLifecycleLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Bug #13194 — no se pudo notificar la firma pendiente ({ExceptionType}) del trámite {InstanceId}, parte {Parte}; el bloqueo se mantiene.")]
+    public static partial void NotificacionFirmaFallida(ILogger logger, string exceptionType, Guid instanceId, string parte);
 }
