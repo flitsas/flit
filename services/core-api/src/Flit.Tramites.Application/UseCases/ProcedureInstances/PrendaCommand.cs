@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -39,7 +40,10 @@ public sealed record RegistrarPrendaInput(
 public sealed class RegistrarPrendaHandler(
     IProcedureInstanceRepository instances,
     IProcedureInstancePrendaRepository prendas,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
+    IAttachmentStorage? storage = null,
+    IVehicleSignatureImprintRepository? imprintAudit = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
     /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible (salvo la familia Matrículas, Feature #13110).</summary>
     public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
@@ -59,6 +63,10 @@ public sealed class RegistrarPrendaHandler(
 
     private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
         prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
+
+    private readonly IAttachmentStorage? _storage = storage;
+    private readonly IVehicleSignatureImprintRepository? _imprintAudit = imprintAudit;
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
 
     public async Task<(PrendaDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -188,7 +196,71 @@ public sealed class RegistrarPrendaHandler(
         await prendas.AddAsync(nueva, ct);
         await prendas.SaveChangesAsync(ct);
 
+        // Bug #13240 — el soporte de la decisión anterior no sobrevive al cambio de decisión.
+        var vigentesResultantes = vigentes.Except(aReemplazar).Append(nueva).ToList();
+        await RetirarSoportesHuerfanosAsync(
+            instanceId, tenantId, vigentesResultantes, aReemplazar, permiteComplementaria, ct).ConfigureAwait(false);
+
         return (ToDto(nueva), null);
+    }
+
+    /// <summary>
+    /// Bug #13240 — retira los adjuntos de prenda (<see cref="PrendaDocTipos.All"/>) que ya no exige ninguna
+    /// decisión vigente: tras cambiar de «registrar» a <c>omitir</c>/<c>sin_prenda</c>/<c>levantar</c> el PDF
+    /// seguía en el expediente y en el consolidado, mientras el FUR (que lee las vigentes) ya no lo declaraba.
+    /// <para>Sin acción complementaria (a lo sumo UNA vigente) es candidato todo <c>prenda_*</c> no exigido,
+    /// incluido el PDF subido sin haber guardado la decisión. CON complementaria solo lo son los DocTipos de
+    /// las decisiones reemplazadas en este guardado: el front guarda la base antes que la complementaria y su
+    /// documento recién subido aún no pertenece a ninguna decisión (review PR #508, B1).</para>
+    /// <para>Mismas reglas que <see cref="DeleteAttachmentHandler"/> (vía <see cref="AttachmentRetiro"/>) y
+    /// solo en estado editable: fuera de él la decisión se guarda (R17) pero el expediente ya salió con esos
+    /// documentos. El consolidado lo invalida <c>ConsolidadoVigenciaTracker</c>. <c>inscripcion_prenda</c> no
+    /// entra: es requisito del catálogo del tipo y de la política del OT, no soporte de una decisión. Sin
+    /// almacenamiento cableado no se hace nada (la fila sin el blob dejaría el archivo huérfano).</para>
+    /// </summary>
+    private async Task RetirarSoportesHuerfanosAsync(
+        Guid instanceId,
+        Guid tenantId,
+        IReadOnlyList<ProcedureInstancePrenda> vigentes,
+        IReadOnlyList<ProcedureInstancePrenda> reemplazadas,
+        bool permiteComplementaria,
+        CancellationToken ct)
+    {
+        if (_storage is null)
+            return;
+
+        var instance = await instances.GetByIdWithAttachmentsAsync(instanceId, tenantId, ct).ConfigureAwait(false);
+        if (instance is null || !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
+            return;
+
+        var exigidos = vigentes
+            .Select(v => PrendaDecision.DocTipoFor(v.Decision))
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlySet<string> candidatos = permiteComplementaria
+            ? reemplazadas
+                .Select(r => PrendaDecision.DocTipoFor(r.Decision))
+                .OfType<string>()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : PrendaDocTipos.All;
+
+        var huerfanos = instance.Attachments
+            .Where(a => candidatos.Contains(a.Tipo) && !exigidos.Contains(a.Tipo))
+            .ToList();
+        if (huerfanos.Count == 0)
+            return;
+
+        var retirables = await AttachmentRetiro
+            .FiltrarRetirablesAsync(huerfanos, _maestroRadicado, tenantId, instanceId, ct)
+            .ConfigureAwait(false);
+        if (retirables.Count == 0)
+            return;
+
+        // O3 (review PR #508): este save solo borra adjuntos porque AutoUnmark es no-op para prenda_*. Si un
+        // ítem del catálogo llegara a usarlos, recargar la entrada antes de Retirar (row_version obsoleto).
+        AttachmentRetiro.Retirar(instance, retirables, instances, _storage, _imprintAudit);
+        await instances.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>

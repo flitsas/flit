@@ -9,12 +9,17 @@ import { formatDateOnly } from '@/lib/format/date-only';
 import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PrendaDocumentUpload } from './PrendaDocumentUpload';
-import { prendaDocTipoFor } from './prenda-document-tipos';
+import { PRENDA_DOC_TIPOS, prendaDocTipoFor } from './prenda-document-tipos';
 import { blockerCopy } from './wizard-copy';
 import { WizardModal } from './WizardModal';
 import type { RuntAvisoGravamenVariant } from './wizardCapabilities';
 import type { WizardStepFormHandle } from './wizard-step-form';
-import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
+import type {
+  FieldValue,
+  PrendaDecision,
+  ProcedureAttachment,
+  WizardModalidad,
+} from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader, WizardFieldToggle, WizardSegmented } from './wizard-atoms';
 import { PRENDA_DECISION_LABELS, PRENDA_OMITIR_AYUDA } from './prenda-decision-labels';
@@ -50,6 +55,30 @@ const MUESTRA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
   'registrar',
   'levantar',
 ]);
+
+/** Tipos de adjunto que gestiona esta sección (los que el servidor retira al guardar, Bug #13240). */
+const PRENDA_ATTACHMENT_TIPOS: ReadonlySet<string> = new Set<string>(Object.values(PRENDA_DOC_TIPOS));
+
+/** Copy del aviso previo al guardado cuando la nueva decisión ya no exige el adjunto (Bug #13240). */
+export const PRENDA_DOC_RETIRO_AVISO =
+  'Al guardar, se retirará el documento de prenda adjuntado para la decisión anterior.';
+
+/** Solo los adjuntos `prenda_*` que gestiona esta sección. */
+function soloAdjuntosPrenda(list: ProcedureAttachment[]): ProcedureAttachment[] {
+  return list.filter((a) => PRENDA_ATTACHMENT_TIPOS.has(a.tipo.toLowerCase()));
+}
+
+/**
+ * Lee los adjuntos `prenda_*` del trámite. `Promise.resolve().then` convierte en rechazo un fallo
+ * síncrono del cliente: una lectura fallida devuelve `null` (se conserva la lista en pantalla) y nunca
+ * tumba el formulario.
+ */
+function fetchPrendaAttachments(instanceId: string): Promise<ProcedureAttachment[] | null> {
+  return Promise.resolve()
+    .then(() => tramitesClient.getAttachments(instanceId))
+    .then((list) => (Array.isArray(list) ? soloAdjuntosPrenda(list) : null))
+    .catch(() => null);
+}
 
 /** En matrícula la prenda es declarativa: registrar o sin prenda. */
 const MATRICULA_DECISIONS: PrendaDecision[] = ['registrar', 'sin_prenda'];
@@ -347,6 +376,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const ofreceOmitir = decisions.includes('omitir');
   const readOnly = useWizardReadOnly();
   const runtDetailId = useId();
+  const avisoRetiroId = useId();
   const [decision, setDecision] = useState<PrendaDecision | ''>('');
   const [acreedorNombre, setAcreedorNombre] = useState('');
   const [acreedorDocumento, setAcreedorDocumento] = useState('');
@@ -367,6 +397,14 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [runtSummary, setRuntSummary] = useState<RuntPrendaSummary | null>(null);
   const [runtOpen, setRuntOpen] = useState(false);
   const [docSatisfied, setDocSatisfied] = useState(false);
+  /**
+   * Bug #13240 — adjuntos `prenda_*` del trámite. Al guardar una decisión que ya no los exige, el
+   * SERVIDOR los retira (fuente de verdad: el frontend no borra nada); aquí solo se leen para avisar
+   * antes de guardar y se releen después. `attachmentsVersion` fuerza la relectura de las cargas
+   * montadas (`PrendaDocumentUpload.refreshKey`).
+   */
+  const [prendaAttachments, setPrendaAttachments] = useState<ProcedureAttachment[]>([]);
+  const [attachmentsVersion, setAttachmentsVersion] = useState(0);
   // HU #12131 — aviso «RUNT sin gravamen»: se abre solo, una vez, cuando el check YA corrió y
   // resolvió sin gravamen. El ref (no state) es lo que impide que un re-render posterior —p. ej. al
   // reabrir el acordeón— lo vuelva a abrir después de que el gestor lo cerró.
@@ -550,6 +588,35 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     complementariaDecision,
   ]);
 
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    void fetchPrendaAttachments(instanceId).then((list) => {
+      if (active && list) setPrendaAttachments(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  const refreshPrendaAttachments = async () => {
+    if (!instanceId) return;
+    const list = await fetchPrendaAttachments(instanceId);
+    if (list) setPrendaAttachments(list);
+  };
+
+  /** Tras un PUT exitoso: relee la lista propia y la de cada carga montada (Bug #13240). */
+  const refreshAfterSave = () => {
+    void refreshPrendaAttachments();
+    setAttachmentsVersion((v) => v + 1);
+  };
+
+  /** Subida/borrado desde una carga: la lista propia también cambia, y la shell refresca. */
+  const handleDocChanged = () => {
+    void refreshPrendaAttachments();
+    onSaved?.();
+  };
+
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
   /**
@@ -578,6 +645,31 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const complementariaDocumentGateReady =
     !complementariaActiva || !complementariaRequiereDocumento || !documentRequired || complementariaDocSatisfied;
   const documentGateReady = baseDocumentGateReady && complementariaDocumentGateReady;
+
+  /**
+   * Bug #13240 — hay adjuntos `prenda_*` que la decisión seleccionada NO exige y que el servidor
+   * retirará al guardar. Con `decisionFija` la decisión base no cambia y la complementaria guardada
+   * sigue vigente aunque se desmarque el check, así que ahí no se avisa: no se retira nada.
+   */
+  const tiposExigidos = new Set<string>(
+    [decision !== '' ? prendaDocTipoFor(decision) : null, complementariaDocTipo]
+      .filter((t): t is string => Boolean(t))
+      .map((t) => t.toLowerCase()),
+  );
+  const avisaRetiroDocumento =
+    !readOnly &&
+    !decisionFija &&
+    decision !== '' &&
+    prendaAttachments.some((a) => !tiposExigidos.has(a.tipo.toLowerCase()));
+  const avisoRetiro = avisaRetiroDocumento ? (
+    <InlineAlert id={avisoRetiroId} tone="info" compact className="mt-1.5">
+      {PRENDA_DOC_RETIRO_AVISO}
+    </InlineAlert>
+  ) : null;
+  const decisionDescribedBy =
+    [ofreceOmitir ? 'prenda-omitir-ayuda' : null, avisaRetiroDocumento ? avisoRetiroId : null]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   useEffect(() => {
     onDocumentGateChange?.(documentGateReady);
@@ -755,6 +847,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               'Corrige lo que haga falta y vuelve a guardar.',
           );
           settle();
+          refreshAfterSave();
           onSaved?.();
           return false;
         }
@@ -762,6 +855,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
       setSaved(true);
       settle();
+      refreshAfterSave();
       onSaved?.();
       return true;
     } catch (err) {
@@ -974,7 +1068,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   value={decision}
                   onChange={(e) => handleDecisionChange(e.target.value as PrendaDecision | '')}
                   disabled={readOnly}
-                  aria-describedby={ofreceOmitir ? 'prenda-omitir-ayuda' : undefined}
+                  aria-describedby={decisionDescribedBy}
                   className={`${WIZARD_SELECT} disabled:opacity-60`}
                 >
                   <option value="">Seleccionar…</option>
@@ -983,6 +1077,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   ))}
                 </select>
                 {ayudaOmitir}
+                {avisoRetiro}
               </div>
               {muestraAcreedor && (
                 <div className="min-w-0 space-y-4 md:self-end">
@@ -1035,7 +1130,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     docTipo={prendaDocTipoFor(decision)!}
                     documentRequired={documentRequired}
                     onSatisfiedChange={setDocSatisfied}
-                    onChanged={onSaved}
+                    onChanged={handleDocChanged}
+                    refreshKey={attachmentsVersion}
                   />
                 </div>
               )}
@@ -1051,7 +1147,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               ) : (
                 <WizardSegmented<PrendaDecision | ''>
                   label="¿Al vehículo se le asociará una prenda?"
-                  describedBy={ofreceOmitir ? 'prenda-omitir-ayuda' : undefined}
+                  describedBy={decisionDescribedBy}
                   value={decision}
                   onChange={handleDecisionChange}
                   disabled={readOnly}
@@ -1059,6 +1155,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 />
               )}
               {!decisionFija && ayudaOmitir}
+              {avisoRetiro}
               {muestraAcreedor && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1180,7 +1277,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   docTipo={prendaDocTipoFor(decision)!}
                   documentRequired={documentRequired}
                   onSatisfiedChange={setDocSatisfied}
-                  onChanged={onSaved}
+                  onChanged={handleDocChanged}
+                  refreshKey={attachmentsVersion}
                 />
               )}
 
@@ -1363,7 +1461,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                           docTipo={complementariaDocTipo}
                           documentRequired={documentRequired}
                           onSatisfiedChange={setComplementariaDocSatisfied}
-                          onChanged={onSaved}
+                          onChanged={handleDocChanged}
+                          refreshKey={attachmentsVersion}
                         />
                       )}
                     </div>
