@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
@@ -56,16 +57,31 @@ public sealed class IctOrchestrationService(
             var existing = await db.Set<ProcedureInstance>()
                 .AsNoTracking()
                 .Where(p => p.TenantId == tenantId && p.ExternalRef == externalRef && p.DeletedAt == null)
-                .Select(p => new { p.Id, p.ReferenceNumber, p.Status })
+                .Select(p => new { p.Id, p.ReferenceNumber, p.Status, p.SubsanacionActiva })
                 .FirstOrDefaultAsync(context.CancellationToken);
             if (existing is not null)
             {
-                return new DraftReply
+                var existingReply = new DraftReply
                 {
                     ProcedureInstanceId = existing.Id.ToString(),
                     ReferenceNumber = existing.ReferenceNumber,
                     Status = existing.Status,
                 };
+
+                // Bug #13109 — si el intento previo creó el borrador pero perdió los adjuntos (se cayó en
+                // HandleBatchAsync), el reintento los completa aquí: sin esto el master quedaba en BORRADOR
+                // con 0 adjuntos para siempre. Mismo criterio de edición que HandleBatchAsync; la dedup
+                // por sha256 evita duplicar los que sí alcanzaron a quedar.
+                if (request.Attachments.Count > 0
+                    && TramiteEstado.PermiteEdicionDatos(existing.Status, existing.SubsanacionActiva))
+                {
+                    var retryCreatedBy = await ResolveIctCreatorAsync(
+                        request.CreatedByUserId, tenantId, context.CancellationToken);
+                    await RegistrarAdjuntosAsync(
+                        existingReply, existing.Id, tenantId, request, retryCreatedBy, context.CancellationToken);
+                }
+
+                return existingReply;
             }
         }
 
@@ -80,12 +96,16 @@ public sealed class IctOrchestrationService(
         // resuelve al OT HABILITADO del tenant por nombre — el mismo resolver (grants + catálogo) que usa
         // el preflight de traspaso. Si el nombre RUNT no casa con un OT habilitado, queda null y el gestor
         // asigna el OT: no se inventa uno. Paridad con v1, donde el traspaso derivaba la secretaría del RUNT.
-        Guid? transitOfficeId = Guid.TryParse(request.TransitOfficeId, out var office) ? office : null;
+        Guid? officeFromIct = Guid.TryParse(request.TransitOfficeId, out var office) && office != Guid.Empty
+            ? office
+            : null;
+        var transitOfficeId = officeFromIct;
+        ResolvedTransitOffice? officeByRuntName = null;
         if (transitOfficeId is null && !string.IsNullOrWhiteSpace(request.TransitOfficeName))
         {
-            var resolvedOffice = await transitOfficeResolver.ResolveEnabledByNameAsync(
+            officeByRuntName = await transitOfficeResolver.ResolveEnabledByNameAsync(
                 tenantId, request.TransitOfficeName.Trim(), context.CancellationToken);
-            transitOfficeId = resolvedOffice?.Id;
+            transitOfficeId = officeByRuntName?.Id;
         }
 
         var createRequest = new CreateProcedureInstanceRequest(
@@ -172,6 +192,24 @@ public sealed class IctOrchestrationService(
             }
         }
 
+        // Organismo del borrador en field_values (Bug #13109, punto 1). La columna TransitOfficeId no basta:
+        // finalizar/radicar (SubmitGate.OrganismoSeleccionado), el mandato y la entrega leen transit_office_*.
+        // Dos orígenes: el id que mandó core-ict (código de la transacción ya validado contra catálogo +
+        // grant; viaja con su código, nombre y city_code) o el OT que se acaba de resolver por el nombre RUNT
+        // (trae además city_name). Un core-ict anterior a este cambio manda el id sin código: no se siembra.
+        // Sin OT resuelto no se siembra nada y el gestor lo asigna, igual que antes.
+        var officeToSeed = officeFromIct is { } officeId
+            ? string.IsNullOrWhiteSpace(request.TransitOfficeCode)
+                ? null
+                : new ResolvedTransitOffice(
+                    officeId, request.TransitOfficeCode.Trim(), request.TransitOfficeName.Trim(),
+                    request.TransitOfficeCity.Trim())
+            : officeByRuntName;
+        if (officeToSeed is not null)
+        {
+            await SembrarOrganismoAsync(reply, summary.Id, tenantId, officeToSeed, context.CancellationToken);
+        }
+
         // Actores del pre-trámite (vendedor/comprador + su representante legal). Se reutiliza
         // PutActorsHandler, el único escritor de partes. Fallo NO fatal: el borrador ya existe y el
         // gestor puede completarlo; se reporta como warning para no perder la trazabilidad.
@@ -220,24 +258,8 @@ public sealed class IctOrchestrationService(
         // borrador ya existe y el gestor puede completarlo; se reporta como warning acumulado.
         if (request.Attachments.Count > 0)
         {
-            // Todos los adjuntos en UNA unidad de trabajo (un solo SaveChanges): registrarlos uno por uno
-            // reventaría por el token de concurrencia de la instancia al reincidir el AutoMark. Ver
-            // RegisterIntegrationAttachmentHandler.HandleBatchAsync.
-            var attachmentInputs = request.Attachments
-                .Select(att => new RegisterAttachmentInput(
-                    Tipo: att.DocumentType,
-                    Filename: att.Filename,
-                    Mimetype: att.MimeType,
-                    SizeBytes: att.SizeBytes,
-                    Sha256: att.Sha256,
-                    StoragePath: att.StoragePath))
-                .ToList();
-            var (_, attachmentWarnings) = await attachmentsHandler.HandleBatchAsync(
-                summary.Id, tenantId, attachmentInputs, createdBy, context.CancellationToken);
-            if (attachmentWarnings.Count > 0)
-            {
-                AppendWarning(reply, "attachments_warning:" + string.Join(",", attachmentWarnings));
-            }
+            RefrescarRastreo();
+            await RegistrarAdjuntosAsync(reply, summary.Id, tenantId, request, createdBy, context.CancellationToken);
         }
 
         // Preflight — PARIDAD con "Consultar RUNT del vehículo" (paso 1 del wizard manual). Un solo
@@ -253,6 +275,7 @@ public sealed class IctOrchestrationService(
             && !string.IsNullOrWhiteSpace(f.ValueText));
         if (tieneVehiculo)
         {
+            RefrescarRastreo();
             try
             {
                 var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
@@ -312,6 +335,116 @@ public sealed class IctOrchestrationService(
         }
 
         return reply;
+    }
+
+    /// <summary>
+    /// Registra los adjuntos ICT por REFERENCIA en UNA unidad de trabajo (un solo SaveChanges): uno por
+    /// uno reventaría por el token de concurrencia de la instancia al reincidir el AutoMark (ver
+    /// RegisterIntegrationAttachmentHandler.HandleBatchAsync). Fallo NO fatal: el borrador ya existe, así
+    /// que una excepción se reporta como warning y no sale como gRPC Unknown (Bug #13109).
+    /// </summary>
+    private async Task RegistrarAdjuntosAsync(
+        DraftReply reply,
+        Guid instanceId,
+        Guid tenantId,
+        CreateDraftFromIctRequest request,
+        Guid createdBy,
+        CancellationToken ct)
+    {
+        var attachmentInputs = request.Attachments
+            .Select(att => new RegisterAttachmentInput(
+                Tipo: att.DocumentType,
+                Filename: att.Filename,
+                Mimetype: att.MimeType,
+                SizeBytes: att.SizeBytes,
+                Sha256: att.Sha256,
+                StoragePath: att.StoragePath))
+            .ToList();
+        try
+        {
+            var (_, attachmentWarnings) = await attachmentsHandler.HandleBatchAsync(
+                instanceId, tenantId, attachmentInputs, createdBy, ct);
+            if (attachmentWarnings.Count > 0)
+            {
+                AppendWarning(reply, "attachments_warning:" + string.Join(",", attachmentWarnings));
+            }
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            AppendWarning(reply, "attachments_warning:exception");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13109 — descarta el grafo trackeado por los pasos previos antes de que el siguiente handler
+    /// recargue la instancia. <c>row_version</c> es solo token de concurrencia y lo sube el trigger
+    /// <c>tr_procedure_instances_row_version</c>: EF no lo relee, y por identity resolution la recarga
+    /// devolvería la MISMA entidad con el token viejo → el UPDATE (AutoMark del checklist, preflight)
+    /// afectaría 0 filas → DbUpdateConcurrencyException. Todos los pasos previos ya hicieron su
+    /// SaveChanges, así que no se pierde nada. Mismo patrón que ConsolidadoCommand.ReloadAsync
+    /// (repo.ResetTracking()).
+    /// </summary>
+    private void RefrescarRastreo() => db.ChangeTracker.Clear();
+
+    /// <summary>
+    /// Siembra los field_values del organismo con las MISMAS claves que el wizard al elegir la secretaría
+    /// en el paso 1 (<c>CreateFromConsultaHandler</c>): id, código, nombre, city_code, city_name si se
+    /// conoce y el origen <c>paso_1</c>, que hace que el paso del FUR muestre el organismo en firme en vez
+    /// de volver a pedirlo (aquí también está en firme: lo fijó la transacción o el RUNT). En la rama por
+    /// código <c>transit_office_city_name</c> no viaja por ICT y el FUR lo rellena en memoria del catálogo.
+    /// <para>En traspaso con placa, el auto-bind del preflight (que corre después) vuelve a escribir id,
+    /// código, nombre, city y city_name desde el RUNT con el mismo resolver: en la rama RUNT es el mismo
+    /// OT (upsert idempotente, mismo contrato); la siembra garantiza el OT aunque el preflight falle.</para>
+    /// <para>Va por <see cref="PatchFieldValuesHandler.HandleSystemSeedAsync"/> en un patch APARTE del
+    /// general: B11 rechaza el patch completo si trae claves <c>transit_office_*</c> en traspaso estándar,
+    /// y mezclarlas con vin/plate los perdería. Fallo NO fatal: <c>seed_warning:transit_office:&lt;err&gt;</c>.</para>
+    /// </summary>
+    private async Task SembrarOrganismoAsync(
+        DraftReply reply,
+        Guid instanceId,
+        Guid tenantId,
+        ResolvedTransitOffice office,
+        CancellationToken ct)
+    {
+        var items = new List<FieldValueInput>
+        {
+            new(null, TransitOfficeFieldKeys.Id, office.Id.ToString(), null),
+            new(null, TransitOfficeFieldKeys.Code, office.Code, null),
+        };
+        if (!string.IsNullOrWhiteSpace(office.Name))
+        {
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.Name, office.Name, null));
+        }
+
+        if (!string.IsNullOrWhiteSpace(office.CityCode))
+        {
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.City, office.CityCode, null));
+        }
+
+        if (!string.IsNullOrWhiteSpace(office.CityName))
+        {
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.CityName, office.CityName, null));
+        }
+
+        items.Add(new FieldValueInput(
+            null, TransitOfficeSelectionPolicy.OrigenFieldKey, TransitOfficeSelectionPolicy.OrigenPasoUno, null));
+
+        try
+        {
+            var (_, seedError) = await patchHandler.HandleSystemSeedAsync(
+                instanceId, tenantId, new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(items), ct);
+            if (seedError is not null)
+            {
+                AppendWarning(reply, "seed_warning:transit_office:" + seedError);
+            }
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // Las filas que no alcanzaron a guardarse se descartan para que el siguiente SaveChanges
+            // (actores, comercial) no las reintente y tumbe el resto de la materialización.
+            RefrescarRastreo();
+            AppendWarning(reply, "seed_warning:transit_office:exception");
+        }
     }
 
     /// <summary>

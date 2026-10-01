@@ -108,13 +108,13 @@ public sealed class OrchestratorJob(
                 await UpdateTransitOfficeNameAsync(connection, q.MasterId, result.TransitOfficeName, ct);
             }
 
-            // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC): terminal, deja el master en ps=4.
+            // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC y, desde el Bug #13109, DRIVER sin paz y salvo):
+            // terminal, deja el master en ps=4 y SendToCoreApiJob no materializa el borrador.
             if (!isValid)
             {
                 await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
             }
-            // Advertencia INFORMATIVA (paz y salvo del conductor/DRIVER): fiel a v1, se registra en el
-            // master pero NO bloquea el paso a borrador (el OT decidirá). Visible en el estado.
+            // Advertencia INFORMATIVA: se registra en el master pero NO bloquea el paso a borrador.
             else if (warnings.Count > 0)
             {
                 await RecordWarningAsync(connection, q.MasterId, string.Join("; ", warnings), ct);

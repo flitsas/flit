@@ -295,8 +295,32 @@ BEGIN
                       AND ts.is_active = true);
         END IF;
 
+        -- Organismo por código (Bug #13109, punto 1): el id que resuelve traffic_secretary_code con el
+        -- mismo criterio que la validación de arriba (activo en catálogo + grant is_enabled del tenant) queda
+        -- en el master para que el borrador nazca con él. Se recalcula en cada pasada (NULL si no hay código
+        -- o no se resuelve): una edición del código seguida de reproceso no deja el id viejo. En traspaso el
+        -- código es opcional; si viene y se resuelve, gana sobre el nombre del RUNT.
+        -- Nombre y city_code (DDL 25) salen de la MISMA fila que el id (asignación por fila): core-api siembra
+        -- con ellos los field_values del OT sin volver al catálogo. Sin fila, los tres quedan en NULL.
+        UPDATE ict.external_integration_master eim
+        SET (transit_office_id, transit_office_name, transit_office_city_code) = (
+                SELECT ts.id, ts.name, ts.city_code
+                FROM catalogs.transit_offices ts
+                JOIN admin.tenant_transit_office_grants g
+                  ON g.transit_office_id = ts.id
+                 AND g.tenant_id = rec.tenant_id
+                 AND g.is_enabled = true
+                WHERE ts.code = eim.traffic_secretary_code
+                  AND ts.is_active = true
+                ORDER BY ts.id
+                LIMIT 1)
+        WHERE eim.id = rec.id_master;
+
         -- Placa activa (traspasos 3/4, HU #12518): solo familia TRASPASO del mismo tenant.
-        -- Anulado, rechazado y aprobado no bloquean (alineado a CF-01 / wizard: no están "en proceso").
+        -- Bug #13109 punto 2: bloquea solo si el trámite está EN PROCESO con la misma regla que core-api
+        -- (TramiteEstado.EstaEnProceso, CF-01): borrador, preparado, preasignacion, asignado, entregado, el
+        -- legado subsanacion, o rechazado con subsanacion_activa. Aprobado, anulado, revocado y rechazado sin
+        -- subsanación no bloquean. Lista positiva: un estado nuevo no bloquea hasta que core-api lo declare.
         IF rec.transaction_type IN (3, 4) THEN
             IF EXISTS (
                 SELECT 1 FROM tramites.procedure_instances pi
@@ -308,7 +332,8 @@ BEGIN
                   AND pt.family = 'TRASPASO'
                   AND upper(btrim(fv.value_text)) = upper(btrim(
                         (SELECT plate FROM ict.external_integration_master WHERE id = rec.id_master)))
-                  AND pi.status NOT IN ('anulado', 'rechazado', 'aprobado')
+                  AND (lower(pi.status) IN ('borrador', 'preparado', 'preasignacion', 'asignado', 'entregado', 'subsanacion')
+                       OR (lower(pi.status) = 'rechazado' AND pi.subsanacion_activa = true))
                   AND pi.deleted_at IS NULL
             ) THEN
                 UPDATE ict.external_integration_master
@@ -358,6 +383,22 @@ BEGIN
             PERFORM ict.record_pretramite_event(rec.id_master, rec.tenant_id,
                 'en_validacion_negocio', 'ok',
                 jsonb_build_object('transaction_type', rec.transaction_type));
+
+            -- Documentos pendientes (Bug #13109, mejora del punto 4): sin cierre de adjuntos ni waiver, las
+            -- fuentes externas y el RUNT esperan (ExternalValidationJob y sp_processor_validation_external
+            -- filtran por lo mismo). La nota va al timeline UNA sola vez por pre-trámite: el NOT EXISTS la
+            -- vuelve idempotente aunque un reproceso pase otra vez por aquí.
+            IF rec.closed_document = FALSE AND rec.process_without_attached_documents = FALSE
+               AND NOT EXISTS (
+                    SELECT 1 FROM ict.pretramite_events e
+                    WHERE e.master_id = rec.id_master
+                      AND e.stage = 'en_validacion_negocio'
+                      AND e.outcome = 'documentos_pendientes') THEN
+                PERFORM ict.record_pretramite_event(rec.id_master, rec.tenant_id,
+                    'en_validacion_negocio', 'documentos_pendientes',
+                    jsonb_build_object('nota',
+                        'No se ha procesado porque no se han terminado de cargar los documentos adjuntos.'));
+            END IF;
         ELSE
             UPDATE ict.external_integration_master
             SET business_validation = 2, business_date_validation = now(), process_status_id = 4
