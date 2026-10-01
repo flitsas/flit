@@ -1,7 +1,8 @@
 # Matriz de pruebas de la suite
 
 Feature #13221 (Epic #13217). Lo que hay que probar antes de encender la suite en un ambiente, sobre la forma final
-(identidad aparte). Se prueba en local con `127.0.0.1` ([local.md](local.md), sección 4) y después en DEV.
+(identidad aparte). Se prueba en local con `127.0.0.1` ([local.md](local.md), sección 4) y después en DEV. La columna «Local» de A y B se recorrió
+en el navegador con la topología real: hub y Trámites → gateway (bandera encendida) → core-identity / core-api.
 
 Estado: **OK** probado y funciona · **Falla** probado y no funciona (ver hallazgo) · **—** sin probar.
 
@@ -9,24 +10,24 @@ Estado: **OK** probado y funciona · **Falla** probado y no funciona (ver hallaz
 
 | # | Caso | Local (identidad aparte) | DEV |
 |---|---|---|---|
-| A1 | Hub sin sesión → portada | — | — |
-| A2 | Login con un solo producto → entra directo | OK (2026-10-01) | — |
-| A3 | Inicio del hub con `?inicio=1` sin volver a iniciar sesión | — | — |
-| A4 | Abrir Trámites sin sesión → login del hub → vuelve a Trámites | OK (2026-10-01) | — |
-| A5 | Con sesión en el hub, abrir Trámites → entra sin contraseña | — | — |
-| A6 | Producto apagado → 403 «Tu empresa no tiene Trámites» → «Ir a mis productos» | — | — |
-| A7 | AdminCompany ve «Administración» y «Usuarios» | OK (2026-10-01) | — |
-| A8 | Cerrar sesión en Trámites o en el hub cierra toda la suite | — | — |
-| A9 | SuperAdmin con varios productos → una tarjeta por producto | — | — |
+| A1 | Hub sin sesión → portada | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A2 | Login con un solo producto → entra directo | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A3 | Inicio del hub con `?inicio=1` sin volver a iniciar sesión | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A4 | Abrir Trámites sin sesión → login del hub → vuelve a Trámites | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A5 | Con sesión en el hub, abrir Trámites → entra sin contraseña | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A6 | Producto apagado → 403 «Tu empresa no tiene Trámites» → «Ir a mis productos» | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A7 | AdminCompany ve «Administración» y «Usuarios» | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A8 | Cerrar sesión en Trámites o en el hub cierra toda la suite | OK (2026-10-01, core-identity aparte + gateway) | — |
+| A9 | SuperAdmin con varios productos → una tarjeta por producto | OK (2026-10-01, core-identity aparte + gateway) | — |
 
 ## B. Identidad aparte
 
 | # | Caso | Local | DEV |
 |---|---|---|---|
-| B1 | `core-api` apagado → login, autorización y token funcionan; Trámites abre sin datos | OK (2026-10-01) | — |
-| B2 | `core-api` vuelve → los datos aparecen sin volver a iniciar sesión | OK (2026-10-01) | — |
-| B3 | `core-identity` apagado con la bandera encendida → el gateway pasa el login a `core-api` en segundos | OK (2026-10-01, gateway real: el login vuelve en ~3 s con chequeo cada 2 s) | — |
-| B4 | Bandera del gateway apagada → todo como antes (vuelta atrás) | — | — |
+| B1 | `core-api` apagado → login, autorización y token funcionan; Trámites abre sin datos | OK (2026-10-01, core-identity aparte + gateway) | — |
+| B2 | `core-api` vuelve → los datos aparecen sin volver a iniciar sesión | OK (2026-10-01, core-identity aparte + gateway) | — |
+| B3 | `core-identity` apagado con la bandera encendida → el gateway pasa el login a `core-api` en segundos | OK (2026-10-01, el login vuelve por core-api en ~3 s) | — |
+| B4 | Bandera del gateway apagada → todo como antes (vuelta atrás) | OK (2026-10-01, core-identity no recibió peticiones) | — |
 | B5 | Desplegar `core-api` (por servicio) con gente dentro → el login no se cae | — | — |
 | B6 | Login de siempre (`FLIT_SESSION_MODE=legacy`) con la bandera encendida | — | — |
 
