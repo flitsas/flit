@@ -1,19 +1,5 @@
 namespace Flit.Modules.Security.Domain.UserManagement;
 
-/// <summary>
-/// El correo solicitado pertenece a una cuenta soft-deleted (HU #10621 AC3). Distinto de
-/// <see cref="Auth.UserAlreadyExistsException"/> (cuenta ACTIVA): permite devolver un mensaje
-/// específico sin exponer el error crudo de unicidad de BD (<c>uq_users_email</c> no es un
-/// índice parcial, así que el correo sigue "ocupado" aunque la cuenta esté eliminada).
-/// </summary>
-public sealed class UserEmailBelongsToDeletedAccountException : Exception
-{
-    public UserEmailBelongsToDeletedAccountException()
-        : base("Ese correo pertenece a una cuenta eliminada. Contacta a un SuperAdmin para restaurarla.")
-    {
-    }
-}
-
 /// <summary>Un usuario no puede suspenderse/desactivarse a sí mismo (HU #10619 AC4).</summary>
 public sealed class SelfSuspensionException : Exception
 {

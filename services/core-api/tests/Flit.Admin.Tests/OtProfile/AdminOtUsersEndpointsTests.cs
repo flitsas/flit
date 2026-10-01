@@ -1234,10 +1234,11 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Code.Should().Be("USER_NOT_DELETED");
     }
 
-    // HU #10623 AC4 — invitar de nuevo con el correo de un usuario eliminado recibe un mensaje
-    // claro (no un error crudo de constraint de BD).
+    // Bug #13194 P6 — invitar de nuevo con el correo de un usuario eliminado CREA la invitación:
+    // uq_users_email es parcial (deleted_at IS NULL) y recrear es una fila de usuario nueva (antes:
+    // 409 por HU #10623 AC4).
     [Fact]
-    public async Task InviteUser_WithEmailOfDeletedAccount_Returns409EmailBelongsToDeletedUser()
+    public async Task InviteUser_WithEmailOfDeletedAccount_CreatesInvitation()
     {
         var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1276,13 +1277,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             new { email = collaboratorEmail, fullName = "Reintento de invitación" },
             TestContext.Current.CancellationToken);
 
-        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
-            cancellationToken: TestContext.Current.CancellationToken);
-        body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
-        // HU #11550 AC3/AC4 — mensaje visible unificado / HU #11580 — código único, con los
-        // otros dos conflictos de correo.
-        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
     // HU #11550 AC1/AC4 / HU #11580 AC1-AC2 — invitar por la ruta del OT con un correo que YA
