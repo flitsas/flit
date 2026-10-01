@@ -139,4 +139,9 @@ public sealed class MandateSignerCompanyResolution
     public Guid MandateSignerId { get; init; }
     public string FullName { get; init; } = string.Empty;
     public string IntegrityHash { get; init; } = string.Empty;
+
+    /// <summary>
+    /// HU #13195 — grupo de origen del vínculo: <c>organismo</c> (incluye super_admin) o <c>compania</c>.
+    /// </summary>
+    public string OriginGroup { get; init; } = "organismo";
 }

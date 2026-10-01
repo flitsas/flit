@@ -78,8 +78,11 @@ internal static class MandateSignerValidation
         IReadOnlyList<Guid> requestedCompanyIds,
         IReadOnlyList<OtCompanyOption> otCompanies,
         IReadOnlyList<MandateSignerCompanyResolution> activeResolutions,
-        Guid? currentSignerId)
+        Guid? currentSignerId,
+        string configuredByScope = "organismo")
     {
+        // HU #13195 — un activo por compañía, organismo y GRUPO DE ORIGEN (organismo+super_admin | compania).
+        var originGroup = GroupOf(configuredByScope);
         var companyById = otCompanies.ToDictionary(c => c.CompanyTenantId);
 
         foreach (var companyId in requestedCompanyIds.Distinct())
@@ -95,7 +98,8 @@ internal static class MandateSignerValidation
 
             var taken = activeResolutions.FirstOrDefault(r =>
                 r.CompanyTenantId == companyId
-                && r.MandateSignerId != currentSignerId);
+                && r.MandateSignerId != currentSignerId
+                && GroupOf(r.OriginGroup) == originGroup);
             if (taken is not null)
             {
                 errors.Add(new MandateSignerValidationError(
@@ -105,6 +109,9 @@ internal static class MandateSignerValidation
             }
         }
     }
+
+    private static string GroupOf(string? scope) =>
+        string.Equals(scope, "compania", StringComparison.OrdinalIgnoreCase) ? "compania" : "organismo";
 
     /// <summary>
     /// Compañías a validar en un organismo: las del puente por OT, o las del comando si no hay puente.
