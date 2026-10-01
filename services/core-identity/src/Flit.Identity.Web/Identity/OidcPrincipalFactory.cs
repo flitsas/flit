@@ -116,7 +116,7 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
     }
 
     /// <summary>Token de servicio (contrato §3): <c>sub</c> = cliente, <c>aud</c> = plataforma, los scopes pedidos.</summary>
-    public ClaimsPrincipal ForService(string clientId, IEnumerable<string> scopes)
+    public static ClaimsPrincipal ForService(string clientId, IEnumerable<string> scopes)
     {
         var identity = NewIdentity();
         identity.SetClaim(Claims.Subject, clientId);

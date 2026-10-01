@@ -10,6 +10,7 @@ using Flit.Api.Identity;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
+using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -48,6 +49,8 @@ if (string.IsNullOrWhiteSpace(coreConnStr))
 }
 
 builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, builder.Environment);
+// Epic #13217 (HU #13232): login y recuperación de cuenta (Flit.Identity.Application). Transición: hasta el corte.
+builder.Services.AddIdentityAuthApplication();
 
 // Runtime de trámites (rework #10128): casos de uso de instancias/wizard/consultas.
 builder.Services.AddTramitesApplication();

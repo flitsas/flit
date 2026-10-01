@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "applicationUrl": "http://127.0.0.1:4905",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Suite__Oidc__Enabled": "true",
+        "Suite__Hosts__Overrides__plataforma": "http://127.0.0.1:4040",
+        "Suite__Hosts__Overrides__tramites": "http://127.0.0.1:3000"
+      }
+    }
+  }
+}

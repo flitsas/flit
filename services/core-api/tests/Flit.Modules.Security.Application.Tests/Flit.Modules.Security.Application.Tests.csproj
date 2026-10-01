@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
+    <!-- Epic #13217 (HU #13232): login y recuperación de cuenta viven en core-identity. -->
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identity.Application\Flit.Identity.Application.csproj" />
     <ProjectReference Include="..\..\src\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
   </ItemGroup>
 

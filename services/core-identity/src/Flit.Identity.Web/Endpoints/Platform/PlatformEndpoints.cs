@@ -78,7 +78,7 @@ public static class PlatformEndpoints
         // GET /admin/tenants/{tenantId}/products — estado de cada producto para una empresa.
         group.MapGet("/admin/tenants/{tenantId:guid}/products", async (
             Guid tenantId,
-            FlitDbContext db,
+            IIdentityDb db,
             ListTenantProductsHandler handler,
             CancellationToken ct) =>
         {
@@ -94,7 +94,7 @@ public static class PlatformEndpoints
             string productCode,
             [FromBody] SetTenantProductRequest request,
             ClaimsPrincipal user,
-            FlitDbContext db,
+            IIdentityDb db,
             SetTenantProductEnabledHandler handler,
             CancellationToken ct) =>
         {

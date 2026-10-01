@@ -26,17 +26,17 @@ namespace Flit.Api.Middleware;
 public sealed class TenantEnforcementMiddleware(RequestDelegate next)
 {
     /// <summary>Clave en <see cref="HttpContext.Items"/> del tenant resuelto (Guid? — null = todos).</summary>
-    public const string TenantItemKey = "tramites.tenantId";
+    public const string TenantItemKey = TenantRequestItems.Tenant;
 
     /// <summary>Clave en <see cref="HttpContext.Items"/> de si el caller es SuperAdmin (bool).</summary>
-    public const string SuperAdminItemKey = "tramites.isSuperAdmin";
+    public const string SuperAdminItemKey = TenantRequestItems.SuperAdmin;
 
     /// <summary>
     /// Clave en <see cref="HttpContext.Items"/> del <see cref="TenantScope"/> de la petición (HU #12321).
     /// Canal NUEVO y paralelo: <see cref="TenantItemKey"/> y <see cref="SuperAdminItemKey"/> conservan
     /// exactamente el mismo valor que antes; un endpoint que ignore el scope devuelve lo mismo.
     /// </summary>
-    public const string TenantScopeItemKey = "tramites.tenantScope";
+    public const string TenantScopeItemKey = TenantRequestItems.TenantScope;
 
     private const string TenantHeader = "X-Tenant-Id";
 

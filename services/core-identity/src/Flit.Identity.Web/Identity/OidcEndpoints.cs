@@ -144,7 +144,7 @@ public static class OidcEndpoints
         var request = http.GetOpenIddictServerRequest() ?? throw new InvalidOperationException("La petición OIDC no llegó al servidor.");
 
         if (request.IsClientCredentialsGrantType())
-            return Results.SignIn(factory.ForService(request.ClientId!, request.GetScopes()), null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            return Results.SignIn(OidcPrincipalFactory.ForService(request.ClientId!, request.GetScopes()), null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
         // authorization_code y refresh_token: OpenIddict ya validó el código o el refresh (y lo rotó).
         var result = await http.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme).ConfigureAwait(false);

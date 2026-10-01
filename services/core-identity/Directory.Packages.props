@@ -1,0 +1,4 @@
+<Project>
+  <!-- Epic #13217 — versiones de paquetes centralizadas: las mismas que core-api, así las librerías compartidas no divergen. -->
+  <Import Project="..\core-api\Directory.Packages.props" />
+</Project>

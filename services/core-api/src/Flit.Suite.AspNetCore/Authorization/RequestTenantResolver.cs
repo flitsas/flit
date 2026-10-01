@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Flit.Api.Middleware;
 using Flit.Queries.Domain.Tenancy;
 
 namespace Flit.Api.Authorization;
@@ -77,9 +76,9 @@ public static class RequestTenantResolver
     public static (Guid? TenantId, bool IsSuperAdmin) FromItems(HttpContext http)
     {
         ArgumentNullException.ThrowIfNull(http);
-        var isSuperAdmin = http.Items.TryGetValue(TenantEnforcementMiddleware.SuperAdminItemKey, out var sa)
+        var isSuperAdmin = http.Items.TryGetValue(TenantRequestItems.SuperAdmin, out var sa)
             && sa is true;
-        Guid? tenantId = http.Items.TryGetValue(TenantEnforcementMiddleware.TenantItemKey, out var t) && t is Guid g
+        Guid? tenantId = http.Items.TryGetValue(TenantRequestItems.Tenant, out var t) && t is Guid g
             ? g
             : null;
         return (tenantId, isSuperAdmin);
@@ -94,7 +93,7 @@ public static class RequestTenantResolver
     public static TenantScope? ScopeFromItems(HttpContext http)
     {
         ArgumentNullException.ThrowIfNull(http);
-        return http.Items.TryGetValue(TenantEnforcementMiddleware.TenantScopeItemKey, out var s) && s is TenantScope scope
+        return http.Items.TryGetValue(TenantRequestItems.TenantScope, out var s) && s is TenantScope scope
             ? scope
             : null;
     }

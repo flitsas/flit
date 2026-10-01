@@ -10,6 +10,9 @@
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
     <Project Path="src/Flit.Identity.Infrastructure/Flit.Identity.Infrastructure.csproj" />
     <Project Path="src/Flit.Suite.AspNetCore/Flit.Suite.AspNetCore.csproj" />
+    <Project Path="../core-identity/src/Flit.Identity.Application/Flit.Identity.Application.csproj" />
+    <Project Path="../core-identity/src/Flit.Identity.Web/Flit.Identity.Web.csproj" />
+    <Project Path="../core-identity/src/Flit.Identity.Api/Flit.Identity.Api.csproj" />
     <Project Path="src/Flit.Tramites.Domain/Flit.Tramites.Domain.csproj" />
     <Project Path="src/Flit.Tramites.Application/Flit.Tramites.Application.csproj" />
     <Project Path="src/Flit.Modules.Security.Application/Flit.Modules.Security.Application.csproj" />
@@ -32,6 +35,7 @@
     <Project Path="tests/Flit.DataMigration.Tests/Flit.DataMigration.Tests.csproj" />
     <Project Path="tests/Flit.Integration.Tests/Flit.Integration.Tests.csproj" />
     <Project Path="tests/Flit.Gateway.Tests/Flit.Gateway.Tests.csproj" />
+    <Project Path="../core-identity/tests/Flit.Identity.Tests/Flit.Identity.Tests.csproj" />
   </Folder>
   <!--
     Migracion V1 -> V2. Vive en tools/ y no en src/ a proposito: es andamiaje temporal que se

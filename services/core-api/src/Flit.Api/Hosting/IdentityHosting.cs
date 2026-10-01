@@ -1,7 +1,5 @@
-using Flit.Api.Endpoints;
-using Flit.Api.Endpoints.Platform;
-using Flit.Api.Endpoints.Public;
 using Flit.Api.Identity;
+using Flit.Identity.Web;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,14 +44,8 @@ internal static class IdentityHosting
     /// Las rutas que el login necesita para sobrevivir a una caída de <c>core-api</c> (frontera §4). Las mapean los dos
     /// papeles: con la bandera del gateway apagada, <c>core-api</c> las sigue atendiendo como hoy.
     /// </summary>
-    public static IEndpointRouteBuilder MapIdentityEndpoints(this IEndpointRouteBuilder app)
-    {
-        app.MapAuthEndpoints(); // /api/v1/auth/*
-        app.MapPlatformEndpoints(); // /api/v1/platform/* · HU #12966
-        app.MapPublicBrandingEndpoints(); // /api/v1/public/branding* · HU #12418
-        app.MapFlitOidcEndpoints(); // /connect/*, /api/v1/platform/issuers · HU #12990 (/connect/* con Suite:Oidc:Enabled)
-        return app;
-    }
+    public static IEndpointRouteBuilder MapIdentityEndpoints(this IEndpointRouteBuilder app) =>
+        app.MapFlitIdentityEndpoints(); // Epic #13217 (HU #13232): viven en Flit.Identity.Web
 
     /// <summary>
     /// <c>/health/ready</c>: la base responde y no le faltan migraciones que este código trae. <c>core-identity</c> no

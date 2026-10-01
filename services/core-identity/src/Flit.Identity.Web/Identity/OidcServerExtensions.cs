@@ -1,4 +1,3 @@
-using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
 using Flit.Modules.Platform.Application.Hosts;
 using Flit.Modules.Security.Application.Auth;
@@ -18,10 +17,6 @@ namespace Flit.Api.Identity;
 /// </summary>
 public static class OidcServerExtensions
 {
-    /// <summary>Aceptación de tokens (compartida con core-identity) más el servidor OIDC. Epic #13217 (HU #13232).</summary>
-    public static IServiceCollection AddFlitOidc(this IServiceCollection services, IConfiguration configuration) =>
-        services.AddFlitOidcAcceptance<FlitDbContext>(configuration).AddFlitOidcServer(configuration);
-
     /// <summary>
     /// El servidor OIDC del hub: sesión del hub (cookie), endpoints de OpenIddict, llaves persistentes, fábrica de
     /// principales y los dos procesos de mantenimiento. Requiere <see cref="OidcAcceptanceExtensions.AddFlitOidcAcceptance{TContext}"/>.
