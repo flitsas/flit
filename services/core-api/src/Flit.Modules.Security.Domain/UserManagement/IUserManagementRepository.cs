@@ -22,12 +22,12 @@ public interface IUserManagementRepository
     Task<UserManagementTarget?> FindTargetAsync(Guid userId, bool includeDeleted, CancellationToken ct);
 
     /// <summary>
-    /// Busca cualquier usuario (activo o soft-deleted) que tenga ese correo, comparación
-    /// case-insensitive (HU #10621 AC2/AC3 — <c>uq_users_email</c> es un índice único GLOBAL,
-    /// no parcial: un correo soft-deleted sigue "ocupado" en BD). <c>null</c> si el correo
-    /// está libre.
+    /// Busca el usuario VIVO (no soft-deleted) que tenga ese correo, comparación
+    /// case-insensitive (HU #10621 AC2). Bug #13194: <c>uq_users_email</c> es un índice parcial
+    /// (<c>deleted_at IS NULL</c>), así que un correo que solo usa una cuenta eliminada está
+    /// libre. <c>null</c> si el correo está libre.
     /// </summary>
-    Task<ExistingUserByEmail?> FindByEmailIncludingDeletedAsync(string email, CancellationToken ct);
+    Task<ExistingUserByEmail?> FindLiveByEmailAsync(string email, CancellationToken ct);
 
     /// <summary>
     /// Actualiza nombre y/o correo del usuario con concurrencia optimista contra
@@ -112,7 +112,7 @@ public sealed record UserManagementTarget(
     long RowVersion);
 
 /// <summary>Resultado de la búsqueda de un usuario existente por correo (HU #10621 AC2/AC3).</summary>
-public sealed record ExistingUserByEmail(Guid UserId, bool IsDeleted);
+public sealed record ExistingUserByEmail(Guid UserId);
 
 /// <summary>Asignación activa de un rol administrativo, con el tenant en el que aplica.</summary>
 public sealed record ActiveAdminRoleAssignment(string RoleCode, Guid TenantId);

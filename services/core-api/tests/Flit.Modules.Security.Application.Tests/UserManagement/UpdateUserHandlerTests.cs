@@ -40,7 +40,7 @@ public sealed class UpdateUserHandlerTests
     [Fact]
     public async Task HandleAsync_WithValidNameAndEmail_PersistsChanges()
     {
-        _repo.FindByEmailIncludingDeletedAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
+        _repo.FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
             .Returns((ExistingUserByEmail?)null);
 
         await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
@@ -61,7 +61,7 @@ public sealed class UpdateUserHandlerTests
         await _handler.Invoking(h => h.HandleAsync(command, CancellationToken.None))
             .Should().NotThrowAsync();
 
-        await _repo.DidNotReceiveWithAnyArgs().FindByEmailIncludingDeletedAsync(
+        await _repo.DidNotReceiveWithAnyArgs().FindLiveByEmailAsync(
             Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _repo.Received(1).UpdateProfileAsync(
             UserId, "Solo Nombre", null, 3, Arg.Any<DateTimeOffset>(), CallerId, Arg.Any<CancellationToken>());
@@ -77,7 +77,7 @@ public sealed class UpdateUserHandlerTests
         await _handler.Invoking(h => h.HandleAsync(command, CancellationToken.None))
             .Should().NotThrowAsync();
 
-        await _repo.DidNotReceiveWithAnyArgs().FindByEmailIncludingDeletedAsync(
+        await _repo.DidNotReceiveWithAnyArgs().FindLiveByEmailAsync(
             Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _repo.Received(1).UpdateProfileAsync(
             UserId, null, null, 3, Arg.Any<DateTimeOffset>(), CallerId, Arg.Any<CancellationToken>());
@@ -87,8 +87,8 @@ public sealed class UpdateUserHandlerTests
     [Fact]
     public async Task HandleAsync_WhenEmailBelongsToAnotherActiveUser_ThrowsUserAlreadyExists()
     {
-        _repo.FindByEmailIncludingDeletedAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
-            .Returns(new ExistingUserByEmail(Guid.NewGuid(), IsDeleted: false));
+        _repo.FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
+            .Returns(new ExistingUserByEmail(Guid.NewGuid()));
 
         await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
             .Should().ThrowAsync<UserAlreadyExistsException>();
@@ -98,19 +98,21 @@ public sealed class UpdateUserHandlerTests
             Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
-    // AC3 — el correo pertenece a una cuenta soft-deleted → error específico, no el genérico de "ya existe".
+    // Bug #13194 P6 — el correo solo lo usa una cuenta soft-deleted: la búsqueda de usuarios VIVOS
+    // no la ve (uq_users_email es parcial por deleted_at IS NULL) y el cambio se persiste (antes: 409).
     [Fact]
-    public async Task HandleAsync_WhenEmailBelongsToDeletedAccount_ThrowsEmailBelongsToDeletedAccount()
+    public async Task HandleAsync_WhenEmailOnlyUsedByDeletedAccount_PersistsChange()
     {
-        _repo.FindByEmailIncludingDeletedAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
-            .Returns(new ExistingUserByEmail(Guid.NewGuid(), IsDeleted: true));
+        _repo.FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
+            .Returns((ExistingUserByEmail?)null);
 
         await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
-            .Should().ThrowAsync<UserEmailBelongsToDeletedAccountException>();
+            .Should().NotThrowAsync();
 
-        await _repo.DidNotReceiveWithAnyArgs().UpdateProfileAsync(
-            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<long>(),
-            Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>());
+        await _repo.Received(1).UpdateProfileAsync(
+            UserId, "Nombre Nuevo", "nuevo.email@flit.co", 3, Arg.Any<DateTimeOffset>(), CallerId,
+            Arg.Any<CancellationToken>());
     }
 
     // AC4 — rowVersion desactualizado: el repositorio detecta la concurrencia optimista y lanza
@@ -118,7 +120,7 @@ public sealed class UpdateUserHandlerTests
     [Fact]
     public async Task HandleAsync_WhenRowVersionIsStale_PropagatesConcurrencyException()
     {
-        _repo.FindByEmailIncludingDeletedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindLiveByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((ExistingUserByEmail?)null);
         _repo.UpdateProfileAsync(
                 UserId, Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<long>(),
@@ -136,14 +138,14 @@ public sealed class UpdateUserHandlerTests
     [Fact]
     public async Task HandleAsync_OnSuccessfulEmailChange_HasNoSessionInvalidationSideEffect()
     {
-        _repo.FindByEmailIncludingDeletedAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
+        _repo.FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
             .Returns((ExistingUserByEmail?)null);
 
         await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
             .Should().NotThrowAsync();
 
         // Única interacción posterior a la resolución del target: FindByEmail + UpdateProfile.
-        await _repo.Received(1).FindByEmailIncludingDeletedAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>());
+        await _repo.Received(1).FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>());
         await _repo.Received(1).UpdateProfileAsync(
             UserId, "Nombre Nuevo", "nuevo.email@flit.co", 3, Arg.Any<DateTimeOffset>(), CallerId,
             Arg.Any<CancellationToken>());
@@ -157,7 +159,7 @@ public sealed class UpdateUserHandlerTests
         await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
             .Should().ThrowAsync<TargetUserNotFoundException>();
 
-        await _repo.DidNotReceiveWithAnyArgs().FindByEmailIncludingDeletedAsync(
+        await _repo.DidNotReceiveWithAnyArgs().FindLiveByEmailAsync(
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -181,7 +183,7 @@ public sealed class UpdateUserHandlerTests
     {
         var otherTenantTarget = DefaultTarget with { TenantId = OtherTenantId };
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>()).Returns(otherTenantTarget);
-        _repo.FindByEmailIncludingDeletedAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
+        _repo.FindLiveByEmailAsync("nuevo.email@flit.co", Arg.Any<CancellationToken>())
             .Returns((ExistingUserByEmail?)null);
 
         await _handler

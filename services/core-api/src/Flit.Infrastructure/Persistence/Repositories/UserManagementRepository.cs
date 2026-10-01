@@ -46,15 +46,14 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
             user.Id, tenantId.Value, user.Email, user.DisplayName, user.DeletedAt, user.RowVersion);
     }
 
-    public async Task<ExistingUserByEmail?> FindByEmailIncludingDeletedAsync(string email, CancellationToken ct)
+    public async Task<ExistingUserByEmail?> FindLiveByEmailAsync(string email, CancellationToken ct)
     {
-        // uq_users_email es un índice único GLOBAL (no parcial por deleted_at): un correo
-        // soft-deleted sigue "ocupado" en BD, por eso esta búsqueda NO filtra por DeletedAt
-        // (a diferencia de AuthUserRepository.FindByEmailAsync, que sí lo hace para el login).
+        // Bug #13194: uq_users_email es parcial (deleted_at IS NULL) — solo un usuario vivo
+        // ocupa el correo; la cuenta eliminada conserva su historial sin bloquearlo.
         return await db.Users
             .AsNoTracking()
-            .Where(u => EF.Functions.ILike(u.Email, email))
-            .Select(u => new ExistingUserByEmail(u.Id, u.DeletedAt != null))
+            .Where(u => u.DeletedAt == null && EF.Functions.ILike(u.Email, email))
+            .Select(u => new ExistingUserByEmail(u.Id))
             .FirstOrDefaultAsync(ct);
     }
 
