@@ -126,6 +126,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
 
+    /// <summary>Personalización por formato de contrato de mandato (HU #13169).</summary>
+    public DbSet<MandateFormatSettingEntity> MandateFormatSettings => Set<MandateFormatSettingEntity>();
+
+    /// <summary>Versiones inmutables de la plantilla de cada formato (HU #13169).</summary>
+    public DbSet<MandateFormatVersionEntity> MandateFormatVersions => Set<MandateFormatVersionEntity>();
+
     /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
     public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
         Set<CompanyOtMandateRuleEntity>();
