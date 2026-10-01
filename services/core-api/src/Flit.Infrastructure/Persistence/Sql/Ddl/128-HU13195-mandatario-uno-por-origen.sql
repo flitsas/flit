@@ -52,6 +52,10 @@ BEGIN
                                              AND b.valid_until > now()
                                              AND upper(btrim(b.document_type))   = upper(btrim(s.document_type))
                                              AND upper(btrim(b.document_number)) = upper(btrim(s.document_number)))
+                                  OR EXISTS (SELECT 1 FROM admin.admin_identity_validations iv
+                                              WHERE iv.id = s.identity_validation_ref
+                                                AND iv.status = 'aprobado'
+                                                AND iv.valid_until > now())
                          END))) AS has_valid_signature
           FROM admin.mandate_signer_companies c
           JOIN admin.mandate_signers s ON s.id = c.mandate_signer_id

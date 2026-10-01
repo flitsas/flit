@@ -1,4 +1,3 @@
-using Flit.Infrastructure.Persistence.Sql;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -7,29 +6,27 @@ namespace Flit.Infrastructure.Migrations
 {
     /// <inheritdoc />
     /// <remarks>
-    /// HU #13160 (Feature #13120, Épica #13090) — limpieza DESTRUCTIVA del modelo de mandatarios: elimina la tabla
-    /// <c>admin.admin_identity_validations</c> (sin uso desde ADR-0050) y las columnas
-    /// <c>admin.mandate_signers.identity_validation_ref</c> y <c>admin.transit_office_mandate_config.custom_field_manifest</c>.
-    /// NO toca <c>admin.company_legal_representatives.identity_validation_ref</c>. El DDL
-    /// (<c>127-HU13160-limpieza-identidad-mandatario.sql</c>) aborta si encuentra datos en uso. La reversa recrea la
-    /// estructura sin datos (DDL 40 y 74 más las dos columnas). La migración tiene Designer.cs con [DbContext] y
-    /// [Migration], y el snapshot ya no incluye la entidad ni las propiedades retiradas.
+    /// HU #13160 — FASE 1 (decisión del Líder Técnico, 01-oct). Esta migración existe SOLO para que el snapshot de EF
+    /// coincida con el modelo (sin PendingModelChanges): el modelo ya no mapea <c>admin.admin_identity_validations</c>,
+    /// <c>admin.mandate_signers.identity_validation_ref</c> ni <c>admin.transit_office_mandate_config.custom_field_manifest</c>.
+    /// Up y Down NO ejecutan SQL: en la base esas estructuras siguen existiendo, huérfanas (columnas nulables y tabla sin
+    /// FK entrantes, así que EF puede escribir y borrar filas sin tocarlas).
+    /// <para>FASE 2 (pendiente, DDL 127 RESERVADO): una migración posterior hará el DROP real de las tres estructuras,
+    /// con respaldo y conteo previos por ambiente. NO va aquí porque la API aplica migraciones al arrancar
+    /// (<c>Program.cs</c>, Migrate()) y una guarda que aborte por datos dejaría la API sin arrancar.</para>
     /// </remarks>
     public partial class HU13160_LimpiezaIdentidadMandatario : Migration
     {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder) =>
-            migrationBuilder.Sql(EmbeddedDdl.LoadUp("127-HU13160-limpieza-identidad-mandatario.sql"));
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            // Fase 1: sin SQL a propósito (ver remarks).
+        }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(EmbeddedDdl.LoadUp("40-HU10907-admin-identity-validations.sql"));
-            migrationBuilder.Sql(EmbeddedDdl.LoadUp("74-HU11504-admin-identity-validations-attempts.sql"));
-            migrationBuilder.Sql(
-                "ALTER TABLE admin.mandate_signers ADD COLUMN IF NOT EXISTS identity_validation_ref uuid;");
-            migrationBuilder.Sql(
-                "ALTER TABLE admin.transit_office_mandate_config ADD COLUMN IF NOT EXISTS custom_field_manifest jsonb;");
+            // Fase 1: sin SQL a propósito (ver remarks).
         }
     }
 }
