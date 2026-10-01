@@ -62,38 +62,9 @@ Flit.Analytics.Application.Scheduling.AnalyticsSchedulingServiceCollectionExtens
 // Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
 builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
 
-// Respuesta 401 con código SESSION_EXPIRED para tokens expirados (HU #10168, AC3).
-// Aditivo sobre AddApiSecurity: solo fija Events, sin alterar TokenValidationParameters.
-builder.Services.PostConfigure<JwtBearerOptions>(
-    JwtBearerDefaults.AuthenticationScheme,
-    options => options.Events = new JwtBearerEvents
-    {
-        // Cierre de sesión en toda la suite: un token OIDC de una sesión ya cerrada se rechaza (SESSION_EXPIRED).
-        OnTokenValidated = Flit.Api.Identity.OidcSessionCheck.ValidateAsync,
-        // HU #12896: la respuesta SESSION_EXPIRED la escribe SOLO OnChallenge. Antes también la escribía
-        // OnAuthenticationFailed y el segundo intento reventaba («the response has already started»); nunca
-        // se había visto porque sin validar el vencimiento ningún token llegaba aquí como vencido.
-        OnChallenge = context =>
-        {
-            // HU #12896: cualquier token PRESENTE pero inválido (vencido, mal firmado, de otro emisor o audiencia)
-            // responde SESSION_EXPIRED, que el frontend ya maneja (borra el token y lleva al login). Sin esto, el
-            // día que la API empieza a validar la firma, las sesiones abiertas con la llave efímera anterior
-            // quedarían en un 401 sin código y el usuario no volvería al login.
-            if (context.AuthenticateFailure is SecurityTokenException)
-            {
-                context.HandleResponse();
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync(JsonSerializer.Serialize(new
-                {
-                    code = "SESSION_EXPIRED",
-                    message = "Session expired. Please sign in again.",
-                }));
-            }
-
-            return Task.CompletedTask;
-        },
-    });
+// Respuesta 401 con código SESSION_EXPIRED para tokens expirados (HU #10168, AC3) y cierre de sesión en toda la suite.
+// Epic #13217 (HU #13232): compartido con core-identity (Flit.Suite.AspNetCore).
+builder.Services.AddFlitSessionExpiredResponses();
 
 // Módulo Admin (HU #10189, RF02).
 builder.Services.AddAdminApplication();

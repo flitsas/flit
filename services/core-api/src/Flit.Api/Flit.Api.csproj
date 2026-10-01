@@ -14,6 +14,8 @@
     <ProjectReference Include="..\Flit.Analytics.Application\Flit.Analytics.Application.csproj" />
     <ProjectReference Include="..\Flit.DrFlit.Application\Flit.DrFlit.Application.csproj" />
     <ProjectReference Include="..\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+    <!-- Epic #13217 (HU #13232): validación de tokens, dominio sellado y hosts de productos, compartidos con core-identity. -->
+    <ProjectReference Include="..\Flit.Suite.AspNetCore\Flit.Suite.AspNetCore.csproj" />
     <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />

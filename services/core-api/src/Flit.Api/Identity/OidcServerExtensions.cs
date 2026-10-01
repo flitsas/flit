@@ -18,11 +18,17 @@ namespace Flit.Api.Identity;
 /// </summary>
 public static class OidcServerExtensions
 {
-    public static IServiceCollection AddFlitOidc(this IServiceCollection services, IConfiguration configuration)
+    /// <summary>Aceptación de tokens (compartida con core-identity) más el servidor OIDC. Epic #13217 (HU #13232).</summary>
+    public static IServiceCollection AddFlitOidc(this IServiceCollection services, IConfiguration configuration) =>
+        services.AddFlitOidcAcceptance<FlitDbContext>(configuration).AddFlitOidcServer(configuration);
+
+    /// <summary>
+    /// El servidor OIDC del hub: sesión del hub (cookie), endpoints de OpenIddict, llaves persistentes, fábrica de
+    /// principales y los dos procesos de mantenimiento. Requiere <see cref="OidcAcceptanceExtensions.AddFlitOidcAcceptance{TContext}"/>.
+    /// </summary>
+    public static IServiceCollection AddFlitOidcServer(this IServiceCollection services, IConfiguration configuration)
     {
-        var section = configuration.GetSection(OidcOptions.SectionName);
-        services.Configure<OidcOptions>(section);
-        var options = section.Get<OidcOptions>() ?? new OidcOptions();
+        var options = configuration.GetSection(OidcOptions.SectionName).Get<OidcOptions>() ?? new OidcOptions();
         if (!options.Enabled)
             return services;
 
@@ -55,7 +61,6 @@ public static class OidcServerExtensions
         });
 
         services.AddOpenIddict()
-            .AddCore(core => core.UseEntityFrameworkCore().UseDbContext<FlitDbContext>().ReplaceDefaultEntities<Guid>())
             .AddServer(server =>
             {
                 server.SetAuthorizationEndpointUris("connect/authorize")
@@ -122,7 +127,6 @@ public static class OidcServerExtensions
         });
 
         services.AddScoped<OidcPrincipalFactory>();
-        OidcTokenAcceptance.Register(services); // HU #12992 (A-07): la API acepta los tokens del hub
         services.AddHostedService<OidcClientSync>();
         services.AddHostedService<OidcPruningService>();
         return services;

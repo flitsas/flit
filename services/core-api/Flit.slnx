@@ -9,6 +9,7 @@
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
     <Project Path="src/Flit.Identity.Infrastructure/Flit.Identity.Infrastructure.csproj" />
+    <Project Path="src/Flit.Suite.AspNetCore/Flit.Suite.AspNetCore.csproj" />
     <Project Path="src/Flit.Tramites.Domain/Flit.Tramites.Domain.csproj" />
     <Project Path="src/Flit.Tramites.Application/Flit.Tramites.Application.csproj" />
     <Project Path="src/Flit.Modules.Security.Application/Flit.Modules.Security.Application.csproj" />

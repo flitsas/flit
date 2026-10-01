@@ -31,71 +31,8 @@ public static class ApiSecurityExtensions
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
 
-        var jwtSection = configuration.GetSection("Jwt");
-        var issuer = jwtSection["Issuer"];
-        var audience = jwtSection["Audience"];
-        var signingKey = ResolveSigningKey(jwtSection, environment);
-
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                // No remapear claims inbound: el claim de rol viaja como "role" y la
-                // policy SuperAdmin lo exige vía RoleClaimType="role". Con el mapeo por
-                // defecto (true), JWT Bearer renombra "role" al URI largo de .NET y
-                // RequireRole nunca encuentra match → todo SuperAdmin recibiría 403.
-                options.MapInboundClaims = false;
-
-                if (signingKey is not null)
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = !string.IsNullOrWhiteSpace(issuer),
-                        ValidIssuer = issuer,
-                        ValidateAudience = !string.IsNullOrWhiteSpace(audience),
-                        ValidAudience = audience,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = signingKey,
-                        RoleClaimType = AdminAuthorization.RoleClaimType,
-                        ClockSkew = TimeSpan.FromSeconds(30),
-                    };
-                    return;
-                }
-
-                // Sin llave de firma: se acepta el token sin validar firma (login no
-                // obligatorio aún). El rol SuperAdmin sigue exigiéndose vía policy.
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                    ValidateLifetime = false,
-                    ValidateIssuerSigningKey = false,
-                    RoleClaimType = AdminAuthorization.RoleClaimType,
-                    SignatureValidator = static (token, _) => new JsonWebToken(token),
-                };
-            });
-
-        // HU #12896 (A-03): sin llave pública configurada, la API puede validar sus PROPIOS tokens con la parte
-        // pública de la llave con que firma (JwtKeyMaterial, persistente con Jwt:PersistSigningKey). Cierra el
-        // modo permisivo de arriba sin poner llaves en el .env. Fail-closed: si la llave no se puede cargar, las
-        // peticiones autenticadas fallan en vez de aceptarse.
-        if (signingKey is null && jwtSection.GetValue<bool>("ValidateIssuedTokens"))
-        {
-            services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-                .PostConfigure<Flit.Infrastructure.Security.JwtKeyMaterial>((options, keyMaterial) =>
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidIssuer = keyMaterial.Issuer,
-                        ValidateAudience = true,
-                        ValidAudience = keyMaterial.Audience,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new RsaSecurityKey(keyMaterial.SigningKey.Rsa.ExportParameters(includePrivateParameters: false)),
-                        RoleClaimType = AdminAuthorization.RoleClaimType,
-                        ClockSkew = TimeSpan.FromSeconds(30),
-                    });
-        }
+        // Epic #13217 (HU #13232): el JWT de la plataforma (de siempre y del hub) se valida igual en core-identity.
+        services.AddFlitTokenValidation(configuration, environment);
 
         // Service-token gRPC este-oeste (ICT): esquema JwtBearer APARTE con secreto compartido (HMAC),
         // aislado del token de plataforma. Solo lo consume la policy IctServicePolicy en los gRPC services
@@ -125,9 +62,7 @@ public static class ApiSecurityExtensions
         });
 
         services.AddAuthorizationBuilder()
-            .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy
-                .RequireAuthenticatedUser()
-                .RequireRole(AdminAuthorization.SuperAdminRole))
+            .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy.RequireSuperAdmin())
             .AddPolicy(AdminAuthorization.AdminCompanyPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .AddRequirements(new AdminCompanyRequirement()))
@@ -163,34 +98,5 @@ public static class ApiSecurityExtensions
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, SuperAdminForbiddenResultHandler>();
 
         return services;
-    }
-
-    private static RsaSecurityKey? ResolveSigningKey(IConfiguration jwtSection, IHostEnvironment environment)
-    {
-        var pem = jwtSection["PublicKeyPem"];
-
-        if (string.IsNullOrWhiteSpace(pem))
-        {
-            var path = jwtSection["PublicKeyPath"];
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                var resolved = Path.IsPathRooted(path)
-                    ? path
-                    : Path.Combine(environment.ContentRootPath, path);
-                if (File.Exists(resolved))
-                {
-                    pem = File.ReadAllText(resolved);
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(pem))
-        {
-            return null;
-        }
-
-        var rsa = RSA.Create();
-        rsa.ImportFromPem(pem);
-        return new RsaSecurityKey(rsa);
     }
 }
