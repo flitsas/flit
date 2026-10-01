@@ -174,6 +174,8 @@ public sealed class ListProcedureInstancesTests
             Status = TramiteEstado.Borrador,
             DraftFinalizedAt = DateTimeOffset.UtcNow.AddHours(-2),
             CreatedAt = DateTimeOffset.UtcNow,
+            // Bug #13194 (D4) — fail-closed: la validación aprueba solo al actor de su MISMO documento.
+            Actors = { Actor("comprador", doc: "123") },
             BiometricValidations =
             {
                 new ProcedureInstanceBiometricValidation
@@ -181,6 +183,8 @@ public sealed class ListProcedureInstancesTests
                     Id = Guid.NewGuid(),
                     PartyRole = "comprador",
                     Status = BiometricEstados.Aprobado,
+                    DocumentType = "CC",
+                    DocumentNumber = "123",
                     CreatedAt = DateTimeOffset.UtcNow,
                 },
             },
@@ -676,7 +680,11 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = Traspaso(Guid.NewGuid());
         instance.Actors.Add(Actor("vendedor", doc: "111"));
-        instance.BiometricValidations.Add(Biometrica("vendedor", estado));
+        // Bug #13194 (D4) — el rechazo se atribuye solo si la fila es del MISMO documento del sujeto.
+        var rechazo = Biometrica("vendedor", estado);
+        rechazo.DocumentType = "CC";
+        rechazo.DocumentNumber = "111";
+        instance.BiometricValidations.Add(rechazo);
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
 
         var result = await _sut.HandleAsync(instance.TenantId, ct);
