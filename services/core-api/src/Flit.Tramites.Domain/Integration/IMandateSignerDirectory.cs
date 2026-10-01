@@ -31,13 +31,13 @@ public sealed record MandateSignerCandidate(
     bool FirmaFisica = false,
     /// <summary>
     /// HU #13130 (ADR-0061) — el mandatario tiene FIRMA VÁLIDA: su vigencia propia está activa Y, si firma
-    /// con biometría, su validación biométrica está vigente (regla de 30 días del módulo Identidad). Las
+    /// con biometría, su validación biométrica está aprobada (sin renovación, HU #13130b; la regla de 30 días rige solo el trámite). Las
     /// dos vigencias conviven. Si es <c>false</c> no se estampa firma ni sello y
     /// <see cref="MotivoSinFirma"/> dice por qué. Por defecto <c>true</c>: sin dato, el comportamiento no cambia.
     /// </summary>
     bool FirmaValida = true,
-    /// <summary>Motivo de <c>FirmaValida == false</c>: <c>mandatario_fuera_de_vigencia</c>, <c>mandatario_inactivo</c>,
-    /// <c>biometria_vencida</c> o <c>sin_validacion_aprobada</c>.</summary>
+    /// <summary>Motivo de <c>FirmaValida == false</c>: <c>mandatario_fuera_de_vigencia</c>, <c>mandatario_inactivo</c>
+    /// o <c>sin_validacion_aprobada</c>.</summary>
     string? MotivoSinFirma = null);
 
 /// <summary>

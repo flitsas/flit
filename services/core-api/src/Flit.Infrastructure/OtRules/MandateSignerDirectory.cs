@@ -212,7 +212,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             _otStatus,
             [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
                 s.Id, transitOfficeId, s.DocumentType, s.DocumentNumber))],
-            (tenantId, documentos, ct) => _identityResolver.ResolveManyAsync(tenantId, documentos, now, ct),
+            (tenantId, documentos, ct) => _identityResolver.ResolveManyMandatarioAsync(tenantId, documentos, now, ct),
             cancellationToken).ConfigureAwait(false);
 
         foreach (var (signerId, result) in resueltos)
