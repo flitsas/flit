@@ -135,7 +135,7 @@ public sealed class MandatoPrelacionTests
     }
 
     [Fact]
-    public async Task DefaultDelOt_ConBajaLogica_NoSeResuelve_YSeApruebaSinFirmante()
+    public async Task DefaultDelOt_ConBajaLogica_NoSeResuelve_YElOtDebeElegir()
     {
         var instance = Seed();
         var defaultOt = Signer();
@@ -144,7 +144,8 @@ public sealed class MandatoPrelacionTests
         // El directorio ya no devuelve a un eliminado (AC4): GetByIdAsync devuelve null.
         _directory.GetByIdAsync(defaultOt.Id, Arg.Any<CancellationToken>()).Returns((MandateSignerCandidate?)null);
 
-        (await Check(instance)).Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
+        // HU #13147b — nadie resuelve y el trámite exige firmante: 409 (el OT elige o registra uno).
+        (await Check(instance)).Outcome.Should().Be(MandatoApprovalOutcome.RequiereSeleccion);
     }
 
     [Fact]
@@ -167,10 +168,10 @@ public sealed class MandatoPrelacionTests
         var conBaul = Signer(MandateSignerOrigins.Organismo, metodo: MandateSignerOrigins.FormaBaul);
         Candidates(conBaul);
 
-        // Sin firma vigente en el baúl: descartado, no hay firmante y se aprueba sin él (S-3).
+        // Sin firma vigente en el baúl: descartado, no hay firmante: el OT debe elegir (409, HU #13147b).
         _vault.ResolveMandatarioAsync(Tenant, "CC", "123", Arg.Any<CancellationToken>())
             .Returns((SignatureVaultMatch?)null);
-        (await Check(instance)).Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
+        (await Check(instance)).Outcome.Should().Be(MandatoApprovalOutcome.RequiereSeleccion);
 
         _vault.ResolveMandatarioAsync(Tenant, "CC", "123", Arg.Any<CancellationToken>())
             .Returns(new SignatureVaultMatch(

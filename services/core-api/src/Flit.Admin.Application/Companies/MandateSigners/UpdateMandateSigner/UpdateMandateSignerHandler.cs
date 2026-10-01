@@ -129,7 +129,8 @@ public sealed class UpdateMandateSignerHandler
                     command.OfficeCompanies,
                     command.MandateSignerId,
                     command.CompanyVisibility,
-                    cancellationToken)
+                    cancellationToken,
+                    command.ConfiguredByScope)
                 .ConfigureAwait(false);
         }
 
