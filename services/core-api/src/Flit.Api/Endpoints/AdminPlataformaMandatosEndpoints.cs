@@ -77,6 +77,12 @@ public static class AdminPlataformaMandatosEndpoints
             .WithName("AdminPlataformaMandatosFormats")
             .Produces(StatusCodes.Status200OK);
 
+        // HU #13173 — vista previa de la plantilla EN BORRADOR de un formato: valida y genera el PDF de muestra sin guardar nada.
+        group.MapPost("/formatos/{code}/preview", PreviewDraftAsync)
+            .WithName("AdminPlataformaMandatosFormatDraftPreview")
+            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+            .Produces(StatusCodes.Status400BadRequest);
+
         group.MapGet("/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminPlataformaMandatosPreview")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
@@ -249,16 +255,71 @@ public static class AdminPlataformaMandatosEndpoints
         return MapWrite(status, view);
     }
 
-    private static IResult PreviewTemplateAsync(
+    private static async Task<IResult> PreviewTemplateAsync(
         [FromRoute] string templateCode,
-        [FromServices] IMandatoGenerator generator)
+        [FromQuery] Guid? officeId,
+        [FromServices] IMandatoGenerator generator,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
     {
         var code = templateCode?.Trim() ?? string.Empty;
-        // auto NO es una redacción: delega en la plantilla de sistema del organismo (la vista previa por OT).
+
+        // HU #13173 — auto no es una redacción, pero con un organismo SÍ tiene vista previa: la redacción efectiva
+        // de ese organismo (la misma de su vista previa propia). Sin organismo no hay nada que resolver.
+        if (string.Equals(code, MandatoTemplateResolver.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            if (officeId is null)
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = "organismo_requerido",
+                        message = "La redacción automática depende del organismo: envía officeId o usa la vista previa del organismo (GET /mandatos/ot/{officeId}/preview).",
+                    },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return await PreviewOtAsync(officeId.Value, service, generator, ct).ConfigureAwait(false);
+        }
+
         if (!MandatoFormatCatalog.IsRedaction(code))
             return MandatoFormatResponses.InvalidPreviewCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
+        return Results.File(doc.Content, contentType: "application/pdf");
+    }
+
+    /// <summary>Cuerpo de <c>POST /formatos/{code}/preview</c>: la plantilla en borrador.</summary>
+    public sealed record FormatDraftPreviewRequest(string? Body);
+
+    private static IResult PreviewDraftAsync(
+        [FromRoute] string code,
+        [FromBody] FormatDraftPreviewRequest request,
+        [FromServices] IMandatoGenerator generator)
+    {
+        var formatCode = code?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!MandatoFormatCatalog.IsRedaction(formatCode))
+            return MandatoFormatResponses.InvalidPreviewCode();
+
+        var body = request?.Body?.Trim() ?? string.Empty;
+        if (body.Length > MandatoFormatResponses.MaxTemplateBodyLength)
+        {
+            return Results.Json(
+                new { error = "plantilla_demasiado_larga", maxLength = MandatoFormatResponses.MaxTemplateBodyLength },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var validation = MandatoTemplateValidator.Validate(body);
+        if (!validation.IsValid)
+            return MandatoFormatResponses.InvalidTemplateBody(validation);
+
+        // Muestra ficticia (MandatoPreviewSample): ninguna persona real, y nada se persiste.
+        var sample = MandatoPreviewSample.Build(formatCode, datosDeMuestra: true) with
+        {
+            CustomTemplateKind = MandatoCustomTemplateKindCodes.Editor,
+            CustomTemplateBody = body,
+        };
+        var doc = generator.GenerateMandato(sample);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
 

@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Documents;
 using Flit.Tramites.Domain.Documents;
 
 namespace Flit.Api.Endpoints;
@@ -9,6 +10,23 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 internal static class MandatoFormatResponses
 {
+    /// <summary>Límite del cuerpo de una plantilla de formato: el mismo del editor de plantilla del organismo.</summary>
+    public const int MaxTemplateBodyLength = 100_000;
+
+    /// <summary>
+    /// 400 con el código del validador (<c>plantilla_vacia</c>, <c>plantilla_sintaxis_invalida</c> o
+    /// <c>plantilla_variable_invalida</c>) y, si aplica, las variables desconocidas con su posición y las permitidas.
+    /// </summary>
+    public static IResult InvalidTemplateBody(MandatoTemplateValidation validation) =>
+        Results.Json(
+            new
+            {
+                error = validation.Error,
+                unknownVariables = validation.UnknownVariables,
+                allowedVariables = MandatoTemplateValidator.AllowedVariables,
+            },
+            statusCode: StatusCodes.Status400BadRequest);
+
     /// <summary>400 <c>template_code_invalido</c> con los códigos válidos para guardar la configuración (incluye auto).</summary>
     public static IResult InvalidTemplateCode() =>
         Results.Json(
