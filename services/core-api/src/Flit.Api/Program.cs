@@ -34,11 +34,6 @@ builder.Host.UseDefaultServiceProvider(options =>
     options.ValidateOnBuild = true;
 });
 
-// HU #13224 (Epic #13217) — el mismo programa corre como core-api o como core-identity (Flit:HostRole=identity).
-// Ver docs/suite/identidad-frontera.md §3: misma composición; cambian las migraciones, los procesos en segundo
-// plano, el gRPC y las rutas.
-var hostRole = HostRoles.From(builder.Configuration);
-
 // Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
     ?? builder.Configuration.GetConnectionString("FlitDb");
@@ -148,7 +143,7 @@ builder.Services.AddGrpc();
 // Al declarar endpoints por código Kestrel ignora ASPNETCORE_URLS/launchSettings, así que se
 // re-declara el endpoint REST desde esas mismas URLs (mismo puerto/host que hoy) y se añade el gRPC.
 var ictGrpcPort = builder.Configuration.GetValue<int?>("Ict:GrpcPort");
-if (hostRole == HostRole.Api && ictGrpcPort is { } grpcPort)
+if (ictGrpcPort is { } grpcPort)
 {
     builder.WebHost.ConfigureKestrel((context, options) =>
     {
@@ -180,12 +175,6 @@ builder.Services.AddPlatformApi(builder.Configuration); // Frente B · HU #12966
 builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (Suite:Oidc:Enabled)
 // === FLIT Suite: fin servicios ===
 
-if (hostRole == HostRole.Identity)
-{
-    // Colas de correo, RUNT, Quipux, lotes, reportes y dominios ya corren en core-api: aquí solo los de OIDC.
-    builder.Services.RemoveBusinessHostedServices();
-}
-
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -193,8 +182,7 @@ var app = builder.Build();
 // hay pendientes es un no-op. La estrategia de reintentos de Npgsql
 // (EnableRetryOnFailure) cubre cortes transitorios de conexión durante el arranque.
 // Se puede desactivar con Database__AutoMigrate=false (p. ej. si se delega al CD).
-// core-identity nunca migra ni siembra: lo hace core-api, y /health/ready le dice si su esquema está al día.
-if (hostRole == HostRole.Api && app.Configuration.GetValue("Database:AutoMigrate", true))
+if (app.Configuration.GetValue("Database:AutoMigrate", true))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
@@ -259,12 +247,7 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 // cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
 
-if (hostRole == HostRole.Api)
-{
-    // Su escritor es un proceso en segundo plano de negocio: en core-identity no corre.
-    app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
-}
-
+app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)
 
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
@@ -273,12 +256,10 @@ app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 app.MapReadiness(); // HU #13224 — /health/ready: base alcanzable y sin migraciones pendientes
 
-// Orquestación ICT, administración, Trámites, reportes… (solo core-api) y las rutas de identidad (los dos papeles).
+// Rutas del login (Flit.Identity.Web): core-api las atiende solo durante la transición, como respaldo del gateway de
+// core-identity (Epic #13217; se quitan en el corte, HU #13235). Después, todo lo demás de core-api.
 app.MapIdentityEndpoints();
-if (hostRole == HostRole.Api)
-{
-    app.MapApiEndpoints();
-}
+app.MapApiEndpoints();
 
 app.Run();
 

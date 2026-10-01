@@ -1,4 +1,3 @@
-using Flit.Api.Identity;
 using Flit.Identity.Web;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -6,52 +5,18 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Api.Hosting;
 
 /// <summary>
-/// Lo que distingue al papel <see cref="HostRole.Identity"/> (HU #13224): qué procesos en segundo plano corre y qué
-/// rutas expone. El resto de la composición (servicios, middlewares, políticas) es la misma de <c>core-api</c>, así
-/// que no puede desviarse. Ver <c>docs/suite/identidad-frontera.md</c> §3, §4 y §8.
+/// Rutas de identidad y salud de core-api (Epic #13217). Las rutas del login viven en Flit.Identity.Web; core-api las
+/// mapea solo durante la transición, como respaldo del gateway de core-identity (HU #13235 las quita).
 /// </summary>
 internal static class IdentityHosting
 {
-    /// <summary>Los únicos procesos en segundo plano propios que corren en <c>core-identity</c>.</summary>
-    internal static readonly IReadOnlySet<Type> IdentityHostedServices = new HashSet<Type>
-    {
-        typeof(OidcClientSync),
-        typeof(OidcPruningService),
-    };
-
-    /// <summary>
-    /// Quita los procesos en segundo plano de FLIT (colas de correo, RUNT, Quipux, lotes, reportes, dominios…) salvo
-    /// los de OIDC: ya corren en <c>core-api</c> y duplicarlos procesaría dos veces el mismo trabajo. Solo toca los
-    /// tipos de ensamblados <c>Flit.*</c>: los del framework (el propio servidor web) se quedan.
-    /// </summary>
-    public static IServiceCollection RemoveBusinessHostedServices(this IServiceCollection services)
-    {
-        var business = services
-            .Where(d => d.ServiceType == typeof(IHostedService)
-                && d.ImplementationType is { } type
-                && IsFlitType(type)
-                && !IdentityHostedServices.Contains(type))
-            .ToList();
-        foreach (var descriptor in business)
-        {
-            services.Remove(descriptor);
-        }
-
-        return services;
-    }
-
-    /// <summary>
-    /// Las rutas que el login necesita para sobrevivir a una caída de <c>core-api</c> (frontera §4). Las mapean los dos
-    /// papeles: con la bandera del gateway apagada, <c>core-api</c> las sigue atendiendo como hoy.
-    /// </summary>
+    /// <summary>Las rutas del login (frontera §4): con la bandera del gateway apagada, core-api las sigue atendiendo.</summary>
     public static IEndpointRouteBuilder MapIdentityEndpoints(this IEndpointRouteBuilder app) =>
         app.MapFlitIdentityEndpoints(); // Epic #13217 (HU #13232): viven en Flit.Identity.Web
 
     /// <summary>
-    /// <c>/health/ready</c>: la base responde y no le faltan migraciones que este código trae. <c>core-identity</c> no
-    /// migra: con código más nuevo que el esquema (core-api aún no migró) no se declara listo y el gateway manda el login
-    /// a core-api. Al revés (esquema más nuevo, lo normal en un despliegue por servicio) sí atiende: las migraciones son
-    /// aditivas. <c>/health</c> sigue siendo solo «vivo».
+    /// <c>/health/ready</c> de core-api: la base responde y no le faltan migraciones que este código trae. El gateway lo
+    /// consulta porque core-api es el respaldo del login durante la transición. <c>/health</c> sigue siendo solo «vivo».
     /// </summary>
     public static IEndpointRouteBuilder MapReadiness(this IEndpointRouteBuilder app)
     {

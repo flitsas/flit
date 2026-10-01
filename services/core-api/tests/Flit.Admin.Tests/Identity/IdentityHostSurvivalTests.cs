@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Flit.Api.Hosting;
+using Flit.Identity.Api;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Platform;
@@ -18,16 +18,16 @@ using Xunit;
 namespace Flit.Admin.Tests.Identity;
 
 /// <summary>
-/// HU #13226 (Epic #13217) — core-identity y core-api sobre la misma base, sin llamarse entre sí: el login completo
-/// funciona solo con core-identity, sus tokens sirven en core-api y cerrar sesión en uno corta en el otro. Ver
-/// <c>docs/suite/identidad-frontera.md</c> §5.
+/// HU #13226/#13233 (Epic #13217) — core-identity (el servicio real, services/core-identity) y core-api sobre la misma
+/// base, sin llamarse entre sí: el login completo funciona solo con core-identity, sus tokens sirven en core-api y
+/// cerrar sesión en uno corta en el otro. Ver <c>docs/suite/identidad-frontera.md</c> §5.
 /// </summary>
 public sealed class IdentityHostSurvivalTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private const string Password = "IdentityPass1!";
 
     private readonly WebApplicationFactory<Program> _api;
-    private readonly WebApplicationFactory<Program> _identity;
+    private readonly WebApplicationFactory<IdentityApiEntryPoint> _identity;
     private readonly string _suffix = Guid.NewGuid().ToString("N")[..10];
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Guid _userId = Guid.NewGuid();
@@ -41,7 +41,16 @@ public sealed class IdentityHostSurvivalTests : IClassFixture<WebApplicationFact
             b.UseSetting("Jwt:PersistSigningKey", "true");
             b.UseSetting("Jwt:ValidateIssuedTokens", "true");
         });
-        _identity = _api.WithWebHostBuilder(b => b.UseSetting(HostRoles.ConfigKey, "identity"));
+        _identity = new WebApplicationFactory<IdentityApiEntryPoint>().WithWebHostBuilder(b =>
+        {
+            // Misma configuración que core-api (OidcServerTests.WithOidc + llave persistente), como en el compose.
+            b.UseSetting("Suite:Oidc:Enabled", "true");
+            b.UseSetting("Suite:Hosts:Environment", "dev");
+            b.UseSetting("Suite:Oidc:ServiceClients:svc-prueba:Secret", OidcServerTests.ServiceSecret);
+            b.UseSetting("Suite:Oidc:ServiceClients:svc-prueba:Scopes:0", "platform.manifest");
+            b.UseSetting("Jwt:PersistSigningKey", "true");
+            b.UseSetting("Jwt:ValidateIssuedTokens", "true");
+        });
         SeedAsync().GetAwaiter().GetResult();
     }
 
@@ -122,14 +131,16 @@ public sealed class IdentityHostSurvivalTests : IClassFixture<WebApplicationFact
         return string.Join("; ", login.Headers.GetValues("Set-Cookie").Select(c => c.Split(';')[0]));
     }
 
-    private static HttpClient Client(WebApplicationFactory<Program> factory)
+    private static HttpClient Client<T>(WebApplicationFactory<T> factory)
+        where T : class
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false, BaseAddress = new Uri("https://localhost") });
         client.DefaultRequestHeaders.Add("X-Flit-Domain", OidcServerTests.Hub);
         return client;
     }
 
-    private async Task<HttpClient> LoggedInAsync(WebApplicationFactory<Program> factory, CancellationToken ct)
+    private async Task<HttpClient> LoggedInAsync<T>(WebApplicationFactory<T> factory, CancellationToken ct)
+        where T : class
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true, BaseAddress = new Uri("https://localhost") });
         client.DefaultRequestHeaders.Add("X-Flit-Domain", OidcServerTests.Hub);
