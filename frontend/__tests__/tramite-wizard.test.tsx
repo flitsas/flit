@@ -1790,7 +1790,8 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     expect(screen.getByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
   });
 
-  it('matrícula: el tipo de servicio ofrece el catálogo completo y exige empresa vinculadora en público', async () => {
+  // Bug #13194 punto 2 — decisión de producto: la empresa vinculadora en público es OPCIONAL (aviso).
+  it('matrícula: el tipo de servicio ofrece el catálogo completo y en público ofrece la empresa vinculadora opcional con aviso', async () => {
     const user = await irARequisitos();
     const select = await screen.findByLabelText('Tipo de servicio');
 
@@ -1801,6 +1802,7 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     await user.selectOptions(select, 'PUBLICO');
     expect(await screen.findByLabelText(/NIT empresa vinculadora/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buscar empresa en RUES' })).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent(/exige la empresa vinculadora/);
   });
 
   it('traspaso: sin tipo de servicio (lo hidrata el RUNT) ni leasing en requisitos', async () => {
