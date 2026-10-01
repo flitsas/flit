@@ -4,8 +4,9 @@ HU #13228 (Feature #13220, Epic #13217). Para el líder técnico, con su sesión
 trae qué hacer, cómo comprobarlo y cómo volver atrás. Se aplica **primero en DEV**; QA y PDN solo con aprobación del
 líder y después de que DEV esté estable.
 
-Contexto: [identidad-frontera.md](identidad-frontera.md). `core-identity` es el mismo `core-api` con
-`Flit__HostRole=identity`: atiende solo el login y sigue en pie cuando `core-api` se cae o se despliega.
+Contexto: [identidad-frontera.md](identidad-frontera.md). `core-identity` es el servicio de identidad, con su propia
+imagen (`ghcr.io/flitsas/flitdev/core-identity`): atiende solo el login y sigue en pie cuando `core-api` se cae o se
+despliega.
 
 ## Requisitos
 
@@ -133,10 +134,9 @@ FLIT_DEPLOY_ROLLING = true
 |---|---|---|
 | `.env` | `COMPOSE_PROFILES` | agregar `identity` |
 | `.env` | `FLIT_IDENTITY_CLUSTER_ENABLED` | `true` |
-| `.env` (opcional) | `CORE_IDENTITY_TAG` | fijar una versión de identidad; vacía = la de `core-api` |
 | GitHub Environment | `FLIT_DEPLOY_ROLLING` | `true` |
 
-`CORE_IDENTITY_PORT` lo exporta el CD; no hace falta en el `.env`.
+`CORE_IDENTITY_PORT` y `CORE_IDENTITY_TAG` los exporta el CD; no hacen falta en el `.env`.
 
 ## Si algo sale mal
 

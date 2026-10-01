@@ -18,7 +18,7 @@ Para levantarla en local, ver [local.md](local.md). Para lo que cambia cuando la
 | **@flit/brand** | `packages/brand/` | dentro de cada front | Decide la marca por host (FLIT o Marca Blanca) con `FLIT_HOSTS`. |
 | **Gateway** | `services/core-api/src/Flit.Gateway` (YARP) | interno, puerto `4002` | Reparte `/api`, `/connect`, `/.well-known`, `/hubs`, `/ml`. Sella el dominio (`X-Flit-Domain`) solo si la petición viene de la red interna. No valida tokens. |
 | **core-api** | `services/core-api/src/Flit.Api` | interno, puerto `4003` | La API de negocio. Hoy también atiende la identidad (login, OIDC, usuarios, roles, productos) y valida los tokens. |
-| **core-identity** | el mismo `Flit.Api` con `Flit__HostRole=identity` | interno, puerto `4004` (perfil `identity`) | Solo el login: `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform`, `/api/v1/public/branding`. Recibe tráfico solo con `FLIT_IDENTITY_CLUSTER_ENABLED`. |
+| **core-identity** | `services/core-identity` (`Flit.Identity.Api`) | interno, puerto `4004` (perfil `identity`) | El servicio de identidad: `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform`, `/api/v1/public/branding`. Recibe tráfico solo con `FLIT_IDENTITY_CLUSTER_ENABLED`. |
 | **Postgres** | — | host del VPS | Una base. Las tablas de la suite: `platform.*`, `identity.oidc_*`, `security.jwt_signing_keys`, el anillo de Data Protection. |
 
 ## 2. Qué viaja entre ellas
@@ -110,14 +110,14 @@ servidor, las variables van en el `.env` del VPS y `docker-compose.prod.yml` las
 
 | Variable (`.env`) | Configuración | Contenedor | Apagada / vacía (hoy) | Encendida |
 |---|---|---|---|---|
-| `COMPOSE_PROFILES=identity` | — | (compose) | `core-identity` no se levanta. | Se levanta `core-identity` (el mismo `core-api` con `Flit__HostRole=identity`). |
+| `COMPOSE_PROFILES=identity` | — | (compose) | `core-identity` no se levanta. | Se levanta `core-identity` (su propia imagen). |
 | `FLIT_IDENTITY_CLUSTER_ENABLED` | `Gateway:IdentityCluster:Enabled` | gateway | `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform` y `/api/v1/public/branding` van a `core-api`. | Esas rutas van a `core-identity`; el resto sigue en `core-api`. Volver atrás = `false`. |
-| — | `Flit:HostRole` | core-identity | — | `identity`: sin migraciones, seeder, gRPC ni procesos de negocio; solo las rutas del login. |
 | `CORE_IDENTITY_PORT` | — | core-identity, gateway | `4004` | Puerto interno de `core-identity` (por ambiente, como los demás). |
-| `CORE_IDENTITY_TAG` | — | core-identity | la de `core-api` | Fijar identidad a una versión mientras `core-api` cambia. |
+| `CORE_IDENTITY_TAG` | — | core-identity | — | Etiqueta de su imagen. La exporta el CD (si su código no cambió, la imagen es la misma reetiquetada). |
 
-`/health/ready` (en los dos procesos) responde 503 si la base no responde o tiene migraciones pendientes;
-`core-identity` lo usa como healthcheck.
+`/health/ready` responde 503 si el servicio no puede atender: en `core-api`, base caída o migraciones pendientes; en
+`core-identity`, base caída o falta alguna tabla o columna de su modelo (no migra). Lo usan el healthcheck del compose y
+el gateway.
 
 ### Las que dicen dónde está cada cosa
 

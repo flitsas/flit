@@ -7,12 +7,12 @@ estado actual de la suite, ver [mapa-y-banderas.md](mapa-y-banderas.md).
 
 ## 1. Objetivo y lo que no se busca
 
-**Objetivo:** que el login y el OIDC sigan funcionando cuando `core-api` se cae, se reinicia o se despliega, y que un
-`core-api` sin memoria no arrastre a la identidad.
+**Objetivo:** que el login y el OIDC sigan funcionando cuando `core-api` se cae, se reinicia o se despliega, que un
+`core-api` sin memoria no arrastre a la identidad, y que un cambio en uno no reconstruya ni redespliegue al otro.
 
 **No se busca en esta entrega:** separar la base de datos, separar el código en repositorios distintos ni mover la
-administración de empresas y organismos. La identidad se separa **por proceso**: dos procesos sobre el mismo código y
-la misma base.
+administración de empresas y organismos. La identidad es un **servicio aparte** (código, programa, imagen y CD propios)
+sobre la misma base.
 
 ## 2. Lo que encontró el inventario
 
@@ -29,30 +29,37 @@ la misma base.
 
 ## 3. Decisión de arquitectura
 
-**El mismo programa con dos papeles.** `core-identity` es el mismo `Flit.Api.dll` de `core-api`, arrancado con
-`Flit__HostRole=identity`. Con ese papel:
+**Un servicio separado de verdad** (decisión de Samuel, 1 oct 2026, sobre lo aprobado con el CTO y el líder técnico):
+`core-identity` vive en `services/core-identity`, con su propio programa, Dockerfile, imagen y job de CD con filtro de
+rutas. Comparte con `core-api` solo librerías de dominio y de infraestructura de identidad, nunca código de negocio.
 
-- **No** corre migraciones ni el seeder (siguen siendo de `core-api`).
-- **No** corre procesos en segundo plano de negocio: solo los dos de OIDC (`OidcClientSync`, `OidcPruningService`).
-- **Solo** mapea los endpoints de identidad (sección 4).
-- Usa el mismo registro de servicios y el mismo orden de middlewares que `core-api`: es el mismo `Program.cs`, así que
-  no puede desviarse (dominio sellado, `DomainBindingMiddleware`, políticas, límite de tasa de la marca).
-
-El **gateway decide** a cuál proceso manda las rutas de identidad con `Gateway:IdentityCluster:Enabled`. Apagada, todo
-va a `core-api` como hoy; volver atrás es apagarla.
-
-Opciones evaluadas (con dos revisiones independientes, de arquitectura y de planificación, que llegaron a lo mismo):
-
-| Opción | Resuelve la caída del login | Riesgo | Esfuerzo |
+| Proyecto | Dónde | Qué tiene | Quién lo usa |
 |---|---|---|---|
-| **A. Mismo programa con papel `identity`** (elegida) | Sí | Bajo: no se mueve código de identidad; no hay composición que se desvíe | Bajo |
-| A'. Proyecto anfitrión nuevo (`Flit.Identity.Api`) | Sí | Medio: el código a reusar es `internal`; mover endpoints, middlewares y autorización a una librería | Medio |
-| A''. Partir `AddPostgresInfrastructure` (1.430 líneas) en piezas | Sí | Medio: orden de registro; dependencias escondidas (canal Renting del correo, auditoría, dominios) | Medio |
-| B. Servicio con su propio `DbContext` | Sí | Medio: dos mapeos de las mismas tablas | Medio |
-| C. Servicio y base separados | Sí | Alto: 98 llaves foráneas, triggers, vistas, RLS y 12 escrituras cruzadas | Alto |
+| `Flit.Identity.Api` | `services/core-identity/src` | El programa: contexto de datos propio, solo los procesos de OIDC, mismo orden de middlewares que `core-api` | core-identity |
+| `Flit.Identity.Web` | `services/core-identity/src` | Servidor OIDC, endpoints de auth, platform y marca pública, límite de tasa | core-identity (y core-api solo en la transición) |
+| `Flit.Identity.Application` | `services/core-identity/src` | Login, recuperar/cambiar/restablecer contraseña, activar cuenta | core-identity (y core-api solo en la transición) |
+| `Flit.Suite.AspNetCore` | `services/core-api/src` | Validación de tokens, dominio sellado, aceptación de tokens del hub, hosts de productos | los dos |
+| `Flit.Identity.Infrastructure` | `services/core-api/src` | Entidades, configuraciones, repositorios y adaptadores de identidad (correo, llaves, marca); `IdentityDbContext` e `IIdentityDb` | los dos |
+| `Security.*`, `Platform`, `Admin.Domain/Application`, `Queries.Domain` | `services/core-api/src` | Dominio compartido (usuarios, roles, productos, Marca Blanca) | los dos |
 
-A no cierra el camino a lo demás: cuando se quiera adelgazar `core-identity`, se parte el registro con una prueba que
-congele la lista de servicios.
+El árbol de `core-identity` son exactamente esos 11 proyectos. `Flit.Identity.Tests` falla si aparece `Flit.Infrastructure`,
+`Flit.Api` o algo de Trámites, OT, reportes, consultas, Quipux o ICT, y si el Dockerfile no copia todo el árbol.
+
+**Datos.** `core-identity` usa `IdentityDbContext`, que solo conoce las tablas de identidad y **no tiene migraciones**:
+las corre `core-api` con `FlitDbContext`, que aplica las mismas configuraciones. Una prueba compara los dos modelos
+columna por columna. Los repositorios de identidad dependen de `IIdentityDb`: en `core-api` es el mismo `FlitDbContext`
+(un solo contexto, como siempre) y en `core-identity` es `IdentityDbContext`.
+
+**Configuración.** `core-identity` usa el mismo `appsettings.json` de `core-api` (enlazado, no copiado) y el compose le
+pasa el mismo bloque de variables con un ancla: emisor, llaves de firma, clientes OIDC y correo no pueden divergir.
+
+**Transición.** Mientras identidad se estabiliza, `core-api` sigue atendiendo las mismas rutas y es el respaldo del
+gateway. En el corte (HU #13235) deja de atenderlas y deja de referenciar `Flit.Identity.Web` y `Flit.Identity.Application`:
+desde ahí un cambio en el login no reconstruye `core-api`.
+
+Cómo se llegó aquí: primero se probó «el mismo programa con dos papeles» (resolvía la supervivencia del login pero no
+la independencia de build) y se reemplazó. Dos revisiones independientes coincidieron en no separar la base de datos
+(98 llaves foráneas, triggers, RLS y 12 escrituras cruzadas).
 
 ## 4. Qué atiende `core-identity`
 
@@ -121,40 +128,33 @@ usuarios y roles). Pasan a identidad junto con B-12 o en el Epic siguiente; move
 Sin cambios respecto a [contrato-plataforma-v1.md](contrato-plataforma-v1.md) §2: separar el proceso es invisible para
 los productos.
 
-## 8. Lo que hay que hacer en el código
+## 8. Cómo quedó en el código
 
-**Etapa 2 (preparar, sin cambiar a `core-api`):**
-
-1. `Flit__HostRole` en `Program.cs`: con `identity`, saltar migraciones, seeder y gRPC; quitar los procesos en segundo
-   plano de `Flit.*` salvo los dos de OIDC (filtrando descriptores, nunca `RemoveAll<IHostedService>`, que quitaría el
-   propio servidor web); no agregar el middleware de telemetría de uso (su escritor no corre).
-2. `MapIdentityEndpoints()`: las rutas de la sección 4, usadas por los dos papeles; `core-api` además mapea todo lo
-   demás.
-3. `/health/ready` con conexión a la base y sin migraciones pendientes.
-
-**Etapa 3-4 (conectar):**
-
-4. Gateway: las rutas de la sección 4 llevan una marca `FlitIdentity` y conservan su política actual; un filtro de
-   configuración las manda a `core-identity-cluster` solo con `Gateway:IdentityCluster:Enabled`. Apagado, el gateway
-   se comporta igual que hoy.
-5. Compose: servicio `core-identity` (puerto `4004`/`5004`/`6004`) con la misma imagen, perfil `identity` (no arranca si no se pide), ancla de
-   variables compartidas, `/health/ready` como healthcheck y sin `depends_on` de `core-api` (tiene que poder arrancar
-   aunque `core-api` esté caído).
-6. Pruebas:
-   - Arranque del papel `identity`: valida el contenedor y solo tiene los procesos de OIDC.
-   - Paridad de rutas: identidad expone exactamente la sección 4 y cada ruta existe igual en `core-api`.
-   - Un token emitido por identidad sirve en `core-api`; tras cerrar sesión en identidad, `core-api` responde
-     `SESSION_EXPIRED`.
-   - El login de siempre en identidad da un JWT que `core-api` acepta.
-   - Con `core-api` apagado, login, autorización y token siguen funcionando en identidad.
-   - Gateway: con la bandera encendida y apagada, cada ruta va a su destino y conserva su política.
+1. **Persistencia** (`Flit.Identity.Infrastructure`): entidades y configuraciones movidas sin cambiar espacios de
+   nombres (una migración de prueba antes y después es idéntica); `IIdentityDb`, `IdentityDbContext` y
+   `NpgsqlConventions`; repositorios y adaptadores de identidad con su registro (`IdentityInfrastructureExtensions`).
+   `CoreApiServiceRegistrationSnapshotTests` congela el registro de servicios de `core-api` (1131 registros): no cambió.
+2. **Web compartido** (`Flit.Suite.AspNetCore`): `AddFlitTokenValidation`, `AddFlitSessionExpiredResponses`, política
+   SuperAdmin, dominio sellado, `RequestTenantResolver`, `AddFlitOidcAcceptance<TContext>` (almacenes de OpenIddict +
+   aceptación de tokens; sin ellos no corre la revisión de sesiones cerradas).
+3. **Servicio** (`services/core-identity`): `Flit.Identity.Application`, `Flit.Identity.Web`, `Flit.Identity.Api` y
+   `Flit.Identity.Tests`. `/health/ready` comprueba que existan todas las tablas y columnas de su modelo (no migra).
+4. **Gateway**: las rutas de la sección 4 llevan la marca `FlitIdentity` y conservan su política; con
+   `Gateway:IdentityCluster:Enabled` van a `core-identity-cluster` (`core-identity` primero, `core-api` de respaldo
+   durante la transición, chequeo de `/health/ready` cada 2 s).
+5. **Compose**: `core-identity` con su imagen, en el perfil `identity`, ancla de variables, sin `depends_on` de
+   `core-api`. **CD**: job `changes` con filtros de rutas y job `build-core-identity`; sin cambios, la imagen anterior
+   se reetiqueta con el commit. Despliegue por servicio detrás de `FLIT_DEPLOY_ROLLING`.
+6. **Pruebas que cruzan los dos servicios**: el login completo funciona solo con `core-identity`; sus tokens (OIDC y de
+   siempre) sirven en `core-api`; cerrar sesión en uno corta en el otro; la sesión del hub sirve en los dos; cada ruta
+   de `core-identity` existe igual en `core-api` (transición).
 
 ## 9. Lo que va con la VPS y el pipeline (Feature #13220, con Jorman)
 
 | Tema | Qué hace falta | Por qué |
 |---|---|---|
 | Despliegue por servicio | Quitar el `docker compose down` global; `up -d --no-deps <servicio>`; identidad se actualiza después de que `core-api` migró y quedó sano | Hoy cada merge reinicia todo: el login se caería en cada despliegue |
-| Etiqueta propia | `CORE_IDENTITY_TAG`, por defecto la de `core-api` | Poder dejar identidad en una versión mientras `core-api` cambia |
+| Imagen y build propios | `core-identity` con su imagen; el CD la reconstruye solo si cambió su árbol (si no, la reetiqueta) | Un cambio en Trámites no reconstruye ni reinicia identidad |
 | Memoria | Límite de memoria a `core-api` y `oom_score_adj` para que identidad sea lo último que el sistema mate | Un `core-api` sin memoria en el mismo VPS puede llevarse cualquier proceso |
 | Conexiones a la base | Tope del pool de `core-api` y conexiones reservadas para identidad | Si `core-api` agota `max_connections`, identidad no puede entrar a la base |
 | CORS del gateway | Se queda leyendo los dominios activos de `core-api` (`/internal/domains`, ruta de negocio) | Si el gateway se reinicia con `core-api` caído, cae a la lista fija de orígenes; el hub y Trámites no se afectan porque llaman a la API desde su servidor |
@@ -166,6 +166,6 @@ los productos.
 | Cachés por proceso: apagar un producto (30 s), un dominio o emisor (60 s - 5 min) o una marca se invalida solo en el proceso que lo hizo | Vida corta; se documenta. Invalidar por la base queda para después |
 | Los dos procesos con servidor OIDC | Comparten todo en la base; `OidcClientSync` está hecho para instancias concurrentes; misma configuración por ancla |
 | Rotar la llave de firma | Mismo `SigningKeyId` en los dos por ancla. Aceptar varias llaves a la vez queda para cuando se rote por primera vez |
-| Telemetría de uso de las rutas de identidad | Se pierde mientras la bandera esté encendida. Aceptado: son rutas de login, no de negocio |
-| `core-identity` carga todos los servicios de `core-api` (más memoria) | Aceptado a cambio de no mover código; se adelgaza después con la prueba que congela el registro |
-| `Security.Application` arrastra `Admin.Application` | Mismo programa: no aplica hasta que se separe el código |
+| Telemetría de uso de las rutas de identidad | core-identity no la registra (su escritor es de negocio). Aceptado: son rutas de login |
+| El dominio compartido (`Security.*`, `Admin.*`, `Platform`) reconstruye los dos servicios cuando cambia | Esperado: lo usan los dos. Sacar la auditoría y Marca Blanca de `Admin.Application` lo achica (Epic posterior) |
+| Alguien agrega una referencia de negocio a core-identity | `BuildClosureTests` lo detecta en CI |

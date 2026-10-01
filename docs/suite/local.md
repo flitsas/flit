@@ -66,20 +66,21 @@ npx next dev -H 127.0.0.1 -p 3000
 - `FLIT_SESSION_SECRET` no hace falta en `next dev`: se usa una clave fija de desarrollo. En un build de producción es
   obligatoria (mínimo 32 caracteres).
 
-## 4. (Opcional) Identidad en su propio proceso
+## 4. (Opcional) core-identity aparte
 
-Para probar la suite con `core-identity` aparte (Epic #13217, [identidad-frontera.md](identidad-frontera.md)): el mismo
-`Flit.Api.dll` con `Flit__HostRole=identity` en otro puerto. Se arranca **después** de la API (ella migra).
+El servicio de identidad (`services/core-identity`, Epic #13217, [identidad-frontera.md](identidad-frontera.md)). Se
+arranca **después** de la API, que es la que migra la base. Usa la misma configuración base que la API; su perfil de
+`launchSettings.json` ya trae OIDC encendido y los `Overrides` de `127.0.0.1`.
 
 ```bash
-cd services/core-api/src/Flit.Api
-Flit__HostRole=identity Database__AutoMigrate=false \
+cd services/core-identity/src/Flit.Identity.Api
+dotnet build
 ConnectionStrings__Core="<la misma de la API>" \
 ASPNETCORE_URLS=http://127.0.0.1:4905 ASPNETCORE_ENVIRONMENT=Development \
 Suite__Oidc__Enabled=true \
 Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4040 \
 Suite__Hosts__Overrides__tramites=http://127.0.0.1:3000 \
-dotnet bin/Debug/net10.0/Flit.Api.dll
+dotnet bin/Debug/net10.0/Flit.Identity.Api.dll
 ```
 
 - El **hub** habla solo con identidad: `CORE_API_ORIGIN` y `BRANDING_INTERNAL_API_URL` a `http://127.0.0.1:4905`.
@@ -89,8 +90,8 @@ dotnet bin/Debug/net10.0/Flit.Api.dll
 - **La prueba que importa:** apaga la API (4903) y entra por `127.0.0.1:3000`. El login funciona y Trámites abre con la
   sesión; solo fallan sus datos. Al volver a levantar la API, recarga: los datos aparecen sin volver a iniciar sesión.
 
-En el servidor esto no se arma a mano: es el servicio `core-identity` del compose (perfil `identity`) y la bandera
-`FLIT_IDENTITY_CLUSTER_ENABLED` del gateway.
+En el servidor esto no se arma a mano: es el servicio `core-identity` del compose (perfil `identity`, su propia imagen)
+y la bandera `FLIT_IDENTITY_CLUSTER_ENABLED` del gateway.
 
 ## Qué probar
 
