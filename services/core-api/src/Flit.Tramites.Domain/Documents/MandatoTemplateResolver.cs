@@ -171,15 +171,12 @@ public static class MandatoTemplateResolver
         string.IsNullOrWhiteSpace(templateCode)
         || string.Equals(templateCode.Trim(), Auto, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Mapea el <paramref name="templateCode"/> del OT a su variante; desconocido ⇒ genérico.</summary>
+    /// <summary>
+    /// Mapea el <paramref name="templateCode"/> del OT a su variante (según <see cref="MandatoFormatCatalog"/>);
+    /// desconocido o <c>auto</c> ⇒ genérico.
+    /// </summary>
     public static MandatoVariante Resolve(string? templateCode) =>
-        (templateCode?.Trim().ToLowerInvariant()) switch
-        {
-            Sabaneta => MandatoVariante.Sabaneta,
-            Bello => MandatoVariante.Bello,
-            Municipio => MandatoVariante.Municipio,
-            _ => MandatoVariante.Generico,
-        };
+        MandatoFormatCatalog.Find(templateCode)?.Variante ?? MandatoVariante.Generico;
 
     /// <summary>
     /// Modo de asignación que nace de la redacción: Sabaneta es institucional;

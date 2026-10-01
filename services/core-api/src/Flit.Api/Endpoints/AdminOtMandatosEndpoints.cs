@@ -193,12 +193,8 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var code = templateCode?.Trim() ?? string.Empty;
-        if (code is not (
-            MandatoTemplateResolver.Generico or MandatoTemplateResolver.Sabaneta
-            or MandatoTemplateResolver.Bello or MandatoTemplateResolver.Municipio))
-        {
-            return Results.BadRequest(new { error = "template_code_invalido" });
-        }
+        if (!MandatoFormatCatalog.IsRedaction(code))
+            return MandatoFormatResponses.InvalidPreviewCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
         return Results.File(doc.Content, contentType: "application/pdf");
@@ -234,7 +230,7 @@ public static class AdminOtMandatosEndpoints
             MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
             MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
             MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
+            MandateConfigWriteStatus.InvalidTemplate => MandatoFormatResponses.InvalidTemplateCode(),
             MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
             MandateConfigWriteStatus.InvalidAssignmentMode =>
                 Results.BadRequest(new { error = "assignment_mode_invalido" }),

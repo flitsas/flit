@@ -16,19 +16,6 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 public static class AdminPlataformaMandatosEndpoints
 {
-    /// <summary>
-    /// Redacciones previsualizables por código. <c>auto</c> NO entra: no es una redacción sino una
-    /// delegación en la plantilla de sistema del organismo, y sin organismo no hay nada que resolver
-    /// (para eso está la vista previa por OT).
-    /// </summary>
-    private static readonly HashSet<string> AllowedTemplates = new(StringComparer.OrdinalIgnoreCase)
-    {
-        MandatoTemplateResolver.Generico,
-        MandatoTemplateResolver.Sabaneta,
-        MandatoTemplateResolver.Bello,
-        MandatoTemplateResolver.Municipio,
-    };
-
     public static IEndpointRouteBuilder MapAdminPlataformaMandatosEndpoints(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
@@ -84,6 +71,11 @@ public static class AdminPlataformaMandatosEndpoints
             .WithName("AdminPlataformaMandatosDeleteTemplate")
             .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
+
+        // HU #13168 — catálogo único de formatos (solo lectura: sin POST ni DELETE, el equipo FLIT gestiona la lista).
+        group.MapGet("/formatos", ListFormatsAsync)
+            .WithName("AdminPlataformaMandatosFormats")
+            .Produces(StatusCodes.Status200OK);
 
         group.MapGet("/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminPlataformaMandatosPreview")
@@ -155,6 +147,9 @@ public static class AdminPlataformaMandatosEndpoints
         var items = await service.ListAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { items });
     }
+
+    private static IResult ListFormatsAsync() =>
+        Results.Ok(new { items = MandatoFormatCatalog.All.Select(MandatoFormatResponses.Describe).ToList() });
 
     private static async Task<IResult> GetAsync(
         Guid officeId,
@@ -259,12 +254,9 @@ public static class AdminPlataformaMandatosEndpoints
         [FromServices] IMandatoGenerator generator)
     {
         var code = templateCode?.Trim() ?? string.Empty;
-        if (!AllowedTemplates.Contains(code))
-        {
-            return Results.Json(
-                new { error = "template_code_invalido", allowed = AllowedTemplates.OrderBy(x => x) },
-                statusCode: StatusCodes.Status400BadRequest);
-        }
+        // auto NO es una redacción: delega en la plantilla de sistema del organismo (la vista previa por OT).
+        if (!MandatoFormatCatalog.IsRedaction(code))
+            return MandatoFormatResponses.InvalidPreviewCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
         return Results.File(doc.Content, contentType: "application/pdf");
@@ -560,7 +552,7 @@ public static class AdminPlataformaMandatosEndpoints
             MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
             MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
             MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
+            MandateConfigWriteStatus.InvalidTemplate => MandatoFormatResponses.InvalidTemplateCode(),
             MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
             MandateConfigWriteStatus.InvalidAssignmentMode =>
                 Results.BadRequest(new { error = "assignment_mode_invalido" }),

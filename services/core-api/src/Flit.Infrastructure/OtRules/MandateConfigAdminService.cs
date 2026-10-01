@@ -18,17 +18,6 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 {
     private const long MaxPdfBytes = 10 * 1024 * 1024;
 
-    private static readonly HashSet<string> Templates = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // "auto" no es una redacción: delega en la plantilla de sistema del organismo. Es la forma de
-        // devolverle la decisión al builtin ahora que la elección explícita le gana (HU #11703).
-        MandatoTemplateResolver.Auto,
-        MandatoTemplateResolver.Generico,
-        MandatoTemplateResolver.Sabaneta,
-        MandatoTemplateResolver.Bello,
-        MandatoTemplateResolver.Municipio,
-    };
-
     private static readonly HashSet<string> Families = new(StringComparer.OrdinalIgnoreCase)
     {
         MandatoFamiliaCodes.Individuo,
@@ -110,7 +99,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (office is null) return (MandateConfigWriteStatus.OfficeNotFound, null);
 
         var template = (request.TemplateCode ?? string.Empty).Trim().ToLowerInvariant();
-        if (!Templates.Contains(template))
+        if (!MandatoFormatCatalog.Contains(template))
             return (MandateConfigWriteStatus.InvalidTemplate, null);
 
         var family = (request.MandataryFamily ?? string.Empty).Trim().ToLowerInvariant();
@@ -1285,8 +1274,7 @@ internal static class MandatoConfigOcr
         }
 
         var suggested = Str(data, "suggestedTemplateCode").ToLowerInvariant();
-        if (suggested is not (MandatoTemplateResolver.Generico or MandatoTemplateResolver.Sabaneta
-            or MandatoTemplateResolver.Bello or MandatoTemplateResolver.Municipio))
+        if (!MandatoFormatCatalog.IsRedaction(suggested))
         {
             suggested = InferTemplate(
                 Str(data, "institutionalMandataryName"),
