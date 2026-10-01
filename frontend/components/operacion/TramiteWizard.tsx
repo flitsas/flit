@@ -289,7 +289,10 @@ function isIdentityApproved(steps: WizardStep[]): boolean {
     return !firma.reasons.includes('pendiente_biometria');
   }
 
-  // HU #10549 — sin paso de identidad (el OT la deshabilitó y el wizard lo ocultó) ⇒ no se exige.
+  // Sin paso de identidad ni de firma: el recorrido no tiene dónde capturarla, así que el cliente no
+  // la exige (el gate de firma del backend sigue mandando al radicar). Bug #13194 (P4): el paso de
+  // identidad ya NO se oculta por la configuración del OT (useWizard), así que esta rama dejó de
+  // cubrir el caso «OT sin validación de identidad».
   return true;
 }
 
