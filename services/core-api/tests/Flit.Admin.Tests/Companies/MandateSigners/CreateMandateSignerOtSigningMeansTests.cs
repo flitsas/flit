@@ -212,12 +212,24 @@ public sealed class CreateMandateSignerOtSigningMeansTests
         (await reader.GetByIdAsync(result.MandateSignerId!.Value, Ct))!.SignatureVaultId.Should().BeNull();
     }
 
+    [Fact]
+    public async Task ConBiometria_AprobadaHace45Dias_SeAceptaEnElAltaDelOt_SinRenovacion()
+    {
+        // HU #13130b (decisión del PO, 01-oct): al mandatario basta una validación aprobada, sin ventana de 30 días.
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.Aprobado, diasDesdeAprobacion: 45);
+
+        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
+
+        result.IsValid.Should().BeTrue();
+        result.SigningMeans.Should().Be("biometria");
+    }
+
     [Theory]
     [InlineData(BiometricEstados.EnProceso, 0)]
-    [InlineData(BiometricEstados.Aprobado, 45)]
-    public async Task ConBiometria_EnCursoOVencida_SeRechazaEnElAltaDelOt(string estado, int dias)
+    public async Task ConBiometria_EnCurso_SeRechazaEnElAltaDelOt(string estado, int dias)
     {
-        // El alta del OT (HU #13123) exige validacion APROBADA y vigente; en curso o vencida no cuentan.
+        // El alta del OT (HU #13123) exige validacion APROBADA; una en curso no cuenta.
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
         await SeedBiometriaAsync(ctx, CompanyA, "1020304050", estado, diasDesdeAprobacion: dias == 0 ? 1 : dias);
 

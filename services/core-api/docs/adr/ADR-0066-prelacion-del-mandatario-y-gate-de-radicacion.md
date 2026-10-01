@@ -188,7 +188,7 @@ MandateSignerDefaultResolver.Resolve(
 
 `MandateSignerCandidate` gana: `Origen` (`organismo|super_admin|compania|asociado`), `SignerModel`, `SignatureMethod` efectiva (nula en `juridica` y `formato_blanco`) y `BaulVigente`. `Level` y `Descartados` los calcula el resolver; `Signer` es nulo cuando `Level = Ninguno` o el nivel es ambiguo.
 
-Motivos de descarte (vocabulario estable): `mandatario_fuera_de_vigencia`, `mandatario_inactivo`, `biometria_vencida`, `sin_validacion_aprobada` (los cuatro de [ADR-0061]), más `baul_sin_firma_vigente`, `firma_fisica_sin_migrar` y `mandatario_eliminado` (defensivo).
+Motivos de descarte (vocabulario estable): `mandatario_fuera_de_vigencia`, `mandatario_inactivo`, `sin_validacion_aprobada` (los tres de [ADR-0061]; `biometria_vencida` se retiró en la HU #13130b: la biometría del mandatario no se renueva), más `baul_sin_firma_vigente`, `firma_fisica_sin_migrar` y `mandatario_eliminado` (defensivo).
 
 ### Exclusiones: cuándo no aplica el mandatario persona
 
@@ -236,7 +236,7 @@ Con dependencias no cableadas (`mandateDirectory` nulo en `TramiteLifecycleServi
 | Código | HTTP | Cuándo | Mensaje (resumen) |
 |---|---|---|---|
 | `mandatario_no_configurado` | 409 | Ningún nivel resuelve, o los candidatos se descartaron solo por vigencia o estado (vencido, inactivo, eliminado) | «Este organismo no tiene un mandatario activo para su compañía. Pida al organismo o a su compañía que registre uno.» |
-| `mandatario_firma_invalida` | 409 | Hay candidatos pero todos se descartaron por firma (`biometria_vencida`, `sin_validacion_aprobada`, `baul_sin_firma_vigente`, `firma_fisica_sin_migrar`) | «El mandatario no tiene firma válida: falta firma en el baúl o validación biométrica vigente.» |
+| `mandatario_firma_invalida` | 409 | Hay candidatos pero todos se descartaron por firma (`sin_validacion_aprobada`, `baul_sin_firma_vigente`, `firma_fisica_sin_migrar`) | «El mandatario no tiene firma válida: falta firma en el baúl o validación biométrica vigente.» |
 
 - Elección del motivo: se toma el descarte de mejor nivel; si alguno es de firma, gana `mandatario_firma_invalida`.
 - Se declaran en `TramiteEstadoErrores` y se mapean en `/submit` **y** en `/transition` (409, igual que `documentos_incompletos`; ambos pasan por `TramiteLifecycleService`). Sin ese mapeo el `default` los devolvería como 422.
