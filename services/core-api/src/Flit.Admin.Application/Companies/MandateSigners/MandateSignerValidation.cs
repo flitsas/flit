@@ -78,14 +78,19 @@ internal static class MandateSignerValidation
         IReadOnlyList<Guid> requestedCompanyIds,
         IReadOnlyList<OtCompanyOption> otCompanies,
         IReadOnlyList<MandateSignerCompanyResolution> activeResolutions,
-        Guid? currentSignerId)
+        Guid? currentSignerId,
+        IReadOnlySet<Guid>? validCompanyIds = null)
     {
         var companyById = otCompanies.ToDictionary(c => c.CompanyTenantId);
 
         foreach (var companyId in requestedCompanyIds.Distinct())
         {
             // RF33: la compañía debe tener grant habilitado y estar activa en el OT.
-            if (!companyById.TryGetValue(companyId, out var company) || !company.IsEnabled || !company.IsActive)
+            // HU #13182b: con <paramref name="validCompanyIds"/> (OT / Super Admin) basta con que sea una compañía activa.
+            var invalida = validCompanyIds is not null
+                ? !validCompanyIds.Contains(companyId)
+                : !companyById.TryGetValue(companyId, out var company) || !company.IsEnabled || !company.IsActive;
+            if (invalida)
             {
                 errors.Add(new MandateSignerValidationError(
                     "companyTenantIds",

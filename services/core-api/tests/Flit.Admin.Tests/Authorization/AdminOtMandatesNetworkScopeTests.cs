@@ -676,12 +676,13 @@ public sealed class AdminOtMandatesNetworkScopeTests
     }
 
     [Fact]
-    public async Task HU13123_AC7_compania_fuera_de_la_visibilidad_del_OT_es_422_sin_confirmar_su_existencia()
+    public async Task HU13123_AC7_compania_inexistente_es_422_sin_confirmar_su_existencia()
     {
         AuthenticateOtUser();
-        // Firma inexistente a propósito: si se validara la firma antes que la compañía, el 422 delataría
-        // que la compañía existe. Debe salir el mismo mensaje que una compañía no habilitada.
-        var response = await PostAltaAsync(_officeA, _child, Guid.NewGuid());
+        // HU #13182b (D3, P7 del PO): el OT ya puede registrar el mandatario de CUALQUIER compañía activa aunque no esté
+        // habilitada en su organismo (antes _child, fuera de su visibilidad, daba 422). Un id inexistente se sigue
+        // rechazando, y antes que la firma: si se validara la firma primero, el 422 delataría que la compañía existe.
+        var response = await PostAltaAsync(_officeA, Guid.NewGuid(), Guid.NewGuid());
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var contenido = await response.Content.ReadAsStringAsync(Ct);

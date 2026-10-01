@@ -226,6 +226,40 @@ public sealed class MandatarioCompaniasAsociadasTests
         (await ctx.MandateSignerAssociatedCompanies.CountAsync(Ct)).Should().Be(0);
     }
 
+    // ── HU #13182b (D3, P7): el OT registra la compañía propietaria aunque no esté habilitada ────────
+
+    [Fact]
+    public async Task D3_ElOtRegistraElMandatarioDeUnaCompaniaActivaNoHabilitadaEnSuOrganismo()
+    {
+        await using var ctx = await NewSeededContextAsync();
+
+        var result = await OtCreate(ctx, Ot, [], "organismo", propietarias: [AjenaSinOperar]);
+
+        result.IsValid.Should().BeTrue(string.Join("; ", result.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public async Task D3_ElOtSigueRechazandoUnaCompaniaPropietariaInactiva()
+    {
+        await using var ctx = await NewSeededContextAsync();
+
+        var result = await OtCreate(ctx, Ot, [], "organismo", propietarias: [Inactiva]);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "companyTenantIds" && e.Value == Inactiva.ToString());
+    }
+
+    [Fact]
+    public async Task D3_ElAdminDeCompaniaConservaRF33_ConElGrantDelOrganismo()
+    {
+        await using var ctx = await NewSeededContextAsync();
+
+        var result = await OtCreate(ctx, Ot, [], "compania", propietarias: [AjenaSinOperar]);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "companyTenantIds" && e.Value == AjenaSinOperar.ToString());
+    }
+
     [Fact]
     public async Task AC4_ElOtTampocoPuedeAsociarEnOrganismosQueNoSonDelMandatario()
     {
@@ -373,7 +407,8 @@ public sealed class MandatarioCompaniasAsociadasTests
         Guid organismo,
         IReadOnlyList<MandateSignerOfficeCompanies> officeCompanies,
         string origen,
-        string documento = "1020304050") =>
+        string documento = "1020304050",
+        IReadOnlyList<Guid>? propietarias = null) =>
         new CreateMandateSignerHandler(
             OtOperable(), new DbMandateSignerReader(ctx), new MandateSignerRepository(ctx), associable: Associable(ctx))
             .HandleAsync(
@@ -382,7 +417,7 @@ public sealed class MandatarioCompaniasAsociadasTests
                     TransitOfficeId = organismo,
                     FullName = "Ana Restrepo",
                     DocumentNumber = documento,
-                    CompanyTenantIds = [Gestora],
+                    CompanyTenantIds = propietarias ?? [Gestora],
                     SignatureMethod = "biometria",
                     OfficeCompanies = officeCompanies,
                     ConfiguredByScope = origen,
