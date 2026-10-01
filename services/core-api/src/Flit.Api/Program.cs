@@ -2,13 +2,7 @@ using System.Text.Json;
 using Flit.Admin.Application;
 using Flit.Analytics.Application;
 using Flit.Api.Authorization;
-using Flit.Api.Endpoints.Analytics;
-using Flit.Api.Endpoints;
-using Flit.Api.Endpoints.Internal;
-using Flit.Api.Endpoints.Platform;
-using Flit.Api.Endpoints.Public;
-using Flit.Api.Endpoints.SuperAdmin;
-using Flit.Api.Endpoints.Tramites;
+using Flit.Api.Hosting;
 using Flit.Api.OpenApi;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
@@ -38,6 +32,11 @@ builder.Host.UseDefaultServiceProvider(options =>
     options.ValidateScopes = true;
     options.ValidateOnBuild = true;
 });
+
+// HU #13224 (Epic #13217) — el mismo programa corre como core-api o como core-identity (Flit:HostRole=identity).
+// Ver docs/suite/identidad-frontera.md §3: misma composición; cambian las migraciones, los procesos en segundo
+// plano, el gRPC y las rutas.
+var hostRole = HostRoles.From(builder.Configuration);
 
 // Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
@@ -175,7 +174,7 @@ builder.Services.AddGrpc();
 // Al declarar endpoints por código Kestrel ignora ASPNETCORE_URLS/launchSettings, así que se
 // re-declara el endpoint REST desde esas mismas URLs (mismo puerto/host que hoy) y se añade el gRPC.
 var ictGrpcPort = builder.Configuration.GetValue<int?>("Ict:GrpcPort");
-if (ictGrpcPort is { } grpcPort)
+if (hostRole == HostRole.Api && ictGrpcPort is { } grpcPort)
 {
     builder.WebHost.ConfigureKestrel((context, options) =>
     {
@@ -207,6 +206,12 @@ builder.Services.AddPlatformApi(builder.Configuration); // Frente B · HU #12966
 builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (Suite:Oidc:Enabled)
 // === FLIT Suite: fin servicios ===
 
+if (hostRole == HostRole.Identity)
+{
+    // Colas de correo, RUNT, Quipux, lotes, reportes y dominios ya corren en core-api: aquí solo los de OIDC.
+    builder.Services.RemoveBusinessHostedServices();
+}
+
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -214,7 +219,8 @@ var app = builder.Build();
 // hay pendientes es un no-op. La estrategia de reintentos de Npgsql
 // (EnableRetryOnFailure) cubre cortes transitorios de conexión durante el arranque.
 // Se puede desactivar con Database__AutoMigrate=false (p. ej. si se delega al CD).
-if (app.Configuration.GetValue("Database:AutoMigrate", true))
+// core-identity nunca migra ni siembra: lo hace core-api, y /health/ready le dice si su esquema está al día.
+if (hostRole == HostRole.Api && app.Configuration.GetValue("Database:AutoMigrate", true))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
@@ -279,149 +285,26 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 // cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
 
-app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
+if (hostRole == HostRole.Api)
+{
+    // Su escritor es un proceso en segundo plano de negocio: en core-identity no corre.
+    app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
+}
+
 app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)
 
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
+app.MapReadiness(); // HU #13224 — /health/ready: base alcanzable y sin migraciones pendientes
 
-// Orquestación ICT (core-ict -> core-api): exige el service-token (esquema/policy IctService) para que
-// solo core-ict autenticado como sistema pueda invocar la orquestación (no un tercero en el puerto interno).
-app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>()
-    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
-// Consulta de fuentes externas para ICT (reusa el subsistema de consultas de core-api).
-app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
-    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
-
-// ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
-app.MapAuthEndpoints();
-app.MapSecurityEndpoints();
-app.MapUserUiPreferencesEndpoints();
-app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
-app.MapAdminCompaniesEndpoints();
-app.MapAdminCompaniesBrandingEndpoints();
-app.MapCompanyBrandingEndpoints();
-app.MapAdminCompaniesDomainEndpoints();
-app.MapCompanyDomainEndpoints();
-app.MapInternalDomainsEndpoints();
-app.MapAdminCompanyChildrenEndpoints();
-app.MapAdminCompanyChildrenConfigEndpoints();
-app.MapAdminCompanyChildrenInvitationsEndpoints();
-app.MapAdminOtEndpoints();
-app.MapAdminOtMetricsEndpoints();
-app.MapAdminOtQueriesEndpoints();
-app.MapAdminPlateRangesEndpoints();
-app.MapOtIntegrationEndpoints();
-app.MapAdminTransitOfficesEndpoints();
-app.MapAdminQuipuxEndpoints();
-app.MapAdminIctJobSettingsEndpoints();
-app.MapAdminIctJobCatalogEndpoints();
-app.MapAdminPlataformaMandatosEndpoints();
-app.MapAdminOtMandatosEndpoints();
-app.MapAdminPlataformaFurEndpoints();
-app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
-app.MapAdminPlataformaNotificacionesEndpoints();
-app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
-app.MapAdminRuntConfirmationEndpoints();
-app.MapAdminLogQxEndpoints();
-app.MapAdminTransitOfficeTenantsEndpoints();
-app.MapAdminMandateSignersEndpoints();
-app.MapAdminCompanyMandateSignersEndpoints();
-app.MapAdminMandateSignerIdentityEndpoints();
-app.MapAdminSignatureVaultEndpoints();
-app.MapAdminLegalRepresentativesEndpoints();
-app.MapAdminDeedsEndpoints();
-app.MapAdminPersonalizedDocumentsEndpoints();
-app.MapAdminCompanyNotificationDeliveryLogsEndpoints();
-app.MapAdminLegalRepresentativeIdentityEndpoints();
-app.MapAdminIdentityVigenciaEndpoints();
-app.MapAdminDocumentTypesEndpoints();
-app.MapAdminBannersEndpoints();
-app.MapAdminRejectionReasonsEndpoints();
-app.MapAdminProcedureDocumentRequirementsEndpoints();
-app.MapAdminDocumentOrderOverridesEndpoints();
-app.MapAdminDocumentRequirementOverridesEndpoints();
-app.MapAdminOtPrendaDocumentPolicyEndpoints();
-app.MapAdminResolvedDocumentMatrixEndpoints();
-app.MapAdminCompanyDocumentParamsEndpoints();
-app.MapAdminImprontasEndpoints();
-// Feature #12201 (ADR-0056-generacion-documental-standalone) — generación documental SIN trámite.
-// Autorización por permiso (generacion-documental.*), no por policy de grupo.
-app.MapAdminGeneracionDocumentalEndpoints();
-app.MapTramitesEndpoints();
-app.MapBulkTramitesEndpoints();
-// Epic #12543 — aceptación de Términos y Condiciones antes de abrir el asistente.
-app.MapTramitesTermsAcceptanceEndpoints();
-app.MapTransfersEndpoints();
-
-// ── Runtime de trámites (rework #10128) ───────────────────────────────────────
-app.MapSuperAdminEndpoints();
-app.MapPublicProcedureEndpoints();
-app.MapPublicProcedureTypeEndpoints();
-app.MapPublicBiometricaEndpoints();
-app.MapPublicKyverumWebhookEndpoints();
-app.MapPublicPortalEndpoints();
-// HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
-app.MapPublicBannersEndpoints();
-// HU #12418 (Feature #12366, ADR-0060 D2) — identidad de marca pública (antes del login) + sesión.
-app.MapPublicBrandingEndpoints();
-app.MapMeBrandingEndpoints();
-app.MapTramitesInstanceEndpoints();
-// HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
-app.MapTramitesNetworkEndpoints();
-// HU #12361 (Feature #12257) — consulta de la auditoría de accesos consolidados (hijo + SuperAdmin).
-app.MapNetworkAccessAuditEndpoints();
-app.MapTramitesActorEndpoints();
-// HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
-app.MapTramitesFirmaPosteriorEndpoints();
-app.MapTramitesAttachmentEndpoints();
-app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — solicitud de revocatoria de trámite Aprobado
-app.MapTramitesOcrEndpoints();
-app.MapTramitesParticipantEndpoints();
-app.MapTramitesBiometricaEndpoints();
-app.MapTramitesFirmaEndpoints();
-app.MapTramitesFurEndpoints();
-app.MapTramitesConsolidadoEndpoints();
-app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
-app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
-app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado
-app.MapAdminTramiteReenviarValidacionEndpoints(); // HU #12161 — reenviar validación de identidad (admin, correo opcional)
-app.MapAdminTramiteReasignarGestorEndpoints(); // HU #12162 — reasignar gestor (AssignedToUserId) + selector de disponibles
-app.MapConsultationEndpoints();
-app.MapTramitesCommercialEndpoints();
-app.MapTramitesPreflightEndpoints();
-app.MapTramitesRnmcEndpoints();
-app.MapTramitesWizardEndpoints();
-app.MapTramitesVehicleColorsEndpoints();
-app.MapTramitesVehicleBodyworksEndpoints();
-app.MapTramitesVehicleServiceTypesEndpoints();
-app.MapTramitesStatusHistoryEndpoints();
-app.MapTramitesNotificationDispatchesEndpoints();
-app.MapLegalRepresentativeConsumptionEndpoints();
-
-// ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
-app.MapAnalyticsEndpoints();
-app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
-app.MapDetailedReportEndpoints(); // Feature #10813
-app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
-app.MapSuperAdminReportSchedulesEndpoints(); // Reportes2 HU-D 2da ola — informes de consulta SuperAdmin
-app.MapAlertRulesEndpoints(); // Reportes2 HU-D
-app.MapAdminOtReportSchedulesEndpoints(); // Reportes2 HU-D 3ra ola — informes programados del OT
-app.MapAdminOtAlertRulesEndpoints(); // Reportes2 HU-D 3ra ola — alertas por umbral del OT
-app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
-app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
-app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
-app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
-app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
-app.MapUsageEventsEndpoints(); // Reportes2 HU-A
-
-// === FLIT Suite: endpoints ===
-// Una línea por frente: app.MapPlatformEndpoints(), app.MapIdentityEndpoints(), … (regla R5).
-app.MapPlatformEndpoints(); // Frente B · HU #12966
-app.MapFlitOidcEndpoints(); // Frente A · HU #12990 (/connect/* solo con Suite:Oidc:Enabled)
-// === FLIT Suite: fin endpoints ===
+// Orquestación ICT, administración, Trámites, reportes… (solo core-api) y las rutas de identidad (los dos papeles).
+app.MapIdentityEndpoints();
+if (hostRole == HostRole.Api)
+{
+    app.MapApiEndpoints();
+}
 
 app.Run();
 
