@@ -2,6 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Integrations;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
@@ -232,6 +233,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
     public DbSet<Banner> Banners => Set<Banner>();
+
+    /// <summary>HU #13084 — clientes de integración externos (<c>integrations.external_clients</c>).</summary>
+    public DbSet<ExternalClient> ExternalClients => Set<ExternalClient>();
 
     public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
 

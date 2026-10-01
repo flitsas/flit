@@ -50,7 +50,8 @@ public static class PublicBrandingRateLimit
         return services;
     }
 
-    private static string ResolvePartitionKey(HttpContext httpContext)
+    /// <summary>IP del cliente (primer hop de <c>X-Forwarded-For</c> o conexión). También la usa <c>external-token</c> (HU #13087).</summary>
+    internal static string ResolvePartitionKey(HttpContext httpContext)
     {
         if (httpContext.Request.Headers.TryGetValue(ForwardedForHeader, out var forwarded))
         {
