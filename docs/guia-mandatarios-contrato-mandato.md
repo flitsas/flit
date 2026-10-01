@@ -2,7 +2,7 @@
 
 Documento funcional. Explica quién firma el contrato de mandato como **mandatario**, cómo lo elige el sistema, dónde se configura en el aplicativo y qué tablas de base de datos lo soportan.
 
-Fecha: 21 de agosto de 2026 · Alcance: módulo de Trámites y Administración de FLIT.
+Fecha: 21 de agosto de 2026 (actualizada el 1 de octubre de 2026, Feature #13245) · Alcance: módulo de Trámites y Administración de FLIT.
 
 ---
 
@@ -49,15 +49,35 @@ Es el lugar principal. Aquí la compañía registra a las personas y decide dón
 |---|---|
 | **Nombre completo** | Aparece bajo la firma en el PDF del mandato |
 | **Tipo de documento** y **Número de documento** | Identificación en el contrato; también sirve para buscar su firma del baúl |
-| **Correo** | Dato de contacto. Registrarlo **no** envía ninguna validación de identidad: esa se origina solo en el módulo Identidad |
+| **Correo** | **Obligatorio** con «Validación de identidad» (a él llega el enlace de validación); opcional con «Baúl de firmas». No es un medio de firma |
 | **Firma del baúl** (opcional) | Su firma custodiada. Con ella, el mandato la estampa automáticamente |
 | **Organismos donde aplica** | Lista de checkboxes. Solo se muestran los organismos habilitados para esa compañía |
 | **Empresas** (dentro de cada organismo marcado) | Acota para qué empresas representadas firma. Vacío = todas |
-| **Estado de identidad** (solo al editar) | Solo lectura: vigente, en curso, vencida o sin validación, calculado desde el módulo Identidad |
+| **Estado de identidad** (solo al editar) | Solo lectura: sin validación (incluye rechazada o con error de envío), en curso, expirada o aprobada, de la validación propia del mandatario |
 
-> La firma física dejó de ser una forma de firma: las marcas históricas se conservan, pero un mandatario nuevo se registra con firma del baúl o con validación biométrica.
+> La firma física dejó de ser una forma de firma: las marcas históricas se conservan, pero un mandatario nuevo se registra con firma del baúl o con validación de identidad (que el sistema lanza al crearlo).
 
-El formulario **bloquea el guardado** si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados. En ese caso muestra una alerta en rojo indicando en cuáles y qué hacer: capturarle la firma del baúl o iniciar su validación biométrica en el módulo Identidad.
+El formulario **bloquea el guardado** si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados, o si elige «Validación de identidad» sin correo. En ese caso muestra una alerta indicando qué hacer: capturarle la firma del baúl o registrar su correo para la validación.
+
+#### Alta con validación de identidad automática
+
+Al **crear** un mandatario persona natural con forma de firma «Validación de identidad», el sistema **lanza solo la validación**, con el mismo flujo de un trámite: Kyverum envía un enlace al correo del mandatario, la persona captura su identidad y el resultado vuelve por webhook a la ficha. No hay que ir al módulo Identidad. Pasa igual cuando el alta la hace el Admin del OT desde el hub; la validación queda a nombre de la **compañía** del mandatario.
+
+La validación se lanza de nuevo cuando:
+
+- se pulsa **«Reenviar validación»** (compañía y hub OT);
+- se **edita el tipo o el número de documento** (la anterior deja de contar);
+- se **pasa de «Baúl de firmas» a «Validación de identidad»**.
+
+**No** se lanza al reactivar un mandatario. Si el proveedor está caído, el sistema guarda el mandatario, encola la validación y reintenta solo; si no se pudo lanzar, se usa «Reenviar validación». El reenvío solo aplica a personas naturales con «Validación de identidad», y la compañía no reenvía lo que configuró el organismo.
+
+#### La validación es exclusiva del mandatario
+
+Solo cuenta la validación lanzada **para ese mandatario**. Las validaciones de la misma persona como comprador, vendedor o desde la prevalidación **no cuentan**, aunque el documento sea el mismo. Tampoco hay que renovarla cada 30 días: basta una aprobación mientras el mandatario esté vigente (fecha fija o rango).
+
+#### Aviso a los mandatarios existentes
+
+Los mandatarios que ya existían con «Validación de identidad» **pierden la firma** hasta que completen la validación por este flujo (no se migra nada automáticamente). Se les muestra un aviso en la ficha y el Super Admin dispone de un **reporte de afectados** (mandatarios activos sin validación propia aprobada, filtrable por organismo y exportable a CSV) para reenviar la validación. Quienes firman con baúl no cambian.
 
 > Nota histórica: antes los mandatarios se registraban desde el perfil del organismo de tránsito, que elegía compañías. Se invirtió porque el mandatario es de la empresa, no del organismo.
 
@@ -171,7 +191,7 @@ En los tres casos los datos del mandatario siguen apareciendo en el **cuerpo** d
 Para que un mandatario pueda firmar necesita **una** de estas dos. **No son acumulativas**: basta con cualquiera.
 
 1. **Firma del baúl vigente** — la firma custodiada de la persona. Es la de mayor prioridad: si la tiene, es la que se estampa.
-2. **Validación biométrica aprobada y vigente** (30 días, módulo Identidad) — si no hay firma del baúl, se estampa el sello de esta validación.
+2. **Validación de identidad propia del mandatario, aprobada** — si no hay firma del baúl, se estampa el sello de esta validación. Es solo la que se lanzó para el mandatario (no la de otros roles) y no caduca a los 30 días: rige mientras el mandatario esté vigente.
 
 Si el mandatario no tiene ninguna de las dos, el trámite no pasa la validación del mandatario al radicar (`mandatario_firma_invalida` / `mandatario_no_configurado`, según el modo del ambiente).
 
@@ -188,10 +208,11 @@ La firma posterior sigue disponible solo para las partes **comprador** y **vende
 | No aparece ningún mandatario para elegir | Que la persona esté activa, marcada en ese organismo, y que la compañía del trámite sea la correcta |
 | Aparece un mandatario pero no el esperado | Las empresas marcadas dentro de ese organismo en su ficha (puede estar acotado por NIT) |
 | Error `mandatario_requerido` al aprobar | Hay varios candidatos y ninguno resuelve solo: elegir en el diálogo o definir un mandatario por defecto en Plataforma → Mandatos |
-| El trámite no pasa la validación del mandatario al radicar | El mandatario no tiene firma del baúl vigente ni validación biométrica vigente, o no hay mandatario activo y vigente para el organismo y la compañía |
+| El trámite no pasa la validación del mandatario al radicar | El mandatario no tiene firma del baúl vigente ni validación propia aprobada (o no tiene vigencia propia activa), o no hay mandatario activo y vigente para el organismo y la compañía |
 | El mandato sale sin firma del mandatario | Revisar si hay convenio comercial con ese organismo, o si el tipo es Persona jurídica |
 | El contrato nombra a un municipio o una UT que no corresponde | Se aplicó al organismo una redacción de otro (Sabaneta o Bello). Cambiar a «Automática» o a la genérica |
-| No se puede guardar el mandatario | La alerta roja indica en qué organismos queda sin poder firmar. Asignarle la firma del baúl o iniciar su validación biométrica en el módulo Identidad |
+| No se puede guardar el mandatario | La alerta roja indica en qué organismos queda sin poder firmar. Asignarle la firma del baúl o registrar su correo para lanzar la validación de identidad |
+| El mandatario aparece «sin validación» o «en curso» | Revisar el correo; usar «Reenviar validación». Una validación como comprador o vendedor no cuenta |
 
 ---
 
@@ -203,6 +224,7 @@ Para quien necesite consultar o auditar directamente.
 
 | Tabla | Qué guarda |
 |---|---|
+| `tramites.procedure_instance_biometric_validations` (`mandate_signer_id`, `party_role = 'mandatario'`) | La validación de identidad propia del mandatario (DDL 129) |
 | `admin.mandate_signers` | La persona: nombre, tipo y número de documento, correo, firma del baúl, cuenta de usuario, activo/inactivo |
 | `admin.mandate_signer_transit_offices` | En qué organismos aplica cada mandatario. Incluye la marca histórica `signs_physically` (firma a mano): se conserva y se honra, pero ya no se asigna a mandatarios nuevos |
 | `admin.mandate_signer_companies` | Vínculo del mandatario con la compañía gestora en un organismo |
