@@ -164,7 +164,9 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
     try {
       await openPdfBlobInNewTab(() => previewMandatoFormatDraft(code, body));
     } catch (err) {
-      setError(explain(err));
+      // openPdfBlobInNewTab envuelve el ApiError del backend en `cause`.
+      const original = err instanceof Error && err.cause instanceof ApiError ? err.cause : err;
+      setError(explain(original));
     } finally {
       setPreviewing(false);
     }

@@ -204,6 +204,30 @@ describe("MandatoFormatoEditor (HU #13175)", () => {
     expect(await screen.findByTestId("mandato-formato-variables-invalidas")).toHaveTextContent("{{nope}}");
   });
 
+  it("vista previa con variable inválida: el helper real envuelve el ApiError en `cause` y igual se ve la lista con su posición", async () => {
+    const user = userEvent.setup();
+    openPdfBlobInNewTab.mockImplementation(async (factory: () => Promise<Blob>) => {
+      try {
+        await factory();
+      } catch (err) {
+        throw new Error("document_preview_failed", { cause: err });
+      }
+    });
+    previewMandatoFormatDraft.mockRejectedValue(
+      new ApiError(400, "plantilla_variable_invalida", {
+        error: "plantilla_variable_invalida",
+        unknownVariables: [{ name: "cedula_inventada", line: 3, column: 7 }],
+      }),
+    );
+    await abrir();
+    await screen.findByTestId("mandato-formato-cuerpo");
+    await user.click(screen.getByRole("button", { name: /vista previa/i }));
+    const lista = await screen.findByTestId("mandato-formato-variables-invalidas");
+    expect(lista).toHaveTextContent("{{cedula_inventada}}");
+    expect(lista).toHaveTextContent(/línea 3/i);
+    expect(screen.queryByText(/no se pudo completar la operación/i)).not.toBeInTheDocument();
+  });
+
   it("409: avisa con claridad, recarga la fila y no pierde el texto escrito", async () => {
     const user = userEvent.setup();
     updateMandatoFormat.mockRejectedValue(new ApiError(409, "row_version_conflict", { error: "row_version_conflict" }));
