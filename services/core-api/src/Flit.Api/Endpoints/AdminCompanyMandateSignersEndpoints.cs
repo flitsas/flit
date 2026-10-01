@@ -171,7 +171,8 @@ public static class AdminCompanyMandateSignersEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler
-            .HandleAsync(tenantId, request, MandateEndpointHelpers.ResolveUserId(httpContext.User), cancellationToken)
+            .HandleAsync(
+                tenantId, request, MandateEndpointHelpers.ResolveUserId(httpContext.User), OrigenDeLaCompania(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
 
         return result.IsValid
@@ -205,7 +206,8 @@ public static class AdminCompanyMandateSignersEndpoints
         }
 
         var result = await handler
-            .HandleAsync(tenantId, mandateSignerId, request, MandateEndpointHelpers.ResolveUserId(httpContext.User), cancellationToken)
+            .HandleAsync(
+                tenantId, mandateSignerId, request, MandateEndpointHelpers.ResolveUserId(httpContext.User), OrigenDeLaCompania(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
 
         return result.Outcome switch
@@ -268,4 +270,8 @@ public static class AdminCompanyMandateSignersEndpoints
         Results.Json(
             new { errors = errors.Select(e => new { field = e.Field, message = e.Message, value = e.Value }) },
             statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    /// <summary>HU #13195c — origen del vínculo: Super Admin → super_admin; Admin de Compañía → compania.</summary>
+    internal static string OrigenDeLaCompania(System.Security.Claims.ClaimsPrincipal user) =>
+        user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "compania";
 }

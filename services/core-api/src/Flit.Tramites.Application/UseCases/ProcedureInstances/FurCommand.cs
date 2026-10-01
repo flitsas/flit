@@ -2013,14 +2013,7 @@ public sealed class GenerarFurHandler(
     /// <summary>Subconjunto del representante legal leído de <c>actor.metadata</c> (ADR-0036).</summary>
     private sealed record ActorMetadataRl(string? TipoDocumento, string? NumeroDocumento, string? NombreCompleto);
 
-    private static DateTime? ParseFechaTramite(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-            return null;
-        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dt)
-            ? dt
-            : null;
-    }
+    private static DateTime? ParseFechaTramite(string? raw) => FechaTramiteParser.Parse(raw);
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;

@@ -131,7 +131,8 @@ public sealed class CreateMandateSignerHandler
                     command.OfficeCompanies,
                     currentSignerId: null,
                     command.CompanyVisibility,
-                    cancellationToken)
+                    cancellationToken,
+                    command.ConfiguredByScope)
                 .ConfigureAwait(false);
         }
 
@@ -312,7 +313,8 @@ public sealed class CreateMandateSignerHandler
         IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
         Guid? currentSignerId,
         OtCompanyVisibility companyVisibility,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string configuredByScope = "organismo")
     {
         var offices = new HashSet<Guid> { primaryOfficeId };
         if (transitOfficeIds is { Count: > 0 })
@@ -331,7 +333,7 @@ public sealed class CreateMandateSignerHandler
             var companiesForOffice = MandateSignerValidation.CompaniesForOffice(
                 officeCompanies, officeId, companyIds);
             MandateSignerValidation.ValidateCompanies(
-                errors, companiesForOffice, otCompanies, resolutions, currentSignerId);
+                errors, companiesForOffice, otCompanies, resolutions, currentSignerId, configuredByScope);
         }
     }
 }

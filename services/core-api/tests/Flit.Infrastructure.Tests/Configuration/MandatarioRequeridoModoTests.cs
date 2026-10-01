@@ -2,6 +2,7 @@ using Flit.Infrastructure;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -89,6 +90,28 @@ public sealed class MandatarioRequeridoModoTests
             .And.Contain("VehicleRegistrationState=Warn")
             .And.Contain("VehicleBodyTypeRequired=Off")
             .And.Contain("MandatarioRequerido=Warn");
+    }
+
+    // HU #13143b — el log sale AL ARRANCAR el host, sin esperar a la primera radicación.
+    [Theory]
+    [InlineData("warn", "MandatarioRequerido=Warn", false)]
+    [InlineData("desactivado", "MandatarioRequerido=Block", true)]
+    public async Task Ac1_AlArrancarElHost_LogueaElModoEfectivo_SinResolverLaPoliticaAMano(
+        string raw, string esperado, bool avisaNoReconocido)
+    {
+        var logger = new CapturingLogger();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(new CapturingLoggerFactory(logger));
+        services.AddTramiteValidationPolicy(InMemory(("TramiteValidations:MandatarioRequerido:Mode", raw)));
+        await using var provider = services.BuildServiceProvider();
+
+        foreach (var hosted in provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>())
+        {
+            await hosted.StartAsync(TestContext.Current.CancellationToken);
+        }
+
+        logger.Messages.Should().Contain(m => m.Contains(esperado, StringComparison.Ordinal));
+        logger.Messages.Any(m => m.Contains("no reconocido", StringComparison.Ordinal)).Should().Be(avisaNoReconocido);
     }
 
     // AC2 — fail-safe a Block en el código.
@@ -216,6 +239,19 @@ public sealed class MandatarioRequeridoModoTests
         policy.DuplicateActiveProcedure.Should().Be(TramiteValidationMode.Warn);
         policy.VehicleRegistrationState.Should().Be(TramiteValidationMode.Block);
         policy.VehicleBodyTypeRequired.Should().Be(TramiteValidationMode.Block);
+    }
+
+    private sealed class CapturingLoggerFactory(ILogger logger) : ILoggerFactory
+    {
+        public void AddProvider(ILoggerProvider provider)
+        {
+        }
+
+        public ILogger CreateLogger(string categoryName) => logger;
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class CapturingLogger : ILogger

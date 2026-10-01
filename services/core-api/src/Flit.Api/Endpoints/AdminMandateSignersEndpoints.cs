@@ -437,6 +437,6 @@ public static class AdminMandateSignersEndpoints
             statusCode: StatusCodes.Status422UnprocessableEntity);
 
     /// <summary>HU #13195 — origen de configuración según quien actúa en la ruta del OT.</summary>
-    private static string OrigenDelActor(ClaimsPrincipal user) =>
+    internal static string OrigenDelActor(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "organismo";
 }

@@ -8,7 +8,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 /// <summary>Desenlace de la resolución del mandatario al aprobar (ADR-0036 §D9, HU #10916).</summary>
 public enum MandatoApprovalOutcome
 {
-    /// <summary>El trámite no exige mandato-persona (no aplica, institucional, o sin mandatarios): aprobar sin firmante.</summary>
+    /// <summary>El trámite no exige mandato-persona (no aplica, institucional/abierto, mandato personalizado): aprobar sin firmante.</summary>
     NotApplicable,
 
     /// <summary>Firmante determinado (único, cotejo por usuario, o selección explícita válida): aprobar con él.</summary>
@@ -107,7 +107,10 @@ public sealed class MandatoApprovalHandler(
                 new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.RequiereSeleccion =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null, candidatos),
-            _ => new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null),
+            // HU #13147b (AC3) — el trámite exige firmante (mandato del sistema, tipo Persona natural) y la
+            // prelación no resolvió a nadie: la aprobación NO pasa sin firmante. El OT elige entre los
+            // válidos; con cero candidatos el 409 mandatario_requerido lo explica (lista vacía).
+            _ => new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null, candidatos),
         };
     }
 }

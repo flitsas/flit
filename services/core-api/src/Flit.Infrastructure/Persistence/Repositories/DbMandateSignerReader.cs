@@ -445,7 +445,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var assignments = await _context.MandateSignerCompanies
                     .AsNoTracking()
                     .Where(c => c.TransitOfficeId == transitOfficeId && c.IsActive)
-                    .Select(c => new { c.CompanyTenantId, c.MandateSignerId })
+                    .Select(c => new { c.CompanyTenantId, c.MandateSignerId, c.ConfiguredByScope })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
@@ -462,6 +462,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                                 MandateSignerId = signer.Id,
                                 FullName = signer.FullName,
                                 IntegrityHash = signer.IntegrityHash,
+                                OriginGroup = a.ConfiguredByScope == "compania" ? "compania" : "organismo",
                             };
                         }),
                 ];
