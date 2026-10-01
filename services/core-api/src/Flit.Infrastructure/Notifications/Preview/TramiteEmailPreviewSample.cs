@@ -8,7 +8,7 @@ namespace Flit.Infrastructure.Notifications.Preview;
 /// </summary>
 public static class TramiteEmailPreviewSample
 {
-    public const string DefaultAssetsBaseUrl = "https://dev.flitsas.online/email-assets";
+    public const string DefaultAssetsBaseUrl = NotificationEmailAssetsOptions.LocalFallbackBaseUrl;
 
     /// <summary>Muestra alineada al mockup de trámite aprobado (traspaso + APROBADO).</summary>
     public static TramiteCambioEstadoEmailModel SampleAprobado { get; } = new(
