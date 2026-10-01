@@ -89,6 +89,9 @@ public static class DependencyInjection
         // de outbox hacia webhooks OT (HU-3) se registra en Infraestructura
         // (ProcedureStateChangeOutboxPublisher, InfrastructureExtensions).
         services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
+        // Bug #13194 (P4, D2) — gate de firma para módulos que deciden un envío al OT fuera de una
+        // transición (encolado de Quipux). Misma regla que el ciclo de vida.
+        services.AddScoped<ITramiteFirmaGate, TramiteFirmaGate>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<CancelSubsanacionHandler>();
