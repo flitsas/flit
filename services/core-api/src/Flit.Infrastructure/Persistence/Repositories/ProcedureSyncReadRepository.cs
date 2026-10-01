@@ -21,7 +21,11 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 ///   <item>nunca los migrados desde FLIT 1 (<c>is_migrated</c>), ni como cambio ni como borrado;</item>
 ///   <item>solo cambios estables: de transacciones anteriores a la más antigua en curso
 ///   (<c>pg_snapshot_xmin</c>: por debajo ya no puede aparecer nada nuevo) y con más de
-///   <c>StabilityLag</c> de antigüedad (ventana de 5 s del contrato).</item>
+///   <c>StabilityLag</c> de antigüedad (ventana de 5 s del contrato). La ventana CORTA la página en el
+///   primer cambio aún inestable en orden de cursor, no lo salta: <c>sync_changed_at</c> es el inicio de
+///   la transacción y <c>sync_xact</c> se asigna al sellar (tras esperar bloqueos), así que no van en el
+///   mismo orden; filtrar fila a fila dejaría pasar una transacción posterior, el cursor la adelantaría
+///   y el cambio anterior no se entregaría nunca.</item>
 /// </list>
 /// <para>Orden y cursor: (transacción que selló, versión). Las filas de la asignación inicial no tienen
 /// transacción y cuentan como la 0.</para>
@@ -45,7 +49,11 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
           FROM tramites.procedure_instances pi
          WHERE pi.is_migrated = false
            AND COALESCE(pi.sync_xact, '0'::xid8) < pg_snapshot_xmin(pg_current_snapshot())
-           AND pi.sync_changed_at <= clock_timestamp() - @lag
+           AND NOT EXISTS (SELECT 1
+                             FROM tramites.procedure_instances q
+                            WHERE q.sync_changed_at > clock_timestamp() - @lag
+                              AND (COALESCE(q.sync_xact, '0'::xid8), q.sync_version)
+                                  <= (COALESCE(pi.sync_xact, '0'::xid8), pi.sync_version))
            AND EXISTS (SELECT 1
                          FROM tramites.procedure_instance_status_history h
                         WHERE h.procedure_instance_id = pi.id
