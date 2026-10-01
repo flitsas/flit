@@ -491,6 +491,8 @@ internal static class ProcedureInstanceEndpoints
                 // ADR-0050 — la familia OTROS no acumula trámites simultáneos: el cambio ES el trámite.
                 PatchFieldValuesHandler.ComplementoNoAdmitidoError => Results.Problem(statusCode: 409, title: PatchFieldValuesHandler.ComplementoNoAdmitidoError, detail: "Este tipo de trámite no admite declarar otra transformación del vehículo: radica un trámite aparte para ese cambio."),
                 "unknown_field" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "field_key no corresponde a ningún campo del tipo de trámite."),
+                // Bug #13194 — soat_estado/soat_vencimiento los escribe el sistema (RUNT u OCR del PDF).
+                PatchFieldValuesHandler.ClaveDeSistemaError => Results.Problem(statusCode: 400, title: PatchFieldValuesHandler.ClaveDeSistemaError, detail: "El estado y el vencimiento del SOAT los registra el sistema: valida el SOAT ante el RUNT o carga el PDF."),
                 _ => Results.Ok(result)
             };
         }).WithName("PatchProcedureInstanceFieldValues");

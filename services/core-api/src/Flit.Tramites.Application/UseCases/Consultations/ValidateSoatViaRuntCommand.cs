@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using Flit.Queries.Domain.Time;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -33,6 +35,11 @@ public sealed record ValidateSoatResult(
 /// pasó: el RUNT no dijo que no hubiera SOAT, solo que no lo reporta. Un vencido explícito del RUNT
 /// (<c>fail</c>) sí manda: es la fuente oficial afirmando lo contrario del documento.</para>
 ///
+/// <para>Bug #13194 (review, SEC) — el soporte manual solo cuenta si el trámite tiene un ADJUNTO de SOAT
+/// vigente (no histórico) y una fecha de vencimiento legible que no haya pasado en el día de Colombia.
+/// Sin adjunto, sin fecha o con fecha ilegible NO hay soporte (fail-closed): el origen <c>user</c>/<c>ocr</c>
+/// del campo lo escribe el cliente y por sí solo no prueba nada.</para>
+///
 /// <para>Bug #13194 — si el proveedor lanza, se loguea y se devuelve <see cref="ProviderError"/>
 /// («la consulta no respondió»): «Enviar al OT» sigue, como cuando falta la plantilla.</para>
 /// </summary>
@@ -41,7 +48,8 @@ public sealed class ValidateSoatViaRuntHandler(
     ICatalogRepository catalogRepo,
     IConsultationProviderRegistry registry,
     Certifications.ICertificationIngestionService? certificationIngestion = null,
-    ILogger<ValidateSoatViaRuntHandler>? logger = null)
+    ILogger<ValidateSoatViaRuntHandler>? logger = null,
+    TimeProvider? clock = null)
 {
     /// <summary>El proveedor RUNT lanzó: la consulta no respondió (no es un SOAT no vigente).</summary>
     public const string ProviderError = "provider_error";
@@ -58,6 +66,8 @@ public sealed class ValidateSoatViaRuntHandler(
 
     private readonly ILogger<ValidateSoatViaRuntHandler> _logger =
         logger ?? NullLogger<ValidateSoatViaRuntHandler>.Instance;
+
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     public async Task<(ValidateSoatResult? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -94,9 +104,11 @@ public sealed class ValidateSoatViaRuntHandler(
             result = await provider.ConsultAsync(
                 new ConsultationContext(instance.Id, instance.TenantId, TemplateCode, fieldValues), ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // Solo la cancelación DEL LLAMADOR se propaga: un OperationCanceledException interno (p. ej. el
+        // timeout de HttpClient, que lanza TaskCanceledException) es un proveedor que no respondió.
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            ValidateSoatLog.ProveedorFallo(_logger, ex, instanceId, providerKey);
+            ValidateSoatLog.ProveedorFallo(_logger, instanceId, providerKey, ex.GetType().Name);
             return (null, ProviderError);
         }
 
@@ -105,7 +117,8 @@ public sealed class ValidateSoatViaRuntHandler(
         var soatEstado = MapSoatEstado(soatCheck?.Status);
 
         // Bug #13194 — «el RUNT no lo reporta» no es «no hay SOAT»: se conserva el soporte manual vigente.
-        var conservaSoporteManual = soatEstado == SoatGate.Unknown && TieneSoporteManualVigente(instance);
+        var conservaSoporteManual = soatEstado == SoatGate.Unknown
+            && await TieneSoporteManualVigenteAsync(instance, tenantId, ct);
         if (conservaSoporteManual)
         {
             soatEstado = SoatGate.Vigente;
@@ -180,11 +193,16 @@ public sealed class ValidateSoatViaRuntHandler(
     }
 
     /// <summary>
-    /// ¿El trámite ya tiene el SOAT vigente por un soporte manual? <c>soat_estado=vigente</c> escrito por
-    /// el OCR del PDF o por el usuario (no por una consulta) y, si se leyó la fecha de vencimiento, que no
-    /// haya pasado. Sin fecha legible se confía en el estado que el propio documento declaró.
+    /// ¿El trámite ya tiene el SOAT vigente por un soporte manual? Exige las tres cosas (fail-closed):
+    /// <list type="number">
+    /// <item><c>soat_estado=vigente</c> escrito por el OCR del PDF o por el usuario (no por una consulta);</item>
+    /// <item>una fecha <c>soat_vencimiento</c> legible que no haya pasado en el día de Colombia;</item>
+    /// <item>un adjunto de SOAT (<see cref="AttachmentRules.SoatEvidenceTipos"/>) no histórico en el trámite.</item>
+    /// </list>
+    /// El adjunto se consulta al final y solo si lo demás ya se cumple: es la única lectura extra.
     /// </summary>
-    private static bool TieneSoporteManualVigente(ProcedureInstance instance)
+    private async Task<bool> TieneSoporteManualVigenteAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
     {
         var estado = instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, SoatGate.FieldKey, StringComparison.OrdinalIgnoreCase));
@@ -196,27 +214,37 @@ public sealed class ValidateSoatViaRuntHandler(
         }
 
         var vencimiento = instance.FieldValues.FirstOrDefault(f =>
-            string.Equals(f.FieldKey, SoatVencimientoKey, StringComparison.OrdinalIgnoreCase))?.ValueText?.Trim();
-        if (string.IsNullOrEmpty(vencimiento))
-            return true;
+            string.Equals(f.FieldKey, SoatVencimientoKey, StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var fecha = ParseFecha(vencimiento);
+        if (fecha is null || fecha.Value < HoyEnColombia())
+            return false;
 
-        DateOnly fecha;
+        var conAdjuntos = await instanceRepo.GetByIdWithAttachmentsAsync(instance.Id, tenantId, ct);
+        return conAdjuntos?.Attachments.Any(a =>
+            !a.IsHistorico && AttachmentRules.IsSoatEvidenceTipo(a.Tipo)) == true;
+    }
+
+    /// <summary>Día calendario de hoy en Colombia (UTC−05:00 fijo, sin horario de verano).</summary>
+    private DateOnly HoyEnColombia() =>
+        DateOnly.FromDateTime(_clock.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
+
+    /// <summary>Fecha de vencimiento como día calendario; <c>null</c> si falta o no se puede leer.</summary>
+    private static DateOnly? ParseFecha(string? valor)
+    {
+        var texto = valor?.Trim();
+        if (string.IsNullOrEmpty(texto))
+            return null;
+
         if (DateOnly.TryParseExact(
-                vencimiento, FormatosFecha, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exacta))
+                texto, FormatosFecha, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exacta))
         {
-            fecha = exacta;
-        }
-        else if (DateTimeOffset.TryParse(
-                     vencimiento, CultureInfo.InvariantCulture, DateTimeStyles.None, out var conHora))
-        {
-            fecha = DateOnly.FromDateTime(conHora.Date);
-        }
-        else
-        {
-            return true;
+            return exacta;
         }
 
-        return fecha >= DateOnly.FromDateTime(DateTime.UtcNow);
+        // Con hora: se toma la fecha CALENDARIO escrita, sin convertir de huso (RN-08, Épica #12552).
+        return DateTimeOffset.TryParse(texto, CultureInfo.InvariantCulture, DateTimeStyles.None, out var conHora)
+            ? DateOnly.FromDateTime(conHora.DateTime)
+            : null;
     }
 
     private static void UpsertSoatEstado(
@@ -280,9 +308,11 @@ public sealed class ValidateSoatViaRuntHandler(
 /// <summary>Logging source-generado (CA1848) de la validación del SOAT. NUNCA incluye PII.</summary>
 internal static partial class ValidateSoatLog
 {
+    // Error, no Warning: la validación del gate SOAT quedó sin respuesta y debe alertar. Solo el TIPO de
+    // la excepción: el mensaje y el stack del proveedor pueden arrastrar la placa o la respuesta del RUNT.
     [LoggerMessage(
         EventId = 13194,
-        Level = LogLevel.Warning,
-        Message = "El proveedor RUNT {ProviderKey} falló al validar el SOAT del trámite {InstanceId}; se trata como consulta sin respuesta.")]
-    public static partial void ProveedorFallo(ILogger logger, Exception ex, Guid instanceId, string providerKey);
+        Level = LogLevel.Error,
+        Message = "El proveedor RUNT {ProviderKey} falló ({ExceptionType}) al validar el SOAT del trámite {InstanceId}; se trata como consulta sin respuesta.")]
+    public static partial void ProveedorFallo(ILogger logger, Guid instanceId, string providerKey, string exceptionType);
 }

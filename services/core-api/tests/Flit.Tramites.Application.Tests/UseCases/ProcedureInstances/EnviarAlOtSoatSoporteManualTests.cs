@@ -22,6 +22,11 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// <c>soat_estado=vigente</c> de un PDF cargado a mano; un vencido explícito del RUNT sí manda.
 /// (b) una excepción del proveedor es «consulta sin respuesta»: el envío continúa.</para>
 ///
+/// <para>Review 2 (SEC-High): el soporte manual exige un ADJUNTO de SOAT no histórico y una fecha de
+/// vencimiento legible que no haya pasado en el día de Colombia — sin adjunto, sin fecha o con fecha
+/// ilegible NO hay soporte (fail-closed). Un <c>soat_estado=vigente</c> con origen <c>user</c> por sí solo
+/// (PATCH forjado) ya no salta el gate.</para>
+///
 /// Uso de ejemplo:
 /// <code>
 /// var sut = new EnviarAlOtHandler(repo, lifecycle, new ValidateSoatViaRuntHandler(repo, catalog, registry), policy);
@@ -52,8 +57,14 @@ public sealed class EnviarAlOtSoatSoporteManualTests
         _provider.Key.Returns(ProviderKey);
     }
 
-    private EnviarAlOtHandler Sut() =>
-        new(_repo, _lifecycle, new ValidateSoatViaRuntHandler(_repo, _catalog, _registry), _policy);
+    private EnviarAlOtHandler Sut(TimeProvider? clock = null) =>
+        new(_repo, _lifecycle, new ValidateSoatViaRuntHandler(_repo, _catalog, _registry, clock: clock), _policy);
+
+    /// <summary>Reloj fijo: el «hoy» del validador se calcula en hora de Colombia a partir de este instante.</summary>
+    private sealed class RelojFijo(DateTimeOffset utc) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utc;
+    }
 
     private void Opcion(bool activa) =>
         _policy.IsEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(activa);
@@ -63,7 +74,14 @@ public sealed class EnviarAlOtSoatSoporteManualTests
             .Returns(new ConsultationResult(
                 ProviderKey, "ok", [new ConsultationCheck("soat", "SOAT", soatStatus, "runt", null)], []));
 
-    private ProcedureInstance Asignado(params (string Key, string Value, string Source)[] campos)
+    private ProcedureInstance Asignado(params (string Key, string Value, string Source)[] campos) =>
+        Asignado(adjuntoSoat: null, campos);
+
+    /// <param name="adjuntoSoat">Tipo del adjunto cargado (p. ej. <c>soat</c>); <c>null</c> = sin adjunto.</param>
+    /// <param name="campos">Field values iniciales (clave, valor, origen).</param>
+    /// <param name="historico">Marca el adjunto como histórico (revocación): ya no es soporte vigente.</param>
+    private ProcedureInstance Asignado(
+        string? adjuntoSoat, (string Key, string Value, string Source)[] campos, bool historico = false)
     {
         var instance = new ProcedureInstance
         {
@@ -89,7 +107,24 @@ public sealed class EnviarAlOtSoatSoporteManualTests
             });
         }
 
+        if (adjuntoSoat is not null)
+        {
+            instance.Attachments.Add(new ProcedureInstanceAttachment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = instance.TenantId,
+                ProcedureInstanceId = instance.Id,
+                Tipo = adjuntoSoat,
+                Filename = "soat.pdf",
+                Mimetype = "application/pdf",
+                Source = "user",
+                IsHistorico = historico,
+                UploadedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
         _repo.GetByIdWithDetailsAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithAttachmentsAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
         _lifecycle.TransitionAsync(Arg.Any<TramiteTransitionCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -111,9 +146,8 @@ public sealed class EnviarAlOtSoatSoporteManualTests
     {
         Opcion(activa: false);
         RuntResponde("unknown");
-        var instance = Asignado(
-            (SoatGate.FieldKey, SoatGate.Vigente, origen),
-            ("soat_vencimiento", Futuro, origen));
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, origen), ("soat_vencimiento", Futuro, origen)]);
 
         var (result, error, warning) = await Sut().HandleAsync(
             instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
@@ -148,9 +182,8 @@ public sealed class EnviarAlOtSoatSoporteManualTests
     {
         Opcion(activa: false);
         RuntResponde("unknown");
-        var instance = Asignado(
-            (SoatGate.FieldKey, SoatGate.Vigente, "ocr"),
-            ("soat_vencimiento", Pasado, "ocr"));
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", Pasado, "ocr")]);
 
         var (_, error, _) = await Sut().HandleAsync(
             instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
@@ -178,9 +211,8 @@ public sealed class EnviarAlOtSoatSoporteManualTests
     {
         Opcion(activa: false);
         RuntResponde("fail");
-        var instance = Asignado(
-            (SoatGate.FieldKey, SoatGate.Vigente, "ocr"),
-            ("soat_vencimiento", Futuro, "ocr"));
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", Futuro, "ocr")]);
 
         var (_, error, _) = await Sut().HandleAsync(
             instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
@@ -238,16 +270,149 @@ public sealed class EnviarAlOtSoatSoporteManualTests
         error.Should().Be("provider_error");
     }
 
-    /// <summary>Edge: la cancelación NO se traga — se propaga.</summary>
+    /// <summary>Edge: la cancelación DEL LLAMADOR no se traga — se propaga.</summary>
     [Fact]
     public async Task Validador_cancelacion_sePropaga()
     {
+        using var cts = new CancellationTokenSource();
         _provider.ConsultAsync(Arg.Any<ConsultationContext>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new OperationCanceledException());
+            .Returns(_ =>
+            {
+                cts.Cancel();
+                return Task.FromException<ConsultationResult>(new OperationCanceledException(cts.Token));
+            });
         var instance = Asignado();
 
         await new ValidateSoatViaRuntHandler(_repo, _catalog, _registry)
-            .Invoking(h => h.HandleAsync(instance.Id, instance.TenantId, Ct))
+            .Invoking(h => h.HandleAsync(instance.Id, instance.TenantId, cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    // ── Review 2 (SEC-High): el soporte manual es fail-closed ───────────────────────────────────────
+
+    /// <summary>
+    /// SEC: PATCH forjado — <c>soat_estado=vigente</c> con origen <c>user</c> y fecha futura, SIN adjunto de
+    /// SOAT + RUNT <c>unknown</c> + opción APAGADA ⇒ bloquea y el estado queda en <c>unknown</c>.
+    /// </summary>
+    [Fact]
+    public async Task Apagada_patchForjadoSinAdjunto_yRuntSinSoat_bloquea()
+    {
+        Opcion(activa: false);
+        RuntResponde("unknown");
+        var instance = Asignado(
+            (SoatGate.FieldKey, SoatGate.Vigente, "user"),
+            ("soat_vencimiento", Futuro, "user"));
+
+        var (result, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        result.Should().BeNull();
+        error.Should().Be(EnviarAlOtHandler.SoatNoVigente);
+        Soat(instance).ValueText.Should().Be(SoatGate.Unknown);
+        await _lifecycle.DidNotReceiveWithAnyArgs().TransitionAsync(default!, Ct);
+    }
+
+    /// <summary>Happy path: adjunto <c>soat_manual</c> + OCR vigente + fecha futura ⇒ continúa y conserva el vigente.</summary>
+    [Fact]
+    public async Task Apagada_conAdjuntoSoatManual_yOcrVigente_continua()
+    {
+        Opcion(activa: false);
+        RuntResponde("unknown");
+        var instance = Asignado("soat_manual",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", Futuro, "ocr")]);
+
+        var (result, error, warning) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().BeNull();
+        warning.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        Soat(instance).ValueText.Should().Be(SoatGate.Vigente);
+    }
+
+    /// <summary>Edge: el adjunto de SOAT histórico (revocación) ya no es soporte vigente ⇒ bloquea.</summary>
+    [Fact]
+    public async Task Apagada_conAdjuntoSoatHistorico_bloquea()
+    {
+        Opcion(activa: false);
+        RuntResponde("unknown");
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", Futuro, "ocr")], historico: true);
+
+        var (_, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().Be(EnviarAlOtHandler.SoatNoVigente);
+    }
+
+    /// <summary>Fail-closed: con adjunto pero SIN fecha de vencimiento ⇒ no hay soporte ⇒ bloquea.</summary>
+    [Fact]
+    public async Task Apagada_conAdjunto_sinFechaVencimiento_bloquea()
+    {
+        Opcion(activa: false);
+        RuntResponde("unknown");
+        var instance = Asignado("soat", [(SoatGate.FieldKey, SoatGate.Vigente, "ocr")]);
+
+        var (_, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().Be(EnviarAlOtHandler.SoatNoVigente);
+        Soat(instance).ValueText.Should().Be(SoatGate.Unknown);
+    }
+
+    /// <summary>Fail-closed: con adjunto pero fecha ilegible ⇒ no hay soporte ⇒ bloquea.</summary>
+    [Theory]
+    [InlineData("pronto")]
+    [InlineData("31/13/2027")]
+    [InlineData("   ")]
+    public async Task Apagada_conAdjunto_fechaIlegible_bloquea(string fecha)
+    {
+        Opcion(activa: false);
+        RuntResponde("unknown");
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", fecha, "ocr")]);
+
+        var (_, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().Be(EnviarAlOtHandler.SoatNoVigente);
+    }
+
+    /// <summary>
+    /// O4: vence HOY en Colombia y son las 20:00 en Bogotá (01:00 UTC del día siguiente) ⇒ sigue vigente.
+    /// Con <c>DateTime.UtcNow</c> el «hoy» ya era mañana y el SOAT salía vencido.
+    /// </summary>
+    [Fact]
+    public async Task Apagada_venceHoyEnBogota_a_las_20h_esVigente()
+    {
+        Opcion(activa: false);
+        RuntResponde("unknown");
+        var reloj = new RelojFijo(new DateTimeOffset(2026, 10, 2, 1, 0, 0, TimeSpan.Zero)); // 2026-10-01 20:00 -05:00
+        var instance = Asignado("soat",
+            [(SoatGate.FieldKey, SoatGate.Vigente, "ocr"), ("soat_vencimiento", "2026-10-01", "ocr")]);
+
+        var (result, error, _) = await Sut(reloj).HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
+    /// <summary>
+    /// O1: un <see cref="OperationCanceledException"/> INTERNO del proveedor (p. ej. timeout de HttpClient)
+    /// sin cancelación del llamador es «el RUNT no respondió» ⇒ <c>provider_error</c>, no una excepción.
+    /// </summary>
+    [Fact]
+    public async Task Validador_cancelacionInternaSinCancelarElLlamador_devuelveProviderError()
+    {
+        _provider.ConsultAsync(Arg.Any<ConsultationContext>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TaskCanceledException("HttpClient.Timeout"));
+        var instance = Asignado();
+
+        var (result, error) = await new ValidateSoatViaRuntHandler(_repo, _catalog, _registry)
+            .HandleAsync(instance.Id, instance.TenantId, Ct);
+
+        result.Should().BeNull();
+        error.Should().Be(ValidateSoatViaRuntHandler.ProviderError);
     }
 }
