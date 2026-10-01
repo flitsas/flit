@@ -45,6 +45,7 @@ jobs:
       python_port: ${{ steps.env.outputs.python_port }}
       migracion_port: ${{ steps.env.outputs.migracion_port }}
       hub_port: ${{ steps.env.outputs.hub_port }}
+      identity_port: ${{ steps.env.outputs.identity_port }}
       suite_env: ${{ steps.env.outputs.suite_env }}
       tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       internal_subnet: ${{ steps.env.outputs.internal_subnet }}
@@ -69,7 +70,7 @@ jobs:
               front_domain=flitsas.online
               api_domain=api.flitsas.online
               image_tag=pdn
-              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6040
+              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6040; identity_port=6004
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
               tramites_domain=tramites.flitsas.online
@@ -81,7 +82,7 @@ jobs:
               front_domain=qa.flitsas.online
               api_domain=api.qa.flitsas.online
               image_tag=qa
-              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5040
+              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5040; identity_port=5004
               suite_env=qa
               tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
@@ -92,7 +93,7 @@ jobs:
               front_domain=dev.flitsas.online
               api_domain=api.dev.flitsas.online
               image_tag=dev
-              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4040
+              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4040; identity_port=4004
               suite_env=dev
               tramites_domain=dev.tramites.flitsas.online
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
@@ -125,6 +126,7 @@ jobs:
             echo "python_port=$python_port"
             echo "migracion_port=$migracion_port"
             echo "hub_port=$hub_port"
+            echo "identity_port=$identity_port"
             echo "suite_env=$suite_env"
             echo "tramites_domain=$tramites_domain"
             echo "internal_subnet=$internal_subnet"
@@ -524,6 +526,9 @@ jobs:
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
             export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
             export HUB_PORT=${{ needs.setup.outputs.hub_port }}
+            # HU #13226 (Epic #13217): core-identity (perfil "identity"). Sin el perfil no se levanta; la etiqueta, si no
+            # se fija en el .env (CORE_IDENTITY_TAG), es la de core-api.
+            export CORE_IDENTITY_PORT=${{ needs.setup.outputs.identity_port }}
             # FLIT Suite: hosts de los productos en este ambiente (Suite:Hosts:Environment de core-api).
             export FLIT_SUITE_ENV=${{ needs.setup.outputs.suite_env }}
             # URL pública del hub (emisor OIDC) para @flit/auth.
@@ -533,9 +538,16 @@ jobs:
             # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
             export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
 
-            # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
-            # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
-            docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            # Feature #13220 (Epic #13217): despliegue por servicio, detrás de la variable FLIT_DEPLOY_ROLLING del
+            # GitHub Environment. Sin ella (hoy) se hace como siempre: down de todo el stack y up.
+            # Con "true": sin down global; core-api primero (migra), luego el resto y core-identity al final, así el
+            # login nunca se cae junto con core-api (ver docs/suite/identidad-frontera.md §9).
+            ROLLING="${{ vars.FLIT_DEPLOY_ROLLING }}"
+            if [ "$ROLLING" != "true" ]; then
+              # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
+              # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
+              docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            fi
 
             # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
             # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
@@ -555,7 +567,26 @@ jobs:
 
             # Pull latest images and restart services
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            if [ "$ROLLING" != "true" ]; then
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            else
+              wait_healthy() {
+                for i in $(seq 1 30); do
+                  state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose -f docker-compose.prod.yml ps -q "$1")" 2>/dev/null || echo missing)
+                  [ "$state" = "healthy" ] && return 0
+                  sleep 5
+                done
+                echo "::error::$1 no quedó healthy"; docker compose -f docker-compose.prod.yml logs --tail=100 "$1"; return 1
+              }
+              docker compose -f docker-compose.prod.yml up -d --no-deps core-api
+              wait_healthy core-api
+              others=$(docker compose -f docker-compose.prod.yml config --services | grep -vx -e core-api -e core-identity | tr '\n' ' ')
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans $others
+              if docker compose -f docker-compose.prod.yml config --services | grep -qx core-identity; then
+                docker compose -f docker-compose.prod.yml up -d --no-deps core-identity
+                wait_healthy core-identity
+              fi
+            fi
 
             # Remove dangling images to free space
             docker image prune -f
@@ -580,6 +611,15 @@ jobs:
               docker compose -f docker-compose.prod.yml ps
               docker compose -f docker-compose.prod.yml logs --tail=100
               exit 1
+            fi
+            # HU #13226: si core-identity corre (perfil "identity"), también tiene que estar listo.
+            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q core-identity 2>/dev/null)" ]; then
+              if ! curl -fsS http://127.0.0.1:${{ needs.setup.outputs.identity_port }}/health/ready > /dev/null; then
+                echo "::error::core-identity no está listo (/health/ready)"
+                docker compose -f docker-compose.prod.yml logs --tail=100 core-identity
+                exit 1
+              fi
+              echo "core-identity listo."
             fi
             echo "Deploy OK."
 
