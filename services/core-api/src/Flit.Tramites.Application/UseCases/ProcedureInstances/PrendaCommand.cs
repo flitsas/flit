@@ -205,34 +205,18 @@ public sealed class RegistrarPrendaHandler(
     }
 
     /// <summary>
-    /// Bug #13240 — retira los adjuntos de prenda (<see cref="PrendaDocTipos.All"/>) que ya no exige
-    /// NINGUNA decisión vigente: el PDF de «registrar» tras cambiar a <c>omitir</c>/<c>sin_prenda</c> o a
-    /// <c>levantar</c> seguía en los documentos del trámite y dentro del consolidado, mientras el FUR —que
-    /// lee las vigentes— ya no lo declaraba.
-    ///
-    /// <para><b>Candidatos según el tipo (review PR #508, B1).</b> Sin acción complementaria
-    /// (Matrícula/Traspaso: a lo sumo UNA vigente) es candidato todo <c>prenda_*</c> que la vigente
-    /// resultante no exige — cubre también el PDF subido sin haber guardado nunca la decisión. CON
-    /// complementaria (<see cref="ProcedureTypeLayers.PermiteAccionComplementaria"/>) solo lo son los
-    /// DocTipos de las decisiones REEMPLAZADAS en este guardado que ninguna vigente resultante exige: el
-    /// front guarda primero la base y luego la complementaria, así que en la primera activación el
-    /// documento de la complementaria ya está subido y todavía no pertenece a ninguna decisión; tratarlo
-    /// como huérfano lo borraba en el PUT de la base.</para>
-    ///
-    /// <para><b>Mismas reglas que el borrado del gestor</b> (<see cref="DeleteAttachmentHandler"/>, vía
-    /// <see cref="AttachmentRetiro"/>): solo en estado editable
-    /// (<see cref="TramiteEstado.PermiteEdicionDatos"/>), nunca tipos del sistema ni adjuntos
-    /// referenciados por una radicación, auditoría de impronta en soft-delete y checklist des-marcado.
-    /// Fuera de estado editable la decisión se guarda (R17, modificación post-registro) pero los
-    /// documentos no se tocan: el expediente ya salió con ellos y el gestor tampoco podría borrarlos a
-    /// mano. El consolidado se invalida solo (<c>ConsolidadoVigenciaTracker</c> ve el adjunto borrado).</para>
-    ///
-    /// <para><c>inscripcion_prenda</c> NO entra: es requisito del catálogo del TIPO
-    /// (LEVANTAR_INSCRIBIR_PRENDA, CAMBIO_ACREEDOR) y el documento de la política del OT, no el soporte
-    /// de una decisión del agregado; ninguna decisión lo exige ni lo deja de exigir.</para>
-    ///
-    /// <para>Sin almacenamiento cableado (dobles de prueba / composiciones antiguas) no se hace nada:
-    /// retirar la fila sin borrar el blob dejaría huérfano el archivo.</para>
+    /// Bug #13240 — retira los adjuntos de prenda (<see cref="PrendaDocTipos.All"/>) que ya no exige ninguna
+    /// decisión vigente: tras cambiar de «registrar» a <c>omitir</c>/<c>sin_prenda</c>/<c>levantar</c> el PDF
+    /// seguía en el expediente y en el consolidado, mientras el FUR (que lee las vigentes) ya no lo declaraba.
+    /// <para>Sin acción complementaria (a lo sumo UNA vigente) es candidato todo <c>prenda_*</c> no exigido,
+    /// incluido el PDF subido sin haber guardado la decisión. CON complementaria solo lo son los DocTipos de
+    /// las decisiones reemplazadas en este guardado: el front guarda la base antes que la complementaria y su
+    /// documento recién subido aún no pertenece a ninguna decisión (review PR #508, B1).</para>
+    /// <para>Mismas reglas que <see cref="DeleteAttachmentHandler"/> (vía <see cref="AttachmentRetiro"/>) y
+    /// solo en estado editable: fuera de él la decisión se guarda (R17) pero el expediente ya salió con esos
+    /// documentos. El consolidado lo invalida <c>ConsolidadoVigenciaTracker</c>. <c>inscripcion_prenda</c> no
+    /// entra: es requisito del catálogo del tipo y de la política del OT, no soporte de una decisión. Sin
+    /// almacenamiento cableado no se hace nada (la fila sin el blob dejaría el archivo huérfano).</para>
     /// </summary>
     private async Task RetirarSoportesHuerfanosAsync(
         Guid instanceId,
@@ -273,12 +257,8 @@ public sealed class RegistrarPrendaHandler(
         if (retirables.Count == 0)
             return;
 
-        // Riesgo latente (review PR #508, O3): este SaveChanges solo hace DELETE de adjuntos porque
-        // AutoUnmark es no-op para prenda_* (ningún ítem de TramiteTipologiaCatalog usa esos DocTipos).
-        // Si alguno llegara a usarlos, AutoUnmark modificaría la instancia y el UPDATE saldría con el
-        // row_version que EF leyó antes del save de la prenda (el ConsolidadoVigenciaTracker puede
-        // haberlo subido) ⇒ DbUpdateConcurrencyException. En ese caso, recargar la entrada antes de Retirar.
-        // Solo se guarda cuando hubo retiro.
+        // O3 (review PR #508): este save solo borra adjuntos porque AutoUnmark es no-op para prenda_*. Si un
+        // ítem del catálogo llegara a usarlos, recargar la entrada antes de Retirar (row_version obsoleto).
         AttachmentRetiro.Retirar(instance, retirables, instances, _storage, _imprintAudit);
         await instances.SaveChangesAsync(ct).ConfigureAwait(false);
     }
