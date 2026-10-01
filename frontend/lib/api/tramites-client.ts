@@ -150,6 +150,7 @@ import type {
 } from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
+import { esFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { resolveApiBase } from './base-url';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
@@ -524,7 +525,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    const problem = parseProblem(body);
+    // Bug #13194 (P4) — el gate de firma tiene copy propio (partes + correo de VID); el resto, el detail.
+    const message = esFirmaPendiente(problem)
+      ? mensajeFirmaPendiente(problem)
+      : problemMessage(res, body);
+    throw new TramitesApiError(res.status, message, problem);
   }
 
   if (res.status === 204) {
@@ -1462,7 +1468,8 @@ export const tramitesClient = {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(problemMessage(res, body));
+      // Bug #13194 (P3) — en 'asignado' el 409 `soporte_soat_requerido` tiene que poder distinguirse.
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
     }
     return JSON.parse(await res.text()) as PersistOcrFieldsResult;
   },
@@ -2443,18 +2450,16 @@ export const tramitesClient = {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      let code: string | undefined;
-      let detail: string | undefined;
-      try {
-        const problem = JSON.parse(body) as { title?: string; detail?: string };
-        code = problem.title;
-        detail = problem.detail;
-      } catch {
-        // cuerpo no-JSON (gateway) → mensaje genérico abajo.
-      }
-      throw new Error(
-        (code && TRANSITION_ERROR_COPY[code]) ?? detail ?? problemMessage(res, body),
-      );
+      // Cuerpo no-JSON (gateway) → parseProblem da null y cae al mensaje genérico.
+      const problem = parseProblem(body);
+      const code = typeof problem?.title === 'string' ? problem.title : undefined;
+      const detail = typeof problem?.detail === 'string' ? problem.detail : undefined;
+      // Bug #13194 (P4) — `firma_pendiente`: el detail nombra las partes; el helper arma el copy.
+      // Se lanza TramitesApiError (subclase de Error) para que el caller pueda leer el código.
+      const message = esFirmaPendiente(problem)
+        ? mensajeFirmaPendiente(problem)
+        : ((code && TRANSITION_ERROR_COPY[code]) ?? detail ?? problemMessage(res, body));
+      throw new TramitesApiError(res.status, message, problem);
     }
     return (await res.json()) as InstanceSummary;
   },
@@ -2652,6 +2657,9 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   transicion_no_permitida: 'La transición de estado solicitada no está permitida.',
   estado_final: 'El trámite está en un estado final y no admite cambios.',
   identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada.',
+  // Bug #13194 (P4) — respaldo; el copy real lo arma mensajeFirmaPendiente (partes + correo de VID).
+  firma_pendiente:
+    'Falta la validación de identidad o firma de una de las partes: no se puede enviar al organismo de tránsito un trámite sin firmar.',
   documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
