@@ -81,6 +81,8 @@ internal static class ConsultationEndpoints
                 "template_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Consultation template RUNT_VEHICLE not found."),
                 "provider_not_resolved" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El template RUNT_VEHICLE no declara un proveedor."),
                 "provider_not_found" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El proveedor RUNT del vehículo no está registrado."),
+                // Bug #13194 — el proveedor RUNT falló: sin esto el 200 salía con cuerpo nulo.
+                ValidateSoatViaRuntHandler.ProviderError => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El RUNT no respondió. Intenta de nuevo o carga el PDF del SOAT."),
                 _ => Results.Ok(result)
             };
         }).WithName("ValidateSoatViaRunt");
