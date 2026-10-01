@@ -246,7 +246,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(screen.queryByTestId("mandatario-sin-candidatos")).not.toBeInTheDocument();
   });
 
-  it("HU13125: 409 mandatario_identidad_requerida pide validación biométrica vigente o firma en el baúl", async () => {
+  it("HU13162: un 409 mandatario_identidad_requerida ya no tiene texto propio (código retirado)", async () => {
     const user = userEvent.setup();
     vi.mocked(approveOtClientProcedure).mockRejectedValueOnce(
       new ApiError(409, "mandatario_identidad_requerida", { error: "mandatario_identidad_requerida" }),
@@ -256,9 +256,8 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
 
-    const aviso = await screen.findByText(/validación biométrica aprobada y vigente, o su firma en el baúl/i);
-    expect(aviso).toBeInTheDocument();
-    expect(aviso.textContent).not.toMatch(/pestaña|Mandatarios/i);
+    expect(await screen.findByText("No se pudo aprobar el trámite.")).toBeInTheDocument();
+    expect(screen.queryByText(/pestaña Mandatarios|se la envía/i)).not.toBeInTheDocument();
   });
 
   it("AC3 rechazar deshabilita confirmar sin motivo", async () => {

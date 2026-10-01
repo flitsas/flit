@@ -49,14 +49,15 @@ Es el lugar principal. Aquí la compañía registra a las personas y decide dón
 |---|---|
 | **Nombre completo** | Aparece bajo la firma en el PDF del mandato |
 | **Tipo de documento** y **Número de documento** | Identificación en el contrato; también sirve para buscar su firma del baúl |
-| **Correo** | Con correo, al registrarlo se le envía la validación de identidad. Si ya tiene una vigente, se reutiliza y no se le vuelve a escribir |
+| **Correo** | Dato de contacto. Registrarlo **no** envía ninguna validación de identidad: esa se origina solo en el módulo Identidad |
 | **Firma del baúl** (opcional) | Su firma custodiada. Con ella, el mandato la estampa automáticamente |
 | **Organismos donde aplica** | Lista de checkboxes. Solo se muestran los organismos habilitados para esa compañía |
 | **Empresas** (dentro de cada organismo marcado) | Acota para qué empresas representadas firma. Vacío = todas |
-| **Firma de forma física** (dentro de cada organismo marcado) | El contrato de ese organismo deja la línea para firmar a mano en lugar de estampar |
-| **Bloque de identidad** (solo al editar) | Enviar, reenviar o consultar el estado de la validación de identidad |
+| **Estado de identidad** (solo al editar) | Solo lectura: vigente, en curso, vencida o sin validación, calculado desde el módulo Identidad |
 
-El formulario **bloquea el guardado** si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados. En ese caso muestra una alerta en rojo indicando en cuáles y qué hacer: capturarle la firma del baúl, registrarle un correo para la validación de identidad, o marcar esos organismos como de firma física.
+> La firma física dejó de ser una forma de firma: las marcas históricas se conservan, pero un mandatario nuevo se registra con firma del baúl o con validación biométrica.
+
+El formulario **bloquea el guardado** si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados. En ese caso muestra una alerta en rojo indicando en cuáles y qué hacer: capturarle la firma del baúl o iniciar su validación biométrica en el módulo Identidad.
 
 > Nota histórica: antes los mandatarios se registraban desde el perfil del organismo de tránsito, que elegía compañías. Se invirtió porque el mandatario es de la empresa, no del organismo.
 
@@ -115,9 +116,9 @@ El sistema distingue dos situaciones que parecen iguales pero no lo son: un orga
 
 **Ruta:** módulo del organismo de tránsito → listado de trámites de la compañía cliente → aprobar
 
-Si al aprobar el trámite hay varios mandatarios posibles y el sistema no puede decidir solo, muestra un diálogo para que el aprobador elija uno. Ese es el punto donde hoy se resuelve la mayoría de los casos.
+El mandatario que firma lo decide el sistema con la **prelación** (primero el que el organismo definió para la compañía, luego el propio de la compañía, el de otra compañía asociada y el predeterminado del organismo). El gestor de la compañía **no elige** mandatario: solo ve quién firmará, en modo lectura. Si al aprobar el trámite la prelación no alcanza a decidir (varios candidatos válidos sin predeterminado), el organismo muestra un diálogo y el aprobador elige uno.
 
-> **Estado actual:** existe una sección de selección de mandatario pensada para el wizard del gestor (cuando se registra el trámite), pero **no está montada en la aplicación**. El componente está desarrollado y con pruebas, pero ninguna pantalla lo usa. En la práctica, hoy la elección ocurre en la aprobación del organismo o de forma automática.
+> **Retirado (Feature #13120):** el gestor ya no puede elegir ni cambiar el mandatario por API (los endpoints `GET /instances/{id}/mandate-signers` y `PUT /instances/{id}/mandate-signer` se eliminaron) ni marcar «firma posterior» para el mandatario. La validación del mandatario se exige antes de radicar.
 
 ### 3.6. Excepción: mandato personalizado de la compañía
 
@@ -162,24 +163,21 @@ En los tres casos los datos del mandatario siguen apareciendo en el **cuerpo** d
 | Modo | Qué se ve en el PDF | Qué lo activa |
 |---|---|---|
 | **Estampada** | La firma o el sello del mandatario impresos sobre la línea | Es el caso normal |
-| **Manual** | Línea de guiones con sus datos debajo, sin estampa | Marcar «Firma de forma física» en ese organismo, o que el mandatario sea el propio organismo |
+| **Manual** | Línea de guiones con sus datos debajo, sin estampa | Marca histórica de firma física en ese organismo (ya no se asigna), o que el mandatario sea el propio organismo |
 | **Sin bloque** | El recuadro solo lleva al mandante | Convenio comercial entre la compañía y el organismo, o tipo Persona jurídica |
 
-### Las tres formas de tener con qué firmar
+### Las dos formas de tener con qué firmar
 
-Para que un mandatario pueda firmar necesita **al menos una** de estas tres. **No son acumulativas**: basta con cualquiera.
+Para que un mandatario pueda firmar necesita **una** de estas dos. **No son acumulativas**: basta con cualquiera.
 
 1. **Firma del baúl vigente** — la firma custodiada de la persona. Es la de mayor prioridad: si la tiene, es la que se estampa.
-2. **Validación de identidad aprobada y vigente** — se envía por correo desde su ficha. Si no hay firma del baúl, se estampa el sello de esta validación.
-3. **Firma física en ese organismo** — no necesita ninguna de las anteriores: el documento le deja la línea y él la suscribe en papel.
+2. **Validación biométrica aprobada y vigente** (30 días, módulo Identidad) — si no hay firma del baúl, se estampa el sello de esta validación.
 
-Si no tiene ninguna de las tres, la aprobación devuelve `mandatario_identidad_requerida`.
+Si el mandatario no tiene ninguna de las dos, el trámite no pasa la validación del mandatario al radicar (`mandatario_firma_invalida` / `mandatario_no_configurado`, según el modo del ambiente).
 
 ### Firma posterior (diferida)
 
-Si el mandatario se queda sin con qué firmar, el trámite no se bloquea: se puede marcar **firma posterior**. Queda registrada una marca pendiente y la firma se aplica más adelante, cuando la persona consiga su firma o su identidad.
-
-La opción **no se ofrece** a quien firma a mano, porque no tiene nada que esperar: el documento ya le deja la línea.
+La firma posterior sigue disponible solo para las partes **comprador** y **vendedor** (personas jurídicas). Para el mandatario **ya no existe**: pedir `parte=mandatario` responde `400 parte_invalida`, porque la validación previa exige tener un mandatario con qué firmar antes de radicar.
 
 ---
 
@@ -190,10 +188,10 @@ La opción **no se ofrece** a quien firma a mano, porque no tiene nada que esper
 | No aparece ningún mandatario para elegir | Que la persona esté activa, marcada en ese organismo, y que la compañía del trámite sea la correcta |
 | Aparece un mandatario pero no el esperado | Las empresas marcadas dentro de ese organismo en su ficha (puede estar acotado por NIT) |
 | Error `mandatario_requerido` al aprobar | Hay varios candidatos y ninguno resuelve solo: elegir en el diálogo o definir un mandatario por defecto en Plataforma → Mandatos |
-| Error `mandatario_identidad_requerida` | La persona no tiene firma del baúl, ni identidad vigente, ni está marcada como firma física en ese organismo |
+| El trámite no pasa la validación del mandatario al radicar | El mandatario no tiene firma del baúl vigente ni validación biométrica vigente, o no hay mandatario activo y vigente para el organismo y la compañía |
 | El mandato sale sin firma del mandatario | Revisar si hay convenio comercial con ese organismo, o si el tipo es Persona jurídica |
 | El contrato nombra a un municipio o una UT que no corresponde | Se aplicó al organismo una redacción de otro (Sabaneta o Bello). Cambiar a «Automática» o a la genérica |
-| No se puede guardar el mandatario | La alerta roja indica en qué organismos queda sin poder firmar. Asignarle firma, correo de identidad, o marcarlo como firma física |
+| No se puede guardar el mandatario | La alerta roja indica en qué organismos queda sin poder firmar. Asignarle la firma del baúl o iniciar su validación biométrica en el módulo Identidad |
 
 ---
 
@@ -206,10 +204,9 @@ Para quien necesite consultar o auditar directamente.
 | Tabla | Qué guarda |
 |---|---|
 | `admin.mandate_signers` | La persona: nombre, tipo y número de documento, correo, firma del baúl, cuenta de usuario, activo/inactivo |
-| `admin.mandate_signer_transit_offices` | En qué organismos aplica cada mandatario. Incluye la marca `signs_physically` (firma a mano) |
+| `admin.mandate_signer_transit_offices` | En qué organismos aplica cada mandatario. Incluye la marca histórica `signs_physically` (firma a mano): se conserva y se honra, pero ya no se asigna a mandatarios nuevos |
 | `admin.mandate_signer_companies` | Vínculo del mandatario con la compañía gestora en un organismo |
 | `admin.mandate_signer_represented_companies` | A qué empresas representadas aplica en cada organismo. Sin filas = aplica a todas |
-| `admin.admin_identity_validations` | Validaciones de identidad (`subject_type = mandate_signer`), con estado y vigencia |
 
 ### Configuración del contrato
 
@@ -225,14 +222,15 @@ Para quien necesite consultar o auditar directamente.
 | Tabla / columna | Qué guarda |
 |---|---|
 | `tramites.procedure_instances.mandate_signer_id` | El mandatario efectivo de ese trámite |
-| `tramites.deferred_signature_marks` | Marcas de firma posterior, incluida la del mandatario |
+| `tramites.deferred_signature_marks` | Marcas de firma posterior de comprador y vendedor (las históricas del mandatario se conservan, ya no se crean) |
 | `tramites.procedure_instance_attachments` | El PDF del mandato. La columna `source` distingue `system` (generado) de `company` (personalizado) |
 
 ---
 
 ## 8. Puntos abiertos
 
-- **Selección en el wizard no disponible.** El componente de selección de mandatario por parte del gestor existe y tiene pruebas, pero no está montado en ninguna pantalla. La elección ocurre hoy en la aprobación del organismo.
+- **Selección por el gestor: retirada.** El gestor ya no elige mandatario; lo resuelve la prelación y, cuando hace falta, el organismo al aprobar (Feature #13120).
+- **Estado de la limpieza.** Pendientes de la Feature #13120: retirar los endpoints ya respondidos en 410 (en espera del ADR-0050 Aceptado) y aplicar en cada ambiente la migración de limpieza (DDL 127) con respaldo previo.
 - **Texto legal pendiente de validación.** Las redacciones de las plantillas están transcritas de la versión anterior del producto y siguen marcadas en el código como pendientes de revisión del Product Owner.
 - **Plantillas propias por organismo ocultas.** La función de cargar una plantilla propia (PDF o editor) está desactivada en la interfaz mediante un interruptor, aunque el backend la conserva intacta. Los organismos que ya tienen una la siguen usando.
 - **Combinaciones incoherentes de redacción y organismo.** El sistema advierte pero no impide aplicar la redacción de un organismo a otro.

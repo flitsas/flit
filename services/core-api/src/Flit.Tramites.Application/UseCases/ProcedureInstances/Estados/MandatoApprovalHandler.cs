@@ -16,13 +16,6 @@ public enum MandatoApprovalOutcome
 
     /// <summary>Varios mandatarios sin cotejo único: el aprobador debe elegir uno (⇒ 409 mandatario_requerido).</summary>
     RequiereSeleccion,
-
-    /// <summary>
-    /// El mandatario resuelto no tiene NINGUNA de las dos formas de firmar —ni firma del baúl vigente ni
-    /// identidad validada vigente—, así que debe conseguir una antes de firmar
-    /// (⇒ 409 mandatario_identidad_requerida).
-    /// </summary>
-    IdentidadRequerida,
 }
 
 /// <summary>Decisión de la resolución del mandatario al aprobar; <c>MandateSignerId</c> solo con <see cref="MandatoApprovalOutcome.Resolved"/>.</summary>
@@ -73,7 +66,7 @@ public sealed class MandatoApprovalHandler(
         // mandatario, sin consultar directorio ni política de firma), así que su sola presencia NO
         // implica que el trámite exija un mandatario que firme. Si el gate lo mirara sin distinguir el
         // origen, un mandato personalizado bloquearía SIEMPRE la aprobación con 409
-        // mandatario_requerido/mandatario_identidad_requerida, aunque nadie vaya a firmarlo. Cuando el
+        // mandatario_requerido, aunque nadie vaya a firmarlo. Cuando el
         // adjunto es del sistema (Source="system", el caso de siempre) el gate exige mandatario
         // exactamente como antes.
         var exigeMandato = instance.Attachments.Any(a =>

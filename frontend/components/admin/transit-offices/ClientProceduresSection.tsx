@@ -1128,18 +1128,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           ? (err.body as { error?: string } | undefined)?.error
           : undefined;
 
-      // ADR-0036 §D9 (HU #10911) — el mandatario resuelto no tiene identidad validada vigente.
-      if (errorCode === "mandatario_identidad_requerida") {
-        setApproveTarget(null);
-        setMandatarioTarget(null);
-        show(
-          "El mandatario necesita una validación biométrica aprobada y vigente, o su firma en el baúl, " +
-            "para firmar el mandato.",
-          "error",
-        );
-        return;
-      }
-
       // ADR-0036 §D9 / HU #13147 (ADR-0066) — el OT debe elegir al firmante: el diálogo lista
       // EXACTAMENTE los candidatos válidos que devuelve el backend en el 409 (sin consultar la lista
       // del organismo ni filtrar en el cliente, que ignoraba la vigencia y el scope del Super Admin).

@@ -121,7 +121,7 @@ definitivos:
 | 5 | Trámites · Prevalidación | Cambiar el correo del sujeto dispara reenvío | `EditarPrevalidacionCommand.cs:96` |
 | 6 | Trámites · Prevalidación | Reenvío manual — tope 3, cooldown 5 min | `ReenviarPrevalidacionHandler` |
 | 7 | Admin · Representantes legales | Validar al RL de una compañía | `AdminLegalRepresentativeIdentityEndpoints.cs:31,43` |
-| 8 | Admin · Mandatarios | OT valida a un firmante de mandato | `AdminMandateSignerIdentityEndpoints.cs:33,45` |
+| 8 | Admin · Mandatarios | ~~OT valida a un firmante de mandato~~ **Retirado (410)**: la identidad del mandatario se origina solo en el módulo Identidad (ADR-0050), no se envía desde la compañía ni el OT | `AdminMandateSignerIdentityEndpoints.cs` |
 | 9 | Infra · Outbox | **Automático.** Reintento de envíos fallidos | `IdentityValidationSendRetryProcessor.cs` |
 
 > La ruta admin (7, 8) va deliberadamente **sin guard de precedencia** —
