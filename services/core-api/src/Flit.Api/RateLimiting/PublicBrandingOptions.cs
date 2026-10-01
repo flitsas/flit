@@ -23,8 +23,10 @@ public sealed class PublicBrandingOptions
     /// la URL absoluta del logotipo (<c>{PublicBaseUrl}/api/v1/public/branding/logos/{logoId}</c>) que
     /// interpola <c>EmailTheme.LogoUrl</c>. Nunca la firma un token: es la misma ruta pública sin auth
     /// que ya expone <c>Flit.Api.Endpoints.Public.PublicBrandingEndpoints</c> desde otro host/base.
+    /// Bug #13194: sin configuración cae al frontend local; cada ambiente define
+    /// <c>PublicBranding__PublicBaseUrl</c>.
     /// </summary>
-    public string PublicBaseUrl { get; set; } = "https://dev.flitsas.online";
+    public string PublicBaseUrl { get; set; } = "http://localhost:3000";
 
     public RateLimitOptions RateLimit { get; set; } = new();
 
