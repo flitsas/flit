@@ -115,6 +115,19 @@ public static class DependencyInjection
         // HU #10189 — listado de compañías.
         services.AddScoped<ListCompaniesHandler>();
 
+        // HU #13087 (Épica #12737) — pase de los clientes de integración externos. Repositorio, hasher,
+        // emisor y ExternalClientAuthSettings se registran en Infrastructure.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<Integrations.Auth.IssueExternalClientTokenHandler>();
+
+        // HU #13088 — administración de clientes externos (SuperAdmin).
+        services.AddScoped<Integrations.Clients.ListExternalClientsHandler>();
+        services.AddScoped<Integrations.Clients.GetExternalClientHandler>();
+        services.AddScoped<Integrations.Clients.CreateExternalClientHandler>();
+        services.AddScoped<Integrations.Clients.UpdateExternalClientHandler>();
+        services.AddScoped<Integrations.Clients.RegenerateExternalClientSecretHandler>();
+        services.AddScoped<Integrations.Clients.UnlockExternalClientHandler>();
+
         // Alta de compañías (botón "Crear compañía" en la consola, #10118).
         services.AddScoped<CreateCompanyHandler>();
 
