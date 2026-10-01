@@ -74,6 +74,10 @@ public sealed class ConsolidadoRegeneracionHitosLifecycleTests
             AddField(i, "plate", plate, "consultation");
         AddField(i, "transit_office_id", OfficeId.ToString(), "user");
 
+        // Bug #13194 (D2) — un trámite que ya pasó de borrador estaba firmado al prepararse.
+        if (status != TramiteEstado.Borrador)
+            FirmaFixture.Firmar(i);
+
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(i);
         _typeRepo.GetByIdAsync(i.ProcedureTypeId, Arg.Any<CancellationToken>()).Returns(new ProcedureType
         {

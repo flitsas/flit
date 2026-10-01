@@ -117,25 +117,26 @@ public sealed class WizardStateDynamicGapsTests
     }
 
     [Fact]
-    public async Task IdentityValidationEnabled_SePropagaDesdeLaPolitica()
+    public async Task IdentityValidationEnabled_SiempreTrue_AunqueElOtLaDeshabilite()
     {
+        // Bug #13194 (D2) — la política del OT ya no apaga la identidad: el flag viaja siempre en true.
         var (handler, instance) = Armar(identityRequired: false);
 
         var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, TestContext.Current.CancellationToken);
 
-        result!.IdentityValidationEnabled.Should().BeFalse("antes el camino dinámico devolvía el default true");
+        result!.IdentityValidationEnabled.Should().BeTrue("la identidad (firma) se exige siempre");
     }
 
     [Fact]
-    public async Task IdentidadDeshabilitadaPorElOt_NoBloqueaLaBiometria()
+    public async Task IdentidadDeshabilitadaPorElOt_SigueBloqueandoLaBiometria()
     {
-        // El flag no basta: si el OT la deshabilita, las partes cuentan como satisfechas y el gate
-        // biométrico no debe aportar blocker (HU #10548).
+        // Bug #13194 (D2) — reemplaza HU #10548: las partes YA NO cuentan como satisfechas porque el OT
+        // deshabilite la identidad; sin validación aprobada, el gate biométrico aporta su blocker.
         var (handler, instance) = Armar(identityRequired: false);
 
         var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, TestContext.Current.CancellationToken);
 
-        result!.Blockers.Should().NotContain(DynamicGateEvaluator.IdentidadNoAprobada);
+        result!.Blockers.Should().Contain(DynamicGateEvaluator.IdentidadNoAprobada);
     }
 
     [Fact]

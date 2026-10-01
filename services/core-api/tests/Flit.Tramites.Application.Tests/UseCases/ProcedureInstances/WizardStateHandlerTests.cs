@@ -280,8 +280,8 @@ public sealed class WizardStateHandlerTests
         result!.IdentityValidationEnabled.Should().BeTrue();
     }
 
-    [Fact] // AC3 — OT con identidad deshabilitada: el flag viaja en false para que el wizard oculte el paso.
-    public async Task Get_IdentityValidationDisabled_FlagFalse()
+    [Fact] // Bug #13194 (D2) — reemplaza HU #10548 AC3: un OT con identidad deshabilitada YA NO la relaja.
+    public async Task Get_OtConIdentidadDeshabilitada_SigueExigiendoIdentidad()
     {
         var ct = TestContext.Current.CancellationToken;
         Setup(Base("matricula_inicial"));
@@ -293,8 +293,10 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.IdentityValidationEnabled.Should().BeFalse();
-        result.Blockers.Should().NotContain(TramiteEstadoErrores.IdentidadNoAprobada);
+        // «No se permite enviar al OT trámites sin firmar»: el flag viaja en true (el paso se muestra) y
+        // la falta de identidad sigue bloqueando, como en cualquier OT.
+        result!.IdentityValidationEnabled.Should().BeTrue();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.IdentidadNoAprobada);
     }
 
     [Fact]
