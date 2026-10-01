@@ -135,6 +135,67 @@ public sealed class DraftRequestPorCapacidadesTests
     }
 
     [Fact]
+    public async Task Bug13109_ConCodigoResuelto_ElRequestLlevaIdCodigoNombreYMunicipioDelMismoOrganismo()
+    {
+        var organismo = Guid.NewGuid();
+        var master = Master(1);
+        master.TrafficSecretaryCode = "11001000";
+        master.TransitOfficeId = organismo;
+        master.TransitOfficeName = "SECRETARIA DISTRITAL DE MOVILIDAD";
+        master.TransitOfficeCityCode = "11001";
+        var tipo = new DraftProcedureType(
+            "MATRICULA_NUEVA", "MATRICULAS",
+            RequiresCommercialValue: false, ResolvesTransitOfficeFromRunt: false);
+
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
+
+        request.TransitOfficeId.Should().Be(organismo.ToString());
+        request.TransitOfficeCode.Should().Be("11001000", "el código ya validado por el SP de negocio");
+        request.TransitOfficeName.Should().Be("SECRETARIA DISTRITAL DE MOVILIDAD");
+        request.TransitOfficeCity.Should().Be("11001");
+    }
+
+    [Fact]
+    public async Task Bug13109_TraspasoConCodigoResuelto_ElNombreEsElDelCatalogoNoElDelRunt()
+    {
+        var master = Master(3);
+        master.TrafficSecretaryCode = "5001000";
+        master.TransitOfficeId = Guid.NewGuid();
+        master.TransitOfficeName = "SECRETARIA DE MOVILIDAD DE MEDELLIN";
+        master.TransitOfficeCityCode = "05001";
+        var tipo = new DraftProcedureType(
+            "TRASPASO_STANDARD", "TRASPASO",
+            RequiresCommercialValue: true, ResolvesTransitOfficeFromRunt: true);
+
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
+
+        request.TransitOfficeName.Should().Be("SECRETARIA DE MOVILIDAD DE MEDELLIN");
+        request.TransitOfficeCode.Should().Be("5001000");
+        request.TransitOfficeCity.Should().Be("05001");
+    }
+
+    [Fact]
+    public async Task Bug13109_SinCodigoResuelto_NoViajanCodigoNiMunicipio()
+    {
+        // Rama RUNT intacta: solo el nombre del RUNT, sin código ni municipio que core-api pudiera sembrar.
+        var master = Master(3);
+        master.TrafficSecretaryCode = "99999999";
+        var tipo = new DraftProcedureType(
+            "TRASPASO_STANDARD", "TRASPASO",
+            RequiresCommercialValue: true, ResolvesTransitOfficeFromRunt: true);
+
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
+
+        request.TransitOfficeId.Should().BeEmpty();
+        request.TransitOfficeCode.Should().BeEmpty();
+        request.TransitOfficeCity.Should().BeEmpty();
+        request.TransitOfficeName.Should().Be("SECRETARÍA DE MOVILIDAD DE BOGOTÁ");
+    }
+
+    [Fact]
     public async Task LosDatosComercialesLosPideElTipo_NoElNumeroTres()
     {
         var tipo = new DraftProcedureType(
