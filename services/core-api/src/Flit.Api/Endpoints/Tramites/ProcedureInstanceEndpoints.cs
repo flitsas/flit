@@ -534,7 +534,9 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden escribir field_values en borrador o subsanación."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden escribir field_values en borrador o subsanación (en 'asignado', solo el OCR del SOAT)."),
+                // Bug #13194 — en 'asignado' la lectura del SOAT exige el PDF cargado en el trámite.
+                PersistOcrFieldsHandler.SoporteSoatRequeridoError => Results.Problem(statusCode: 409, title: PersistOcrFieldsHandler.SoporteSoatRequeridoError, detail: "Carga primero el PDF del SOAT en el trámite para registrar su lectura."),
                 "tipo_no_soportado" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tipo de documento no tiene campos persistibles por OCR."),
                 "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el tipo de documento."),
                 _ => Results.Ok(result)
