@@ -94,7 +94,8 @@ public static class AdminCompanyMandateSignersEndpoints
 
         // HU #13179 — la ruta represented-companies de mandatarios se RETIRA: la lista del formulario ya no sale de las
         // fichas de Representantes Legales sino de associable-companies (HU #13178). ListRepresentedCompaniesAsync
-        // se conserva: lo usa el flujo de escrituras (admin-deeds).
+        // se conserva: lo usa el flujo de escrituras (admin-deeds). HU #13179b: ver MapRetiredRepresentedCompanies.
+        group.MapRetiredRepresentedCompanies();
 
         // HU #11758 (ADR-0050) — las tres rutas de identidad del mandatario desde el configurador de la
         // COMPAÑÍA (send/resend/link) se RETIRAN: el módulo Identidad es la única fuente que puede
@@ -265,5 +266,25 @@ public static class AdminCompanyMandateSignersEndpoints
         var raw = user.FindFirst("sub")?.Value
             ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(raw, out var id) ? id : null;
+    }
+}
+
+/// <summary>
+/// HU #13179b (AC6) — lápida de la ruta retirada <c>mandate-signers/represented-companies</c>. Sin ella el enrutador
+/// la confunde con <c>PUT …/mandate-signers/{mandateSignerId:guid}</c> (la restricción guid se evalúa después de la
+/// política de método) y contesta 405 con «Allow: PUT»; el AC pide 404. No hay lógica ni datos: solo 404.
+/// </summary>
+internal sealed class RetiredRouteMarker;
+
+internal static class RetiredRepresentedCompaniesRoute
+{
+    private static readonly string[] Methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+    public static RouteGroupBuilder MapRetiredRepresentedCompanies(this RouteGroupBuilder group)
+    {
+        group.MapMethods("/represented-companies", Methods, () => Results.NotFound())
+            .WithMetadata(new RetiredRouteMarker())
+            .ExcludeFromDescription();
+        return group;
     }
 }

@@ -48,6 +48,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         group.MapPut("/{mandateSignerId:guid}", UpdateMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateChildMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateChildMandateSignerAsync);
+        group.MapRetiredRepresentedCompanies(); // HU #13179b: ruta retirada → 404 (no 405)
         return group;
     }
 
