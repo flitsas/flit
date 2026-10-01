@@ -189,16 +189,25 @@ public sealed class RepresentedAssociationRetirementTests : IClassFixture<WebApp
     }
 
     [Fact]
-    public async Task AC1_Reporte_IgnoraMandatariosInactivosOEliminados()
+    public async Task D2_ElReporteListaExactamenteLoQueElRetiroBorra_AunConMandatarioEliminadoOSinVinculoActivo()
     {
         await using var ctx = NewContext();
         var (signer, _, _) = await SeedAsync(ctx);
+        // Mandatario dado de baja y con el vínculo a la compañía inactivo: antes el reporte salía vacío y el retiro
+        // sí borraba las dos filas activas.
         var entity = await ctx.MandateSigners.SingleAsync(s => s.Id == signer, Ct);
         entity.DeletedAt = DateTimeOffset.UtcNow;
+        entity.IsActive = false;
+        (await ctx.MandateSignerCompanies.SingleAsync(c => c.MandateSignerId == signer, Ct)).IsActive = false;
         await ctx.SaveChangesAsync(Ct);
-        var report = new GetRepresentedAssociationImpactReportHandler(new RepresentedAssociationRetirementStore(ctx));
+        var store = new RepresentedAssociationRetirementStore(ctx);
 
-        (await report.HandleAsync(Ct)).Should().BeEmpty();
+        var rows = await new GetRepresentedAssociationImpactReportHandler(store).HandleAsync(Ct);
+
+        var row = rows.Should().ContainSingle().Subject;
+        row.MandateSignerName.Should().Be("Daniel Amado");
+        row.AssociatedCount.Should().Be(2);
+        row.AssociatedCount.Should().Be(await store.RetireActiveAsync(Ct), "el reporte coincide con lo que se retira");
     }
 
     [Fact]
