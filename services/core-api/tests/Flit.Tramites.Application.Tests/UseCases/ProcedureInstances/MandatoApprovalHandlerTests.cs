@@ -262,9 +262,9 @@ public sealed class MandatoApprovalHandlerTests
     public void HU13137_LosMensajesDelConflictoDistinguenCeroCandidatosDeVarios()
     {
         Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeSinMandatarioAlAprobar
-            .Should().Contain("No hay un mandatario activo")
+            .Should().Contain("No hay un mandatario disponible")
             .And.NotContainEquivalentOf("hay varios");
         Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeEleccionRequerida
-            .Should().Contain("elija uno");
+            .Should().Contain("Selecciona uno");
     }
 }

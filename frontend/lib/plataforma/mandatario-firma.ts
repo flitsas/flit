@@ -61,9 +61,9 @@ export function organismosSinMedioDeFirma(
 
 /** Qué le falta al mandatario, para decírselo al gestor en vez de un «no se pudo guardar». */
 export function motivoSinFirma(medio: MedioDeFirma): string {
-  if (medio.signatureInvalidReason === "mandatario_fuera_de_vigencia") return "Está fuera de su vigencia.";
+  if (medio.signatureInvalidReason === "mandatario_fuera_de_vigencia") return "Su vigencia terminó.";
   if (medio.signatureMethod === "biometria") return "Pendiente de validación de identidad.";
-  return "No tiene firma en el baúl ni validación de identidad aprobada.";
+  return "Aún no tiene una firma guardada en el baúl ni su validación de identidad aprobada.";
 }
 
 /** Cómo se presenta el medio de firma del mandatario en listados del OT. */

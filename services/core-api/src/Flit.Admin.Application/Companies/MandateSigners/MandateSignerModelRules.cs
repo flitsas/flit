@@ -44,7 +44,7 @@ public static class MandateSignerModelRules
 
     /// <summary>HU #13246 — con biometría el enlace de captura viaja por correo: sin correo no hay validación posible.</summary>
     public const string CorreoRequeridoConBiometriaMessage =
-        "El correo es obligatorio con la forma de firma validación de identidad: ahí se envía el enlace de captura.";
+        "Escribe el correo del mandatario: ahí enviamos el enlace para validar su identidad.";
 
     public const string FechaInicioRequeridaMessage =
         "La fecha de inicio es obligatoria para la vigencia por rango.";
@@ -75,7 +75,7 @@ public static class MandateSignerModelRules
         {
             errors.Add(new MandateSignerValidationError(
                 "signerModel",
-                "El modelo del mandatario debe ser natural, juridica o formato_blanco.",
+                "Elige quién firma: persona natural, persona jurídica o formato en blanco.",
                 null));
             model = MandateSignerModels.Natural;
         }
@@ -101,7 +101,7 @@ public static class MandateSignerModelRules
         if (!MandateValidityKinds.IsValid(kind))
         {
             errors.Add(new MandateSignerValidationError(
-                "validityKind", "El tipo de vigencia debe ser fixed o range.", null));
+                "validityKind", "Elige si la vigencia es fija o por rango de fechas.", null));
             kind = MandateValidityKinds.Fixed;
         }
 
@@ -116,7 +116,7 @@ public static class MandateSignerModelRules
         if (method is not null && !MandateSignatureMethods.IsValid(method))
         {
             errors.Add(new MandateSignerValidationError(
-                "signatureMethod", "La forma de firma debe ser baul o biometria.", null));
+                "signatureMethod", "Elige cómo firma el mandatario: baúl de firmas o validación de identidad.", null));
             method = null;
         }
 

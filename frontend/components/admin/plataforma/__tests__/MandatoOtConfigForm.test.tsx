@@ -319,7 +319,7 @@ describe("MandatoOtConfigForm", () => {
       abrir();
       expect(await screen.findByTestId("mandato-company-tipo-a")).toHaveTextContent("Persona natural");
       expect(screen.getByText("Default")).toBeInTheDocument();
-      expect(screen.getByText(/sin regla propia: usa el tipo por defecto/i)).toBeInTheDocument();
+      expect(screen.getByText(/sin configuración propia: usa el del organismo/i)).toBeInTheDocument();
     });
 
     it("no muestra etiquetas antiguas y un modo desconocido cae en Persona natural", async () => {

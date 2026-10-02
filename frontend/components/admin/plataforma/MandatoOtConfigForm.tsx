@@ -13,7 +13,7 @@ import {
   type CompanyTipoMandatoValues,
 } from "@/components/admin/plataforma/CompanyTipoMandatoModal";
 import type { MandatoFormatosState } from "@/hooks/useMandatoFormatos";
-import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
+import { Modal } from "@/components/atom/Modal";
 import {
   deleteCompanyOtMandateRule,
   deleteMandateOtCustomTemplate,
@@ -245,20 +245,10 @@ export function MandatoOtConfigForm({
         }
       }
       setRulesStatus("ready");
-    } catch (err) {
+    } catch {
       setRulesStatus("error");
-      const status = err instanceof ApiError ? err.status : null;
-      if (status === 404) {
-        setError(
-          "El API no reconoce el endpoint de compañías (¿Flit.Api desactualizado?). Reinicia la API con el código nuevo y aplica la migración 61.",
-        );
-      } else if (status === 500) {
-        setError(
-          "Error del servidor al listar compañías. Suele faltar la tabla company_ot_mandate_rules (migración 61).",
-        );
-      } else {
-        setError("No se pudieron cargar las compañías. Reintentar.");
-      }
+      // Sin detalles internos: el usuario solo necesita saber qué hacer.
+      setError("No pudimos cargar las compañías de este organismo. Inténtalo de nuevo en unos minutos; si sigue igual, avisa a soporte.");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cambian con el organismo o su modo
   }, [office.officeId, office.assignmentMode, highlightCompanyId, lockedCompany]);
@@ -574,13 +564,13 @@ export function MandatoOtConfigForm({
               {tipoNegocioLabel(resolveTipoNegocio(row.assignmentMode))}
             </span>
             {row.hasExplicitRule ? null : (
-              <span title="Sin regla propia: la compañía usa el tipo por defecto del organismo, Persona natural.">
+              <span title="Sin configuración propia: la compañía usa el tipo de mandato del organismo, Persona natural.">
                 <StatusBadge label="Default" tone="neutral" />
               </span>
             )}
             {row.hasExplicitRule ? null : (
               <span className="text-[11px] text-[#59677D] dark:text-white/50">
-                Sin regla propia: usa el tipo por defecto.
+                Sin configuración propia: usa el del organismo.
               </span>
             )}
           </div>
@@ -676,18 +666,16 @@ export function MandatoOtConfigForm({
 
   return (
     <>
-    <OtSidePanel
+    <Modal
       open
-      title={mode === "mandatario" ? "Configurar mandatario" : "Configurar mandato"}
-      ariaLabel={
+      title={
         mode === "mandatario"
           ? `Configurar mandatario de ${office.name}`
           : `Configurar mandato de ${office.name}`
       }
       onClose={onClose}
-      disabled={busy}
-      width="xl"
-      surface="modal"
+      busy={busy}
+      size="xl"
       zClassName="z-[60]"
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -753,8 +741,8 @@ export function MandatoOtConfigForm({
         </p>
         <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
           {mode === "mandato"
-            ? "La plantilla de este organismo solo se asocia aquí (SuperAdmin). Elegir un mandatario no cambia esta redacción."
-            : "Un mandatario general por OT y, como máximo, uno por empresa en este organismo. Esto no modifica la plantilla."}
+            ? "La redacción del mandato de este organismo solo se asigna aquí (Super Admin). Elegir un mandatario no la cambia."
+            : "Aquí eliges quién firma por defecto en este organismo: una persona general y, si quieres, otra distinta para cada compañía. No cambia la redacción del mandato."}
         </p>
 
         {error ? (
@@ -1056,8 +1044,8 @@ export function MandatoOtConfigForm({
                   ))}
                 </select>
                 <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Una sola persona a nivel general. Si la empresa no tiene mandatario propio, se usa
-                  esta. El default cliente×OT prima. Sin ninguno, el mandato sale en blanco.
+                  Es quien firma cuando la compañía no tiene un mandatario propio. Si a una compañía le elegiste
+                  uno específico, ese tiene prioridad. Si no hay ninguno, el mandato sale con los datos en blanco.
                 </span>
                 {onRegisterSigner ? (
                   <div className="flex flex-col gap-1.5 pt-1">
@@ -1114,8 +1102,8 @@ export function MandatoOtConfigForm({
                   Tipo de mandatario por compañía
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Sin regla propia la empresa usa el modelo del organismo. En Persona natural puedes
-                  fijar un mandatario preferido (preselección en el paso FUR).{" "}
+                  Si una compañía no tiene configuración propia, usa la del organismo. En «Persona natural»
+                  puedes elegir un mandatario preferido, que aparece ya seleccionado al radicar.{" "}
                   {rulesStatus === "ready" ? (
                     <span className="font-medium text-[#162244] dark:text-white/80">
                       {companyRules.length} compañía{companyRules.length === 1 ? "" : "s"}
@@ -1206,7 +1194,7 @@ export function MandatoOtConfigForm({
           </div>
         )}
       </div>
-    </OtSidePanel>
+    </Modal>
     {typeEditRow ? (
       <CompanyTipoMandatoModal
         key={typeEditRow.companyTenantId}
@@ -1321,7 +1309,7 @@ function MandatarioActualReadOnly({
           <dd className="font-mono">{docNumber?.trim() || "—"}</dd>
         </div>
         <div>
-          <dt className="font-medium text-[#59677D] dark:text-white/65">Hash de integridad</dt>
+          <dt className="font-medium text-[#59677D] dark:text-white/65">Huella de integridad</dt>
           <dd className="flex items-center gap-2 font-mono">
             {hash?.trim() ? (
               <>
@@ -1331,7 +1319,7 @@ function MandatarioActualReadOnly({
                 <button
                   type="button"
                   className="shrink-0 rounded-lg p-1 text-[#557EFF] hover:bg-[#EFF6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                  aria-label="Copiar hash de integridad"
+                  aria-label="Copiar huella de integridad"
                   onClick={() => void copyHash()}
                 >
                   <Copy className="h-3.5 w-3.5" aria-hidden="true" />

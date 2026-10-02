@@ -21,7 +21,7 @@ internal static class MandateSignerValidation
     public const string DocumentoRequeridoMessage = "El número de documento es obligatorio.";
 
     public const string SinCompaniasMessage =
-        "Debe asignar al menos una compañía al mandatario.";
+        "Elige al menos una compañía para el mandatario.";
 
     public const string ExclusividadClienteOtMessage =
         "Ya existe un mandatario para esta empresa en este organismo.";
@@ -97,7 +97,7 @@ internal static class MandateSignerValidation
             {
                 errors.Add(new MandateSignerValidationError(
                     "companyTenantIds",
-                    "La compañía no está habilitada o está inactiva en el organismo de tránsito.",
+                    "Esta compañía no puede registrar mandatarios en este organismo: no lo tiene habilitado o está inactiva.",
                     companyId.ToString()));
             }
 

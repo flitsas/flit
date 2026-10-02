@@ -209,7 +209,7 @@ public sealed class MandatarioGateRadicacionTests
 
         outcome.ErrorCode.Should().Be(TramiteEstadoErrores.MandatarioFirmaInvalida);
         outcome.ErrorCode.Should().Be("mandatario_firma_invalida");
-        outcome.ErrorDetail.Should().Contain("baúl").And.Contain("biométrica");
+        outcome.ErrorDetail.Should().Contain("baúl").And.Contain("validación de identidad");
     }
 
     [Fact]

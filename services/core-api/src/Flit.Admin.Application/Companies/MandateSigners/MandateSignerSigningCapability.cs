@@ -27,12 +27,12 @@ public static class MandateSignerSigningCapability
     public const string Field = "transitOfficeIds";
 
     public const string SinMedioDeFirmaMessage =
-        "El mandatario no está en condiciones de firmar en los organismos indicados: no tiene firma en "
-        + "el baúl ni una validación biométrica válida o en curso. Carga su firma en el baúl de firmas "
-        + "o inicia la validación biométrica en el módulo Identidad.";
+        "El mandatario aún no puede firmar en los organismos elegidos: no tiene una firma guardada en el "
+        + "baúl ni su validación de identidad aprobada o en curso. Guarda su firma en el baúl de firmas o "
+        + "elige «Validación de identidad» como forma de firma.";
 
     public const string SinFirmaDelBaulMessage =
-        "Elija la firma del baúl del mandatario: la forma de firma baúl exige una firma activa y vigente.";
+        "Elige la firma del baúl del mandatario. Para firmar con el baúl necesita una firma activa y vigente.";
 
     public const string FieldVault = "signatureVaultId";
 

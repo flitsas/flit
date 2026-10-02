@@ -195,7 +195,7 @@ public sealed class CreateCompanyMandateSignerHandler
         if (firma is null)
         {
             return new MandateSignerValidationError(
-                "signatureVaultId", "La firma indicada no existe en el baul de esta compania.", null);
+                "signatureVaultId", "La firma elegida no está en el baúl de esta compañía. Elige otra.", null);
         }
 
         var documento = request.DocumentNumber?.Trim() ?? string.Empty;
@@ -204,7 +204,7 @@ public sealed class CreateCompanyMandateSignerHandler
             || !string.Equals(firma.DocumentNumber, documento, StringComparison.Ordinal))
         {
             return new MandateSignerValidationError(
-                "signatureVaultId", "La firma indicada no pertenece al mandatario.", null);
+                "signatureVaultId", "La firma elegida pertenece a otra persona. Elige la firma del propio mandatario.", null);
         }
 
         var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date);
@@ -212,7 +212,7 @@ public sealed class CreateCompanyMandateSignerHandler
             || hoy < firma.VigenciaDesde
             || hoy > firma.VigenciaHasta
             ? new MandateSignerValidationError(
-                "signatureVaultId", "La firma indicada no esta activa o su vigencia ha expirado.", null)
+                "signatureVaultId", "La firma elegida ya no está activa o su vigencia terminó. Elige otra firma del baúl.", null)
             : null;
     }
 
@@ -232,7 +232,7 @@ public sealed class CreateCompanyMandateSignerHandler
         {
             return ([], new MandateSignerValidationError(
                 "transitOfficeIds",
-                "Debe indicar al menos un organismo de tránsito donde aplique el mandatario.",
+                "Elige al menos un organismo de tránsito donde aplique el mandatario.",
                 null));
         }
 

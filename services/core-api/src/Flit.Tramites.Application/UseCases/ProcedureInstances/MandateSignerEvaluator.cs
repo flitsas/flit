@@ -81,24 +81,24 @@ public static class MandateSignerEstados
     public const string MotivoMandatoDeCompania = "mandato_personalizado_de_compania";
 
     public const string MensajeSinMandatario =
-        "Este organismo no tiene un mandatario activo para su compañía. Pida al organismo o a su compañía " +
-        "que registre un mandatario para ese organismo.";
+        "Este organismo no tiene un mandatario activo para tu compañía. Pídele al organismo o al administrador " +
+        "de tu compañía que registre uno.";
 
     /// <summary>
     /// HU #13137 — 409 <c>mandatario_requerido</c> sin ningún candidato válido: no es que «haya varios», es que no
     /// queda mandatario activo para elegir (p. ej. se dio de baja al asignado).
     /// </summary>
     public const string MensajeSinMandatarioAlAprobar =
-        "No hay un mandatario activo, vigente y con firma válida para esta compañía en este organismo. " +
-        "Registre o reactive un mandatario y vuelva a intentar la aprobación.";
+        "No hay un mandatario disponible para esta compañía en este organismo: debe estar activo, vigente y " +
+        "con firma válida. Registra o reactiva uno y vuelve a aprobar.";
 
     /// <summary>HU #13137 — 409 <c>mandatario_requerido</c> con candidatos: el OT debe elegir uno.</summary>
     public const string MensajeEleccionRequerida =
-        "El mandatario que firma el mandato no quedó determinado: elija uno de los mandatarios válidos " +
-        "y vuelva a intentar la aprobación.";
+        "Falta elegir quién firma el mandato. Selecciona uno de los mandatarios disponibles y vuelve a " +
+        "aprobar.";
 
     public const string MensajeFirmaInvalida =
-        "El mandatario no tiene firma válida: falta firma en el baúl de firmas o validación biométrica vigente.";
+        "El mandatario aún no puede firmar: necesita una firma guardada en el baúl o su validación de identidad aprobada.";
 }
 
 /// <summary>

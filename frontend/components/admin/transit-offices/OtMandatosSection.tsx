@@ -384,7 +384,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
             Persona natural por defecto para los trámites de este OT. Se usa cuando la empresa que
-            radica no tiene mandatario propio. Si hay default cliente×OT, ese prima.
+            radica no tiene mandatario propio. Si a la compañía se le eligió uno específico, ese tiene prioridad.
           </p>
         </div>
         <DataTable

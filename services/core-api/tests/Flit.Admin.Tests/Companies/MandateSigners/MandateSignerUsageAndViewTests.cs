@@ -40,7 +40,7 @@ public sealed class MandateSignerUsageAndViewTests
         result.Errors.Should().Contain(e =>
             e.Field == "companyTenantIds"
             && e.Value == Scenario.CompanyC.ToString()
-            && e.Message.Contains("no está habilitada o está inactiva"));
+            && e.Message.Contains("no lo tiene habilitado o está inactiva"));
     }
 
     [Fact]

@@ -180,7 +180,7 @@ public sealed class MandateSignerEvaluatorTests
         r.Estado.Should().Be(MandateSignerEstado.FirmaInvalida);
         r.Motivo.Should().Be("sin_validacion_aprobada");
         r.CodigoDeError.Should().Be("mandatario_firma_invalida");
-        r.MensajeDeError.Should().Contain("baúl").And.Contain("biométrica");
+        r.MensajeDeError.Should().Contain("baúl").And.Contain("validación de identidad");
     }
 
     [Fact]

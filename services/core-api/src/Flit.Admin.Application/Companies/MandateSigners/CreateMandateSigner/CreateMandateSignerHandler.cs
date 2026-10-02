@@ -34,15 +34,15 @@ public sealed class CreateMandateSignerHandler
     public const string MeansBiometric = "biometria";
 
     public const string SinMedioParaOtMessage =
-        "El mandatario no está en condiciones de firmar: elija la forma de firma validación de identidad "
-        + "o cargue su firma vigente en el baúl de su compañía.";
+        "El mandatario aún no puede firmar. Elige «Validación de identidad» como forma de firma o guarda "
+        + "su firma vigente en el baúl de la compañía.";
 
     public const string SinBaulParaOtMessage =
-        "El mandatario no tiene una firma vigente en el baúl de su compañía. Elija la forma de firma "
-        + "biometría o cargue su firma en el baúl.";
+        "El mandatario no tiene una firma vigente en el baúl de la compañía. Elige «Validación de identidad» "
+        + "como forma de firma o guarda su firma en el baúl.";
 
     public const string VariasCompaniasSinBaulMessage =
-        "Sin indicar la firma del baúl, el mandatario solo puede registrarse para una compañía a la vez.";
+        "Si no eliges una firma del baúl, el mandatario solo se puede registrar para una compañía a la vez.";
 
     public CreateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,

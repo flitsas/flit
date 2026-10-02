@@ -80,7 +80,7 @@ public sealed class MandateSignerSigningCapabilityTests
         var mensaje = MandateSignerSigningCapability.SinMedioDeFirmaMessage;
 
         mensaje.Should().NotContainEquivalentOf("correo");
-        mensaje.Should().Contain("baúl").And.Contain("biométrica");
+        mensaje.Should().Contain("baúl").And.Contain("validación de identidad");
     }
 
     [Fact]

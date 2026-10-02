@@ -20,17 +20,17 @@ const FORMA_FIRMA: Record<string, string> = {
 };
 
 const MOTIVO: Record<string, string> = {
-  sin_mandatario_configurado: 'No hay un mandatario registrado para este organismo.',
-  mandatario_eliminado: 'El mandatario que correspondía ya no está registrado.',
-  mandatario_fuera_de_vigencia: 'El mandatario está fuera de su vigencia.',
-  mandatario_inactivo: 'El mandatario está inactivo.',
-  sin_validacion_aprobada: 'El mandatario no tiene una validación de identidad aprobada.',
-  baul_sin_firma_vigente: 'El mandatario no tiene una firma vigente en el baúl.',
-  firma_fisica_sin_migrar: 'La firma física del mandatario no se ha migrado.',
+  sin_mandatario_configurado: 'Este organismo no tiene un mandatario registrado para tu compañía.',
+  mandatario_eliminado: 'El mandatario que correspondía fue dado de baja.',
+  mandatario_fuera_de_vigencia: 'La vigencia del mandatario terminó. Hay que ampliar sus fechas o registrar otro mandatario.',
+  mandatario_inactivo: 'El mandatario está desactivado.',
+  sin_validacion_aprobada: 'El mandatario todavía no ha validado su identidad.',
+  baul_sin_firma_vigente: 'El mandatario no tiene una firma vigente guardada en el baúl.',
+  firma_fisica_sin_migrar: 'Este mandatario firmaba a mano y esa forma de firma ya no se usa. Hay que cambiarla a baúl de firmas o validación de identidad.',
 };
 
 export function motivoMandatarioCopy(motivo?: string | null): string {
-  return (motivo && MOTIVO[motivo]) || 'El mandatario no cumple los requisitos para firmar.';
+  return (motivo && MOTIVO[motivo]) || 'El mandatario aún no puede firmar el mandato.';
 }
 
 /** Alerta de falta de mandatario: solo con mandatario ausente o con firma inválida y validación activa. */

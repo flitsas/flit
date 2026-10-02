@@ -22,13 +22,13 @@ public static class MandateSignerAssociationRules
 {
     public const string Field = "associatedCompanyTenantIds";
 
-    public const string PropiaMessage = "La compañía propia del mandatario no puede asociarse a sí misma.";
-    public const string InactivaMessage = "La compañía asociada está inactiva o bloqueada.";
-    public const string InexistenteMessage = "La compañía asociada no existe.";
+    public const string PropiaMessage = "La compañía del mandatario no se puede asociar a sí misma. Quítala de la lista.";
+    public const string InactivaMessage = "Esta compañía está inactiva o bloqueada y no se puede asociar.";
+    public const string InexistenteMessage = "No encontramos esta compañía. Actualiza la lista y vuelve a elegirla.";
     public const string NoOperaEnOrganismoMessage =
-        "La compañía no está habilitada o está inactiva en el organismo de tránsito.";
+        "Esta compañía no puede registrar mandatarios en este organismo: no lo tiene habilitado o está inactiva.";
     public const string OrganismoAjenoMessage =
-        "Las compañías asociadas solo pueden indicarse para organismos del mandatario.";
+        "Solo puedes asociar compañías en los organismos donde aplica el mandatario.";
 
     /// <summary>Origen de configuración que identifica al Admin de Compañía (ver <c>MandateSignerOrigins</c>).</summary>
     private const string OrigenCompania = "compania";
