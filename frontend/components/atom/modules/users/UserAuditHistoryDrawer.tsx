@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/atom/Modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { History, Loader2, X } from "lucide-react";
 import { fetchAdminAuditLog } from "@/lib/api/audit";
@@ -173,40 +174,26 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
     void load();
   }, [load]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const items = useMemo(
     () => (entries ?? []).map((e) => ({ entry: e, changes: describeChanges(e) })),
     [entries],
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm" role="presentation">
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default"
-        aria-label="Cerrar historial"
-        onClick={onClose}
-      />
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="user-audit-title"
-        className="relative z-10 flex h-full w-full max-w-md flex-col border-l bg-white shadow-xl dark:bg-[#0B0F14]"
-      >
-        <header className="flex items-start justify-between gap-3 border-b px-4 py-4">
+    <Modal
+      open
+      title={`Historial de ${userLabel}`}
+      onClose={onClose}
+      size="lg"
+      zClassName="z-50"
+      header={({ titleId }) => (
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2" style={{ color: "#557EFF" }}>
               <History className="h-4 w-4 shrink-0" aria-hidden />
               <span className="text-[10px] font-semibold uppercase tracking-wider">Auditoría</span>
             </div>
-            <h2 id="user-audit-title" className="truncate text-sm font-bold">
+            <h2 id={titleId} className="truncate text-sm font-bold">
               Historial de {userLabel}
             </h2>
             <p className="mt-0.5 text-[11px] opacity-60">Quién cambió qué y cuándo (máx. 50 eventos).</p>
@@ -219,9 +206,10 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
           >
             <X className="h-4 w-4" />
           </button>
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        </div>
+      )}
+    >
+        <div>
           {loading && (
             <div role="status" className="flex flex-col items-center gap-2 py-16 text-sm opacity-60">
               <Loader2 className="h-5 w-5 animate-spin" style={{ color: "#557EFF" }} />
@@ -303,7 +291,6 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
             </ul>
           )}
         </div>
-      </aside>
-    </div>
+    </Modal>
   );
 }
