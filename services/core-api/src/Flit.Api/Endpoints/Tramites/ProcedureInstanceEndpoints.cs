@@ -104,7 +104,11 @@ internal static class ProcedureInstanceEndpoints
                 "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
                 "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
                 "DUPLICATE_ACTIVE_PROCEDURE" => Results.Problem(statusCode: 409, title: "DUPLICATE_ACTIVE_PROCEDURE", detail: "Ya existe un trámite activo del mismo tipo para la placa/VIN."),
-                _ => Results.Created($"/api/v1/tramites/instances/{result!.Id}", result)
+                // Gate de creación (HU #12348 / #12409): ot_not_permitted, tenant_inactive, network_inactive.
+                _ => MapRadicationGateError(error)
+                    ?? (result is null
+                        ? Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "No se pudo crear el trámite.")
+                        : Results.Created($"/api/v1/tramites/instances/{result.Id}", result))
             };
         }).WithName("CreateProcedureInstance");
 
@@ -1239,6 +1243,25 @@ internal static class ProcedureInstanceEndpoints
     }
 
     /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>
+    /// <summary>
+    /// Traduce las denegaciones del gate de creación (<see cref="Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons"/>)
+    /// a 403 con un mensaje claro. Antes caían al caso por defecto y respondían 500 (NullReferenceException).
+    /// Devuelve <c>null</c> si el código no es del gate.
+    /// </summary>
+    internal static IResult? MapRadicationGateError(string? error) => error switch
+    {
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.OtNotPermitted => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La compañía no tiene habilitado este organismo de tránsito. Contacta al administrador."),
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.TenantInactive => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La compañía está inactiva y no puede crear trámites."),
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.NetworkInactive => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La red de la compañía está inactiva y no puede crear trámites."),
+        _ => null,
+    };
+
     private static bool EsMatriculaInicial(string? modalidad) =>
         string.Equals(
             modalidad?.Trim(),
