@@ -8,6 +8,8 @@ export interface SuiteApp {
   icon: string;
   url: string;
   current: boolean;
+  /** Todavía no desplegado en este ambiente: `url` lleva a su pantalla «Próximamente» del hub. */
+  comingSoon?: boolean;
 }
 
 // Nombres de platform.products.icon (DDL 119). Un icono desconocido cae a Box, nunca rompe el menú.

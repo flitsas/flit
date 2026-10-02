@@ -21,12 +21,14 @@ internal sealed class ConfiguredProductHosts(IOptionsMonitor<SuiteHostsOptions> 
         return $"{o.Scheme}://{HostFor(o, productCode)}";
     }
 
-    public string LinkFor(string productCode)
+    public string LinkFor(string productCode) =>
+        IsComingSoon(productCode) ? $"{UrlFor(ProductCodes.Plataforma).TrimEnd('/')}/proximamente/{productCode}" : UrlFor(productCode);
+
+    /// <summary>En la lista y sin un reemplazo explícito (en local, un reemplazo apunta a la app que sí corre).</summary>
+    public bool IsComingSoon(string productCode)
     {
         var o = options.CurrentValue;
-        return o.ComingSoon.Contains(productCode, StringComparer.Ordinal) && !o.Overrides.ContainsKey(productCode)
-            ? $"{UrlFor(ProductCodes.Plataforma).TrimEnd('/')}/proximamente/{productCode}"
-            : UrlFor(productCode);
+        return o.ComingSoon.Contains(productCode, StringComparer.Ordinal) && !o.Overrides.ContainsKey(productCode);
     }
 
     public string? ProductForHost(string? host)

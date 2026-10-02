@@ -40,6 +40,8 @@ public sealed class ConfiguredProductHostsTests
         hosts.LinkFor("comparendos").Should().Be("https://dev.flitsas.online/proximamente/comparendos");
         hosts.LinkFor("diagnostico").Should().Be("https://dev.flitsas.online/proximamente/diagnostico");
         hosts.LinkFor("tramites").Should().Be("https://dev.tramites.flitsas.online");
+        hosts.IsComingSoon("comparendos").Should().BeTrue();
+        hosts.IsComingSoon("tramites").Should().BeFalse();
     }
 
     [Fact]
@@ -68,6 +70,7 @@ public sealed class ConfiguredProductHostsTests
         });
 
         hosts.LinkFor("comparendos").Should().Be("http://127.0.0.1:4061");
+        hosts.IsComingSoon("comparendos").Should().BeFalse();
     }
 
     [Fact]

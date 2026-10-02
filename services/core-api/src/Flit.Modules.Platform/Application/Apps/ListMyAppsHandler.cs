@@ -50,12 +50,15 @@ public sealed class ListMyAppsHandler
                     continue;
             }
 
-            result.Add(new MyAppView(product.Code, product.Name, product.Icon, _hosts.LinkFor(product.Code), product.Code == current));
+            result.Add(new MyAppView(product.Code, product.Name, product.Icon, _hosts.LinkFor(product.Code), product.Code == current, _hosts.IsComingSoon(product.Code)));
         }
 
         return result;
     }
 }
 
-/// <summary>Un producto del menú (contrato v1 §6: <c>{ code, name, icon, url, current }</c>).</summary>
-public sealed record MyAppView(string Code, string Name, string Icon, string Url, bool Current);
+/// <summary>
+/// Un producto del menú (contrato v1 §6: <c>{ code, name, icon, url, current, comingSoon }</c>). <c>comingSoon</c>: todavía
+/// no está desplegado en este ambiente y <c>url</c> lleva a su pantalla «Próximamente» del hub.
+/// </summary>
+public sealed record MyAppView(string Code, string Name, string Icon, string Url, bool Current, bool ComingSoon);

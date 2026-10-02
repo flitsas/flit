@@ -127,7 +127,7 @@ Todos bajo `/api/v1/platform/**`, documentados en `contracts/openapi/platform.v1
 
 | Método y ruta | Dueño | Auth | Respuesta |
 |---|---|---|---|
-| `GET /me/apps` | B | Token de usuario, cualquier `aud` | `[{ code, name, icon, url, current }]` con los productos que el usuario puede abrir en su host actual. Al SuperAdmin le devuelve todos |
+| `GET /me/apps` | B | Token de usuario, cualquier `aud` | `[{ code, name, icon, url, current, comingSoon }]` (`comingSoon`: aún no desplegado en el ambiente; `url` lleva a su «Próximamente» del hub, v1.2) con los productos que el usuario puede abrir en su host actual. Al SuperAdmin le devuelve todos |
 | `PUT /products/{code}/manifest` | B | Servicio, scope `platform.manifest` | Idempotente. Cuerpo: `{ version, modules:[{code,name,permissions:[{slug,name}]}], defaultRoles:[{code,name,permissions:[…]}] }` |
 | `GET /admin/tenants/{tenantId}/products` | B | SuperAdmin | `[{ productCode, enabled, notes, updatedAt, updatedBy }]` |
 | `PUT /admin/tenants/{tenantId}/products/{productCode}` | B | SuperAdmin | `{ enabled, notes }`; idempotente y auditado. Apagar la cabeza apaga también a sus hijas |

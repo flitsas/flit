@@ -16,6 +16,9 @@ public interface IProductHosts
     /// </summary>
     string LinkFor(string productCode);
 
+    /// <summary><c>true</c> si el producto todavía no está desplegado en este ambiente (su enlace es «Próximamente»).</summary>
+    bool IsComingSoon(string productCode);
+
     /// <summary>Producto que sirve <paramref name="host"/>, o <c>null</c> si no es un host FLIT conocido.</summary>
     string? ProductForHost(string? host);
 }
