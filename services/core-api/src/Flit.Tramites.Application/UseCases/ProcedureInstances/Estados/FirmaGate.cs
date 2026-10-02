@@ -18,7 +18,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 ///
 /// <para><b>Quién firma.</b> Las partes que el tipo declara para identidad
 /// (<see cref="PartesDeclaradas.Identidad(ProcedureInstance)"/>: matrícula y el resto, comprador;
-/// traspaso, comprador y vendedor; el traspaso unilateral solo convoca al comprador), acotadas a
+/// traspaso, comprador y vendedor; el traspaso unilateral solo convoca al propietario, DDL 94; el locatario del leasing no firma, DDL 88), acotadas a
 /// comprador/vendedor, que son las únicas que el resolutor acredita. Es la MISMA lista de la columna
 /// «Firmado» del listado, así que el gate bloquea exactamente lo que el listado no pinta firmado.</para>
 ///
@@ -78,6 +78,49 @@ public static class FirmaGate
         return PartesQueFirman(instance)
             .Where(p => !aprobadas.Contains(p))
             .ToList();
+    }
+
+    /// <summary>
+    /// Notifica (correo de validación) cada parte sin firma. Nunca lanza salvo cancelación: una excepción
+    /// del notificador se informa por <paramref name="alFallar"/> (tipo de excepción y parte, sin PII) y la
+    /// parte queda en <see cref="FirmaNotificacionEstados.Fallida"/>. Sin notificador:
+    /// <see cref="FirmaNotificacionEstados.NoConfigurada"/>. Compartido por el ciclo de vida y por «Enviar
+    /// al OT», que evalúa la firma ANTES de consultar el RUNT (review PR #510, MENOR-3).
+    /// </summary>
+    public static async Task<IReadOnlyList<ParteSinFirma>> NotificarAsync(
+        IFirmaPendienteNotifier? notifier,
+        Guid instanceId,
+        Guid tenantId,
+        IReadOnlyList<string> partes,
+        Action<string, string>? alFallar,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(partes);
+        var resultado = new List<ParteSinFirma>(partes.Count);
+        foreach (var parte in partes)
+        {
+            string estado;
+            if (notifier is null)
+            {
+                estado = FirmaNotificacionEstados.NoConfigurada;
+            }
+            else
+            {
+                try
+                {
+                    estado = await notifier.NotificarAsync(instanceId, tenantId, parte, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    alFallar?.Invoke(ex.GetType().Name, parte);
+                    estado = FirmaNotificacionEstados.Fallida;
+                }
+            }
+
+            resultado.Add(new ParteSinFirma(parte, estado));
+        }
+
+        return resultado;
     }
 
     /// <summary>Mensaje para el usuario con las partes que faltan por firmar (sin PII).</summary>

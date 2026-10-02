@@ -185,6 +185,8 @@ public static class DependencyInjection
         services.AddScoped<EnsureIdentityAndNotifyHandler>();
         // Bug #13194 (P4, D2) — el gate de firma notifica cada parte sin firma vía este adaptador.
         services.AddScoped<IFirmaPendienteNotifier, EnsureIdentityFirmaPendienteNotifier>();
+        // Bug #13194 (MAYOR-1) — partes del último bloqueo de firma de la petición (extensión del 409).
+        services.AddScoped<UltimoBloqueoFirma>();
         services.AddScoped<RepresentanteLegalDesdeDirectorio>();
 
         // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
