@@ -1,6 +1,8 @@
 @import "tailwindcss";
 /* Tokens de diseño FLIT: @theme, :root y .dark viven en @flit/ui (B-02). */
 @import "@flit/ui/tokens.css";
+/* Puntero de la suite (flecha de marca y mano en lo clicable), igual en todas las apps. */
+@import "@flit/ui/cursor.css";
 /* Barra común y dock de la suite (B-10). */
 @import "@flit/shell/shell.css";
 

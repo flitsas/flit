@@ -2,8 +2,8 @@
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { HelpCircle, KeyRound, Moon, Sun } from "lucide-react";
-import { SuiteShell, type AccountLink, type SuiteApp } from "@flit/shell/SuiteShell";
+import { Moon, Sun } from "lucide-react";
+import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
 import {
   decodeJwtPayload,
   isAdminCompany,
@@ -16,7 +16,6 @@ import {
 import { apiFetch } from "@/lib/api/client";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
-import { COPY } from "@/lib/copy/copy-catalog";
 import { DrFlitAssistant } from "@/components/dr-flit";
 import { tramitesNav } from "./dock/tramitesNav";
 
@@ -35,12 +34,6 @@ export type ModuleId =
   | "ict-logs"
   | "ict-reportes"
   | "ict-trazabilidad";
-
-// «Ayuda» vive en el menú de cuenta (HU #12723), no en el dock.
-const ACCOUNT_LINKS: AccountLink[] = [
-  { label: COPY.B21Ayuda, href: "/manual", icon: HelpCircle },
-  { label: "Cambio de contraseña", href: "/profile/change-password", icon: KeyRound },
-];
 
 /** Productos del usuario por el cliente de la API (Bearer con la sesión antigua; BFF con la de @flit/auth). */
 const loadApps = (signal: AbortSignal) => apiFetch<SuiteApp[]>("/api/v1/platform/me/apps", { signal });
@@ -76,19 +69,9 @@ function useCurrentUser() {
       if (typeof payload.role_code === "string") roleCodes.push(payload.role_code);
       else if (typeof payload.role === "string") roleCodes.push(payload.role);
     }
-    const roleLabel = roleCodes.includes("SuperAdmin")
-      ? "Super Admin"
-      : roleCodes.includes("AdminCompany")
-        ? "Admin de Compañía"
-        : roleCodes.includes("ot_admin")
-          ? "Admin OT"
-          : isOtUser(payload)
-            ? roleCodes[0] || "Usuario OT"
-            : roleCodes[0] || "Usuario";
     return {
       displayName: (payload.display_name as string | undefined) ?? null,
       email: (payload.email as string | undefined) ?? "",
-      roleLabel,
       roles: roleCodes,
       // El token compara permisos sin mayúsculas (`hasPermission`); el catálogo los declara en minúscula.
       permissions: Array.isArray(payload.permissions)
@@ -166,7 +149,6 @@ export function Shell({
       email: currentUser?.email ?? "",
       displayName: currentUser?.displayName ?? null,
       tenantName: currentUser?.tenantName ?? null,
-      roleLabel: currentUser?.roleLabel ?? "Usuario",
       permissions: currentUser?.permissions ?? [],
       roles: currentUser?.roles ?? [],
       isSuperAdmin: Boolean(currentUser?.isSuperAdmin),
@@ -188,14 +170,13 @@ export function Shell({
       loadApps={loadApps}
       homeHref="/"
       search={search}
-      accountLinks={ACCOUNT_LINKS}
       onLogout={onLogout}
       layout="app"
       headerActions={
         <button
           onClick={toggle}
           aria-label="Cambiar tema"
-          className="mr-1 flex items-center gap-1 rounded-full px-1 py-1 transition"
+          className="flex items-center gap-1 rounded-full px-1 py-1 transition"
           style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
         >
           <span className={`h-7 w-7 grid place-items-center rounded-full ${dark ? "" : "bg-white"}`}>

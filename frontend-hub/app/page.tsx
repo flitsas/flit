@@ -9,6 +9,7 @@ import { HubHome } from "@/components/HubHome";
 import { HubShell } from "@/components/HubShell";
 import { HUB_PRODUCT } from "@/lib/auth.server";
 import { hubConfig } from "@/lib/config.server";
+import { toHubUser } from "@/lib/hub-user";
 import { decideHome } from "@/lib/home";
 import { fetchMyAppsOnServer } from "@/lib/me-apps.server";
 
@@ -45,14 +46,7 @@ export default async function HubRoot({ searchParams }: { searchParams: Promise<
       if (decision.kind === "direct") redirect(decision.url);
     }
 
-    const hubUser = {
-      email: user.email,
-      tenantName: user.tenant.name,
-      roleLabel: user.roles.map((r) => r.code).join(", ") || undefined,
-      permissions: user.permissions,
-      roles: user.roles.map((r) => r.code),
-      isSuperAdmin: user.isSuperAdmin,
-    };
+    const hubUser = toHubUser(user);
     return (
       <HubShell tramitesUrl={config.tramitesUrl} user={hubUser}>
         <HubHome user={hubUser} tramitesUrl={config.tramitesUrl} apps={apps} />

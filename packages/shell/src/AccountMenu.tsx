@@ -2,28 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut } from "lucide-react";
-import type { NavIcon } from "./nav";
+import { LogOut, MoreVertical } from "lucide-react";
+import type { AccountLink } from "./account";
 
 export interface ShellUser {
   email: string;
   tenantName?: string | null;
   /** Nombre a mostrar; sin él se muestra el correo. */
   displayName?: string | null;
-  /** Rol a mostrar (el primero del producto). */
+  /** Rol a mostrar; si falta, la barra lo deduce de los roles (`suiteRoleLabel`). */
   roleLabel?: string;
 }
 
-/** Enlace propio del producto en el menú de cuenta (p. ej. Ayuda o Cambio de contraseña en Trámites). */
-export interface AccountLink {
-  label: string;
-  href: string;
-  icon: NavIcon;
-}
+const itemClass =
+  "flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/10";
 
-// Menú de cuenta de la barra común (B-10). Cerrar sesión va a /auth/logout de la app (@flit/auth), que cierra también
-// la sesión del hub y la de los demás productos de este navegador (A-13). Una app que cierra sesión por su cuenta (la
-// sesión antigua de Trámites, B-13) pasa `onLogout`.
+// Cuenta en la barra común, con el diseño de siempre de Trámites: rol, empresa y nombre, avatar y el menú ⋮.
+// Salir va a /auth/logout de la app (@flit/auth), que cierra también la sesión del hub y la de los demás productos de
+// este navegador (A-13). Una app que cierra sesión por su cuenta (la sesión antigua de Trámites, B-13) pasa `onLogout`.
 export function AccountMenu({
   user,
   links = [],
@@ -37,10 +33,8 @@ export function AccountMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const name = user.displayName || user.email;
-  const initial = name.charAt(0).toUpperCase() || "?";
-  const itemClass =
-    "mt-1 flex w-full items-center gap-2 rounded-full px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]";
+  const name = user.displayName || user.email || "—";
+  const initial = (user.displayName?.[0] ?? user.email?.[0] ?? "U").toUpperCase();
 
   useEffect(() => {
     if (!open) return;
@@ -57,60 +51,69 @@ export function AccountMenu({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Menú de cuenta"
-        aria-expanded={open}
-        aria-controls="flit-suite-account"
-        className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-[var(--nav-app-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]"
+    <>
+      <div className="hidden flex-col items-end leading-tight sm:flex">
+        <span className="text-[10px] font-medium text-flit-brand">{user.roleLabel || "—"}</span>
+        {user.tenantName && <span className="text-[10px] opacity-55">{user.tenantName}</span>}
+        <span className="text-xs font-semibold">{name}</span>
+      </div>
+      <div
+        className="grid h-9 w-9 select-none place-items-center rounded-full border-2 text-xs font-bold text-white"
+        style={{
+          borderColor: "var(--color-flit-tech)",
+          background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+        }}
+        aria-label="Avatar"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-flit-brand text-sm font-semibold text-white">{initial}</span>
-        <span className="hidden text-left leading-tight sm:block">
-          <span className="block max-w-[14rem] truncate text-xs font-semibold text-[var(--nav-texto-fuerte)]">{name}</span>
-          {user.tenantName && <span className="block max-w-[14rem] truncate text-[11px] text-[var(--nav-texto)]">{user.tenantName}</span>}
-        </span>
-      </button>
-      {open && (
-        <div
-          id="flit-suite-account"
-          role="region"
-          aria-label="Cuenta"
-          className="absolute right-0 top-full z-50 mt-2 w-64 rounded-[var(--nav-radio-panel)] border border-[var(--nav-borde)] bg-white p-2 shadow-[var(--nav-sombra-panel)]"
+        {initial}
+      </div>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Menú de usuario"
+          aria-expanded={open}
+          aria-controls="flit-suite-account"
+          className="rounded-md p-1 hover:bg-black/5 dark:hover:bg-white/10"
         >
-          <div className="border-b border-[var(--nav-borde)] px-3 pb-2 pt-1">
-            <p className="truncate text-sm font-semibold text-[var(--nav-texto-fuerte)]">{name}</p>
-            {user.displayName && <p className="truncate text-xs text-[var(--nav-texto)]">{user.email}</p>}
-            {user.tenantName && <p className="truncate text-xs text-[var(--nav-texto)]">{user.tenantName}</p>}
-            {user.roleLabel && <p className="truncate text-xs text-[var(--nav-texto)]">{user.roleLabel}</p>}
+          <MoreVertical className="h-5 w-5" />
+        </button>
+        {open && (
+          <div
+            id="flit-suite-account"
+            role="region"
+            aria-label="Cuenta"
+            className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-[var(--color-flit-gray)] bg-white py-1.5 text-xs text-[var(--color-flit-primary)] shadow-[0_18px_40px_-10px_rgba(22,39,68,0.25)] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          >
+            {links.map(({ label, href, icon: Icon }) => (
+              <Link key={href} href={href} onClick={() => setOpen(false)} className={itemClass}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span className="font-medium">{label}</span>
+              </Link>
+            ))}
+            {links.length > 0 && <div className="my-1 h-px bg-[var(--color-flit-gray)] dark:bg-white/10" />}
+            {onLogout ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onLogout();
+                }}
+                className={itemClass}
+                style={{ color: "var(--color-flit-alert)" }}
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span className="font-medium">Salir de la plataforma</span>
+              </button>
+            ) : (
+              <a href={logoutHref} className={itemClass} style={{ color: "var(--color-flit-alert)" }}>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span className="font-medium">Salir de la plataforma</span>
+              </a>
+            )}
           </div>
-          {links.map(({ label, href, icon: Icon }) => (
-            <Link key={href} href={href} onClick={() => setOpen(false)} className={itemClass}>
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-            </Link>
-          ))}
-          {onLogout ? (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onLogout();
-              }}
-              className={itemClass}
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              Cerrar sesión
-            </button>
-          ) : (
-            <a href={logoutHref} className={itemClass}>
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              Cerrar sesión
-            </a>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 }

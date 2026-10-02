@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 /* Tokens de diseño FLIT: @theme, :root y .dark viven en @flit/ui (B-02). */
 @import "@flit/ui/tokens.css";
+/* Puntero de la suite (flecha de marca y mano en lo clicable), igual en todas las apps. */
+@import "@flit/ui/cursor.css";
 /* Dock y barra común de la suite (B-13): los estilos del dock salieron de aquí a @flit/shell. */
 @import "@flit/shell/shell.css";
 
@@ -68,31 +70,6 @@
     background-image:
       radial-gradient(at 20% 0%, rgba(85, 126, 255, 0.18), transparent 50%),
       radial-gradient(at 100% 100%, rgba(0, 219, 213, 0.12), transparent 50%);
-  }
-
-  html,
-  body {
-    cursor:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L2 18 L7 13 L11 20 L14 19 L10 12 L17 12 Z' fill='%23557eff' stroke='white' stroke-width='1'/></svg>")
-      2 2,
-      default;
-  }
-
-  html.dark,
-  html.dark body {
-    cursor:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L2 18 L7 13 L11 20 L14 19 L10 12 L17 12 Z' fill='%2300dbd5' stroke='%23162744' stroke-width='1'/></svg>")
-      2 2,
-      default;
-  }
-
-  a,
-  button,
-  [role="button"],
-  select,
-  summary,
-  label[for] {
-    cursor: pointer;
   }
 
   @keyframes flit-orbit {

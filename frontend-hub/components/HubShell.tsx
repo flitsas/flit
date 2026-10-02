@@ -28,7 +28,14 @@ export function hubNav(tramitesUrl: string): NavCatalog {
 
 export function HubShell({ user, tramitesUrl, children }: { user: HubUser; tramitesUrl: string; children: React.ReactNode }) {
   return (
-    <SuiteShell productCode="plataforma" productName="Inicio" nav={hubNav(tramitesUrl)} user={user} homeHref="/?inicio=1">
+    <SuiteShell
+      productCode="plataforma"
+      productName="Inicio"
+      nav={hubNav(tramitesUrl)}
+      user={user}
+      homeHref="/?inicio=1"
+      accountUrl={tramitesUrl}
+    >
       {children}
     </SuiteShell>
   );

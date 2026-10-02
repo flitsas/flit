@@ -47,7 +47,7 @@ describe("Shell — dock", () => {
   it("no muestra 'Ayuda' en el dock; la entrada vive en el menú de cuenta", async () => {
     renderShell(["reportes"]);
     expect(within(dock()).queryByRole("link", { name: "Ayuda" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Menú de cuenta" }));
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
     expect(screen.getByRole("link", { name: "Ayuda" })).toHaveAttribute("href", "/manual");
   });
 
@@ -136,7 +136,7 @@ describe("Shell — usuario de organismo de tránsito", () => {
       expect(within(dock()).queryByRole("link", { name })).not.toBeInTheDocument();
     }
 
-    await userEvent.click(screen.getByRole("button", { name: "Menú de cuenta" }));
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
     expect(screen.getByText("Admin OT")).toBeInTheDocument();
   });
 
@@ -259,24 +259,24 @@ describe("Shell — barra y menú de cuenta", () => {
     expect(screen.queryByRole("button", { name: "Notificaciones" })).not.toBeInTheDocument();
   });
 
-  it("el menú de cuenta trae Ayuda, Cambio de contraseña y Cerrar sesión, sin 'Actualización de la información'", async () => {
+  it("el menú de cuenta trae Ayuda, Cambio de contraseña y Salir de la plataforma, sin 'Actualización de la información'", async () => {
     renderShell();
-    await userEvent.click(screen.getByRole("button", { name: "Menú de cuenta" }));
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
     expect(screen.getByRole("link", { name: "Ayuda" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cambio de contraseña" })).toHaveAttribute("href", "/profile/change-password");
-    expect(screen.getByRole("link", { name: "Cerrar sesión" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Salir de la plataforma" })).toBeInTheDocument();
     expect(screen.queryByText("Actualización de la información")).not.toBeInTheDocument();
   });
 
-  it("Cerrar sesión usa el cierre de la app cuando lo hay (sesión antigua o @flit/auth)", async () => {
+  it("Salir usa el cierre de la app cuando lo hay (sesión antigua o @flit/auth)", async () => {
     const onLogout = vi.fn();
     render(
       <Shell onLogout={onLogout} visibleModuleCodes={ALL_SPA}>
         <div>contenido</div>
       </Shell>,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Menú de cuenta" }));
-    await userEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    await userEvent.click(screen.getByRole("button", { name: "Salir de la plataforma" }));
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
