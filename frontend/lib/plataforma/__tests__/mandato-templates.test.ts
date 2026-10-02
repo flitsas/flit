@@ -4,6 +4,7 @@ import {
   MANDATO_TIPOS,
   assignmentModeFromFormat,
   mandatoFormatName,
+  resumenTiposPorCompania,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
@@ -75,6 +76,11 @@ describe("mandato-templates tipos de negocio", () => {
     expect(mandatoFormatName([fmt("bello", "Bello Renombrado")], "bello")).toBe("Bello Renombrado");
     expect(mandatoFormatName(FORMATOS, "retirado")).toBe("retirado");
     expect(mandatoFormatName(FORMATOS, null)).toBe("");
+  });
+
+  it("resume los tipos por compañía: Persona natural siempre, y las excepciones con su cantidad", () => {
+    expect(resumenTiposPorCompania(0, 0)).toBe("Persona natural");
+    expect(resumenTiposPorCompania(2, 1)).toBe("Persona natural · Persona jurídica (2) · Mandato abierto (1)");
   });
 });
 

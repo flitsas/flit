@@ -448,6 +448,8 @@ export interface CompanyTransitOfficeOption {
   transitOfficeId: string;
   code: string;
   name: string;
+  /** Nombre vigente del formato de contrato de ese organismo (HU #13174). */
+  formatName?: string;
 }
 
 /** Datos que la compañía captura de un mandatario. */

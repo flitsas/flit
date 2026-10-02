@@ -6,7 +6,11 @@ using Flit.Queries.Domain.Time;
 namespace Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 
 /// <summary>Organismo de tránsito ofrecido a la compañía al elegir dónde aplica un mandatario.</summary>
-public sealed record CompanyTransitOfficeResponse(Guid TransitOfficeId, string Code, string Name);
+public sealed record CompanyTransitOfficeResponse(
+    Guid TransitOfficeId,
+    string Code,
+    string Name,
+    string FormatName = "");
 
 /// <summary>
 /// HU #11202 — mandatarios vistos desde la COMPAÑÍA gestora. Es la vista inversa de la consola del
@@ -101,6 +105,6 @@ public sealed class ListCompanyTransitOfficesHandler
         var options = await _reader
             .ListCompanyTransitOfficesAsync(companyTenantId, cancellationToken).ConfigureAwait(false);
 
-        return [.. options.Select(o => new CompanyTransitOfficeResponse(o.TransitOfficeId, o.Code, o.Name))];
+        return [.. options.Select(o => new CompanyTransitOfficeResponse(o.TransitOfficeId, o.Code, o.Name, o.FormatName))];
     }
 }

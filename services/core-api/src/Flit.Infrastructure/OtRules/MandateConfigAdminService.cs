@@ -71,10 +71,31 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             .Select(o => o.Id)
             .ToHashSet();
 
+        // HU #13150 — la tabla de Plataforma muestra el tipo real por compañía, no un rótulo fijo.
+        // Se agrupa en memoria: el proveedor InMemory no traduce el GroupBy de EF.
+        var typeRows = await _db.CompanyOtMandateRules.AsNoTracking()
+            .Select(r => new { r.TransitOfficeId, r.AssignmentMode })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var typesByOffice = typeRows
+            .GroupBy(x => x.TransitOfficeId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(x => x.AssignmentMode, StringComparer.Ordinal).ToDictionary(m => m.Key, m => m.Count()));
+
         return _catalog.All
             .Where(o => activeOfficeIds.Contains(o.Id))
             .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(o => ToView(o, configs.GetValueOrDefault(o.Id)))
+            .Select(o =>
+            {
+                var view = ToView(o, configs.GetValueOrDefault(o.Id));
+                if (!typesByOffice.TryGetValue(o.Id, out var modes))
+                    return view;
+
+                modes.TryGetValue(MandatoAssignmentModeCodes.Institutional, out var juridica);
+                modes.TryGetValue(MandatoAssignmentModeCodes.Open, out var abierto);
+                return view with { ExplicitPersonaJuridica = juridica, ExplicitMandatoAbierto = abierto };
+            })
             .ToList();
     }
 

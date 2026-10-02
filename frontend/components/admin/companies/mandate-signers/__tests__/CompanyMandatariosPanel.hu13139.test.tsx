@@ -14,7 +14,14 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchCompanyMandateSigners: (...a: unknown[]) => fetchCompanyMandateSigners(...a),
   fetchCompanyTransitOffices: vi
     .fn()
-    .mockResolvedValue([{ transitOfficeId: "ot-1", code: "05001000", name: "Tránsito de Medellín" }]),
+    .mockResolvedValue([
+      {
+        transitOfficeId: "ot-1",
+        code: "05001000",
+        name: "Tránsito de Medellín",
+        formatName: "Medellín renombrado",
+      },
+    ]),
   fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
   createCompanyMandateSigner: vi.fn(),
   updateCompanyMandateSigner: vi.fn(),
@@ -97,6 +104,9 @@ describe("HU #13139 — lista con estados, candado y acciones por rol", () => {
       signer({ id: "2", fullName: "Propio" }),
     ]);
     renderPanel();
+    expect(await screen.findByTestId("formatos-contrato-compania")).toHaveTextContent(
+      "Medellín renombrado",
+    );
     await screen.findByRole("table", TABLA);
     const f = fila("Del Organismo");
     expect(f).toHaveAttribute("data-candado", "true");

@@ -39,6 +39,10 @@ export interface MandateOtConfigView {
   defaultMandateSignerDocumentType: string | null;
   defaultMandateSignerDocumentNumber: string | null;
   defaultMandateSignerIntegrityHash: string | null;
+  /** Compañías con Persona jurídica explícita. El resto usa Persona natural. */
+  explicitPersonaJuridica: number;
+  /** Compañías con Mandato abierto explícito. */
+  explicitMandatoAbierto: number;
 }
 
 export interface UpsertMandateOtConfigBody {
@@ -108,6 +112,8 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       optionalString(raw.defaultMandateSignerDocumentNumber ?? raw.DefaultMandateSignerDocumentNumber),
     defaultMandateSignerIntegrityHash:
       optionalString(raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash),
+    explicitPersonaJuridica: Number(raw.explicitPersonaJuridica ?? raw.ExplicitPersonaJuridica ?? 0) || 0,
+    explicitMandatoAbierto: Number(raw.explicitMandatoAbierto ?? raw.ExplicitMandatoAbierto ?? 0) || 0,
   };
 }
 
@@ -360,6 +366,19 @@ export function readFormatError(body: unknown): { error: string | null; unknownV
 
 export async function listMandatoFormats(signal?: AbortSignal): Promise<MandatoFormatView[]> {
   const data = await apiFetch<{ items?: Record<string, unknown>[] }>(`${base}/formatos`, { signal });
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(mapFormat);
+}
+
+/** HU #13174 — el hub OT lee el mismo catálogo (nombres, sin el cuerpo de la plantilla). */
+export async function listOtMandatoFormats(
+  officeId: string,
+  signal?: AbortSignal,
+): Promise<MandatoFormatView[]> {
+  const data = await apiFetch<{ items?: Record<string, unknown>[] }>(
+    `/api/v1/admin/ot/offices/${encodeURIComponent(officeId)}/mandatos/formatos`,
+    { signal },
+  );
   const items = Array.isArray(data?.items) ? data.items : [];
   return items.map(mapFormat);
 }

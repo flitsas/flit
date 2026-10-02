@@ -18,8 +18,10 @@ import { MandatarioFirmaPreviewDialog } from "@/components/admin/transit-offices
 import {
   fetchMandateOtConfig,
   listCompanyOtMandateRules,
+  listOtMandatoFormats,
   type CompanyOtMandateRuleView,
   type MandateOtConfigView,
+  type MandatoFormatView,
 } from "@/lib/api/admin-plataforma-mandatos";
 import {
   createMandateSigner,
@@ -62,6 +64,7 @@ import {
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "@/components/admin/companies/legal-representatives/rl-flit-styles";
+import { mandatoFormatName } from "@/lib/plataforma/mandato-templates";
 
 
 export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string }) {
@@ -69,6 +72,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [office, setOffice] = useState<MandateOtConfigView | null>(null);
+  const [formatos, setFormatos] = useState<readonly MandatoFormatView[]>([]);
+  const [formatosError, setFormatosError] = useState(false);
   const [companies, setCompanies] = useState<CompanyOtMandateRuleView[]>([]);
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [previewSigner, setPreviewSigner] = useState<MandateSigner | null>(null);
@@ -104,14 +109,20 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       setError(null);
     }
     try {
-      const [view, rules, signerList] = await Promise.all([
+      const [view, rules, signerList, catalogo] = await Promise.all([
         fetchMandateOtConfig(transitOfficeId),
         listCompanyOtMandateRules(transitOfficeId),
         fetchMandateSigners(transitOfficeId),
+        listOtMandatoFormats(transitOfficeId).then(
+          (items) => ({ items, error: false }),
+          () => ({ items: [] as MandatoFormatView[], error: true }),
+        ),
       ]);
       setOffice(view);
       setCompanies(rules);
       setSigners(signerList);
+      setFormatos(catalogo.items);
+      setFormatosError(catalogo.error);
       setStatus("ready");
     } catch (err) {
       setOffice(null);
@@ -342,8 +353,17 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     },
   ];
 
+  const nombreFormato = mandatoFormatName(formatos, office.templateCode) || office.templateCode;
+
   return (
     <div className="flex flex-col gap-4" data-testid="ot-mandatos-section">
+      <p className="text-sm text-[#59677D] dark:text-white/70" data-testid="ot-formato-contrato">
+        Formato de contrato:{" "}
+        <span className="font-medium text-[#162244] dark:text-white">
+          {formatosError ? office.templateCode : nombreFormato}
+        </span>
+        {formatosError ? " (no se pudo cargar el nombre del catálogo)" : null}
+      </p>
       <SectionTabs
         ariaLabel="Secciones de mandatos del organismo"
         active={seccion}

@@ -45,6 +45,9 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   fetchMandateOtPreview: vi.fn(),
   fetchMandatoTemplatePreview: vi.fn(),
   fetchMandateSigners: vi.fn(),
+  listOtMandatoFormats: vi.fn().mockResolvedValue([
+    { code: "generico", name: "Genérico del catálogo", assignmentMode: "signer" },
+  ]),
 }));
 
 vi.mock("@/lib/api/admin-mandate-signers", () => ({
@@ -210,6 +213,7 @@ describe("OtMandatosSection", () => {
       </ToastProvider>,
     );
     expect(await abrirFormularioGeneral(user)).toBeInTheDocument();
+    expect(screen.getByTestId("ot-formato-contrato")).toHaveTextContent("Genérico del catálogo");
     // AC6: sin selector del baúl ni bloque de empresas representadas.
     expect(screen.queryByLabelText(/firma del baúl/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/firma solo para/i)).not.toBeInTheDocument();

@@ -27,6 +27,7 @@ import { useMandatoFormatos } from "@/hooks/useMandatoFormatos";
 import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import {
   mandatoFormatName,
+  resumenTiposPorCompania,
 } from "@/lib/plataforma/mandato-templates";
 import { useToast } from "@/components/admin/Toast";
 
@@ -143,9 +144,14 @@ export function MandatosCatalogPanel() {
     },
     {
       key: "tipo",
-      header: "Tipo",
-      render: () => (
-        <span className="text-sm text-[#59677D] dark:text-white/65">Por compañía</span>
+      header: "Tipos por compañía",
+      render: (row) => (
+        <span
+          className="text-sm text-[#162244] dark:text-white"
+          data-testid={`mandato-tipos-${row.officeId}`}
+        >
+          {resumenTiposPorCompania(row.explicitPersonaJuridica, row.explicitMandatoAbierto)}
+        </span>
       ),
     },
     {

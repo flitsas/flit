@@ -36,7 +36,14 @@ public sealed record MandateOtConfigView(
     string? DefaultMandateSignerName = null,
     string? DefaultMandateSignerDocumentType = null,
     string? DefaultMandateSignerDocumentNumber = null,
-    string? DefaultMandateSignerIntegrityHash = null);
+    string? DefaultMandateSignerIntegrityHash = null,
+    /// <summary>
+    /// Compañías de este organismo con tipo Persona jurídica explícito. El resto, sin regla o en
+    /// Persona natural, usa ese tipo (el de un organismo nuevo).
+    /// </summary>
+    int ExplicitPersonaJuridica = 0,
+    /// <summary>Compañías de este organismo con tipo Mandato abierto explícito.</summary>
+    int ExplicitMandatoAbierto = 0);
 
 public sealed record UpsertMandateOtConfigRequest(
     string TemplateCode,

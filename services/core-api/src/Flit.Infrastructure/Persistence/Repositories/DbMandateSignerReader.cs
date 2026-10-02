@@ -2,6 +2,7 @@ using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Identity;
 using Flit.Tramites.Application.UseCases.Persons;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -308,20 +309,49 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
                 // Solo organismos ACTIVOS del catálogo: uno desactivado no sirve para radicar, así que
                 // ofrecerlo como destino de un mandatario sería ofrecer algo inservible.
+                var offices = await _context.TransitOffices
+                    .AsNoTracking()
+                    .Where(o => officeIds.Contains(o.Id) && o.IsActive)
+                    .OrderBy(o => o.Name)
+                    .Select(o => new { o.Id, o.Code, o.Name })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var officeIdList = offices.Select(o => o.Id).ToList();
+                var configs = await _context.TransitOfficeMandateConfigs
+                    .AsNoTracking()
+                    .Where(c => officeIdList.Contains(c.TransitOfficeId))
+                    .Select(c => new { c.TransitOfficeId, c.TemplateCode, c.CustomTemplateKind })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var renamed = await _context.MandateFormatSettings
+                    .AsNoTracking()
+                    .Select(s => new { s.FormatCode, s.DisplayName })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var nameByCode = renamed.ToDictionary(
+                    s => s.FormatCode,
+                    s => s.DisplayName,
+                    StringComparer.OrdinalIgnoreCase);
+
                 IReadOnlyList<CompanyTransitOfficeOption> options =
                 [
-                    .. await _context.TransitOffices
-                        .AsNoTracking()
-                        .Where(o => officeIds.Contains(o.Id) && o.IsActive)
-                        .OrderBy(o => o.Name)
-                        .Select(o => new CompanyTransitOfficeOption
+                    .. offices.Select(o =>
+                    {
+                        var cfg = configs.FirstOrDefault(c => c.TransitOfficeId == o.Id);
+                        var code = MandatoSystemOfficeTemplates.ResolveTemplateCode(
+                            o.Code, cfg?.TemplateCode, cfg?.CustomTemplateKind);
+                        var formatName = nameByCode.TryGetValue(code, out var custom) && !string.IsNullOrWhiteSpace(custom)
+                            ? custom
+                            : MandatoFormatCatalog.Find(code)?.DefaultName ?? code;
+                        return new CompanyTransitOfficeOption
                         {
                             TransitOfficeId = o.Id,
                             Code = o.Code,
                             Name = o.Name,
-                        })
-                        .ToListAsync(cancellationToken)
-                        .ConfigureAwait(false),
+                            FormatName = formatName,
+                        };
+                    }),
                 ];
                 return options;
             },

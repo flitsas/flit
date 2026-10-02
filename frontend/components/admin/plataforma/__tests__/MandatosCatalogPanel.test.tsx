@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MandatosCatalogPanel } from "@/components/admin/plataforma/MandatosCatalogPanel";
 import { ToastProvider } from "@/components/admin/Toast";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 const listMandateOtConfigs = vi.fn();
 const deleteMandateOtConfig = vi.fn();
 const openPdfBlobInNewTab = vi.fn();
@@ -104,6 +108,8 @@ const sampleRows = [
     defaultMandateSignerDocumentType: null,
     defaultMandateSignerDocumentNumber: null,
     defaultMandateSignerIntegrityHash: null,
+    explicitPersonaJuridica: 2,
+    explicitMandatoAbierto: 1,
   },
   {
     officeId: "o2",
@@ -149,7 +155,8 @@ describe("MandatosCatalogPanel configurador", () => {
     await esperarFilas();
     expect(screen.getAllByText("Sabaneta").length).toBeGreaterThan(0);
     expect(screen.getByText("Medellín")).toBeInTheDocument();
-    expect(screen.getAllByText("Por compañía").length).toBeGreaterThan(0);
+    expect(screen.getByText("Persona natural · Persona jurídica (2) · Mandato abierto (1)")).toBeInTheDocument();
+    expect(screen.getAllByText("Persona natural").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }),
     ).toBeInTheDocument();

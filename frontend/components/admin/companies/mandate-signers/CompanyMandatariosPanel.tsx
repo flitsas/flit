@@ -207,6 +207,17 @@ export function CompanyMandatariosPanel({
 
   return (
     <div className="space-y-4">
+      {offices.some((o) => o.formatName) ? (
+        <ul className="space-y-1 text-sm text-[#59677D] dark:text-white/70" data-testid="formatos-contrato-compania">
+          {offices.filter((o) => o.formatName).map((o) => (
+            <li key={o.transitOfficeId}>
+              Formato de contrato en {o.name}:{" "}
+              <span className="font-medium text-[#162244] dark:text-white">{o.formatName}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {sinOrganismos && (
         <p
           className="rounded-xl border px-3 py-2 text-xs"

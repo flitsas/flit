@@ -43,6 +43,9 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   deleteCompanyOtMandateRule: vi.fn(),
   fetchMandateOtPreview: vi.fn(),
   fetchMandatoTemplatePreview: vi.fn(),
+  listOtMandatoFormats: vi.fn().mockResolvedValue([
+    { code: "generico", name: "Genérico del catálogo", assignmentMode: "signer" },
+  ]),
 }));
 vi.mock("@/lib/api/admin-mandate-signers", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/admin-mandate-signers")>(

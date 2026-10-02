@@ -131,6 +131,11 @@ public sealed class CompanyTransitOfficeOption
     public Guid TransitOfficeId { get; init; }
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Nombre vigente del formato de contrato de ese organismo (HU #13174). Vacío si no se pudo resolver.
+    /// </summary>
+    public string FormatName { get; init; } = string.Empty;
 }
 
 /// <summary>

@@ -13,6 +13,17 @@ import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
  */
 export const MANDATO_TEMPLATE_AUTO_CODE = "auto";
 
+/**
+ * Tipos de mandato que el Super Admin ve en la fila del organismo (HU #13150).
+ * Persona natural es el tipo de un organismo nuevo y de toda compañía sin regla propia.
+ */
+export function resumenTiposPorCompania(explicitJuridica: number, explicitAbierto: number): string {
+  const partes = ["Persona natural"];
+  if (explicitJuridica > 0) partes.push(`Persona jurídica (${explicitJuridica})`);
+  if (explicitAbierto > 0) partes.push(`Mandato abierto (${explicitAbierto})`);
+  return partes.join(" · ");
+}
+
 /** Nombre vigente del formato; si el código guardado ya no está en el catálogo, muestra el código. */
 export function mandatoFormatName(
   formatos: readonly MandatoFormatView[],

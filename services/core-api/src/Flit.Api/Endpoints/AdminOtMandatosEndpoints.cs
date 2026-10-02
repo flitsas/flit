@@ -35,8 +35,19 @@ public static class AdminOtMandatosEndpoints
             .WithName("AdminOtMandatosDeleteCompanyRule");
         group.MapGet("/templates/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminOtMandatosTemplatePreview");
+        // HU #13174 — el hub muestra el nombre vigente del catálogo (el que edita el Super Admin), sin el cuerpo.
+        group.MapGet("/formatos", ListFormatsAsync)
+            .WithName("AdminOtMandatosFormats");
 
         return app;
+    }
+
+    private static async Task<IResult> ListFormatsAsync(
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var items = await formats.ListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { items = items.Select(MandatoFormatResponses.Describe).ToList() });
     }
 
     private static async Task<IResult> GetAsync(
