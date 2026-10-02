@@ -430,10 +430,14 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         var candidatas = ConsolidadoVigenciaTracker.Candidatas(ChangeTracker);
         var afectadas = base.SaveChanges(acceptAllChangesOnSuccess);
 
-        if (ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
-                .GetAwaiter().GetResult())
+        var tocadas = ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        if (tocadas.Count > 0)
         {
             base.SaveChanges(acceptAllChangesOnSuccess);
+            // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
+            ConsolidadoVigenciaTracker.RefrescarRowVersionAsync(this, tocadas, CancellationToken.None)
+                .GetAwaiter().GetResult();
         }
 
         ConsolidadoVigenciaTracker
@@ -451,10 +455,14 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         var afectadas = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken)
             .ConfigureAwait(false);
 
-        if (await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
-                .ConfigureAwait(false))
+        var tocadas = await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
+            .ConfigureAwait(false);
+        if (tocadas.Count > 0)
         {
             await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+            // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
+            await ConsolidadoVigenciaTracker.RefrescarRowVersionAsync(this, tocadas, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await ConsolidadoVigenciaTracker
