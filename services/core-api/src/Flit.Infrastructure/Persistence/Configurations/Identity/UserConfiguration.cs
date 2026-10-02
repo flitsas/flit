@@ -15,7 +15,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
         builder.Property(x => x.Email).HasMaxLength(320).IsRequired();
-        builder.HasIndex(x => x.Email).IsUnique().HasDatabaseName("uq_users_email");
+        // Bug #13194: único solo entre usuarios vivos; un correo de usuario borrado (soft-delete) puede recrearse.
+        builder.HasIndex(x => x.Email)
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL")
+            .HasDatabaseName("uq_users_email");
 
         builder.Property(x => x.DisplayName).HasMaxLength(150).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired();

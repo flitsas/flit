@@ -88,26 +88,36 @@ public sealed class PatchFieldValuesTests
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
-    [Fact] // HU #10611 / #10785 (Feature #10587) — soat_estado es una clave escribible post-envío (ruta de
-           // placa). El comando la permite por CLAVE; la restricción por sub-estado la impone el trigger de BD.
-    public async Task HandleAsync_Entregado_SoatEstadoKey_Allowed()
+    /// <summary>
+    /// Bug #13194 (review 2, SEC-High) — <c>soat_estado</c> y <c>soat_vencimiento</c> son claves de SISTEMA
+    /// (consulta RUNT / OCR del PDF): el PATCH del gestor las rechaza en cualquier estado, incluido
+    /// borrador y el post-envío que antes (Feature #10587) las dejaba pasar. Nada se persiste.
+    /// </summary>
+    [Theory]
+    [InlineData(TramiteEstado.Borrador, "soat_estado", "vigente")]
+    [InlineData(TramiteEstado.Asignado, "soat_estado", "vigente")]
+    [InlineData(TramiteEstado.Entregado, "SOAT_ESTADO", "vigente")]
+    [InlineData(TramiteEstado.Borrador, "soat_vencimiento", "2099-12-31")]
+    public async Task HandleAsync_ClaveSoatDeSistema_Rechazada(string status, string key, string value)
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
+        var instance = Instance(id, tenantId, status);
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
-        _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
 
         var request = new PatchFieldValuesRequest(
-            [new FieldValueInput(null, "soat_estado", "vigente", null)]);
+        [
+            new FieldValueInput(null, "vehicle_color", "ROJO", null),
+            new FieldValueInput(null, key, value, null),
+        ]);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
 
-        error.Should().BeNull();
-        instance.FieldValues.Should().ContainSingle(f => f.FieldKey == "soat_estado" && f.ValueText == "vigente");
-        result.Should().NotBeNull();
-        await _repo.Received(1).SaveChangesAsync(ct);
+        error.Should().Be(PatchFieldValuesHandler.ClaveDeSistemaError);
+        result.Should().BeNull();
+        instance.FieldValues.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     // ── HU #10870 (AC1): subsanación reabre la edición COMPLETA, no solo transit_office_* ─────────

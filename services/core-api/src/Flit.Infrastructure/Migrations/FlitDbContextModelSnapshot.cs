@@ -4909,7 +4909,8 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique()
-                        .HasDatabaseName("uq_users_email");
+                        .HasDatabaseName("uq_users_email")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("users", "identity");
                 });

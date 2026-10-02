@@ -256,7 +256,7 @@ public static class AsignacionPlacaEmailComposer
     private static string CombineAssetUrl(string assetsBaseUrl, string fileName)
     {
         var baseUrl = string.IsNullOrWhiteSpace(assetsBaseUrl)
-            ? "https://dev.flitsas.online/email-assets"
+            ? NotificationEmailAssetsOptions.LocalFallbackBaseUrl
             : assetsBaseUrl.Trim().TrimEnd('/');
         return $"{baseUrl}/{fileName}";
     }

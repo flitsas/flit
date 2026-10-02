@@ -6,6 +6,7 @@ import { useToast } from "@/components/admin/Toast";
 import { fetchOtRequirements, updateOtRequirements } from "@/lib/api/admin-ot";
 import { ApiError } from "@/lib/api/types";
 import type { OtRequirements } from "@/lib/api/types-ot";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 
 interface RequirementsSectionProps {
   /** Oficina OT en scope (SuperAdmin navegando el hub). */
@@ -19,9 +20,11 @@ interface ToggleRowProps {
   checked: boolean;
   disabled?: boolean;
   onChange: (next: boolean) => void;
+  /** Nota que se pinta debajo de la fila y describe al switch (`aria-describedby`). */
+  note?: { id: string; text: string };
 }
 
-function ToggleRow({ id, label, description, checked, disabled, onChange }: ToggleRowProps) {
+function ToggleRow({ id, label, description, checked, disabled, onChange, note }: ToggleRowProps) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-2xl border p-4">
       <div className="min-w-0">
@@ -29,6 +32,11 @@ function ToggleRow({ id, label, description, checked, disabled, onChange }: Togg
           {label}
         </label>
         <p className="mt-1 text-xs opacity-70">{description}</p>
+        {note ? (
+          <InlineAlert id={note.id} tone="info" compact className="mt-2">
+            {note.text}
+          </InlineAlert>
+        ) : null}
       </div>
       <button
         id={id}
@@ -36,6 +44,7 @@ function ToggleRow({ id, label, description, checked, disabled, onChange }: Togg
         role="switch"
         aria-checked={checked}
         aria-label={label}
+        aria-describedby={note?.id}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-muted transition-colors disabled:opacity-50"
@@ -158,6 +167,12 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
             checked={requirements.identityValidationEnabled}
             disabled={saving}
             onChange={(v) => patch({ identityValidationEnabled: v })}
+            // Bug #13194 (P4) — la firma se exige siempre: el switch ya no tiene efecto. Se conserva
+            // (retirarlo es decisión de producto), pero no puede seguir prometiendo que desactiva algo.
+            note={{
+              id: "ot-req-identity-nota",
+              text: "La validación de identidad es obligatoria para radicar; este ajuste ya no la desactiva.",
+            }}
           />
 
           <div className="flex justify-end">

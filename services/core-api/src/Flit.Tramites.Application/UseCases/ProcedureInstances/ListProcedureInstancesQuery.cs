@@ -309,10 +309,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// delega. Cuando el baúl no procede, no cuenta <i>en ninguno de los dos sentidos</i>: ni acredita ni
     /// rechaza, y la parte queda a merced de su validación de identidad. Coste: cero consultas nuevas.</para>
     ///
-    /// <para>La asimetría documentada en la HU #11667 se mantiene: el diccionario se materializa sin mirar
-    /// el flag <c>signature_vault_enabled</c> del tenant. Filtrarlo aquí exigiría una consulta de
-    /// configuración por tenant en la ruta de lote; la corrección pertenece al origen de las claves, que
-    /// sirve a la columna y al chip a la vez.</para>
+    /// <para>Bug #13194 (P4, D1) — la asimetría de la HU #11667 se cerró en el origen de las claves: el
+    /// diccionario ya solo trae firmas de tenants con <c>signature_vault_enabled</c> activo, así que con el
+    /// interruptor apagado la columna deja de pintar «Firmado» por baúl (como el paso de identidad y el
+    /// gate). La validación propia del rechazo exige ahora coincidencia ESTRICTA de documento.</para>
     ///
     /// <para><b>Reporte 2026-09-03 — el rechazo NO puede sobrevivir a un cambio de persona.</b> El chequeo
     /// de rechazo miraba <c>PartyRole</c> con <c>Any(...)</c> sobre TODO el historial: al reemplazar al

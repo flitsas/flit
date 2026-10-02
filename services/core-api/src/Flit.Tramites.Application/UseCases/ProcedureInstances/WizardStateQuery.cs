@@ -56,8 +56,9 @@ public sealed record WizardStateDto(
     IReadOnlyList<string> AllowedTransitions)
 {
     /// <summary>
-    /// HU #10548 — si el OT destino tiene la validación de identidad deshabilitada, es <c>false</c>
-    /// y el frontend oculta el paso de identidad (AC3 / HU #10549). Default <c>true</c> (se exige).
+    /// HU #10548 — antes era <c>false</c> si el OT destino deshabilitaba la validación de identidad, y
+    /// el frontend ocultaba el paso. Bug #13194 (P4, D2): la identidad (firma) se exige SIEMPRE, así que
+    /// viaja siempre en <c>true</c>. Se conserva en el contrato por compatibilidad (deprecado).
     /// </summary>
     public bool IdentityValidationEnabled { get; init; } = true;
 
@@ -267,7 +268,9 @@ public sealed record WizardCapabilitiesDto(
 /// </summary>
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
+#pragma warning disable CS9113 // Bug #13194 (D2): se conserva la firma (DI y llamadores); la identidad ya no se relaja por OT.
     IIdentityValidationPolicy? identityPolicy = null,
+#pragma warning restore CS9113
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     ISignatureVaultPolicy? vaultPolicy = null,
     IConsultationBlockingPolicy? blockingPolicy = null,
@@ -291,10 +294,6 @@ public sealed class GetWizardStateHandler(
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → camino estático).
     private readonly IDynamicProceduresPolicy _dynamicPolicy =
         dynamicPolicy ?? NullDynamicProceduresPolicy.Instance;
-
-    // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
-    private readonly IIdentityValidationPolicy _identityPolicy =
-        identityPolicy ?? NullIdentityValidationPolicy.Instance;
 
     // ADR-0025 §4 / HU #10645 — baúl de firmas: un actor NIT cubierto cuenta como identidad aprobada.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
@@ -358,13 +357,11 @@ public sealed class GetWizardStateHandler(
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
 
-        // HU #10548 — si el OT destino deshabilita la identidad, se trata como satisfecha (el paso no
-        // bloquea el submit) y se expone el flag para que el wizard oculte el paso (AC3 / HU #10549).
-        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
-            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct);
-        var partesEfectivas = identityRequired
-            ? identidadAprobada
-            : IdentitySatisfiedForAllParties(identidadAprobada);
+        // Bug #13194 (P4, D2) — «no se permite enviar al OT trámites sin firmar»: la identidad se exige
+        // SIEMPRE, también si el OT destino la deshabilitó (HU #10548 ya no relaja). El paso de identidad
+        // se muestra y bloquea igual que en cualquier OT, en paridad con el gate de TramiteLifecycleService.
+        const bool identityRequired = true;
+        var partesEfectivas = identidadAprobada;
 
         // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
         var docsCompletos = matrixCompleteness is null
@@ -917,10 +914,6 @@ public sealed class GetWizardStateHandler(
         "prenda_decision" => "Prenda",
         _ => "Datos",
     };
-
-    /// <summary>Une comprador y vendedor al set aprobado (identidad deshabilitada, HU #10548).</summary>
-    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
-        new(approved, StringComparer.OrdinalIgnoreCase) { "comprador", "vendedor" };
 
     /// <summary>Id del OT elegido en el FUR (field_value <c>transit_office_id</c>), o null.</summary>
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
