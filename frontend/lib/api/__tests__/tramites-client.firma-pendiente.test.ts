@@ -65,6 +65,38 @@ describe('tramites-client — 409 firma_pendiente', () => {
     expect((err as Error).message).toMatch(/^Falta la firma del comprador\./);
   });
 
+  // Contrato EXACTO del backend (FirmaGate.Detalle + extensión `partesSinFirma`).
+  it('transition: detail real «parte (notificación: estado)» → nombra el correo fallido', async () => {
+    respondWith(409, {
+      title: 'firma_pendiente',
+      status: 409,
+      detail:
+        'No se permite enviar al organismo de tránsito un trámite sin firmar. Falta la firma (identidad aprobada y vigente) de: comprador (notificación: enviada), vendedor (notificación: fallida).',
+    });
+    const err = await capturar(tramitesClient.transitionInstance('inst-1', 'preparado'));
+    expect((err as Error).message).toBe(
+      'Falta la firma del comprador y del vendedor. ' +
+        'Enviamos el enlace de validación de identidad al correo del comprador. ' +
+        'No pudimos enviar el enlace de validación al vendedor; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.',
+    );
+  });
+
+  it.each([
+    ['submit', () => tramitesClient.submitInstance('inst-1')],
+    ['enviar-al-ot', () => tramitesClient.enviarAlOt('inst-1', {})],
+    ['transition', () => tramitesClient.transitionInstance('inst-1', 'entregado')],
+  ])('%s: la extensión partesSinFirma manda sobre el detail', async (_ruta, llamar) => {
+    respondWith(409, {
+      ...GENERICO,
+      partesSinFirma: [{ parte: 'comprador', notificacion: 'fallida' }],
+    });
+    const err = await capturar(llamar());
+    expect(esErrorFirmaPendiente(err)).toBe(true);
+    expect((err as Error).message).toBe(
+      'Falta la firma del comprador. No pudimos enviar el enlace de validación al comprador; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.',
+    );
+  });
+
   it('transition: los demás códigos conservan su copy (regresión)', async () => {
     respondWith(409, { title: 'identidad_no_aprobada', status: 409, detail: 'x' });
     await expect(tramitesClient.transitionInstance('inst-1', 'preparado')).rejects.toThrow(

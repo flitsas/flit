@@ -76,6 +76,62 @@ describe('partesFirmaPendiente', () => {
   });
 });
 
+// Contrato EXACTO del backend (FirmaGate.Detalle + extensión `partesSinFirma`, review 4.ª vuelta PR #510).
+const DETAIL_BACKEND_CON_NOTIFICACION =
+  'No se permite enviar al organismo de tránsito un trámite sin firmar. Falta la firma ' +
+  '(identidad aprobada y vigente) de: comprador (notificación: enviada), vendedor (notificación: fallida).';
+
+describe('contrato del backend (FirmaGate)', () => {
+  it('detail con «parte (notificación: estado)»: extrae parte y estado', () => {
+    expect(partesFirmaPendiente({ title: 'firma_pendiente', detail: DETAIL_BACKEND_CON_NOTIFICACION })).toEqual([
+      { parte: 'comprador', notificacion: 'enviada' },
+      { parte: 'vendedor', notificacion: 'fallida' },
+    ]);
+  });
+
+  it('detail con ya_en_curso y no_configurada', () => {
+    expect(
+      partesFirmaPendiente({
+        title: 'firma_pendiente',
+        detail:
+          'No se permite enviar al organismo de tránsito un trámite sin firmar. Falta la firma ' +
+          '(identidad aprobada y vigente) de: comprador (notificación: ya_en_curso), vendedor (notificación: no_configurada).',
+      }),
+    ).toEqual([
+      { parte: 'comprador', notificacion: 'ya_en_curso' },
+      { parte: 'vendedor', notificacion: 'no_configurada' },
+    ]);
+  });
+
+  it('el mensaje del detail real avisa que el correo del vendedor falló (antes caía al genérico)', () => {
+    expect(mensajeFirmaPendiente({ title: 'firma_pendiente', detail: DETAIL_BACKEND_CON_NOTIFICACION })).toBe(
+      'Falta la firma del comprador y del vendedor. ' +
+        'Enviamos el enlace de validación de identidad al correo del comprador. ' +
+        'No pudimos enviar el enlace de validación al vendedor; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.',
+    );
+  });
+
+  it('la extensión `partesSinFirma` (forma exacta) manda sobre el detail', () => {
+    const problem = {
+      type: 'https://tools.ietf.org/html/rfc9110#section-15.5.10',
+      title: 'firma_pendiente',
+      status: 409,
+      detail: DETAIL_BACKEND_CON_NOTIFICACION,
+      partesSinFirma: [{ parte: 'comprador', notificacion: 'ya_en_curso' }],
+    };
+    expect(partesFirmaPendiente(problem)).toEqual([{ parte: 'comprador', notificacion: 'ya_en_curso' }]);
+    expect(mensajeFirmaPendiente(problem)).toBe(
+      'Falta la firma del comprador. Ya hay una validación en curso para el comprador.',
+    );
+  });
+
+  it('extensión vacía: cae al detail', () => {
+    expect(
+      partesFirmaPendiente({ title: 'firma_pendiente', detail: DETAIL_BACKEND_CON_NOTIFICACION, partesSinFirma: [] }),
+    ).toHaveLength(2);
+  });
+});
+
 describe('mensajeFirmaPendiente', () => {
   it('genérico sin partes ni notificación (contrato actual de /submit y /enviar-al-ot)', () => {
     const msg = mensajeFirmaPendiente({ title: 'firma_pendiente', detail: DETAIL_GENERICO });
@@ -92,19 +148,24 @@ describe('mensajeFirmaPendiente', () => {
   it('una parte con correo enviado', () => {
     expect(
       mensajeFirmaPendiente({ title: 'firma_pendiente', partes: [{ parte: 'comprador', notificacion: 'enviada' }] }),
-    ).toBe('Falta la firma del comprador. Enviamos el enlace de validación de identidad a su correo.');
+    ).toBe('Falta la firma del comprador. Enviamos el enlace de validación de identidad al correo del comprador.');
   });
 
-  it('validación ya en curso y correo fallido (asistente → paso 4)', () => {
+  it('validación ya en curso', () => {
     expect(
       mensajeFirmaPendiente({ title: 'firma_pendiente', partes: [{ parte: 'comprador', notificacion: 'ya_en_curso' }] }),
-    ).toMatch(/Ya hay una validación de identidad en curso; espera a que termine\./);
-    expect(
-      mensajeFirmaPendiente({ title: 'firma_pendiente', partes: [{ parte: 'vendedor', notificacion: 'fallida' }] }),
-    ).toMatch(/No se pudo enviar el correo de validación: usa «Validar identidad» en el paso 4\./);
+    ).toBe('Falta la firma del comprador. Ya hay una validación en curso para el comprador.');
   });
 
-  it('varias partes: cada notificación nombra a su parte', () => {
+  it.each(['fallida', 'no_configurada'])('correo %s: no pudimos enviar el enlace → paso 4 o módulo Identidad', (estado) => {
+    expect(
+      mensajeFirmaPendiente({ title: 'firma_pendiente', partes: [{ parte: 'vendedor', notificacion: estado }] }),
+    ).toBe(
+      'Falta la firma del vendedor. No pudimos enviar el enlace de validación al vendedor; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.',
+    );
+  });
+
+  it('varias partes: cada notificación nombra a su parte; no_requerida no agrega frase', () => {
     const msg = mensajeFirmaPendiente({
       title: 'firma_pendiente',
       partes: [
@@ -112,11 +173,12 @@ describe('mensajeFirmaPendiente', () => {
         { parte: 'comprador', notificacion: 'no_requerida' },
       ],
     });
-    expect(msg).toMatch(/^Falta la firma del vendedor y del comprador\./);
-    expect(msg).toMatch(/al correo del vendedor\./);
+    expect(msg).toBe(
+      'Falta la firma del vendedor y del comprador. Enviamos el enlace de validación de identidad al correo del vendedor.',
+    );
   });
 
-  it('en asignado no remite al paso 4: prevalidación del módulo Identidad o baúl del RL', () => {
+  it('en asignado: sin notificación remite al módulo Identidad o al baúl del RL, no al paso 4', () => {
     const msg = mensajeFirmaPendiente({ title: 'firma_pendiente' }, 'asignado');
     expect(msg).not.toMatch(/paso 4/);
     expect(msg).toMatch(/módulo Identidad/);
@@ -126,7 +188,9 @@ describe('mensajeFirmaPendiente', () => {
       { title: 'firma_pendiente', partes: [{ parte: 'comprador', notificacion: 'fallida' }] },
       'asignado',
     );
-    expect(fallida).toMatch(/inicia la prevalidación desde el módulo Identidad/);
+    expect(fallida).toContain(
+      'No pudimos enviar el enlace de validación al comprador; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.',
+    );
     expect(fallida).not.toMatch(/se envía automáticamente/);
   });
 
