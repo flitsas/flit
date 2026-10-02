@@ -82,6 +82,40 @@ public sealed class Bug13194TenantRlsScopeTransaccionAmbienteTests(PostgresDatab
     }
 
     [PostgresFact]
+    public async Task SiLaOperacionFalla_LasEntidadesQueAgregoQuedanDesacopladas()
+    {
+        // Review PR #510 (L3/MENOR-2) — tras revertir al savepoint, lo que la operación fallida dejó en el
+        // change tracker se desacopla: un SaveChanges posterior del dueño no intenta reinsertarlo.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext();
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var huerfana = new Flit.Infrastructure.Persistence.Entities.Admin.TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = Guid.NewGuid(), // no existe: la FK falla dentro del ámbito
+            };
+
+            var fallo = async () => await TenantRlsScope.ExecuteAsync(
+                db, TenantA,
+                async () =>
+                {
+                    db.TenantOperationalPolicies.Add(huerfana);
+                    return await db.SaveChangesAsync(ct);
+                },
+                ct);
+            await fallo.Should().ThrowAsync<Exception>();
+
+            db.Entry(huerfana).State.Should().Be(EntityState.Detached);
+            (await db.SaveChangesAsync(ct)).Should().Be(0, "no queda nada pendiente de la operación revertida");
+            await tx.CommitAsync(ct);
+        });
+    }
+
+    [PostgresFact]
     public async Task SiLaOperacionFalla_RevierteAlSavepoint_YLaTransaccionAmbienteSigueUtilizable()
     {
         var ct = TestContext.Current.CancellationToken;
