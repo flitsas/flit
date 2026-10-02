@@ -81,7 +81,7 @@ Se llena **junto** a las casillas 11/12 del numeral 3 cuando hay inscripción, r
 | Inscribir / registrar / constituir | **LIM. PROPIEDAD** (columna 2) | Nombre del acreedor |
 | Levantar | **OTRO** (columna 4) | Nombre del acreedor |
 | Levantar e inscribir (mismo FUR) | LIM. PROPIEDAD **y** OTRO | Nombre del acreedor |
-| Sin gravamen | Nada | Vacío |
+| Sin gravamen, o gravamen omitido (decisión `omitir`) | Nada | Vacío |
 
 HURTO (1) y EMBARGO (3) no se marcan por prenda. Sin nombre de acreedor: **sí X en la columna, A FAVOR DE vacío**. Overlay: `alert_data_code_2` / `_4` / `_5`.
 
@@ -138,12 +138,23 @@ Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / s
 
 | Tipo de acción | Debe marcar (numeral 3) | Observación — estructura |
 |----------------|-------------------------|--------------------------|
-| Ninguna / no aplica | No suma | No imprime bloque de gravamen. |
+| Ninguna / no aplica — decisión `sin_prenda`, `omitir` o sin decisión | No suma (ni 11 ni 12) | No imprime bloque de gravamen. **Numeral 20:** nada (LIM. PROPIEDAD, OTRO y A FAVOR DE vacíos). |
 | Inscribir / registrar / constituir | **+11** Inscrip. prenda | Si hay nombre y documento: `Inscripción de prenda a favor de {NOMBRE_ACREEDOR} identificado con número de documento {DOCUMENTO}`. Si hay nombre sin documento: solo el nombre (sin sufijo vacío). Sin nombre: **sí casilla, no texto**. **Numeral 20:** LIM. PROPIEDAD + A FAVOR DE. |
 | Levantar | **+12** Levanta prenda | Si hay nombre y documento: `Levantamiento de prenda a favor de {NOMBRE_ACREEDOR} identificado con número de documento {DOCUMENTO}`. Si hay nombre sin documento: solo el nombre. Sin nombre: **sí casilla, no texto**. **Numeral 20:** OTRO + A FAVOR DE. **Excepción — trámite `LEVANTAMIENTO_PRENDA`:** ahí se captura la entidad ante la que se levantó y el literal pasa a `Levantamiento de prenda ante {ENTIDAD}`, porque el acreedor ya lo nombra el numeral 20 y repetirlo gasta renglones. En traspaso y matrícula la entidad no se captura y el literal es el de esta fila. |
 | Levantar e inscribir (mismo FUR) | **+11 +12** | Las dos frases, unidas con `, `. El simulador admite `ambas`; el wizard operativo puede no capturar las dos a la vez. |
 
 Constantes de código: `FurPrendaObservation.Etiqueta`, `EtiquetaLevantamiento` y `SufijoDocumento`. El nombre y el documento del acreedor se imprimen tal cual (trim); no se inventa contenido.
+
+### Decisión `omitir` («Omitir prenda»)
+
+Aplica en toda la familia `MATRICULAS` con prenda complementaria (`MATRICULA_NUEVA`, `MATRICULA_LEASING`, `REMATRICULA`; gravamen reportado por RUNT), **sin importar** la política CF-06 del OT, y en `TRASPASO_*` y demás tipos con dimensión de gravamen **solo si** el OT admite el certificado de gravamen como opcional (CF-06). `CANCELACION_MATRICULA` queda fuera (su perfil apaga la prenda, DDL 93). El gestor declara que existe gravamen pero **no se solicita ningún trámite de prenda en este FUR**: no hay adjunto, justificación ni acreedor.
+
+- Numeral 3: solo la casilla de la tabla 1 (1 en `MATRICULA_NUEVA`/`MATRICULA_LEASING`, 16 en `REMATRICULA`, 2 en `TRASPASO_*`) y las de la tabla 3 que estén activas. **Ni 11 ni 12.**
+- Numeral 20: nada por gravamen (LIM. PROPIEDAD, OTRO y A FAVOR DE vacíos).
+- Párrafo 23: no hay bloque de gravamen. Los demás bloques se mantienen en su orden; en `MATRICULA_LEASING` (y en `TRASPASO_UNILATERAL`) el bloque 1 de locatario **sí** se imprime completo — `omitir` solo suprime el bloque 3 (gravamen), nunca el del tipo.
+- El dato de gravamen de la consulta RUNT **no** alimenta el FUR: el formulario declara lo que se solicita, no lo que reporta el RUNT.
+
+Fuente: art. 5.1.8 (el FUR acumula los trámites *solicitados*) y 5.3.13.1 (la inscripción de prenda es un trámite propio). Dejar las casillas vacías es **decisión de producto** (Feature #13110; alcance ampliado a toda la familia Matrículas el 2026-09-29). En traspaso, el riesgo del art. 5.3.2.1 num. 3 está aceptado y registrado en el Feature. Código: `PrendaDecision.ToFurMarking` devuelve `FurPrendaMarking.Ninguna`.
 
 ---
 

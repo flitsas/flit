@@ -7,13 +7,13 @@ namespace Flit.Modules.Security.Application.Auth.CreateInvitation;
 
 public sealed partial class CreateInvitationHandler(
     IInvitationRepository invitationRepository,
-    IUserManagementRepository userManagementRepository,
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
     INetworkUrlBaseResolver urlBaseResolver,
     ILogger<CreateInvitationHandler> logger,
-    IEmailThemeResolver? themeResolver = null)
+    IEmailThemeResolver? themeResolver = null,
+    SecurityEmailAssetsOptions? emailAssets = null)
 {
     // HU #12428 — parámetro opcional (patrón NullBrandingCacheInvalidator/NullEmailThemeResolver):
     // los tests que no ejercitan esta historia no cambian su construcción del handler.
@@ -30,15 +30,6 @@ public sealed partial class CreateInvitationHandler(
         var roleIds = command.RoleIds?.Distinct().ToList() ?? [];
         if (roleIds.Count == 0)
             throw new NoRolesSelectedException();
-
-        // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted: uq_users_email es un
-        // índice único GLOBAL (no parcial por deleted_at), así que ese correo sigue "ocupado" en
-        // BD aunque IInvitationRepository.UserExistsWithEmailAsync (que SÍ filtra DeletedAt ==
-        // null) reporte que "no existe". Sin este chequeo la invitación se crearía igual y solo
-        // fallaría al activarla, con un error crudo de constraint de BD.
-        var existingByEmail = await userManagementRepository.FindByEmailIncludingDeletedAsync(email, cancellationToken);
-        if (existingByEmail is { IsDeleted: true })
-            throw new UserEmailBelongsToDeletedAccountException();
 
         foreach (var roleId in roleIds)
         {
@@ -71,7 +62,7 @@ public sealed partial class CreateInvitationHandler(
         var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         // HU #12428 AC1/AC8 — tema por la red del tenant destino (cabeza, hija o FLIT).
         var theme = await _themeResolver.ResolveAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = InvitationEmailTemplate.Compose(command.FullName, link, theme: theme);
+        var composed = InvitationEmailTemplate.Compose(command.FullName, link, SecurityEmailAssets.BaseOrNull(emailAssets), theme);
         // HU #11363 AC1 — id estable del catálogo (TemplateIds.Invitation en Flit.Infrastructure);
         // comparte plantilla con ResendInvitationHandler (dos disparadores, una sola entrada).
         var message = new EmailMessage(command.TenantId, "security.invitation", email, email, composed.Subject, composed.HtmlBody)

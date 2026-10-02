@@ -229,4 +229,19 @@ public sealed class FurNumeral3MarksTests
             new FurTransformacionesDeclaradas(Combustible: true))
             .Should().BeEquivalentTo([2, 12, 18]);
     }
+    // ── Feature #13110 — «Omitir prenda»: la tabla 2 no suma (ni 11 ni 12) ─────────────────────
+
+    [Fact]
+    public void MatriculaInicial_SinPrenda_SoloCasilla1()
+    {
+        Marks("MATRICULA_NUEVA", "MATRICULAS", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
+            .Should().Equal(1);
+    }
+
+    [Fact]
+    public void Traspaso_SinPrenda_SoloCasilla2()
+    {
+        Marks("TRASPASO_STANDARD", "TRASPASO", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
+            .Should().Equal(2);
+    }
 }

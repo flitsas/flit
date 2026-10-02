@@ -1758,55 +1758,43 @@ public sealed class GenerarFurHandler(
         && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
 
     /// <summary>
-    /// Validación Kyverum del actor concreto (documento del sujeto). Sin actor, cae al primer bio
-    /// aprobado del rol (comportamiento legacy de un certificado por parte).
+    /// Validación Kyverum del actor concreto (documento del sujeto). Sin actor explícito se usa el
+    /// PRIMER actor del rol —su documento—, nunca «el primer bio aprobado del rol».
     /// </summary>
+    /// <remarks>
+    /// Bug #13194 (P4, D4) — fail-closed. Antes, sin actor (o sin documento usable) se tomaba la primera
+    /// validación Kyverum aprobada del ROL sin mirar de quién era: el certificado de OTRA persona del mismo
+    /// tenant podía terminar estampado en el FUR. Ahora la validación local tiene que coincidir en
+    /// documento con el sujeto, y si el sujeto no tiene documento no hay certificado que descargar.
+    /// </remarks>
     private async Task<ProcedureInstanceBiometricValidation?> ResolveKyverumBioForActorAsync(
         ProcedureInstance instance,
         string role,
         ProcedureInstanceActor? actor,
         CancellationToken ct)
     {
-        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
-        if (subject is not null
-            && !string.IsNullOrWhiteSpace(subject.TipoDocumento)
-            && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-        {
-            var doc = subject.NumeroDocumento.Trim();
-            var bio = instance.BiometricValidations.FirstOrDefault(v =>
-                string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
-                && EsKyverumConId(v)
-                && string.Equals(v.DocumentNumber?.Trim(), doc, StringComparison.OrdinalIgnoreCase));
-
-            if (bio is not null)
-                return bio;
-
-            var source = await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, subject.TipoDocumento.Trim(), doc, DateTimeOffset.UtcNow, ct);
-            return source is not null && EsKyverumConId(source) ? source : null;
-        }
-
-        // Sin actor (o sin documento usable): primer bio del rol, como antes.
-        var porRol = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
-        if (porRol is not null)
-            return porRol;
-
-        var actorRol = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-        var subjectRol = actorRol is null ? null : IdentitySubjectResolver.For(actorRol);
-        if (subjectRol is null
-            || string.IsNullOrWhiteSpace(subjectRol.TipoDocumento)
-            || string.IsNullOrWhiteSpace(subjectRol.NumeroDocumento))
+        var sujetoActor = actor ?? instance.Actors
+            .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Ordinal)
+            .FirstOrDefault();
+        var subject = sujetoActor is null ? null : IdentitySubjectResolver.For(sujetoActor);
+        if (subject is null
+            || string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             return null;
 
-        var vigente = await repo.FindVigenteApprovedByDocumentAsync(
-            instance.TenantId,
-            subjectRol.TipoDocumento.Trim(),
-            subjectRol.NumeroDocumento.Trim(),
-            DateTimeOffset.UtcNow,
-            ct);
-        return vigente is not null && EsKyverumConId(vigente) ? vigente : null;
+        var doc = subject.NumeroDocumento.Trim();
+        var bio = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
+            && EsKyverumConId(v)
+            && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, doc));
+
+        if (bio is not null)
+            return bio;
+
+        var source = await repo.FindVigenteApprovedByDocumentAsync(
+            instance.TenantId, subject.TipoDocumento.Trim(), doc, DateTimeOffset.UtcNow, ct);
+        return source is not null && EsKyverumConId(source) ? source : null;
     }
 
     /// <summary>

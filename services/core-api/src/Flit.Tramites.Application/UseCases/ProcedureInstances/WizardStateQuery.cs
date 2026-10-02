@@ -56,8 +56,9 @@ public sealed record WizardStateDto(
     IReadOnlyList<string> AllowedTransitions)
 {
     /// <summary>
-    /// HU #10548 — si el OT destino tiene la validación de identidad deshabilitada, es <c>false</c>
-    /// y el frontend oculta el paso de identidad (AC3 / HU #10549). Default <c>true</c> (se exige).
+    /// HU #10548 — antes era <c>false</c> si el OT destino deshabilitaba la validación de identidad, y
+    /// el frontend ocultaba el paso. Bug #13194 (P4, D2): la identidad (firma) se exige SIEMPRE, así que
+    /// viaja siempre en <c>true</c>. Se conserva en el contrato por compatibilidad (deprecado).
     /// </summary>
     public bool IdentityValidationEnabled { get; init; } = true;
 
@@ -103,6 +104,16 @@ public sealed record WizardStateDto(
     /// flag para pintar Obligatorio/Opcional en la carga del certificado.
     /// </summary>
     public bool PrendaDocumentRequired { get; init; } = true;
+
+    /// <summary>
+    /// Feature #13110 — el wizard puede ofrecer «Omitir prenda» (<c>omitir</c>). <c>true</c> solo si la
+    /// decisión de prenda aplica al trámite (<see cref="WizardCapabilitiesDto.HasPrendaGate"/>: tipo
+    /// prendario o gravamen reportado por el RUNT) y <see cref="PrendaDecision.OmitirAdmitido"/> la
+    /// admite: en la familia Matrículas siempre; en Traspaso y el resto, solo con el certificado de prenda
+    /// opcional en el OT (<see cref="PrendaDocumentRequired"/> = <c>false</c>). Es la misma regla que
+    /// aplica el PUT de prenda: el asistente recibe la respuesta y no la replica.
+    /// </summary>
+    public bool PrendaOmitAllowed { get; init; }
 
     /// <summary>
     /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
@@ -267,7 +278,9 @@ public sealed record WizardCapabilitiesDto(
 /// </summary>
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
+#pragma warning disable CS9113 // Bug #13194 (D2): se conserva la firma (DI y llamadores); la identidad ya no se relaja por OT.
     IIdentityValidationPolicy? identityPolicy = null,
+#pragma warning restore CS9113
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     ISignatureVaultPolicy? vaultPolicy = null,
     IConsultationBlockingPolicy? blockingPolicy = null,
@@ -291,10 +304,6 @@ public sealed class GetWizardStateHandler(
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → camino estático).
     private readonly IDynamicProceduresPolicy _dynamicPolicy =
         dynamicPolicy ?? NullDynamicProceduresPolicy.Instance;
-
-    // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
-    private readonly IIdentityValidationPolicy _identityPolicy =
-        identityPolicy ?? NullIdentityValidationPolicy.Instance;
 
     // ADR-0025 §4 / HU #10645 — baúl de firmas: un actor NIT cubierto cuenta como identidad aprobada.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
@@ -358,13 +367,11 @@ public sealed class GetWizardStateHandler(
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
 
-        // HU #10548 — si el OT destino deshabilita la identidad, se trata como satisfecha (el paso no
-        // bloquea el submit) y se expone el flag para que el wizard oculte el paso (AC3 / HU #10549).
-        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
-            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct);
-        var partesEfectivas = identityRequired
-            ? identidadAprobada
-            : IdentitySatisfiedForAllParties(identidadAprobada);
+        // Bug #13194 (P4, D2) — «no se permite enviar al OT trámites sin firmar»: la identidad se exige
+        // SIEMPRE, también si el OT destino la deshabilitó (HU #10548 ya no relaja). El paso de identidad
+        // se muestra y bloquea igual que en cualquier OT, en paridad con el gate de TramiteLifecycleService.
+        const bool identityRequired = true;
+        var partesEfectivas = identidadAprobada;
 
         // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
         var docsCompletos = matrixCompleteness is null
@@ -428,23 +435,40 @@ public sealed class GetWizardStateHandler(
                         IdentityValidationEnabled = identityRequired,
                         RnmcEnabled = rnmcEnabled,
                         PrendaDocumentRequired = prendaDocumentRequired,
+                        PrendaOmitAllowed = ResolvePrendaOmitAllowed(
+                            dynamicState, instance, prendaDocumentRequired),
                     },
                     instance), null);
             }
         }
 
+        var staticState = ComputeState(
+            instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
+            runtExigido);
         var state = AnnotateInstanceFlags(
-            ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
-                runtExigido) with
+            staticState with
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
                 PrendaDocumentRequired = prendaDocumentRequired,
+                PrendaOmitAllowed = ResolvePrendaOmitAllowed(
+                    staticState, instance, prendaDocumentRequired),
             },
             instance);
         return (state, null);
     }
+
+    /// <summary>
+    /// Feature #13110 — <see cref="WizardStateDto.PrendaOmitAllowed"/>: la decisión de prenda aplica (el
+    /// <c>HasPrendaGate</c> que ya viaja en las capacidades, derivado del tipo y del gravamen RUNT) y
+    /// <see cref="PrendaDecision.OmitirAdmitido"/> lo permite para la familia y la política del OT. La
+    /// familia se lee null-safe: sin el tipo cargado cae a OTROS (no es matrícula), igual que el PUT.
+    /// </summary>
+    private static bool ResolvePrendaOmitAllowed(
+        WizardStateDto state, ProcedureInstance instance, bool prendaDocumentRequired) =>
+        (state.Capabilities?.HasPrendaGate ?? false)
+        && PrendaDecision.OmitirAdmitido(
+            ProcedureFamilyCodes.FromCodeOrOtros(instance.ProcedureType?.Family), prendaDocumentRequired);
 
     /// <summary>
     /// Política compañía+OT del certificado de prenda (snapshot al <see cref="ProcedureInstance.CreatedAt"/>).
@@ -705,7 +729,7 @@ public sealed class GetWizardStateHandler(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
             DocumentRequirements = documentRequirements,
             PrendaVigente = prendaVigente,
-            RuntReportaGravamen = RuntReportaGravamen(fv),
+            RuntReportaGravamen = RuntReportaGravamen(instance),
             TypeCode = instance.ProcedureType?.Code,
             FamilyCode = instance.ProcedureType?.Family,
             AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
@@ -885,22 +909,13 @@ public sealed class GetWizardStateHandler(
     /// (Kyverum, Verifik, Intempo) en <c>field_values</c>, que es también de donde el asistente saca
     /// la alerta amarilla y el detalle del acreedor: pantalla y gate leen el MISMO dato.
     ///
-    /// <para>El RUNT contesta «SI»/«NO» en texto. Se acepta cualquier variante afirmativa razonable y
-    /// se ignora el resto: un dato ausente o ilegible NO inventa un gravamen —eso convertiría cada
-    /// consulta fallida en un bloqueo— pero tampoco lo oculta cuando sí vino.</para>
+    /// <para>Bug #13203 — la regla vive en <see cref="RuntGravamenSignal"/>: banderas afirmativas O
+    /// <c>runt_gravamenes</c> con al menos una garantía (el RUNT puede decir «NO»/«NO» y traer una
+    /// garantía mobiliaria del RNGM). Se evalúa sobre la instancia y no sobre el diccionario de
+    /// <c>ValueText</c>, porque el detalle vive en <c>ValueJson</c>.</para>
     /// </summary>
-    private static bool RuntReportaGravamen(Dictionary<string, string?> fv) =>
-        EsAfirmativo(Get(fv, "runt_tiene_prendas")) || EsAfirmativo(Get(fv, "runt_tiene_gravamenes"));
-
-    /// <inheritdoc cref="RuntReportaGravamen(Dictionary{string, string})"/>
     private static bool RuntReportaGravamen(ProcedureInstance instance) =>
-        instance.FieldValues.Any(f =>
-            (string.Equals(f.FieldKey, "runt_tiene_prendas", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(f.FieldKey, "runt_tiene_gravamenes", StringComparison.OrdinalIgnoreCase))
-            && EsAfirmativo(f.ValueText));
-
-    private static bool EsAfirmativo(string? valor) =>
-        valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
+        RuntGravamenSignal.Reporta(instance.FieldValues);
 
     private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
         string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);
@@ -917,10 +932,6 @@ public sealed class GetWizardStateHandler(
         "prenda_decision" => "Prenda",
         _ => "Datos",
     };
-
-    /// <summary>Une comprador y vendedor al set aprobado (identidad deshabilitada, HU #10548).</summary>
-    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
-        new(approved, StringComparer.OrdinalIgnoreCase) { "comprador", "vendedor" };
 
     /// <summary>Id del OT elegido en el FUR (field_value <c>transit_office_id</c>), o null.</summary>
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)

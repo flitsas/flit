@@ -1438,8 +1438,11 @@ export interface WizardState {
   /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
   allowedTransitions: string[];
   /**
-   * HU #10549 — si el OT destino tiene la validación de identidad deshabilitada es `false` y el
-   * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
+   * HU #10549 — si el OT destino tenía la validación de identidad deshabilitada llegaba en `false` y
+   * el wizard ocultaba el paso de identidad.
+   *
+   * @deprecated Bug #13194 (P4) — la firma se exige siempre: el backend lo manda siempre en `true` y
+   * la UI ya no lo lee (el paso de identidad se muestra siempre). Se conserva solo por compatibilidad.
    */
   identityValidationEnabled?: boolean;
   /**
@@ -1471,6 +1474,13 @@ export interface WizardState {
    * el trámite). Ausente ⇒ se trata como obligatorio.
    */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda»: hay gravamen RUNT y la
+   * familia lo admite (Matrícula Inicial siempre; Traspaso y el resto solo con el certificado de
+   * prenda opcional en el OT, CF-06). El front no replica la regla: solo lee este booleano.
+   * Ausente ⇒ compatibilidad con clientes previos (traspaso: `!prendaDocumentRequired`; matrícula: no).
+   */
+  prendaOmitAllowed?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──

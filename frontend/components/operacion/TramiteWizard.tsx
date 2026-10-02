@@ -297,7 +297,10 @@ function isIdentityApproved(steps: WizardStep[]): boolean {
     return !firma.reasons.includes('pendiente_biometria');
   }
 
-  // HU #10549 — sin paso de identidad (el OT la deshabilitó y el wizard lo ocultó) ⇒ no se exige.
+  // Sin paso de identidad ni de firma: el recorrido no tiene dónde capturarla, así que el cliente no
+  // la exige (el gate de firma del backend sigue mandando al radicar). Bug #13194 (P4): el paso de
+  // identidad ya NO se oculta por la configuración del OT (useWizard), así que esta rama dejó de
+  // cubrir el caso «OT sin validación de identidad».
   return true;
 }
 
@@ -1420,8 +1423,8 @@ export function TramiteWizard(props: Props) {
     (activeStep?.key === 'consulta_vin' && !secretariaListaGateOk) ||
     // Trámites simultáneos incompletos (valor vacío o sin soporte): no Continuar.
     (isPrendaStep && !simultaneosGateOk) ||
-    // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos; si el tipo es PÚBLICO,
-    // tampoco hasta que la consulta devuelva la razón social de la empresa vinculadora (casilla 19).
+    // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos. La empresa vinculadora
+    // (casilla 19) es opcional con PÚBLICO desde el Bug #13194 (aviso normativo, no bloquea).
     // ADR-0050 — se ata a `caps.entraPorVin` (trámites que matriculan), no a «no es traspaso».
     (activeStep?.key === 'documentos' && caps.entraPorVin && !tipoServicioGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
@@ -1989,6 +1992,7 @@ export function TramiteWizard(props: Props) {
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
                 esMigrado={wizard?.esMigrado ?? false}
                 prendaDocumentRequired={wizard?.prendaDocumentRequired ?? true}
+                prendaOmitAllowed={wizard?.prendaOmitAllowed}
                 onPrendaDocumentGateChange={setPrendaDocGateOk}
                 deferredFamily={deferredCreation ? entryFamily : undefined}
                 onSimultaneosGateChange={setSimultaneosGateOk}
@@ -4644,6 +4648,7 @@ function StepBody({
   rnmcEnabled = false,
   esMigrado = false,
   prendaDocumentRequired = true,
+  prendaOmitAllowed,
   onPrendaDocumentGateChange,
   deferredFamily,
   onSimultaneosGateChange,
@@ -4681,7 +4686,7 @@ function StepBody({
   /** HU #10536 — marca de prioridad del paso 1; se aplica al crear el trámite. */
   prioritario?: boolean;
   onPrioritarioChange?: (value: boolean) => void;
-  /** Gate Continuar: tipo de servicio (+ empresa vinculadora si es PÚBLICO) completo en requisitos. */
+  /** Gate Continuar: tipo de servicio elegido en requisitos (empresa vinculadora opcional, Bug #13194). */
   onTipoServicioGateChange?: (ok: boolean) => void;
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;
@@ -4713,6 +4718,11 @@ function StepBody({
   esMigrado?: boolean;
   /** Compañía+OT: certificado de prenda obligatorio (default) u opcional. */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda» (`prendaOmitAllowed`).
+   * `undefined` ⇒ compatibilidad: traspaso con `!prendaDocumentRequired`, matrícula sin omitir.
+   */
+  prendaOmitAllowed?: boolean;
   /** Gate Continuar: certificado de prenda listo (o no exigible). */
   onPrendaDocumentGateChange?: (ready: boolean) => void;
   /** Gate Continuar: trámites simultáneos con valor + adjunto (o ninguno activo). */
@@ -4847,8 +4857,11 @@ function StepBody({
                           onSaved={onRefresh}
                           embeddedInWizard
                           modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                          decisions={esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined}
+                          decisions={
+                            esPuerta ? traspasoDecisions(prendaDocumentRequired, prendaOmitAllowed) : undefined
+                          }
                           documentRequired={prendaDocumentRequired}
+                          omitAllowed={prendaOmitAllowed}
                           onDocumentGateChange={onPrendaDocumentGateChange}
                           runtHasGravamen={runtHasPrendaInfo}
                           runtGravamenMessage={gravamen?.message}
@@ -4930,9 +4943,12 @@ function StepBody({
                             modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
                             decisions={
                               decisionesDelTipo ??
-                              (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
+                              (esPuerta
+                                ? traspasoDecisions(prendaDocumentRequired, prendaOmitAllowed)
+                                : undefined)
                             }
                             documentRequired={documentoObligatorio}
+                            omitAllowed={prendaOmitAllowed}
                             exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
                             // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
                             // admiten declarar la acción complementaria en la misma radicación.

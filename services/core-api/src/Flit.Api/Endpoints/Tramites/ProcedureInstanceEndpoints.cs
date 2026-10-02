@@ -485,6 +485,8 @@ internal static class ProcedureInstanceEndpoints
                 // ADR-0050 — la familia OTROS no acumula trámites simultáneos: el cambio ES el trámite.
                 PatchFieldValuesHandler.ComplementoNoAdmitidoError => Results.Problem(statusCode: 409, title: PatchFieldValuesHandler.ComplementoNoAdmitidoError, detail: "Este tipo de trámite no admite declarar otra transformación del vehículo: radica un trámite aparte para ese cambio."),
                 "unknown_field" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "field_key no corresponde a ningún campo del tipo de trámite."),
+                // Bug #13194 — soat_estado/soat_vencimiento los escribe el sistema (RUNT u OCR del PDF).
+                PatchFieldValuesHandler.ClaveDeSistemaError => Results.Problem(statusCode: 400, title: PatchFieldValuesHandler.ClaveDeSistemaError, detail: "El estado y el vencimiento del SOAT los registra el sistema: valida el SOAT ante el RUNT o carga el PDF."),
                 _ => Results.Ok(result)
             };
         }).WithName("PatchProcedureInstanceFieldValues");
@@ -508,7 +510,9 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden escribir field_values en borrador o subsanación."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden escribir field_values en borrador o subsanación (en 'asignado', solo el OCR del SOAT)."),
+                // Bug #13194 — en 'asignado' la lectura del SOAT exige el PDF cargado en el trámite.
+                PersistOcrFieldsHandler.SoporteSoatRequeridoError => Results.Problem(statusCode: 409, title: PersistOcrFieldsHandler.SoporteSoatRequeridoError, detail: "Carga primero el PDF del SOAT en el trámite para registrar su lectura."),
                 "tipo_no_soportado" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tipo de documento no tiene campos persistibles por OCR."),
                 "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el tipo de documento."),
                 _ => Results.Ok(result)
@@ -536,8 +540,8 @@ internal static class ProcedureInstanceEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "prenda_decision_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "La decisión de prenda no es válida (solicitar|registrar|levantar|omitir|sin_prenda)."),
-                // CF-06 (HU #10881) — el organismo exige el certificado: "asumo el riesgo" no es una
-                // elección disponible en ese trámite. 409 y no 400: la decisión es válida en general,
+                // CF-06 (HU #10881) — el organismo exige el certificado: «Omitir prenda» no es una
+                // elección disponible en ese trámite (salvo la familia Matrículas, Feature #13110). 409 y no 400: la decisión es válida en general,
                 // lo que choca es la regla del OT.
                 RegistrarPrendaHandler.OmitirNoAdmitidoError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.OmitirNoAdmitidoError, detail: "El organismo de tránsito exige el certificado de prenda: registra o levanta la prenda, o declara que el vehículo no tiene."),
                 // ADR-0050 — el tipo no tiene dimensión de gravamen (familia OTROS que no es de prenda).
@@ -639,6 +643,7 @@ internal static class ProcedureInstanceEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             HttpContext http,
             SubmitProcedureInstanceHandler handler,
+            UltimoBloqueoFirma bloqueoFirma,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -659,7 +664,10 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "procedure_type_not_enabled" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tipo de trámite todavía no está habilitado para crearse. Contacta al administrador."),
                 TramiteEstadoErrores.DocumentosIncompletos => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.DocumentosIncompletos, detail: "Faltan documentos obligatorios para radicar."),
-                TramiteEstadoErrores.IdentidadNoAprobada => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.IdentidadNoAprobada, detail: "La validación de identidad no está aprobada o no está vigente."),
+                // Bug #13194 (MAYOR-1) — preparar desde borrador también notifica: lleva `partesSinFirma`.
+                TramiteEstadoErrores.IdentidadNoAprobada => FirmaPendienteProblem.Crear(TramiteEstadoErrores.IdentidadNoAprobada, "La validación de identidad no está aprobada o no está vigente.", bloqueoFirma.PartesSinFirma),
+                // Bug #13194 (P4, D2) — gate de firma: no se envía al OT un trámite sin firmar (siempre).
+                TramiteEstadoErrores.FirmaPendiente => FirmaPendienteProblem.Crear(TramiteEstadoErrores.FirmaPendiente, null, bloqueoFirma.PartesSinFirma),
                 // HU #10459 — gate completo de traspaso: la firma de compraventa bloquea la radicación.
                 SubmitGate.FirmaCompraventaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.FirmaCompraventaRequerida, detail: "Falta la firma del contrato de compraventa de comprador y vendedor."),
                 "fur_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes de radicar."),
@@ -755,6 +763,7 @@ internal static class ProcedureInstanceEndpoints
             HttpContext http,
             EnviarAlOtRequest? body,
             EnviarAlOtHandler handler,
+            UltimoBloqueoFirma bloqueoFirma,
             CancellationToken ct)
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -768,6 +777,9 @@ internal static class ProcedureInstanceEndpoints
                 TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(
                     statusCode: 422, title: TramiteEstadoErrores.TransicionNoPermitida,
                     detail: "Solo se puede enviar al organismo de tránsito un trámite con placa asignada (estado Asignado)."),
+                // Bug #13194 (P4, D2) — gate de firma: no se envía al OT un trámite sin firmar.
+                TramiteEstadoErrores.FirmaPendiente => FirmaPendienteProblem.Crear(
+                    TramiteEstadoErrores.FirmaPendiente, null, bloqueoFirma.PartesSinFirma),
                 EnviarAlOtHandler.SoatNoVigente => Results.Problem(
                     statusCode: 409, title: EnviarAlOtHandler.SoatNoVigente,
                     detail: "El RUNT no reporta un SOAT vigente para el vehículo. La compañía tiene "
@@ -795,7 +807,8 @@ internal static class ProcedureInstanceEndpoints
             HttpContext http,
             EnviarAlOtRequest? body,
             EnviarAlOtHandler handler,
-            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, ct))
+            UltimoBloqueoFirma bloqueoFirma,
+            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, bloqueoFirma, ct))
             .WithName("EnviarAlOt");
 
         group.MapPost("/instances/{id:guid}/plate-flow/complete", (
@@ -804,7 +817,8 @@ internal static class ProcedureInstanceEndpoints
             HttpContext http,
             EnviarAlOtRequest? body,
             EnviarAlOtHandler handler,
-            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, ct))
+            UltimoBloqueoFirma bloqueoFirma,
+            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, bloqueoFirma, ct))
             .WithName("CompletePlateFlow");
 
         // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
@@ -870,6 +884,7 @@ internal static class ProcedureInstanceEndpoints
             TransitionProcedureInstanceRequest request,
             HttpContext http,
             TransitionProcedureInstanceHandler handler,
+            UltimoBloqueoFirma bloqueoFirma,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -904,6 +919,9 @@ internal static class ProcedureInstanceEndpoints
                 // organismo o la compañía registran un mandatario.
                 TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida =>
                     MandatarioGateProblem.For(errorCode, errorDetail),
+                // Bug #13194 (P4, D2) — gate de firma (409): el detalle nombra las partes sin firmar.
+                TramiteEstadoErrores.FirmaPendiente =>
+                    FirmaPendienteProblem.Crear(errorCode, errorDetail, bloqueoFirma.PartesSinFirma),
                 _ => Results.Problem(
                     statusCode: 422, title: errorCode,
                     detail: errorDetail ?? "La transición solicitada no es válida."),

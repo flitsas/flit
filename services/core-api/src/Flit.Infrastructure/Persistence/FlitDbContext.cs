@@ -2,6 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Integrations;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
@@ -239,6 +240,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<Banner> Banners => Set<Banner>();
 
+    /// <summary>HU #13084 — clientes de integración externos (<c>integrations.external_clients</c>).</summary>
+    public DbSet<ExternalClient> ExternalClients => Set<ExternalClient>();
+
     public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
 
     public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
@@ -432,10 +436,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         var candidatas = ConsolidadoVigenciaTracker.Candidatas(ChangeTracker);
         var afectadas = base.SaveChanges(acceptAllChangesOnSuccess);
 
-        if (ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
-                .GetAwaiter().GetResult())
+        var tocadas = ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        if (tocadas.Count > 0)
         {
             base.SaveChanges(acceptAllChangesOnSuccess);
+            // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
+            ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
 
         ConsolidadoVigenciaTracker
@@ -453,10 +460,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         var afectadas = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken)
             .ConfigureAwait(false);
 
-        if (await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
-                .ConfigureAwait(false))
+        var tocadas = await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
+            .ConfigureAwait(false);
+        if (tocadas.Count > 0)
         {
             await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+            // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
+            ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
 
         await ConsolidadoVigenciaTracker

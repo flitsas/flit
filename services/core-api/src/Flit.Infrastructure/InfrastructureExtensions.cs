@@ -105,6 +105,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // Bug #13194 (review PR #510, MAYOR-2) — savepoint por trámite en el lote del outbox de identidad.
+        services.AddScoped<ISavepointScope, Persistence.EfSavepointScope>();
         // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
         services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
         // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
@@ -224,6 +226,8 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        // HU #13076 (Épica #12737) — lectura entre compañías del feed de sincronización externa (ámbito exclusivo).
+        services.AddScoped<Flit.Tramites.Domain.ExternalSync.IProcedureSyncReadRepository, ProcedureSyncReadRepository>();
         services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
@@ -305,6 +309,9 @@ public static class InfrastructureExtensions
         services.AddSingleton<IPasswordHasher, Argon2PasswordHasher>();
         services.AddSingleton<IJwtTokenIssuer, RsaJwtTokenIssuer>();
 
+        // HU #13087 — pase de los clientes de integración externos (llave, emisor y audiencia propios).
+        services.AddExternalClientAuth(configuration);
+
         // Recuperación de contraseña (HU #10169): repos, generador de token y email.
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
@@ -354,6 +361,13 @@ public static class InfrastructureExtensions
         services.AddSingleton(Options.Create(emailAssets));
         services.Configure<NotificationEmailAssetsOptions>(
             configuration.GetSection(NotificationEmailAssetsOptions.SectionName));
+        // Bug #13194 — los correos del módulo Security (Application, sin acceso a Infrastructure)
+        // leen la MISMA clave Notifications:EmailAssets:BaseUrl; sin ella, respaldo local del layout.
+        services.AddSingleton(new SecurityEmailAssetsOptions
+        {
+            BaseUrl = configuration.GetSection(SecurityEmailAssetsOptions.SectionName)[nameof(SecurityEmailAssetsOptions.BaseUrl)]
+                ?? string.Empty,
+        });
 
         // SMTP real, o consola en Development cuando no hay host configurado.
         // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son

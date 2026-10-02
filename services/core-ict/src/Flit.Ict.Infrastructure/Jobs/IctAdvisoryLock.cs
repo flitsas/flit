@@ -22,6 +22,14 @@ internal static class IctAdvisoryLock
         public const long Webhook = 4810005;
     }
 
+    /// <summary>
+    /// Ámbito del advisory lock TRANSACCIONAL del register (Bug #13109, punto 7): una clave de
+    /// deduplicación dentro de un tenant. Se pasa por <c>hashtextextended</c> para obtener el bigint; una
+    /// colisión de hash solo serializa dos registros que no chocaban, nunca deja pasar un duplicado.
+    /// </summary>
+    public static string RegisterScope(Guid tenantId, string dedupKey) =>
+        $"ict-register:{tenantId:N}:{dedupKey}";
+
     public static async Task<bool> TryLockAsync(DbConnection connection, long key, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();

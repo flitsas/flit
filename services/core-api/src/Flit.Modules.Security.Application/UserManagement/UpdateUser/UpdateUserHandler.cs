@@ -10,7 +10,8 @@ namespace Flit.Modules.Security.Application.UserManagement.UpdateUser;
 /// AC1: si el nombre y/o correo son válidos y distintos, se persisten.
 /// AC2: correo ya usado por otra cuenta ACTIVA → <see cref="UserAlreadyExistsException"/> (409
 ///      <c>USER_ALREADY_EXISTS</c>, mapeado en el endpoint).
-/// AC3: correo perteneciente a una cuenta soft-deleted → <see cref="UserEmailBelongsToDeletedAccountException"/>.
+/// AC3 (Bug #13194): un correo que solo usa una cuenta soft-deleted está libre — <c>uq_users_email</c>
+///      es parcial por <c>deleted_at IS NULL</c>, así que la cuenta eliminada no lo ocupa.
 /// AC4: <c>RowVersion</c> desactualizado (otro admin ya guardó cambios) → la excepción de
 ///      concurrencia del repositorio se propaga tal cual; el endpoint la mapea a 409.
 /// AC5: no se invalida ninguna sesión activa aquí — es una decisión de diseño explícita: el
@@ -52,13 +53,9 @@ public sealed class UpdateUserHandler(IUserManagementRepository repo)
             // un falso conflicto cuando el admin reenvía el mismo correo actual.
             if (!string.Equals(trimmedEmail, target.Email, StringComparison.OrdinalIgnoreCase))
             {
-                var existing = await repo.FindByEmailIncludingDeletedAsync(trimmedEmail, ct);
+                var existing = await repo.FindLiveByEmailAsync(trimmedEmail, ct);
                 if (existing is not null && existing.UserId != cmd.UserId)
-                {
-                    if (existing.IsDeleted)
-                        throw new UserEmailBelongsToDeletedAccountException();
                     throw new UserAlreadyExistsException();
-                }
 
                 email = trimmedEmail;
             }

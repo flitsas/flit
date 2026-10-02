@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Linq.Expressions;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
@@ -5,6 +6,8 @@ using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.RuntConfirmation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -18,8 +21,12 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedureInstanceRepository
+internal sealed partial class ProcedureInstanceRepository(
+    FlitDbContext db,
+    ILogger<ProcedureInstanceRepository>? logger = null) : IProcedureInstanceRepository
 {
+    // Bug #13194 — opcional (132 construcciones en tests sin logger); en DI lo resuelve el contenedor.
+    private readonly ILogger _logger = logger ?? NullLogger<ProcedureInstanceRepository>.Instance;
     private const string ReferenceUniqueConstraint = "uq_procedure_instances_tenant_reference";
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -286,24 +293,65 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.ProcedureType)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
-    public async Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
-        Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct)
+    public async Task<IReadOnlyList<ProcedureInstance>> ListPendientesDeFirmaPorSujetoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct)
     {
+        // Bug #13194 (review PR #510, MENOR-5) — tipo y número se comparan SIN distinguir mayúsculas
+        // (el consumidor filtra después en memoria con OrdinalIgnoreCase; aquí no se puede perder un trámite
+        // por un «cc» frente a «CC»). Columnas: upper() sobre ambos lados.
+        var tipoUpper = tipoDoc.Trim().ToUpperInvariant();
+        var documentoUpper = documento.Trim().ToUpperInvariant();
+
+        // Persona jurídica: el sujeto es el representante legal en actor.metadata (jsonb, camelCase como
+        // lo serializa ActorMetadataReader). `@>` distingue mayúsculas: se prueba el documento tal cual, en
+        // MAYÚSCULAS y en minúsculas. Parametrizado, sin concatenar SQL.
+        static string Representante(string t, string d) => JsonSerializer.Serialize(new
+        {
+            representanteLegal = new { tipoDocumento = t, numeroDocumento = d },
+        });
+        var representanteTalCual = Representante(tipoDoc.Trim(), documento.Trim());
+        var representanteMayus = Representante(tipoUpper, documentoUpper);
+        var representanteMinus = Representante(tipoDoc.Trim().ToLowerInvariant(), documento.Trim().ToLowerInvariant());
+        var radicadosPendientes = TramiteFirmaPendiente.EstadosRadicadosPendientes.ToList();
+
         return await db.ProcedureInstances
             // ADR-0050 — el consumidor lee `instance.Family` para decidir el reparto por partes.
             .Include(i => i.ProcedureType)
             .Include(i => i.Actors)
+            // Review PR #510 (MAYOR-2 ii) — el consumidor omite lo ya firmado: FUR vigente posterior a la
+            // aprobación (adjuntos) o compraventa firmada por la parte (firmas).
+            .Include(i => i.Attachments)
+            .Include(i => i.Signatures)
+            .AsSplitQuery()
             .Where(i => i.TenantId == tenantId
-                && i.Status == TramiteEstado.Borrador
-                && i.DraftFinalizedAt != null
                 && i.DeletedAt == null
+                && ((i.Status == TramiteEstado.Borrador && i.DraftFinalizedAt != null)
+                    || (i.Status == TramiteEstado.Rechazado && i.SubsanacionActiva)
+                    || radicadosPendientes.Contains(i.Status))
                 && i.Actors.Any(a =>
-                    a.ActorType == parte
-                    && a.DocumentType == tipoDoc
-                    && a.DocumentNumber == documento))
+                    (a.ActorType == BiometricRules.ParteComprador || a.ActorType == BiometricRules.ParteVendedor)
+                    && ((a.DocumentType.ToUpper() == tipoUpper && a.DocumentNumber.ToUpper() == documentoUpper)
+                        || EF.Functions.JsonContains(a.Metadata, representanteTalCual)
+                        || EF.Functions.JsonContains(a.Metadata, representanteMayus)
+                        || EF.Functions.JsonContains(a.Metadata, representanteMinus))))
             .OrderBy(i => i.DraftFinalizedAt)
             .ThenBy(i => i.Consecutivo)
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlySet<Guid>> ListInstanceIdsConEventoDeValidacionAsync(
+        Guid tenantId, string tipo, Guid validationId, CancellationToken ct)
+    {
+        var correlacion = JsonSerializer.Serialize(new { validation_id = validationId });
+        var ids = await db.ProcedureInstanceEvents
+            .AsNoTracking()
+            .Where(e => e.TenantId == tenantId
+                && e.Tipo == tipo
+                && EF.Functions.JsonContains(e.Payload, correlacion))
+            .Select(e => e.ProcedureInstanceId)
+            .Distinct()
+            .ToListAsync(ct);
+        return ids.ToHashSet();
     }
 
     public Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct) =>
@@ -469,9 +517,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             return new Dictionary<string, bool>();
 
         var distinct = tenantIds.Distinct().ToList();
+
+        // Bug #13194 (P4, D1) — el interruptor «Baúl de firmas activo» de la compañía MANDA: solo
+        // cuentan las firmas de tenants con signature_vault_enabled activo, igual que en el paso de
+        // identidad y el gate (SignatureVaultPolicy.ResolveAsync). Sin fila de configuración = apagado.
+        // Es un filtro (subconsulta) en la MISMA consulta: sin N+1 ni lectura extra por tenant.
+        var tenantsConBaul = db.TenantOperationalPolicies
+            .Where(p => p.SignatureVaultEnabled)
+            .Select(p => p.TenantId);
+
         var rows = await db.SignatureVault
             .AsNoTracking()
-            .Where(v => distinct.Contains(v.TenantId))
+            .Where(v => distinct.Contains(v.TenantId) && tenantsConBaul.Contains(v.TenantId))
             .Select(v => new { v.TenantId, v.DocumentType, v.DocumentNumber, v.Estado, v.VigenciaDesde, v.VigenciaHasta })
             .ToListAsync(ct);
 
@@ -576,12 +633,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
-                // Bug #13055 — ni las de un trámite anulado o revocado (misma cláusula que WhereInstanciaVigente).
                 && (v.ProcedureInstanceId == null
-                    || (v.ProcedureInstance != null
-                        && v.ProcedureInstance.DeletedAt == null
-                        && v.ProcedureInstance.Status != TramiteEstado.Anulado
-                        && v.ProcedureInstance.Status != TramiteEstado.Revocado)))
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .ToListAsync(ct);
 
         foreach (var v in candidates)
@@ -1846,11 +1899,25 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             return true;
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateConcurrencyException ex)
         {
+            // Bug #13194 — antes se tragaba sin rastro y un 409 «conflicto_concurrencia» persistente no
+            // era diagnosticable. Solo tipo de entidad e id (sin valores: pueden llevar PII).
+            foreach (var entry in ex.Entries)
+            {
+                var id = entry.Metadata.FindPrimaryKey()?.Properties
+                    .Select(p => entry.Property(p.Name).CurrentValue?.ToString())
+                    .FirstOrDefault() ?? "?";
+                LogConflictoConcurrencia(_logger, entry.Metadata.ClrType.Name, id);
+            }
+
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Conflicto de concurrencia optimista al guardar {Entidad} {EntidadId}: el guardado se descartó (row_version desactualizado u otro escritor).")]
+    private static partial void LogConflictoConcurrencia(ILogger logger, string entidad, string entidadId);
 
     public async Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct)

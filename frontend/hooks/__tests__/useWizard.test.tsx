@@ -1,4 +1,7 @@
-// HU #10549 — el wizard oculta el paso de identidad cuando el OT la deshabilita.
+// HU #10549 — el wizard ocultaba el paso de identidad cuando el OT la deshabilitaba.
+// Bug #13194 (P4) — decisión: la firma se exige SIEMPRE, también en OT sin VID. El paso 4 se muestra
+// aunque `identityValidationEnabled` llegue en false (flag deprecado; el backend lo manda en true).
+// Uso de ejemplo: useWizard('inst-1').steps → incluye siempre { key: 'identidad' }
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useWizard } from "../useWizard";
@@ -37,13 +40,18 @@ describe("useWizard — HU #10549", () => {
     vi.clearAllMocks();
   });
 
-  it("oculta el paso de identidad cuando identityValidationEnabled = false", async () => {
+  it("Bug #13194 — conserva el paso de identidad aunque identityValidationEnabled = false", async () => {
     vi.mocked(tramitesClient.getWizardState).mockResolvedValue(wizard(false));
     const { result } = renderHook(() => useWizard("inst-1"));
 
-    await waitFor(() => expect(result.current.steps.length).toBe(4));
-    expect(result.current.steps.some((s) => s.key === "identidad")).toBe(false);
-    expect(result.current.steps.some((s) => s.key === "fur")).toBe(true);
+    await waitFor(() => expect(result.current.steps.length).toBe(5));
+    expect(result.current.steps.map((s) => s.key)).toEqual([
+      "consulta_vin",
+      "documentos",
+      "comprador",
+      "identidad",
+      "fur",
+    ]);
   });
 
   it("conserva el paso de identidad cuando la validación está habilitada", async () => {

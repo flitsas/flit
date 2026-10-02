@@ -29,6 +29,11 @@ const mocks = vi.hoisted(() => ({
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
   enviarAlOt: vi.fn(),
+  // Bug #13194 (P3) — soporte del SOAT en asignado desde el modal «Enviar al OT».
+  analyzeDocument: vi.fn(),
+  uploadAttachment: vi.fn(),
+  persistOcrFields: vi.fn(),
+  validateSoatViaRunt: vi.fn(),
   // La tabla consulta la config del tenant al montar (bloqueo de creación por familia y
   // "solo vehículos propios"); sin este mock el efecto revienta y tumba todo el archivo.
   getConsultationConfig: vi.fn(),
@@ -1594,6 +1599,74 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
   });
 });
 
+// Bug #13194 — P4 (gate de firma) y P3 (soporte del SOAT en asignado) desde el modal «Enviar al OT».
+describe('TramitesTable — «Enviar al OT»: firma pendiente y soporte del SOAT (Bug #13194)', () => {
+  const asignado = () => {
+    const [item] = makeInstances(1);
+    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'asignado' } satisfies InstanceSummary;
+  };
+
+  async function abrirYEnviar() {
+    mocks.listInstances.mockResolvedValue([asignado()]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await userEvent.click(await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Enviar al OT' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar al OT' }));
+    return screen.getByRole('dialog', { name: 'Enviar al organismo de tránsito' });
+  }
+
+  it('P4 — 409 firma_pendiente: explica la salida en asignado (módulo Identidad / baúl), no el paso 4', async () => {
+    mocks.enviarAlOt.mockRejectedValue(
+      Object.assign(new Error('x'), {
+        status: 409,
+        problem: { title: 'firma_pendiente', status: 409, detail: 'No se permite enviar…' },
+      }),
+    );
+    const dialog = await abrirYEnviar();
+    const alerta = await within(dialog).findByRole('alert');
+    expect(alerta).toHaveTextContent(/Falta la validación de identidad o firma de una de las partes/);
+    expect(alerta).toHaveTextContent(/módulo Identidad/);
+    expect(alerta).not.toHaveTextContent(/paso 4/);
+    expect(within(dialog).getByRole('button', { name: 'Enviar al OT' })).toBeInTheDocument();
+  });
+
+  it('P3 — 409 soat_no_vigente abre la carga del PDF; al cargarlo registra la lectura y permite reintentar', async () => {
+    mocks.enviarAlOt.mockRejectedValueOnce(
+      Object.assign(new Error('El RUNT no reporta un SOAT vigente para el vehículo.'), {
+        status: 409,
+        problem: { title: 'soat_no_vigente', status: 409 },
+      }),
+    );
+    mocks.analyzeDocument.mockResolvedValue({ ok: true, tipo: 'soat', data: { fecha_vencimiento: '2027-05-01' } });
+    mocks.uploadAttachment.mockResolvedValue({ id: 'att-1' });
+    mocks.persistOcrFields.mockResolvedValue({ persistidos: 1 });
+    mocks.validateSoatViaRunt.mockResolvedValue({
+      vigente: true,
+      soatEstado: 'vigente',
+      vencimiento: null,
+      aseguradora: null,
+      message: 'El RUNT no reporta el SOAT, pero el soporte cargado está vigente: se conserva.',
+    });
+
+    const dialog = await abrirYEnviar();
+    const disclosure = await within(dialog).findByRole('button', { name: /Cargar PDF del SOAT/ });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+
+    const input = within(dialog).getByLabelText(/PDF del SOAT/);
+    await userEvent.upload(input, new File(['%PDF-1.4'], 'soat.pdf', { type: 'application/pdf' }));
+
+    const ok = await within(dialog).findByText(/Ya puedes enviar el trámite al OT/);
+    expect(ok.closest('[role="status"]')).not.toBeNull();
+    expect(mocks.persistOcrFields).toHaveBeenCalledWith('proc1', 'soat', { fecha_vencimiento: '2027-05-01' }, undefined);
+    // El error anterior del SOAT se retira: el siguiente paso es reintentar el envío.
+    expect(within(dialog).queryByText(/no reporta un SOAT vigente/)).toBeNull();
+
+    mocks.enviarAlOt.mockResolvedValue({ instance: null, warningCode: null, warningMessage: null });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enviar al OT' }));
+    await waitFor(() => expect(mocks.enviarAlOt).toHaveBeenCalledTimes(2));
+  });
+});
+
 describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
   it('selecciona varios borradores ICT y los pausa en lote', async () => {
     const [b] = makeInstances(1);
@@ -1614,6 +1687,58 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
+  });
+
+  // Bug #13109 (punto 3) — la barra ofrece la acción que corresponde al estado de la selección,
+  // igual que el menú por fila: nada pausado → Pausar; todo pausado → Reanudar; mezcla → ninguna.
+  async function seleccionarTodas(placa: string) {
+    await screen.findByText(placa);
+    for (const check of screen.getAllByRole('checkbox')) await userEvent.click(check);
+    return screen.getByRole('region', { name: 'Acciones masivas de pausa' });
+  }
+
+  it('Bug #13109 — sin ninguna fila pausada la barra solo ofrece "Pausar"', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'n1', placa: 'NOP001', origin: 'ict', estado: 'borrador', isPaused: false },
+      { ...b, id: 'n2', placa: 'NOP002', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const barra = await seleccionarTodas('NOP001');
+    expect(within(barra).getByRole('button', { name: 'Pausar' })).toBeInTheDocument();
+    expect(within(barra).queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument();
+  });
+
+  it('Bug #13109 — con todas las filas pausadas la barra solo ofrece "Reanudar" y reanuda en lote', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'p1', placa: 'PAU001', origin: 'ict', estado: 'borrador', isPaused: true },
+      { ...b, id: 'p2', placa: 'PAU002', origin: 'ict', estado: 'borrador', isPaused: true },
+    ]);
+    mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const barra = await seleccionarTodas('PAU001');
+    expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
+    await userEvent.click(within(barra).getByRole('button', { name: 'Reanudar' }));
+    expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['p1', 'p2'], false, null, undefined);
+  });
+
+  it('Bug #13109 — con una mezcla de pausadas y no pausadas la barra no ofrece ninguna de las dos', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'x1', placa: 'MIX001', origin: 'ict', estado: 'borrador', isPaused: true },
+      { ...b, id: 'x2', placa: 'MIX002', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const barra = await seleccionarTodas('MIX001');
+    expect(within(barra).getByText('2 seleccionados')).toBeInTheDocument();
+    expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
+    expect(within(barra).queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument();
+    // «Limpiar» sigue disponible para salir de la selección.
+    expect(within(barra).getByRole('button', { name: 'Limpiar' })).toBeInTheDocument();
   });
 });
 

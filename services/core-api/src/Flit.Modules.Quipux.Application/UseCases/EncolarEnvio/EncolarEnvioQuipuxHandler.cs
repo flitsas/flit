@@ -43,6 +43,7 @@ public sealed class EncolarEnvioQuipuxHandler
     private readonly IQuipuxTenantPort _tenants;
     private readonly IQuipuxAuditLog _audit;
     private readonly ILogger<EncolarEnvioQuipuxHandler> _logger;
+    private readonly ITramiteFirmaGate? _firmaGate;
 
     public EncolarEnvioQuipuxHandler(
         IProcedureInstanceRepository instances,
@@ -52,7 +53,8 @@ public sealed class EncolarEnvioQuipuxHandler
         IQuipuxOrganismoPort organismos,
         IQuipuxTenantPort tenants,
         IQuipuxAuditLog audit,
-        ILogger<EncolarEnvioQuipuxHandler> logger)
+        ILogger<EncolarEnvioQuipuxHandler> logger,
+        ITramiteFirmaGate? firmaGate = null)
     {
         _instances = instances ?? throw new ArgumentNullException(nameof(instances));
         _procedureTypes = procedureTypes ?? throw new ArgumentNullException(nameof(procedureTypes));
@@ -62,6 +64,8 @@ public sealed class EncolarEnvioQuipuxHandler
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        // Bug #13194 (P4, D2) — opcional al final: sin gate cableado (tests previos) no se evalúa.
+        _firmaGate = firmaGate;
     }
 
     public async Task<EncolarEnvioQuipuxResult> HandleAsync(
@@ -95,6 +99,20 @@ public sealed class EncolarEnvioQuipuxHandler
         if (!string.Equals(instance.Status, TramiteEstado.Preparado, StringComparison.Ordinal))
         {
             return EncolarEnvioQuipuxResult.NoElegible(EncolarEnvioQuipuxMotivos.EstadoNoPreparado);
+        }
+
+        // Bug #13194 (P4, D2) — «no se permite enviar al OT trámites sin firmar». Encolar ES el envío: la
+        // transición preparado→entregado de Quipux ocurre DESPUÉS de que la secretaría registra el
+        // documento, y ahí ya no se puede bloquear sin dejar un huérfano (Quipux lo tiene, FLIT no). Por
+        // eso el gate corre aquí, antes de crear la submission. Un preparado sin firma (p. ej. preparado
+        // antes de este gate en un OT sin validación de identidad) queda no elegible y se reevalúa en el
+        // próximo ciclo, como cualquier otro motivo: no rompe el lote ni consume intentos.
+        if (_firmaGate is not null)
+        {
+            var sinFirma = await _firmaGate.PartesSinFirmaAsync(
+                command.ProcedureInstanceId, command.TenantId, cancellationToken);
+            if (sinFirma.Count > 0)
+                return EncolarEnvioQuipuxResult.NoElegible(EncolarEnvioQuipuxMotivos.FirmaPendiente);
         }
 
         var procedureType = await _procedureTypes.GetByIdAsync(instance.ProcedureTypeId, cancellationToken);

@@ -37,6 +37,8 @@ import {
 } from '@/lib/tramites/network-scope';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { SoatSoporteAsignado } from './SoatSoporteAsignado';
+import { esErrorFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import {
   TramitesFiltrosBar,
@@ -651,6 +653,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    * queda abierto mostrándola para que el gestor sepa en qué condiciones lo envió al OT.
    */
   const [processWarning, setProcessWarning] = useState<string | null>(null);
+  /** Bug #13194 (P3) — carga del PDF del SOAT desplegada (se abre sola ante 409 soat_no_vigente). */
+  const [soatSoporteAbierto, setSoatSoporteAbierto] = useState(false);
 
   const openProcesar = (item: InstanceSummary) => {
     setProcessTarget(item);
@@ -658,6 +662,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setImpuestoPagado(false);
     setProcessError(null);
     setProcessWarning(null);
+    setSoatSoporteAbierto(false);
   };
 
   const confirmProcesar = async () => {
@@ -684,6 +689,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         setProcessTarget(null);
       }
     } catch (err) {
+      // Bug #13194 (P4) — gate de firma: en asignado el asistente ya no es editable, así que el
+      // mensaje no remite al paso 4 sino a la prevalidación del módulo Identidad o al baúl del RL.
+      if (esErrorFirmaPendiente(err)) {
+        setProcessError(
+          mensajeFirmaPendiente((err as { problem?: Record<string, unknown> | null }).problem, 'asignado'),
+        );
+        return;
+      }
+      // Bug #13194 (P3) — el RUNT no reporta el SOAT y la compañía no deja continuar: la salida es
+      // cargar el PDF del SOAT aquí mismo y reintentar.
+      const code = (err as { problem?: { title?: unknown } | null } | null)?.problem?.title;
+      if (code === 'soat_no_vigente') setSoatSoporteAbierto(true);
       setProcessError(err instanceof Error ? err.message : 'No se pudo enviar el trámite al OT.');
     } finally {
       setProcessActing(false);
@@ -1093,6 +1110,16 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [items, selectedIds, currentTenantId],
   );
 
+  /**
+   * Bug #13109 (punto 3) — como el menú por fila, la barra ofrece una sola acción según el estado
+   * de los propios seleccionados: todos pausados → Reanudar; ninguno → Pausar; mezcla → ninguna.
+   */
+  const pausadosSeleccionados = seleccionPorAlcance.propios.filter((it) => it.isPaused).length;
+  const ofrecePausar = seleccionPorAlcance.propios.length > 0 && pausadosSeleccionados === 0;
+  const ofreceReanudar =
+    seleccionPorAlcance.propios.length > 0 &&
+    pausadosSeleccionados === seleccionPorAlcance.propios.length;
+
   const handleBulkPause = useCallback(
     async (paused: boolean) => {
       if (selectedIds.size === 0) return;
@@ -1460,23 +1487,23 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             </span>
             {/* HU #12362 (AC6) — las acciones solo existen si hay trámites PROPIOS en la selección;
                 los de la red se cuentan aparte, con su motivo, para que la exclusión no sea muda. */}
-            {seleccionPorAlcance.propios.length > 0 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void handleBulkPause(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
-                >
-                  <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleBulkPause(false)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                >
-                  <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
-                </button>
-              </>
+            {ofrecePausar ? (
+              <button
+                type="button"
+                onClick={() => void handleBulkPause(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+              >
+                <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+              </button>
+            ) : null}
+            {ofreceReanudar ? (
+              <button
+                type="button"
+                onClick={() => void handleBulkPause(false)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              >
+                <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+              </button>
             ) : null}
             {seleccionPorAlcance.excluidos > 0 ? (
               <span
@@ -1645,6 +1672,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 Impuesto departamental pagado
               </label>
             </div>
+            <SoatSoporteAsignado
+              instanceId={processTarget.id}
+              tenantId={isAdmin ? processTarget.tenantId : undefined}
+              abierto={soatSoporteAbierto}
+              onToggle={setSoatSoporteAbierto}
+              disabled={processActing || !!processWarning}
+              onResultado={(r) => {
+                // El soporte ya acredita el SOAT: el error anterior deja de ser cierto.
+                if (r.estado === 'vigente') setProcessError(null);
+              }}
+            />
             {processError ? (
               <InlineAlert tone="warning" title="No se pudo enviar el trámite" className="mt-4">
                 {processError}

@@ -9,9 +9,14 @@
 -- Índice PARCIAL de apoyo al drenado batcheado (mismo criterio que el SP de negocio): solo indexa las
 -- filas PENDIENTES de validación externa, para que cada lote (LIMIT + ORDER BY created_at) sea un
 -- index-scan barato. Se auto-mantiene pequeño (las filas salen del índice al pasar external_validation a 2).
-CREATE INDEX IF NOT EXISTS ix_eim_pending_external
+-- Bug #13109: el predicado incluye el corte por documentos (mismo filtro que el SP). Como el nombre anterior
+-- ya existe en las bases desplegadas (CREATE INDEX IF NOT EXISTS no lo reescribiría), el índice nuevo lleva
+-- otro nombre y el viejo se elimina. Idempotente.
+DROP INDEX IF EXISTS ict.ix_eim_pending_external;
+CREATE INDEX IF NOT EXISTS ix_eim_pending_external_docs
     ON ict.external_integration_master (created_at)
-    WHERE external_validation = 0 AND process_status_id = 2 AND business_validation = 2 AND deleted_at IS NULL;
+    WHERE external_validation = 0 AND process_status_id = 2 AND business_validation = 2 AND deleted_at IS NULL
+      AND (closed_document = true OR process_without_attached_documents = true);
 
 CREATE OR REPLACE PROCEDURE ict.sp_processor_validation_external()
 LANGUAGE plpgsql
@@ -37,6 +42,9 @@ BEGIN
         FROM ict.external_integration_master m
         WHERE m.external_validation = 0 AND m.process_status_id = 2 AND m.business_validation = 2
           AND m.deleted_at IS NULL
+          -- Bug #13109, punto 4: mientras el cliente no cierre los adjuntos (ni pida procesar sin ellos) no se
+          -- identifican fuentes ni se consulta el RUNT. Mismo corte que SendToCoreApiJob.
+          AND (m.closed_document = true OR m.process_without_attached_documents = true)
         ORDER BY m.created_at
         LIMIT v_batch_size
     LOOP
@@ -77,9 +85,9 @@ BEGIN
         -- DRIVER (paz y salvo del conductor) para VENDEDOR (MAIN) y COMPRADOR (ASSI). Calcado de v1
         -- (BackApiExternalTransactValiQueryExt: DRIVER_MAIN / DRIVER_ASSI). Solo personas naturales (el
         -- paz y salvo aplica a la licencia; un NIT no conduce). El INSERT...SELECT produce 0 filas si el
-        -- actor no existe (p. ej. matrícula sin comprador). La novedad de paz y salvo es INFORMATIVA: NO
-        -- bloquea el paso a borrador (ver ExternalSourceValidators.Warnings), fiel a v1 (validateDriverRequest
-        -- registra la novedad y retorna OK, no un error).
+        -- actor no existe (p. ej. matrícula sin comprador). Desde el Bug #13109 (punto 9) un paz y salvo en
+        -- «no» explícito es novedad BLOQUEANTE (ExternalSourceValidators.Validate): no se crea el borrador.
+        -- Difiere de v1, donde validateDriverRequest solo registraba la novedad y retornaba OK.
         INSERT INTO ict.external_integration_source_query
             (eim_id, tenant_id, eia_id, actor_level, query_type, document_type, document_number)
         SELECT rec.id_master, rec.tenant_id, eia.id,

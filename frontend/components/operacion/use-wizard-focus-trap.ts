@@ -29,6 +29,14 @@ export function useWizardFocusTrap<T extends HTMLElement>(
 ) {
   const { active, onEscape, initialFocusRef } = options;
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Ref "latest" del onEscape (Bug #13194): los consumidores suelen pasar un arrow inline, nuevo en
+  // cada render. Si fuera dependencia del efecto, cada tecla en un input controlado del diálogo
+  // re-ejecutaría el foco inicial (y devolvería el foco al disparador): el campo perdía el foco tras
+  // la 1ª letra. Escape lee siempre el más reciente sin re-montar la trampa.
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  });
 
   useEffect(() => {
     if (!active) return;
@@ -45,7 +53,7 @@ export function useWizardFocusTrap<T extends HTMLElement>(
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onEscape?.();
+        onEscapeRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -71,5 +79,5 @@ export function useWizardFocusTrap<T extends HTMLElement>(
       // Devuelve el foco al disparador: sin esto el teclado se queda "colgado" en el body.
       triggerRef.current?.focus?.();
     };
-  }, [active, containerRef, onEscape, initialFocusRef]);
+  }, [active, containerRef, initialFocusRef]);
 }

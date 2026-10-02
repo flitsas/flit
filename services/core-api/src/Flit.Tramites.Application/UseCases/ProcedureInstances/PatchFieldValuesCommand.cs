@@ -18,11 +18,33 @@ public sealed record PatchFieldValuesRequest(IReadOnlyList<FieldValueInput> Item
 
 public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 {
-    public async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
+    public Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         PatchFieldValuesRequest request,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: false, ct);
+
+    /// <summary>
+    /// Siembra de SISTEMA al materializar un borrador (Bug #13109): mismo escritor que el PATCH del
+    /// gestor, salvo B11. B11 protege el OT del traspaso frente al USUARIO; aquí no hay usuario, sino el
+    /// organismo que core-ict ya resolvió por el código de la transacción (activo + grant del tenant).
+    /// Las demás reglas (complementos, edición solo en borrador) siguen aplicando. No lo expone ningún
+    /// endpoint HTTP: solo lo invoca la orquestación gRPC de ICT.
+    /// </summary>
+    public Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleSystemSeedAsync(
+        Guid id,
+        Guid tenantId,
+        PatchFieldValuesRequest request,
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: true, ct);
+
+    private async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleCoreAsync(
+        Guid id,
+        Guid tenantId,
+        PatchFieldValuesRequest request,
+        bool semillaDeSistema,
+        CancellationToken ct)
     {
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
@@ -31,12 +53,21 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         // B11 (HU #10659) — en TRASPASO el OT lo fija el RUNT (auto-bind en preflight) y NO es
         // editable por el usuario: cualquier PATCH de claves transit_office_* se rechaza. La excepción
         // post-submit (IsPostSubmitTransitOfficeKey) NO aplica en traspaso. Matrícula: sin cambios.
+        // La siembra de sistema (HandleSystemSeedAsync) no es una edición del usuario y no pasa por aquí.
         var tipologia = instance.TypeCode;
-        if (string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal)
+        if (!semillaDeSistema
+            && string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal)
             && request.Items.Any(i => IsTransitOfficeKey(i.FieldKey)))
         {
             return (null, "ot_traspaso_no_modificable");
         }
+
+        // Bug #13194 (review, SEC) — el estado y el vencimiento del SOAT son claves de SISTEMA: los
+        // escriben la consulta al RUNT (ValidateSoatViaRuntHandler) y el OCR del PDF cargado
+        // (PersistOcrFieldsHandler). Ningún flujo del front los manda por aquí; aceptarlos dejaba que un
+        // gestor declarara «vigente» a mano y saltara el gate de «Enviar al OT».
+        if (!semillaDeSistema && request.Items.Any(i => IsClaveSoatDeSistema(i.FieldKey)))
+            return (null, ClaveDeSistemaError);
 
         // ADR-0050 — sin trámites complementarios donde el tipo no los admite (familia OTROS). El
         // gate vive aquí porque este endpoint es la ÚNICA vía por la que el asistente declara una
@@ -110,6 +141,15 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 
         return (GetProcedureInstanceHandler.ToDetail(instance), null);
     }
+
+    /// <summary>Error: el PATCH intenta escribir una clave que solo escribe el sistema (Bug #13194).</summary>
+    public const string ClaveDeSistemaError = "clave_de_sistema";
+
+    /// <summary>Claves del SOAT que solo escribe el sistema (consulta RUNT u OCR del PDF), nunca el PATCH.</summary>
+    private static readonly string[] ClavesSoatDeSistema = [SoatGate.FieldKey, "soat_vencimiento"];
+
+    private static bool IsClaveSoatDeSistema(string fieldKey) =>
+        ClavesSoatDeSistema.Contains(fieldKey, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Error: el tipo no admite ese trámite por encima del suyo (familia OTROS).</summary>
     public const string ComplementoNoAdmitidoError = "complemento_no_admitido";
@@ -203,10 +243,9 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
     private static bool IsPostSubmitTransitOfficeKey(string fieldKey) =>
         string.Equals(fieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase)
         || string.Equals(fieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase)
-        // Feature #10587 — la compañía registra el estado del SOAT tras la asignación de placa
-        // (la máquina de estados / el trigger de BD restringen a 'asignado').
-        || string.Equals(fieldKey, "soat_estado", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase);
+    // Feature #10587 — soat_estado ya no entra por aquí: es clave de sistema (Bug #13194). En 'asignado'
+    // lo registran la validación ante el RUNT y el OCR del PDF del SOAT, no el PATCH del gestor.
 
     // B11 — toda clave del organismo de tránsito (incluye transit_office_id), para el bloqueo en traspaso.
     private static bool IsTransitOfficeKey(string fieldKey) =>

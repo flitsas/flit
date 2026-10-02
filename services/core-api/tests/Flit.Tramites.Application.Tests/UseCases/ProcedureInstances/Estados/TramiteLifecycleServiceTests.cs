@@ -109,6 +109,14 @@ public sealed class TramiteLifecycleServiceTests
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
                 CreatedAt = DateTimeOffset.UtcNow,
             });
+            // Bug #13194 (D4) — fail-closed: la validación solo aprueba al actor de su MISMO documento.
+            i.Actors.Add(ActorNatural(i, "comprador", "1"));
+        }
+        else if (status != TramiteEstado.Borrador)
+        {
+            // Bug #13194 (D2) — un trámite que ya pasó de borrador estaba firmado al prepararse; el gate
+            // de firma corre en toda llegada a preparado/preasignacion/entregado.
+            FirmaFixture.Firmar(i);
         }
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(i);
         _typeRepo.GetByIdAsync(i.ProcedureTypeId, Arg.Any<CancellationToken>()).Returns(new ProcedureType
@@ -654,6 +662,8 @@ public sealed class TramiteLifecycleServiceTests
 
         foreach (var parte in new[] { "comprador", "vendedor" })
         {
+            // Bug #13194 (D4) — fail-closed: cada validación necesita su actor del MISMO documento.
+            i.Actors.Add(ActorNatural(i, parte, parte == "comprador" ? "1" : "2"));
             i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
             {
                 Id = Guid.NewGuid(),
@@ -1003,6 +1013,86 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Preparado);
     }
 
+    // ── Feature #13110 — «Omitir prenda» no bloquea Preparar (AC7, CF-4) ───────────────────────
+    // Sin cambios en TramiteLifecycleService ni en PrendaGate: regresión de que la excepción de
+    // Matrícula Inicial en el PUT no deja un trámite atascado en el gate de preparación.
+
+    /// <summary>
+    /// AC7 — Matrícula Inicial con <c>omitir</c> y OT que exige el certificado: ni el override del OT
+    /// (<c>omitir</c> no pide documento) ni el gate R10 de matrícula (acepta <c>omitir</c> sin
+    /// documento ni acreedor) bloquean.
+    /// <para>Uso de ejemplo: <c>TransitionAsync(new TramiteTransitionCommand(id, tenant, "preparado", …))</c>
+    /// devuelve <c>Success = true</c>.</para>
+    /// </summary>
+    [Fact]
+    public async Task Preparar_MatriculaOmitirConOtQueExige_NoBloquea()
+    {
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, i.TransitOfficeId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Omitir));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue(outcome.ErrorCode);
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    /// <summary>Snapshot de preflight con el check <c>gravamenes</c> en <c>warn</c> (activa R10 en traspaso).</summary>
+    private static void ConGravamenesEnWarn(ProcedureInstance instance) =>
+        instance.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Overall = "warn",
+            Checks = """[{"key":"gravamenes","status":"warn"}]""",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+    /// <summary>
+    /// AC7 — Traspaso con <c>omitir</c>, preflight de gravámenes en <c>warn</c> y OT con certificado
+    /// opcional: el gate R10 del traspaso acepta <c>omitir</c> sin documento ni acreedor. El control
+    /// (<c>decision = null</c>) prueba que el semáforo en warn sí activa el gate en este cableado.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Omitir, true)]
+    [InlineData(null, false)]
+    public async Task Preparar_TraspasoOmitirConGravamenWarnYOtOpcional_NoBloquea(string? decision, bool avanza)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        ConGravamenesEnWarn(i);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(false);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        if (avanza)
+        {
+            outcome.Success.Should().BeTrue(outcome.ErrorCode);
+            i.Status.Should().Be(TramiteEstado.Preparado);
+        }
+        else
+        {
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        }
+    }
+
     // ── HU #10872 — re-radicar re-evaluando SOLO los gates de lo corregido ────────────────
 
     private static string BaselineMetadata(Dictionary<string, string?> fieldSnapshot, string? motivo = null) =>
@@ -1149,7 +1239,24 @@ public sealed class TramiteLifecycleServiceTests
             prendaRepo: StubPrendaRepo(PrendaDecision.Registrar),
             camaraComercioResolver: new CamaraComercioRequirementResolver());
 
-    private static void ConCompradorJuridico(ProcedureInstance i) =>
+    /// <summary>Actor persona natural con documento CC (Bug #13194: el resolutor exige actor con documento).</summary>
+    private static ProcedureInstanceActor ActorNatural(ProcedureInstance i, string parte, string documento) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = i.TenantId,
+        ProcedureInstanceId = i.Id,
+        ActorType = parte,
+        DocumentType = "CC",
+        DocumentNumber = documento,
+        FullName = $"Persona {parte}",
+        PersonType = "natural",
+    };
+
+    private static void ConCompradorJuridico(ProcedureInstance i)
+    {
+        // El comprador natural que siembra Wire(conGates: true) se reemplaza por la persona jurídica.
+        foreach (var natural in i.Actors.Where(a => a.ActorType == "comprador").ToList())
+            i.Actors.Remove(natural);
         i.Actors.Add(new ProcedureInstanceActor
         {
             Id = Guid.NewGuid(),
@@ -1165,6 +1272,7 @@ public sealed class TramiteLifecycleServiceTests
             Metadata = ActorMetadataReader.Serialize(
                 null, null, new ActorRepresentanteLegal("CC", "1", "Rep Legal", "x@y.com", null)),
         });
+    }
 
     [Fact]
     public async Task Radicar_CompradorJuridicoSinCertificado_Bloquea()

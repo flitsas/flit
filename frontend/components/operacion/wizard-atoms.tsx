@@ -115,6 +115,7 @@ export function WizardSegmented<T extends string>({
   onChange,
   disabled,
   className = '',
+  describedBy,
 }: {
   /**
    * Rótulo visible sobre la pista. Si se omite, el grupo solo se nombra para
@@ -128,6 +129,8 @@ export function WizardSegmented<T extends string>({
   onChange: (value: T) => void;
   disabled?: boolean;
   className?: string;
+  /** `id` del texto de ayuda que describe el grupo (WCAG 1.3.1/3.3.2) → `aria-describedby`. */
+  describedBy?: string;
 }) {
   const groupName = ariaLabel ?? label ?? 'Opciones';
   return (
@@ -139,6 +142,7 @@ export function WizardSegmented<T extends string>({
       <div
         role="group"
         aria-label={groupName}
+        aria-describedby={describedBy}
         className="inline-flex gap-0.5 rounded-xl border p-1"
         style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
       >

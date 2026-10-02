@@ -140,6 +140,8 @@ builder.Services.AddScoped<Flit.Modules.Security.Application.Auth.IDomainContext
 builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
     builder.Configuration.GetSection(Flit.Api.RateLimiting.PublicBrandingOptions.SectionName));
 builder.Services.AddPublicBrandingRateLimiter();
+// HU #13087 — policy external-token (10/min por IP); va después: fija el OnRejected común.
+builder.Services.AddExternalClientRateLimiter(builder.Configuration);
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -245,6 +247,9 @@ app.UseCors(FrontendCorsPolicy);
 
 // HU #12418 (Feature #12366, ADR-0060 D2) — límite de tasa de /public/branding* (delta-hechos #1:
 // primera policy del repo). Tras CORS/routing, antes de auth/endpoints.
+// HU #13086 (Épica #12737) — bitácora de /api/v1/external/*. Antes de UseRateLimiter: registra también los 429.
+app.UseMiddleware<Flit.Api.Middleware.ExternalAccessLogMiddleware>();
+
 app.UseRateLimiter();
 
 // HU #12417 (Feature #12368, ADR-0060 D2) — puebla DomainContext leyendo EXCLUSIVAMENTE el sello
@@ -260,6 +265,10 @@ app.UseAuthentication();
 app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
 
 app.UseAuthorization();
+
+// HU #13085 (Épica #12737) — cuota por cliente externo (120/min por client_id). Va DESPUÉS de la autorización:
+// el client_id solo es fiable con el pase ya validado, y los 401/403 no consumen cuota.
+app.UseMiddleware<Flit.Api.RateLimiting.ExternalClientQuotaMiddleware>();
 
 // Enforcement multi-tenant de los endpoints runtime de trámites (#1): resuelve el tenant desde el
 // JWT (no del header del cliente) y deja superadmin con acceso multi-tenant. Va DESPUÉS de la auth
@@ -288,6 +297,8 @@ app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
 
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
+app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token
+app.MapExternalSyncEndpoints(); // HU #13081 (Épica #12737) — GET /api/v1/external/tramites/sync
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
@@ -330,6 +341,7 @@ app.MapAdminLegalRepresentativeIdentityEndpoints();
 app.MapAdminIdentityVigenciaEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminBannersEndpoints();
+app.MapAdminExternalClientsEndpoints(); // HU #13088 (Épica #12737) — clientes de integración externos (SuperAdmin)
 app.MapAdminRejectionReasonsEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();

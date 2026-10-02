@@ -104,6 +104,20 @@ public sealed class SubmitProcedureInstanceTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
+        // Bug #13194 (D2/D4) — firmado: la validación aprueba solo al actor de su MISMO documento, y el
+        // vendedor queda firmado para los casos que convierten el fixture en traspaso.
+        i.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "1",
+            FullName = "Persona comprador",
+            PersonType = "natural",
+        });
+        Estados.FirmaFixture.Firmar(i, "vendedor");
         // Organismo de tránsito seleccionado.
         i.FieldValues.Add(new ProcedureInstanceFieldValue
         {

@@ -37,19 +37,16 @@ internal static class IdentityApprovalResolver
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
         {
-            // ADR-0053 — sin NINGÚN actor para la parte, se evalúa igual UNA vez con `actor = null`:
-            // es el comportamiento previo a esta versión (un único `ActorFor` que podía devolver null),
-            // y algunas validaciones biométricas "sueltas" (sin fila de actor vinculada) siguen siendo
-            // válidas por diseño — `DocumentoCoincide` hace match abierto cuando no hay documento del
-            // actor con el que comparar (fail-open, legado). Cambiar esto sería una regresión, no una
-            // mejora: se preserva íntegro.
+            // Bug #13194 (P4, D4) — fail-closed: una parte SIN actor no queda aprobada. Antes se evaluaba
+            // con `actor = null` y `DocumentoCoincide` hacía match abierto, así que cualquier validación
+            // aprobada del ROL —de otra persona del mismo tenant— aprobaba la parte. Sin sujeto con
+            // documento no se puede afirmar de quién es la identidad.
             var actores = ActoresDe(instance, parte);
-            var actoresOSinActor = actores.Count > 0
-                ? actores
-                : (IReadOnlyList<ProcedureInstanceActor?>)[null];
+            if (actores.Count == 0)
+                continue;
 
             var todosCubiertos = true;
-            foreach (var actor in actoresOSinActor)
+            foreach (var actor in actores)
             {
                 var (tipoDoc, documento) = ActorDoc(actor);
 
@@ -117,13 +114,11 @@ internal static class IdentityApprovalResolver
     /// <para><b>Lo que sigue sin cubrirse.</b> (1) Solo se acredita por estados terminales de la
     /// identidad: los no terminales (<c>en_proceso</c>, <c>rechazado</c>) siguen leyéndose únicamente de
     /// las filas PROPIAS del trámite, porque las claves en lote solo traen identidades aprobadas y
-    /// vigentes. (2) <c>firmaBaulVigentePorPersona</c> se materializa <b>sin mirar el flag
-    /// <c>signature_vault_enabled</c> del tenant</b>, que la ruta per-instancia sí respeta vía
-    /// <see cref="ISignatureVaultPolicy"/>. Se replica esa asimetría a propósito: es la que ya vive en la
-    /// columna «Firmado», que consume el mismo diccionario, y filtrar aquí exigiría una consulta nueva de
-    /// configuración por tenant —justo lo que esta ruta no puede hacer— además de dejar el chip y la
-    /// columna diciendo cosas distintas. La corrección pertenece al origen de las claves, que sirve a los
-    /// dos consumidores a la vez.</para>
+    /// vigentes. (2) Bug #13194 (P4, D1): <c>firmaBaulVigentePorPersona</c> ya solo trae firmas de
+    /// tenants con <c>signature_vault_enabled</c> activo —el filtro se aplica en el origen de las claves
+    /// (<c>ListFirmaBaulVigenciaKeysAsync</c>), en la misma consulta—, igual que la ruta per-instancia vía
+    /// <see cref="ISignatureVaultPolicy"/>. Antes la asimetría hacía que el listado pintara «Firmado»
+    /// mientras el paso de identidad y el gate decían «no iniciada».</para>
     /// </summary>
     /// <remarks>
     /// ADR-0053 (Múltiple Propietario) — misma extensión "todos los actores" que
@@ -139,16 +134,14 @@ internal static class IdentityApprovalResolver
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
         {
-            // ADR-0053 — misma regla de "sin actor" que ResolveApprovedPartiesAsync: se evalúa una vez
-            // con `actor = null` en vez de omitir la parte, para preservar el match fail-open de
-            // `DocumentoCoincide` con validaciones sin fila de actor vinculada.
+            // Bug #13194 (P4, D4) — misma regla fail-closed que ResolveApprovedPartiesAsync: sin actor,
+            // la parte no queda aprobada.
             var actores = ActoresDe(instance, parte);
-            var actoresOSinActor = actores.Count > 0
-                ? actores
-                : (IReadOnlyList<ProcedureInstanceActor?>)[null];
+            if (actores.Count == 0)
+                continue;
 
             var todosCubiertos = true;
-            foreach (var actor in actoresOSinActor)
+            foreach (var actor in actores)
             {
                 var (tipoDoc, documento) = ActorDoc(actor);
 

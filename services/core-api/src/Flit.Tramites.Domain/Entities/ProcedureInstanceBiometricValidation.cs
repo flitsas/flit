@@ -377,16 +377,23 @@ public static class BiometricRules
     /// validaciones de una persona anterior cuando el gestor cambia el documento, el gate NO debe contar
     /// como aprobada una validación cuyo documento difiera del actor actual (p.ej. si esa invalidación no
     /// llegó a correr, falló de red o se saltó). El gate deja de depender de un mejor-esfuerzo del frontend.
-    /// <para>Lenient: si la validación o el actor no tienen documento (fixtures/datos parciales), no se
-    /// descarta por documento — sólo se descarta cuando AMBOS números están presentes y difieren. El tipo
-    /// de documento sólo descarta cuando ambos están presentes y difieren.</para>
+    /// <para><b>Bug #13194 (P4, D4) — fail-closed.</b> Antes era «lenient»: si la validación o el sujeto
+    /// no tenían número de documento, coincidía siempre. Eso dejaba aprobar a una persona DISTINTA del
+    /// mismo tenant (una validación sin documento, o un sujeto sin documento, servía para cualquiera). Ahora
+    /// sin los dos números no hay coincidencia: no se puede afirmar que la validación sea de este sujeto.
+    /// Todos los caminos de creación vigentes (Kyverum, magic-link, prevalidación) exigen el documento, y la
+    /// vigencia de una identidad es de 30 días, así que ninguna validación legítima vigente queda fuera.
+    /// Los guardas de idempotencia (no iniciar una segunda validación) también usan esta regla, pero solo
+    /// con 2+ actores en el rol: ahí una fila sin documento ya no bloquea al copropietario (con un solo
+    /// actor el guarda no mira el documento y no cambia nada).
+    /// El tipo de documento sigue descartando solo cuando ambos están presentes y difieren.</para>
     /// </summary>
     public static bool DocumentoCoincide(
         ProcedureInstanceBiometricValidation validation, string? tipoDoc, string? documento)
     {
         ArgumentNullException.ThrowIfNull(validation);
         if (string.IsNullOrWhiteSpace(documento) || string.IsNullOrWhiteSpace(validation.DocumentNumber))
-            return true;
+            return false;
         if (!string.Equals(validation.DocumentNumber.Trim(), documento.Trim(), StringComparison.OrdinalIgnoreCase))
             return false;
         if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(validation.DocumentType))

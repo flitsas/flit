@@ -53,6 +53,26 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
     /// </summary>
     public string? RuntTransitOfficeName { get; set; }
 
+    /// <summary>
+    /// Organismo de tránsito resuelto por el <see cref="TrafficSecretaryCode"/> del cliente (Bug #13109).
+    /// Lo escribe <c>sp_processor_validation_business</c> cuando el código existe, está activo y tiene
+    /// grant habilitado para el tenant. Cuando existe, el borrador nace con este id y el nombre del RUNT
+    /// no se usa: el código que viajó en la transacción gana. Null si no hay código o no se resolvió.
+    /// </summary>
+    public Guid? TransitOfficeId { get; set; }
+
+    /// <summary>
+    /// Nombre del organismo de la misma fila del catálogo que <see cref="TransitOfficeId"/> (Bug #13109).
+    /// Lo escribe el SP de negocio junto con el id; null si el código no se resolvió.
+    /// </summary>
+    public string? TransitOfficeName { get; set; }
+
+    /// <summary>
+    /// <c>city_code</c> DANE del organismo de la misma fila que <see cref="TransitOfficeId"/> (Bug #13109).
+    /// core-api lo siembra como <c>transit_office_city</c>; null si el código no se resolvió.
+    /// </summary>
+    public string? TransitOfficeCityCode { get; set; }
+
     public string UrlWebHook { get; set; } = string.Empty;
 
     public bool ClosedDocument { get; set; }
