@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Platform.Application.Apps;
+using Flit.Modules.Platform.Application.Hosts;
 using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Platform.Domain.Manifest;
@@ -75,17 +76,35 @@ public static class PlatformEndpoints
         }).RequireAuthorization(p => p.RequireAssertion(ctx => HasScope(ctx.User, ManifestScope)))
           .WithName("ApplyProductManifest");
 
-        // GET /admin/tenants/{tenantId}/products — estado de cada producto para una empresa.
+        // GET /admin/tenants/{tenantId}/products — estado de cada producto para una empresa, con quién lo cambió por
+        // última vez y si todavía no está desplegado en este ambiente (pestaña «Productos» de la compañía).
         group.MapGet("/admin/tenants/{tenantId:guid}/products", async (
             Guid tenantId,
             IIdentityDb db,
             ListTenantProductsHandler handler,
+            IProductHosts hosts,
             CancellationToken ct) =>
         {
             if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
                 return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
 
-            return Results.Ok(await handler.HandleAsync(tenantId, ct));
+            var products = await handler.HandleAsync(tenantId, ct);
+            var editors = products.Where(p => p.UpdatedBy is not null).Select(p => p.UpdatedBy!.Value).Distinct().ToList();
+            var emails = await db.Users.AsNoTracking()
+                .Where(u => editors.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.Email, ct);
+
+            return Results.Ok(products.Select(p => new
+            {
+                p.ProductCode,
+                p.Name,
+                p.Enabled,
+                p.Notes,
+                p.UpdatedAt,
+                p.UpdatedBy,
+                UpdatedByEmail = p.UpdatedBy is { } by && emails.TryGetValue(by, out var email) ? email : null,
+                ComingSoon = hosts.IsComingSoon(p.ProductCode),
+            }));
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("ListTenantProducts");
 
         // PUT /admin/tenants/{tenantId}/products/{productCode} — encender o apagar, idempotente y auditado.

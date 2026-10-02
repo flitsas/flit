@@ -32,6 +32,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _superAdminId = Guid.NewGuid();
+    private readonly Guid _adminId = Guid.NewGuid();
     private readonly Guid _roleId = Guid.NewGuid();
     private readonly string _suffix = Guid.NewGuid().ToString("N")[..10];
 
@@ -69,6 +70,58 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
         Use(_client, "SuperAdmin", Guid.NewGuid());
 
         (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
+    }
+
+    // ── HU #12967: el Admin de Compañía entra a todo producto encendido ──────────────
+
+    [Fact]
+    public async Task AsignarAdminCompany_LeDaElAdminDeCadaProducto()
+    {
+        await AssignAdminCompanyAsync();
+
+        await using var db = CreateDbContext();
+        var roles = await (
+            from a in db.UserRoleAssignments.AsNoTracking()
+            join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+            where a.UserId == _adminId && a.TenantId == _tenantId && a.DeletedAt == null
+            select r.Code).ToListAsync(TestContext.Current.CancellationToken);
+
+        roles.Should().BeEquivalentTo("AdminCompany", "admin_tramites", "admin_comparendos", "admin_diagnostico");
+    }
+
+    [Fact]
+    public async Task AdminCompany_VeComparendosSoloCuandoSeEnciendeParaSuEmpresa()
+    {
+        await AssignAdminCompanyAsync();
+        Use(_client, "SuperAdmin", _superAdminId);
+        (await _client.PutAsJsonAsync($"/api/v1/platform/admin/tenants/{_tenantId}/products/comparendos",
+            new { enabled = false }, TestContext.Current.CancellationToken)).EnsureSuccessStatusCode();
+
+        Use(_client, "AdminCompany", _adminId);
+        (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites");
+
+        Use(_client, "SuperAdmin", _superAdminId);
+        (await _client.PutAsJsonAsync($"/api/v1/platform/admin/tenants/{_tenantId}/products/comparendos",
+            new { enabled = true }, TestContext.Current.CancellationToken)).EnsureSuccessStatusCode();
+
+        Use(_client, "AdminCompany", _adminId);
+        (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos");
+    }
+
+    [Fact]
+    public async Task ListadoDeProductos_DiceQuienLoCambioYSiEstaProximamente()
+    {
+        Use(_client, "SuperAdmin", _superAdminId);
+        (await _client.PutAsJsonAsync($"/api/v1/platform/admin/tenants/{_tenantId}/products/diagnostico",
+            new { enabled = true }, TestContext.Current.CancellationToken)).EnsureSuccessStatusCode();
+
+        var list = await _client.GetFromJsonAsync<JsonElement>($"/api/v1/platform/admin/tenants/{_tenantId}/products", TestContext.Current.CancellationToken);
+        var diagnostico = list.EnumerateArray().Single(p => p.GetProperty("productCode").GetString() == "diagnostico");
+        diagnostico.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        diagnostico.GetProperty("updatedByEmail").GetString().Should().Be($"b06-sa-{_suffix}@flit.local");
+        diagnostico.GetProperty("comingSoon").GetBoolean().Should().BeTrue();
+        list.EnumerateArray().Single(p => p.GetProperty("productCode").GetString() == "tramites")
+            .GetProperty("comingSoon").GetBoolean().Should().BeFalse();
     }
 
     // ── /admin/tenants/{tenantId}/products ────────────────────────────────────────
@@ -248,6 +301,20 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
 
     private FlitDbContext CreateDbContext() => _factory.Services.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
 
+    /// <summary>Asigna AdminCompany en la empresa de prueba; el espejo de la base agrega el admin de cada producto.</summary>
+    private async Task AssignAdminCompanyAsync()
+    {
+        await using var db = CreateDbContext();
+        var adminCompany = await db.Roles.AsNoTracking()
+            .SingleAsync(r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null, TestContext.Current.CancellationToken);
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantId, UserId = _adminId, RoleId = adminCompany.Id,
+            AssignedAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
     private async Task SetTramitesAsync(bool enabled)
     {
         await using var db = CreateDbContext();
@@ -267,6 +334,11 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
         db.Users.Add(new User
         {
             Id = _userId, Email = $"b06-{_suffix}@flit.local", DisplayName = "Usuario B-06", Status = "active",
+            HomeTenantId = _tenantId, CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.Users.Add(new User
+        {
+            Id = _adminId, Email = $"b06-admin-{_suffix}@flit.local", DisplayName = "Admin B-06", Status = "active",
             HomeTenantId = _tenantId, CreatedAt = DateTimeOffset.UtcNow,
         });
         db.Users.Add(new User
@@ -296,13 +368,13 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
         var moduleIds = db.SecurityModules.Where(m => m.Code == "diagnostico-" + _suffix).Select(m => m.Id).ToList();
         var permissionIds = db.RbacActions.Where(p => moduleIds.Contains(p.ModuleId)).Select(p => p.Id).ToList();
         db.RoleGrants.Where(g => permissionIds.Contains(g.PermissionId) || g.RoleId == _roleId).ExecuteDelete();
-        db.UserRoleAssignments.Where(a => a.UserId == _userId || a.TenantId == _tenantId).ExecuteDelete();
+        db.UserRoleAssignments.Where(a => a.UserId == _userId || a.UserId == _adminId || a.TenantId == _tenantId).ExecuteDelete();
         db.Roles.Where(r => r.Code == "diagnostico_" + _suffix || r.Id == _roleId).ExecuteDelete();
         db.RbacActions.Where(p => permissionIds.Contains(p.Id)).ExecuteDelete();
         db.SecurityModules.Where(m => moduleIds.Contains(m.Id)).ExecuteDelete();
         db.Set<TenantProductEntity>().Where(r => r.TenantId == _tenantId).ExecuteDelete();
         db.TenantConfigAuditLogs.Where(a => a.TenantId == _tenantId).ExecuteDelete();
-        db.Users.Where(u => u.Id == _userId || u.Id == _superAdminId).ExecuteDelete();
+        db.Users.Where(u => u.Id == _userId || u.Id == _superAdminId || u.Id == _adminId).ExecuteDelete();
         db.Tenants.Where(t => t.Id == _tenantId).ExecuteDelete();
         _client.Dispose();
     }

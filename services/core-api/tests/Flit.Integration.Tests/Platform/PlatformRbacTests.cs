@@ -27,6 +27,7 @@ public sealed class PlatformRbacTests(PostgresDatabaseFixture fixture) : Postgre
     private static readonly Guid AdminTramitesId = new("bbbbbbbb-0000-4000-8000-000000000002");
     private static readonly Guid RadicadorId = new("bbbbbbbb-0000-4000-8000-000000000003");
     private static readonly Guid SuperAdminId = new("bbbbbbbb-0000-4000-8000-000000000004");
+    private static readonly Guid AdminComparendosId = new("bbbbbbbb-0000-4000-8000-000000000005");
     private static readonly Guid PlatformPermissionId = new("cccccccc-0000-4000-8000-000000000001");
     private static readonly Guid TramitesPermissionId = new("cccccccc-0000-4000-8000-000000000002");
 
@@ -129,6 +130,30 @@ public sealed class PlatformRbacTests(PostgresDatabaseFixture fixture) : Postgre
         (await ActiveRoleCodesAsync()).Should().BeEmpty();
     }
 
+    // ── HU #12967 (DDL 126): el espejo cubre el admin de cada producto ─────────────────
+
+    [PostgresFact]
+    public async Task AdminCompany_RecibeYPierdeElAdminDeCadaProducto()
+    {
+        await SeedAsync();
+        await using (var ctx = NewContext())
+        {
+            ctx.Roles.Add(NewRole(AdminComparendosId, "admin_comparendos", "comparendos", isSystem: true));
+            await ctx.SaveChangesAsync();
+        }
+
+        await AssignAsync(AdminCompanyId);
+        (await ActiveRoleCodesAsync()).Should().Equal("AdminCompany", "admin_comparendos", "admin_tramites");
+
+        await using (var ctx = NewContext())
+        {
+            await new RemoveRoleAssignmentHandler(new UserRoleAssignmentRepository(ctx))
+                .HandleAsync(UserId, TenantSeed.LoneId, AdminCompanyId, ActorId, TestContext.Current.CancellationToken);
+        }
+
+        (await ActiveRoleCodesAsync()).Should().BeEmpty();
+    }
+
     [PostgresFact]
     public async Task CambiarDeAdminCompanyARadicador_QuedaSoloRadicador()
     {
@@ -213,7 +238,7 @@ public sealed class PlatformRbacTests(PostgresDatabaseFixture fixture) : Postgre
         // Estado anterior a la B-04: AdminCompany con un permiso de Trámites y sin admin_tramites.
         await ExecAsync("""
             ALTER TABLE security.role_permissions DISABLE TRIGGER tr_role_permissions_same_product;
-            ALTER TABLE security.user_role_assignments DISABLE TRIGGER tr_ura_mirror_admin_tramites;
+            ALTER TABLE security.user_role_assignments DISABLE TRIGGER tr_ura_mirror_product_admins;
             """);
         try
         {
@@ -230,20 +255,28 @@ public sealed class PlatformRbacTests(PostgresDatabaseFixture fixture) : Postgre
         {
             await ExecAsync("""
                 ALTER TABLE security.role_permissions ENABLE TRIGGER tr_role_permissions_same_product;
-                ALTER TABLE security.user_role_assignments ENABLE TRIGGER tr_ura_mirror_admin_tramites;
+                ALTER TABLE security.user_role_assignments ENABLE TRIGGER tr_ura_mirror_product_admins;
                 """);
         }
 
-        // Correr el DDL dos veces: la segunda no cambia nada.
-        await ExecAsync(LoadDdl());
-        await ExecAsync(LoadDdl());
+        // Correr el DDL dos veces: la segunda no cambia nada. El DDL 120 vuelve a crear su espejo (solo Trámites), que el
+        // DDL 126 reemplazó por tr_ura_mirror_product_admins: al final se retira para dejar la base como en producción.
+        try
+        {
+            await ExecAsync(LoadDdl());
+            await ExecAsync(LoadDdl());
 
-        (await ActiveRoleCodesAsync()).Should().Equal("AdminCompany", "admin_tramites");
-        await using var check = NewContext();
-        var adminCompanyGrants = await check.RoleGrants.AsNoTracking().Where(g => g.RoleId == AdminCompanyId).Select(g => g.PermissionId).ToListAsync();
-        var adminTramitesGrants = await check.RoleGrants.AsNoTracking().Where(g => g.RoleId == AdminTramitesId).Select(g => g.PermissionId).ToListAsync();
-        adminCompanyGrants.Should().Equal(PlatformPermissionId);
-        adminTramitesGrants.Should().Equal(TramitesPermissionId);
+            (await ActiveRoleCodesAsync()).Should().Equal("AdminCompany", "admin_tramites");
+            await using var check = NewContext();
+            var adminCompanyGrants = await check.RoleGrants.AsNoTracking().Where(g => g.RoleId == AdminCompanyId).Select(g => g.PermissionId).ToListAsync();
+            var adminTramitesGrants = await check.RoleGrants.AsNoTracking().Where(g => g.RoleId == AdminTramitesId).Select(g => g.PermissionId).ToListAsync();
+            adminCompanyGrants.Should().Equal(PlatformPermissionId);
+            adminTramitesGrants.Should().Equal(TramitesPermissionId);
+        }
+        finally
+        {
+            await ExecAsync("DROP TRIGGER IF EXISTS tr_ura_mirror_admin_tramites ON security.user_role_assignments;");
+        }
     }
 
     // ── Login ─────────────────────────────────────────────────────────────────────

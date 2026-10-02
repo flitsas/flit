@@ -217,7 +217,7 @@ components:
   schemas:
     MyApp:
       type: object
-      required: [code, name, icon, url, current]
+      required: [code, name, icon, url, current, comingSoon]
       properties:
         code:
           type: string
@@ -234,6 +234,9 @@ components:
           example: https://tramites.flitsas.online
         current:
           type: boolean
+        comingSoon:
+          type: boolean
+          description: Todavía no desplegado en este ambiente; `url` lleva a su pantalla «Próximamente» del hub (v1.2).
 
     TenantProductState:
       type: object
@@ -259,10 +262,17 @@ components:
       allOf:
         - $ref: "#/components/schemas/TenantProductState"
         - type: object
-          required: [name]
+          required: [name, comingSoon]
           properties:
             name:
               type: string
+            updatedByEmail:
+              type: string
+              nullable: true
+              description: Correo de quien lo cambió por última vez (HU 12967).
+            comingSoon:
+              type: boolean
+              description: Todavía no desplegado en este ambiente; se puede encender igual (HU 12967).
 
     ProductManifest:
       type: object
