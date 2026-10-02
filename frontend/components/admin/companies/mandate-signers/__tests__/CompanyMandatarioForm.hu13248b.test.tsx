@@ -1,4 +1,4 @@
-// HU #13248b (F9 #13245) — rediseño del formulario del mandatario: panel lateral en pasos numerados que
+// HU #13248b (F9 #13245) — rediseño del formulario del mandatario: modal normal (el de los demás módulos) en pasos numerados que
 // solo muestra lo que aplica, resumen fijo al guardar, selector de organismos (chips o buscador) y errores
 // por campo sin perder lo escrito. Un solo formulario para compañía, Super Admin y hub OT.
 
@@ -76,12 +76,12 @@ beforeEach(() => {
   onSubmit.mockResolvedValue({ id: "ms-2", integrityHash: "b".repeat(64) });
 });
 
-describe("HU #13248b AC1 — panel lateral en pasos numerados", () => {
-  it("es un panel lateral con el título del alta, no un modal angosto", () => {
+describe("HU #13248b AC1 — modal en pasos numerados", () => {
+  it("es un modal normal centrado (componente Modal) con el título del alta", () => {
     renderForm();
     const dialogo = screen.getByRole("dialog", { name: "Registrar mandatario" });
-    expect(dialogo.tagName).toBe("ASIDE");
-    expect(dialogo.className).toMatch(/max-w-3xl/);
+    expect(dialogo.tagName).not.toBe("ASIDE");
+    expect(dialogo.className).toMatch(/items-center justify-center/);
   });
 
   it("Persona natural: ¿Quién firma? · Datos · ¿Cómo firma? · Vigencia · Dónde aplica, numerados", () => {

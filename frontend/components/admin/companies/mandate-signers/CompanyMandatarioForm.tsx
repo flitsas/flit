@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Building2, FileText, ShieldCheck, User, Vault } from "lucide-react";
-import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
+import { Modal } from "@/components/atom/Modal";
 import {
   MultiSelectBuscable,
   type OpcionSeleccionable,
@@ -58,7 +58,7 @@ const FORMAS: ReadonlyArray<{ value: SignatureMethod; label: string; ayuda: stri
 
 /**
  * HU #11202 / HU #13248b — alta y edición del mandatario. Un solo formulario para la compañía, el Super
- * Admin (ficha de la compañía) y el hub del organismo. Panel lateral ancho en pasos numerados que solo
+ * Admin (ficha de la compañía) y el hub del organismo. Modal normal (el mismo de los demás módulos) en pasos numerados que solo
  * muestra lo que aplica: ¿Quién firma? → Datos → ¿Cómo firma? → Vigencia → Dónde aplica. El pie fijo
  * resume lo que pasará al guardar.
  */
@@ -155,15 +155,6 @@ export function CompanyMandatarioForm({
   };
   const avisoValidacion = avisoDeNuevaValidacion({ ...datosDeValidacion, correo: email });
   const consecuencia = consecuenciaDeGuardar(disparoDeValidacion(datosDeValidacion));
-
-  // Escape cierra el panel (salvo mientras guarda).
-  useEffect(() => {
-    const alTeclear = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !saving) onCancel();
-    };
-    document.addEventListener("keydown", alTeclear);
-    return () => document.removeEventListener("keydown", alTeclear);
-  }, [saving, onCancel]);
 
   const clearField = (campo: CampoMandatario) => {
     setError(null);
@@ -313,14 +304,12 @@ export function CompanyMandatarioForm({
   ].filter((x): x is string => !!x);
 
   return (
-    <OtSidePanel
+    <Modal
       open
       title={editing ? "Editar mandatario" : "Registrar mandatario"}
-      ariaLabel={editing ? "Editar mandatario" : "Registrar mandatario"}
       onClose={onCancel}
-      disabled={saving}
-      width="xl"
-      surface="modal"
+      busy={saving}
+      size="xl"
       zClassName={overlayClassName}
       footer={
         <div className="space-y-2">
@@ -677,7 +666,7 @@ export function CompanyMandatarioForm({
           </div>
         </Paso>
       </div>
-    </OtSidePanel>
+    </Modal>
   );
 }
 
