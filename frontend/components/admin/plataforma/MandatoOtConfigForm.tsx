@@ -161,12 +161,11 @@ export function MandatoOtConfigForm({
   const terceroAjeno = terceroAjenoEnPlantilla(templateCode, office.code);
   // HU #13152 — sigue la redacción SELECCIONADA (antes de guardar); con "auto" usa la efectiva.
   const selectedTemplate = templateCode === "auto" ? effectiveTemplate : templateCode;
-  // HU #13174 — sin comparar códigos: la familia institucional sale del formato que trae el catálogo
-  // (tipo «Persona jurídica») o de la familia ya guardada del organismo.
+  // HU #13152 — los campos siguen la redacción SELECCIONADA, no la familia ya guardada.
+  // Si el organismo nació institucional y ahora se elige Genérico (Persona natural), los campos se ocultan.
   const showInstitutionalMeta =
     findMandatoFormat(formatos.formatos, selectedTemplate)?.assignmentMode === "institutional" ||
-    formatoNombraMandatarioInstitucional(selectedTemplate) ||
-    family === "organismo_transito";
+    formatoNombraMandatarioInstitucional(selectedTemplate);
   const effectiveTemplateName = mandatoFormatName(formatos.formatos, effectiveTemplate);
   const selectedFormat = findMandatoFormat(formatos.formatos, templateCode);
   const savedCodeUnknown =

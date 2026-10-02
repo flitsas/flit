@@ -274,9 +274,9 @@ describe("MandatoOtConfigForm", () => {
       expect(upsertMandateOtConfig).not.toHaveBeenCalled();
     });
 
-    it("familia organismo_transito mantiene los campos visibles", () => {
+    it("la familia ya guardada no mantiene los campos si la redacción elegida es Genérico", () => {
       renderMandato({ ...generico, mandataryFamily: "organismo_transito" } as MandateOtConfigView);
-      expect(screen.getByLabelText(/^mandatario institucional \/ UT$/i)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^mandatario institucional \/ UT$/i)).not.toBeInTheDocument();
     });
   });
   describe("HU #13150 columna Tipo de mandato por compañía", () => {
