@@ -23,6 +23,7 @@ import {
 } from "@/lib/plataforma/mandatario-modelo";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
+import { FechaCalendario } from "./FechaCalendario";
 import { MandatarioIdentidadBlock } from "./MandatarioIdentidadBlock";
 import {
   MandatarioCompaniasAsociadas,
@@ -163,6 +164,27 @@ export function CompanyMandatarioForm({
       const next = { ...prev };
       delete next[campo];
       return next;
+    });
+  };
+
+  // El bloque de fechas cambia de alto. Sin anclar el scroll, el modal se desplaza al cambiar Fija/Rango.
+  const elegirVigencia = (kind: ValidityKind) => {
+    const scroller = document.querySelector<HTMLElement>("[role=dialog] .overflow-y-auto");
+    const top = scroller?.scrollTop ?? 0;
+    setValidityKind(kind);
+    clearField("validFrom");
+    clearField("validTo");
+    requestAnimationFrame(() => {
+      if (!scroller) return;
+      scroller.scrollTop = top;
+      if (kind !== "range") return;
+      const bloque = document.getElementById("mandatario-vigencia-fechas");
+      if (!bloque) return;
+      const visible = scroller.getBoundingClientRect();
+      const fechas = bloque.getBoundingClientRect();
+      if (fechas.bottom > visible.bottom) {
+        scroller.scrollTop += fechas.bottom - visible.bottom + 8;
+      }
     });
   };
 
@@ -553,60 +575,43 @@ export function CompanyMandatarioForm({
                   name="mandatario-vigencia"
                   label="Fija"
                   checked={validityKind === "fixed"}
-                  onChange={() => {
-                    setValidityKind("fixed");
-                    clearField("validFrom");
-                    clearField("validTo");
-                  }}
+                  onChange={() => elegirVigencia("fixed")}
                 />
                 <Segmento
                   name="mandatario-vigencia"
                   label="Rango de fechas"
                   checked={validityKind === "range"}
-                  onChange={() => {
-                    setValidityKind("range");
-                    clearField("validFrom");
-                    clearField("validTo");
-                  }}
+                  onChange={() => elegirVigencia("range")}
                 />
               </div>
               {validityKind === "range" ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div id="mandatario-vigencia-fechas" className="grid min-w-0 gap-3 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="mandatario-valid-from" className="mb-1.5 block text-xs font-semibold">
-                      Fecha de inicio
-                    </label>
-                    <input
+                    <FechaCalendario
                       id="mandatario-valid-from"
-                      type="date"
+                      label="Fecha de inicio"
                       value={validFrom}
-                      onChange={(e) => {
-                        setValidFrom(e.target.value);
+                      invalid={!!fieldErrors.validFrom}
+                      describedBy={fieldErrors.validFrom ? "mandatario-valid-from-error" : undefined}
+                      onChange={(iso) => {
+                        setValidFrom(iso);
                         clearField("validFrom");
                         clearField("validTo");
                       }}
-                      className={inputClass}
-                      aria-invalid={fieldErrors.validFrom ? true : undefined}
-                      aria-describedby={fieldErrors.validFrom ? "mandatario-valid-from-error" : undefined}
                     />
                     <FieldError id="mandatario-valid-from-error" message={fieldErrors.validFrom} />
                   </div>
                   <div>
-                    <label htmlFor="mandatario-valid-to" className="mb-1.5 block text-xs font-semibold">
-                      Fecha de fin
-                    </label>
-                    <input
+                    <FechaCalendario
                       id="mandatario-valid-to"
-                      type="date"
+                      label="Fecha de fin"
                       value={validTo}
-                      min={validFrom || undefined}
-                      onChange={(e) => {
-                        setValidTo(e.target.value);
+                      invalid={!!fieldErrors.validTo}
+                      describedBy={fieldErrors.validTo ? "mandatario-valid-to-error" : undefined}
+                      onChange={(iso) => {
+                        setValidTo(iso);
                         clearField("validTo");
                       }}
-                      className={inputClass}
-                      aria-invalid={fieldErrors.validTo ? true : undefined}
-                      aria-describedby={fieldErrors.validTo ? "mandatario-valid-to-error" : undefined}
                     />
                     <FieldError id="mandatario-valid-to-error" message={fieldErrors.validTo} />
                   </div>
@@ -772,8 +777,11 @@ function Segmento({
 }) {
   return (
     <label
-      className="cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF]"
+      className="relative cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF]"
       style={checked ? { background: "#557EFF", color: "#FFFFFF" } : { color: "#59677D" }}
+      // El radio está oculto con position:absolute. Si toma el foco, el modal (overlay con
+      // desenfoque) lo lleva al inicio del scroll. El clic sigue cambiando la opción.
+      onMouseDown={(e) => e.preventDefault()}
     >
       <input
         type="radio"

@@ -2,7 +2,7 @@
 // vigencia. Un bloque por criterio de aceptación.
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiValidationError } from "@/lib/api/types";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
@@ -46,6 +46,27 @@ function signer(overrides: Partial<MandateSigner> = {}): MandateSigner {
 
 const onSubmit = vi.fn();
 const onCancel = vi.fn();
+
+/** Abre el calendario del campo y elige el día ISO, sin depender del mes en que arranque el reloj. */
+async function elegirFecha(
+  user: { click: (el: Element) => Promise<void> },
+  label: string,
+  iso: string,
+) {
+  await user.click(screen.getByLabelText(label));
+  const dialog = await screen.findByRole("dialog", { name: `Elegir ${label}` });
+  const target = iso.slice(0, 7);
+  for (let i = 0; i < 36; i += 1) {
+    const days = [...dialog.querySelectorAll<HTMLElement>("[data-testid^=day-]")].filter(
+      (d) => !d.hasAttribute("data-outside"),
+    );
+    const sample = days[Math.floor(days.length / 2)]?.getAttribute("data-testid")?.slice(4, 11);
+    if (sample === target) break;
+    const nombre = sample && sample < target ? "Ir al mes siguiente" : "Ir al mes anterior";
+    await user.click(within(dialog).getByRole("button", { name: nombre }));
+  }
+  await user.click(within(dialog).getByTestId(`day-${iso}`));
+}
 
 function renderForm(props: Partial<React.ComponentProps<typeof CompanyMandatarioForm>> = {}) {
   return render(
@@ -111,8 +132,8 @@ describe("HU #13132 AC1 — Persona natural", () => {
     await llenarNatural(user);
     await user.click(radio("Validación de identidad"));
     await user.click(radio("Rango de fechas"));
-    await user.type(screen.getByLabelText("Fecha de inicio"), "2026-10-01");
-    await user.type(screen.getByLabelText("Fecha de fin"), "2026-12-31");
+    await elegirFecha(user, "Fecha de inicio", "2026-10-01");
+    await elegirFecha(user, "Fecha de fin", "2026-12-31");
     await user.click(guardar());
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -241,8 +262,8 @@ describe("HU #13132 AC3 — validaciones locales", () => {
     await llenarNatural(user);
     await user.click(radio("Validación de identidad"));
     await user.click(radio("Rango de fechas"));
-    await user.type(screen.getByLabelText("Fecha de inicio"), "2026-12-31");
-    await user.type(screen.getByLabelText("Fecha de fin"), "2026-10-01");
+    await elegirFecha(user, "Fecha de inicio", "2026-12-31");
+    await elegirFecha(user, "Fecha de fin", "2026-10-01");
     await user.click(guardar());
     expect(screen.getByText("La fecha de fin no puede ser anterior a la de inicio.")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
@@ -262,8 +283,8 @@ describe("HU #13132 AC4 — error 422 del servidor", () => {
     await llenarNatural(user);
     await user.click(radio("Validación de identidad"));
     await user.click(radio("Rango de fechas"));
-    await user.type(screen.getByLabelText("Fecha de inicio"), "2026-10-01");
-    await user.type(screen.getByLabelText("Fecha de fin"), "2026-12-31");
+    await elegirFecha(user, "Fecha de inicio", "2026-10-01");
+    await elegirFecha(user, "Fecha de fin", "2026-12-31");
     await user.click(guardar());
 
     const alerta = await screen.findByRole("alert");
@@ -272,7 +293,7 @@ describe("HU #13132 AC4 — error 422 del servidor", () => {
       "La fecha de fin no puede ser anterior a la fecha de inicio.",
     );
     expect(screen.getByLabelText("Nombre completo")).toHaveValue("Ana Restrepo");
-    expect(screen.getByLabelText("Fecha de fin")).toHaveValue("2026-12-31");
+    expect(screen.getByLabelText("Fecha de fin")).toHaveTextContent("31/12/2026");
     expect(guardar()).toBeEnabled();
   });
 
@@ -303,8 +324,8 @@ describe("HU #13132 AC5 — edición y cambio de modelo", () => {
     expect(radio("Persona natural")).toBeChecked();
     expect(radio("Validación de identidad")).toBeChecked();
     expect(radio("Rango de fechas")).toBeChecked();
-    expect(screen.getByLabelText("Fecha de inicio")).toHaveValue("2026-10-01");
-    expect(screen.getByLabelText("Fecha de fin")).toHaveValue("2026-12-31");
+    expect(screen.getByLabelText("Fecha de inicio")).toHaveTextContent("01/10/2026");
+    expect(screen.getByLabelText("Fecha de fin")).toHaveTextContent("31/12/2026");
   });
 
   it("avisa antes de guardar que cambiar de Persona natural descarta forma de firma y vigencia", async () => {
