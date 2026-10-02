@@ -149,18 +149,84 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
         esquema.GetProperty("scheme").GetString().Should().Be("bearer");
         raiz.GetProperty("security")[0].TryGetProperty("externalClient", out _).Should().BeTrue();
 
-        var enContrato = raiz.GetProperty("paths").EnumerateObject()
-            .SelectMany(p => p.Value.EnumerateObject().Select(o => $"{o.Name.ToUpperInvariant()} {p.Name}"))
-            .ToHashSet();
-        var enLaApi = _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+        var enContrato = Operaciones(raiz).Where(o => !o.Anunciada).Select(o => o.Ruta).ToHashSet();
+        var enLaApi = RutasExternasDeLaApi();
+
+        enContrato.Should().BeEquivalentTo(enLaApi, "cada ruta externa está documentada y el contrato no promete rutas que no existen");
+    }
+
+    /// <summary>
+    /// HU #13262 (Feature #13261, Épica #12741) — una operación con <c>x-estado: anunciada</c> se publica antes de
+    /// existir para que el consumidor implemente en paralelo. Mientras la API no la exponga, la marca es obligatoria;
+    /// en cuanto la exponga, esta prueba falla hasta quitar la marca y la ruta pasa a la verificación de arriba.
+    /// </summary>
+    [Fact]
+    public void AC4_LasOperacionesAnunciadasNoExistenTodaviaEnLaApi()
+    {
+        var anunciadas = Operaciones(Contrato.Value.RootElement).Where(o => o.Anunciada).Select(o => o.Ruta).ToList();
+
+        anunciadas.Should().Contain("POST /api/v1/external/tramites/{id}/adjuntos");
+        RutasExternasDeLaApi().Should().NotIntersectWith(anunciadas, "al implementarla se quita x-estado: anunciada del contrato");
+    }
+
+    /// <summary>
+    /// HU #13262 — el envío de adjuntos publica lo acordado con Flito: cuerpo multipart con la lista cerrada de tipos,
+    /// el mismo cuerpo en 201 y 200, cada código de error en su estado y el 409 de estado con <c>estado</c> y
+    /// <c>terminal</c> (AC1, AC3). Los ejemplos se validan contra sus esquemas en la prueba de ejemplos.
+    /// </summary>
+    [Fact]
+    public void AC4_ElEnvioDeAdjuntosPublicaElContratoAcordado()
+    {
+        const string ruta = "/api/v1/external/tramites/{id}/adjuntos";
+        var post = Contrato.Value.RootElement.GetProperty("paths").GetProperty(ruta).GetProperty("post");
+
+        post.GetProperty("requestBody").GetProperty("content").GetProperty("multipart/form-data")
+            .GetProperty("schema").GetProperty("$ref").GetString().Should().Be("#/components/schemas/AdjuntoEnvio");
+        Schemas.GetProperty("AdjuntoEnvio").GetProperty("properties").GetProperty("tipo").GetProperty("enum")
+            .EnumerateArray().Select(t => t.GetString()).Should().Equal("liquidacion_impuesto");
+
+        foreach (var status in new[] { "200", "201" })
+        {
+            post.GetProperty("responses").GetProperty(status).GetProperty("content").GetProperty("application/json")
+                .GetProperty("schema").GetProperty("$ref").GetString().Should().Be("#/components/schemas/AdjuntoRecibido");
+        }
+
+        Schemas.GetProperty("AdjuntoRecibido").GetProperty("required").EnumerateArray().Select(c => c.GetString())
+            .Should().BeEquivalentTo("adjuntoId", "tipo", "sha256", "reemplazoDe", "enMatriz", "pagadoMarcado");
+
+        CodigosDocumentados(ruta, "post", 400).Should().BeEquivalentTo("missing_file", "invalid_tipo", "invalid_mime", "file_too_large");
+        CodigosDocumentados(ruta, "post", 401).Should().Equal("invalid_token");
+        CodigosDocumentados(ruta, "post", 403).Should().Equal("insufficient_scope");
+        CodigosDocumentados(ruta, "post", 404).Should().Equal("procedure_not_found");
+        CodigosDocumentados(ruta, "post", 409).Should().BeEquivalentTo("not_allowed_in_state", "not_allowed_in_state", "attachment_exists");
+        CodigosDocumentados(ruta, "post", 429).Should().Equal("rate_limited");
+        CodigosDocumentados(ruta, "post", 503).Should().Equal("storage_unavailable");
+
+        var deEstado = post.GetProperty("responses").GetProperty("409").GetProperty("content").GetProperty("application/problem+json")
+            .GetProperty("examples").EnumerateObject().Select(e => e.Value.GetProperty("value"))
+            .Where(v => v.GetProperty("code").GetString() == "not_allowed_in_state")
+            .ToList();
+        deEstado.Select(v => v.GetProperty("terminal").GetBoolean()).Should().BeEquivalentTo([true, false]);
+        deEstado.Select(v => v.TryGetProperty("estado", out var estado) && estado.ValueKind == JsonValueKind.String)
+            .Should().AllBeEquivalentTo(true);
+
+        Contrato.Value.RootElement.GetProperty("components").GetProperty("securitySchemes").GetProperty("externalClient")
+            .GetProperty("description").GetString().Should().Contain("external.tramites.attachments.write");
+    }
+
+    private static IEnumerable<(string Ruta, bool Anunciada)> Operaciones(JsonElement raiz) =>
+        raiz.GetProperty("paths").EnumerateObject()
+            .SelectMany(p => p.Value.EnumerateObject().Select(o => (
+                $"{o.Name.ToUpperInvariant()} {p.Name}",
+                o.Value.TryGetProperty("x-estado", out var estado) && estado.GetString() == "anunciada")));
+
+    private HashSet<string> RutasExternasDeLaApi() =>
+        _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
             .OfType<RouteEndpoint>()
             .Where(e => e.RoutePattern.RawText?.StartsWith("/api/v1/external", StringComparison.Ordinal) == true)
             .SelectMany(e => (e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods ?? [])
                 .Select(m => $"{m} {e.RoutePattern.RawText}"))
             .ToHashSet();
-
-        enContrato.Should().BeEquivalentTo(enLaApi, "cada ruta externa está documentada y el contrato no promete rutas que no existen");
-    }
 
     // ── Validación de un subconjunto de OpenAPI 3.0 ─────────────────────────────
     // type, nullable, required, properties (sin propiedades no declaradas), items, enum, maxItems, allOf,
