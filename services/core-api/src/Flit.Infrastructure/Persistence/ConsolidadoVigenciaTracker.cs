@@ -140,7 +140,7 @@ internal static class ConsolidadoVigenciaTracker
     /// </summary>
     /// <returns>Ids de las instancias que quedaron con cambios pendientes que el llamador debe persistir
     /// (vacío si no hay nada que guardar). Tras persistirlos, el llamador debe llamar a
-    /// <see cref="RefrescarRowVersionAsync"/> con esos ids.</returns>
+    /// <see cref="AvanzarRowVersion"/> con esos ids.</returns>
     public static async Task<IReadOnlyList<Guid>> InvalidarAsync(
         DbContext context,
         Cambios cambios,
@@ -216,33 +216,32 @@ internal static class ConsolidadoVigenciaTracker
     /// la store en el modelo). La entidad rastreada quedaba con el token VIEJO y el siguiente guardado del
     /// MISMO contexto —p. ej. «Enviar al OT»: fase 1 persiste los checks (dato del FUR, sella
     /// <c>expediente_actualizado_en</c>) y fase 2 transiciona— salía con <c>WHERE row_version = viejo</c>:
-    /// <c>DbUpdateConcurrencyException</c>, 409 <c>conflicto_concurrencia</c> en cada intento. Se relee el
-    /// token de esas instancias y se fija como valor original y actual, sin marcar la propiedad modificada.
+    /// <c>DbUpdateConcurrencyException</c>, 409 <c>conflicto_concurrencia</c> en cada intento.
+    /// <para>Determinista, sin releer (review PR #510, L4): <c>public.trg_row_version</c> hace
+    /// <c>NEW.row_version := COALESCE(OLD.row_version, 0) + 1</c> y el UPDATE solo afectó la fila porque su
+    /// <c>WHERE row_version = token</c> coincidió, así que OLD es el token enviado (el valor original) y la
+    /// base quedó en token + 1. El trigger se salta solo si cambian únicamente columnas <c>sync_*</c> (DDL 123),
+    /// que este UPDATE nunca toca (sella marcas de vigencia). Releer abría una ventana en la que se podía
+    /// absorber la versión de otro escritor.</para>
     /// </summary>
-    public static async Task RefrescarRowVersionAsync(
-        DbContext context,
-        IReadOnlyList<Guid> ids,
-        CancellationToken ct)
+    public static void AvanzarRowVersion(DbContext context, IReadOnlyList<Guid> ids)
     {
-        if (ids.Count == 0)
+        // Sin base relacional (InMemory en tests) no hay trigger: el token no se movió en la store.
+        if (ids.Count == 0 || !context.Database.IsRelational())
             return;
 
-        var versiones = await context.Set<ProcedureInstance>()
-            .AsNoTracking()
-            .Where(p => ids.Contains(p.Id))
-            .Select(p => new { p.Id, p.RowVersion })
-            .ToDictionaryAsync(p => p.Id, p => p.RowVersion, ct)
-            .ConfigureAwait(false);
+        var tocadas = ids.ToHashSet();
 
         // Copia: fijar valores dispara detección de cambios y modificaría la colección enumerada.
         foreach (var entry in context.ChangeTracker.Entries<ProcedureInstance>().ToList())
         {
-            if (entry.State == EntityState.Detached || !versiones.TryGetValue(entry.Entity.Id, out var version))
+            if (entry.State == EntityState.Detached || !tocadas.Contains(entry.Entity.Id))
                 continue;
 
             var propiedad = entry.Property(p => p.RowVersion);
-            propiedad.OriginalValue = version;
-            propiedad.CurrentValue = version;
+            var siguiente = propiedad.OriginalValue + 1;
+            propiedad.OriginalValue = siguiente;
+            propiedad.CurrentValue = siguiente;
             propiedad.IsModified = false;
         }
     }
