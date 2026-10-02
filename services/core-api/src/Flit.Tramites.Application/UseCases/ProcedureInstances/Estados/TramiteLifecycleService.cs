@@ -54,7 +54,9 @@ public sealed class TramiteLifecycleService(
     // sin resolutor el gate de Cámara de Comercio se omite (comportamiento previo a la HU).
     CamaraComercioRequirementResolver? camaraComercioResolver = null,
     // Bug #13194 (P4, D2) — al final por la misma razón. Null ⇒ el gate bloquea igual, sin notificar.
-    IFirmaPendienteNotifier? firmaNotifier = null) : ITramiteLifecycleService
+    IFirmaPendienteNotifier? firmaNotifier = null,
+    // Bug #13194 (MAYOR-1) — accesor scoped para la extensión `partesSinFirma` del 409. Null en tests.
+    UltimoBloqueoFirma? ultimoBloqueo = null) : ITramiteLifecycleService
 {
     private readonly ILogger<TramiteLifecycleService> _logger =
         logger ?? NullLogger<TramiteLifecycleService>.Instance;
@@ -183,6 +185,7 @@ public sealed class TramiteLifecycleService(
                     {
                         var notificadas = await NotificarPartesSinFirmaAsync(instance, faltantes, ct)
                             .ConfigureAwait(false);
+                        RegistrarBloqueo(notificadas);
                         return TramiteTransitionOutcome.Fail(
                                 code, $"{detail} Firma pendiente de: {FirmaGate.PartesConNotificacion(notificadas)}.")
                             with { PartesSinFirma = notificadas };
@@ -208,6 +211,7 @@ public sealed class TramiteLifecycleService(
                 // Cada parte sin firma (baúl o VID ausentes o vencidos) recibe el correo de validación. Un
                 // fallo de la notificación no cambia el 409: queda como estado «fallida» de esa parte.
                 var notificadas = await NotificarPartesSinFirmaAsync(instance, sinFirma, ct).ConfigureAwait(false);
+                RegistrarBloqueo(notificadas);
                 return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(notificadas))
                     with { PartesSinFirma = notificadas };
             }
@@ -309,40 +313,23 @@ public sealed class TramiteLifecycleService(
         return TramiteTransitionOutcome.Ok(instance);
     }
 
+    /// <summary>Bug #13194 (MAYOR-1) — deja las partes del bloqueo en el accesor scoped de la petición.</summary>
+    private void RegistrarBloqueo(IReadOnlyList<ParteSinFirma> partes)
+    {
+        if (ultimoBloqueo is not null)
+            ultimoBloqueo.PartesSinFirma = partes;
+    }
+
     /// <summary>
     /// Bug #13194 (P4, D2) — notifica (correo de validación) cada parte sin firma. Nunca lanza: una excepción
     /// del notificador se registra sin PII y la parte queda en <see cref="FirmaNotificacionEstados.Fallida"/>.
     /// </summary>
-    private async Task<IReadOnlyList<ParteSinFirma>> NotificarPartesSinFirmaAsync(
-        ProcedureInstance instance, IReadOnlyList<string> partes, CancellationToken ct)
-    {
-        var resultado = new List<ParteSinFirma>(partes.Count);
-        foreach (var parte in partes)
-        {
-            string estado;
-            if (firmaNotifier is null)
-            {
-                estado = FirmaNotificacionEstados.NoConfigurada;
-            }
-            else
-            {
-                try
-                {
-                    estado = await firmaNotifier.NotificarAsync(instance.Id, instance.TenantId, parte, ct)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    TramiteLifecycleLog.NotificacionFirmaFallida(_logger, ex.GetType().Name, instance.Id, parte);
-                    estado = FirmaNotificacionEstados.Fallida;
-                }
-            }
-
-            resultado.Add(new ParteSinFirma(parte, estado));
-        }
-
-        return resultado;
-    }
+    private Task<IReadOnlyList<ParteSinFirma>> NotificarPartesSinFirmaAsync(
+        ProcedureInstance instance, IReadOnlyList<string> partes, CancellationToken ct) =>
+        FirmaGate.NotificarAsync(
+            firmaNotifier, instance.Id, instance.TenantId, partes,
+            (tipo, parte) => TramiteLifecycleLog.NotificacionFirmaFallida(_logger, tipo, instance.Id, parte),
+            ct);
 
     /// <summary>
     /// HU #12796 — pide la regeneración anticipada sin afectar al hito: la cola no bloquea y un descarte

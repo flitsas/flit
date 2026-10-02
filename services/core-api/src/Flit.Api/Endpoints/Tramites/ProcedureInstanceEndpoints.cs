@@ -22,11 +22,6 @@ namespace Flit.Api.Endpoints.Tramites;
 
 internal static class ProcedureInstanceEndpoints
 {
-    /// <summary>Bug #13194 (P4, D2) — detalle genérico del 409 <c>firma_pendiente</c> (sin PII).</summary>
-    private const string FirmaPendienteDetalle =
-        "No se permite enviar al organismo de tránsito un trámite sin firmar: falta la identidad aprobada y "
-        + "vigente de alguna de las partes que firman.";
-
     internal static IEndpointRouteBuilder MapTramitesInstanceEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/tramites");
@@ -672,6 +667,7 @@ internal static class ProcedureInstanceEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             HttpContext http,
             SubmitProcedureInstanceHandler handler,
+            UltimoBloqueoFirma bloqueoFirma,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -692,9 +688,10 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "procedure_type_not_enabled" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tipo de trámite todavía no está habilitado para crearse. Contacta al administrador."),
                 TramiteEstadoErrores.DocumentosIncompletos => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.DocumentosIncompletos, detail: "Faltan documentos obligatorios para radicar."),
-                TramiteEstadoErrores.IdentidadNoAprobada => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.IdentidadNoAprobada, detail: "La validación de identidad no está aprobada o no está vigente."),
+                // Bug #13194 (MAYOR-1) — preparar desde borrador también notifica: lleva `partesSinFirma`.
+                TramiteEstadoErrores.IdentidadNoAprobada => FirmaPendienteProblem.Crear(TramiteEstadoErrores.IdentidadNoAprobada, "La validación de identidad no está aprobada o no está vigente.", bloqueoFirma.PartesSinFirma),
                 // Bug #13194 (P4, D2) — gate de firma: no se envía al OT un trámite sin firmar (siempre).
-                TramiteEstadoErrores.FirmaPendiente => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.FirmaPendiente, detail: FirmaPendienteDetalle),
+                TramiteEstadoErrores.FirmaPendiente => FirmaPendienteProblem.Crear(TramiteEstadoErrores.FirmaPendiente, null, bloqueoFirma.PartesSinFirma),
                 // HU #10459 — gate completo de traspaso: la firma de compraventa bloquea la radicación.
                 SubmitGate.FirmaCompraventaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.FirmaCompraventaRequerida, detail: "Falta la firma del contrato de compraventa de comprador y vendedor."),
                 "fur_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes de radicar."),
@@ -787,6 +784,7 @@ internal static class ProcedureInstanceEndpoints
             HttpContext http,
             EnviarAlOtRequest? body,
             EnviarAlOtHandler handler,
+            UltimoBloqueoFirma bloqueoFirma,
             CancellationToken ct)
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -801,8 +799,8 @@ internal static class ProcedureInstanceEndpoints
                     statusCode: 422, title: TramiteEstadoErrores.TransicionNoPermitida,
                     detail: "Solo se puede enviar al organismo de tránsito un trámite con placa asignada (estado Asignado)."),
                 // Bug #13194 (P4, D2) — gate de firma: no se envía al OT un trámite sin firmar.
-                TramiteEstadoErrores.FirmaPendiente => Results.Problem(
-                    statusCode: 409, title: TramiteEstadoErrores.FirmaPendiente, detail: FirmaPendienteDetalle),
+                TramiteEstadoErrores.FirmaPendiente => FirmaPendienteProblem.Crear(
+                    TramiteEstadoErrores.FirmaPendiente, null, bloqueoFirma.PartesSinFirma),
                 EnviarAlOtHandler.SoatNoVigente => Results.Problem(
                     statusCode: 409, title: EnviarAlOtHandler.SoatNoVigente,
                     detail: "El RUNT no reporta un SOAT vigente para el vehículo. La compañía tiene "
@@ -830,7 +828,8 @@ internal static class ProcedureInstanceEndpoints
             HttpContext http,
             EnviarAlOtRequest? body,
             EnviarAlOtHandler handler,
-            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, ct))
+            UltimoBloqueoFirma bloqueoFirma,
+            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, bloqueoFirma, ct))
             .WithName("EnviarAlOt");
 
         group.MapPost("/instances/{id:guid}/plate-flow/complete", (
@@ -839,7 +838,8 @@ internal static class ProcedureInstanceEndpoints
             HttpContext http,
             EnviarAlOtRequest? body,
             EnviarAlOtHandler handler,
-            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, ct))
+            UltimoBloqueoFirma bloqueoFirma,
+            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, bloqueoFirma, ct))
             .WithName("CompletePlateFlow");
 
         // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
@@ -905,6 +905,7 @@ internal static class ProcedureInstanceEndpoints
             TransitionProcedureInstanceRequest request,
             HttpContext http,
             TransitionProcedureInstanceHandler handler,
+            UltimoBloqueoFirma bloqueoFirma,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -937,7 +938,7 @@ internal static class ProcedureInstanceEndpoints
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
                 // Bug #13194 (P4, D2) — gate de firma (409): el detalle nombra las partes sin firmar.
                 TramiteEstadoErrores.FirmaPendiente =>
-                    Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail ?? FirmaPendienteDetalle),
+                    FirmaPendienteProblem.Crear(errorCode, errorDetail, bloqueoFirma.PartesSinFirma),
                 _ => Results.Problem(
                     statusCode: 422, title: errorCode,
                     detail: errorDetail ?? "La transición solicitada no es válida."),
