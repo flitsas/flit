@@ -363,7 +363,8 @@ public static class AdminInfrastructureExtensions
         // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations queda sin
         // lectores de identidad: el estado que muestra la consola (ficha de mandatarios y representantes)
         // sale del módulo Identidad (IdentityVigenciaPorDocumentoResolver, HU #11765), en el tenant de la
-        // compañía que registró a la persona (HU #13121).
+        // compañía que registró a la persona (HU #13121). El retiro físico de la tabla y de las dos columnas huérfanas
+        // (HU #13160, fase 2) es el script manual docs/sql/127-HU13160-fase2-drop-identidad-mandatario.sql, no una migración.
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
