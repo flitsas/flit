@@ -7,9 +7,10 @@
  * está cerrado:
  *  - el código puede venir en `title` (ProblemDetails, lo que hace hoy el backend), `code`,
  *    `errorCode` o `error`;
- *  - las partes pueden venir como lista (`partes`, `partesSinFirma`, `partesFaltantes`, `parties`)
- *    de textos u objetos `{ parte, notificacion }`, o solo dentro del `detail`
- *    («… Falta la firma (identidad aprobada y vigente) de: comprador, vendedor.»);
+ *  - las partes vienen, por prioridad, en la extensión `partesSinFirma: [{ parte, notificacion }]`
+ *    (alias aceptados: `partes`, `partesFaltantes`, `parties`, también como lista de textos) o, si no
+ *    hay extensión, en el `detail` de `FirmaGate.Detalle`:
+ *    «… de: comprador (notificación: enviada), vendedor (notificación: fallida).» (o sin paréntesis);
  *  - la notificación del correo de validación de identidad por parte puede faltar (paso posterior).
  *
  * Sin partes ni notificación el mensaje es genérico. Solo se nombran ROLES conocidos: nada que venga
@@ -19,7 +20,7 @@
 export const FIRMA_PENDIENTE_CODE = 'firma_pendiente';
 
 /** Estado del correo de validación de identidad (VID) que el backend reporta por parte. */
-export type NotificacionVid = 'no_requerida' | 'enviada' | 'ya_en_curso' | 'fallida';
+export type NotificacionVid = 'no_requerida' | 'enviada' | 'ya_en_curso' | 'fallida' | 'no_configurada';
 
 export interface ParteFirmaPendiente {
   /** Rol normalizado (`comprador`, `vendedor`, …). */
@@ -42,10 +43,17 @@ const PARTE_LABEL: Record<string, string> = {
   acreedor: 'acreedor',
 };
 
-const NOTIFICACIONES: readonly NotificacionVid[] = ['no_requerida', 'enviada', 'ya_en_curso', 'fallida'];
+const NOTIFICACIONES: readonly NotificacionVid[] = [
+  'no_requerida',
+  'enviada',
+  'ya_en_curso',
+  'fallida',
+  'no_configurada',
+];
 
 const CODE_KEYS = ['title', 'code', 'errorCode', 'error'] as const;
-const LIST_KEYS = ['partes', 'partesSinFirma', 'partesFaltantes', 'parties', 'missingParties'] as const;
+// `partesSinFirma` primero: es la extensión que emite el backend (review PR #510).
+const LIST_KEYS = ['partesSinFirma', 'partes', 'partesFaltantes', 'parties', 'missingParties'] as const;
 const PARTE_KEYS = ['parte', 'rol', 'role', 'party'] as const;
 const NOTIF_KEYS = ['notificacion', 'notificacionVid', 'estadoNotificacion', 'notification'] as const;
 
@@ -87,6 +95,9 @@ function primerValor(o: Record<string, unknown>, keys: readonly string[]): unkno
   return undefined;
 }
 
+/** Token del detail: «comprador» o «comprador (notificación: enviada)». */
+const TOKEN_DETAIL = /^\s*([a-záéíóúñ_]+)\s*(?:\(\s*notificaci[oó]n\s*:\s*([a-z_]+)\s*\))?\s*$/i;
+
 /** Partes que faltan por firmar, en el orden en que las reporta el backend y sin repetir. */
 export function partesFirmaPendiente(problem: Problem): ParteFirmaPendiente[] {
   const p = asRecord(problem);
@@ -118,13 +129,16 @@ export function partesFirmaPendiente(problem: Problem): ParteFirmaPendiente[] {
     }
   }
 
-  // Contrato actual de `/transition`: las partes solo viajan en el `detail` («… de: comprador, vendedor.»).
+  // Sin extensión: `FirmaGate.Detalle` («… de: comprador (notificación: enviada), vendedor.»).
   if (out.length === 0 && typeof p.detail === 'string') {
     const m = /de:\s*([^.]+)\.?\s*$/i.exec(p.detail);
     if (m) {
-      for (const token of m[1].split(/,|\by\b/)) {
-        const parte = normalizarParte(token);
-        add(parte, parte && mapaNotif ? normalizarNotificacion(mapaNotif[parte]) : null);
+      for (const token of m[1].split(/,|\s+y\s+/)) {
+        const t = TOKEN_DETAIL.exec(token);
+        if (!t) continue;
+        const parte = normalizarParte(t[1]);
+        const notif = normalizarNotificacion(t[2]) ?? (parte && mapaNotif ? normalizarNotificacion(mapaNotif[parte]) : null);
+        add(parte, notif);
       }
     }
   }
@@ -160,29 +174,23 @@ export function mensajeFirmaPendiente(
     frases.push(`Falta la firma ${listaDel(partes.map((x) => x.parte))}.`);
   }
 
-  const una = partes.length === 1;
   let hayNotificacion = false;
   for (const { parte, notificacion } of partes) {
-    const quien = una ? '' : ` del ${PARTE_LABEL[parte]}`;
+    const al = `al ${PARTE_LABEL[parte]}`;
     switch (notificacion) {
       case 'enviada':
         hayNotificacion = true;
-        frases.push(
-          una
-            ? 'Enviamos el enlace de validación de identidad a su correo.'
-            : `Enviamos el enlace de validación de identidad al correo${quien}.`,
-        );
+        frases.push(`Enviamos el enlace de validación de identidad al correo del ${PARTE_LABEL[parte]}.`);
         break;
       case 'ya_en_curso':
         hayNotificacion = true;
-        frases.push(`Ya hay una validación de identidad en curso${quien}; espera a que termine.`);
+        frases.push(`Ya hay una validación en curso para el ${PARTE_LABEL[parte]}.`);
         break;
       case 'fallida':
+      case 'no_configurada':
         hayNotificacion = true;
         frases.push(
-          contexto === 'asignado'
-            ? `No se pudo enviar el correo de validación${quien}: inicia la prevalidación desde el módulo Identidad.`
-            : `No se pudo enviar el correo de validación${quien}: usa «Validar identidad» en el paso 4.`,
+          `No pudimos enviar el enlace de validación ${al}; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.`,
         );
         break;
       default:
