@@ -78,7 +78,8 @@ public sealed class RepresentanteLegalDesdeDirectorio(IBulkTramitesLegalRepresen
         var declarado = rl?.NumeroDocumento;
         var representante = string.IsNullOrWhiteSpace(declarado)
             ? entrada.Representantes[0]
-            : entrada.Representantes.FirstOrDefault(r => MismoDocumento(r.NumeroDocumento, declarado));
+            : entrada.Representantes.FirstOrDefault(r =>
+                MismoDocumento(r.TipoDocumento, r.NumeroDocumento, rl?.TipoDocumento, declarado));
         if (representante is null)
         {
             // Declaró a alguien que el directorio no tiene para ese NIT: no se sustituye por otra persona.
@@ -136,11 +137,43 @@ public sealed class RepresentanteLegalDesdeDirectorio(IBulkTramitesLegalRepresen
         return ActorPersonTypes.IsJuridical(ActorPersonTypes.ResolveForDocument(tipo, actor.PersonType));
     }
 
-    /// <summary>Empata cédulas aunque vengan con puntos o ceros a la izquierda, como el asistente.</summary>
-    private static bool MismoDocumento(string a, string b) => SoloDigitos(a) == SoloDigitos(b);
+    /// <summary>
+    /// ¿Es la misma persona? Empata cédulas aunque vengan con puntos o ceros a la izquierda, como el
+    /// asistente. Bug #13194 (review PR #510, L1 de security) — fail-closed:
+    /// <list type="bullet">
+    ///   <item>si ambos lados traen tipo de documento, tienen que coincidir (CC ≠ CE aunque los dígitos sean
+    ///   los mismos);</item>
+    ///   <item>si alguno de los números lleva letras (PA, PEP, …), se compara el alfanumérico exacto en
+    ///   MAYÚSCULAS (sin separadores): quitar las letras haría coincidir pasaportes distintos;</item>
+    ///   <item>si no, los dígitos normalizados, que no pueden quedar vacíos (un «0» o «---» no empareja con
+    ///   nadie).</item>
+    /// </list>
+    /// </summary>
+    public static bool MismoDocumento(string? tipoA, string? numeroA, string? tipoB, string? numeroB)
+    {
+        // El tipo se compara sin separadores ni mayúsculas («C.C.» = «CC»).
+        if (!string.IsNullOrWhiteSpace(tipoA) && !string.IsNullOrWhiteSpace(tipoB)
+            && !string.Equals(Alfanumerico(tipoA), Alfanumerico(tipoB), StringComparison.Ordinal))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(numeroA) || string.IsNullOrWhiteSpace(numeroB))
+            return false;
+
+        if (numeroA.Any(char.IsLetter) || numeroB.Any(char.IsLetter))
+        {
+            var a = Alfanumerico(numeroA);
+            return a.Length > 0 && string.Equals(a, Alfanumerico(numeroB), StringComparison.Ordinal);
+        }
+
+        var digitosA = SoloDigitos(numeroA);
+        return digitosA.Length > 0 && string.Equals(digitosA, SoloDigitos(numeroB), StringComparison.Ordinal);
+    }
 
     private static string SoloDigitos(string valor) =>
         new string(valor.Where(char.IsDigit).ToArray()).TrimStart('0');
+
+    private static string Alfanumerico(string valor) =>
+        new string(valor.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
 
     private static string? Primero(string? propio, string? directorio) =>
         string.IsNullOrWhiteSpace(propio)
