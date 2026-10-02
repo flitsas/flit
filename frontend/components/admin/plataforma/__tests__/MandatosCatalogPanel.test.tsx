@@ -1,5 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MandatosCatalogPanel } from "@/components/admin/plataforma/MandatosCatalogPanel";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -65,12 +66,18 @@ vi.mock("@/lib/documents/open-document-tab", () => ({
 // Las filas y el catálogo llegan por separado: se espera a una acción de fila, no a un texto repetido.
 const esperarFilas = () => screen.findByRole("button", { name: /acciones de mandato para sabaneta/i });
 
-function renderPanel() {
-  return render(
+// La pantalla se organiza en pestañas: «Formatos de contrato» (la que abre por defecto), «Configuración por
+// organismo» y «Simulador». Los tests abren la pestaña que necesitan.
+function renderPanel(pestana: "organismos" | "formatos" = "organismos") {
+  const r = render(
     <ToastProvider>
       <MandatosCatalogPanel />
     </ToastProvider>,
   );
+  if (pestana === "organismos") {
+    fireEvent.click(screen.getByRole("tab", { name: /configuración por organismo/i }));
+  }
+  return r;
 }
 
 const sampleRows = [
@@ -247,19 +254,18 @@ describe("MandatosCatalogPanel configurador", () => {
   });
 
   it("HU #13152: la ayuda dice que el tipo por defecto es Persona natural y nadie afirma que Mandato abierto lo es", async () => {
-    renderPanel();
-    await esperarFilas();
+    renderPanel("formatos");
     expect(
-      screen.getByText(/tipo por defecto de un organismo nuevo es persona natural/i),
+      await screen.findByText(/tipo por defecto de un organismo nuevo es persona natural/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/abierto[^.]*es el (default|tipo por defecto)/i)).not.toBeInTheDocument();
   });
 
   it("abre preview de plantilla genérica", async () => {
     const user = userEvent.setup();
-    renderPanel();
-    await esperarFilas();
-    await user.click(await screen.findByRole("button", { name: /ver documento del formato genérico/i }));
+    renderPanel("formatos");
+    await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+    await pulsarAccion(user, /ver documento del formato genérico/i);
     await waitFor(() => expect(openPdfBlobInNewTab).toHaveBeenCalled());
   });
 
@@ -292,7 +298,7 @@ describe("MandatosCatalogPanel configurador", () => {
         formato("generico", "Genérico"),
         formato("bello", "Bello renombrado"),
       ]);
-      renderPanel();
+      renderPanel("formatos");
       const tabla = await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
       expect(within(tabla).getByText("Bello renombrado")).toBeInTheDocument();
       expect(within(tabla).getByText("Genérico")).toBeInTheDocument();
@@ -304,7 +310,7 @@ describe("MandatosCatalogPanel configurador", () => {
         formato("sabaneta", "Sabaneta (editado)", "institutional"),
         formato("generico", "Genérico"),
       ]);
-      renderPanel();
+      renderPanel("formatos");
       await screen.findByText("Medellín");
       await waitFor(() => expect(screen.getAllByText("Sabaneta (editado)").length).toBeGreaterThan(1));
     });
@@ -312,7 +318,7 @@ describe("MandatosCatalogPanel configurador", () => {
     it("si el catálogo falla muestra el error con Reintentar y al reintentar carga", async () => {
       const user = userEvent.setup();
       listMandatoFormats.mockRejectedValueOnce(new Error("boom"));
-      renderPanel();
+      renderPanel("formatos");
       expect(await screen.findByTestId("mandatos-formatos-error")).toBeInTheDocument();
       expect(screen.queryByRole("table", { name: /formatos de contrato de mandato/i })).not.toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: /reintentar/i }));
@@ -322,15 +328,17 @@ describe("MandatosCatalogPanel configurador", () => {
 
     it("mientras carga muestra un estado de carga", async () => {
       listMandatoFormats.mockReturnValue(new Promise(() => undefined));
-      renderPanel();
+      renderPanel("formatos");
       expect(await screen.findByTestId("mandatos-formatos-loading")).toBeInTheDocument();
     });
 
     it("la automática no ofrece Ver documento: delega en el organismo", async () => {
-      renderPanel();
-      await screen.findByRole("button", { name: /editar formato automática/i });
-      expect(screen.queryByRole("button", { name: /ver documento del formato automática/i })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /ver documento del formato genérico/i })).toBeInTheDocument();
+      const user = userEvent.setup();
+      renderPanel("formatos");
+      await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+      expect(await hayAccion(user, /editar formato automática/i)).toBe(true);
+      expect(await hayAccion(user, /ver documento del formato automática/i, undefined, false)).toBe(false);
+      expect(await hayAccion(user, /ver documento del formato genérico/i)).toBe(true);
     });
   });
 
@@ -345,11 +353,12 @@ describe("MandatosCatalogPanel configurador", () => {
     });
 
     it("lista nombre, tipo de mandato, versión vigente y fecha de la última edición, sin crear ni eliminar", async () => {
+      const user = userEvent.setup();
       listMandatoFormats.mockResolvedValue([
         completo("generico", "Genérico"),
         completo("municipio", "Envigado, Funza y Medellín", { currentVersion: 0, updatedAt: null }),
       ]);
-      renderPanel();
+      renderPanel("formatos");
       const tabla = await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
       expect(within(tabla).getByRole("columnheader", { name: /^nombre$/i })).toBeInTheDocument();
       expect(within(tabla).getByRole("columnheader", { name: /tipo de mandato/i })).toBeInTheDocument();
@@ -359,8 +368,8 @@ describe("MandatosCatalogPanel configurador", () => {
       expect(within(tabla).getByText("De fábrica")).toBeInTheDocument();
       expect(within(tabla).getByText(/30\/09\/2026/)).toBeInTheDocument();
       // Cada fila tiene Editar con etiqueta accesible por formato.
-      expect(screen.getByRole("button", { name: /editar formato genérico/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /editar formato envigado, funza y medellín/i })).toBeInTheDocument();
+      expect(await hayAccion(user, /editar formato genérico/i)).toBe(true);
+      expect(await hayAccion(user, /editar formato envigado, funza y medellín/i)).toBe(true);
       // No hay acciones de crear ni eliminar formatos.
       expect(screen.queryByRole("button", { name: /(crear|nuevo|agregar|eliminar|borrar).*formato|formato.*(eliminar|borrar)/i })).not.toBeInTheDocument();
     });
@@ -373,8 +382,9 @@ describe("MandatosCatalogPanel configurador", () => {
       getMandatoFormat.mockResolvedValue({ format: antes, body: "Texto {{placa}}", versions: [] });
       updateMandatoFormat.mockResolvedValue({ format: despues, changed: true, publishedVersion: null });
 
-      renderPanel();
-      await user.click(await screen.findByRole("button", { name: /editar formato envigado/i }));
+      renderPanel("formatos");
+      await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+      await pulsarAccion(user, /editar formato envigado/i);
       const nombre = await screen.findByLabelText(/nombre del formato/i);
       await user.clear(nombre);
       await user.type(nombre, "Envigado jurídico");

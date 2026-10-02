@@ -1,6 +1,7 @@
 // HU #13140 (Feature F3 #13115) — hub del OT: desactivar, reactivar y eliminar con advertencia de impacto.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -171,7 +172,7 @@ describe("HU #13140 — hub del OT", () => {
     deleteSigner.mockResolvedValue({ reassigned: 0, pendingOtDecision: 1 });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /eliminar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /eliminar mandatario hugo mandatario/i);
     const dialogo = await screen.findByRole("dialog");
     const impacto = await within(dialogo).findByTestId("mandatario-baja-impacto");
     expect(impacto).toHaveTextContent("Gestora de Prueba S.A.S. en OT Bogotá");
@@ -187,14 +188,14 @@ describe("HU #13140 — hub del OT", () => {
     inactivateSigner.mockResolvedValue({ reassigned: 0, pendingOtDecision: 0 });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /desactivar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /desactivar mandatario hugo mandatario/i);
     let dialogo = await screen.findByRole("dialog");
     await within(dialogo).findByText(/¿desactivar a/i);
     await user.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(inactivateSigner).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /desactivar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /desactivar mandatario hugo mandatario/i);
     dialogo = await screen.findByRole("dialog");
     await user.click(await within(dialogo).findByRole("button", { name: "Desactivar" }));
     await waitFor(() => expect(inactivateSigner).toHaveBeenCalledWith("ot-1", "ms-1"));
@@ -207,9 +208,9 @@ describe("HU #13140 — hub del OT", () => {
       .mockResolvedValueOnce({ restoredLinks: [], conflictLinks: [], restoredDefaults: 0 });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /reactivar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /reactivar mandatario hugo mandatario/i);
     expect(await screen.findByText(/ya hay otro mandatario activo para esa compañía y organismo/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /reactivar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /reactivar mandatario hugo mandatario/i);
     expect(await screen.findByText("Hugo Mandatario vuelve a estar activo.")).toBeInTheDocument();
   });
 

@@ -6,7 +6,7 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
-import { RowActions } from "@/components/atom/RowActions";
+import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -339,29 +339,17 @@ export function CompanyMandatariosPanel({
                     )}
                   </td>
                   <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
-                    {(signer.transitOfficeIds ?? []).length === 0
-                      ? "—"
-                      : (signer.transitOfficeIds ?? [])
-                          .map((id) => officeNameById.get(id) ?? id)
-                          .join(", ")}
-                    {/* HU #11717 — se SEÑALA, no se inhabilita: los trámites en curso siguen
-                        emitiendo su mandato como hoy. */}
-                    {sinFirmaPorSigner(signer).length > 0 && (
-                      <div
-                        className="mt-1 text-[11px] leading-tight"
-                        style={{ color: "#E5484D" }}
-                        title={motivoSinFirma(signer)}
-                      >
-                        No puede firmar en{" "}
-                        {sinFirmaPorSigner(signer)
-                          .map((id) => officeNameById.get(id) ?? id)
-                          .join(", ")}
-                        : {motivoSinFirma(signer).toLowerCase()}
-                      </div>
-                    )}
+                    <OrganismosDelMandatario
+                      ids={signer.transitOfficeIds ?? []}
+                      nombrePorId={officeNameById}
+                      sinFirmaIds={sinFirmaPorSigner(signer)}
+                      motivo={motivoSinFirma(signer)}
+                    />
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActions
+                    <RowActionsMenu
+                      ariaLabel={`Acciones de ${signer.fullName}`}
+                      subject={signer.fullName}
                       actions={!puedeEditar ? [] : [
                         {
                           icon: Pencil,
@@ -457,6 +445,55 @@ export function CompanyMandatariosPanel({
           onSubmit={handleSubmit}
           onResend={reenviarValidacion}
         />
+      )}
+    </div>
+  );
+}
+
+const MAX_ORGANISMOS_VISIBLES = 3;
+
+/**
+ * Organismos de un mandatario: uno por línea (los que no puede firmar, en rojo), una sola frase con el motivo y
+ * «+N más» plegable cuando son muchos. Antes se pegaban con comas y el aviso repetía los mismos nombres.
+ * HU #11717 — se SEÑALA, no se inhabilita: los trámites en curso siguen emitiendo su mandato como hoy.
+ */
+function OrganismosDelMandatario({
+  ids,
+  nombrePorId,
+  sinFirmaIds,
+  motivo,
+}: {
+  ids: readonly string[];
+  nombrePorId: ReadonlyMap<string, string>;
+  sinFirmaIds: readonly string[];
+  motivo: string;
+}) {
+  if (ids.length === 0) return <>—</>;
+  const sinFirma = new Set(sinFirmaIds);
+  const items = ids.map((id) => ({ id, nombre: nombrePorId.get(id) ?? id, bloqueado: sinFirma.has(id) }));
+  const visibles = items.slice(0, MAX_ORGANISMOS_VISIBLES);
+  const resto = items.slice(MAX_ORGANISMOS_VISIBLES);
+  const fila = (o: (typeof items)[number]) => (
+    <li key={o.id} className="leading-snug" style={o.bloqueado ? { color: "#E5484D" } : undefined}>
+      {o.nombre}
+    </li>
+  );
+  const todosBloqueados = sinFirmaIds.length > 0 && sinFirmaIds.length === ids.length;
+  return (
+    <div data-testid="mandatario-organismos">
+      <ul className="space-y-0.5">{visibles.map(fila)}</ul>
+      {resto.length > 0 && (
+        <details className="mt-0.5 text-[11px]">
+          <summary className="cursor-pointer font-semibold text-[#557EFF]">+{resto.length} más</summary>
+          <ul className="mt-0.5 space-y-0.5 text-xs">{resto.map(fila)}</ul>
+        </details>
+      )}
+      {sinFirmaIds.length > 0 && (
+        <div className="mt-1 text-[11px] leading-tight" style={{ color: "#E5484D" }} title={motivo}>
+          {todosBloqueados
+            ? `No puede firmar todavía: ${motivo.toLowerCase()}`
+            : `No puede firmar en los organismos marcados en rojo: ${motivo.toLowerCase()}`}
+        </div>
       )}
     </div>
   );

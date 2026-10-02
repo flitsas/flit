@@ -1,5 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -147,6 +148,7 @@ describe("OtMandatosSection", () => {
   });
 
   it("lista empresas habilitadas y permite editar el mandatario", async () => {
+    const user = userEvent.setup();
     fetchMandateOtConfig.mockResolvedValue(office);
     listCompanyOtMandateRules.mockResolvedValue([
       companyRow({
@@ -161,13 +163,14 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     expect(await screen.findByTestId("ot-mandatos-company-table")).toBeInTheDocument();
     expect(await screen.findByText("Gestora de Prueba S.A.S.")).toBeInTheDocument();
     expect(screen.getByText("900123456")).toBeInTheDocument();
     expect(screen.queryByText("CIA-1")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /^código$/i })).not.toBeInTheDocument();
     expect(screen.getByText("Carlos Pérez")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /editar mandatario de gestora de prueba/i })).toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario de gestora de prueba/i)).toBe(true);
   });
 
   it("muestra Sin definir cuando el OT no tiene mandatario general", async () => {
@@ -178,11 +181,11 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    expect(await screen.findByTestId("ot-mandatos-general-signer")).toHaveTextContent("Sin definir");
+    expect(await screen.findByTestId("ot-mandatos-general-signer")).toHaveTextContent(/todavía no hay un mandatario general/i);
   });
 
   async function abrirFormularioGeneral(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByRole("button", { name: /editar mandatario general del organismo/i }));
+    await pulsarAccion(user, /editar mandatario general del organismo/i);
     await user.click(await screen.findByTestId("mandato-ot-register-signer"));
     return screen.findByRole("dialog", { name: /registrar mandatario/i });
   }
@@ -284,7 +287,7 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /editar mandatario general del organismo/i }));
+    await pulsarAccion(user, /editar mandatario general del organismo/i);
     await screen.findByTestId("mandato-ot-config-form");
     expect(screen.queryByTestId("mandato-ot-register-signer")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^registrar mandatario$/i })).not.toBeInTheDocument();
@@ -299,7 +302,8 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /editar mandatario de gestora de prueba/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
+    await pulsarAccion(user, /editar mandatario de gestora de prueba/i);
     expect(await screen.findByTestId("mandato-ot-config-form")).toHaveAttribute("data-mode", "mandatario");
   });
 
@@ -316,8 +320,9 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     expect(await screen.findByText("Carlos Pérez")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /editar mandatario de gestora de prueba/i }));
+    await pulsarAccion(user, /editar mandatario de gestora de prueba/i);
     const closeButtons = await screen.findAllByRole("button", { name: /^cerrar$/i });
     const footerClose = closeButtons.find((el) => el.textContent?.trim() === "Cerrar");
     expect(footerClose).toBeDefined();
@@ -334,6 +339,7 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     expect(await screen.findByText(/no hay compañías activas/i)).toBeInTheDocument();
     expect(screen.getByText(/no hay mandatarios creados en este organismo/i)).toBeInTheDocument();
   });
@@ -350,6 +356,7 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     const tabla = await screen.findByRole("table", { name: "Compañías activas" });
     expect(within(tabla).getByText("Nunca Radicó Ltda.")).toBeInTheDocument();
     expect(within(tabla).getByText("800555111")).toBeInTheDocument();
@@ -362,7 +369,7 @@ describe("OtMandatosSection", () => {
     );
     // «Filas por página» del modelo de trámites.
     expect(screen.getAllByText(/filas por página/i).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole("button", { name: /editar mandatario de nunca radicó ltda/i }));
+    await pulsarAccion(user, /editar mandatario de nunca radicó ltda/i);
     expect(await screen.findByTestId("mandato-ot-config-form")).toHaveAttribute("data-mode", "mandatario");
     expect((await screen.findAllByText("Nunca Radicó Ltda.")).length).toBeGreaterThan(0);
   });
@@ -375,6 +382,7 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     await screen.findByRole("table", { name: "Compañías activas" });
     fetchOtAssociableCompanies.mockClear();
     const buscador = screen.getByTestId("ot-mandatos-company-search");
@@ -402,6 +410,7 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     await screen.findByRole("table", { name: "Compañías activas" });
     fetchOtAssociableCompanies.mockResolvedValue(pagina([]));
     await user.type(screen.getByTestId("ot-mandatos-company-search"), "zzz");
@@ -417,6 +426,7 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     expect(await screen.findByText("No se pudieron cargar las compañías.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /reintentar/i }));
     expect(await screen.findByRole("table", { name: "Compañías activas" })).toBeInTheDocument();
@@ -459,7 +469,7 @@ describe("OtMandatosSection", () => {
     expect(screen.getByText("Persona natural")).toBeInTheDocument();
     expect(screen.getByTestId("mandatario-vigencia")).toHaveTextContent("Vigente");
     expect(screen.queryByText(/firma a mano|f[ií]sica/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /ver firma de hugo mandatario/i }));
+    await pulsarAccion(user, /ver firma de hugo mandatario/i);
     expect(await screen.findByRole("dialog", { name: /firma de hugo mandatario/i })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /firma de hugo mandatario/i })).toBeInTheDocument();
     expect(fetchMandateSignerSignatureImage).toHaveBeenCalledWith("ot-1", "ms-1");

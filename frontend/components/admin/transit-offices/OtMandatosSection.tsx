@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { MandatarioGeneralCard } from "@/components/admin/transit-offices/MandatarioGeneralCard";
+import { SectionTabs } from "@/components/atom/SectionTabs";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
 import { MandatoOtConfigForm, type MandatoOtConfigPanelMode } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { OtCompaniasMandatarioTable } from "@/components/admin/transit-offices/OtCompaniasMandatarioTable";
-import { RowActions } from "@/components/atom/RowActions";
+import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
+import type { RowAction } from "@/components/atom/RowActions";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { MandatarioFirmaPreviewDialog } from "@/components/admin/transit-offices/MandatarioFirmaPreviewDialog";
@@ -71,6 +74,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   // Bug #13055 — tablas homologadas con el modelo de trámites: «Filas por página». El mandatario
   // general es una sola fila fija y no pagina; las compañías paginan en servidor (HU #13182).
   const pgSigners = usePaginacion();
+  const [seccion, setSeccion] = useState<"companias" | "mandatarios">("mandatarios");
   const [panel, setPanel] = useState<{
     mode: MandatoOtConfigPanelMode;
     companyId: string | null;
@@ -159,55 +163,6 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     );
   }
 
-  const generalRow: GeneralMandatarioRow = {
-    id: office.officeId,
-    nit: null,
-    name: office.name,
-    signerName: office.defaultMandateSignerName,
-    docType: office.defaultMandateSignerDocumentType,
-    docNumber: office.defaultMandateSignerDocumentNumber,
-    hash: office.defaultMandateSignerIntegrityHash,
-  };
-
-  const generalColumns: DataTableColumn<GeneralMandatarioRow>[] = [
-    {
-      key: "nit",
-      header: "NIT",
-      cellClassName: "font-mono",
-      render: (row) => dash(row.nit),
-    },
-    {
-      key: "name",
-      header: "Organismo",
-      cellClassName: "font-semibold",
-      render: (row) => row.name,
-    },
-    {
-      key: "signer",
-      header: "Mandatario",
-      render: (row) => (
-        <span data-testid="ot-mandatos-general-signer">{signerCell(row.signerName)}</span>
-      ),
-    },
-    {
-      key: "actions",
-      header: "Acción",
-      align: "right",
-      render: () => (
-        <RowActions
-          actions={[
-            {
-              icon: Pencil,
-              label: "Editar mandatario general del organismo",
-              tone: "primary",
-              onClick: () => setPanel({ mode: "mandatario", companyId: null }),
-            },
-          ]}
-        />
-      ),
-    },
-  ];
-
   const reactivar = async (signer: MandateSigner) => {
     setBusySignerId(signer.id);
     try {
@@ -247,7 +202,74 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     await load({ silent: true });
   };
 
+  // El mandatario general se muestra en su tarjeta; la tabla lista a los demás.
+  const generalSigner = signers.find((sg) => sg.id === office.defaultMandateSignerId) ?? null;
+  const otrosSigners = generalSigner ? signers.filter((sg) => sg.id !== generalSigner.id) : signers;
+
   const companyNameById = new Map(companies.map((c) => [c.companyTenantId, c.companyName]));
+
+  // Acciones sobre una persona (tabla y tarjeta del mandatario general).
+  const accionesDe = (row: MandateSigner): RowAction[] => [
+          ...(canRegisterSigner && puedeEditarMandatario(row)
+            ? [
+                {
+                  icon: Pencil,
+                  label: `Editar mandatario ${row.fullName}`,
+                  tone: "primary" as const,
+                  onClick: () => setEditingSigner(row),
+                },
+              ]
+            : []),
+          ...(canRegisterSigner && puedeEditarMandatario(row)
+            ? [
+                row.isActive
+                  ? {
+                      icon: UserX,
+                      label: `Desactivar mandatario ${row.fullName}`,
+                      tone: "danger" as const,
+                      disabled: busySignerId === row.id,
+                      onClick: () => setBaja({ signer: row, accion: "desactivar" }),
+                    }
+                  : {
+                      icon: RotateCcw,
+                      label: `Reactivar mandatario ${row.fullName}`,
+                      disabled: busySignerId === row.id,
+                      onClick: () => void reactivar(row),
+                    },
+              ]
+            : []),
+          ...(canRegisterSigner && puedeEditarMandatario(row) && puedeReenviarValidacion(row)
+            ? [
+                {
+                  icon: Send,
+                  label: `Reenviar validación a ${row.fullName}`,
+                  disabled: busySignerId === row.id,
+                  onClick: () => void reenviarDesdeFila(row),
+                },
+              ]
+            : []),
+          ...(canRegisterSigner && puedeEliminarMandatario(row)
+            ? [
+                {
+                  icon: Trash2,
+                  label: `Eliminar mandatario ${row.fullName}`,
+                  tone: "danger" as const,
+                  disabled: busySignerId === row.id,
+                  onClick: () => setBaja({ signer: row, accion: "eliminar" }),
+                },
+              ]
+            : []),
+          ...(modeloDe(row) === "natural"
+            ? [
+                {
+                  icon: Eye,
+                  label: `Ver firma de ${row.fullName}`,
+                  tone: "primary" as const,
+                  onClick: () => setPreviewSigner(row),
+                },
+              ]
+            : []),
+        ];
 
   const signerColumns: DataTableColumn<MandateSigner>[] = [
     {
@@ -309,110 +331,46 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       header: "Acción",
       align: "right",
       render: (row) => {
-        const actions = [
-          ...(canRegisterSigner && puedeEditarMandatario(row)
-            ? [
-                {
-                  icon: Pencil,
-                  label: `Editar mandatario ${row.fullName}`,
-                  tone: "primary" as const,
-                  onClick: () => setEditingSigner(row),
-                },
-              ]
-            : []),
-          ...(canRegisterSigner && puedeEditarMandatario(row)
-            ? [
-                row.isActive
-                  ? {
-                      icon: UserX,
-                      label: `Desactivar mandatario ${row.fullName}`,
-                      tone: "danger" as const,
-                      disabled: busySignerId === row.id,
-                      onClick: () => setBaja({ signer: row, accion: "desactivar" }),
-                    }
-                  : {
-                      icon: RotateCcw,
-                      label: `Reactivar mandatario ${row.fullName}`,
-                      disabled: busySignerId === row.id,
-                      onClick: () => void reactivar(row),
-                    },
-              ]
-            : []),
-          ...(canRegisterSigner && puedeEditarMandatario(row) && puedeReenviarValidacion(row)
-            ? [
-                {
-                  icon: Send,
-                  label: `Reenviar validación a ${row.fullName}`,
-                  disabled: busySignerId === row.id,
-                  onClick: () => void reenviarDesdeFila(row),
-                },
-              ]
-            : []),
-          ...(canRegisterSigner && puedeEliminarMandatario(row)
-            ? [
-                {
-                  icon: Trash2,
-                  label: `Eliminar mandatario ${row.fullName}`,
-                  tone: "danger" as const,
-                  disabled: busySignerId === row.id,
-                  onClick: () => setBaja({ signer: row, accion: "eliminar" }),
-                },
-              ]
-            : []),
-          ...(modeloDe(row) === "natural"
-            ? [
-                {
-                  icon: Eye,
-                  label: `Ver firma de ${row.fullName}`,
-                  tone: "primary" as const,
-                  onClick: () => setPreviewSigner(row),
-                },
-              ]
-            : []),
-        ];
-        return actions.length > 0 ? <RowActions actions={actions} /> : null;
+        const actions = accionesDe(row);
+        return actions.length > 0 ? (
+          <RowActionsMenu ariaLabel={`Acciones de ${row.fullName}`} subject={row.fullName} actions={actions} />
+        ) : null;
       },
     },
   ];
 
   return (
     <div className="flex flex-col gap-4" data-testid="ot-mandatos-section">
-      <div className="flex flex-col gap-3" data-testid="ot-mandatos-general-card">
-        <div>
-          <h2 className="text-sm font-semibold text-[#162244] dark:text-white">
-            Mandatario general del organismo
-          </h2>
-          <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
-            Persona natural por defecto para los trámites de este OT. Se usa cuando la empresa que
-            radica no tiene mandatario propio. Si a la compañía se le eligió uno específico, ese tiene prioridad.
-          </p>
-        </div>
-        <DataTable
-          columns={generalColumns}
-          rows={[generalRow]}
-          getRowKey={(row) => row.id}
-          ariaLabel="Mandatario general del organismo"
-          minWidth={720}
-        />
-      </div>
-
-      <OtCompaniasMandatarioTable
-        transitOfficeId={transitOfficeId}
-        signerNameOf={signerNameOf}
-        sinMandatarioOf={sinMandatarioOf}
-        onEdit={editCompany}
+      <SectionTabs
+        ariaLabel="Secciones de mandatos del organismo"
+        active={seccion}
+        onChange={setSeccion}
+        tabs={[
+          {
+            id: "mandatarios",
+            label: "Mandatarios",
+            count: signers.length,
+            content: (
+      <div className="flex flex-col gap-6">
+      <MandatarioGeneralCard
+        nombre={office.defaultMandateSignerName}
+        tipoDocumento={office.defaultMandateSignerDocumentType}
+        numeroDocumento={office.defaultMandateSignerDocumentNumber}
+        signer={generalSigner}
+        puedeEditar
+        acciones={generalSigner ? accionesDe(generalSigner) : []}
+        onEditar={() => setPanel({ mode: "mandatario", companyId: null })}
       />
-
       <div className="flex flex-col gap-3" data-testid="ot-mandatos-signers-card">
         <div>
-          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">Mandatarios</h3>
+          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">Otros mandatarios del organismo</h3>
           <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
-            Personas registradas en este organismo, se usen o no como general o por empresa.
+            Las demás personas registradas en este organismo, se usen o no por empresa.
           </p>
         </div>
         <DataTable
           columns={signerColumns}
-          rows={pgSigners.paginar(signers)}
+          rows={pgSigners.paginar(otrosSigners)}
           getRowKey={(row) => row.id}
           ariaLabel="Mandatarios del organismo"
           minWidth={720}
@@ -420,12 +378,31 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           pagination={{
             page: pgSigners.page,
             pageSize: pgSigners.pageSize,
-            totalCount: signers.length,
+            totalCount: otrosSigners.length,
             onPageChange: pgSigners.setPage,
             onPageSizeChange: pgSigners.setPageSize,
           }}
         />
       </div>
+      </div>
+            ),
+          },
+          {
+            id: "companias",
+            label: "Compañías",
+            content: (
+              <div className="flex flex-col gap-6">
+      <OtCompaniasMandatarioTable
+        transitOfficeId={transitOfficeId}
+        signerNameOf={signerNameOf}
+        sinMandatarioOf={sinMandatarioOf}
+        onEdit={editCompany}
+      />
+              </div>
+            ),
+          },
+        ]}
+      />
 
       {panel && office ? (
         <MandatoOtConfigForm
@@ -558,21 +535,3 @@ function dash(value: string | null | undefined): string {
   const text = value?.trim();
   return text ? text : "—";
 }
-
-function signerCell(name: string | null | undefined) {
-  const text = name?.trim();
-  if (!text) {
-    return <span className="text-[#59677D] dark:text-white/55">Sin definir</span>;
-  }
-  return text;
-}
-
-type GeneralMandatarioRow = {
-  id: string;
-  nit: string | null;
-  name: string;
-  signerName: string | null;
-  docType: string | null;
-  docNumber: string | null;
-  hash: string | null;
-};

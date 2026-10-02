@@ -1,6 +1,7 @@
 // HU #13248 (F9 #13245) - hub del OT: estado de la validación propia y «Reenviar validación».
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -164,20 +165,22 @@ describe("HU #13248 — hub del OT", () => {
   });
 
   it("AC1/AC6: la lista muestra el estado de la validación propia y la acción Reenviar", async () => {
+    const user = userEvent.setup();
     renderSection();
-    const reenviar = await screen.findByRole("button", { name: /reenviar validación a hugo mandatario/i });
-    expect(reenviar).toBeEnabled();
+    expect(await hayAccion(user, /reenviar validación a hugo mandatario/i)).toBe(true);
+    expect(await accionDeshabilitada(user, /reenviar validación a hugo mandatario/i)).toBe(false);
     expect(screen.getAllByText("Pendiente de validación").length).toBeGreaterThan(0);
   });
 
   it("AC6: con Baúl o Persona jurídica no hay acción ni estado de validación", async () => {
+    const user = userEvent.setup();
     fetchMandateSigners.mockResolvedValue([
       signer({ id: "ms-2", fullName: "Baul Uno", signatureMethod: "baul", signatureVaultId: "v-1" }),
       signer({ id: "ms-3", fullName: "Entidad Dos", signerModel: "juridica", signatureMethod: null }),
     ]);
     renderSection();
-    await screen.findByRole("button", { name: /editar mandatario baul uno/i });
-    expect(screen.queryByRole("button", { name: /reenviar validación/i })).not.toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario baul uno/i)).toBe(true);
+    expect(await hayAccion(user, /reenviar validación/i, undefined, false)).toBe(false);
     expect(screen.queryByText("Pendiente de validación")).not.toBeInTheDocument();
   });
 
@@ -185,7 +188,7 @@ describe("HU #13248 — hub del OT", () => {
     resendSigner.mockResolvedValue({ identity: "sent", validationId: "v-9" });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /reenviar validación a hugo mandatario/i }));
+    await pulsarAccion(user, /reenviar validación a hugo mandatario/i);
     await waitFor(() => expect(resendSigner).toHaveBeenCalledWith("ot-1", "ms-1"));
     expect(await screen.findByText("Enviamos el enlace de validación a hugo@ejemplo.com.")).toBeInTheDocument();
   });
@@ -194,7 +197,7 @@ describe("HU #13248 — hub del OT", () => {
     resendSigner.mockResolvedValue({ identity: "queued", validationId: "v-9" });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /editar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /editar mandatario hugo mandatario/i);
     const dialogo = await screen.findByRole("dialog");
     expect(within(dialogo).getByTestId("mandatario-validacion-estado")).toHaveTextContent("Pendiente de validación");
     await user.click(within(dialogo).getByRole("button", { name: "Reenviar validación" }));
@@ -206,7 +209,7 @@ describe("HU #13248 — hub del OT", () => {
     resendSigner.mockRejectedValue(new ApiError(422, "x", { errors: [{ field: "email" }] }));
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /reenviar validación a hugo mandatario/i }));
+    await pulsarAccion(user, /reenviar validación a hugo mandatario/i);
     expect(await screen.findByText(/Falta el correo/)).toBeInTheDocument();
   });
 
@@ -215,8 +218,8 @@ describe("HU #13248 — hub del OT", () => {
     reactivateSigner.mockResolvedValue({ restoredLinks: [], conflictLinks: [], restoredDefaults: 0 });
     const user = userEvent.setup();
     renderSection();
-    expect(screen.queryByRole("button", { name: /reenviar validación/i })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /reactivar mandatario hugo mandatario/i }));
+    expect(await hayAccion(user, /reenviar validación/i, undefined, false)).toBe(false);
+    await pulsarAccion(user, /reactivar mandatario hugo mandatario/i);
     await waitFor(() => expect(reactivateSigner).toHaveBeenCalled());
     expect(resendSigner).not.toHaveBeenCalled();
   });

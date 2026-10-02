@@ -3,6 +3,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { ToastProvider } from "@/components/admin/Toast";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
@@ -90,6 +91,7 @@ const DELEGADO_ORGANISMO = { origin: "organismo", puedeEditar: false, puedeElimi
 
 describe("HU #13139 — lista con estados, candado y acciones por rol", () => {
   it("AC1: el Admin de Compañía ve el de origen organismo en gris, con candado, leyenda y sin acciones", async () => {
+    const user = userEvent.setup();
     fetchCompanyMandateSigners.mockResolvedValue([
       signer({ id: "1", fullName: "Del Organismo", ...DELEGADO_ORGANISMO }),
       signer({ id: "2", fullName: "Propio" }),
@@ -104,10 +106,11 @@ describe("HU #13139 — lista con estados, candado y acciones por rol", () => {
     expect(within(f).queryByRole("button")).not.toBeInTheDocument();
     // El propio conserva sus acciones y no lleva candado.
     expect(within(fila("Propio")).queryByTestId("mandatario-candado")).not.toBeInTheDocument();
-    expect(within(fila("Propio")).getByRole("button", { name: /editar mandatario propio/i })).toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario propio/i, fila("Propio"))).toBe(true);
   });
 
   it("AC2: con las banderas del Admin OT (puede editar) la misma fila conserva sus acciones y no se bloquea", async () => {
+    const user = userEvent.setup();
     loginAs("ot_admin");
     fetchCompanyMandateSigners.mockResolvedValue([
       signer({ fullName: "Del Organismo", origin: "organismo", puedeEditar: true, puedeEliminar: true }),
@@ -117,7 +120,7 @@ describe("HU #13139 — lista con estados, candado y acciones por rol", () => {
     const f = fila("Del Organismo");
     expect(f).not.toHaveAttribute("data-candado");
     expect(within(f).queryByTestId("mandatario-candado")).not.toBeInTheDocument();
-    expect(within(f).getByRole("button", { name: /editar mandatario/i })).toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario/i, f)).toBe(true);
   });
 
   it("AC3: verde, naranja, rojo y rojo con los textos Vigente, Por vencer, Vencido e Inactivo", async () => {

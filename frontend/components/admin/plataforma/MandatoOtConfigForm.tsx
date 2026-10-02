@@ -5,7 +5,7 @@ import { Copy, Eye, FileText, Pencil, RotateCcw, Search, Trash2, Upload } from "
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
-import { RowActions } from "@/components/atom/RowActions";
+import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   CompanyTipoMandatoModal,
@@ -626,7 +626,9 @@ export function MandatoOtConfigForm({
               cellClassName: "!px-2.5",
               headerClassName: "!px-2.5",
               render: (row: CompanyOtMandateRuleView) => (
-                <RowActions
+                <RowActionsMenu
+                  ariaLabel={`Acciones de ${row.companyName}`}
+                  subject={row.companyName}
                   actions={[
                     {
                       icon: Pencil,

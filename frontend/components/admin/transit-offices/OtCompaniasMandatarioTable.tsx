@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Pencil } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
-import { RowActions } from "@/components/atom/RowActions";
+import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
@@ -128,7 +128,9 @@ export function OtCompaniasMandatarioTable({
         header: "Acción",
         align: "right",
         render: (row) => (
-          <RowActions
+          <RowActionsMenu
+            ariaLabel={`Acciones de ${row.name}`}
+            subject={row.name}
             actions={[
               {
                 icon: Pencil,

@@ -73,7 +73,9 @@ describe("HU #13133 — lista de mandatarios de la compañía", () => {
     await screen.findByRole("table", TABLA);
     expect(screen.queryByText(/firma f[ií]sica|a mano|forma f[ií]sica/i)).not.toBeInTheDocument();
     // Sin medio de firma se avisa que no puede firmar: ya no hay organismo exento.
-    expect(screen.getByText(/no puede firmar en tránsito de medellín/i)).toBeInTheDocument();
+    // Con un solo organismo y sin medio de firma, el aviso es una frase corta y el organismo sale en su propia línea.
+    expect(screen.getByText(/no puede firmar todavía/i)).toBeInTheDocument();
+    expect(screen.getByText(/tránsito de medellín/i)).toBeInTheDocument();
   });
 
   it("AC2: cada mandatario muestra su modelo y una etiqueta con su estado de vigencia", async () => {
@@ -171,5 +173,31 @@ describe("HU #13133 — lista de mandatarios de la compañía", () => {
     fetchCompanyMandateSigners.mockRejectedValueOnce(new Error("x"));
     renderPanel();
     expect(await screen.findByText(/no se pudieron cargar los mandatarios/i)).toBeInTheDocument();
+  });
+});
+
+describe("HU #13248c — organismos del mandatario: legible con muchos", () => {
+  const sinMedio = { identityStatus: "none", signatureVaultId: null } as const;
+
+  it("lista cada organismo en su línea y con más de 3 pliega el resto en «+N más»", async () => {
+    fetchCompanyMandateSigners.mockResolvedValue([
+      signer({ ...sinMedio, transitOfficeIds: ["o1", "o2", "o3", "o4", "o5"] }),
+    ]);
+    renderPanel();
+    await screen.findByRole("table", TABLA);
+    const celda = screen.getByTestId("mandatario-organismos");
+    expect(celda.querySelectorAll("ul > li").length).toBeGreaterThanOrEqual(5);
+    expect(within(celda).getByText("+2 más")).toBeInTheDocument();
+  });
+
+  it("el aviso es UNA frase corta y no repite los nombres de los organismos", async () => {
+    fetchCompanyMandateSigners.mockResolvedValue([
+      signer({ ...sinMedio, transitOfficeIds: ["o1", "o2", "o3"] }),
+    ]);
+    renderPanel();
+    await screen.findByRole("table", TABLA);
+    const avisos = screen.getAllByText(/no puede firmar/i);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].textContent).toMatch(/^No puede firmar todavía:/);
   });
 });

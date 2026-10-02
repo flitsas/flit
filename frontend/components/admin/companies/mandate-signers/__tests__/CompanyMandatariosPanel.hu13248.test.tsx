@@ -2,6 +2,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { ToastProvider } from "@/components/admin/Toast";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { ApiError } from "@/lib/api/types";
@@ -90,7 +91,7 @@ function renderPanel() {
 
 async function abrir(user: ReturnType<typeof userEvent.setup>, nombre: RegExp) {
   await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-  await user.click(screen.getByRole("button", { name: nombre }));
+  await pulsarAccion(user, nombre);
   return screen.findByRole("dialog");
 }
 
@@ -115,15 +116,18 @@ afterEach(() => window.localStorage.clear());
 describe("HU #13248 — panel de la compañía", () => {
   it("AC1/AC6: la tabla muestra el estado de la validación propia y la acción Reenviar", async () => {
     renderPanel();
-    expect(await screen.findByRole("button", { name: /reenviar validación a ana restrepo/i })).toBeEnabled();
+    const user = userEvent.setup();
+    expect(await hayAccion(user, /reenviar validación a ana restrepo/i)).toBe(true);
+    expect(await accionDeshabilitada(user, /reenviar validación a ana restrepo/i)).toBe(false);
     expect(screen.getByTestId("mandatario-validacion-celda")).toHaveTextContent("Pendiente de validación");
   });
 
   it("AC6: con Baúl no hay estado ni acción", async () => {
+    const user = userEvent.setup();
     fetchCompanyMandateSigners.mockResolvedValue([signer({ signatureMethod: "baul", signatureVaultId: "v-1" })]);
     renderPanel();
-    await screen.findByRole("button", { name: /editar mandatario ana restrepo/i });
-    expect(screen.queryByRole("button", { name: /reenviar validación/i })).not.toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario ana restrepo/i)).toBe(true);
+    expect(await hayAccion(user, /reenviar validación/i, undefined, false)).toBe(false);
     expect(screen.getByTestId("mandatario-validacion-celda")).not.toHaveTextContent("Pendiente");
   });
 
@@ -131,7 +135,7 @@ describe("HU #13248 — panel de la compañía", () => {
     resendSigner.mockResolvedValue({ identity: "sent", validationId: "v-1" });
     const user = userEvent.setup();
     renderPanel();
-    await user.click(await screen.findByRole("button", { name: /reenviar validación a ana restrepo/i }));
+    await pulsarAccion(user, /reenviar validación a ana restrepo/i);
     await waitFor(() => expect(resendSigner).toHaveBeenCalledWith("t-1", "ms-1", undefined));
     expect(await screen.findByText("Enviamos el enlace de validación a ana@ejemplo.com.")).toBeInTheDocument();
   });
@@ -151,7 +155,7 @@ describe("HU #13248 — panel de la compañía", () => {
     resendSigner.mockRejectedValue(new ApiError(403, "x", { code: "mandatario_configurado_por_organismo" }));
     const user = userEvent.setup();
     renderPanel();
-    await user.click(await screen.findByRole("button", { name: /reenviar validación a ana restrepo/i }));
+    await pulsarAccion(user, /reenviar validación a ana restrepo/i);
     expect(await screen.findByText(/lo configuró el organismo/i)).toBeInTheDocument();
   });
 
@@ -162,8 +166,8 @@ describe("HU #13248 — panel de la compañía", () => {
     reactivateSigner.mockResolvedValue({ restoredLinks: [], conflictLinks: [], restoredDefaults: 0 });
     const user = userEvent.setup();
     renderPanel();
-    expect(screen.queryByRole("button", { name: /reenviar validación/i })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /reactivar mandatario ana restrepo/i }));
+    expect(await hayAccion(user, /reenviar validación/i, undefined, false)).toBe(false);
+    await pulsarAccion(user, /reactivar mandatario ana restrepo/i);
     await waitFor(() => expect(reactivateSigner).toHaveBeenCalled());
     expect(resendSigner).not.toHaveBeenCalled();
   });

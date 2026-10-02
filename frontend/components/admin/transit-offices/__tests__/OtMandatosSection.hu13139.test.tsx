@@ -1,7 +1,8 @@
 // HU #13139 (Feature F3 #13115) — hub del OT: acciones por banderas del servidor, candado y
 // «Sin mandatario» en la lista de compañías.
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -157,11 +158,12 @@ describe("HU #13139 — hub del OT", () => {
   });
 
   it("AC2: el Admin OT ve la acción de editar sobre el de origen organismo, sin candado", async () => {
+    const user = userEvent.setup();
     fetchMandateSigners.mockResolvedValue([signer()]);
     renderSection();
     const tabla = await screen.findByRole("table", { name: "Mandatarios del organismo" });
     const fila = within(tabla).getByText("Hugo Mandatario").closest("tr") as HTMLElement;
-    expect(within(fila).getByRole("button", { name: /editar mandatario hugo mandatario/i })).toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario hugo mandatario/i, fila)).toBe(true);
     expect(within(fila).queryByTestId("mandatario-candado")).not.toBeInTheDocument();
   });
 
@@ -170,7 +172,7 @@ describe("HU #13139 — hub del OT", () => {
     updateMandateSigner.mockResolvedValue({ id: "ms-1", integrityHash: "h" });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /editar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /editar mandatario hugo mandatario/i);
     const dialogo = await screen.findByRole("dialog", { name: /editar mandatario/i });
     await user.click(within(dialogo).getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(updateMandateSigner).toHaveBeenCalledTimes(1));
@@ -179,11 +181,12 @@ describe("HU #13139 — hub del OT", () => {
   });
 
   it("AC5: sin banderas de edición no hay botón de editar", async () => {
+    const user = userEvent.setup();
     fetchMandateSigners.mockResolvedValue([signer({ puedeEditar: false, puedeEliminar: false })]);
     renderSection();
     const tabla = await screen.findByRole("table", { name: "Mandatarios del organismo" });
     const fila = within(tabla).getByText("Hugo Mandatario").closest("tr") as HTMLElement;
-    expect(within(fila).queryByRole("button", { name: /editar mandatario/i })).not.toBeInTheDocument();
+    expect(await hayAccion(user, /editar mandatario/i, fila, false)).toBe(false);
   });
 
   it("AC4: la compañía sin mandatario activo en el organismo se marca «Sin mandatario»", async () => {
@@ -204,6 +207,7 @@ describe("HU #13139 — hub del OT", () => {
     });
     fetchMandateSigners.mockResolvedValue([signer({ companyTenantIds: ["cia-3"] })]);
     renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: /^Compañías/ }));
     const tabla = await screen.findByRole("table", { name: "Compañías activas" });
     const fila = (n: string) => within(tabla).getByText(n).closest("tr") as HTMLElement;
     expect(within(fila("Sin Nadie S.A.S.")).getByTestId("ot-mandatos-sin-mandatario")).toHaveTextContent(

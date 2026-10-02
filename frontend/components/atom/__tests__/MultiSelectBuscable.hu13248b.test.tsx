@@ -144,3 +144,35 @@ describe("HU #13248b — estados", () => {
     expect(screen.getByRole("status")).toHaveTextContent("No hay compañías.");
   });
 });
+
+describe("listas largas: protecciones de uso", () => {
+  it("con muchas opciones, «Seleccionar las filtradas» no deja marcar todo sin escribir antes en el buscador", async () => {
+    const user = userEvent.setup();
+    render(<Arnes />);
+    const boton = screen.getByRole("button", { name: "Seleccionar las filtradas" });
+    expect(boton).toBeDisabled();
+    expect(boton).toHaveAttribute("title", expect.stringMatching(/escribe en el buscador/i));
+    await user.type(screen.getByLabelText("Buscar compañía"), "Compañía 00");
+    expect(boton).toBeEnabled();
+    await user.click(boton);
+    expect(screen.getByText("9 seleccionadas")).toBeInTheDocument();
+  });
+
+  it("con pocas opciones se puede seleccionar todo sin filtrar", async () => {
+    const user = userEvent.setup();
+    render(<Arnes opciones={muchas.slice(0, 12)} />);
+    const boton = screen.getByRole("button", { name: "Seleccionar las filtradas" });
+    expect(boton).toBeEnabled();
+    await user.click(boton);
+    expect(screen.getByText("12 seleccionadas")).toBeInTheDocument();
+  });
+
+  it("los chips de lo seleccionado tienen alto máximo con scroll, para no empujar la lista", async () => {
+    const user = userEvent.setup();
+    render(<Arnes seleccion={muchas.slice(0, 40)} />);
+    const chips = screen.getByTestId("sel-seleccion");
+    expect(chips.className).toMatch(/max-h-24/);
+    expect(chips.className).toMatch(/overflow-y-auto/);
+    await user.type(screen.getByLabelText("Buscar compañía"), "x");
+  });
+});

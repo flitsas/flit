@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { ApiError } from "@/lib/api/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MandatoFormatosState } from "@/hooks/useMandatoFormatos";
@@ -378,9 +379,7 @@ describe("MandatoOtConfigForm", () => {
       );
 
     const abrirEditor = async (user: ReturnType<typeof userEvent.setup>) => {
-      await user.click(
-        await screen.findByRole("button", { name: /editar tipo de mandato de gestora uno/i }),
-      );
+      await pulsarAccion(user, /editar tipo de mandato de gestora uno/i);
       return screen.findByTestId("mandato-tipo-editor");
     };
 
@@ -519,9 +518,7 @@ describe("MandatoOtConfigForm", () => {
       const user = userEvent.setup();
       deleteCompanyOtMandateRule.mockResolvedValue(undefined);
       abrir();
-      await user.click(
-        await screen.findByRole("button", { name: /volver al default de gestora uno/i }),
-      );
+      await pulsarAccion(user, /volver al default de gestora uno/i);
       await screen.findByTestId("mandato-volver-default");
       listCompanyOtMandateRules.mockResolvedValue([
         { ...base, hasExplicitRule: false, rowVersion: null },
@@ -534,14 +531,15 @@ describe("MandatoOtConfigForm", () => {
     });
 
     it("no ofrece Volver al default sin regla propia ni el control fuera de Plataforma", async () => {
+      const user = userEvent.setup();
       listCompanyOtMandateRules.mockResolvedValue([{ ...base, hasExplicitRule: false, rowVersion: null }]);
       const { unmount } = abrir();
-      await screen.findByRole("button", { name: /editar tipo de mandato de gestora uno/i });
-      expect(screen.queryByRole("button", { name: /volver al default de/i })).not.toBeInTheDocument();
+      expect(await hayAccion(user, /editar tipo de mandato de gestora uno/i)).toBe(true);
+      expect(await hayAccion(user, /volver al default de/i, undefined, false)).toBe(false);
       unmount();
       abrir(false);
       await screen.findByTestId("mandato-company-tipo-cia-1");
-      expect(screen.queryByRole("button", { name: /editar tipo de mandato de/i })).not.toBeInTheDocument();
+      expect(await hayAccion(user, /editar tipo de mandato de/i, undefined, false)).toBe(false);
     });
 
     it("mientras guarda, deshabilita los controles y muestra el loader", async () => {
@@ -553,7 +551,7 @@ describe("MandatoOtConfigForm", () => {
       await user.click(screen.getByRole("button", { name: /^guardar$/i }));
       await waitFor(() => expect(screen.getByRole("button", { name: /^guardar$/i })).toBeDisabled());
       expect(screen.getByTestId("mandato-tipo-select")).toBeDisabled();
-      expect(screen.getByRole("button", { name: /editar tipo de mandato de gestora uno/i })).toBeDisabled();
+      expect(await accionDeshabilitada(user, /editar tipo de mandato de gestora uno/i)).toBe(true);
       resolve({ ...base, rowVersion: 4 });
       await waitFor(() => expect(screen.queryByTestId("mandato-tipo-editor")).not.toBeInTheDocument());
     });

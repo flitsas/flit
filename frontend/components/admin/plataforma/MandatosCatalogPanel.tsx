@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, FileText, RotateCcw, Search, Users } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import { SectionTabs } from "@/components/atom/SectionTabs";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -32,6 +33,7 @@ import { useToast } from "@/components/admin/Toast";
  * Configurador SuperAdmin — plantillas + config por OT (Plataforma → Mandatos).
  */
 export function MandatosCatalogPanel() {
+  const [seccion, setSeccion] = useState<"formatos" | "organismos" | "simulador">("formatos");
   const { show: showToast } = useToast();
   const formatos = useMandatoFormatos();
   const [search, setSearch] = useState("");
@@ -198,6 +200,16 @@ export function MandatosCatalogPanel() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="mandatos-catalog-panel">
+      <SectionTabs
+        ariaLabel="Secciones de mandatos de la plataforma"
+        active={seccion}
+        onChange={setSeccion}
+        tabs={[
+          {
+            id: "formatos",
+            label: "Formatos de contrato",
+            count: formatos.status === "ready" ? formatos.formatos.length : undefined,
+            content: (
       <section aria-labelledby="mandatos-plantillas-heading" className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
           <h2
@@ -241,7 +253,13 @@ export function MandatosCatalogPanel() {
           />
         )}
       </section>
-
+            ),
+          },
+          {
+            id: "organismos",
+            label: "Configuración por organismo",
+            count: filtered.length,
+            content: (
       <section aria-labelledby="mandatos-aplicacion-heading" className="flex flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2
@@ -288,8 +306,17 @@ export function MandatosCatalogPanel() {
           }}
         />
       </section>
-
+            ),
+          },
+          {
+            id: "simulador",
+            label: "Simulador",
+            content: (
       <MandatoSimuladorPanel offices={rows} />
+            ),
+          },
+        ]}
+      />
 
       {resetTarget ? (
         <ResetConfirmDialog

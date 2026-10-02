@@ -30,6 +30,9 @@ export function normalizarBusqueda(texto: string): string {
 
 const soloDigitos = (texto: string) => texto.replace(/\D/g, "");
 
+/** Con más opciones que esto, «Seleccionar las filtradas» exige escribir primero en el buscador. */
+const MAX_SIN_FILTRO = 25;
+
 /** Coincide por nombre/detalle (sin tildes) o por los dígitos del código (NIT sin puntos ni guion). */
 export function coincideBusqueda(opcion: OpcionSeleccionable, consulta: string): boolean {
   const q = consulta.trim();
@@ -94,6 +97,9 @@ export function MultiSelectBuscable({
   const ids = useMemo(() => new Set(seleccion.map((s) => s.id)), [seleccion]);
   const filtradas = useMemo(() => opciones.filter((o) => coincideBusqueda(o, consulta)), [opciones, consulta]);
   const faltanPorMarcar = filtradas.some((o) => !ids.has(o.id));
+  // Con listas largas, marcar «todo» de un clic sin filtro sería un accidente casi seguro (p. ej. 363 compañías):
+  // se pide escribir algo en el buscador primero.
+  const exigeFiltro = !consulta.trim() && opciones.length > MAX_SIN_FILTRO;
 
   const alternar = (o: OpcionSeleccionable) =>
     onChange(ids.has(o.id) ? seleccion.filter((s) => s.id !== o.id) : [...seleccion, o]);
@@ -210,7 +216,11 @@ export function MultiSelectBuscable({
       </div>
 
       {n > 0 ? (
-        <ul className="flex flex-wrap gap-1.5" aria-label={`${grupo} seleccionadas`} data-testid={`${testId}-seleccion`}>
+        <ul
+          className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto"
+          aria-label={`${grupo} seleccionadas`}
+          data-testid={`${testId}-seleccion`}
+        >
           {seleccion.map((s) => (
             <li
               key={s.id}
@@ -262,7 +272,8 @@ export function MultiSelectBuscable({
         <button
           type="button"
           onClick={marcarFiltradas}
-          disabled={disabled || !faltanPorMarcar}
+          disabled={disabled || !faltanPorMarcar || exigeFiltro}
+          title={exigeFiltro ? "Escribe en el buscador para elegir varias a la vez" : undefined}
           className="rounded-full border px-3 py-1 text-xs font-semibold text-[#162744] disabled:opacity-40"
         >
           Seleccionar las filtradas

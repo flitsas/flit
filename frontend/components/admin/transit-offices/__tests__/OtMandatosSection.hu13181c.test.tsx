@@ -2,6 +2,7 @@
 // la propia compañía del mandatario no se ofrece en la lista.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -178,7 +179,7 @@ describe("HU #13181c — edición del mandatario desde el hub del OT", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /editar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /editar mandatario hugo mandatario/i);
     const dialogo = await screen.findByRole("dialog", { name: /editar mandatario/i });
     await user.click(await within(dialogo).findByLabelText(/Otra Uno S\.A\.S\./));
     await user.click(within(dialogo).getByRole("button", { name: "Guardar" }));
@@ -199,7 +200,7 @@ describe("HU #13181c — edición del mandatario desde el hub del OT", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /editar mandatario hugo mandatario/i }));
+    await pulsarAccion(user, /editar mandatario hugo mandatario/i);
     const dialogo = await screen.findByRole("dialog", { name: /editar mandatario/i });
     expect(await within(dialogo).findByLabelText(/Otra Uno S\.A\.S\./)).toBeInTheDocument();
     expect(within(dialogo).queryByLabelText(/Propia S\.A\.S\./)).not.toBeInTheDocument();

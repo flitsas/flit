@@ -2,7 +2,7 @@
 
 import { Eye, Pencil } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
-import { RowActions } from "@/components/atom/RowActions";
+import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import { formatFechaHora } from "@/lib/format/date";
@@ -68,7 +68,9 @@ export function MandatosFormatosTable({
       header: "Acciones",
       align: "right",
       render: (row) => (
-        <RowActions
+        <RowActionsMenu
+          ariaLabel={`Acciones del formato ${row.name}`}
+          subject={row.name}
           actions={[
             {
               icon: Pencil,

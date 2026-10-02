@@ -3,6 +3,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { accionDeshabilitada, hayAccion, pulsarAccion } from "@/lib/test-acciones";
 import { ToastProvider } from "@/components/admin/Toast";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { ApiError } from "@/lib/api/types";
@@ -89,7 +90,7 @@ function renderPanel() {
 
 async function abrir(user: ReturnType<typeof userEvent.setup>, nombre: RegExp) {
   await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-  await user.click(screen.getByRole("button", { name: nombre }));
+  await pulsarAccion(user, nombre);
   return screen.findByRole("dialog");
 }
 
@@ -193,7 +194,7 @@ describe("HU #13140 — desactivar, reactivar y eliminar", () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-    await user.click(screen.getByRole("button", { name: /reactivar mandatario ana restrepo/i }));
+    await pulsarAccion(user, /reactivar mandatario ana restrepo/i);
     expect(await screen.findByText(/no desplazó al mandatario vigente/i)).toBeInTheDocument();
     expect(reactivateSigner).toHaveBeenCalledWith("t-1", "ms-1", undefined);
   });
@@ -204,7 +205,7 @@ describe("HU #13140 — desactivar, reactivar y eliminar", () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-    await user.click(screen.getByRole("button", { name: /reactivar mandatario ana restrepo/i }));
+    await pulsarAccion(user, /reactivar mandatario ana restrepo/i);
     expect(await screen.findByText("Ana Restrepo vuelve a estar activo.")).toBeInTheDocument();
   });
 
@@ -216,7 +217,7 @@ describe("HU #13140 — desactivar, reactivar y eliminar", () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-    await user.click(screen.getByRole("button", { name: /reactivar mandatario ana restrepo/i }));
+    await pulsarAccion(user, /reactivar mandatario ana restrepo/i);
     expect(await screen.findByText(/ya hay otro mandatario activo para esa compañía y organismo/i)).toBeInTheDocument();
   });
 
@@ -280,10 +281,11 @@ describe("HU #13140 — desactivar, reactivar y eliminar", () => {
   });
 
   it("sin la bandera puedeEliminar no se ofrece eliminar, pero sí desactivar", async () => {
+    const user = userEvent.setup();
     fetchCompanyMandateSigners.mockResolvedValue([signer({ puedeEliminar: false })]);
     renderPanel();
     await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-    expect(screen.queryByRole("button", { name: /eliminar mandatario/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /desactivar mandatario/i })).toBeInTheDocument();
+    expect(await hayAccion(user, /eliminar mandatario/i, undefined, false)).toBe(false);
+    expect(await hayAccion(user, /desactivar mandatario/i)).toBe(true);
   });
 });
