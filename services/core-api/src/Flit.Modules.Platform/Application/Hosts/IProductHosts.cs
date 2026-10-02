@@ -7,8 +7,14 @@ namespace Flit.Modules.Platform.Application.Hosts;
 /// </summary>
 public interface IProductHosts
 {
-    /// <summary>URL absoluta del producto en este ambiente.</summary>
+    /// <summary>URL absoluta de la app del producto en este ambiente (su origen: retornos del login, emisor).</summary>
     string UrlFor(string productCode);
+
+    /// <summary>
+    /// Adónde lleva el menú de productos: la app, o su pantalla «Próximamente» del hub si todavía no está desplegada en
+    /// este ambiente.
+    /// </summary>
+    string LinkFor(string productCode);
 
     /// <summary>Producto que sirve <paramref name="host"/>, o <c>null</c> si no es un host FLIT conocido.</summary>
     string? ProductForHost(string? host);

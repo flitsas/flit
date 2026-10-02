@@ -50,7 +50,7 @@ public sealed class ListMyAppsHandler
                     continue;
             }
 
-            result.Add(new MyAppView(product.Code, product.Name, product.Icon, _hosts.UrlFor(product.Code), product.Code == current));
+            result.Add(new MyAppView(product.Code, product.Name, product.Icon, _hosts.LinkFor(product.Code), product.Code == current));
         }
 
         return result;

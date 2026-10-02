@@ -20,6 +20,13 @@ public sealed class SuiteHostsOptions
     /// <c>http://localhost:3000</c>. Si un producto tiene reemplazo, se usa tal cual.
     /// </summary>
     public Dictionary<string, string> Overrides { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Productos del catálogo que todavía no tienen app desplegada en este ambiente (Comparendos y Diagnóstico al abrir
+    /// la suite): su enlace lleva a la pantalla «Próximamente» del hub (<c>/proximamente/&lt;código&gt;</c>) en vez de a
+    /// un host que no responde. Al desplegar el producto en un ambiente, se quita de la lista de ese ambiente.
+    /// </summary>
+    public List<string> ComingSoon { get; set; } = [];
 }
 
 /// <summary>Bandera <c>Suite:ProductAccess:Enforce</c> del contrato §9. HU #12966 (B-06).</summary>

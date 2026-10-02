@@ -6,7 +6,9 @@ namespace Flit.Api.Platform;
 
 /// <summary>
 /// <see cref="IProductHosts"/> sobre <see cref="SuiteHostsOptions"/> (contrato v1 §1): la plataforma vive en
-/// <c>[ambiente.]raíz</c> y cada producto en <c>[ambiente.]producto.raíz</c>. HU #12966 (B-06).
+/// <c>[ambiente.]raíz</c> y cada producto en <c>[ambiente.]producto.raíz</c>. HU #12966 (B-06). El enlace de un
+/// producto «próximamente» (<see cref="SuiteHostsOptions.ComingSoon"/>) lleva a su pantalla en el hub; su origen (el
+/// de los retornos del login) no cambia.
 /// </summary>
 internal sealed class ConfiguredProductHosts(IOptionsMonitor<SuiteHostsOptions> options) : IProductHosts
 {
@@ -17,6 +19,14 @@ internal sealed class ConfiguredProductHosts(IOptionsMonitor<SuiteHostsOptions> 
             return url;
 
         return $"{o.Scheme}://{HostFor(o, productCode)}";
+    }
+
+    public string LinkFor(string productCode)
+    {
+        var o = options.CurrentValue;
+        return o.ComingSoon.Contains(productCode, StringComparer.Ordinal) && !o.Overrides.ContainsKey(productCode)
+            ? $"{UrlFor(ProductCodes.Plataforma).TrimEnd('/')}/proximamente/{productCode}"
+            : UrlFor(productCode);
     }
 
     public string? ProductForHost(string? host)
