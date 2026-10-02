@@ -6,6 +6,8 @@ using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.RuntConfirmation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -18,8 +20,12 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedureInstanceRepository
+internal sealed partial class ProcedureInstanceRepository(
+    FlitDbContext db,
+    ILogger<ProcedureInstanceRepository>? logger = null) : IProcedureInstanceRepository
 {
+    // Bug #13194 — opcional (132 construcciones en tests sin logger); en DI lo resuelve el contenedor.
+    private readonly ILogger _logger = logger ?? NullLogger<ProcedureInstanceRepository>.Instance;
     private const string ReferenceUniqueConstraint = "uq_procedure_instances_tenant_reference";
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -1709,11 +1715,25 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             return true;
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateConcurrencyException ex)
         {
+            // Bug #13194 — antes se tragaba sin rastro y un 409 «conflicto_concurrencia» persistente no
+            // era diagnosticable. Solo tipo de entidad e id (sin valores: pueden llevar PII).
+            foreach (var entry in ex.Entries)
+            {
+                var id = entry.Metadata.FindPrimaryKey()?.Properties
+                    .Select(p => entry.Property(p.Name).CurrentValue?.ToString())
+                    .FirstOrDefault() ?? "?";
+                LogConflictoConcurrencia(_logger, entry.Metadata.ClrType.Name, id);
+            }
+
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Conflicto de concurrencia optimista al guardar {Entidad} {EntidadId}: el guardado se descartó (row_version desactualizado u otro escritor).")]
+    private static partial void LogConflictoConcurrencia(ILogger logger, string entidad, string entidadId);
 
     public async Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct)

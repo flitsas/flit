@@ -102,16 +102,18 @@ internal static class ConsolidadoVigenciaTracker
     /// cada instancia primero: los triggers de denormalización pudieron bumpear <c>row_version</c>
     /// durante el save anterior, y sin recargar el UPDATE saldría con el token obsoleto.
     /// </summary>
-    /// <returns><c>true</c> si dejó cambios pendientes que el llamador debe persistir.</returns>
-    public static async Task<bool> InvalidarAsync(
+    /// <returns>Ids de las instancias que quedaron con cambios pendientes que el llamador debe persistir
+    /// (vacío si no hay nada que guardar). Tras persistirlos, el llamador debe llamar a
+    /// <see cref="RefrescarRowVersionAsync"/> con esos ids.</returns>
+    public static async Task<IReadOnlyList<Guid>> InvalidarAsync(
         DbContext context,
         IReadOnlyCollection<Guid> candidatas,
         CancellationToken ct)
     {
         if (candidatas.Count == 0)
-            return false;
+            return [];
 
-        var alguna = false;
+        var tocadas = new List<Guid>();
         foreach (var id in candidatas)
         {
             var entry = context.ChangeTracker.Entries<ProcedureInstance>()
@@ -143,10 +145,48 @@ internal static class ConsolidadoVigenciaTracker
                 continue;
 
             entry.Entity.InvalidarConsolidados();
-            alguna = true;
+            if (!tocadas.Contains(id))
+                tocadas.Add(id);
         }
 
-        return alguna;
+        return tocadas;
+    }
+
+    /// <summary>
+    /// Bug #13194 (P4-24) — tras el UPDATE de las marcas, el trigger <c>tr_procedure_instances_row_version</c>
+    /// (BEFORE UPDATE) sube <c>row_version</c> en la base, pero EF no lo relee (el token no es generado por
+    /// la store en el modelo). La entidad rastreada quedaba con el token VIEJO y el siguiente guardado del
+    /// MISMO contexto —p. ej. «Enviar al OT»: fase 1 persiste los checks (dato del FUR, sella
+    /// <c>expediente_actualizado_en</c>) y fase 2 transiciona— salía con <c>WHERE row_version = viejo</c>:
+    /// <c>DbUpdateConcurrencyException</c>, 409 <c>conflicto_concurrencia</c> en cada intento. Se relee el
+    /// token de esas instancias y se fija como valor original y actual, sin marcar la propiedad modificada.
+    /// </summary>
+    public static async Task RefrescarRowVersionAsync(
+        DbContext context,
+        IReadOnlyList<Guid> ids,
+        CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return;
+
+        var versiones = await context.Set<ProcedureInstance>()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.RowVersion })
+            .ToDictionaryAsync(p => p.Id, p => p.RowVersion, ct)
+            .ConfigureAwait(false);
+
+        // Copia: fijar valores dispara detección de cambios y modificaría la colección enumerada.
+        foreach (var entry in context.ChangeTracker.Entries<ProcedureInstance>().ToList())
+        {
+            if (entry.State == EntityState.Detached || !versiones.TryGetValue(entry.Entity.Id, out var version))
+                continue;
+
+            var propiedad = entry.Property(p => p.RowVersion);
+            propiedad.OriginalValue = version;
+            propiedad.CurrentValue = version;
+            propiedad.IsModified = false;
+        }
     }
 
     /// <summary>Instancia a la que pertenece una fila hija del expediente, o <c>null</c> si no lo es.</summary>
