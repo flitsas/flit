@@ -54,6 +54,25 @@ public sealed class Bug13194PendientesDeFirmaPorSujetoIntegrationTests(PostgresD
             "el consumidor necesita el tipo y los actores para decidir qué firmar");
     }
 
+    /// <summary>
+    /// Review PR #510 (MENOR-5) — el tipo de documento de la validación puede venir en minúsculas («cc»):
+    /// columna y metadata del representante se comparan sin distinguir mayúsculas.
+    /// </summary>
+    [PostgresFact]
+    public async Task ListPendientesDeFirmaPorSujeto_NoDistingueMayusculasEnElTipo()
+    {
+        await SeedAsync();
+        await using var ctx = NewContext();
+        var repo = new ProcedureInstanceRepository(ctx);
+
+        var result = await repo.ListPendientesDeFirmaPorSujetoAsync(
+            TenantA, "cc", Persona, TestContext.Current.CancellationToken);
+
+        result.Select(i => i.Id).Should().BeEquivalentTo(
+            [PjAsignado, PnBorradorFinalizadoVendedor, PnSubsanacion],
+            "«cc» y «CC» son el mismo tipo de documento, en columna y en el RL de la metadata");
+    }
+
     [PostgresFact]
     public async Task ListInstanceIdsConEventoDeValidacion_SoloLaMismaValidacionYTenant()
     {
