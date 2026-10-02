@@ -23,7 +23,7 @@ export function MandatarioFirmaPreviewDialog({
   officeId: string;
   onClose: () => void;
 }) {
-  const tipo = tipoDeFirmaMandatario(signer, officeId);
+  const tipo = tipoDeFirmaMandatario(signer);
 
   return (
     <Modal
@@ -81,8 +81,8 @@ function textoPreview(tipo: TipoFirmaMandatario): string {
       return "El contrato estampa el sello de la validación de identidad vigente.";
     case "identidad_pendiente":
       return "La validación de identidad está en curso. Cuando quede vigente, el contrato estampará el sello.";
-    case "a_mano":
-      return "No hay imagen ni sello. El contrato deja la línea para firmar en papel.";
+    case "identidad_sin_validar":
+      return "La persona aún no completa su validación de identidad. Hasta entonces el recuadro del mandatario queda en blanco (Sin firmar).";
     default:
       return "No hay medio de firma. El recuadro del mandatario queda en blanco (Sin firmar).";
   }

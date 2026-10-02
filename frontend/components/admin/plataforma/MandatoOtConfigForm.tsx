@@ -1,11 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Eye, FileText, Search, Trash2, Upload } from "lucide-react";
+import { Copy, Eye, FileText, Pencil, RotateCcw, Search, Trash2, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
-import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
+  CompanyTipoMandatoModal,
+  CompanyVolverDefaultModal,
+  type CompanyTipoMandatoValues,
+} from "@/components/admin/plataforma/CompanyTipoMandatoModal";
+import type { MandatoFormatosState } from "@/hooks/useMandatoFormatos";
+import { Modal } from "@/components/atom/Modal";
+import {
+  deleteCompanyOtMandateRule,
   deleteMandateOtCustomTemplate,
   fetchMandateOtPreview,
   fetchMandatoTemplatePreview,
@@ -13,6 +23,7 @@ import {
   saveMandateOtEditorBody,
   setCompanyDefaultSigner,
   setOtDefaultSigner,
+  upsertCompanyOtMandateRule,
   uploadMandateOtPdfTemplate,
   upsertMandateOtConfig,
   type CompanyOtMandateRuleView,
@@ -23,9 +34,15 @@ import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate
 import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
-  assignmentModeFromTemplateCode,
-  mandatoTemplateOptions,
-  systemTemplateLabel,
+  MANDATO_TEMPLATE_AUTO_CODE,
+  assignmentModeFromFormat,
+  findMandatoFormat,
+  formatoNombraMandatarioInstitucional,
+  mandatoFormatName,
+  resolveAssignmentMode,
+  resolveTipoNegocio,
+  suggestedFamilyForTipo,
+  tipoNegocioLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
 
@@ -61,24 +78,44 @@ export interface MandatoOtConfigFormProps {
    * catálogo sigue listando todas las que radican en el OT.
    */
   lockToCompanyId?: string | null;
+  /**
+   * HU #13182 — compañía activa elegida en la lista del hub que aún no tiene regla en este OT (p. ej.
+   * nunca le radicó): el panel la muestra sin mandatario definido en vez de quedar vacío.
+   */
+  lockedCompany?: { id: string; name: string; nit: string } | null;
   /** Abre el alta de mandatario de esa empresa (hub OT). */
   onRegisterSigner?: (companyTenantId: string) => void;
+  /**
+   * HU #13151 - permite al Super Admin editar el tipo de mandato de cada compania. Solo lo activa
+   * Plataforma; el hub del OT no lo pasa.
+   */
+  editableCompanyType?: boolean;
   /** Tras un alta, recarga el listado de mandatarios del OT sin cerrar el panel. */
   signersRevision?: number;
   /** Mandatario recién creado: se preselecciona como default del OT. */
   lastCreatedSignerId?: string | null;
+  /**
+   * HU #13174 — catálogo de formatos del backend (lo carga el contenedor; el hub OT no muestra el
+   * selector de redacción, por eso es opcional).
+   */
+  formatos?: MandatoFormatosState;
   onClose: () => void;
   onSaved: (view: MandateOtConfigView) => void;
 }
+
+const SIN_FORMATOS: MandatoFormatosState = { formatos: [], status: "ready", reload: () => {} };
 
 export function MandatoOtConfigForm({
   office,
   mode,
   highlightCompanyId,
   lockToCompanyId,
+  lockedCompany,
   onRegisterSigner,
+  editableCompanyType = false,
   signersRevision = 0,
   lastCreatedSignerId,
+  formatos = SIN_FORMATOS,
   onClose,
   onSaved,
 }: MandatoOtConfigFormProps) {
@@ -112,15 +149,29 @@ export function MandatoOtConfigForm({
   const [error, setError] = useState<string | null>(null);
   const [otDefaultSignerId, setOtDefaultSignerId] = useState(office.defaultMandateSignerId ?? "");
   const [hostCompanyId, setHostCompanyId] = useState("");
+  // HU #13151 - edicion del tipo de mandato por compania.
+  const [typeEditId, setTypeEditId] = useState<string | null>(null);
+  const [resetRuleId, setResetRuleId] = useState<string | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
+  const [ruleConflict, setRuleConflict] = useState(false);
 
   const hasCustom = view.hasCustomTemplate;
   // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
   const effectiveTemplate = view.templateCode || "generico";
   const terceroAjeno = terceroAjenoEnPlantilla(templateCode, office.code);
+  // HU #13152 — sigue la redacción SELECCIONADA (antes de guardar); con "auto" usa la efectiva.
+  const selectedTemplate = templateCode === "auto" ? effectiveTemplate : templateCode;
+  // HU #13152 — los campos siguen la redacción SELECCIONADA, no la familia ya guardada.
+  // Si el organismo nació institucional y ahora se elige Genérico (Persona natural), los campos se ocultan.
   const showInstitutionalMeta =
-    effectiveTemplate === "sabaneta" ||
-    effectiveTemplate === "bello" ||
-    family === "organismo_transito";
+    findMandatoFormat(formatos.formatos, selectedTemplate)?.assignmentMode === "institutional" ||
+    formatoNombraMandatarioInstitucional(selectedTemplate);
+  const effectiveTemplateName = mandatoFormatName(formatos.formatos, effectiveTemplate);
+  const selectedFormat = findMandatoFormat(formatos.formatos, templateCode);
+  const savedCodeUnknown =
+    formatos.status === "ready" &&
+    templateCode !== MANDATO_TEMPLATE_AUTO_CODE &&
+    selectedFormat === undefined;
 
   const filteredCompanyRules = useMemo(() => {
     const scoped = lockToCompanyId
@@ -132,6 +183,13 @@ export function MandatoOtConfigForm({
       return row.companyName.toLowerCase().includes(q);
     });
   }, [companyRules, companySearch, lockToCompanyId]);
+
+  const typeEditRow = typeEditId
+    ? (companyRules.find((r) => r.companyTenantId === typeEditId) ?? null)
+    : null;
+  const resetRuleRow = resetRuleId
+    ? (companyRules.find((r) => r.companyTenantId === resetRuleId) ?? null)
+    : null;
 
   const companyPageRows = companyPg.paginar(filteredCompanyRules);
 
@@ -148,7 +206,35 @@ export function MandatoOtConfigForm({
         listCompanyOtMandateRules(office.officeId),
         fetchMandateSigners(office.officeId).catch(() => [] as MandateSigner[]),
       ]);
-      setCompanyRules(items);
+      const sinRegla =
+        lockedCompany && !items.some((row) => row.companyTenantId === lockedCompany.id);
+      setCompanyRules(
+        sinRegla
+          ? [
+              ...items,
+              {
+                companyTenantId: lockedCompany.id,
+                companyName: lockedCompany.name,
+                companyTaxId: lockedCompany.nit,
+                companyCode: null,
+                // HU #13182b (H17): sin regla propia la compañía hereda el tipo REAL del organismo (el OT
+                // nace como Persona natural), no «Mandato abierto».
+                assignmentMode: office.assignmentMode || "signer",
+                mandataryFamily: office.mandataryFamily || "individuo",
+                institutionalMandataryName: office.institutionalMandataryName ?? null,
+                institutionalMandataryNit: office.institutionalMandataryNit ?? null,
+                chamberCity: office.chamberCity ?? null,
+                mandatarySigla: office.mandatarySigla ?? null,
+                hasExplicitRule: false,
+                defaultMandateSignerId: null,
+                defaultMandateSignerName: null,
+                defaultMandateSignerDocumentType: null,
+                defaultMandateSignerDocumentNumber: null,
+                defaultMandateSignerIntegrityHash: null,
+              } as CompanyOtMandateRuleView,
+            ]
+          : items,
+      );
       setOtSigners(signers.filter((s) => s.isActive));
       if (highlightCompanyId) {
         const focused = items.find((row) => row.companyTenantId === highlightCompanyId);
@@ -158,22 +244,13 @@ export function MandatoOtConfigForm({
         }
       }
       setRulesStatus("ready");
-    } catch (err) {
+    } catch {
       setRulesStatus("error");
-      const status = err instanceof ApiError ? err.status : null;
-      if (status === 404) {
-        setError(
-          "El API no reconoce el endpoint de compañías (¿Flit.Api desactualizado?). Reinicia la API con el código nuevo y aplica la migración 61.",
-        );
-      } else if (status === 500) {
-        setError(
-          "Error del servidor al listar compañías. Suele faltar la tabla company_ot_mandate_rules (migración 61).",
-        );
-      } else {
-        setError("No se pudieron cargar las compañías. Reintentar.");
-      }
+      // Sin detalles internos: el usuario solo necesita saber qué hacer.
+      setError("No pudimos cargar las compañías de este organismo. Inténtalo de nuevo en unos minutos; si sigue igual, avisa a soporte.");
     }
-  }, [office.officeId, highlightCompanyId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cambian con el organismo o su modo
+  }, [office.officeId, office.assignmentMode, highlightCompanyId, lockedCompany]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
@@ -212,20 +289,21 @@ export function MandatoOtConfigForm({
     templateCode,
     requiresForNaturalPerson: true,
     mandataryFamily: family,
-    assignmentMode: assignmentModeFromTemplateCode(
+    assignmentMode: assignmentModeFromFormat(
+      formatos.formatos,
       templateCode === "auto" ? effectiveTemplate : templateCode,
     ),
     institutionalMandataryName: showInstitutionalMeta ? instName || null : null,
     institutionalMandataryNit: showInstitutionalMeta ? instNit || null : null,
-    chamberCity: chamberCity || null,
-    mandatarySigla: sigla || null,
+    chamberCity: showInstitutionalMeta ? chamberCity || null : null,
+    mandatarySigla: showInstitutionalMeta ? sigla || null : null,
     rowVersion,
   });
 
   const handleSaveMeta = async () => {
     setError(null);
     if (showInstitutionalMeta && !instName.trim()) {
-      setError("El nombre del mandatario institucional (texto de plantilla) es obligatorio.");
+      setError("El nombre del mandatario institucional es obligatorio.");
       return;
     }
     setSaving(true);
@@ -295,6 +373,91 @@ export function MandatoOtConfigForm({
       setError(messageFromSaveError(err, "No se pudo guardar el mandatario general del OT."));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const closeRuleDialogs = () => {
+    setTypeEditId(null);
+    setResetRuleId(null);
+    setRuleError(null);
+    setRuleConflict(false);
+  };
+
+  /** Mensaje de un fallo al escribir la regla; marca el conflicto para ofrecer recargar. */
+  const handleRuleFailure = async (err: unknown, fallback: string) => {
+    const code =
+      err instanceof ApiError && err.body && typeof err.body === "object" && "error" in err.body
+        ? String((err.body as { error?: unknown }).error ?? "")
+        : "";
+    if (err instanceof ApiError && (err.status === 409 || code === "row_version_conflict")) {
+      setRuleConflict(true);
+      setRuleError(
+        "Otra persona modificó la regla de esta compañía mientras la editabas. Se cargó el tipo actual; revisa y vuelve a guardar.",
+      );
+      await loadCompanyRules();
+      return;
+    }
+    setRuleConflict(false);
+    if (code === "mandatario_institucional_requerido") {
+      setRuleError("El nombre de la entidad es obligatorio.");
+    } else if (err instanceof ApiError && err.status === 403) {
+      setRuleError("No tienes permiso para cambiar el tipo de mandato.");
+    } else {
+      setRuleError(fallback);
+    }
+  };
+
+  const handleSaveCompanyType = async (
+    row: CompanyOtMandateRuleView,
+    values: CompanyTipoMandatoValues,
+  ) => {
+    setRuleError(null);
+    setRuleConflict(false);
+    setSavingCompanyId(row.companyTenantId);
+    try {
+      const institucional = values.tipo === "institucional";
+      const saved = await upsertCompanyOtMandateRule(office.officeId, row.companyTenantId, {
+        assignmentMode: resolveAssignmentMode(values.tipo),
+        mandataryFamily: suggestedFamilyForTipo(values.tipo, view.templateCode),
+        institutionalMandataryName: institucional ? values.institutionalName.trim() : null,
+        institutionalMandataryNit: institucional ? values.institutionalNit.trim() || null : null,
+        chamberCity: institucional ? values.chamberCity.trim() || null : null,
+        mandatarySigla: institucional ? values.sigla.trim() || null : null,
+        defaultMandateSignerId: values.tipo === "persona_rl" ? row.defaultMandateSignerId : null,
+        rowVersion: row.rowVersion,
+      });
+      setCompanyRules((prev) =>
+        prev.map((r) =>
+          r.companyTenantId === row.companyTenantId
+            ? {
+                ...r,
+                ...saved,
+                companyName: saved.companyName || r.companyName,
+                companyTaxId: saved.companyTaxId ?? r.companyTaxId,
+              }
+            : r,
+        ),
+      );
+      closeRuleDialogs();
+    } catch (err) {
+      await handleRuleFailure(err, "No se pudo guardar el tipo de mandato.");
+    } finally {
+      setSavingCompanyId(null);
+    }
+  };
+
+  const handleResetCompanyRule = async (row: CompanyOtMandateRuleView) => {
+    setRuleError(null);
+    setRuleConflict(false);
+    setSavingCompanyId(row.companyTenantId);
+    try {
+      await deleteCompanyOtMandateRule(office.officeId, row.companyTenantId, undefined, row.rowVersion);
+      closeRuleDialogs();
+      await loadCompanyRules();
+    } catch (err) {
+      await handleRuleFailure(err, "No se pudo volver al default.");
+    } finally {
+      setSavingCompanyId(null);
     }
   };
 
@@ -373,21 +536,44 @@ export function MandatoOtConfigForm({
               <p className="truncate text-sm font-medium text-[#162244] dark:text-white">
                 {row.companyName}
               </p>
-              <p
-                className="truncate text-[11px] text-[#59677D] dark:text-white/50"
-                title={
-                  rowBusy
-                    ? "Guardando cambios…"
-                    : row.hasExplicitRule
-                      ? "Esta compañía tiene una regla propia de mandato para este OT (mandatario default distinto al implícito)."
-                      : "Sin regla propia: usa Persona/RL por defecto del sistema para este OT."
-                }
-              >
-                {rowBusy ? "Guardando…" : row.hasExplicitRule ? "Regla propia" : "Default"}
-              </p>
+              {row.companyTaxId ? (
+                <p className="truncate font-mono text-[11px] text-[#59677D] dark:text-white/50">
+                  {row.companyTaxId}
+                </p>
+              ) : null}
+              {rowBusy ? (
+                <p className="text-[11px] text-[#59677D] dark:text-white/50">Guardando…</p>
+              ) : null}
             </div>
           );
         },
+      },
+      {
+        // HU #13150 — tipo de mandato de la compañía en este organismo.
+        key: "tipoMandato",
+        header: "Tipo de mandato",
+        cellClassName: "!px-2.5",
+        headerClassName: "!px-2.5",
+        render: (row) => (
+          <div className="flex flex-col items-start gap-1">
+            <span
+              className="text-sm text-[#162244] dark:text-white"
+              data-testid={`mandato-company-tipo-${row.companyTenantId}`}
+            >
+              {tipoNegocioLabel(resolveTipoNegocio(row.assignmentMode))}
+            </span>
+            {row.hasExplicitRule ? null : (
+              <span title="Sin configuración propia: la compañía usa el tipo de mandato del organismo, Persona natural.">
+                <StatusBadge label="Default" tone="neutral" />
+              </span>
+            )}
+            {row.hasExplicitRule ? null : (
+              <span className="text-[11px] text-[#59677D] dark:text-white/50">
+                Sin configuración propia: usa el del organismo.
+              </span>
+            )}
+          </div>
+        ),
       },
       {
         key: "defaultSigner",
@@ -430,25 +616,67 @@ export function MandatoOtConfigForm({
           );
         },
       },
+      ...(editableCompanyType
+        ? [
+            {
+              key: "acciones",
+              header: "Acciones",
+              align: "right" as const,
+              cellClassName: "!px-2.5",
+              headerClassName: "!px-2.5",
+              render: (row: CompanyOtMandateRuleView) => (
+                <RowActionsMenu
+                  ariaLabel={`Acciones de ${row.companyName}`}
+                  subject={row.companyName}
+                  actions={[
+                    {
+                      icon: Pencil,
+                      label: `Editar tipo de mandato de ${row.companyName}`,
+                      onClick: () => {
+                        setRuleError(null);
+                        setRuleConflict(false);
+                        setTypeEditId(row.companyTenantId);
+                      },
+                      disabled: busy,
+                    },
+                    ...(row.hasExplicitRule
+                      ? [
+                          {
+                            icon: RotateCcw,
+                            label: `Volver al default de ${row.companyName}`,
+                            onClick: () => {
+                              setRuleError(null);
+                              setRuleConflict(false);
+                              setResetRuleId(row.companyTenantId);
+                            },
+                            disabled: busy,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              ),
+            } satisfies DataTableColumn<CompanyOtMandateRuleView>,
+          ]
+        : []),
     ],
     // Handlers son estables por cierre de render; deps cubren estado que cambia las celdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers del mismo render
-    [busy, savingCompanyId, otSigners, office.officeId, onRegisterSigner],
+    [busy, savingCompanyId, otSigners, office.officeId, onRegisterSigner, editableCompanyType],
   );
 
   return (
-    <OtSidePanel
+    <>
+    <Modal
       open
-      title={mode === "mandatario" ? "Configurar mandatario" : "Configurar mandato"}
-      ariaLabel={
+      title={
         mode === "mandatario"
           ? `Configurar mandatario de ${office.name}`
           : `Configurar mandato de ${office.name}`
       }
       onClose={onClose}
-      disabled={busy}
-      width="xl"
-      surface="modal"
+      busy={busy}
+      size="xl"
       zClassName="z-[60]"
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -514,8 +742,8 @@ export function MandatoOtConfigForm({
         </p>
         <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
           {mode === "mandato"
-            ? "La plantilla de este organismo solo se asocia aquí (SuperAdmin). Elegir un mandatario no cambia esta redacción."
-            : "Un mandatario general por OT y, como máximo, uno por empresa en este organismo. Esto no modifica la plantilla."}
+            ? "La redacción del mandato de este organismo solo se asigna aquí (Super Admin). Elegir un mandatario no la cambia."
+            : "Aquí eliges quién firma por defecto en este organismo: una persona general y, si quieres, otra distinta para cada compañía. No cambia la redacción del mandato."}
         </p>
 
         {error ? (
@@ -537,27 +765,60 @@ export function MandatoOtConfigForm({
               Plantilla del mandato (por OT)
             </h3>
 
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-[#162244] dark:text-white">
-                Redacción que aplica este OT
-              </span>
-              <select
-                value={templateCode}
-                onChange={(e) => setTemplateCode(e.target.value)}
-                disabled={busy}
-                data-testid="mandato-template-select"
-                className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            {formatos.status === "loading" ? (
+              <p
+                role="status"
+                aria-live="polite"
+                data-testid="mandato-formatos-loading"
+                className="text-xs text-[#59677D] dark:text-white/65"
               >
-                {mandatoTemplateOptions().map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                {mandatoTemplateOptions().find((o) => o.code === templateCode)?.summary ?? ""}
-              </span>
-            </label>
+                Cargando formatos de contrato…
+              </p>
+            ) : formatos.status === "error" ? (
+              <div
+                role="alert"
+                data-testid="mandato-formatos-error"
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+              >
+                <span>No se pudo cargar la lista de formatos de contrato.</span>
+                <button
+                  type="button"
+                  onClick={formatos.reload}
+                  className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                  Redacción que aplica este OT
+                </span>
+                <select
+                  value={templateCode}
+                  onChange={(e) => setTemplateCode(e.target.value)}
+                  disabled={busy}
+                  data-testid="mandato-template-select"
+                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                >
+                  {savedCodeUnknown ? (
+                    <option value={templateCode}>{templateCode} (ya no está en el catálogo)</option>
+                  ) : null}
+                  {formatos.formatos.map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                  {selectedFormat?.delegatesToOfficeTemplate
+                    ? "El organismo usa la redacción que el sistema tiene asignada a su código. Si no tiene ninguna, usa el Genérico."
+                    : selectedFormat
+                      ? `Tipo de mandato por defecto: ${tipoNegocioLabel(resolveTipoNegocio(selectedFormat.assignmentMode))}.`
+                      : ""}
+                </span>
+              </label>
+            )}
 
             {/* HU #11718 — la redacción elegida puede nombrar a un tercero ajeno al organismo:
                 las plantillas del sistema llevan su municipio y su mandatario institucional
@@ -592,13 +853,13 @@ export function MandatoOtConfigForm({
                     Sistema
                   </span>
                   <span className="inline-flex items-center rounded-full border border-[#557EFF]/35 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-[#162244] dark:border-[#00DBD5]/40 dark:bg-white/10 dark:text-white">
-                    {systemTemplateLabel(effectiveTemplate)}
+                    {effectiveTemplateName}
                   </span>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
                   En automática, este OT emite hoy la redacción{" "}
                   <span className="font-semibold text-[#162244] dark:text-white">
-                    {systemTemplateLabel(effectiveTemplate)}
+                    {effectiveTemplateName}
                   </span>{" "}
                   para todas las compañías.
                 </p>
@@ -632,7 +893,7 @@ export function MandatoOtConfigForm({
                   className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF4E00] disabled:opacity-50"
                 >
                   <Trash2 className="h-3 w-3" aria-hidden="true" />
-                  Quitar y volver a {systemTemplateLabel(effectiveTemplate)}
+                  Quitar y volver a {effectiveTemplateName}
                 </button>
               </div>
             ) : null}
@@ -784,8 +1045,8 @@ export function MandatoOtConfigForm({
                   ))}
                 </select>
                 <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Una sola persona a nivel general. Si la empresa no tiene mandatario propio, se usa
-                  esta. El default cliente×OT prima. Sin ninguno, el mandato sale en blanco.
+                  Es quien firma cuando la compañía no tiene un mandatario propio. Si a una compañía le elegiste
+                  uno específico, ese tiene prioridad. Si no hay ninguno, el mandato sale con los datos en blanco.
                 </span>
                 {onRegisterSigner ? (
                   <div className="flex flex-col gap-1.5 pt-1">
@@ -842,8 +1103,8 @@ export function MandatoOtConfigForm({
                   Tipo de mandatario por compañía
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Sin regla propia la empresa usa el modelo del organismo. En Persona/RL puedes
-                  fijar un mandatario preferido (preselección en el paso FUR).{" "}
+                  Si una compañía no tiene configuración propia, usa la del organismo. En «Persona natural»
+                  puedes elegir un mandatario preferido, que aparece ya seleccionado al radicar.{" "}
                   {rulesStatus === "ready" ? (
                     <span className="font-medium text-[#162244] dark:text-white/80">
                       {companyRules.length} compañía{companyRules.length === 1 ? "" : "s"}
@@ -855,9 +1116,12 @@ export function MandatoOtConfigForm({
             </div>
 
             {rulesStatus === "loading" ? (
-              <p className="text-[11px] text-[#59677D]" role="status">
-                Cargando compañías…
-              </p>
+              <>
+                <p className="text-[11px] text-[#59677D]" role="status">
+                  Cargando compañías…
+                </p>
+                <CarLoaderModal label="Cargando compañías…" />
+              </>
             ) : null}
             {rulesStatus === "error" ? (
               <p role="alert" className="text-[11px] text-[#FF4E00]">
@@ -931,7 +1195,33 @@ export function MandatoOtConfigForm({
           </div>
         )}
       </div>
-    </OtSidePanel>
+    </Modal>
+    {typeEditRow ? (
+      <CompanyTipoMandatoModal
+        key={typeEditRow.companyTenantId}
+        row={typeEditRow}
+        busy={savingCompanyId !== null}
+        error={ruleError}
+        conflict={ruleConflict}
+        onSave={(values) => void handleSaveCompanyType(typeEditRow, values)}
+        onCancel={closeRuleDialogs}
+        onReload={() => {
+          setRuleError(null);
+          setRuleConflict(false);
+        }}
+      />
+    ) : null}
+    {resetRuleRow ? (
+      <CompanyVolverDefaultModal
+        companyName={resetRuleRow.companyName}
+        busy={savingCompanyId !== null}
+        error={ruleError}
+        onConfirm={() => void handleResetCompanyRule(resetRuleRow)}
+        onCancel={closeRuleDialogs}
+      />
+    ) : null}
+    {savingCompanyId !== null ? <CarLoaderModal label="Guardando…" /> : null}
+    </>
   );
 }
 
@@ -1020,7 +1310,7 @@ function MandatarioActualReadOnly({
           <dd className="font-mono">{docNumber?.trim() || "—"}</dd>
         </div>
         <div>
-          <dt className="font-medium text-[#59677D] dark:text-white/65">Hash de integridad</dt>
+          <dt className="font-medium text-[#59677D] dark:text-white/65">Huella de integridad</dt>
           <dd className="flex items-center gap-2 font-mono">
             {hash?.trim() ? (
               <>
@@ -1030,7 +1320,7 @@ function MandatarioActualReadOnly({
                 <button
                   type="button"
                   className="shrink-0 rounded-lg p-1 text-[#557EFF] hover:bg-[#EFF6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                  aria-label="Copiar hash de integridad"
+                  aria-label="Copiar huella de integridad"
                   onClick={() => void copyHash()}
                 >
                   <Copy className="h-3.5 w-3.5" aria-hidden="true" />

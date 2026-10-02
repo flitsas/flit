@@ -19,6 +19,7 @@ internal sealed class MandateSignerCompanyConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.CompanyTenantId).IsRequired();
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(x => x.CreatedAt).IsRequired();
+        builder.Property(x => x.ConfiguredByScope).HasMaxLength(20).IsRequired().HasDefaultValue("organismo");
 
         builder.HasOne<MandateSigner>()
             .WithMany()

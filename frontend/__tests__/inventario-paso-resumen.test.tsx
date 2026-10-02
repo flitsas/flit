@@ -46,8 +46,6 @@ const mocks = vi.hoisted(() => ({
   fetchAttachmentPreviewUrl: vi.fn(),
   listTransitOffices: vi.fn(),
   runRnmc: vi.fn(),
-  listMandateSigners: vi.fn(),
-  setMandateSigner: vi.fn(),
   listFirmas: vi.fn(),
   listParticipantes: vi.fn(),
   enviarAlOt: vi.fn(),
@@ -203,8 +201,6 @@ beforeEach(() => {
   mocks.fetchAttachmentPreviewUrl.mockResolvedValue({ url: 'https://storage/doc' });
   mocks.listTransitOffices.mockResolvedValue([]);
   mocks.runRnmc.mockResolvedValue([]);
-  mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
-  mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);
   mocks.enviarAlOt.mockResolvedValue({ warningMessage: null });
@@ -420,15 +416,7 @@ describe('MatriculaResumen — inventario: actores del trámite', () => {
 describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda', () => {
   // El mandatario se retiró del resumen (decisión del usuario): el backend lo resuelve solo cuando
   // no se elige a mano. Se fija la AUSENCIA para que no vuelva por descuido en un rediseño futuro.
-  it('el mandatario no se pinta en el resumen, ni siquiera con candidatos disponibles', async () => {
-    mocks.listMandateSigners.mockResolvedValue({
-      opciones: [
-        { id: 'm-1', nombre: 'Juan Mandatario', tipoDocumento: 'CC', documento: '555', firmaBaulVigente: true, identidadVigente: false, firmaFisica: false, identidadHasta: null },
-        { id: 'm-2', nombre: 'Luisa Apoderada', tipoDocumento: 'CC', documento: '666', firmaBaulVigente: false, identidadVigente: false, firmaFisica: false, identidadHasta: null },
-      ],
-      elegidoId: 'm-1',
-      editable: true,
-    });
+  it('el mandatario elegible no se pinta en el resumen (la elección manual se retiró)', async () => {
     renderResumen();
 
     expect(await screen.findByRole('region', { name: 'Vehículo' })).toBeInTheDocument();

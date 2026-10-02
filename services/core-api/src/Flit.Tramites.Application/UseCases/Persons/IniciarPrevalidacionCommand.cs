@@ -146,21 +146,67 @@ public sealed class IniciarPrevalidacionHandler(
         // ── 5a. Proveedor Kyverum ─────────────────────────────────────────────────
         if (providerOptions.IsKyverum)
         {
-            var (result, error, conflict) = await IniciarConKyverumAsync(tenantId, person, subject, validationId, ct);
+            var (result, error, conflict) = await IniciarConKyverumAsync(tenantId, person.Id, null, subject, validationId, ct);
             return (result, error, conflict);
         }
 
         // ── 5b. Proveedor mock ────────────────────────────────────────────────────
         {
-            var (result, error, conflict) = await IniciarConMockAsync(tenantId, person, subject, validationId, ct);
+            var (result, error, conflict) = await IniciarConMockAsync(tenantId, person.Id, null, subject, validationId, ct);
             return (result, error, conflict);
         }
+    }
+
+    /// <summary>
+    /// HU #13246 (Feature #13245, Épica #13090) — lanza la validación de identidad PROPIA de un mandatario con el MISMO flujo
+    /// de la prevalidación y del trámite (Kyverum: enlace al correo, captura y webhook; mock en local). Diferencias
+    /// deliberadas respecto de <see cref="HandleAsync"/>:
+    /// <list type="bullet">
+    ///   <item>La validación queda con <c>PartyRole = mandatario</c> y <c>MandateSignerId</c> de la ficha, en el
+    ///        <paramref name="tenantId"/> de la COMPAÑÍA del mandatario (también cuando la crea el OT).</item>
+    ///   <item>Sin <see cref="Person"/> ni trámite: el ancla es la ficha. No evalúa la precedencia de envío por documento
+    ///        (una identidad vigente del mismo documento de un comprador, vendedor o prevalidación NO cuenta ni
+    ///        bloquea): solo le importa lo que ya hay para ESE mandatario.</item>
+    ///   <item>Las validaciones en vuelo del mismo mandatario se cierran antes (<c>expirado</c>): la anterior deja de contar.
+    ///        Dos lanzamientos simultáneos dejan una sola activa (índice único parcial por mandatario → error
+    ///        <c>prevalidacion_activa</c> para el que pierde la carrera).</item>
+    /// </list>
+    /// No cambia el contrato de <see cref="HandleAsync"/>.
+    /// </summary>
+    public async Task<(IniciarPrevalidacionResult? Result, string? Error)> HandleMandatarioAsync(
+        Guid tenantId,
+        Guid mandateSignerId,
+        string documentType,
+        string documentNumber,
+        string name,
+        string email,
+        CancellationToken ct = default)
+    {
+        if (mandateSignerId == Guid.Empty
+            || string.IsNullOrWhiteSpace(documentType)
+            || string.IsNullOrWhiteSpace(documentNumber)
+            || string.IsNullOrWhiteSpace(name)
+            || string.IsNullOrWhiteSpace(email))
+            return (null, "datos_incompletos");
+
+        var subject = new IdentitySubjectStandalone(
+            name.Trim(), documentType.Trim(), documentNumber.Trim(), email.Trim());
+
+        // La anterior deja de contar: se cierra la que siga en vuelo antes de crear la nueva (el índice único parcial
+        // por mandatario no admite dos). El resto del historial se conserva.
+        await procedureRepo.SupersedeMandatarioInFlightAsync(mandateSignerId, DateTimeOffset.UtcNow, ct);
+
+        var validationId = Guid.NewGuid();
+        var (result, error, _) = providerOptions.IsKyverum
+            ? await IniciarConKyverumAsync(tenantId, null, mandateSignerId, subject, validationId, ct)
+            : await IniciarConMockAsync(tenantId, null, mandateSignerId, subject, validationId, ct);
+        return (result, error);
     }
 
     // ── Kyverum path ─────────────────────────────────────────────────────────────
 
     private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConKyverumAsync(
-        Guid tenantId, Person person, IdentitySubjectStandalone subject,
+        Guid tenantId, Guid? personId, Guid? mandateSignerId, IdentitySubjectStandalone subject,
         Guid validationId, CancellationToken ct)
     {
         KyverumVerifyStartResult provider;
@@ -170,7 +216,7 @@ public sealed class IniciarPrevalidacionHandler(
                 new KyverumVerifyStartRequest(
                     ProcedureInstanceId: null,
                     CorrelationId: validationId,
-                    Parte: null,
+                    Parte: mandateSignerId is null ? null : BiometricRules.ParteMandatario,
                     Nombre: subject.Nombre,
                     TipoDoc: subject.TipoDocumento,
                     Documento: subject.NumeroDocumento,
@@ -183,7 +229,7 @@ public sealed class IniciarPrevalidacionHandler(
                 return (null, "proveedor_error", null);
 
             var queuedAt = DateTimeOffset.UtcNow;
-            var queued = BuildValidation(tenantId, person.Id, validationId, subject,
+            var queued = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject,
                 status: BiometricEstados.PendienteEnvio,
                 provider: BiometricProviders.Kyverum,
                 now: queuedAt,
@@ -197,7 +243,7 @@ public sealed class IniciarPrevalidacionHandler(
                 ProcedureInstanceId = null,
                 ValidationId = queued.Id,
                 Provider = BiometricProviders.Kyverum,
-                Parte = null,
+                Parte = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
             }, ct);
 
             try
@@ -215,7 +261,7 @@ public sealed class IniciarPrevalidacionHandler(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var validation = BuildValidation(tenantId, person.Id, validationId, subject,
+        var validation = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject,
             status: BiometricEstados.EnProceso,
             provider: BiometricProviders.Kyverum,
             now: now,
@@ -238,7 +284,7 @@ public sealed class IniciarPrevalidacionHandler(
             ProcedureInstanceId = null,
             ValidationId = validation.Id,
             Provider = BiometricProviders.Kyverum,
-            Parte = null,
+            Parte = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
             ProviderVerificationId = provider.VerificationId,
         }, ct);
 
@@ -259,13 +305,13 @@ public sealed class IniciarPrevalidacionHandler(
     // ── Mock path ────────────────────────────────────────────────────────────────
 
     private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConMockAsync(
-        Guid tenantId, Person person, IdentitySubjectStandalone subject,
+        Guid tenantId, Guid? personId, Guid? mandateSignerId, IdentitySubjectStandalone subject,
         Guid validationId, CancellationToken ct)
     {
         var token = BiometricToken.Generate();
         var now = DateTimeOffset.UtcNow;
 
-        var validation = BuildValidation(tenantId, person.Id, validationId, subject,
+        var validation = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject,
             status: BiometricEstados.Enviado,
             provider: BiometricProviders.Mock,
             now: now,
@@ -280,7 +326,7 @@ public sealed class IniciarPrevalidacionHandler(
             ProcedureInstanceId = null,
             ValidationId = validation.Id,
             Provider = BiometricProviders.Mock,
-            Parte = null,
+            Parte = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
         }, ct);
 
         try
@@ -306,7 +352,8 @@ public sealed class IniciarPrevalidacionHandler(
     /// </summary>
     private static ProcedureInstanceBiometricValidation BuildValidation(
         Guid tenantId,
-        Guid personId,
+        Guid? personId,
+        Guid? mandateSignerId,
         Guid validationId,
         IdentitySubjectStandalone subject,
         string status,
@@ -322,7 +369,9 @@ public sealed class IniciarPrevalidacionHandler(
             TenantId = tenantId,
             PersonId = personId,
             ProcedureInstanceId = null,
-            PartyRole = null,
+            // HU #13246 — con mandateSignerId la validación es del mandatario (exclusiva de su ficha).
+            PartyRole = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
+            MandateSignerId = mandateSignerId,
             Name = subject.Nombre,
             DocumentType = subject.TipoDocumento,
             DocumentNumber = subject.NumeroDocumento,

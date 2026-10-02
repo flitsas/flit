@@ -127,10 +127,12 @@ public sealed class AdminIdentityDeprecatedEndpointsTests : IClassFixture<WebApp
             TestContext.Current.CancellationToken);
         transitOffices.StatusCode.Should().NotBe(HttpStatusCode.Gone);
 
+        // HU #13179 — la ruta represented-companies de mandatarios se retiró (404; la lista sale de associable-companies,
+        // HU #13178): ya no existe, y tampoco responde 410.
         var representedCompanies = await client.GetAsync(
             $"/api/v1/admin/companies/{TenantId}/mandate-signers/represented-companies",
             TestContext.Current.CancellationToken);
-        representedCompanies.StatusCode.Should().NotBe(HttpStatusCode.Gone);
+        representedCompanies.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         // Inactivate/Reactivate sobre un id inexistente: 404 de negocio, nunca 410 (la ruta sigue viva).
         var inactivate = await client.PostAsync(

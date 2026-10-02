@@ -297,6 +297,7 @@ sin relajar producción:
 |------------|---------|------------------------------------|
 | CF-01 duplicidad de trámite en curso | `TramiteValidations:DuplicateActiveProcedure:Mode` | `409 DUPLICATE_ACTIVE_PROCEDURE` (VIN en Matrícula Inicial, placa en Traspaso) |
 | CF-03 precondición registral | `TramiteValidations:VehicleRegistrationState:Mode` | `422 VEHICLE_STATE_INVALID_FOR_TYPE` (vehículo ya matriculado, fuente RUNT o FLIT) |
+| Mandatario requerido al radicar (HU #13143, ADR-0066) | `TramiteValidations:MandatarioRequerido:Mode` | `409 mandatario_no_configurado` / `409 mandatario_firma_invalida` (el trámite no tiene mandatario activo, vigente y con firma válida) |
 
 | Modo | Efecto |
 |------|--------|
@@ -316,6 +317,19 @@ TRAMITE_VALIDATION_VEHICLE_STATE_MODE=warn    # DEV: warn · QA: warn  · PDN: b
 ```
 
 Sin esas variables el compose inyecta `block` en ambas: **un ambiente nunca se relaja por olvido**.
+
+**Excepción deliberada: mandatario al radicar (HU #13143).** Su variable es
+`TRAMITE_VALIDATION_MANDATARIO_MODE` (en el compose, `TramiteValidations__MandatarioRequerido__Mode`) y el
+compose la entrega en **`warn`** (`${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}`), igual que `appsettings.json`:
+código nuevo con datos sin migrar (firma física, organismos sin mandatarios) detendría radicaciones en PDN. En
+**código** sigue el fail-safe: ausente, vacío o no reconocido resuelve a `block`. Calendario: DEV y QA arrancan
+en `warn`; PDN pasa a `block` solo con el reporte de firma física vacío, 14 días en `warn` sin avisos y la
+confirmación escrita del Líder Técnico (ADR-0066). El paso a `block` es **cambiar esta variable en el `.env` del
+VPS y reiniciar, sin despliegue de código**:
+
+```bash
+TRAMITE_VALIDATION_MANDATARIO_MODE=warn   # DEV: warn · QA: warn (ensayo: block) · PDN: warn hasta la confirmación
+```
 Un valor no reconocido (`false`, `desactivado`, …) también resuelve a `block` y deja un `warning` en
 el log de arranque. El modo efectivo de cada validación se registra al arrancar con la categoría
 `Flit.TramiteValidations`.
@@ -326,7 +340,8 @@ sección a su copia:
 ```jsonc
 "TramiteValidations": {
   "DuplicateActiveProcedure": { "Mode": "off" },
-  "VehicleRegistrationState": { "Mode": "off" }
+  "VehicleRegistrationState": { "Mode": "off" },
+  "MandatarioRequerido": { "Mode": "warn" }
 }
 ```
 

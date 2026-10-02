@@ -45,10 +45,8 @@ public sealed class UpdateMandateSignerCommand
     public IReadOnlyList<Guid>? TransitOfficeIds { get; init; }
 
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO. La firma física ya no es una forma de firma: el campo se
+    /// acepta por compatibilidad con clientes anteriores, pero no se valida ni se persiste como exención.
     /// </summary>
     public IReadOnlyList<Guid>? PhysicalSignatureOfficeIds { get; init; }
 
@@ -59,8 +57,9 @@ public sealed class UpdateMandateSignerCommand
     public Guid? SignatureVaultId { get; init; }
 
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
-    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// HU #13179 — compañías de FLIT (por tenant) a las que se asocia, POR ORGANISMO. Vacío o ausente ⇒
+    /// solo aplica a su propia compañía. En la edición, <c>null</c> no toca nada y cada organismo de la
+    /// lista reemplaza su conjunto.
     /// </summary>
     public IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies { get; init; }
 
@@ -73,6 +72,24 @@ public sealed class UpdateMandateSignerCommand
     /// firma que la compañía acababa de elegir.</para>
     /// </summary>
     public bool ActualizaFirma { get; init; }
+
+    /// <summary>HU #13129 — modelo; ausente ⇒ se conserva el guardado.</summary>
+    public string? SignerModel { get; init; }
+
+    /// <summary>HU #13129 — forma de firma; ausente ⇒ se conserva la guardada (solo natural).</summary>
+    public string? SignatureMethod { get; init; }
+
+    /// <summary>HU #13129 — <c>fixed</c> | <c>range</c>; ausente ⇒ se conserva la guardada (solo natural).</summary>
+    public string? ValidityKind { get; init; }
+
+    public DateOnly? ValidFrom { get; init; }
+    public DateOnly? ValidTo { get; init; }
+
+    /// <summary>
+    /// HU #13195 — origen del vínculo mandatario-compañía que se escribe: <c>organismo</c> (por defecto, ruta del
+    /// OT), <c>super_admin</c> o <c>compania</c> (ruta de la compañía). Ver <c>MandateSignerOrigins</c>.
+    /// </summary>
+    public string ConfiguredByScope { get; init; } = "organismo";
 
     public Guid? UpdatedBy { get; init; }
     public Guid? CorrelationId { get; init; }

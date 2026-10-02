@@ -65,6 +65,62 @@ public sealed class MandateSignerHandlerTests
             && e.Message.Contains("Ya existe un mandatario", StringComparison.Ordinal));
     }
 
+    // HU #13195b — un activo por compañía, organismo y GRUPO DE ORIGEN: dos orígenes coexisten.
+    [Theory]
+    [InlineData("compania", "organismo")]
+    [InlineData("organismo", "compania")]
+    public async Task Create_AllowsSignersOfDifferentOriginGroupOnSameCompany(string first, string second)
+    {
+        await using var ctx = NewSeededContext();
+        var (create, _, _, _, _) = CrudHandlers(ctx);
+
+        var a = NewCreate("Samuel", "111", [CompanyA]);
+        var b = NewCreate("Daniel", "222", [CompanyA]);
+        (await create.HandleAsync(WithScope(a, first), Ct)).IsValid.Should().BeTrue();
+
+        var result = await create.HandleAsync(WithScope(b, second), Ct);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("compania")]
+    [InlineData("organismo")]
+    public async Task Create_RejectsSecondSignerOfSameOriginGroupOnSameCompany(string scope)
+    {
+        await using var ctx = NewSeededContext();
+        var (create, _, _, _, _) = CrudHandlers(ctx);
+
+        (await create.HandleAsync(WithScope(NewCreate("Samuel", "111", [CompanyA]), scope), Ct)).IsValid.Should().BeTrue();
+        var second = await create.HandleAsync(WithScope(NewCreate("Daniel", "222", [CompanyA]), scope), Ct);
+
+        second.IsValid.Should().BeFalse();
+        second.Errors.Should().Contain(e => e.Message.Contains("Ya existe un mandatario", StringComparison.Ordinal));
+    }
+
+    private static CreateMandateSignerCommand WithScope(CreateMandateSignerCommand c, string scope) =>
+        new()
+        {
+            TransitOfficeId = c.TransitOfficeId,
+            FullName = c.FullName,
+            DocumentNumber = c.DocumentNumber,
+            CompanyTenantIds = c.CompanyTenantIds,
+            DocumentType = c.DocumentType,
+            Email = c.Email,
+            TransitOfficeIds = c.TransitOfficeIds,
+            SignatureVaultId = c.SignatureVaultId,
+            OfficeCompanies = c.OfficeCompanies,
+            SignerModel = c.SignerModel,
+            SignatureMethod = c.SignatureMethod,
+            ValidityKind = c.ValidityKind,
+            ValidFrom = c.ValidFrom,
+            ValidTo = c.ValidTo,
+            CreatedBy = c.CreatedBy,
+            CompanyVisibility = c.CompanyVisibility,
+            ValidateSigningMeans = c.ValidateSigningMeans,
+            ConfiguredByScope = scope,
+        };
+
     [Fact]
     public async Task Create_AllowsSecondSignerOnDifferentCompany()
     {
@@ -103,7 +159,7 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Reactivate_BringsSignerBackActive_WithoutCompanies()
+    public async Task Reactivate_BringsSignerBackActive_RestoringItsCompanies()
     {
         await using var ctx = NewSeededContext();
         var (create, _, inactivate, reactivate, list) = CrudHandlers(ctx);
@@ -124,11 +180,11 @@ public sealed class MandateSignerHandlerTests
         }, Ct);
         outcome.Should().Be(ReactivateMandateSignerOutcome.Reactivated);
 
-        // Vuelve activo pero sin compañías (se liberaron y no se restauran).
+        // HU #13136 — vuelve activo y recupera las compañías que retiró la baja.
         var row = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct))
             .Single(s => s.Id == samuel.MandateSignerId);
         row.IsActive.Should().BeTrue();
-        row.CompanyTenantIds.Should().BeEmpty();
+        row.CompanyTenantIds.Should().BeEquivalentTo([CompanyA]);
 
         // Reactivar de nuevo es idempotente (ya activo) → NotFound.
         var again = await reactivate.HandleAsync(new ReactivateMandateSignerCommand
@@ -156,6 +212,7 @@ public sealed class MandateSignerHandlerTests
             MandateSignerId = created.MandateSignerId!.Value,
             FullName = "Samuel Alberto Cárdenas",
             DocumentNumber = "123456",
+            Email = "mandatario@flit.test",
             CompanyTenantIds = [CompanyA, CompanyB],
             UpdatedBy = Operator,
         }, Ct);
@@ -184,11 +241,27 @@ public sealed class MandateSignerHandlerTests
             MandateSignerId = created.MandateSignerId!.Value,
             FullName = "Samuel",
             DocumentNumber = "111",
+            Email = "mandatario@flit.test",
             CompanyTenantIds = [CompanyA, CompanyB],
             UpdatedBy = Operator,
         }, Ct);
 
         updated.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+    }
+
+    [Fact]
+    public async Task Create_OtSinCompaniaPropietaria_EsValido()
+    {
+        await using var ctx = NewSeededContext();
+        var (create, _, _, _, list) = CrudHandlers(ctx);
+
+        var result = await create.HandleAsync(NewCreate("Omar", "2020202021", []), Ct);
+
+        result.IsValid.Should().BeTrue();
+        var signers = await list.HandleAsync(
+            new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct);
+        signers.Should().ContainSingle();
+        signers[0].CompanyTenantIds.Should().BeEmpty();
     }
 
     [Fact]
@@ -218,6 +291,8 @@ public sealed class MandateSignerHandlerTests
             FullName = fullName,
             DocumentNumber = documentNumber,
             CompanyTenantIds = companies,
+            Email = "mandatario@flit.test",
+            SignatureMethod = "biometria",
             CreatedBy = Operator,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };

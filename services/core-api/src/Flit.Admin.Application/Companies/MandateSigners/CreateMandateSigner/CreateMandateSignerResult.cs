@@ -8,8 +8,10 @@ public sealed class CreateMandateSignerResult
         Guid? mandateSignerId,
         string? integrityHash,
         IReadOnlyList<MandateSignerValidationError> errors,
-        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted)
+        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted,
+        string? signingMeans = null)
     {
+        SigningMeans = signingMeans;
         IsValid = isValid;
         MandateSignerId = mandateSignerId;
         IntegrityHash = integrityHash;
@@ -23,16 +25,23 @@ public sealed class CreateMandateSignerResult
     public IReadOnlyList<MandateSignerValidationError> Errors { get; }
 
     /// <summary>
-    /// Desenlace de la validación de identidad disparada por el alta (HU #11000). El alta NUNCA falla por
-    /// esto (best-effort); el desenlace viaja al cliente para que el aviso al usuario sea veraz.
+    /// Desenlace de la validación de identidad PROPIA disparada por el alta (HU #11000, HU #13246). El alta NUNCA falla
+    /// por esto (best-effort); el desenlace viaja al cliente para que el aviso al usuario sea veraz.
     /// </summary>
     public MandateSignerIdentityOutcome Identity { get; }
+
+    /// <summary>
+    /// Ajuste HU #13123 — medio de firma resuelto en el alta desde el OT: <c>baul</c> o <c>biometria</c>;
+    /// <c>null</c> si no se evaluó. Solo el nombre del medio: nunca datos del baúl.
+    /// </summary>
+    public string? SigningMeans { get; }
 
     public static CreateMandateSignerResult Success(
         Guid mandateSignerId,
         string integrityHash,
-        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted) =>
-        new(true, mandateSignerId, integrityHash, [], identity);
+        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted,
+        string? signingMeans = null) =>
+        new(true, mandateSignerId, integrityHash, [], identity, signingMeans);
 
     public static CreateMandateSignerResult Invalid(IReadOnlyList<MandateSignerValidationError> errors) =>
         new(false, null, null, errors);
@@ -52,4 +61,10 @@ public enum MandateSignerIdentityOutcome
 
     /// <summary>El proveedor de identidad falló: el mandatario quedó creado y el reenvío queda disponible.</summary>
     Failed,
+
+    /// <summary>
+    /// HU #13246 — el proveedor falló de forma transitoria: el mandatario quedó guardado y la validación encolada para
+    /// reintento automático (la respuesta lo indica).
+    /// </summary>
+    Queued,
 }

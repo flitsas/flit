@@ -222,24 +222,7 @@ public static class InfrastructureExtensions
         // block (default fail-safe) / warn / off. Se configura por el .env de cada VPS
         // (TramiteValidations__<Validación>__Mode) porque DEV, QA y PDN corren TODOS con
         // ASPNETCORE_ENVIRONMENT=Development y appsettings.{Environment}.json no los distingue.
-        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>(
-            configuration.GetSection(
-                Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions.SectionName));
-        // Igual que ImprontaValidation: Application consume la política YA resuelta, sin IOptions.
-        services.AddSingleton(sp =>
-        {
-            var options = sp.GetRequiredService<
-                IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>>().Value;
-            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.TramiteValidations");
-            var policy = Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicy.Resolve(
-                options,
-                (name, raw) => TramiteValidationLog.UnrecognizedMode(logger, name, raw));
-            TramiteValidationLog.PolicyResolved(
-                logger,
-                policy.DuplicateActiveProcedure,
-                policy.VehicleRegistrationState);
-            return policy;
-        });
+        services.AddTramiteValidationPolicy(configuration);
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
