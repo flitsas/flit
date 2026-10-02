@@ -118,12 +118,15 @@ public sealed class CreateMandateSignerHandler
             command.Email,
             command.SignatureVaultId));
 
+        var exigeCompania = string.Equals(
+            command.ConfiguredByScope, "compania", StringComparison.Ordinal);
         var (otTenantId, errors) = MandateSignerValidation.ValidateBase(
             otStatus,
             profile.FullName,
             profile.DocumentNumber,
             companyIds,
-            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco);
+            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco,
+            requireCompanies: exigeCompania);
         if (inferred?.Error is not null)
         {
             errors.Add(inferred.Error);
@@ -292,6 +295,17 @@ public sealed class CreateMandateSignerHandler
         if (method == MandateSignatureMethods.Biometria)
         {
             return new SigningResolution(null, null, MeansBiometric);
+        }
+
+        if (distinctCompanies.Count == 0)
+        {
+            return new SigningResolution(
+                new MandateSignerValidationError(
+                    "signatureMethod",
+                    "Para usar el baúl de firmas, elige al menos una compañía: ahí se busca la firma de la persona.",
+                    null),
+                null,
+                null);
         }
 
         if (distinctCompanies.Count != 1)

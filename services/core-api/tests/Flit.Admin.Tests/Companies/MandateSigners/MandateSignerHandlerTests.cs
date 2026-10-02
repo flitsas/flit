@@ -250,6 +250,21 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
+    public async Task Create_OtSinCompaniaPropietaria_EsValido()
+    {
+        await using var ctx = NewSeededContext();
+        var (create, _, _, _, list) = CrudHandlers(ctx);
+
+        var result = await create.HandleAsync(NewCreate("Omar", "2020202021", []), Ct);
+
+        result.IsValid.Should().BeTrue();
+        var signers = await list.HandleAsync(
+            new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct);
+        signers.Should().ContainSingle();
+        signers[0].CompanyTenantIds.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_RejectsWhenOtIsInactive_Contract()
     {
         await using var ctx = NewSeededContext();

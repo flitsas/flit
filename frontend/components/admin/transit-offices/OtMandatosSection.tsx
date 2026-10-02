@@ -61,6 +61,7 @@ import {
 } from "@/lib/plataforma/mandatario-validacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
+import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "@/components/admin/companies/legal-representatives/rl-flit-styles";
 
 
 export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string }) {
@@ -89,6 +90,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     return isSuperAdmin(payload) || isOtAdmin(payload);
   });
   const [signerCompanyId, setSignerCompanyId] = useState<string | null>(null);
+  // Alta directa desde la pestaña Mandatarios: el organismo queda fijo y las compañías son opcionales.
+  const [creating, setCreating] = useState(false);
   // HU #13139 — edición del mandatario desde la lista (solo si el servidor lo permite por rol y origen).
   const [editingSigner, setEditingSigner] = useState<MandateSigner | null>(null);
   // HU #13140 — confirmación previa de desactivar o eliminar; reactivar es directo.
@@ -352,6 +355,19 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
             count: signers.length,
             content: (
       <div className="flex flex-col gap-6">
+      {canRegisterSigner ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className={rlPrimaryCtaClass}
+            style={rlPrimaryCtaStyle}
+            data-testid="ot-nuevo-mandatario"
+            onClick={() => setCreating(true)}
+          >
+            Nuevo mandatario
+          </button>
+        </div>
+      ) : null}
       <MandatarioGeneralCard
         nombre={office.defaultMandateSignerName}
         tipoDocumento={office.defaultMandateSignerDocumentType}
@@ -423,6 +439,42 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
             setOffice(view);
             setPanel(null);
             void load();
+          }}
+        />
+      ) : null}
+
+      {creating ? (
+        <CompanyMandatarioForm
+          variant="hub"
+          offices={[{ transitOfficeId, code: office.code, name: office.name }]}
+          editing={null}
+          initialOfficeIds={[transitOfficeId]}
+          restrictToOfficeIds={[transitOfficeId]}
+          overlayClassName="z-[80]"
+          onCancel={() => setCreating(false)}
+          onSubmit={async (input: CompanyMandateSignerInput) => {
+            const saved = await createMandateSigner(transitOfficeId, {
+              fullName: input.fullName,
+              documentType: input.documentType,
+              documentNumber: input.documentNumber,
+              email: input.email,
+              companyTenantIds: [],
+              transitOfficeIds: [transitOfficeId],
+              signerModel: input.signerModel,
+              signatureMethod: input.signatureMethod,
+              validityKind: input.validityKind,
+              validFrom: input.validFrom,
+              validTo: input.validTo,
+              officeCompanies: input.officeCompanies,
+            });
+            setCreating(false);
+            const validacion = mensajeValidacionTrasGuardar(saved, input.email);
+            show(
+              validacion ? `Mandatario registrado. ${validacion}` : "Mandatario registrado.",
+              saved.identity === "failed" ? "error" : "success",
+            );
+            void load();
+            return saved;
           }}
         />
       ) : null}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FileText, RotateCcw, Search, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, FileText, RotateCcw, Search, UserRound, Users } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
@@ -33,6 +34,7 @@ import { useToast } from "@/components/admin/Toast";
  * Configurador SuperAdmin — plantillas + config por OT (Plataforma → Mandatos).
  */
 export function MandatosCatalogPanel() {
+  const router = useRouter();
   const [seccion, setSeccion] = useState<"formatos" | "organismos" | "simulador">("formatos");
   const { show: showToast } = useToast();
   const formatos = useMandatoFormatos();
@@ -179,6 +181,12 @@ export function MandatosCatalogPanel() {
               onSelect: () => setEditing({ office: row, mode: "mandatario" }),
               disabled: actingId !== null || previewing !== null,
               disabledReason: "Hay otra acción en curso.",
+            },
+            {
+              key: "personas",
+              label: "Mandatarios del organismo",
+              icon: UserRound,
+              onSelect: () => router.push(`/admin/transit-offices/${row.officeId}/mandatos`),
             },
             ...(row.hasExplicitConfig
               ? [

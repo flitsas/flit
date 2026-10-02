@@ -623,21 +623,30 @@ export function CompanyMandatarioForm({
           <div className="space-y-4">
             <fieldset>
               <legend className="mb-1.5 block text-xs font-semibold">Organismos de tránsito</legend>
-              <MultiSelectBuscable
-                testId="mandatario-organismos"
-                grupo="Organismos de tránsito"
-                genero="m"
-                opciones={opcionesOrganismos}
-                seleccion={organismosElegidos}
-                onChange={(next) => {
-                  clearField("offices");
-                  setSelected(next.map((o) => o.id));
-                }}
-                buscarLabel="Buscar organismo por nombre o código"
-                buscarPlaceholder="Buscar por nombre o código…"
-                chipsHasta={ORGANISMOS_COMO_CHIPS}
-                textoVacio="No hay organismos habilitados."
-              />
+              {isHub ? (
+                <p className="text-xs font-semibold text-[#162744] dark:text-white" data-testid="mandatario-organismo-fijo">
+                  {visibleOffices[0]?.name ?? "Este organismo"}
+                  {visibleOffices[0]?.code ? (
+                    <span className="ml-1 font-normal text-[#59677D]">· {visibleOffices[0].code}</span>
+                  ) : null}
+                </p>
+              ) : (
+                <MultiSelectBuscable
+                  testId="mandatario-organismos"
+                  grupo="Organismos de tránsito"
+                  genero="m"
+                  opciones={opcionesOrganismos}
+                  seleccion={organismosElegidos}
+                  onChange={(next) => {
+                    clearField("offices");
+                    setSelected(next.map((o) => o.id));
+                  }}
+                  buscarLabel="Buscar organismo por nombre o código"
+                  buscarPlaceholder="Buscar por nombre o código…"
+                  chipsHasta={ORGANISMOS_COMO_CHIPS}
+                  textoVacio="No hay organismos habilitados."
+                />
+              )}
               <p className="mt-1.5 text-xs leading-tight opacity-70">
                 {isHub
                   ? "El mandatario se registra en este organismo."
@@ -660,6 +669,11 @@ export function CompanyMandatarioForm({
                   excluirIds={ownerCompanyIds}
                   errores={erroresAsociadas}
                   onSinRed={setSinRed}
+                  ayuda={
+                    isHub && ownerCompanyIds.length === 0
+                      ? "Opcional. Si no eliges ninguna, el mandatario queda en el organismo y puedes asignarlo después a una compañía."
+                      : undefined
+                  }
                 />
               </fieldset>
             ) : null}

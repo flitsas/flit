@@ -35,7 +35,8 @@ internal static class MandateSignerValidation
         string? fullName,
         string? documentNumber,
         IReadOnlyList<Guid> companyTenantIds,
-        bool documentRequired = true)
+        bool documentRequired = true,
+        bool requireCompanies = true)
     {
         var errors = new List<MandateSignerValidationError>();
 
@@ -50,7 +51,9 @@ internal static class MandateSignerValidation
             errors.Add(new MandateSignerValidationError("documentNumber", DocumentoRequeridoMessage, null));
         }
 
-        if (companyTenantIds is null || companyTenantIds.Count == 0)
+        // El alta del organismo puede quedar sin compañía propietaria: las asociadas son opcionales y
+        // el mandatario se asigna después. La ruta de la compañía sigue exigiendo la suya.
+        if (requireCompanies && (companyTenantIds is null || companyTenantIds.Count == 0))
         {
             errors.Add(new MandateSignerValidationError("companyTenantIds", SinCompaniasMessage, null));
         }

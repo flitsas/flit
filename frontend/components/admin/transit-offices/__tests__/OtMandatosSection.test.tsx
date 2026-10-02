@@ -287,10 +287,38 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
+    expect(screen.queryByRole("button", { name: "Nuevo mandatario" })).not.toBeInTheDocument();
     await pulsarAccion(user, /editar mandatario general del organismo/i);
     await screen.findByTestId("mandato-ot-config-form");
     expect(screen.queryByTestId("mandato-ot-register-signer")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^registrar mandatario$/i })).not.toBeInTheDocument();
+  });
+
+  it("el Admin OT registra un mandatario desde la pestaña, con el organismo fijo y sin compañía obligatoria", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    createMandateSigner.mockResolvedValue({ id: "ms-nuevo", integrityHash: "h" });
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
+    expect(await screen.findByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
+    expect(screen.getByTestId("mandatario-organismo-fijo")).toHaveTextContent("OT Bogotá");
+    expect(screen.getByText(/queda en el organismo/i)).toBeInTheDocument();
+    await diligenciar(user);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(createMandateSigner).toHaveBeenCalledTimes(1));
+    expect(createMandateSigner).toHaveBeenCalledWith(
+      "ot-1",
+      expect.objectContaining({
+        fullName: "Ana Mandataria",
+        companyTenantIds: [],
+        transitOfficeIds: ["ot-1"],
+      }),
+    );
+    expect(await screen.findByText(/mandatario registrado/i)).toBeInTheDocument();
   });
 
   it("abre la configuración de mandatario de la empresa", async () => {

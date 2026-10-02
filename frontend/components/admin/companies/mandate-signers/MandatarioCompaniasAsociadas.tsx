@@ -62,6 +62,7 @@ export function MandatarioCompaniasAsociadas({
   excluirIds = [],
   errores = {},
   onSinRed,
+  ayuda,
 }: {
   fuente: FuenteAsociadas;
   seleccion: Record<string, AsociadaSeleccionada>;
@@ -71,6 +72,8 @@ export function MandatarioCompaniasAsociadas({
   /** Motivo 422 por compañía (id de tenant → mensaje). */
   errores?: Record<string, string>;
   onSinRed?: (sinRed: boolean) => void;
+  /** Texto bajo el selector. Por defecto explica que, sin selección, aplica solo a su compañía. */
+  ayuda?: string;
 }) {
   const [companias, setCompanias] = useState<AssociableCompany[] | null>(null);
   const [soloPropia, setSoloPropia] = useState(false);
@@ -169,7 +172,7 @@ export function MandatarioCompaniasAsociadas({
         textoVacio="No hay compañías para asociar."
         errores={errores}
       />
-      <p className="text-xs leading-tight opacity-70">{TEXTO_OPCIONAL}</p>
+      <p className="text-xs leading-tight opacity-70">{ayuda ?? TEXTO_OPCIONAL}</p>
     </div>
   );
 }

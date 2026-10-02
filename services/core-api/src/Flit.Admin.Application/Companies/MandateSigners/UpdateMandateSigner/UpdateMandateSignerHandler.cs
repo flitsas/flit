@@ -105,12 +105,15 @@ public sealed class UpdateMandateSignerHandler
                 command.ActualizaFirma ? command.SignatureVaultId : null),
             signer);
 
+        var exigeCompania = string.Equals(
+            command.ConfiguredByScope, "compania", StringComparison.Ordinal);
         var (otTenantId, errors) = MandateSignerValidation.ValidateBase(
             otStatus,
             profile.FullName,
             profile.DocumentNumber,
             companyIds,
-            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco);
+            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco,
+            requireCompanies: exigeCompania);
         errors.AddRange(profileErrors);
         errors.AddRange(associationErrors);
 
