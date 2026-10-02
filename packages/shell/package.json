@@ -11,6 +11,8 @@
     "./SuiteShell": "./src/SuiteShell.tsx",
     "./nav": "./src/nav.ts",
     "./account": "./src/account.ts",
+    "./theme": "./src/theme.tsx",
+    "./theme-script": "./src/theme-script.ts",
     "./shell.css": "./src/styles/shell.css",
     "./apps": "./src/apps.ts"
   },

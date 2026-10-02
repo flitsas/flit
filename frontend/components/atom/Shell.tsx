@@ -2,8 +2,8 @@
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Moon, Sun } from "lucide-react";
 import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
+import { useSuiteTheme } from "@flit/shell/theme";
 import {
   decodeJwtPayload,
   isAdminCompany,
@@ -37,18 +37,6 @@ export type ModuleId =
 
 /** Productos del usuario por el cliente de la API (Bearer con la sesión antigua; BFF con la de @flit/auth). */
 const loadApps = (signal: AbortSignal) => apiFetch<SuiteApp[]>("/api/v1/platform/me/apps", { signal });
-
-function useTheme() {
-  const [dark, setDark] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("flit-theme") === "dark";
-  });
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    localStorage.setItem("flit-theme", dark ? "dark" : "light");
-  }, [dark]);
-  return { dark, toggle: () => setDark((d) => !d) };
-}
 
 function useCurrentUser() {
   const [user] = useState(() => {
@@ -126,7 +114,7 @@ export function Shell({
   /** Consulta actual (`?m=…`) para marcar el módulo de la SPA; solo la página `/` la necesita. */
   search?: string;
 }) {
-  const { dark, toggle } = useTheme();
+  const { dark } = useSuiteTheme();
   const currentUser = useCurrentUser();
   const pathname = usePathname() ?? "";
   const otTransitOfficeId = useOtTransitOfficeId(Boolean(currentUser?.isOtUser), pathname);
@@ -172,21 +160,6 @@ export function Shell({
       search={search}
       onLogout={onLogout}
       layout="app"
-      headerActions={
-        <button
-          onClick={toggle}
-          aria-label="Cambiar tema"
-          className="flex items-center gap-1 rounded-full px-1 py-1 transition"
-          style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
-        >
-          <span className={`h-7 w-7 grid place-items-center rounded-full ${dark ? "" : "bg-white"}`}>
-            <Sun className="h-3.5 w-3.5" />
-          </span>
-          <span className={`h-7 w-7 grid place-items-center rounded-full ${dark ? "bg-white" : ""}`}>
-            <Moon className="h-3.5 w-3.5" />
-          </span>
-        </button>
-      }
       overlay={
         // DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance).
         <DrFlitAssistant

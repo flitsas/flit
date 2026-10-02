@@ -11,6 +11,7 @@ import type { SuiteApp } from "./apps";
 import { Dock } from "./dock/Dock";
 import { buildDock, isActive, type NavCatalog, type NavViewer } from "./nav";
 import { ProductMenu } from "./ProductMenu";
+import { ThemeToggle } from "./theme";
 
 export type { NavCatalog, NavItem, NavSection, NavViewer } from "./nav";
 export type { ShellUser } from "./AccountMenu";
@@ -47,7 +48,9 @@ export interface SuiteShellProps {
   accountLinks?: AccountLink[];
   /** Cierre de sesión propio de la app; sin él, Cerrar sesión va a /auth/logout (@flit/auth). */
   onLogout?: () => void;
-  /** Controles propios del producto en la barra, antes del menú de productos (p. ej. el tema). */
+  /** Interruptor claro/oscuro de la suite (por defecto, sí). */
+  themeToggle?: boolean;
+  /** Controles propios del producto en la barra, antes del menú de productos. */
   headerActions?: React.ReactNode;
   /** Capa flotante sobre el contenido (p. ej. un asistente). */
   overlay?: React.ReactNode;
@@ -79,6 +82,7 @@ export function SuiteShell({
   accountUrl = "",
   accountLinks = NO_LINKS,
   onLogout,
+  themeToggle = true,
   headerActions,
   overlay,
   footer,
@@ -104,17 +108,18 @@ export function SuiteShell({
   const header = (
     <header
       className={`z-40 flex items-center justify-between border-b border-[var(--color-flit-gray)] px-4 py-3 md:px-6 dark:border-white/[0.08] ${
-        app ? "shrink-0" : "sticky top-0 bg-[var(--nav-app-bg)]"
+        app ? "shrink-0" : "sticky top-0 bg-[var(--color-flit-bg)]/90 backdrop-blur dark:bg-[#05060A]/90"
       }`}
     >
       <Link href={homeHref} className="flex items-center gap-3" aria-label={`${brand.platformName} — ${productName}`}>
-        <BrandLogo variant="dark" className={`h-10 w-auto ${app ? "dark:hidden" : ""}`} />
-        {app && <BrandLogo variant="white" className="hidden h-10 w-auto dark:block" />}
+        <BrandLogo variant="dark" className="h-10 w-auto dark:hidden" />
+        <BrandLogo variant="white" className="hidden h-10 w-auto dark:block" />
         <span className="hidden border-l border-[var(--color-flit-gray)] pl-3 text-sm font-semibold sm:inline dark:border-white/10">
           {productName}
         </span>
       </Link>
       <div className="flex items-center gap-3">
+        {themeToggle && <ThemeToggle />}
         {headerActions}
         <ProductMenu productCode={productCode} apps={apps} loadApps={loadApps} />
         <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} />
@@ -151,7 +156,7 @@ export function SuiteShell({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--nav-app-bg)]">
+    <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white">
       {header}
       {/* Colchón para que el dock fijo no tape el final del contenido (guía §4.3). */}
       <main className="mx-auto max-w-screen-2xl px-4 pb-28 pt-6">{children}</main>
