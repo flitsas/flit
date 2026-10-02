@@ -437,6 +437,32 @@ describe('TramiteWizard — anular trámite', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('El trámite ya fue entregado.');
     expect(onExit).not.toHaveBeenCalled();
   });
+
+  // Bug #13194 punto 1 — el `onClose` inline del WizardModal cambiaba en cada render y la trampa de
+  // foco re-enfocaba la X tras CADA tecla: el motivo solo aceptaba una letra.
+  it('escribir varias letras en el motivo conserva el foco y el valor completo (Bug #13194)', async () => {
+    const user = await abrirDialogo();
+    const motivo = screen.getByLabelText('Motivo de la anulación');
+
+    await user.click(motivo);
+    await user.type(motivo, 'Error de digitación');
+
+    expect(motivo).toHaveValue('Error de digitación');
+    expect(document.activeElement).toBe(motivo);
+  });
+
+  it('Escape sigue cerrando el diálogo de anular tras escribir (Bug #13194)', async () => {
+    const user = await abrirDialogo();
+    const motivo = screen.getByLabelText('Motivo de la anulación');
+    await user.type(motivo, 'Abc');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Motivo de la anulación')).not.toBeInTheDocument(),
+    );
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
+  });
 });
 
 describe('TramiteWizard — instancia existente (Track B)', () => {
@@ -1764,7 +1790,8 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     expect(screen.getByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
   });
 
-  it('matrícula: el tipo de servicio ofrece el catálogo completo y exige empresa vinculadora en público', async () => {
+  // Bug #13194 punto 2 — decisión de producto: la empresa vinculadora en público es OPCIONAL (aviso).
+  it('matrícula: el tipo de servicio ofrece el catálogo completo y en público ofrece la empresa vinculadora opcional con aviso', async () => {
     const user = await irARequisitos();
     const select = await screen.findByLabelText('Tipo de servicio');
 
@@ -1775,6 +1802,7 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     await user.selectOptions(select, 'PUBLICO');
     expect(await screen.findByLabelText(/NIT empresa vinculadora/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buscar empresa en RUES' })).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent(/exige la empresa vinculadora/);
   });
 
   it('traspaso: sin tipo de servicio (lo hidrata el RUNT) ni leasing en requisitos', async () => {

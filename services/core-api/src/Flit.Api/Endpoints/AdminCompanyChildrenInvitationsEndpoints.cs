@@ -138,12 +138,6 @@ public static class AdminCompanyChildrenInvitationsEndpoints
                 new { code = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException)
-        {
-            return Results.Json(
-                new { code = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
-                statusCode: StatusCodes.Status409Conflict);
-        }
         catch (AuthRoleNotFoundException)
         {
             return Results.Json(

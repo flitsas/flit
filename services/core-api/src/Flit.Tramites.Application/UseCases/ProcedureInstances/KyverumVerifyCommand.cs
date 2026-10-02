@@ -49,11 +49,32 @@ public sealed class IniciarKyverumVerifyHandler(
 {
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
-    public async Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
+    public Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid id,
         Guid tenantId,
         IniciarBiometriaInput input,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, input, permitirRadicadoPendiente: false, ct);
+
+    /// <summary>
+    /// Bug #13194 (punto 4) — variante del disparo automático (<see cref="EnsureIdentityAndNotifyHandler"/>):
+    /// además de los estados editables admite los radicados pendientes de firma
+    /// (<see cref="TramiteFirmaPendiente.PermiteIniciarValidacion"/>), para renovar una identidad vencida
+    /// antes de la entrega al organismo. El endpoint del gestor sigue usando <see cref="HandleAsync"/>.
+    /// </summary>
+    public Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleParaRadicadoPendienteAsync(
+        Guid id,
+        Guid tenantId,
+        IniciarBiometriaInput input,
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, input, permitirRadicadoPendiente: true, ct);
+
+    private async Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleCoreAsync(
+        Guid id,
+        Guid tenantId,
+        IniciarBiometriaInput input,
+        bool permitirRadicadoPendiente,
+        CancellationToken ct)
     {
         var parte = NormalizeParte(input.Parte);
         if (parte is "invalid")
@@ -65,7 +86,13 @@ public sealed class IniciarKyverumVerifyHandler(
         var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found", null);
-        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
+        // Bug #13194 (punto 4) — el disparo automático (EnsureIdentityAndNotifyHandler) puede renovar una
+        // identidad vencida en un trámite radicado que aún no se entrega al organismo para decidir
+        // (TramiteFirmaPendiente). El endpoint del gestor conserva la regla de siempre (solo editables).
+        var estadoPermitido = permitirRadicadoPendiente
+            ? TramiteFirmaPendiente.PermiteIniciarValidacion(instance.Status, instance.SubsanacionActiva)
+            : TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva);
+        if (!estadoPermitido)
             return (null, "not_draft", null);
 
         // Datos del sujeto ANTES de la precedencia de envío / guard por parte: el body puede

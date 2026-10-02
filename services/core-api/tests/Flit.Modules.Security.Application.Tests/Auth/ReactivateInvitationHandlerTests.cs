@@ -23,7 +23,6 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 public sealed class ReactivateInvitationHandlerTests
 {
     private readonly IInvitationRepository _repo = Substitute.For<IInvitationRepository>();
-    private readonly IUserManagementRepository _userManagementRepo = Substitute.For<IUserManagementRepository>();
     private readonly ISecureTokenGenerator _tokenGen = Substitute.For<ISecureTokenGenerator>();
     private readonly IEmailSender _email = Substitute.For<IEmailSender>();
     private readonly ILogger<ReactivateInvitationHandler> _logger = Substitute.For<ILogger<ReactivateInvitationHandler>>();
@@ -46,7 +45,7 @@ public sealed class ReactivateInvitationHandlerTests
     public ReactivateInvitationHandlerTests()
     {
         _handler = new ReactivateInvitationHandler(
-            _repo, _userManagementRepo, _tokenGen, _email, _options, _urlBaseResolver, _logger);
+            _repo, _tokenGen, _email, _options, _urlBaseResolver, _logger);
         // Por defecto: sin red — el resolutor devuelve la base configurada literal (AC4).
         _urlBaseResolver
             .ForTenantAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -55,8 +54,6 @@ public sealed class ReactivateInvitationHandlerTests
         _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailSendResult.Sent));
         // Camino feliz por defecto: correo libre y rol vigente.
-        _userManagementRepo.FindByEmailIncludingDeletedAsync(Email, Arg.Any<CancellationToken>())
-            .Returns((ExistingUserByEmail?)null);
         _repo.ExistsPendingAsync(Arg.Any<Guid>(), Email, Arg.Any<CancellationToken>()).Returns(false);
         _repo.UserExistsWithEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
         _repo.RoleExistsInTenantAsync(Arg.Any<Guid>(), RoleId, Arg.Any<CancellationToken>()).Returns(true);
@@ -202,23 +199,22 @@ public sealed class ReactivateInvitationHandlerTests
             .Should().ThrowAsync<UserAlreadyExistsException>();
     }
 
-    // Correo pertenece a una cuenta soft-deleted → 409, mismo criterio que CreateInvitationHandler.
+    // Bug #13194 P6 — el único usuario con ese correo está eliminado: el correo está libre y la
+    // invitación se reactiva (antes: 409), mismo criterio que CreateInvitationHandler.
     [Fact]
-    public async Task HandleAsync_EmailBelongsToDeletedAccount_ThrowsUserEmailBelongsToDeletedAccount()
+    public async Task HandleAsync_EmailOnlyUsedByDeletedAccount_Reactivates()
     {
         _repo.FindForReactivateAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
             .Returns(Cancelled(TenantId));
-        _userManagementRepo.FindByEmailIncludingDeletedAsync(Email, Arg.Any<CancellationToken>())
-            .Returns(new ExistingUserByEmail(Guid.NewGuid(), true));
+        // UserExistsWithEmailAsync filtra DeletedAt == null: la cuenta eliminada no cuenta.
+        _repo.UserExistsWithEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
 
-        await _handler
-            .Invoking(h => h.HandleAsync(
-                new ReactivateInvitationCommand(InvitationId, TenantId, ReactivatedBy),
-                CancellationToken.None))
-            .Should().ThrowAsync<UserEmailBelongsToDeletedAccountException>();
+        await _handler.HandleAsync(
+            new ReactivateInvitationCommand(InvitationId, TenantId, ReactivatedBy),
+            CancellationToken.None);
 
-        await _repo.DidNotReceiveWithAnyArgs().ReactivateAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).ReactivateAsync(
+            InvitationId, Arg.Any<string>(), Arg.Any<DateTimeOffset>(), ReactivatedBy, Arg.Any<CancellationToken>());
     }
 
     // Alguno de los roles de la invitación ya no está activo → 409, no revive con un rol muerto.

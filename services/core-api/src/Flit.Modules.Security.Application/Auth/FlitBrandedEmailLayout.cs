@@ -10,11 +10,17 @@ namespace Flit.Modules.Security.Application.Auth;
 /// </summary>
 /// <remarks>
 /// Los composers de cada plantilla aportan el título y el HTML interno (enunciados y enlaces);
-/// este layout solo aplica la marca. Assets públicos vía <see cref="DefaultAssetsBaseUrl"/>.
+/// este layout solo aplica la marca. Assets públicos: la base que recibe <c>Wrap</c> (en producción,
+/// <c>Notifications:EmailAssets:BaseUrl</c> vía <see cref="SecurityEmailAssetsOptions"/>); sin base,
+/// <see cref="DefaultAssetsBaseUrl"/>.
 /// </remarks>
 public static class FlitBrandedEmailLayout
 {
-    public const string DefaultAssetsBaseUrl = "https://dev.flitsas.online/email-assets";
+    /// <summary>
+    /// Bug #13194 — respaldo SOLO para desarrollo local (frontend en <c>localhost:3000</c>). Los
+    /// ambientes desplegados definen <c>Notifications__EmailAssets__BaseUrl</c>; nunca se cae a DEV.
+    /// </summary>
+    public const string DefaultAssetsBaseUrl = "http://localhost:3000/email-assets";
     public const string DefaultHeaderFileName = "tramite-cambio-estado-header.png";
     public const string DefaultLogoFileName = "flit-logo.png";
     public const string PrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";

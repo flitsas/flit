@@ -29,6 +29,11 @@ const mocks = vi.hoisted(() => ({
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
   enviarAlOt: vi.fn(),
+  // Bug #13194 (P3) — soporte del SOAT en asignado desde el modal «Enviar al OT».
+  analyzeDocument: vi.fn(),
+  uploadAttachment: vi.fn(),
+  persistOcrFields: vi.fn(),
+  validateSoatViaRunt: vi.fn(),
   // La tabla consulta la config del tenant al montar (bloqueo de creación por familia y
   // "solo vehículos propios"); sin este mock el efecto revienta y tumba todo el archivo.
   getConsultationConfig: vi.fn(),
@@ -1591,6 +1596,74 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
     // Sigue pudiendo reintentar: el trámite no se movió.
     expect(within(dialog).getByRole('button', { name: 'Enviar al OT' })).toBeInTheDocument();
     expect(screen.getAllByText('Asignado').length).toBeGreaterThan(0);
+  });
+});
+
+// Bug #13194 — P4 (gate de firma) y P3 (soporte del SOAT en asignado) desde el modal «Enviar al OT».
+describe('TramitesTable — «Enviar al OT»: firma pendiente y soporte del SOAT (Bug #13194)', () => {
+  const asignado = () => {
+    const [item] = makeInstances(1);
+    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'asignado' } satisfies InstanceSummary;
+  };
+
+  async function abrirYEnviar() {
+    mocks.listInstances.mockResolvedValue([asignado()]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await userEvent.click(await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Enviar al OT' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar al OT' }));
+    return screen.getByRole('dialog', { name: 'Enviar al organismo de tránsito' });
+  }
+
+  it('P4 — 409 firma_pendiente: explica la salida en asignado (módulo Identidad / baúl), no el paso 4', async () => {
+    mocks.enviarAlOt.mockRejectedValue(
+      Object.assign(new Error('x'), {
+        status: 409,
+        problem: { title: 'firma_pendiente', status: 409, detail: 'No se permite enviar…' },
+      }),
+    );
+    const dialog = await abrirYEnviar();
+    const alerta = await within(dialog).findByRole('alert');
+    expect(alerta).toHaveTextContent(/Falta la validación de identidad o firma de una de las partes/);
+    expect(alerta).toHaveTextContent(/módulo Identidad/);
+    expect(alerta).not.toHaveTextContent(/paso 4/);
+    expect(within(dialog).getByRole('button', { name: 'Enviar al OT' })).toBeInTheDocument();
+  });
+
+  it('P3 — 409 soat_no_vigente abre la carga del PDF; al cargarlo registra la lectura y permite reintentar', async () => {
+    mocks.enviarAlOt.mockRejectedValueOnce(
+      Object.assign(new Error('El RUNT no reporta un SOAT vigente para el vehículo.'), {
+        status: 409,
+        problem: { title: 'soat_no_vigente', status: 409 },
+      }),
+    );
+    mocks.analyzeDocument.mockResolvedValue({ ok: true, tipo: 'soat', data: { fecha_vencimiento: '2027-05-01' } });
+    mocks.uploadAttachment.mockResolvedValue({ id: 'att-1' });
+    mocks.persistOcrFields.mockResolvedValue({ persistidos: 1 });
+    mocks.validateSoatViaRunt.mockResolvedValue({
+      vigente: true,
+      soatEstado: 'vigente',
+      vencimiento: null,
+      aseguradora: null,
+      message: 'El RUNT no reporta el SOAT, pero el soporte cargado está vigente: se conserva.',
+    });
+
+    const dialog = await abrirYEnviar();
+    const disclosure = await within(dialog).findByRole('button', { name: /Cargar PDF del SOAT/ });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+
+    const input = within(dialog).getByLabelText(/PDF del SOAT/);
+    await userEvent.upload(input, new File(['%PDF-1.4'], 'soat.pdf', { type: 'application/pdf' }));
+
+    const ok = await within(dialog).findByText(/Ya puedes enviar el trámite al OT/);
+    expect(ok.closest('[role="status"]')).not.toBeNull();
+    expect(mocks.persistOcrFields).toHaveBeenCalledWith('proc1', 'soat', { fecha_vencimiento: '2027-05-01' }, undefined);
+    // El error anterior del SOAT se retira: el siguiente paso es reintentar el envío.
+    expect(within(dialog).queryByText(/no reporta un SOAT vigente/)).toBeNull();
+
+    mocks.enviarAlOt.mockResolvedValue({ instance: null, warningCode: null, warningMessage: null });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enviar al OT' }));
+    await waitFor(() => expect(mocks.enviarAlOt).toHaveBeenCalledTimes(2));
   });
 });
 

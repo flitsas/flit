@@ -1,7 +1,6 @@
 using System.Globalization;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
-using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -11,6 +10,7 @@ using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Api.Grpc;
 
@@ -30,12 +30,11 @@ public sealed class IctOrchestrationService(
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
     RunPreflightHandler preflightHandler,
-    EnsureIdentityHandler ensureIdentityHandler,
-    IniciarKyverumVerifyHandler kyverumVerifyHandler,
-    SimularBiometriaHandler simularBiometriaHandler,
-    BiometricsProviderOptions biometricsProviderOptions,
+    EnsureIdentityAndNotifyHandler identityNotifier,
+    RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
-    FlitDbContext db) : IctOrchestration.IctOrchestrationBase
+    FlitDbContext db,
+    ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
 {
     public override async Task<DraftReply> CreateDraftFromIct(
         CreateDraftFromIctRequest request,
@@ -214,6 +213,7 @@ public sealed class IctOrchestrationService(
         // PutActorsHandler, el único escritor de partes. Fallo NO fatal: el borrador ya existe y el
         // gestor puede completarlo; se reporta como warning para no perder la trazabilidad.
         var actorInputs = MapActors(request.Actors, request.ProcedureTypeCode);
+        actorInputs = await CompletarRepresentantesAsync(reply, tenantId, actorInputs, context.CancellationToken);
         if (actorInputs.Count > 0)
         {
             var (_, actorsError) = await actorsHandler.HandleAsync(
@@ -302,36 +302,7 @@ public sealed class IctOrchestrationService(
             : new[] { "comprador" };
         foreach (var parte in partesIdentidad)
         {
-            try
-            {
-                var (ensured, ensureError) = await ensureIdentityHandler.HandleAsync(
-                    summary.Id, tenantId, parte, ct: context.CancellationToken);
-                if (ensureError is not null || ensured is null)
-                {
-                    AppendWarning(reply, "identity_warning:" + (ensureError ?? "ensure_null"));
-                    continue;
-                }
-
-                if (ensured.Outcome == EnsureIdentityOutcomes.RequiereValidacion)
-                {
-                    if (biometricsProviderOptions.IsKyverum)
-                    {
-                        await kyverumVerifyHandler.HandleAsync(
-                            summary.Id,
-                            tenantId,
-                            new IniciarBiometriaInput(parte, string.Empty, string.Empty, string.Empty, string.Empty),
-                            context.CancellationToken);
-                    }
-                    else
-                    {
-                        await simularBiometriaHandler.HandleAsync(summary.Id, tenantId, parte, ct: context.CancellationToken);
-                    }
-                }
-            }
-            catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
-            {
-                AppendWarning(reply, "identity_warning:exception");
-            }
+            await AsegurarIdentidadAsync(reply, summary.Id, tenantId, parte, context.CancellationToken);
         }
 
         return reply;
@@ -456,6 +427,101 @@ public sealed class IctOrchestrationService(
         reply.ErrorCode = string.IsNullOrEmpty(reply.ErrorCode) ? warning : reply.ErrorCode + ";" + warning;
 
     /// <summary>
+    /// Bug #13194 (punto 4) — asegura la identidad de la parte y dispara el correo de validación con el
+    /// método reutilizable <see cref="EnsureIdentityAndNotifyHandler"/>. Antes el resultado del inicio de
+    /// la biométrica se descartaba: un <c>datos_incompletos</c> (RL sin correo) o un fallo de Kyverum dejaba
+    /// el paso 4 en «Aún no se ha iniciado» sin rastro. Ahora cada fallo sale como
+    /// <c>identity_warning:&lt;parte&gt;:&lt;código&gt;</c> en el reply y en el log (sin PII). Best-effort: el
+    /// borrador ya existe y una excepción no tumba la materialización.
+    /// </summary>
+    private async Task AsegurarIdentidadAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, string parte, CancellationToken ct)
+    {
+        try
+        {
+            var (result, error) = await identityNotifier.HandleAsync(instanceId, tenantId, parte, ct: ct);
+            var code = IdentityWarningCode(result, error);
+            if (code is not null)
+            {
+                IctOrchestrationLog.IdentityWarning(logger, code, instanceId, parte);
+                AppendWarning(reply, "identity_warning:" + parte + ":" + code);
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            IctOrchestrationLog.IdentityWarning(logger, "exception:" + ex.GetType().Name, instanceId, parte);
+            AppendWarning(reply, "identity_warning:" + parte + ":exception");
+        }
+    }
+
+    /// <summary>
+    /// Código de aviso de identidad para el reply ICT, o <c>null</c> si la parte quedó cubierta (vigente,
+    /// reusada, baúl, en curso) o se le envió la validación. <c>sin_actor</c> también avisa: sin sujeto de
+    /// identidad (p. ej. PJ sin documento del representante) no hay a quién enviarle la validación.
+    /// </summary>
+    internal static string? IdentityWarningCode(EnsureIdentityAndNotifyResult? result, string? error)
+    {
+        if (error is not null || result is null)
+        {
+            return error ?? "ensure_null";
+        }
+
+        if (result.Outcome == EnsureIdentityOutcomes.SinActor)
+        {
+            return EnsureIdentityOutcomes.SinActor;
+        }
+
+        return result.Notificacion == IdentityNotificationOutcomes.Fallida
+            ? result.NotificacionError ?? IdentityNotificationOutcomes.Fallida
+            : null;
+    }
+
+    /// <summary>
+    /// Bug #13194 (punto 4) — completa el representante legal de las partes PJ desde el directorio de la
+    /// compañía del MISMO tenant (<see cref="RepresentanteLegalDesdeDirectorio"/>) y descarta, con aviso,
+    /// las que sigan sin correo de contacto (<c>PutActorsHandler</c> lo exige). Los avisos salen como
+    /// <c>identity_warning:rl_no_registrado:&lt;rol&gt;</c> / <c>identity_warning:rl_sin_correo:&lt;rol&gt;</c>.
+    /// Un fallo del directorio no tumba la materialización: se sigue con lo que trajo el ICT.
+    /// </summary>
+    private async Task<List<ActorInput>> CompletarRepresentantesAsync(
+        DraftReply reply, Guid tenantId, List<ActorInput> actores, CancellationToken ct)
+    {
+        var completados = actores;
+        if (actores.Exists(RepresentanteLegalDesdeDirectorio.EsJuridica))
+        {
+            try
+            {
+                var resultado = await representanteDirectorio.CompletarAsync(tenantId, actores, ct);
+                completados = [.. resultado.Actores];
+                foreach (var aviso in resultado.Avisos)
+                {
+                    AppendWarning(reply, "identity_warning:" + aviso);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                RefrescarRastreo();
+                IctOrchestrationLog.DirectoryWarning(logger, ex.GetType().Name);
+                AppendWarning(reply, "identity_warning:directorio_rl:exception");
+            }
+        }
+
+        var conCorreo = new List<ActorInput>(completados.Count);
+        foreach (var actor in completados)
+        {
+            if (string.IsNullOrWhiteSpace(actor.Email))
+            {
+                AppendWarning(reply, "actors_warning:sin_correo:" + actor.Rol);
+                continue;
+            }
+
+            conCorreo.Add(actor);
+        }
+
+        return conCorreo;
+    }
+
+    /// <summary>
     /// Traduce los actores del contrato ICT al vocabulario de partes de trámites.
     /// OJO con la semántica de v1: <c>seller</c> NO siempre es un vendedor — es el slot del TITULAR /
     /// firmante principal. En TRASPASO (3,4) es el titular saliente (→ <c>vendedor</c>, entidad OWNER);
@@ -518,21 +584,24 @@ public sealed class IctOrchestrationService(
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(a.Email) || string.IsNullOrWhiteSpace(a.DocumentNumber))
+        // Bug #13194 (punto 4) — «NIT» con puntos/espacios/minúsculas («n.i.t.») también es persona jurídica.
+        var esNit = EsTipoNit(a.DocumentType);
+
+        // La PJ puede llegar sin correo de la compañía: el directorio de RL del tenant lo completa después
+        // (CompletarRepresentantesAsync), que es también quien la descarta con aviso si sigue sin él.
+        if (string.IsNullOrWhiteSpace(a.DocumentNumber) || (!esNit && string.IsNullOrWhiteSpace(a.Email)))
         {
             return;
         }
 
-        var personType = string.Equals(a.DocumentType?.Trim(), "NIT", StringComparison.OrdinalIgnoreCase)
-            ? "juridical"
-            : "natural";
+        var personType = esNit ? "juridical" : "natural";
 
         result.Add(new ActorInput(
             Rol: rol,
-            TipoDocumento: a.DocumentType?.Trim().ToUpperInvariant() ?? string.Empty,
+            TipoDocumento: esNit ? "NIT" : a.DocumentType?.Trim().ToUpperInvariant() ?? string.Empty,
             NumeroDocumento: a.DocumentNumber.Trim(),
             NombreCompleto: a.FullName?.Trim() ?? string.Empty,
-            Email: a.Email.Trim(),
+            Email: a.Email?.Trim() ?? string.Empty,
             Telefono: string.IsNullOrWhiteSpace(a.Phone) ? null : a.Phone.Trim(),
             Ciudad: MetaString(a.Metadata, "city"),
             Direccion: MetaString(a.Metadata, "address"),
@@ -541,6 +610,13 @@ public sealed class IctOrchestrationService(
             RepresentanteLegal: MapRepresentanteLegal(a.Metadata),
             Mandante: MapMandante(a.Metadata)));
     }
+
+    /// <summary>¿El tipo de documento es NIT, tolerando puntos, espacios y mayúsculas/minúsculas?</summary>
+    internal static bool EsTipoNit(string? documentType) =>
+        string.Equals(
+            new string((documentType ?? string.Empty).Where(char.IsLetter).ToArray()),
+            "NIT",
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Datos del LOCATARIO (lessee) como atributos "loose" del trámite, para los trámites que NO son
@@ -731,7 +807,16 @@ public sealed class IctOrchestrationService(
     /// TODO(ICT-SERVICE-USER): aprovisionar este usuario en el alta del cliente de integración y
     /// asignarle un rol de solo-lectura, en vez de crearlo perezosamente aquí.
     /// </summary>
-    private async Task<Guid> ResolveIctCreatorAsync(string requestedUserId, Guid tenantId, CancellationToken ct)
+    private Task<Guid> ResolveIctCreatorAsync(string requestedUserId, Guid tenantId, CancellationToken ct) =>
+        ResolveIctCreatorAsync(db, requestedUserId, tenantId, ct);
+
+    /// <summary>
+    /// Núcleo de <see cref="ResolveIctCreatorAsync(string, Guid, CancellationToken)"/> sobre un
+    /// <see cref="FlitDbContext"/> explícito: <c>internal</c> para probarlo contra PostgreSQL real
+    /// (Bug #13194 — el índice parcial de <c>uq_users_email</c>).
+    /// </summary>
+    internal static async Task<Guid> ResolveIctCreatorAsync(
+        FlitDbContext db, string requestedUserId, Guid tenantId, CancellationToken ct)
     {
         if (Guid.TryParse(requestedUserId, out var requested) && requested != Guid.Empty)
         {
@@ -748,11 +833,23 @@ public sealed class IctOrchestrationService(
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO identity.users (id, email, display_name, status, created_at, home_tenant_id)
             VALUES (uuidv7(), {email}, 'Integración ICT', 'active', now(), {tenantId})
-            ON CONFLICT (email) DO NOTHING
+            ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
             """, ct);
 
+        // Bug #13194 — uq_users_email es parcial (deleted_at IS NULL): el árbitro del ON CONFLICT debe
+        // repetir el predicado (sin él, 42P10) y la lectura solo puede devolver el usuario VIVO.
         return await db.Database
-            .SqlQuery<Guid>($"SELECT id AS \"Value\" FROM identity.users WHERE email = {email}")
+            .SqlQuery<Guid>($"SELECT id AS \"Value\" FROM identity.users WHERE email = {email} AND deleted_at IS NULL")
             .FirstAsync(ct);
     }
+}
+
+/// <summary>Logs del orquestador ICT sin PII (solo ids, parte y códigos).</summary>
+internal static partial class IctOrchestrationLog
+{
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: identidad sin asegurar ({Code}). Instancia {InstanceId}, parte {Parte}.")]
+    public static partial void IdentityWarning(ILogger logger, string code, Guid instanceId, string parte);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: no se pudo consultar el directorio de representantes legales ({ExceptionType}).")]
+    public static partial void DirectoryWarning(ILogger logger, string exceptionType);
 }

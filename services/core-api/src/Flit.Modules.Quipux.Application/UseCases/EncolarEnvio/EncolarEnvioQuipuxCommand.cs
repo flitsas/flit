@@ -57,6 +57,12 @@ public static class EncolarEnvioQuipuxMotivos
     public const string EstadoNoPreparado = "estado_no_preparado";
 
     /// <summary>
+    /// Bug #13194 (P4, D2) — alguna parte que debe firmar no tiene identidad aprobada y vigente: no se
+    /// envía al OT un trámite sin firmar. Mismo código que el gate del ciclo de vida.
+    /// </summary>
+    public const string FirmaPendiente = "firma_pendiente";
+
+    /// <summary>
     /// El <c>procedure_type</c> no tiene bloque <c>quipux</c> en <c>external_refs</c> (o está a medio
     /// llenar). Es el gate natural: ese tipo de trámite no se radica por esta vía.
     /// </summary>

@@ -40,6 +40,14 @@ public static class TramiteEstadoErrores
     /// <summary>RF03 — gate Borrador→Preparado: la validación de identidad no está aprobada/vigente (422).</summary>
     public const string IdentidadNoAprobada = "identidad_no_aprobada";
 
+    /// <summary>
+    /// Bug #13194 (P4, D2) — gate de firma: una o más partes que deben firmar no tienen identidad
+    /// aprobada y vigente (baúl de firmas habilitado y vigente del RL en PJ, o validación de identidad
+    /// del mismo tenant). Corre en TODA transición del gestor/sistema hacia <c>preparado</c>,
+    /// <c>preasignacion</c> o <c>entregado</c>, sin relajación por OT (409). El detalle nombra las partes.
+    /// </summary>
+    public const string FirmaPendiente = "firma_pendiente";
+
     /// <summary>RF03 — gate Borrador→Preparado: faltan documentos obligatorios del checklist (422).</summary>
     public const string DocumentosIncompletos = "documentos_incompletos";
 

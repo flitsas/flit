@@ -2731,16 +2731,6 @@ public static class AdminOtEndpoints
                 new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException)
-        {
-            // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
-            // HU #11580 — código único de cara al cliente; la causa concreta queda en
-            // auditoría vía ConfigAuditFailureContext.
-            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
-            return Results.Json(
-                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
-                statusCode: StatusCodes.Status409Conflict);
-        }
     }
 
     private static async Task<IResult> ListUsersAsync(
@@ -2926,15 +2916,6 @@ public static class AdminOtEndpoints
             // ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
             // que se instrumente el filtro.
             ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
-            return Results.Json(
-                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
-                statusCode: StatusCodes.Status409Conflict);
-        }
-        catch (UserEmailBelongsToDeletedAccountException)
-        {
-            // HU #11580 — código único de cara al cliente; la causa concreta queda en
-            // auditoría vía ConfigAuditFailureContext.
-            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
                 new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
@@ -3256,13 +3237,6 @@ public static class AdminOtEndpoints
         catch (UserAlreadyExistsException)
         {
             ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
-            return Results.Json(
-                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
-                statusCode: StatusCodes.Status409Conflict);
-        }
-        catch (UserEmailBelongsToDeletedAccountException)
-        {
-            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
                 new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);

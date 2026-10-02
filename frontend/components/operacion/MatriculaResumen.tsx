@@ -150,7 +150,11 @@ interface Props {
   vendedorBio?: BiometricValidation | null;
   /** Refresco del wizard tras iniciar/actualizar biométrica embebida. */
   onBiometricRefresh?: () => void;
-  /** Partes cubiertas por firma del baúl (no se embebe captura). */
+  /**
+   * Partes cubiertas por firma del baúl según el registro. Solo se reenvía a `BiometricStep`.
+   * @deprecated Bug #13194 (P4) — la cobertura se decide solo con `firmaBaulPartes`/`firmaBaulActores`
+   * del servidor (fail-closed); esta señal ya no rotula una parte como firmada.
+   */
   vaultCoveredPartes?: BiometricParte[];
   /** Borrador finalizado: fuerza biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
@@ -726,10 +730,9 @@ export default function MatriculaResumen({
     };
   }, []);
 
-  const vendedorFirmaBaul =
-    firmaBaulPartes.includes('vendedor') || vaultCoveredPartes.includes('vendedor');
-  const compradorFirmaBaul =
-    firmaBaulPartes.includes('comprador') || vaultCoveredPartes.includes('comprador');
+  // Bug #13194 (P4) — fail-closed, mismo criterio que `BiometricStep`: solo lo que reporta el servidor.
+  const vendedorFirmaBaul = firmaBaulPartes.includes('vendedor');
+  const compradorFirmaBaul = firmaBaulPartes.includes('comprador');
   // ADR-0051 — qué partes firman lo declara el TIPO. Ausente ⇒ el criterio previo (vendedor solo en
   // traspaso, comprador siempre), así que ningún tipo ya en operación cambia.
   const firma = (parte: BiometricParte): boolean =>
@@ -818,11 +821,11 @@ export default function MatriculaResumen({
     return ordenados.map(({ item: actor, ordinal }) => {
       const matches = validationsForActor(biometric, actor, ordinal);
       const bio = matches.length > 0 ? matches[matches.length - 1] : null;
-      // Mismo criterio que `BiometricStep`: el dato POR LADO (`firmaBaulPartes`/`vaultCoveredPartes`)
+      // Mismo criterio que `BiometricStep`: el dato POR LADO (`firmaBaulPartes`, solo del servidor)
       // es impreciso a propósito con 2+ actores, así que solo se admite para el ordinal=1.
       const firmaBaul =
         isCoveredByVaultForActor(firmaBaulActores, rol, ordinal) ||
-        (ordinal === 1 && (firmaBaulPartes.includes(rol) || vaultCoveredPartes.includes(rol)));
+        (ordinal === 1 && firmaBaulPartes.includes(rol));
       const resumenActor: ResumenActor = {
         nombre: actor.nombreCompleto,
         documento: actor.numeroDocumento,

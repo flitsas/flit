@@ -29,7 +29,7 @@ public sealed class ListadoIncluyeElTipoTests
     [
         "ListWithSummaryGraphAsync",
         "ListWithSummaryGraphFilteredAsync",
-        "ListDraftFinalizedByActorAsync",
+        "ListPendientesDeFirmaPorSujetoAsync",
     ];
 
     private static string Fuente()

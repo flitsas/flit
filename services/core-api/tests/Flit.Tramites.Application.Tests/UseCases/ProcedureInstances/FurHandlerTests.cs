@@ -1393,6 +1393,9 @@ public sealed class FurHandlerTests
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
         WithOrganismo(instance);
+        // Bug #13194 (D4) — el certificado se resuelve por el documento del actor, nunca «el primero del rol».
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR", "1"));
+        instance.Actors.Add(ActorNatural(instance, "vendedor", "VENDEDOR", "1"));
         instance.BiometricValidations.Add(Bio("comprador"));
         instance.BiometricValidations.Add(Bio("vendedor"));
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
@@ -1456,6 +1459,7 @@ public sealed class FurHandlerTests
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
         WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR", "1")); // Bug #13194 (D4)
         instance.BiometricValidations.Add(Bio(parte: "comprador")); // matrícula = comprador
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
@@ -1554,6 +1558,7 @@ public sealed class FurHandlerTests
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
         WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR", "1")); // Bug #13194 (D4)
         instance.BiometricValidations.Add(Bio(parte: "comprador"));
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
@@ -1599,6 +1604,39 @@ public sealed class FurHandlerTests
     }
 
     // ── HU #10762 · Certificado RNMC ──────────────────────────────────────
+
+    /// <summary>
+    /// Bug #13194 (P4, D4) — el certificado de identidad del FUR es el de la PERSONA del actor. Antes, sin
+    /// coincidencia por documento se tomaba «el primer bio Kyverum del rol», y el certificado de OTRA
+    /// persona del mismo tenant podía terminar en el expediente.
+    /// </summary>
+    [Fact]
+    public async Task Generar_Bug13194_CertificadoKyverumDeOtraPersonaDelRol_NoSeDescarga()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR", "1"));
+        // El actor queda aprobado por su propia validación (mock, sin certificado externo)…
+        var propia = Bio(parte: "comprador");
+        propia.Provider = BiometricProviders.Mock;
+        propia.KyverumVerificationId = null;
+        // …y en el rol hay además un Kyverum aprobado de OTRA persona (documento 2).
+        var otraPersona = Bio(parte: "comprador");
+        otraPersona.DocumentNumber = "2";
+        otraPersona.KyverumVerificationId = "kyv-otra-persona";
+        instance.BiometricValidations.Add(propia);
+        instance.BiometricValidations.Add(otraPersona);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        _certClient.RequestedIds.Should().NotContain("kyv-otra-persona");
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_identidad");
+    }
 
     private static ProcedureInstanceActor ActorNatural(
         ProcedureInstance instance, string rol, string nombre, string doc, int ordinal = 1) =>

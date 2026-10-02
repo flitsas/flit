@@ -12,6 +12,7 @@ public sealed class EmailThemePublicBrandingOptions
     public const string SectionName = "PublicBranding";
 
     /// <summary>HU #12428 AC3 — base HTTPS pública usada para la URL absoluta del logotipo del tema
-    /// de correo (<c>{PublicBaseUrl}/api/v1/public/branding/logos/{logoId}</c>).</summary>
-    public string PublicBaseUrl { get; set; } = "https://dev.flitsas.online";
+    /// de correo (<c>{PublicBaseUrl}/api/v1/public/branding/logos/{logoId}</c>). Bug #13194: sin
+    /// configuración cae al frontend local; cada ambiente define <c>PublicBranding__PublicBaseUrl</c>.</summary>
+    public string PublicBaseUrl { get; set; } = "http://localhost:3000";
 }

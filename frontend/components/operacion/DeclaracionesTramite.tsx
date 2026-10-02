@@ -23,6 +23,10 @@ const RUES_NO_ENCONTRADO =
 const RUES_NO_DISPONIBLE =
   'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
 
+/** Bug #13194 — aviso normativo de la empresa vinculadora (opcional con servicio PÚBLICO). */
+const AVISO_EMPRESA_VINCULADORA =
+  'Si el vehículo es de servicio público de pasajeros o mixto (colectivo, taxi, especial, mixto o por carretera), el organismo de tránsito exige la empresa vinculadora (Res. 20233040017145, art. 5.3.1.2). Para servicio público de carga es opcional.';
+
 // B4 (guardián de diseño) — antes duplicaba a mano la clase de campo del wizard (sin `focus:ring`,
 // solo cambio de borde). Se usa `WIZARD_INPUT` (`wizard-field-styles.ts`), la única fuente para el
 // anillo de foco de 2px que exige el sistema.
@@ -134,22 +138,18 @@ export function DeclaracionesTramite({
   }, [instanceId, esMatricula]);
 
   /**
-   * Gate de "Continuar": la misma regla que antes gobernaba el paso 1 —sin tipo de servicio no se
-   * avanza, y con servicio PÚBLICO tampoco hasta que la consulta devuelva la razón social de la
-   * empresa vinculadora—, ahora aplicada en el paso donde se captura. En solo lectura no hay nada
-   * que completar: bloquear la navegación de un trámite ya enviado sería atrapar al operador.
+   * Gate de "Continuar": sin tipo de servicio no se avanza. La empresa vinculadora (casilla 19) ya
+   * NO bloquea con servicio PÚBLICO (Bug #13194, decisión de producto): es opcional y se muestra un
+   * aviso normativo — la exige el organismo para pasajeros/mixto, no para carga. En solo lectura no
+   * hay nada que completar: bloquear la navegación de un trámite ya enviado sería atrapar al operador.
    */
   useEffect(() => {
-    const ok =
-      !esMatricula ||
-      readOnly ||
-      (!!tipoServicioCode &&
-        (tipoServicioCode !== 'PUBLICO' || !!empresaVinculadoraRazonSocial));
+    const ok = !esMatricula || readOnly || !!tipoServicioCode;
     onTipoServicioGateChange?.(ok);
     // `onTipoServicioGateChange` es un setState del shell recreado en cada render: incluirlo
     // reemitiría en bucle. Lo que gobierna la emisión es lo capturado aquí.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [esMatricula, readOnly, tipoServicioCode, empresaVinculadoraRazonSocial]);
+  }, [esMatricula, readOnly, tipoServicioCode]);
 
   const recargarFieldValues = async () => {
     if (!instanceId) return;
@@ -350,6 +350,18 @@ export function DeclaracionesTramite({
                       </p>
                     )}
                   </div>
+
+                  {/* Bug #13194 — empresa vinculadora opcional: aviso normativo no bloqueante mientras
+                      no haya empresa consultada. Ámbar de advertencia del design system; en oscuro, amber-300
+                      sobre amber-500/10 (patrón de OtNowTab/OtReviewersTab), AA en ambos modos. */}
+                  {empresaVinculadoraRazonSocial === null && (
+                    <p
+                      className="w-full rounded-xl border border-[#F9AC00] bg-[rgba(249,172,0,0.08)] px-3 py-2 text-xs leading-relaxed text-[#8a6000] dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                      role="note"
+                    >
+                      {AVISO_EMPRESA_VINCULADORA}
+                    </p>
+                  )}
 
                   {/* El campo NO existe hasta que se consulta — `null` es "todavía sin consultar".
                       Ocupa una fila completa (w-full) porque las razones sociales del RUES llegan
