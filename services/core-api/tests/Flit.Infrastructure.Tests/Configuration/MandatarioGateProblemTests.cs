@@ -15,7 +15,7 @@ public sealed class MandatarioGateProblemTests
 {
     [Theory]
     [InlineData(TramiteEstadoErrores.MandatarioNoConfigurado, "mandatario activo")]
-    [InlineData(TramiteEstadoErrores.MandatarioFirmaInvalida, "firma válida")]
+    [InlineData(TramiteEstadoErrores.MandatarioFirmaInvalida, "identidad aprobada")]
     public void LosDosCodigos_SonConflict409_ConTituloIgualAlCodigo_YMensajeExplicativo(string code, string fragmento)
     {
         var result = MandatarioGateProblem.For(code, null);

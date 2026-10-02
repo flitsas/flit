@@ -110,6 +110,10 @@ public sealed class MandatarioGateRadicacionTests
             });
         }
 
+        // Bug #13194: radicar exige la firma de las partes antes del gate del mandatario. Estas pruebas
+        // cubren el mandatario, así que el comprador ya llega con identidad aprobada.
+        FirmaFixture.Firmar(i);
+
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(i);
         _typeRepo.GetByIdAsync(i.ProcedureTypeId, Arg.Any<CancellationToken>()).Returns(new ProcedureType
         {
