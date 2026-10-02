@@ -415,8 +415,7 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         {
             base.SaveChanges(acceptAllChangesOnSuccess);
             // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
-            ConsolidadoVigenciaTracker.RefrescarRowVersionAsync(this, tocadas, CancellationToken.None)
-                .GetAwaiter().GetResult();
+            ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
 
         return afectadas;
@@ -436,8 +435,7 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         {
             await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
             // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
-            await ConsolidadoVigenciaTracker.RefrescarRowVersionAsync(this, tocadas, cancellationToken)
-                .ConfigureAwait(false);
+            ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
 
         // El número de filas que se devuelve es el del save del LLAMADOR: las marcas de vigencia son
