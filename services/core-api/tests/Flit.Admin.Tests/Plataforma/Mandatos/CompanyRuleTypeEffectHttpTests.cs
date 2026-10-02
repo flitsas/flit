@@ -66,6 +66,43 @@ public sealed class CompanyRuleTypeEffectHttpTests(WebApplicationFactory<Program
         return instance;
     }
 
+    /// <summary>
+    /// Deja al comprador con identidad aprobada y vigente (documento ficticio). Misma idea que
+    /// <c>FirmaFixture.Firmar</c> de los tests de trámites: este proyecto no referencia ese ensamblado.
+    /// </summary>
+    private static void FirmarComprador(ProcedureInstance instance)
+    {
+        const string documento = "9000000001";
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            ActorType = BiometricRules.ParteComprador,
+            PersonType = "natural",
+            DocumentType = "CC",
+            DocumentNumber = documento,
+            FullName = "Persona comprador",
+            Email = "comprador@example.test",
+        });
+        instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            PartyRole = BiometricRules.ParteComprador,
+            Status = BiometricEstados.Aprobado,
+            Name = "Persona comprador",
+            DocumentType = "CC",
+            DocumentNumber = documento,
+            Email = "comprador@example.test",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            ValidatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+    }
+
     /// <summary>Evalúa con servicios NUEVOS (scope propio): si hubiera caché o estado retenido, se vería.</summary>
     private async Task<MandateSignerEvaluacion> EvaluateAsync()
     {
@@ -101,6 +138,10 @@ public sealed class CompanyRuleTypeEffectHttpTests(WebApplicationFactory<Program
         grant.IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
         var operable = Substitute.For<IOtOperabilityGate>();
         operable.IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        // Bug #13194: la firma corre antes que el gate del mandatario. Sin comprador firmado
+        // la transición devuelve firma_pendiente y estos AC nunca llegan a evaluar el tipo.
+        FirmarComprador(instance);
 
         var sut = new TramiteLifecycleService(
             repo, typeRepo, grant, operable, NullOtRuleGate.Instance,
