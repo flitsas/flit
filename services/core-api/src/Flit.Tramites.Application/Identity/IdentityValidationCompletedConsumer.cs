@@ -225,10 +225,14 @@ public sealed class IdentityValidationCompletedConsumer(
         return null;
     }
 
+    /// <summary>Tipo del adjunto del FUR.</summary>
+    private const string TipoFur = "fur";
+
     /// <summary>
     /// (ii) ¿El trámite ya tiene la firma de esta persona? Con compraventa: cada parte del sujeto ya firmó el
     /// contrato. Sin compraventa: hay un FUR generado por el sistema DESPUÉS de la aprobación (lleva el sello
-    /// de esta validación) y no quedó desactualizado por un cambio posterior del expediente.
+    /// de esta validación). En release no existe la marca de expediente actualizado (Bug #13055, aún no
+    /// promovido), así que no se evalúa si el FUR quedó desactualizado por un cambio posterior.
     /// </summary>
     private static bool YaFirmado(
         ProcedureInstance instance, List<string> partes, bool generaCompraventa, DateTimeOffset aprobadaEn)
@@ -242,13 +246,12 @@ public sealed class IdentityValidationCompletedConsumer(
         }
 
         var fur = instance.Attachments
-            .Where(a => string.Equals(a.Tipo, FurVigenciaExpediente.TipoFur, StringComparison.OrdinalIgnoreCase))
+            .Where(a => string.Equals(a.Tipo, TipoFur, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(a => a.UploadedAt)
             .FirstOrDefault();
         return fur is not null
             && !string.Equals(fur.Source, "user", StringComparison.OrdinalIgnoreCase)
-            && fur.UploadedAt >= aprobadaEn
-            && !FurVigenciaExpediente.FurDesactualizado(instance);
+            && fur.UploadedAt >= aprobadaEn;
     }
 
     /// <summary>

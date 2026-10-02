@@ -156,14 +156,13 @@ internal static class ConsolidadoVigenciaTracker
     /// Bug #13194 (P4-24) — tras el UPDATE de las marcas, el trigger <c>tr_procedure_instances_row_version</c>
     /// (BEFORE UPDATE) sube <c>row_version</c> en la base, pero EF no lo relee (el token no es generado por
     /// la store en el modelo). La entidad rastreada quedaba con el token VIEJO y el siguiente guardado del
-    /// MISMO contexto —p. ej. «Enviar al OT»: fase 1 persiste los checks (dato del FUR, sella
-    /// <c>expediente_actualizado_en</c>) y fase 2 transiciona— salía con <c>WHERE row_version = viejo</c>:
+    /// MISMO contexto —p. ej. «Enviar al OT» con consolidado vigente: fase 1 persiste los checks (dato del
+    /// FUR, baja las marcas de vigencia) y fase 2 transiciona— salía con <c>WHERE row_version = viejo</c>:
     /// <c>DbUpdateConcurrencyException</c>, 409 <c>conflicto_concurrencia</c> en cada intento.
     /// <para>Determinista, sin releer (review PR #510, L4): <c>public.trg_row_version</c> hace
     /// <c>NEW.row_version := COALESCE(OLD.row_version, 0) + 1</c> y el UPDATE solo afectó la fila porque su
     /// <c>WHERE row_version = token</c> coincidió, así que OLD es el token enviado (el valor original) y la
-    /// base quedó en token + 1. El trigger se salta solo si cambian únicamente columnas <c>sync_*</c> (DDL 123),
-    /// que este UPDATE nunca toca (sella marcas de vigencia). Releer abría una ventana en la que se podía
+    /// base quedó en token + 1 (en release el trigger no tiene excepciones). Releer abría una ventana en la que se podía
     /// absorber la versión de otro escritor.</para>
     /// </summary>
     public static void AvanzarRowVersion(DbContext context, IReadOnlyList<Guid> ids)
