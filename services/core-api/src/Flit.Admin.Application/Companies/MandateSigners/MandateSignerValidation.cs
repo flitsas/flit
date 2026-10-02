@@ -24,7 +24,7 @@ internal static class MandateSignerValidation
         "Elige al menos una compañía para el mandatario.";
 
     public const string ExclusividadClienteOtMessage =
-        "Ya existe un mandatario para esta empresa en este organismo.";
+        "Ya existe un mandatario para esta empresa en este organismo. Desactiva o edita el actual antes de registrar otro.";
 
     /// <summary>
     /// Valida datos básicos + OT operable. Devuelve el tenant del OT si es operable, junto a
