@@ -6,7 +6,8 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// <summary>
 /// HU #13178 — lectura cross-tenant de las compañías gestoras de FLIT sobre <c>identity.tenants</c>, con
 /// proyección mínima (id, razón social, NIT, alta, activo). Excluye los organismos de tránsito (tienen
-/// <c>transit_office_profiles</c>) y el tenant de la plataforma (<c>FLIT</c>). Solo la consumen el OT y el Super
+/// <c>transit_office_profiles</c>) y el tenant de la plataforma (<c>FLIT</c>), salvo en
+/// <see cref="ListOwnerCandidatesByIdsAsync"/> (un mandatario sí puede pertenecer a la plataforma, HU #13182b). Solo la consumen el OT y el Super
 /// Admin (lo impone el endpoint) y la validación del guardado; aparte de <see cref="CrossTenantRead"/> no toca la
 /// visibilidad de la bandeja de trámites (<c>OtVisibleCompanies</c>, Bug #12912).
 /// </summary>
@@ -48,6 +49,28 @@ internal sealed class ManagingCompanyDirectory : IManagingCompanyDirectory
             async () => await _context.Tenants.AsNoTracking()
                 .Where(t => wanted.Contains(t.Id)
                     && t.TenantType != PlatformTenantType
+                    && !_context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id))
+                .Select(t => new ManagingCompanyRow(t.Id, t.LegalName, t.TaxId, t.CreatedAt, t.IsActive))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false),
+            cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ManagingCompanyRow>> ListOwnerCandidatesByIdsAsync(
+        IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<ManagingCompanyRow>>([]);
+        }
+
+        // HU #13182b — el tenant de la plataforma (FLIT) SÍ puede tener mandatarios: solo se excluyen los organismos.
+        var wanted = ids.Distinct().ToList();
+        return CrossTenantRead.ExecuteAsync<IReadOnlyList<ManagingCompanyRow>>(
+            _context,
+            async () => await _context.Tenants.AsNoTracking()
+                .Where(t => wanted.Contains(t.Id)
                     && !_context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id))
                 .Select(t => new ManagingCompanyRow(t.Id, t.LegalName, t.TaxId, t.CreatedAt, t.IsActive))
                 .ToListAsync(cancellationToken)

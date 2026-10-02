@@ -74,6 +74,16 @@ public interface IMandatarioAssociableCompanies
         IReadOnlyCollection<Guid> ownerCompanyTenantIds,
         IReadOnlyCollection<Guid> candidateTenantIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Evalúa las compañías PROPIETARIAS de un mandatario cuando lo registra el OT o el Super Admin (HU #13182b). A
+    /// diferencia de <see cref="RejectionsAsync"/>, el tenant de la propia plataforma (tipo <c>FLIT</c>) SÍ puede tener
+    /// mandatarios (decisión del PO, 02-oct-2026): basta con que exista, esté activo y no sea un organismo de tránsito.
+    /// Devuelve, por id que NO pasa, <see cref="AssociableCompanyRejections.CompaniaInexistente"/> o
+    /// <see cref="AssociableCompanyRejections.CompaniaInactiva"/>; los ids válidos no aparecen.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> OwnerRejectionsAsync(
+        IReadOnlyCollection<Guid> ownerTenantIds, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Compañía gestora activa, con el dato de creación para deduplicar por NIT de forma estable.</summary>
@@ -93,6 +103,13 @@ public interface IManagingCompanyDirectory
     /// NIT de sus compañías asociadas. Los ids que no son compañías gestoras no aparecen.
     /// </summary>
     Task<IReadOnlyList<ManagingCompanyRow>> ListByIdsAsync(
+        IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Como <see cref="ListByIdsAsync"/> pero INCLUYE el tenant de la plataforma (tipo <c>FLIT</c>): lo usa solo la
+    /// validación de las compañías propietarias de un mandatario (HU #13182b). Sigue excluyendo los organismos de tránsito.
+    /// </summary>
+    Task<IReadOnlyList<ManagingCompanyRow>> ListOwnerCandidatesByIdsAsync(
         IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
 }
 

@@ -339,14 +339,15 @@ public sealed class CreateMandateSignerHandler
         string configuredByScope = "organismo")
     {
         // HU #13182b (D3, P7 del PO) — el OT / Super Admin registra el mandatario de CUALQUIER compañía gestora
-        // activa aunque no esté habilitada en el organismo; la inexistente o inactiva se sigue rechazando. El Admin
+        // activa aunque no esté habilitada en el organismo (incluido el tenant de la plataforma, tipo FLIT); la inexistente o
+        // inactiva se sigue rechazando. El Admin
         // de Compañía (origen «compania») conserva RF33 con el grant del organismo.
         HashSet<Guid>? validas = null;
         if (associable is not null
             && !string.Equals(configuredByScope, "compania", StringComparison.Ordinal))
         {
             var rechazos = await associable
-                .RejectionsAsync(null, [], companyIds.Distinct().ToList(), cancellationToken)
+                .OwnerRejectionsAsync(companyIds.Distinct().ToList(), cancellationToken)
                 .ConfigureAwait(false);
             validas = [.. companyIds.Where(id => !rechazos.ContainsKey(id))];
         }

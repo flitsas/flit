@@ -45,6 +45,8 @@ public sealed class MandatarioCompaniasAsociadasTests
     private static readonly Guid Ajena = Guid.Parse("dddddddd-0000-4000-8000-000000000021");
     private static readonly Guid AjenaSinOperar = Guid.Parse("dddddddd-0000-4000-8000-000000000022");
     private static readonly Guid Inactiva = Guid.Parse("dddddddd-0000-4000-8000-000000000023");
+    /// <summary>Tenant de la propia plataforma (tipo FLIT), con el organismo habilitado como el DEMO real (HU #13182b).</summary>
+    private static readonly Guid Plataforma = Guid.Parse("dddddddd-0000-4000-8000-000000000031");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -249,6 +251,43 @@ public sealed class MandatarioCompaniasAsociadasTests
         result.Errors.Should().Contain(e => e.Field == "companyTenantIds" && e.Value == Inactiva.ToString());
     }
 
+    // ── Decisión del PO (02-oct-2026): el tenant de la plataforma (tipo FLIT) SÍ puede tener mandatarios ─────
+
+    [Fact]
+    public async Task D3_ElOtRegistraElMandatarioDelTenantDePlataformaTipoFlit()
+    {
+        await using var ctx = await NewSeededContextAsync();
+
+        var result = await OtCreate(ctx, Ot, [], "organismo", propietarias: [Plataforma]);
+
+        result.IsValid.Should().BeTrue(string.Join("; ", result.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public async Task D3_ElSuperAdminRegistraDesdeLaFichaElMandatarioDelTenantDePlataformaTipoFlit()
+    {
+        await using var ctx = await NewSeededContextAsync();
+
+        var result = await CompanyCreate(ctx).HandleAsync(Plataforma, Alta(), null, "super_admin", Ct);
+
+        result.IsValid.Should().BeTrue(string.Join("; ", result.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public async Task D3_ElTenantDePlataformaNoSeOfreceComoAsociable_PeroSiComoPropietario()
+    {
+        await using var ctx = await NewSeededContextAsync();
+        var associable = Associable(ctx);
+
+        var lista = await associable.ListForOtAsync(null, 1, 100, Ct);
+        lista.Page!.Items.Should().NotContain(c => c.Id == Plataforma);
+
+        var propietarias = await associable.OwnerRejectionsAsync([Plataforma, Inactiva, Guid.NewGuid()], Ct);
+        propietarias.Should().NotContainKey(Plataforma);
+        propietarias[Inactiva].Should().Be(AssociableCompanyRejections.CompaniaInactiva);
+        propietarias.Values.Should().Contain(AssociableCompanyRejections.CompaniaInexistente);
+    }
+
     [Fact]
     public async Task D3_ElAdminDeCompaniaConservaRF33_ConElGrantDelOrganismo()
     {
@@ -443,13 +482,13 @@ public sealed class MandatarioCompaniasAsociadasTests
         return reader;
     }
 
-    private static Tenant NewTenant(Guid id, string nit, bool active = true, Guid? parent = null) => new()
+    private static Tenant NewTenant(Guid id, string nit, bool active = true, Guid? parent = null, string tipo = "CONCESIONARIO") => new()
     {
         Id = id,
         Code = "T-" + id.ToString("N")[..8],
         LegalName = "Compañía " + id.ToString("N")[..4],
         TaxId = nit,
-        TenantType = "CONCESIONARIO",
+        TenantType = tipo,
         IsActive = active,
         ParentTenantId = parent,
         CreatedAt = DateTimeOffset.UtcNow,
@@ -474,9 +513,10 @@ public sealed class MandatarioCompaniasAsociadasTests
             NewTenant(HijaInactiva, "900000014-1", active: false, parent: Gestora),
             NewTenant(Ajena, "900000021-1"),
             NewTenant(AjenaSinOperar, "900000022-1"),
-            NewTenant(Inactiva, "900000023-1", active: false));
+            NewTenant(Inactiva, "900000023-1", active: false),
+            NewTenant(Plataforma, "900000031-1", tipo: "FLIT"));
 
-        foreach (var tenant in new[] { Gestora, Hija1, Hija2, Hija3, Ajena, Inactiva })
+        foreach (var tenant in new[] { Gestora, Hija1, Hija2, Hija3, Ajena, Inactiva, Plataforma })
         {
             ctx.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
             {

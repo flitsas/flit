@@ -114,6 +114,34 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
         return result;
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> OwnerRejectionsAsync(
+        IReadOnlyCollection<Guid> ownerTenantIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ownerTenantIds);
+
+        var result = new Dictionary<Guid, string>();
+        if (ownerTenantIds.Count == 0)
+        {
+            return result;
+        }
+
+        var found = (await _directory.ListOwnerCandidatesByIdsAsync(ownerTenantIds, cancellationToken)
+            .ConfigureAwait(false)).ToDictionary(c => c.Id);
+        foreach (var id in ownerTenantIds.Distinct())
+        {
+            if (!found.TryGetValue(id, out var company))
+            {
+                result[id] = AssociableCompanyRejections.CompaniaInexistente;
+            }
+            else if (!company.IsActive)
+            {
+                result[id] = AssociableCompanyRejections.CompaniaInactiva;
+            }
+        }
+
+        return result;
+    }
+
     private async Task<List<AssociableCompany>> ActiveChildrenAsync(Guid companyTenantId, CancellationToken ct)
     {
         var children = await _hierarchy.ListChildrenAsync(companyTenantId, ct).ConfigureAwait(false);
