@@ -68,7 +68,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         Use(_client, "SuperAdmin", Guid.NewGuid());
 
-        (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "demo");
+        (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
     }
 
     // ── /admin/tenants/{tenantId}/products ────────────────────────────────────────
@@ -121,7 +121,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         Use(_client, "Radicador", _userId);
 
-        var put = await _client.PutAsJsonAsync("/api/v1/platform/products/demo/manifest", Manifest("demo." + _suffix + ".read"), TestContext.Current.CancellationToken);
+        var put = await _client.PutAsJsonAsync("/api/v1/platform/products/diagnostico/manifest", Manifest("diagnostico." + _suffix + ".read"), TestContext.Current.CancellationToken);
 
         put.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -131,22 +131,22 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         UseService(_client);
 
-        var first = await _client.PutAsJsonAsync("/api/v1/platform/products/demo/manifest", Manifest("demo." + _suffix + ".read"), TestContext.Current.CancellationToken);
+        var first = await _client.PutAsJsonAsync("/api/v1/platform/products/diagnostico/manifest", Manifest("diagnostico." + _suffix + ".read"), TestContext.Current.CancellationToken);
         first.StatusCode.Should().Be(HttpStatusCode.OK);
         var created = await first.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
         created.GetProperty("modulesCreated").GetInt32().Should().Be(1);
         created.GetProperty("permissionsCreated").GetInt32().Should().Be(1);
         created.GetProperty("rolesCreated").GetInt32().Should().Be(1);
 
-        var second = await _client.PutAsJsonAsync("/api/v1/platform/products/demo/manifest", Manifest("demo." + _suffix + ".read"), TestContext.Current.CancellationToken);
+        var second = await _client.PutAsJsonAsync("/api/v1/platform/products/diagnostico/manifest", Manifest("diagnostico." + _suffix + ".read"), TestContext.Current.CancellationToken);
         var again = await second.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
         again.GetProperty("modulesCreated").GetInt32().Should().Be(0);
         again.GetProperty("permissionsCreated").GetInt32().Should().Be(0);
         again.GetProperty("rolesCreated").GetInt32().Should().Be(0);
 
         await using var db = CreateDbContext();
-        (await db.SecurityModules.SingleAsync(m => m.Code == "demo-" + _suffix, TestContext.Current.CancellationToken)).ProductCode.Should().Be("demo");
-        (await db.Roles.SingleAsync(r => r.Code == "demo_" + _suffix, TestContext.Current.CancellationToken)).ProductCode.Should().Be("demo");
+        (await db.SecurityModules.SingleAsync(m => m.Code == "diagnostico-" + _suffix, TestContext.Current.CancellationToken)).ProductCode.Should().Be("diagnostico");
+        (await db.Roles.SingleAsync(r => r.Code == "diagnostico_" + _suffix, TestContext.Current.CancellationToken)).ProductCode.Should().Be("diagnostico");
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         UseService(_client);
 
-        var put = await _client.PutAsJsonAsync("/api/v1/platform/products/demo/manifest", Manifest("tramites." + _suffix + ".read"), TestContext.Current.CancellationToken);
+        var put = await _client.PutAsJsonAsync("/api/v1/platform/products/diagnostico/manifest", Manifest("tramites." + _suffix + ".read"), TestContext.Current.CancellationToken);
 
         put.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await CodeOfAsync(put)).Should().Be("MANIFEST_SLUG_PREFIX");
@@ -203,8 +203,8 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     private object Manifest(string slug) => new
     {
         version = "1.0.0",
-        modules = new[] { new { code = "demo-" + _suffix, name = "Demo IT", permissions = new[] { new { slug, name = "Leer" } } } },
-        defaultRoles = new[] { new { code = "demo_" + _suffix, name = "Demo IT", permissions = new[] { slug } } },
+        modules = new[] { new { code = "diagnostico-" + _suffix, name = "Demo IT", permissions = new[] { new { slug, name = "Leer" } } } },
+        defaultRoles = new[] { new { code = "diagnostico_" + _suffix, name = "Demo IT", permissions = new[] { slug } } },
     };
 
     private static async Task<List<string>> GetAppCodesAsync(HttpClient client)
@@ -293,11 +293,11 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         // Borrado en orden de dependencias: los hijos antes que la empresa.
         using var db = CreateDbContext();
-        var moduleIds = db.SecurityModules.Where(m => m.Code == "demo-" + _suffix).Select(m => m.Id).ToList();
+        var moduleIds = db.SecurityModules.Where(m => m.Code == "diagnostico-" + _suffix).Select(m => m.Id).ToList();
         var permissionIds = db.RbacActions.Where(p => moduleIds.Contains(p.ModuleId)).Select(p => p.Id).ToList();
         db.RoleGrants.Where(g => permissionIds.Contains(g.PermissionId) || g.RoleId == _roleId).ExecuteDelete();
         db.UserRoleAssignments.Where(a => a.UserId == _userId || a.TenantId == _tenantId).ExecuteDelete();
-        db.Roles.Where(r => r.Code == "demo_" + _suffix || r.Id == _roleId).ExecuteDelete();
+        db.Roles.Where(r => r.Code == "diagnostico_" + _suffix || r.Id == _roleId).ExecuteDelete();
         db.RbacActions.Where(p => permissionIds.Contains(p.Id)).ExecuteDelete();
         db.SecurityModules.Where(m => moduleIds.Contains(m.Id)).ExecuteDelete();
         db.Set<TenantProductEntity>().Where(r => r.TenantId == _tenantId).ExecuteDelete();

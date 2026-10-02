@@ -41,7 +41,7 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
         await using var ctx = NewContext();
         var products = await new ProductCatalogRepository(ctx).ListAsync();
 
-        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "demo");
+        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
         products.Should().OnlyContain(p => p.IsActive);
         products.Single(p => p.Code == "tramites").Name.Should().Be("Trámites");
     }
