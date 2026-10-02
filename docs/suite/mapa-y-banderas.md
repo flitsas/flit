@@ -79,7 +79,7 @@ revisión de sesión cerrada tarda como mucho 15 s) y @flit/auth borra su sesió
 | Autorizaciones (una por sesión del hub y producto) | `identity.oidc_authorizations` | hasta el cierre de sesión; se purgan cada 6 h | core-api |
 | Llaves de firma | `security.jwt_signing_keys`, cifradas con Data Protection | hasta que se rote el `SigningKeyId` | core-api al arrancar |
 | Anillo de Data Protection | tabla de llaves en `FlitDbContext` | permanente | core-api |
-| Productos por empresa | `platform.tenant_products` | permanente | SuperAdmin |
+| Productos por empresa | `platform.tenant_products` | permanente | SuperAdmin, en Compañías → la compañía → pestaña «Productos» |
 | Claims para la UI (modo oidc) | `localStorage` de Trámites | hasta cerrar sesión | Trámites |
 | JWT de siempre (modo legacy) | cookie `flit_token` + `localStorage` | 12 h, sin renovación (`Jwt:TokenLifetimeHours`) | core-api en `/api/v1/auth/login` |
 
@@ -183,6 +183,7 @@ sesión una vez más con el login de siempre.
 | Página en blanco o 431 en local | Cookies de `localhost` de otras apps pasan 16 KB | Usar `127.0.0.1` ([local.md](local.md)) |
 | «Abriendo tu sesión…» que no termina | La API no está arriba, o no acepta la URL de retorno | `Suite:Hosts:Overrides` (local) o `Suite:Hosts:Environment` (servidor); log de core-api |
 | Vuelve al login después de iniciar sesión | La cookie de sesión no se pudo leer: cambió `FLIT_SESSION_SECRET` o la cookie no se guardó (HTTP vs HTTPS) | DevTools → Application → Cookies: ¿existe `flit_session_tramites`? |
+| Un producto encendido no le aparece a un usuario | Le falta un rol en ese producto. El Admin de Compañía lo recibe solo (`admin_<producto>`, DDL 126); a los demás se lo asigna él | Pestaña «Productos» de la compañía; `security.user_role_assignments` del usuario con `product_code` |
 | 403 «Tu empresa no tiene Trámites» | La empresa no tiene el producto en `platform.tenant_products`, o el usuario no tiene rol en Trámites | `GET /api/v1/platform/me/apps`; configuración de la compañía (SuperAdmin) |
 | Entra pero los menús salen vacíos | Los claims del token no traen roles/permisos del producto | Decodificar el token (`/auth/claims` en local) y revisar `roles` y `permissions` |
 | «Tu sesión expiró» justo después de iniciar sesión | La cookie del producto era de una sesión ya cerrada (se salió desde otra app) o se reusó un refresh (H3 y H4 de [matriz-pruebas.md](matriz-pruebas.md)). Hoy la app pide una sesión nueva sola; el aviso solo sale si eso falla dos veces en menos de 10 s | Log de core-identity: `already been redeemed` o `were revoked to prevent a potential token replay attack` |

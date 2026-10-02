@@ -20,6 +20,25 @@ export interface TenantProductState {
   changed: boolean;
 }
 
+/** Un producto de la suite con su estado para una empresa (GET /api/v1/platform/admin/tenants/{tenantId}/products). */
+export interface TenantProduct {
+  productCode: string;
+  name: string;
+  enabled: boolean;
+  notes: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  /** Correo de quien lo cambió por última vez, si se conoce. */
+  updatedByEmail: string | null;
+  /** Todavía no desplegado en este ambiente: se puede encender, pero sus usuarios verán «Próximamente». */
+  comingSoon: boolean;
+}
+
+/** GET /api/v1/platform/admin/tenants/{tenantId}/products — solo SuperAdmin. */
+export function listTenantProducts(tenantId: string): Promise<TenantProduct[]> {
+  return apiFetch<TenantProduct[]>(`/api/v1/platform/admin/tenants/${encodeURIComponent(tenantId)}/products`);
+}
+
 export function listMyApps(): Promise<MyApp[]> {
   return apiFetch<MyApp[]>("/api/v1/platform/me/apps");
 }

@@ -5,10 +5,16 @@
 // Uso de ejemplo:
 //   render(<CompanyConfigTabs settings={settings} onSaveSettings={spy} />);
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CompanyConfigTabs } from "../CompanyConfigTabs";
 import { ApiValidationError, type TenantSettings } from "@/lib/api/types";
+
+// La pestaña «Productos» (HU #12967) abre por defecto y pide los productos de la compañía.
+vi.mock("@/lib/api/platform", () => ({ listTenantProducts: vi.fn().mockResolvedValue([]), setTenantProduct: vi.fn() }));
+
+/** «Guardar todo» vive en las pestañas de configuración; la consola abre en «Productos». */
+const openTramites = () => fireEvent.click(screen.getByRole("tab", { name: "Trámites" }));
 
 const settings: TenantSettings = {
   tenantId: "t1",
@@ -33,6 +39,7 @@ describe("CompanyConfigTabs (AC2)", () => {
     const onSaveSettings = vi.fn().mockResolvedValue(undefined);
 
     render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+    openTramites();
 
     // "Guardar todo" no guarda directo: abre la confirmación.
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
@@ -96,6 +103,7 @@ describe("CompanyConfigTabs (AC2)", () => {
     const onSaveSettings = vi.fn().mockResolvedValue(undefined);
 
     render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+    openTramites();
 
     // Pestaña Trámites: familias como desplegables (Matrículas abierta por defecto).
     expect(screen.getByRole("tab", { name: /^trámites$/i })).toHaveAttribute("aria-selected", "true");
@@ -200,6 +208,7 @@ describe("CompanyConfigTabs (AC2)", () => {
     const onSaveSettings = vi.fn().mockResolvedValue(undefined);
 
     render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+    openTramites();
 
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /cancelar/i }));
@@ -220,6 +229,7 @@ describe("CompanyConfigTabs (AC2)", () => {
       );
 
     render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+    openTramites();
 
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /guardar cambios/i }));
@@ -295,6 +305,7 @@ describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", (
     render(
       <CompanyConfigTabs settings={settings} company={company} onSaveSettings={vi.fn()} />,
     );
+    openTramites();
 
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
 
@@ -306,6 +317,7 @@ describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", (
   it("sin identidad resuelta la pantalla funciona igual, sin hueco de empresa", async () => {
     const user = userEvent.setup();
     render(<CompanyConfigTabs settings={settings} company={null} onSaveSettings={vi.fn()} />);
+    openTramites();
 
     // El encabezado puede existir (alojar «Guardar todo»), pero sin razón social ni NIT.
     expect(screen.queryByText(/transportes acme/i)).not.toBeInTheDocument();
@@ -386,6 +398,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
 
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
     expect(tabs).toEqual([
+      "Productos",
       "Trámites",
       "Configuración Empresa",
       "Documentos",
