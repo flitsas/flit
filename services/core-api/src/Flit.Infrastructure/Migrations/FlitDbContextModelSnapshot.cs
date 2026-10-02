@@ -4909,7 +4909,8 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique()
-                        .HasDatabaseName("uq_users_email");
+                        .HasDatabaseName("uq_users_email")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("users", "identity");
                 });
@@ -8293,10 +8294,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("consolidado_wizard_generado_en");
 
-                    b.Property<DateTimeOffset?>("ExpedienteActualizadoEn")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("expediente_actualizado_en");
-
                     b.Property<bool>("ConsolidadoWizardVigente")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -8331,6 +8328,10 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("DraftFinalizedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("draft_finalized_at");
+
+                    b.Property<DateTimeOffset?>("ExpedienteActualizadoEn")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("expediente_actualizado_en");
 
                     b.Property<string>("ExternalRef")
                         .HasMaxLength(64)

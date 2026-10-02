@@ -1,19 +1,5 @@
 namespace Flit.Modules.Security.Domain.UserManagement;
 
-/// <summary>
-/// El correo solicitado pertenece a una cuenta soft-deleted (HU #10621 AC3). Distinto de
-/// <see cref="Auth.UserAlreadyExistsException"/> (cuenta ACTIVA): permite devolver un mensaje
-/// específico sin exponer el error crudo de unicidad de BD (<c>uq_users_email</c> no es un
-/// índice parcial, así que el correo sigue "ocupado" aunque la cuenta esté eliminada).
-/// </summary>
-public sealed class UserEmailBelongsToDeletedAccountException : Exception
-{
-    public UserEmailBelongsToDeletedAccountException()
-        : base("Ese correo pertenece a una cuenta eliminada. Contacta a un SuperAdmin para restaurarla.")
-    {
-    }
-}
-
 /// <summary>Un usuario no puede suspenderse/desactivarse a sí mismo (HU #10619 AC4).</summary>
 public sealed class SelfSuspensionException : Exception
 {
@@ -63,6 +49,20 @@ public sealed class SelfDeletionException : Exception
 {
     public SelfDeletionException()
         : base("A user cannot delete themselves.")
+    {
+    }
+}
+
+/// <summary>
+/// Bug #13194 — no se puede restaurar una cuenta eliminada si su correo ya lo usa otra cuenta VIVA
+/// (p. ej. se volvió a invitar y activar). <c>uq_users_email</c> es parcial (<c>deleted_at IS NULL</c>):
+/// restaurar dejaría dos cuentas vivas con el mismo correo y la BD lo rechaza. El handler lo detecta
+/// antes y el repositorio traduce el 23505 de la carrera a esta misma excepción.
+/// </summary>
+public sealed class UserEmailInUseByLiveAccountException : Exception
+{
+    public UserEmailInUseByLiveAccountException()
+        : base("Ya existe una cuenta activa con ese correo.")
     {
     }
 }

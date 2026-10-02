@@ -8,7 +8,7 @@ namespace Flit.Infrastructure.Notifications.Preview;
 /// </summary>
 public static class AsignacionPlacaEmailPreviewSample
 {
-    public const string DefaultAssetsBaseUrl = "https://dev.flitsas.online/email-assets";
+    public const string DefaultAssetsBaseUrl = NotificationEmailAssetsOptions.LocalFallbackBaseUrl;
 
     public static AsignacionPlacaEmailModel Sample { get; } = new(
         ClienteNombre: "Juan Carlos Pérez Gómez",

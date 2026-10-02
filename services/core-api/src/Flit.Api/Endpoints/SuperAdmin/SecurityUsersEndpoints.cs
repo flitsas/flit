@@ -46,6 +46,13 @@ internal static class SecurityUsersEndpoints
                     new { code = "USER_NOT_DELETED", message = ex.Message },
                     statusCode: StatusCodes.Status409Conflict);
             }
+            catch (UserEmailInUseByLiveAccountException ex)
+            {
+                // Bug #13194 — el correo ya lo usa otra cuenta viva: restaurar violaría uq_users_email.
+                return Results.Json(
+                    new { code = "USER_EMAIL_IN_USE", message = ex.Message },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
         }).WithName("RestoreUser");
     }
 }

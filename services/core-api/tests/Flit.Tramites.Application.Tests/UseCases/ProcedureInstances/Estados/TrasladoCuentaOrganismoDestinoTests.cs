@@ -170,6 +170,10 @@ public sealed class TrasladoCuentaOrganismoDestinoTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
+        // Bug #13194 (D4) — fail-closed: la validación de arriba no tiene actor de su documento; el
+        // comprador firmado lo aporta el fixture compartido.
+        FirmaFixture.Firmar(i);
+
         if (destino is not null)
         {
             i.FieldValues.Add(new ProcedureInstanceFieldValue

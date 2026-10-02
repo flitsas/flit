@@ -11,7 +11,7 @@ namespace Flit.Infrastructure.Notifications.Preview;
 /// </summary>
 public static class RevocationRequestEmailPreviewSample
 {
-    public const string DefaultAssetsBaseUrl = "https://dev.flitsas.online/email-assets";
+    public const string DefaultAssetsBaseUrl = NotificationEmailAssetsOptions.LocalFallbackBaseUrl;
 
     public static RevocationRequestEmailModel SampleSolicitada { get; } = new(
         DestinatarioNombre: "Juan Carlos Pérez Gómez",

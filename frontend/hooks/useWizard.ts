@@ -104,14 +104,10 @@ export function useWizard(
     setState((s) => ({ ...s, error: null }));
   }, []);
 
-  // HU #10549 — si el OT destino deshabilita la validación de identidad, el wizard oculta el paso
-  // de identidad (matrícula). El backend ya lo reporta `complete` (no bloquea), así que ocultarlo
-  // no afecta el gate; en traspaso la biométrica vive dentro del paso `fur` (nada que ocultar).
-  const rawSteps = state.wizard?.steps ?? [];
-  const steps =
-    state.wizard?.identityValidationEnabled === false
-      ? rawSteps.filter((s) => s.key !== 'identidad')
-      : rawSteps;
+  // Bug #13194 (P4) — la firma se exige SIEMPRE, también en un OT sin validación de identidad: el paso
+  // `identidad` ya no se oculta por `identityValidationEnabled` (HU #10549, flag deprecado). Los pasos
+  // son los que manda el servidor, tal cual.
+  const steps = state.wizard?.steps ?? [];
 
   return {
     state,

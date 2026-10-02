@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
@@ -26,7 +27,11 @@ public sealed class EnviarAlOtHandler(
     ValidateSoatViaRuntHandler? soatValidator = null,
     ISoatRuntValidationPolicy? soatPolicy = null,
     FirmarImprontaManualSiListaHandler? firmaImpronta = null,
-    ILogger<EnviarAlOtHandler>? logger = null)
+    ILogger<EnviarAlOtHandler>? logger = null,
+    // Bug #13194 (review PR #510, MENOR-3) — al final para no desplazar posiciones existentes.
+    ITramiteFirmaGate? firmaGate = null,
+    IFirmaPendienteNotifier? firmaNotifier = null,
+    UltimoBloqueoFirma? ultimoBloqueo = null)
 {
     /// <summary>
     /// El RUNT no reporta un SOAT vigente y la compañía tiene apagada la opción de continuar sin él.
@@ -60,6 +65,24 @@ public sealed class EnviarAlOtHandler(
         // Solo desde 'asignado' (HU #12597 AC5): en preasignacion no hay placa y en entregado ya se envió.
         if (instance.Status != TramiteEstado.Asignado)
             return (null, TramiteEstadoErrores.TransicionNoPermitida, null);
+
+        // Bug #13194 (MENOR-3) — la firma se evalúa PRIMERO (solo lectura): sin firma no se consulta el
+        // RUNT ni se persisten los checks. Se notifica a cada parte (correo de validación, idempotente) y se
+        // responde 409 firma_pendiente. El gate del ciclo de vida sigue como red de seguridad.
+        if (firmaGate is not null)
+        {
+            var sinFirma = await firmaGate.PartesSinFirmaAsync(id, tenantId, ct).ConfigureAwait(false);
+            if (sinFirma.Count > 0)
+            {
+                var notificadas = await FirmaGate.NotificarAsync(
+                    firmaNotifier, id, tenantId, sinFirma,
+                    (tipo, parte) => EnviarAlOtLog.NotificacionFirmaFallida(_logger, tipo, id, parte),
+                    ct).ConfigureAwait(false);
+                if (ultimoBloqueo is not null)
+                    ultimoBloqueo.PartesSinFirma = notificadas;
+                return (null, TramiteEstadoErrores.FirmaPendiente, null);
+            }
+        }
 
         // Validación del SOAT contra el RUNT al procesar. La consulta se hace SIEMPRE que haya
         // validador (así el estado del SOAT queda registrado y el gestor lo ve). El bloqueo es el
@@ -201,4 +224,8 @@ internal static partial class EnviarAlOtLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "La firma automática de impronta del trámite {InstanceId} (tenant {TenantId}) se omitió al enviar al OT por una excepción no controlada.")]
     public static partial void FirmaImprontaOmitida(ILogger logger, Exception ex, Guid instanceId, Guid tenantId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Bug #13194 — no se pudo notificar la firma pendiente ({ExceptionType}) del trámite {InstanceId}, parte {Parte}; el envío al OT queda bloqueado.")]
+    public static partial void NotificacionFirmaFallida(ILogger logger, string exceptionType, Guid instanceId, string parte);
 }

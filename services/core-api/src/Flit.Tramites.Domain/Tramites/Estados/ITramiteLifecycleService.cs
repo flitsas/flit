@@ -47,6 +47,12 @@ public sealed record TramiteTransitionOutcome(
 {
     public bool Success => ErrorCode is null;
 
+    /// <summary>
+    /// Bug #13194 (P4, D2) — partes sin firma y el estado de su notificación (correo de validación) cuando
+    /// la transición se bloquea por falta de firma. Null en cualquier otro desenlace.
+    /// </summary>
+    public IReadOnlyList<ParteSinFirma>? PartesSinFirma { get; init; }
+
     public static TramiteTransitionOutcome Ok(ProcedureInstance instance) => new(instance, null, null);
 
     public static TramiteTransitionOutcome Fail(string errorCode, string? detail = null) =>

@@ -135,11 +135,14 @@ public sealed class SecurityEmailTemplateCompositionTests
 
     // --- WelcomeRegistrationEmailTemplate -------------------------------------------------
 
+    // Bug #13194 — la plantilla ya no tiene login por defecto: siempre lo recibe del handler.
+    private const string WelcomeLoginUrl = "https://app.flit.test/login";
+
     [Fact]
     public void WelcomeRegistration_Compose_es_pura_misma_entrada_misma_salida()
     {
-        var first = WelcomeRegistrationEmailTemplate.Compose();
-        var second = WelcomeRegistrationEmailTemplate.Compose();
+        var first = WelcomeRegistrationEmailTemplate.Compose(WelcomeLoginUrl);
+        var second = WelcomeRegistrationEmailTemplate.Compose(WelcomeLoginUrl);
 
         first.Should().Be(second);
     }
@@ -147,14 +150,14 @@ public sealed class SecurityEmailTemplateCompositionTests
     [Fact]
     public void WelcomeRegistration_Compose_usa_login_principal_y_copy_del_diseno()
     {
-        var composed = WelcomeRegistrationEmailTemplate.Compose();
+        var composed = WelcomeRegistrationEmailTemplate.Compose(WelcomeLoginUrl);
 
         composed.Subject.Should().Be(WelcomeRegistrationEmailTemplate.Subject);
         var decoded = System.Net.WebUtility.HtmlDecode(composed.HtmlBody);
         decoded.Should().Contain("GRACIAS POR REGISTRARTE");
         decoded.Should().Contain("Nos alegra que estés aquí.");
-        composed.HtmlBody.Should().Contain(WelcomeRegistrationEmailTemplate.DefaultLoginUrl);
-        decoded.Should().Contain("dev.flitsas.online/login");
+        composed.HtmlBody.Should().Contain(WelcomeLoginUrl);
+        decoded.Should().Contain("app.flit.test/login");
         decoded.Should().Contain("Disfruta de todos tus beneficios");
         decoded.Should().Contain("POLÍTICA DE PRIVACIDAD");
     }
