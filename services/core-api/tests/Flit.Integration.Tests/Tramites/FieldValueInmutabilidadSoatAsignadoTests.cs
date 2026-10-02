@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Integration.Tests.Postgres;
 using FluentAssertions;
 using Npgsql;
@@ -19,6 +20,9 @@ public sealed class FieldValueInmutabilidadSoatAsignadoTests(PostgresDatabaseFix
     private const string CheckViolation = "23514";
     private static readonly Guid Compania = new("5a5a5a5a-0001-4000-8000-000000013194");
     private static readonly Guid Instancia = new("5a5a5a5a-0002-4000-8000-000000013194");
+
+    // procedure_instances.created_by_user_id es NOT NULL (FK a identity.users): se siembra un gestor sintético.
+    private static readonly Guid Gestor = new("5a5a5a5a-0003-4000-8000-000000013194");
 
     [PostgresFact]
     public async Task Asignado_admiteSoatVencimiento_yRechazaOtraLlave()
@@ -49,6 +53,16 @@ public sealed class FieldValueInmutabilidadSoatAsignadoTests(PostgresDatabaseFix
         {
             ctx.Tenants.Add(TenantSeed.New(Compania, "IT-13194-SOAT", isGroupParent: false, parentId: null));
             await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+            ctx.Users.Add(new User
+            {
+                Id = Gestor,
+                Email = "it-13194-soat@flit.test",
+                DisplayName = "Gestor sintético 13194",
+                Status = "active",
+                HomeTenantId = Compania,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var conn = await Fixture.OpenConnectionAsync();
@@ -56,9 +70,9 @@ public sealed class FieldValueInmutabilidadSoatAsignadoTests(PostgresDatabaseFix
                  {
                      """
                      INSERT INTO tramites.procedure_instances
-                         (id, tenant_id, procedure_type_id, reference_number, status, vin, created_at)
+                         (id, tenant_id, procedure_type_id, reference_number, status, vin, created_by_user_id, created_at)
                      VALUES (@id, @tenant, (SELECT id FROM tramites.procedure_types ORDER BY code LIMIT 1),
-                             'IT-13194', 'borrador', 'SINTVIN13194', now())
+                             'IT-13194', 'borrador', 'SINTVIN13194', @gestor, now())
                      """,
                      "INSERT INTO tramites.procedure_instance_status_history (tenant_id, procedure_instance_id, to_status) VALUES (@tenant, @id, @estado)",
                      "UPDATE tramites.procedure_instances SET status = @estado WHERE id = @id",
@@ -68,6 +82,7 @@ public sealed class FieldValueInmutabilidadSoatAsignadoTests(PostgresDatabaseFix
             cmd.Parameters.AddWithValue("id", Instancia);
             cmd.Parameters.AddWithValue("tenant", Compania);
             cmd.Parameters.AddWithValue("estado", estado);
+            cmd.Parameters.AddWithValue("gestor", Gestor);
             await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
     }
