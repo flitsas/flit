@@ -26,6 +26,12 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 ///   <c>set_config</c>, que es transaccional— y relanza, dejando la transacción ambiente utilizable para
 ///   que su dueño decida (el outbox sella el intento y confirma).</item>
 /// </list>
+/// <para>Review PR #510 (L3/MENOR-2): la restauración del tenant y el RELEASE van con
+/// <see cref="CancellationToken.None"/>; si la restauración falla también se revierte al savepoint. Si el
+/// propio rollback falla, se lanza <see cref="AggregateException"/> con la excepción ORIGINAL primero. Tras
+/// revertir, las entidades que la operación dejó rastreadas (insertadas o cargadas) se desacoplan del change
+/// tracker: sus filas ya no existen y un SaveChanges posterior del dueño de la transacción no debe
+/// arrastrarlas.</para>
 /// <para>No confirma ni revierte la transacción ambiente: es de quien la abrió. Sin transacción ambiente
 /// el comportamiento es el de siempre (transacción propia dentro de la execution strategy).</para>
 /// </remarks>
@@ -75,13 +81,14 @@ internal static class TenantRlsScope
         CancellationToken cancellationToken)
     {
         // Nombre único por llamada: tolera ámbitos anidados sin pisarse.
-        var savepoint = "tenant_rls_" + Guid.NewGuid().ToString("N");
+        var savepoint = SavepointEf.NuevoNombre("tenant_rls");
 
         // Valor del ámbito actual ('' si nunca se fijó en la sesión) para restaurarlo al salir.
         var previo = await context.Database
             .SqlQuery<string>($"SELECT coalesce(current_setting('app.current_tenant_id', true), '') AS \"Value\"")
             .SingleAsync(cancellationToken).ConfigureAwait(false);
 
+        var previas = SavepointEf.Rastreadas(context);
         await ambiente.CreateSavepointAsync(savepoint, cancellationToken).ConfigureAwait(false);
         T result;
         try
@@ -92,17 +99,27 @@ internal static class TenantRlsScope
 
             result = await operation().ConfigureAwait(false);
         }
-        catch
+        catch (Exception original)
         {
             // Deshace las escrituras de la operación y el set_config; la transacción ambiente sigue viva.
-            await ambiente.RollbackToSavepointAsync(savepoint, CancellationToken.None).ConfigureAwait(false);
+            await SavepointEf.RevertirAsync(context, ambiente, savepoint, previas, original).ConfigureAwait(false);
             throw;
         }
 
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT set_config('app.current_tenant_id', {previo}, true)",
-            cancellationToken).ConfigureAwait(false);
-        await ambiente.ReleaseSavepointAsync(savepoint, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT set_config('app.current_tenant_id', {previo}, true)",
+                CancellationToken.None).ConfigureAwait(false);
+            await ambiente.ReleaseSavepointAsync(savepoint, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception restauracion)
+        {
+            // Sin restaurar el tenant no se puede dejar el ámbito: se revierte todo lo de la operación.
+            await SavepointEf.RevertirAsync(context, ambiente, savepoint, previas, restauracion).ConfigureAwait(false);
+            throw;
+        }
+
         return result;
     }
 }
