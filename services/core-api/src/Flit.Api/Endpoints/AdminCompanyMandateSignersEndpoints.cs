@@ -115,10 +115,11 @@ public static class AdminCompanyMandateSignersEndpoints
                 [FromQuery] string? search,
                 [FromQuery] int? page,
                 [FromQuery] int? pageSize,
+                [FromQuery] bool? all,
                 [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
                 CancellationToken ct) =>
                 AssociableCompaniesHttp.ToResult(
-                    await service.ListForCompanyAsync(tenantId, search, page ?? 1, pageSize ?? 0, ct)
+                    await service.ListForCompanyAsync(tenantId, search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), ct)
                         .ConfigureAwait(false)))
             .WithName("AdminCompanyMandateSignersAssociableCompanies")
             .WithSummary("Compañías hijas a las que el Admin de Compañía puede asociar su mandatario")

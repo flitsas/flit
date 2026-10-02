@@ -113,9 +113,32 @@ export function mensajeErrorReenvio(error: unknown): string {
   return "No se pudo reenviar la validación. Intenta de nuevo.";
 }
 
+/** Qué dispara una validación nueva al guardar (AC4); `null` si no se dispara ninguna. */
+export type DisparoDeValidacion = "alta" | "desde_baul" | "cambio_documento";
+
+export function disparoDeValidacion(args: {
+  editing: MandateSigner | null;
+  metodo: SignatureMethod | null;
+  esNatural: boolean;
+  tipoDocumento: string;
+  numeroDocumento: string;
+}): DisparoDeValidacion | null {
+  const { editing, metodo, esNatural, tipoDocumento, numeroDocumento } = args;
+  if (!esNatural || metodo !== "biometria") return null;
+  if (!editing) return "alta";
+  const antes = formaDeFirmaDe(editing);
+  const eraNatural = modeloDe(editing) === "natural";
+  if (eraNatural && antes === "baul") return "desde_baul";
+  const cambiaDocumento =
+    editing.documentType !== tipoDocumento || (editing.documentNumber ?? "") !== numeroDocumento.trim();
+  if (cambiaDocumento && eraNatural) return "cambio_documento";
+  return null;
+}
+
 /**
  * Aviso previo al guardado (AC4): cuándo el servidor va a lanzar una validación nueva. `null` si no
  * se dispara ninguna. En el alta con validación de identidad también avisa, sin hablar de la anterior.
+ * HU #13248b: con `correo` escrito, el alta lo nombra («le enviaremos el enlace a ana@…»).
  */
 export function avisoDeNuevaValidacion(args: {
   editing: MandateSigner | null;
@@ -123,22 +146,36 @@ export function avisoDeNuevaValidacion(args: {
   esNatural: boolean;
   tipoDocumento: string;
   numeroDocumento: string;
+  correo?: string;
 }): string | null {
-  const { editing, metodo, esNatural, tipoDocumento, numeroDocumento } = args;
-  if (!esNatural || metodo !== "biometria") return null;
-  if (!editing) return "Al guardar enviaremos el enlace de validación al correo del mandatario.";
-  const antes = formaDeFirmaDe(editing);
-  const eraNatural = modeloDe(editing) === "natural";
-  const pasaDeBaul = eraNatural && antes === "baul";
-  const cambiaDocumento =
-    editing.documentType !== tipoDocumento || (editing.documentNumber ?? "") !== numeroDocumento.trim();
-  if (pasaDeBaul) {
-    return "Al guardar enviaremos una nueva validación al correo del mandatario.";
+  const disparo = disparoDeValidacion(args);
+  const correo = args.correo?.trim();
+  switch (disparo) {
+    case "alta":
+      return correo
+        ? `Al guardar le enviaremos el enlace a ${correo}.`
+        : "Al guardar enviaremos el enlace de validación al correo del mandatario.";
+    case "desde_baul":
+      return "Al guardar enviaremos una nueva validación al correo del mandatario.";
+    case "cambio_documento":
+      return "Al guardar enviaremos una nueva validación al correo del mandatario. La anterior deja de contar.";
+    default:
+      return null;
   }
-  if (cambiaDocumento && eraNatural) {
-    return "Al guardar enviaremos una nueva validación al correo del mandatario. La anterior deja de contar.";
+}
+
+/** Frase corta para el resumen del pie del formulario («se enviará la validación»…). */
+export function consecuenciaDeGuardar(disparo: DisparoDeValidacion | null): string | null {
+  switch (disparo) {
+    case "alta":
+      return "se enviará la validación";
+    case "desde_baul":
+      return "pasará a validación de identidad";
+    case "cambio_documento":
+      return "la validación anterior deja de contar";
+    default:
+      return null;
   }
-  return null;
 }
 
 /** Mensaje tras guardar, según lo que informó el servidor en `identity`. `null` si no hay nada que añadir. */

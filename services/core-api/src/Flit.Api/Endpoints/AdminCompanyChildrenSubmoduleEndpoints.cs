@@ -639,6 +639,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         [FromQuery] string? search,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
+        [FromQuery] bool? all,
         [FromServices] ICompanyHierarchyRepository hierarchy,
         [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
         CancellationToken ct)
@@ -650,7 +651,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         }
 
         return AssociableCompaniesHttp.ToResult(
-            await service.ListForCompanyAsync(childTenantId, search, page ?? 1, pageSize ?? 0, ct).ConfigureAwait(false));
+            await service.ListForCompanyAsync(childTenantId, search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> InactivateChildMandateSignerAsync(

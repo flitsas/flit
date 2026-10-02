@@ -8,6 +8,14 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 internal static class AssociableCompaniesHttp
 {
+    /// <summary>
+    /// <c>?all=true</c> pide la lista completa (con tope de 1000) sin paginar; sin él, el <c>pageSize</c> de siempre.
+    /// </summary>
+    public static int PageSizeOf(int? pageSize, bool? all) =>
+        all == true
+            ? Flit.Admin.Application.Companies.MandateSigners.AssociableCompanies.MandatarioAssociableCompanies.AllItems
+            : pageSize ?? 0;
+
     public static IResult ToResult(AssociableCompaniesResult result)
     {
         ArgumentNullException.ThrowIfNull(result);

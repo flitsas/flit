@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 import {
   avisoDeNuevaValidacion,
+  consecuenciaDeGuardar,
+  disparoDeValidacion,
   mensajeReenvio,
   mensajeValidacionTrasGuardar,
   presentarValidacion,
@@ -89,5 +91,27 @@ describe("HU #13248 — mensajes", () => {
     expect(mensajeValidacionTrasGuardar({ identity: "failed" }, null)).toMatch(/Reenviar validación/);
     expect(mensajeValidacionTrasGuardar({ identity: "notattempted" }, null)).toBeNull();
     expect(mensajeValidacionTrasGuardar(undefined, null)).toBeNull();
+  });
+});
+
+describe("HU #13248b — consecuencia en el resumen y aviso con correo", () => {
+  const args = { editing: null, metodo: "biometria" as const, esNatural: true, tipoDocumento: "CC", numeroDocumento: "1" };
+
+  it("cada disparo tiene su frase corta y sin disparo no hay frase", () => {
+    expect(disparoDeValidacion(args)).toBe("alta");
+    expect(disparoDeValidacion({ ...args, editing: signer(), numeroDocumento: "2" })).toBe("cambio_documento");
+    expect(
+      disparoDeValidacion({ ...args, editing: signer({ signatureMethod: "baul", signatureVaultId: "s" }) }),
+    ).toBe("desde_baul");
+    expect(disparoDeValidacion({ ...args, editing: signer() })).toBeNull();
+    expect(consecuenciaDeGuardar("alta")).toBe("se enviará la validación");
+    expect(consecuenciaDeGuardar("desde_baul")).toBe("pasará a validación de identidad");
+    expect(consecuenciaDeGuardar("cambio_documento")).toBe("la validación anterior deja de contar");
+    expect(consecuenciaDeGuardar(null)).toBeNull();
+  });
+
+  it("el alta nombra el correo escrito", () => {
+    expect(avisoDeNuevaValidacion({ ...args, correo: " ana@x.co " })).toBe("Al guardar le enviaremos el enlace a ana@x.co.");
+    expect(avisoDeNuevaValidacion({ ...args, correo: "" })).toMatch(/correo del mandatario/);
   });
 });

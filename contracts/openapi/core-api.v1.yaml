@@ -978,6 +978,13 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: all
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Con true devuelve la lista completa en una sola respuesta (tope de 1000; ignora page y pageSize). Lo usa el
+            selector con buscador del formulario del mandatario (HU #13248b).
       responses:
         "200":
           description: Página de compañías asociables (solo id, nombre y NIT).
@@ -1021,6 +1028,13 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: all
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Con true devuelve la lista completa en una sola respuesta (tope de 1000; ignora page y pageSize). Lo usa el
+            selector con buscador del formulario del mandatario (HU #13248b).
       responses:
         "200":
           description: Página de compañías asociables (solo id, nombre y NIT).
@@ -1068,6 +1082,13 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: all
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Con true devuelve la lista completa en una sola respuesta (tope de 1000; ignora page y pageSize). Lo usa el
+            selector con buscador del formulario del mandatario (HU #13248b).
       responses:
         "200":
           description: Página de compañías asociables (solo id, nombre y NIT).

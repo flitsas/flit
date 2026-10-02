@@ -247,6 +247,8 @@ export interface AssociableCompaniesQuery {
   search?: string;
   page?: number;
   pageSize?: number;
+  /** HU #13248b — pide la lista completa en una sola respuesta (el servidor la topa en 1000); ignora page y pageSize. */
+  all?: boolean;
 }
 
 export interface AssociableCompaniesPage {
@@ -280,7 +282,7 @@ export async function fetchOtAssociableCompanies(
   signal?: AbortSignal,
 ): Promise<AssociableCompaniesPage> {
   const r = await apiFetch<AssociableCompaniesPage>(`${base(transitOfficeId)}/associable-companies`, {
-    query: { search: query.search, page: query.page, pageSize: query.pageSize },
+    query: { search: query.search, page: query.page, pageSize: query.pageSize, all: query.all },
     signal,
   });
   return normalizarAsociables(r);
@@ -498,7 +500,7 @@ export async function fetchCompanyAssociableCompanies(
 ): Promise<AssociableCompaniesPage> {
   const r = await apiFetch<AssociableCompaniesPage>(
     `${companyBase(tenantId, networkHeadId)}/associable-companies`,
-    { query: { search: query.search, page: query.page, pageSize: query.pageSize }, signal },
+    { query: { search: query.search, page: query.page, pageSize: query.pageSize, all: query.all }, signal },
   );
   return normalizarAsociables(r);
 }

@@ -88,6 +88,31 @@ public sealed class MandatarioAssociableCompaniesTests : IClassFixture<WebApplic
         p2.PageSize.Should().Be(2);
     }
 
+    [Fact]
+    public async Task HU13248b_Ot_ListaCompleta_DevuelveTodasEnUnaSolaPagina_ConTope()
+    {
+        // Selector con buscador: sin paginar. Un pageSize normal sigue limitado a 100.
+        var sut = Sut(Enumerable.Range(1, 250).Select(i => Row($"Compania {i:000}", $"9{i:00000}")));
+
+        var todas = (await sut.ListForOtAsync(null, 7, MandatarioAssociableCompanies.AllItems, Ct)).Page!;
+        var normal = (await sut.ListForOtAsync(null, 1, 500, Ct)).Page!;
+
+        todas.Items.Should().HaveCount(250);
+        todas.Total.Should().Be(250);
+        todas.Page.Should().Be(1);
+        normal.Items.Should().HaveCount(MandatarioAssociableCompanies.MaxPageSize);
+    }
+
+    [Fact]
+    public async Task HU13248b_Compania_ListaCompleta_DevuelveTodasLasHijas()
+    {
+        var sut = Sut([], Enumerable.Range(1, 130).Select(i => Child($"Hija {i:000}", $"8{i:00000}-1")));
+
+        var todas = (await sut.ListForCompanyAsync(Guid.NewGuid(), null, 1, MandatarioAssociableCompanies.AllItems, Ct)).Page!;
+
+        todas.Items.Should().HaveCount(130);
+    }
+
     // ── AC2: el OT ve compañías que nunca le han radicado ──────────────────────────────────────────
 
     [Fact]

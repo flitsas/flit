@@ -80,24 +80,19 @@ beforeEach(() => {
 });
 
 describe("HU #13181 AC1 — OT y Super Admin buscan y seleccionan", () => {
-  it("busca por nombre o NIT, marca varias (sin duplicados) y las conserva entre búsquedas", async () => {
+  it("pide la lista completa y la filtra al escribir; las marcadas se conservan entre búsquedas", async () => {
     const user = userEvent.setup();
     renderHub();
     await user.click(await screen.findByRole("checkbox", { name: "ACME SAS (NIT 900111111)" }));
-    fetchOt.mockResolvedValue(pagina([BETA]));
+    expect(fetchOt).toHaveBeenCalledWith("ot-1", expect.objectContaining({ all: true }), expect.anything());
     await user.type(screen.getByLabelText("Buscar compañía por nombre o NIT"), "beta");
-    await waitFor(() =>
-      expect(fetchOt).toHaveBeenCalledWith(
-        "ot-1",
-        expect.objectContaining({ search: "beta", page: 1 }),
-        expect.anything(),
-      ),
-    );
-    await user.click(await screen.findByRole("checkbox", { name: "BETA SAS (NIT 900222222)" }));
+    expect(screen.queryByRole("checkbox", { name: "ACME SAS (NIT 900111111)" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "BETA SAS (NIT 900222222)" }));
     // Las dos quedan marcadas aunque la lista solo muestre la última búsqueda, sin repetirse.
     const seleccion = screen.getByRole("list", { name: "Compañías seleccionadas" });
     expect(within(seleccion).getAllByRole("listitem")).toHaveLength(2);
     expect(within(seleccion).getByText(/ACME SAS · NIT 900111111/)).toBeInTheDocument();
+    expect(screen.getByText("2 seleccionadas")).toBeInTheDocument();
     await diligenciar(user);
     await user.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -106,15 +101,25 @@ describe("HU #13181 AC1 — OT y Super Admin buscan y seleccionan", () => {
     ]);
   });
 
-  it("no envía búsquedas de un solo carácter", async () => {
+  it("el NIT se busca ignorando puntos y guion; «Seleccionar las filtradas» y «Limpiar» operan sobre la lista", async () => {
     const user = userEvent.setup();
     renderHub();
     await screen.findByRole("checkbox", { name: "ACME SAS (NIT 900111111)" });
-    fetchOt.mockClear();
-    await user.type(screen.getByLabelText("Buscar compañía por nombre o NIT"), "a");
-    expect(await screen.findByText(/al menos 2 caracteres/i)).toBeInTheDocument();
-    await new Promise((r) => setTimeout(r, 450));
-    expect(fetchOt).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("Buscar compañía por nombre o NIT"), "900.222-2");
+    expect(screen.queryByRole("checkbox", { name: "ACME SAS (NIT 900111111)" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Seleccionar las filtradas" }));
+    expect(screen.getByText("1 seleccionada")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "BETA SAS (NIT 900222222)" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Limpiar" }));
+    expect(screen.getByText("0 seleccionadas")).toBeInTheDocument();
+  });
+
+  it("quitar una compañía con la ✕ de su chip la desmarca", async () => {
+    const user = userEvent.setup();
+    renderHub();
+    await user.click(await screen.findByRole("checkbox", { name: "ACME SAS (NIT 900111111)" }));
+    await user.click(screen.getByRole("button", { name: "Quitar ACME SAS" }));
+    expect(screen.getByRole("checkbox", { name: "ACME SAS (NIT 900111111)" })).not.toBeChecked();
   });
 
   it("no ofrece la compañía propia del mandatario", async () => {
@@ -126,15 +131,14 @@ describe("HU #13181 AC1 — OT y Super Admin buscan y seleccionan", () => {
 });
 
 describe("HU #13181 AC2 — Admin de Compañía con red", () => {
-  it("ve solo sus hijas y no hay buscador global", async () => {
+  it("ve solo sus hijas, pidiendo la lista completa de sus hijas (sin la lista del OT)", async () => {
     fetchHijas.mockResolvedValue(pagina([ACME, BETA]));
     const user = userEvent.setup();
     renderCompania();
     expect(await screen.findByRole("checkbox", { name: "ACME SAS (NIT 900111111)" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "BETA SAS (NIT 900222222)" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Buscar compañía por nombre o NIT")).not.toBeInTheDocument();
     expect(fetchOt).not.toHaveBeenCalled();
-    expect(fetchHijas).toHaveBeenCalledWith("t-1", expect.anything(), expect.anything(), undefined);
+    expect(fetchHijas).toHaveBeenCalledWith("t-1", { all: true }, expect.anything(), undefined);
     await user.click(screen.getByRole("checkbox", { name: "BETA SAS (NIT 900222222)" }));
     await diligenciar(user);
     await user.click(screen.getByRole("button", { name: "Guardar" }));

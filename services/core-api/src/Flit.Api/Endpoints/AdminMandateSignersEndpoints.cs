@@ -275,16 +275,17 @@ public static class AdminMandateSignersEndpoints
         return MandateSignerIdentityHttp.ToResult(result, mandateSignerId);
     }
 
-    /// <summary>HU #13178 — <c>?search=</c> (mínimo 2 caracteres), <c>?page=</c>, <c>?pageSize=</c>.</summary>
+    /// <summary>HU #13178 — <c>?search=</c> (mínimo 2 caracteres), <c>?page=</c>, <c>?pageSize=</c>, <c>?all=true</c> (lista completa, tope 1000).</summary>
     private static async Task<IResult> AssociableCompaniesAsync(
         [FromQuery] string? search,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
+        [FromQuery] bool? all,
         [FromServices] IMandatarioAssociableCompanies service,
         CancellationToken cancellationToken)
     {
         var result = await service
-            .ListForOtAsync(search, page ?? 1, pageSize ?? 0, cancellationToken)
+            .ListForOtAsync(search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), cancellationToken)
             .ConfigureAwait(false);
         return AssociableCompaniesHttp.ToResult(result);
     }

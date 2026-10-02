@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
-import { avisoDeNuevaValidacion } from "@/lib/plataforma/mandatario-validacion";
+import { useEffect, useState, type ReactNode } from "react";
+import { Building2, FileText, ShieldCheck, User, Vault } from "lucide-react";
+import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
-  FORMAS_DE_FIRMA,
-  MODELOS_MANDATARIO,
+  MultiSelectBuscable,
+  type OpcionSeleccionable,
+} from "@/components/atom/MultiSelectBuscable";
+import {
+  avisoDeNuevaValidacion,
+  consecuenciaDeGuardar,
+  disparoDeValidacion,
+} from "@/lib/plataforma/mandatario-validacion";
+import {
   NOMBRE_FORMATO_EN_BLANCO,
-  TIPOS_DE_VIGENCIA,
   camposDePerfil,
   campoDeError,
   perfilInicial,
@@ -36,11 +42,25 @@ import type {
 } from "@/lib/api/admin-mandate-signers";
 
 const DOC_TYPES = ["CC", "CE", "PAS", "NIT"];
+/** Con 8 organismos o menos se muestran como chips conmutables, sin buscador. */
+const ORGANISMOS_COMO_CHIPS = 8;
+
+const MODELOS: ReadonlyArray<{ value: SignerModel; label: string; ayuda: string; icono: ReactNode }> = [
+  { value: "natural", label: "Persona natural", ayuda: "Firma con su identidad", icono: <User className="h-5 w-5" aria-hidden="true" /> },
+  { value: "juridica", label: "Persona jurídica", ayuda: "La entidad, con su NIT", icono: <Building2 className="h-5 w-5" aria-hidden="true" /> },
+  { value: "formato_blanco", label: "Formato en blanco", ayuda: "El PDF sin firma", icono: <FileText className="h-5 w-5" aria-hidden="true" /> },
+];
+
+const FORMAS: ReadonlyArray<{ value: SignatureMethod; label: string; ayuda: string; icono: ReactNode }> = [
+  { value: "biometria", label: "Validación de identidad", ayuda: "La persona valida con un enlace", icono: <ShieldCheck className="h-5 w-5" aria-hidden="true" /> },
+  { value: "baul", label: "Baúl de firmas", ayuda: "Usa una firma ya guardada", icono: <Vault className="h-5 w-5" aria-hidden="true" /> },
+];
 
 /**
- * HU #11202 (AC1/AC2/AC3) — alta y edición del mandatario desde el configurador de la compañía. Los
- * organismos son un multiselect de los que la compañía tiene habilitados: ofrecer otros sería ofrecer
- * un destino donde no puede radicar.
+ * HU #11202 / HU #13248b — alta y edición del mandatario. Un solo formulario para la compañía, el Super
+ * Admin (ficha de la compañía) y el hub del organismo. Panel lateral ancho en pasos numerados que solo
+ * muestra lo que aplica: ¿Quién firma? → Datos → ¿Cómo firma? → Vigencia → Dónde aplica. El pie fijo
+ * resume lo que pasará al guardar.
  */
 export function CompanyMandatarioForm({
   variant = "company",
@@ -82,7 +102,7 @@ export function CompanyMandatarioForm({
    * pasa: ahí se siguen viendo todos los OT habilitados.
    */
   restrictToOfficeIds?: string[];
-  /** Overlay del modal. Por defecto `z-50`; desde un OtSidePanel hay que subir (p. ej. `z-[80]`). */
+  /** z-index del panel. Por defecto `z-50`; desde otro panel hay que subir (p. ej. `z-[80]`). */
   overlayClassName?: string;
   onCancel: () => void;
   onSubmit: (input: CompanyMandateSignerInput) => Promise<MandateSignerSaved>;
@@ -121,17 +141,29 @@ export function CompanyMandatarioForm({
 
   const esNatural = signerModel === "natural";
   const esJuridica = signerModel === "juridica";
+  const formatoBlanco = signerModel === "formato_blanco";
   // AC5: se avisa antes de guardar que cambiar de Persona natural descarta forma de firma y vigencia.
   const descartaDatos = editing != null && (editing.signerModel ?? "natural") === "natural" && !esNatural;
 
   const conBiometria = esNatural && signatureMethod === "biometria";
-  const avisoValidacion = avisoDeNuevaValidacion({
+  const datosDeValidacion = {
     editing,
     metodo: signatureMethod,
     esNatural,
     tipoDocumento: documentType,
     numeroDocumento: documentNumber,
-  });
+  };
+  const avisoValidacion = avisoDeNuevaValidacion({ ...datosDeValidacion, correo: email });
+  const consecuencia = consecuenciaDeGuardar(disparoDeValidacion(datosDeValidacion));
+
+  // Escape cierra el panel (salvo mientras guarda).
+  useEffect(() => {
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !saving) onCancel();
+    };
+    document.addEventListener("keydown", alTeclear);
+    return () => document.removeEventListener("keydown", alTeclear);
+  }, [saving, onCancel]);
 
   const clearField = (campo: CampoMandatario) => {
     setError(null);
@@ -140,14 +172,6 @@ export function CompanyMandatarioForm({
       const next = { ...prev };
       delete next[campo];
       return next;
-    });
-  };
-
-  const toggleOffice = (id: string) => {
-    setError(null);
-    setSelected((prev) => {
-      const quitando = prev.includes(id);
-      return quitando ? prev.filter((x) => x !== id) : [...prev, id];
     });
   };
 
@@ -166,6 +190,28 @@ export function CompanyMandatarioForm({
     restrictToOfficeIds && restrictToOfficeIds.length > 0
       ? offices.filter((o) => restrictToOfficeIds.includes(o.transitOfficeId))
       : offices;
+  const opcionesOrganismos: OpcionSeleccionable[] = visibleOffices.map((o) => ({
+    id: o.transitOfficeId,
+    label: o.name,
+    detalle: o.code || undefined,
+    codigo: o.code || undefined,
+    ariaLabel: o.name,
+  }));
+  const organismosElegidos: OpcionSeleccionable[] = selected.map(
+    (id) => opcionesOrganismos.find((o) => o.id === id) ?? { id, label: "Organismo de tránsito" },
+  );
+
+  // Lleva la vista al primer campo con error y le da el foco (el error queda junto al campo).
+  const irAlPrimerError = () => {
+    setTimeout(() => {
+      const campo = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (campo) {
+        campo.focus();
+        return;
+      }
+      document.querySelector<HTMLElement>('[role="alert"]')?.scrollIntoView?.({ block: "center" });
+    }, 0);
+  };
 
   const handleSave = async () => {
     const errores: ErroresMandatario = {};
@@ -201,9 +247,11 @@ export function CompanyMandatarioForm({
     setFieldErrors(errores);
     setError(null);
     setErroresAsociadas({});
-    if (Object.keys(errores).length > 0) return;
+    if (Object.keys(errores).length > 0) {
+      irAlPrimerError();
+      return;
+    }
 
-    const formatoBlanco = signerModel === "formato_blanco";
     const conBaul = esNatural && signatureMethod === "baul" && !isHub;
     setSaving(true);
     try {
@@ -237,6 +285,7 @@ export function CompanyMandatarioForm({
       setFieldErrors(campos);
       setErroresAsociadas(porCompania);
       setError(general);
+      irAlPrimerError();
     } finally {
       setSaving(false);
     }
@@ -245,148 +294,225 @@ export function CompanyMandatarioForm({
   const inputClass =
     "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]";
 
+  // Pasos visibles, numerados de corrido (con Persona jurídica o Formato en blanco hay menos).
+  let numero = 0;
+  const siguiente = () => ++numero;
+
+  const resumen = [
+    MODELOS.find((m) => m.value === signerModel)?.label,
+    esNatural && signatureMethod ? FORMAS.find((f) => f.value === signatureMethod)?.label : null,
+    esNatural
+      ? validityKind === "range"
+        ? validFrom && validTo
+          ? `Vigencia ${validFrom} a ${validTo}`
+          : "Vigencia por rango"
+        : "Vigencia fija"
+      : null,
+    `${selected.length} ${selected.length === 1 ? "organismo" : "organismos"}`,
+    consecuencia,
+  ].filter((x): x is string => !!x);
+
   return (
-    <div
-      className={`fixed inset-0 ${overlayClassName} grid place-items-center bg-black/40 px-4 backdrop-blur-sm`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={editing ? "Editar mandatario" : "Registrar mandatario"}
-    >
-      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border bg-white p-6 dark:bg-[#0B0F14]">
-        <div className="mb-3 flex items-start justify-between">
-          <h3 className="text-sm font-bold">
-            {editing ? "Editar mandatario" : "Registrar mandatario"}
-          </h3>
-          <button type="button" onClick={onCancel} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-3 overflow-y-auto">
-          <fieldset>
-            <legend className="mb-1.5 block text-xs font-semibold">Modelo del mandatario</legend>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Modelo del mandatario">
-              {MODELOS_MANDATARIO.map((m) => (
-                <RadioChip
-                  key={m.value}
-                  name="mandatario-modelo"
-                  label={m.label}
-                  checked={signerModel === m.value}
-                  onChange={() => {
-                    setSignerModel(m.value);
-                    setError(null);
-                    setFieldErrors({});
-                  }}
-                />
-              ))}
-            </div>
-            {signerModel === "formato_blanco" && (
-              <p className="mt-1 text-[11px] leading-tight opacity-70" data-testid="mandatario-formato-blanco-nota">
-                El sistema solo entrega el PDF sin firma. No se piden datos de la persona.
-              </p>
-            )}
-            {descartaDatos && (
-              <p
-                className="mt-1 text-[11px] leading-tight"
-                style={{ color: "#8a6000" }}
-                role="status"
-                data-testid="mandatario-cambio-modelo-aviso"
-              >
-                Al guardar se descartan la forma de firma y la vigencia de la Persona natural.
-              </p>
-            )}
-          </fieldset>
-
-          {signerModel !== "formato_blanco" && (
-            <div>
-              <label htmlFor="mandatario-nombre" className="mb-1.5 block text-xs font-semibold">
-                {esJuridica ? "Nombre de la entidad" : "Nombre completo"}
-              </label>
-              <input
-                id="mandatario-nombre"
-                type="text"
-                value={fullName}
-                onChange={(e) => {
-                  setFullName(e.target.value);
-                  clearField("fullName");
-                }}
-                className={inputClass}
-                aria-invalid={fieldErrors.fullName ? true : undefined}
-                aria-describedby={fieldErrors.fullName ? "mandatario-nombre-error" : undefined}
-              />
-              <FieldError id="mandatario-nombre-error" message={fieldErrors.fullName} />
-            </div>
+    <OtSidePanel
+      open
+      title={editing ? "Editar mandatario" : "Registrar mandatario"}
+      ariaLabel={editing ? "Editar mandatario" : "Registrar mandatario"}
+      onClose={onCancel}
+      disabled={saving}
+      width="xl"
+      surface="modal"
+      zClassName={overlayClassName}
+      footer={
+        <div className="space-y-2">
+          {error && (
+            <p className="text-xs leading-tight" style={{ color: "#E5484D" }} role="alert">
+              {error}
+            </p>
           )}
+          <p className="text-xs leading-snug text-[#59677D] dark:text-white/65" data-testid="mandatario-resumen">
+            <span className="font-semibold text-[#162744] dark:text-white">Al guardar: </span>
+            {resumen.join(" · ")}
+          </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={saving}
+              className="rounded-full border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#162744] disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+            >
+              {saving ? "Guardando…" : "Guardar"}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4" data-testid="mandatario-form">
+        <Paso numero={siguiente()} titulo="¿Quién firma?" id="mandatario-paso-quien">
+          <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Modelo del mandatario">
+            {MODELOS.map((m) => (
+              <TarjetaOpcion
+                key={m.value}
+                name="mandatario-modelo"
+                label={m.label}
+                ayuda={m.ayuda}
+                icono={m.icono}
+                checked={signerModel === m.value}
+                onChange={() => {
+                  setSignerModel(m.value);
+                  setError(null);
+                  setFieldErrors({});
+                }}
+              />
+            ))}
+          </div>
+          {descartaDatos && (
+            <p
+              className="mt-2 text-xs leading-tight"
+              style={{ color: "#8a6000" }}
+              role="status"
+              data-testid="mandatario-cambio-modelo-aviso"
+            >
+              Al guardar se descartan la forma de firma y la vigencia de la Persona natural.
+            </p>
+          )}
+        </Paso>
 
-          {signerModel !== "formato_blanco" && (
-            <div className={esJuridica ? undefined : "grid gap-3 sm:grid-cols-2"}>
+        <Paso numero={siguiente()} titulo="Datos" id="mandatario-paso-datos">
+          {formatoBlanco ? (
+            <p className="text-xs leading-tight opacity-70" data-testid="mandatario-formato-blanco-nota">
+              No se piden datos: el sistema solo entrega el PDF sin firma.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="mandatario-nombre" className="mb-1.5 block text-xs font-semibold">
+                  {esJuridica ? "Nombre de la entidad" : "Nombre completo"}
+                </label>
+                <input
+                  id="mandatario-nombre"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    clearField("fullName");
+                  }}
+                  className={inputClass}
+                  aria-invalid={fieldErrors.fullName ? true : undefined}
+                  aria-describedby={fieldErrors.fullName ? "mandatario-nombre-error" : undefined}
+                />
+                <FieldError id="mandatario-nombre-error" message={fieldErrors.fullName} />
+              </div>
+
+              <div className={esJuridica ? undefined : "grid gap-3 sm:grid-cols-[10rem_1fr]"}>
+                {esNatural && (
+                  <div>
+                    <label htmlFor="mandatario-tipo-doc" className="mb-1.5 block text-xs font-semibold">
+                      Tipo de documento
+                    </label>
+                    <select
+                      id="mandatario-tipo-doc"
+                      value={documentType}
+                      onChange={(e) => setDocumentType(e.target.value)}
+                      className={inputClass}
+                    >
+                      {DOC_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="mandatario-doc" className="mb-1.5 block text-xs font-semibold">
+                    {esJuridica ? "NIT" : "Número de documento"}
+                  </label>
+                  <input
+                    id="mandatario-doc"
+                    type="text"
+                    value={documentNumber}
+                    onChange={(e) => {
+                      setDocumentNumber(e.target.value);
+                      clearField("documentNumber");
+                    }}
+                    className={inputClass}
+                    aria-invalid={fieldErrors.documentNumber ? true : undefined}
+                    aria-describedby={fieldErrors.documentNumber ? "mandatario-doc-error" : undefined}
+                  />
+                  <FieldError id="mandatario-doc-error" message={fieldErrors.documentNumber} />
+                </div>
+              </div>
+
               {esNatural && (
                 <div>
-                  <label htmlFor="mandatario-tipo-doc" className="mb-1.5 block text-xs font-semibold">
-                    Tipo de documento
+                  <label htmlFor="mandatario-email" className="mb-1.5 block text-xs font-semibold">
+                    Correo{conBiometria ? " (obligatorio)" : " (opcional)"}
                   </label>
-                  <select
-                    id="mandatario-tipo-doc"
-                    value={documentType}
-                    onChange={(e) => setDocumentType(e.target.value)}
+                  <input
+                    id="mandatario-email"
+                    type="email"
+                    required={conBiometria}
+                    aria-required={conBiometria ? true : undefined}
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      clearField("email");
+                    }}
                     className={inputClass}
-                  >
-                    {DOC_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    aria-invalid={fieldErrors.email ? true : undefined}
+                    aria-describedby={`mandatario-email-ayuda${fieldErrors.email ? " mandatario-email-error" : ""}`}
+                  />
+                  <FieldError id="mandatario-email-error" message={fieldErrors.email} />
+                  <p id="mandatario-email-ayuda" className="mt-1 text-xs leading-tight opacity-70">
+                    {conBiometria ? "Aquí le llega el enlace para validar su identidad." : "Es un dato de contacto."}
+                  </p>
                 </div>
               )}
-              <div>
-                <label htmlFor="mandatario-doc" className="mb-1.5 block text-xs font-semibold">
-                  {esJuridica ? "NIT" : "Número de documento"}
-                </label>
-                <input
-                  id="mandatario-doc"
-                  type="text"
-                  value={documentNumber}
-                  onChange={(e) => {
-                    setDocumentNumber(e.target.value);
-                    clearField("documentNumber");
-                  }}
-                  className={inputClass}
-                  aria-invalid={fieldErrors.documentNumber ? true : undefined}
-                  aria-describedby={fieldErrors.documentNumber ? "mandatario-doc-error" : undefined}
-                />
-                <FieldError id="mandatario-doc-error" message={fieldErrors.documentNumber} />
-              </div>
             </div>
           )}
+        </Paso>
 
-          {esNatural && (
-            <>
-              <div>
-                <label htmlFor="mandatario-email" className="mb-1.5 block text-xs font-semibold">
-                  Correo{conBiometria ? " (obligatorio)" : " (opcional)"}
-                </label>
-                <input
-                  id="mandatario-email"
-                  type="email"
-                  required={conBiometria}
-                  aria-required={conBiometria ? true : undefined}
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    clearField("email");
-                  }}
-                  className={inputClass}
-                  aria-invalid={fieldErrors.email ? true : undefined}
-                  aria-describedby={fieldErrors.email ? "mandatario-email-error" : undefined}
-                />
-                <FieldError id="mandatario-email-error" message={fieldErrors.email} />
-                <p className="mt-1 text-[11px] leading-tight opacity-70">
-                  {conBiometria
-                    ? "Aquí enviamos el enlace para que la persona valide su identidad."
-                    : "Es un dato de contacto."}
-                </p>
+        {esNatural && (
+          <Paso numero={siguiente()} titulo="¿Cómo firma?" id="mandatario-paso-como">
+            <div className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Forma de firma">
+                {FORMAS.map((f) => (
+                  <TarjetaOpcion
+                    key={f.value}
+                    name="mandatario-forma-firma"
+                    label={f.label}
+                    ayuda={f.ayuda}
+                    icono={f.icono}
+                    checked={signatureMethod === f.value}
+                    onChange={() => {
+                      setSignatureMethod(f.value);
+                      clearField("signatureMethod");
+                      clearField("signatureVaultId");
+                    }}
+                  />
+                ))}
               </div>
+              <FieldError id="mandatario-forma-firma-error" message={fieldErrors.signatureMethod} />
+
+              {avisoValidacion && (
+                <p
+                  className="text-xs leading-tight"
+                  style={{ color: "#8a6000" }}
+                  role="status"
+                  data-testid="mandatario-aviso-validacion"
+                >
+                  {avisoValidacion}
+                </p>
+              )}
 
               {/* Solo al EDITAR: en el alta el mandatario aún no tiene id contra el que consultar. */}
               {editing && (
@@ -396,48 +522,11 @@ export function CompanyMandatarioForm({
                 />
               )}
 
-              <fieldset>
-                <legend className="mb-1.5 block text-xs font-semibold">Forma de firma</legend>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Forma de firma">
-                  {FORMAS_DE_FIRMA.map((f) => (
-                    <RadioChip
-                      key={f.value}
-                      name="mandatario-forma-firma"
-                      label={f.label}
-                      checked={signatureMethod === f.value}
-                      onChange={() => {
-                        setSignatureMethod(f.value);
-                        clearField("signatureMethod");
-                        clearField("signatureVaultId");
-                      }}
-                    />
-                  ))}
-                </div>
-                <FieldError id="mandatario-forma-firma-error" message={fieldErrors.signatureMethod} />
-                {signatureMethod === "biometria" && (
-                  <p className="mt-1 text-[11px] leading-tight opacity-70">
-                    La persona valida su identidad con un enlace que le llega al correo.
-                  </p>
-                )}
-                {avisoValidacion && (
-                  <p
-                    className="mt-1 text-[11px] leading-tight"
-                    style={{ color: "#8a6000" }}
-                    role="status"
-                    data-testid="mandatario-aviso-validacion"
-                  >
-                    {avisoValidacion}
-                  </p>
-                )}
-                {signatureMethod === "baul" && isHub && (
-                  <p
-                    className="mt-1 text-[11px] leading-tight opacity-70"
-                    data-testid="mandatario-hub-firma-nota"
-                  >
-                    Se usa la firma que la persona tenga vigente en el baúl de la empresa.
-                  </p>
-                )}
-              </fieldset>
+              {signatureMethod === "baul" && isHub && (
+                <p className="text-xs leading-tight opacity-70" data-testid="mandatario-hub-firma-nota">
+                  Se usa la firma que la persona tenga vigente en el baúl de la empresa.
+                </p>
+              )}
 
               {signatureMethod === "baul" && !isHub && (
                 <div>
@@ -459,153 +548,215 @@ export function CompanyMandatarioForm({
                   <FieldError id="mandatario-baul-error" message={fieldErrors.signatureVaultId} />
                 </div>
               )}
+            </div>
+          </Paso>
+        )}
 
-              <fieldset>
-                <legend className="mb-1.5 block text-xs font-semibold">Vigencia</legend>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Vigencia">
-                  {TIPOS_DE_VIGENCIA.map((v) => (
-                    <RadioChip
-                      key={v.value}
-                      name="mandatario-vigencia"
-                      label={v.label}
-                      checked={validityKind === v.value}
-                      onChange={() => {
-                        setValidityKind(v.value);
+        {esNatural && (
+          <Paso numero={siguiente()} titulo="Vigencia" id="mandatario-paso-vigencia">
+            <div className="space-y-3">
+              <div
+                className="inline-flex rounded-full border border-[#DFE5ED] bg-white p-0.5 dark:bg-transparent"
+                role="radiogroup"
+                aria-label="Vigencia"
+              >
+                <Segmento
+                  name="mandatario-vigencia"
+                  label="Fija"
+                  checked={validityKind === "fixed"}
+                  onChange={() => {
+                    setValidityKind("fixed");
+                    clearField("validFrom");
+                    clearField("validTo");
+                  }}
+                />
+                <Segmento
+                  name="mandatario-vigencia"
+                  label="Rango de fechas"
+                  checked={validityKind === "range"}
+                  onChange={() => {
+                    setValidityKind("range");
+                    clearField("validFrom");
+                    clearField("validTo");
+                  }}
+                />
+              </div>
+              {validityKind === "range" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="mandatario-valid-from" className="mb-1.5 block text-xs font-semibold">
+                      Fecha de inicio
+                    </label>
+                    <input
+                      id="mandatario-valid-from"
+                      type="date"
+                      value={validFrom}
+                      onChange={(e) => {
+                        setValidFrom(e.target.value);
                         clearField("validFrom");
                         clearField("validTo");
                       }}
+                      className={inputClass}
+                      aria-invalid={fieldErrors.validFrom ? true : undefined}
+                      aria-describedby={fieldErrors.validFrom ? "mandatario-valid-from-error" : undefined}
                     />
-                  ))}
-                </div>
-                {validityKind === "range" && (
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label htmlFor="mandatario-valid-from" className="mb-1.5 block text-xs font-semibold">
-                        Fecha de inicio
-                      </label>
-                      <input
-                        id="mandatario-valid-from"
-                        type="date"
-                        value={validFrom}
-                        onChange={(e) => {
-                          setValidFrom(e.target.value);
-                          clearField("validFrom");
-                          clearField("validTo");
-                        }}
-                        className={inputClass}
-                        aria-invalid={fieldErrors.validFrom ? true : undefined}
-                        aria-describedby={fieldErrors.validFrom ? "mandatario-valid-from-error" : undefined}
-                      />
-                      <FieldError id="mandatario-valid-from-error" message={fieldErrors.validFrom} />
-                    </div>
-                    <div>
-                      <label htmlFor="mandatario-valid-to" className="mb-1.5 block text-xs font-semibold">
-                        Fecha de fin
-                      </label>
-                      <input
-                        id="mandatario-valid-to"
-                        type="date"
-                        value={validTo}
-                        min={validFrom || undefined}
-                        onChange={(e) => {
-                          setValidTo(e.target.value);
-                          clearField("validTo");
-                        }}
-                        className={inputClass}
-                        aria-invalid={fieldErrors.validTo ? true : undefined}
-                        aria-describedby={fieldErrors.validTo ? "mandatario-valid-to-error" : undefined}
-                      />
-                      <FieldError id="mandatario-valid-to-error" message={fieldErrors.validTo} />
-                    </div>
+                    <FieldError id="mandatario-valid-from-error" message={fieldErrors.validFrom} />
                   </div>
-                )}
-                <FieldError id="mandatario-vigencia-error" message={fieldErrors.validityKind} />
-              </fieldset>
-            </>
-          )}
-
-          <fieldset>
-            <legend className="mb-1.5 block text-xs font-semibold">
-              Organismos donde aplica
-            </legend>
-            <div className="space-y-1.5 rounded-xl border p-3">
-              {visibleOffices.map((o) => (
-                <div key={o.transitOfficeId}>
-                  <label className="flex items-center gap-2 text-xs">
+                  <div>
+                    <label htmlFor="mandatario-valid-to" className="mb-1.5 block text-xs font-semibold">
+                      Fecha de fin
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={selected.includes(o.transitOfficeId)}
-                      onChange={() => toggleOffice(o.transitOfficeId)}
-                      aria-label={o.name}
+                      id="mandatario-valid-to"
+                      type="date"
+                      value={validTo}
+                      min={validFrom || undefined}
+                      onChange={(e) => {
+                        setValidTo(e.target.value);
+                        clearField("validTo");
+                      }}
+                      className={inputClass}
+                      aria-invalid={fieldErrors.validTo ? true : undefined}
+                      aria-describedby={fieldErrors.validTo ? "mandatario-valid-to-error" : undefined}
                     />
-                    <span>
-                      {o.name}
-                      {o.code && <span className="opacity-70"> · {o.code}</span>}
-                    </span>
-                  </label>
+                    <FieldError id="mandatario-valid-to-error" message={fieldErrors.validTo} />
+                  </div>
                 </div>
-              ))}
-            </div>
-            <p className="mt-1 text-[11px] leading-tight opacity-70">
-              {isHub ? (
-                "El mandatario se registra en este organismo."
               ) : (
-                "Solo se listan los organismos habilitados para esta compañía. Al editar, quitar uno retira al mandatario de ese organismo y lo deja en los demás."
+                <p className="text-xs leading-tight opacity-70">Vale mientras el mandatario esté activo.</p>
               )}
-            </p>
+              <FieldError id="mandatario-vigencia-error" message={fieldErrors.validityKind} />
+            </div>
+          </Paso>
+        )}
 
-            <FieldError id="mandatario-offices-error" message={fieldErrors.offices} />
-          </fieldset>
-
-          {fuenteAsociadas ? (
+        <Paso numero={siguiente()} titulo="Dónde aplica" id="mandatario-paso-donde">
+          <div className="space-y-4">
             <fieldset>
-              <legend className="mb-1.5 block text-xs font-semibold">Compañías asociadas</legend>
-              <MandatarioCompaniasAsociadas
-                fuente={fuenteAsociadas}
-                seleccion={asociadasSel}
+              <legend className="mb-1.5 block text-xs font-semibold">Organismos de tránsito</legend>
+              <MultiSelectBuscable
+                testId="mandatario-organismos"
+                grupo="Organismos de tránsito"
+                genero="m"
+                opciones={opcionesOrganismos}
+                seleccion={organismosElegidos}
                 onChange={(next) => {
-                  setAsociadasSel(next);
-                  setErroresAsociadas({});
-                  setError(null);
+                  clearField("offices");
+                  setSelected(next.map((o) => o.id));
                 }}
-                excluirIds={ownerCompanyIds}
-                errores={erroresAsociadas}
-                onSinRed={setSinRed}
+                buscarLabel="Buscar organismo por nombre o código"
+                buscarPlaceholder="Buscar por nombre o código…"
+                chipsHasta={ORGANISMOS_COMO_CHIPS}
+                textoVacio="No hay organismos habilitados."
               />
+              <p className="mt-1.5 text-xs leading-tight opacity-70">
+                {isHub
+                  ? "El mandatario se registra en este organismo."
+                  : "Solo los organismos habilitados para esta compañía. Quitar uno retira al mandatario de ese organismo; en los demás sigue."}
+              </p>
+              <FieldError id="mandatario-offices-error" message={fieldErrors.offices} />
             </fieldset>
-          ) : null}
 
-          {error && (
-            <p className="text-[11px] leading-tight" style={{ color: "#E5484D" }} role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-xl border px-4 py-2 text-xs font-semibold"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving}
-            className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: "#557EFF" }}
-          >
-            {saving ? "Guardando…" : "Guardar"}
-          </button>
-        </div>
+            {fuenteAsociadas ? (
+              <fieldset>
+                <legend className="mb-1.5 block text-xs font-semibold">Compañías asociadas</legend>
+                <MandatarioCompaniasAsociadas
+                  fuente={fuenteAsociadas}
+                  seleccion={asociadasSel}
+                  onChange={(next) => {
+                    setAsociadasSel(next);
+                    setErroresAsociadas({});
+                    setError(null);
+                  }}
+                  excluirIds={ownerCompanyIds}
+                  errores={erroresAsociadas}
+                  onSinRed={setSinRed}
+                />
+              </fieldset>
+            ) : null}
+          </div>
+        </Paso>
       </div>
-    </div>
+    </OtSidePanel>
   );
 }
 
-function RadioChip({
+/** Paso numerado del panel: tarjeta blanca con el número en círculo de marca y un título corto. */
+function Paso({
+  numero,
+  titulo,
+  id,
+  children,
+}: {
+  numero: number;
+  titulo: string;
+  id: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby={`${id}-titulo`}
+      className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/15 dark:bg-[#162744]"
+    >
+      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-[#162744] dark:text-white">
+        <span
+          aria-hidden="true"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
+          style={{ background: "#557EFF" }}
+        >
+          {numero}
+        </span>
+        {titulo}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** Tarjeta con ícono y una línea de ayuda; el radio nativo queda oculto pero operable con teclado. */
+function TarjetaOpcion({
+  name,
+  label,
+  ayuda,
+  icono,
+  checked,
+  onChange,
+}: {
+  name: string;
+  label: string;
+  ayuda: string;
+  icono: ReactNode;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label
+      className="flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors hover:bg-[rgba(85,126,255,0.04)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF] has-[:focus-visible]:ring-offset-2"
+      style={
+        checked
+          ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" }
+          : { borderColor: "#DFE5ED", background: "#FFFFFF" }
+      }
+    >
+      <input
+        type="radio"
+        name={name}
+        checked={checked}
+        onChange={onChange}
+        aria-label={label}
+        className="sr-only"
+      />
+      <span className="mt-0.5 shrink-0 text-[#557EFF]">{icono}</span>
+      <span className="min-w-0">
+        <span className="block text-xs font-semibold leading-snug text-[#162744]">{label}</span>
+        <span className="mt-0.5 block text-xs text-[#59677D]">{ayuda}</span>
+      </span>
+    </label>
+  );
+}
+
+/** Opción de un control segmentado (Fija | Rango de fechas). */
+function Segmento({
   name,
   label,
   checked,
@@ -618,15 +769,16 @@ function RadioChip({
 }) {
   return (
     <label
-      className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-      style={checked ? { borderColor: "#557EFF" } : undefined}
+      className="cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF]"
+      style={checked ? { background: "#557EFF", color: "#FFFFFF" } : { color: "#59677D" }}
     >
       <input
         type="radio"
         name={name}
         checked={checked}
         onChange={onChange}
-        className="h-4 w-4 accent-[#557EFF]"
+        aria-label={label}
+        className="sr-only"
       />
       {label}
     </label>
@@ -636,7 +788,7 @@ function RadioChip({
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p id={id} className="mt-1 text-[11px] leading-tight" style={{ color: "#E5484D" }} role="alert">
+    <p id={id} className="mt-1 text-xs leading-tight" style={{ color: "#E5484D" }} role="alert">
       {message}
     </p>
   );

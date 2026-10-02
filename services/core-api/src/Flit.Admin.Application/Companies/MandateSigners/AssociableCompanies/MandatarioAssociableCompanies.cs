@@ -18,6 +18,14 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
     public const int DefaultPageSize = 20;
     public const int MaxPageSize = 100;
 
+    /// <summary>
+    /// Valor centinela de <c>pageSize</c> para pedir la lista completa (<c>?all=true</c>, selector con buscador).
+    /// Tiene tope: <see cref="MaxAllItems"/>. Un <c>pageSize</c> normal sigue limitado a <see cref="MaxPageSize"/>.
+    /// </summary>
+    public const int AllItems = -1;
+
+    public const int MaxAllItems = 1000;
+
     public const string SearchTooShortMessage = "La búsqueda debe tener al menos 2 caracteres.";
 
     private readonly IManagingCompanyDirectory _directory;
@@ -146,8 +154,10 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
     private static AssociableCompaniesPage Paginate(
         List<AssociableCompany> companies, int page, int pageSize, bool aplicaSolo)
     {
-        var size = pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, MaxPageSize);
-        var number = Math.Max(1, page);
+        var size = pageSize == AllItems
+            ? MaxAllItems
+            : pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, MaxPageSize);
+        var number = pageSize == AllItems ? 1 : Math.Max(1, page);
         var items = companies.Skip((number - 1) * size).Take(size).ToList();
         return new AssociableCompaniesPage(items, companies.Count, number, size, aplicaSolo);
     }
