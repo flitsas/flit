@@ -557,13 +557,14 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         invitation.TenantId.Should().Be(_companyTenantId);
     }
 
-    // HU #11580 AC1/AC2 — indistinguibilidad: las tres causas de correo ya ocupado
-    // (invitación pendiente, cuenta activa, cuenta eliminada) deben producir EXACTAMENTE la
-    // misma respuesta (status + code + message), para que un atacante no pueda distinguir cuál
-    // de las tres es la causa real. Se comparan las tres respuestas ENTRE SÍ, no solo contra un
-    // valor fijo, para que el test falle si alguien reintroduce cualquier diferencia.
+    // HU #11580 AC1/AC2 — indistinguibilidad: las causas de correo ya ocupado que SIGUEN dando conflicto
+    // (invitación pendiente, cuenta activa) deben producir EXACTAMENTE la misma respuesta (status + code +
+    // message), para que un atacante no pueda distinguir cuál es la causa real. Se comparan las respuestas
+    // ENTRE SÍ, no solo contra un valor fijo, para que el test falle si alguien reintroduce una diferencia.
+    // Bug #13194 (P6): la cuenta ELIMINADA dejó de ser causa de conflicto (índice único parcial
+    // WHERE deleted_at IS NULL: el correo se puede reinvitar); lo fija el test siguiente.
     [Fact]
-    public async Task Invite_ThreeConflictCauses_ReturnIndistinguishableResponses()
+    public async Task Invite_ConflictCauses_ReturnIndistinguishableResponses()
     {
         // Causa 1 — invitación pendiente en el mismo tenant destino.
         var (_, pendingEmail) = await SeedPendingInvitationAsync(_companyTenantId, lastSentAt: null);
@@ -571,8 +572,37 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         // Causa 2 — cuenta activa (reutiliza el correo del SuperAdmin sembrado en SeedAsync).
         var activeEmail = $"superadmin-{_superAdminUserId:N}@flit.local";
 
-        // Causa 3 — cuenta eliminada (soft-delete): se siembra un usuario ya con DeletedAt
-        // fijado, sin pasar por el endpoint de borrado (más simple y no depende de otro flujo).
+        var responsePending = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email = pendingEmail, fullName = "Causa 1", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        var responseActive = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email = activeEmail, fullName = "Causa 2", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        responsePending.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        responseActive.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var bodyPending = await responsePending.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        var bodyActive = await responseActive.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Las respuestas deben ser IDÉNTICAS entre sí: el cuerpo no delata la causa.
+        bodyActive.Should().BeEquivalentTo(bodyPending);
+
+        bodyPending!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
+        bodyPending.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+    }
+
+    // Bug #13194 (P6) — el correo de una cuenta ELIMINADA (soft-delete) ya no bloquea la reinvitación:
+    // el índice único es parcial (WHERE deleted_at IS NULL) y la invitación se crea (201). Antes era la
+    // tercera causa indistinguible de HU #11580.
+    [Fact]
+    public async Task Invite_EmailOfDeletedAccount_IsCreated()
+    {
+        // Se siembra un usuario ya con DeletedAt fijado, sin pasar por el endpoint de borrado.
         var deletedUserId = Guid.NewGuid();
         var deletedEmail = $"deleted-{deletedUserId:N}@flit.local";
         await using (var db = CreateDbContext())
@@ -591,41 +621,17 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
 
         try
         {
-            var responsePending = await _client.PostAsJsonAsync(
+            var response = await _client.PostAsJsonAsync(
                 "/api/v1/security/invitations",
-                new { email = pendingEmail, fullName = "Causa 1", targetTenantId = _companyTenantId },
-                TestContext.Current.CancellationToken);
-            var responseActive = await _client.PostAsJsonAsync(
-                "/api/v1/security/invitations",
-                new { email = activeEmail, fullName = "Causa 2", targetTenantId = _companyTenantId },
-                TestContext.Current.CancellationToken);
-            var responseDeleted = await _client.PostAsJsonAsync(
-                "/api/v1/security/invitations",
-                new { email = deletedEmail, fullName = "Causa 3", targetTenantId = _companyTenantId },
+                new { email = deletedEmail, fullName = "Cuenta eliminada", targetTenantId = _companyTenantId },
                 TestContext.Current.CancellationToken);
 
-            responsePending.StatusCode.Should().Be(HttpStatusCode.Conflict);
-            responseActive.StatusCode.Should().Be(HttpStatusCode.Conflict);
-            responseDeleted.StatusCode.Should().Be(HttpStatusCode.Conflict);
-
-            var bodyPending = await responsePending.Content.ReadFromJsonAsync<SecurityErrorBody>(
-                cancellationToken: TestContext.Current.CancellationToken);
-            var bodyActive = await responseActive.Content.ReadFromJsonAsync<SecurityErrorBody>(
-                cancellationToken: TestContext.Current.CancellationToken);
-            var bodyDeleted = await responseDeleted.Content.ReadFromJsonAsync<SecurityErrorBody>(
-                cancellationToken: TestContext.Current.CancellationToken);
-
-            // Las tres respuestas deben ser IDÉNTICAS entre sí — ni un atacante que dispare las
-            // tres causas puede diferenciarlas por el cuerpo de la respuesta.
-            bodyActive.Should().BeEquivalentTo(bodyPending);
-            bodyDeleted.Should().BeEquivalentTo(bodyPending);
-
-            bodyPending!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
-            bodyPending.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+            response.StatusCode.Should().Be(HttpStatusCode.Created);
         }
         finally
         {
             await using var db = CreateDbContext();
+            db.UserInvitations.RemoveRange(db.UserInvitations.Where(i => i.Email == deletedEmail));
             db.TenantConfigAuditLogs.RemoveRange(
                 db.TenantConfigAuditLogs.Where(a => a.ChangedBy == _superAdminUserId || a.TargetEntityId == deletedUserId));
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
