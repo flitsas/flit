@@ -109,6 +109,27 @@ public sealed class IdentityValidationCompletedConsumerTests
             DraftFinalizedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+        // Review PR #510 (L2) — sin actor del sujeto el consumidor ya no cae a la parte validada: el
+        // repositorio real trae los actores, así que el doble también.
+        return ConSujeto(i, "comprador");
+    }
+
+    /// <summary>Agrega el actor cuyo sujeto de identidad es la persona validada (TipoDoc/Documento).</summary>
+    private static ProcedureInstance ConSujeto(ProcedureInstance i, string parte, string documento = Documento)
+    {
+        i.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = parte,
+            DocumentType = TipoDoc,
+            DocumentNumber = documento,
+            FullName = "Sujeto",
+            Metadata = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
         return i;
     }
 
@@ -300,7 +321,7 @@ public sealed class IdentityValidationCompletedConsumerTests
 
     /// <summary>Instancia "lean" de TRASPASO_UNILATERAL (familia TRASPASO, sin compraventa).</summary>
     private static ProcedureInstance LeanUnilateral(Guid id, Guid tenant) =>
-        new()
+        ConSujeto(new ProcedureInstance
         {
             ProcedureType = ProcedureTypeFixture.TraspasoUnilateral,
             Id = id,
@@ -310,7 +331,143 @@ public sealed class IdentityValidationCompletedConsumerTests
             Status = TramiteEstado.Borrador,
             DraftFinalizedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
+        }, "vendedor");
+
+    // ── Review PR #510 (MAYOR-2 acotado) ─────────────────────────────────────────────────────────
+
+    /// <summary>Savepoint de prueba: ejecuta la operación y deja propagar la excepción, como el real.</summary>
+    private sealed class SavepointDirecto : ISavepointScope
+    {
+        public int Llamadas { get; private set; }
+
+        public Task<T> EjecutarAsync<T>(Func<Task<T>> operacion, CancellationToken ct = default)
+        {
+            Llamadas++;
+            return operacion();
+        }
+    }
+
+    [Fact]
+    public async Task MAYOR2_i_ExcepcionEnUnTramite_NoCortaElLote()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        AprobadaValidation(validationId, tenant);
+
+        var roto = Guid.NewGuid();
+        var sano = Guid.NewGuid();
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance>
+            {
+                Lean(roto, tenant, "TRM-2026-000201", false),
+                Lean(sano, tenant, "TRM-2026-000202", false),
+            });
+        _repo.GetByIdWithFurGraphAsync(roto, tenant, Arg.Any<CancellationToken>())
+            .Returns<ProcedureInstance?>(_ => throw new InvalidOperationException("fallo de prueba"));
+        var full = StubMatriculaGraph(sano, tenant);
+        var savepoints = new SavepointDirecto();
+        var sut = new IdentityValidationCompletedConsumer(_repo, _firma, _fur, savepoints);
+
+        var result = await sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Processed.Should().Be(1, "el trámite sano se firma aunque el anterior haya fallado");
+        result.Skipped.Should().ContainSingle(s => s == "TRM-2026-000201:" + IdentityValidationCompletedConsumer.OmitidoExcepcion);
+        full.Attachments.Should().Contain(a => a.Tipo == "fur");
+        savepoints.Llamadas.Should().Be(2, "un savepoint por trámite");
+    }
+
+    [Fact]
+    public async Task MAYOR2_ii_FurVigenteGeneradoTrasLaAprobacion_SeOmiteComoYaFirmado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        var validacion = AprobadaValidation(validationId, tenant);
+        validacion.ValidatedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+
+        var id = Guid.NewGuid();
+        var lean = Lean(id, tenant, "TRM-2026-000203", false);
+        lean.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "fur",
+            Source = "system",
+            StoragePath = "p/fur",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { lean });
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Processed.Should().Be(0);
+        result.Skipped.Should().ContainSingle(s => s == "TRM-2026-000203:" + IdentityValidationCompletedConsumer.OmitidoYaFirmado);
+        await _repo.DidNotReceive().GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MAYOR2_ii_FurAnteriorALaAprobacion_SeRegenera()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        var validacion = AprobadaValidation(validationId, tenant);
+        validacion.ValidatedAt = DateTimeOffset.UtcNow;
+
+        var id = Guid.NewGuid();
+        var lean = Lean(id, tenant, "TRM-2026-000204", false);
+        lean.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "fur",
+            Source = "system",
+            StoragePath = "p/fur-viejo",
+            UploadedAt = DateTimeOffset.UtcNow.AddDays(-1),
+        });
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { lean });
+        StubMatriculaGraph(id, tenant);
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Processed.Should().Be(1, "un FUR previo a la aprobación no lleva el sello de esta validación");
+    }
+
+    [Fact]
+    public async Task L2_iii_SujetoQueNoEsParte_SeOmite_SinCaerALaParteValidada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        AprobadaValidation(validationId, tenant);
+
+        var id = Guid.NewGuid();
+        var otro = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
+            Id = id,
+            TenantId = tenant,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000205",
+            Status = TramiteEstado.Borrador,
+            DraftFinalizedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
+        ConSujeto(otro, "comprador", documento: "9000000999"); // otra persona en la parte
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { otro });
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Processed.Should().Be(0);
+        result.Skipped.Should().ContainSingle(s => s == "TRM-2026-000205:" + IdentityValidationCompletedConsumer.OmitidoSujetoNoEsParte);
+        await _repo.DidNotReceive().GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>());
+    }
 
     /// <summary>Grafo apto para generar FUR: identidad del propietario aprobada y organismo resuelto.</summary>
     private ProcedureInstance StubUnilateralGraph(Guid id, Guid tenant)
