@@ -203,12 +203,26 @@ public sealed class MandateSignerEvaluator(
         // Mismo criterio que la pantalla y el PDF: en borrador/subsanación se recalcula; fuera de ahí manda
         // el firmante guardado si sigue siendo válido.
         var editable = TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva);
-        var (prelacion, _) = await MandateSignerPrelacionLoader
+        var (prelacion, todos) = await MandateSignerPrelacionLoader
             .ResolveAsync(
                 directory, vaultPolicy, officeId, instance.TenantId,
                 MandateSignerSelectionResolver.ResolveNitMandante(instance), config,
                 eleccionOt, editable ? null : instance.MandateSignerId, ct)
             .ConfigureAwait(false);
+
+        // Trámite en estado FINAL (aprobado, revocado): el mandato ya se emitió con el firmante que quedó guardado y
+        // no se puede regenerar. Si ese mandatario venció o se dio de baja DESPUÉS, el indicador no debe cambiar de
+        // persona (diría una cosa y el documento firmado otra): se sigue mostrando quien firmó.
+        if (!editable
+            && TramiteEstado.Finales.Contains(instance.Status)
+            && instance.MandateSignerId is { } guardado
+            && prelacion.Signer?.Id != guardado
+            && todos.FirstOrDefault(c => c.Id == guardado) is { } firmante)
+        {
+            return new MandateSignerEvaluacion(
+                MandateSignerEstado.Valido, MandateSignerLevel.Explicita, firmante, firmante.SignatureMethod, null,
+                prelacion.Validos, prelacion.Descartados, officeId);
+        }
 
         return Clasificar(prelacion, officeId);
     }

@@ -214,6 +214,45 @@ public sealed class MandateSignerEvaluatorTests
     }
 
     [Fact]
+    public async Task TramiteAprobado_ConservaAlFirmanteGuardado_AunqueDespuesVenza()
+    {
+        // Hallazgo de la validación de la épica #13090: tras aprobar, si el mandatario vencía el indicador pasaba a
+        // otra persona mientras el PDF ya emitido (que no se regenera) seguía diciendo la original.
+        Config();
+        var firmante = Signer(MandateSignerOrigins.Organismo);
+        var otro = Signer(MandateSignerOrigins.Compania);
+        var vencido = firmante with { FirmaValida = false, MotivoSinFirma = "mandatario_fuera_de_vigencia" };
+        Candidates(vencido, otro);
+
+        var aprobado = Instance();
+        aprobado.Status = TramiteEstado.Aprobado;
+        aprobado.MandateSignerId = firmante.Id;
+
+        var r = await Evaluate(aprobado);
+
+        r.Estado.Should().Be(MandateSignerEstado.Valido);
+        r.Signer!.Id.Should().Be(firmante.Id, "el mandato aprobado ya salió con ese firmante");
+        r.Nivel.Should().Be(MandateSignerLevel.Explicita);
+    }
+
+    [Fact]
+    public async Task TramiteRadicadoSinAprobar_SiElGuardadoVencio_SeRecalculaYElOtroEntra()
+    {
+        // Antes de aprobar sí debe cambiar: el OT elegirá con el candidato válido que quede.
+        Config();
+        var firmante = Signer(MandateSignerOrigins.Organismo);
+        var otro = Signer(MandateSignerOrigins.Compania);
+        var vencido = firmante with { FirmaValida = false, MotivoSinFirma = "mandatario_fuera_de_vigencia" };
+        Candidates(vencido, otro);
+
+        var entregado = Instance();
+        entregado.Status = TramiteEstado.Entregado;
+        entregado.MandateSignerId = firmante.Id;
+
+        (await Evaluate(entregado)).Signer!.Id.Should().Be(otro.Id);
+    }
+
+    [Fact]
     public void Clasificar_ElEstadoSeTraduceAlVocabularioEstable()
     {
         MandateSignerEstados.ToCode(MandateSignerEstado.Valido).Should().Be("valido");
