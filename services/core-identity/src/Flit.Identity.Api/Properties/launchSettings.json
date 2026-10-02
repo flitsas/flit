@@ -2,7 +2,7 @@
   "profiles": {
     "http": {
       "commandName": "Project",
-      "applicationUrl": "http://127.0.0.1:4905",
+      "applicationUrl": "http://127.0.0.1:4004",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "Suite__Oidc__Enabled": "true",

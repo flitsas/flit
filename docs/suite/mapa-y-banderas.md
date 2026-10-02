@@ -125,10 +125,11 @@ el gateway.
 |---|---|---|---|---|
 | `FLIT_HUB_URL` | frontend, frontend-hub, core-api (enlaces de correo) | URL pública del hub = emisor OIDC | `http://127.0.0.1:4040` | la pone el CD: `https://dev.flitsas.online`, `https://qa.flitsas.online`, `https://flitsas.online` |
 | `FLIT_OIDC_INTERNAL_URL` | frontend, frontend-hub | Adónde canjea y renueva tokens el servidor | igual a `FLIT_HUB_URL` | `http://gateway:<puerto>` (red interna) |
-| `CORE_API_ORIGIN` | frontend, frontend-hub | Destino del proxy `/api/v1` | `http://127.0.0.1:4903` | `http://gateway:<puerto>` |
+| `CORE_API_ORIGIN` | frontend, frontend-hub | Destino del proxy `/api/v1` | `http://127.0.0.1:4003` | `http://gateway:<puerto>` |
 | `TRAMITES_URL` (`FLIT_TRAMITES_URL` en el `.env`) | frontend-hub | URL de Trámites | `http://127.0.0.1:3000` | la pone el CD: `https://dev.tramites.flitsas.online`… |
 | `FLIT_SUITE_ENV` → `Suite:Hosts:Environment` | core-api | Prefijo de ambiente para armar los hosts de cada producto | vacío + `Overrides` | `dev`, `qa`, vacío en PDN (la pone el CD) |
 | `Suite:Hosts:Overrides:<producto>` | core-api | URL fija por producto | `plataforma`, `tramites` con `127.0.0.1` | no se usa |
+| `Suite:Hosts:ComingSoon` | core-api, core-identity | Productos sin app desplegada todavía: su enlace lleva a `/proximamente/<código>` del hub | `comparendos`, `diagnostico`, `demo` (en `appsettings.json`) | igual; al desplegar un producto en un ambiente, se quita de la lista de ese ambiente |
 | `FLIT_APP_URL` | cada front | URL pública de la app, si el `Host` no sirve | no hace falta | no hace falta |
 | `FLIT_HOSTS` | frontend-hub | Qué hosts son marca FLIT (el resto, Marca Blanca) | por defecto | por defecto del compose |
 
@@ -184,6 +185,7 @@ sesión una vez más con el login de siempre.
 | Vuelve al login después de iniciar sesión | La cookie de sesión no se pudo leer: cambió `FLIT_SESSION_SECRET` o la cookie no se guardó (HTTP vs HTTPS) | DevTools → Application → Cookies: ¿existe `flit_session_tramites`? |
 | 403 «Tu empresa no tiene Trámites» | La empresa no tiene el producto en `platform.tenant_products`, o el usuario no tiene rol en Trámites | `GET /api/v1/platform/me/apps`; configuración de la compañía (SuperAdmin) |
 | Entra pero los menús salen vacíos | Los claims del token no traen roles/permisos del producto | Decodificar el token (`/auth/claims` en local) y revisar `roles` y `permissions` |
+| «Tu sesión expiró» justo después de iniciar sesión | La cookie del producto era de una sesión ya cerrada (se salió desde otra app) o se reusó un refresh (H3 y H4 de [matriz-pruebas.md](matriz-pruebas.md)). Hoy la app pide una sesión nueva sola; el aviso solo sale si eso falla dos veces en menos de 10 s | Log de core-identity: `already been redeemed` o `were revoked to prevent a potential token replay attack` |
 | Cerró sesión y otro producto sigue abierto | Normal hasta 15 s (caché de sesión cerrada) o hasta la siguiente llamada a la API | Esperar o recargar; si persiste, log de core-api por `SESSION_EXPIRED` |
 | Todos los usuarios tienen que volver a entrar | Cambió `FLIT_SESSION_SECRET`, el `SigningKeyId` o el anillo de Data Protection | `.env` del ambiente; tabla de llaves |
 | `SESSION_EXPIRED` en todas las llamadas | La API no reconoce el emisor o la firma | `Suite:Hosts:*`, `/.well-known/openid-configuration` del hub, `JWT_VALIDATE_ISSUED_TOKENS` |
