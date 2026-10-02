@@ -425,6 +425,113 @@ public sealed class FirmaGateBug13194Tests
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    // ── Review PR #510 (MAYOR-3): partes que firman según el tipo ──
+
+    [Fact]
+    public async Task TraspasoUnilateral_SoloFirmaElPropietario_ElCompradorSinVidNoBloquea()
+    {
+        // DDL 94 / ADR-0051: en TRASPASO_UNILATERAL valida identidad y firma SOLO el propietario
+        // (biometricActors/signatureActors = OWNER). El comprador no se convoca.
+        var i = Wire(TramiteEstado.Preparado);
+        i.ProcedureType = ProcedureTypeFixture.TraspasoUnilateral;
+        FirmaFixture.Firmar(i, "vendedor");
+        i.Actors.Add(Natural(i, "comprador", "9000000801"));
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue("el comprador no firma en el traspaso unilateral");
+    }
+
+    [Fact]
+    public async Task TraspasoUnilateral_PropietarioSinVid_Bloquea()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        i.ProcedureType = ProcedureTypeFixture.TraspasoUnilateral;
+        i.Actors.Add(Natural(i, "vendedor", "9000000802"));
+        FirmaFixture.Firmar(i, "comprador");
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        AssertBloqueadoSinEfectos(outcome, i, TramiteEstado.Preparado);
+        outcome.ErrorDetail.Should().Contain("vendedor").And.NotContain("comprador (");
+    }
+
+    [Fact]
+    public async Task Copropietarios_UnCompradorFirmadoYOtroNo_BloqueaNombrandoComprador()
+    {
+        // ADR-0053 — "todos firman": basta un copropietario sin identidad para que la parte quede pendiente.
+        var i = Wire(TramiteEstado.Preparado);
+        FirmaFixture.Firmar(i, "comprador");
+        var segundo = Natural(i, "comprador", "9000000803");
+        segundo.Ordinal = 2;
+        i.Actors.Add(segundo);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        AssertBloqueadoSinEfectos(outcome, i, TramiteEstado.Preparado);
+        outcome.ErrorDetail.Should().Contain("comprador");
+
+        // Firmado también el segundo copropietario, pasa.
+        i.BiometricValidations.Add(FirmaFixture.Aprobada(i, "comprador", "CC", "9000000803"));
+        (await Transition(i, TramiteEstado.Entregado)).Success.Should().BeTrue();
+    }
+
+    private static ProcedureType TipoLeasing(string code) => new()
+    {
+        Id = Guid.NewGuid(),
+        Code = code,
+        Name = code,
+        Family = ProcedureFamilyCodes.Matriculas,
+        // DDL 88: el locatario es parte propia (requiresLessee) pero NO valida identidad ni firma.
+        GateProfile = """{"entryMode":"VIN","requiresBuyer":true,"requiresLessee":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true}""",
+        PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
+        CreatedAt = DateTimeOffset.UtcNow,
+    };
+
+    [Theory]
+    [InlineData("MATRICULA_LEASING")]
+    [InlineData("CAMBIO_LOCATARIO")]
+    public async Task Leasing_FirmaLaEntidadCompradora_NuncaElLocatario(string code)
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        i.ProcedureType = TipoLeasing(code);
+        i.Actors.Add(JuridicoConRl(i, "comprador"));
+        i.Actors.Add(Natural(i, "locatario", "9000000804")); // sin VID: no debe contar
+
+        // La entidad compradora sin firma bloquea, y el detalle no menciona al locatario.
+        var bloqueado = await Transition(i, TramiteEstado.Entregado);
+        AssertBloqueadoSinEfectos(bloqueado, i, TramiteEstado.Preparado);
+        bloqueado.ErrorDetail.Should().Contain("comprador").And.NotContain("locatario");
+
+        // Con el RL de la entidad compradora validado, pasa aunque el locatario no tenga VID.
+        i.BiometricValidations.Add(FirmaFixture.Aprobada(i, "comprador", "CC", "9000000501"));
+        (await Transition(i, TramiteEstado.Entregado)).Success.Should().BeTrue();
+    }
+
+    // ── Review PR #510 (MAYOR-1): el bloqueo queda en el accesor scoped para la extensión del 409 ──
+
+    [Fact]
+    public async Task Bloqueo_DejaLasPartesEnUltimoBloqueoFirma()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Wire(TramiteEstado.Preparado);
+        i.Actors.Add(Natural(i, "comprador", "9000000901"));
+        var notifier = Substitute.For<IFirmaPendienteNotifier>();
+        notifier.NotificarAsync(i.Id, i.TenantId, "comprador", Arg.Any<CancellationToken>())
+            .Returns(FirmaNotificacionEstados.Enviada);
+        var bloqueo = new UltimoBloqueoFirma();
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            identityPolicy: OtSinVid(), firmaNotifier: notifier, ultimoBloqueo: bloqueo);
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Entregado, null, null), ct);
+
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.FirmaPendiente);
+        bloqueo.PartesSinFirma.Should().Equal(new ParteSinFirma("comprador", FirmaNotificacionEstados.Enviada));
+    }
+
     // ── A quién aplica el gate ──
 
     [Theory]
