@@ -2,22 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
-import { appIcon, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
+import { reauthenticate } from "@flit/auth/client";
+import { appIcon, AppsSessionError, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
 import { buildDock } from "@flit/shell/nav";
 import { hubNav, type HubUser } from "./HubShell";
 
 /**
  * Inicio del hub con sesión (B-11, opción 4): saludo, una tarjeta por producto que el usuario puede abrir y los
  * accesos de administración que le correspondan. Si el servidor no pudo leer los productos, se piden aquí por el
- * proxy (que renueva el token).
+ * proxy (que renueva el token). Si la sesión del hub ya no sirve (se cerró desde otro producto, o entró otro usuario),
+ * se pide una nueva en silencio en vez de mostrar «sin productos» con el usuario anterior.
  */
 export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; tramitesUrl: string; apps: SuiteApp[] | null }) {
   const [apps, setApps] = useState<SuiteApp[] | null>(initial);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (apps) return;
     const controller = new AbortController();
-    fetchMyApps(controller.signal).then(setApps).catch(() => setApps([]));
+    fetchMyApps(controller.signal)
+      .then(setApps)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (error instanceof AppsSessionError && reauthenticate({ returnTo: "/?inicio=1", silent: true })) return;
+        setFailed(true);
+      });
     return () => controller.abort();
   }, [apps]);
 
@@ -38,7 +47,14 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
         <h2 id="hub-productos" className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--nav-texto)]">
           Tus productos
         </h2>
-        {apps === null ? (
+        {failed ? (
+          <p role="alert" className="text-sm text-[var(--nav-texto)]">
+            No pudimos cargar tus productos.{" "}
+            <button type="button" onClick={() => window.location.reload()} className="font-semibold text-flit-brand underline-offset-4 hover:underline">
+              Intentar de nuevo
+            </button>
+          </p>
+        ) : apps === null ? (
           <p className="text-sm text-[var(--nav-texto)]">Cargando…</p>
         ) : products.length === 0 ? (
           <p className="text-sm text-[var(--nav-texto)]">Tu empresa todavía no tiene productos habilitados.</p>

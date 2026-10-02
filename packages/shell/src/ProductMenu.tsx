@@ -18,14 +18,17 @@ export function ProductMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [apps, setApps] = useState<SuiteApp[] | null>(given ?? null);
+  const [failed, setFailed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || apps) return;
+    if (!open || apps || failed) return;
     const controller = new AbortController();
-    loadApps(controller.signal).then(setApps).catch(() => setApps([]));
+    loadApps(controller.signal)
+      .then(setApps)
+      .catch(() => !controller.signal.aborted && setFailed(true));
     return () => controller.abort();
-  }, [open, apps, loadApps]);
+  }, [open, apps, failed, loadApps]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +63,9 @@ export function ProductMenu({
           aria-label="Productos"
           className="absolute right-0 top-full z-50 mt-2 w-72 rounded-[var(--nav-radio-panel)] border border-[var(--nav-borde)] bg-white p-3 shadow-[var(--nav-sombra-panel)]"
         >
-          {apps === null ? (
+          {failed ? (
+            <p className="px-2 py-4 text-center text-sm text-slate-500">No pudimos cargar los productos.</p>
+          ) : apps === null ? (
             <p className="px-2 py-4 text-center text-sm text-slate-500">Cargando…</p>
           ) : apps.length === 0 ? (
             <p className="px-2 py-4 text-center text-sm text-slate-500">No hay productos disponibles.</p>

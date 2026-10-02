@@ -23,9 +23,21 @@ export function appIcon(name: string): NavIcon {
   return ICONS[name] ?? Box;
 }
 
-/** Lee los productos por el proxy /api/v1 de la app (el Bearer lo pone su servidor). Sin sesión, lista vacía. */
+/** La API rechazó la sesión de la app (401): hay que pedir una nueva al hub, no mostrar «sin productos». */
+export class AppsSessionError extends Error {
+  constructor() {
+    super("SESSION_EXPIRED");
+    this.name = "AppsSessionError";
+  }
+}
+
+/**
+ * Lee los productos por el proxy /api/v1 de la app (el Bearer lo pone su servidor). Lanza `AppsSessionError` si la
+ * sesión ya no sirve y `Error` si la API falló: una lista vacía significa de verdad que no hay productos.
+ */
 export async function fetchMyApps(signal?: AbortSignal): Promise<SuiteApp[]> {
   const response = await fetch("/api/v1/platform/me/apps", { credentials: "same-origin", cache: "no-store", signal });
-  if (!response.ok) return [];
+  if (response.status === 401) throw new AppsSessionError();
+  if (!response.ok) throw new Error(`me/apps respondió ${response.status}`);
   return (await response.json()) as SuiteApp[];
 }

@@ -19,8 +19,9 @@ public sealed class OidcOptions
 
     /// <summary>
     /// HU #12992 (A-07): margen para reusar un refresh ya canjeado. En 0, reusarlo lo rechaza y revoca la cadena (señal
-    /// de robo). OpenIddict trae 30 s por defecto para refrescos en paralelo; <c>@flit/auth</c> (A-09) refresca en el
-    /// servidor, uno a la vez, así que no lo necesita.
+    /// de robo). OpenIddict trae 30 s por defecto para refrescos en paralelo; aquí no hace falta porque <c>@flit/auth</c>
+    /// (A-09) refresca en el servidor y deja una sola renovación por refresh token (<c>renewOnce</c> en
+    /// <c>packages/auth/src/store.ts</c>). Si un front corre en más de una réplica, eso ya no basta: subir este margen.
     /// </summary>
     public int RefreshTokenReuseLeewaySeconds { get; set; }
 

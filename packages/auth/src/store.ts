@@ -68,6 +68,39 @@ export interface FreshSession {
 }
 
 /**
+ * El servidor rota el refresh en cada uso y, si alguien vuelve a usar uno ya canjeado, revoca toda la sesión (señal de
+ * robo, `RefreshTokenReuseLeewaySeconds` = 0). Una página dispara varias llamadas a la vez: si el token está por vencer,
+ * cada una intentaría renovar con el mismo refresh y la segunda tumbaría la sesión («Tu sesión expiró» al azar).
+ * Por eso hay una sola renovación por refresh token en este proceso: las peticiones simultáneas esperan la misma, y su
+ * resultado se reusa un rato para las que llegan todavía con la cookie vieja (salieron antes de recibir la nueva).
+ */
+const RENEWAL_REUSE_MS = 30_000;
+type Renewals = Map<string, { result: Promise<StoredSession>; until: number }>;
+// En `globalThis` y no en el módulo: Next empaqueta cada ruta (el BFF, /auth/claims, /auth/session) por separado y cada
+// paquete tendría su propia copia; el registro tiene que ser uno por proceso.
+const renewals: Renewals = ((globalThis as { __flitAuthRenewals?: Renewals }).__flitAuthRenewals ??= new Map());
+
+function renewOnce(config: AuthConfig, session: StoredSession): Promise<StoredSession> {
+  const now = Date.now();
+  for (const [key, entry] of renewals) if (entry.until <= now) renewals.delete(key);
+
+  const key = `${config.productCode}:${session.refreshToken}`;
+  const current = renewals.get(key);
+  if (current) return current.result;
+
+  const result = refreshSession(config, session);
+  renewals.set(key, { result, until: now + RENEWAL_REUSE_MS });
+  // Un fallo no se recuerda: las que ya esperaban lo comparten, la siguiente vuelve a preguntar.
+  result.catch(() => renewals.delete(key));
+  return result;
+}
+
+/** Solo para pruebas: olvida las renovaciones recordadas. */
+export function forgetRenewals(): void {
+  renewals.clear();
+}
+
+/**
  * La sesión de la petición con el access token vigente: si está por vencer se renueva; si el refresh ya no sirve
  * (revocado, usuario suspendido, sin acceso al producto) se borra y queda sin sesión.
  */
@@ -77,7 +110,7 @@ export async function freshSession(request: Request, config: AuthConfig, now = M
   if (session.expiresAt - now > REFRESH_MARGIN_SECONDS) return { session, setCookies: [] };
 
   try {
-    const renewed = await refreshSession(config, session);
+    const renewed = await renewOnce(config, session);
     return { session: renewed, setCookies: await sessionCookies(renewed, request, config) };
   } catch {
     return { session: null, setCookies: clearSessionCookies(request, config) };

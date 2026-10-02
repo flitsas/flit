@@ -5,7 +5,7 @@ import { createApiProxy } from "../proxy";
 import { createAuthRoutes, safeReturnTo } from "../routes";
 import { sessionUser } from "../claims";
 import type { AuthConfig } from "../config";
-import { pack, unsealSession } from "../store";
+import { forgetRenewals, pack, unsealSession } from "../store";
 import type { StoredSession } from "../types";
 
 // A-09 (HU del Feature #12887) — @flit/auth: login OIDC con PKCE, sesión cifrada en cookie HttpOnly sin Domain y
@@ -24,7 +24,10 @@ const routes = createAuthRoutes({ productCode: "tramites", config: () => config 
 const APP = "https://dev.tramites.flitsas.online";
 const SESSION = sessionCookie("tramites");
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  forgetRenewals();
+});
 
 function jwt(claims: Record<string, unknown>): string {
   const enc = (o: unknown) => base64UrlEncode(new TextEncoder().encode(JSON.stringify(o)));
@@ -213,6 +216,41 @@ describe("renovación y proxy", () => {
     expect((fetchMock.mock.calls[1][1].headers as Headers).get("authorization")).toBe(`Bearer ${renewed}`);
     const stored = await unsealSession(readChunked(parseCookies(cookieHeader(response.headers.getSetCookie())), SESSION)!, config.sessionSecret);
     expect(stored?.refreshToken).toBe("r2");
+  });
+
+  it("varias llamadas simultáneas con el token por vencer renuevan UNA sola vez (reusar el refresh revoca la sesión)", async () => {
+    const renewed = jwt({ sub: "u1", exp: now() + 900 });
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(url.endsWith("/connect/token") ? Response.json({ access_token: renewed, refresh_token: "r2", expires_in: 900 }) : Response.json({ ok: true })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const proxy = createApiProxy({ productCode: "tramites", config: () => config });
+    const cookie = await sessionCookieHeader({ accessToken: jwt({ exp: now() + 10 }), refreshToken: "r1", expiresAt: now() + 10 });
+    const call = () => proxy(new Request(`${APP}/api/v1/x`, { headers: { host: "dev.tramites.flitsas.online", cookie } }), ["x"]);
+
+    const responses = await Promise.all([call(), call(), call()]);
+    // Una que sale después, todavía con la cookie vieja, tampoco vuelve a usar r1.
+    responses.push(await call());
+
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/connect/token"))).toHaveLength(1);
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      const stored = await unsealSession(readChunked(parseCookies(cookieHeader(response.headers.getSetCookie())), SESSION)!, config.sessionSecret);
+      expect(stored?.refreshToken).toBe("r2");
+    }
+  });
+
+  it("una renovación fallida no se recuerda: la siguiente vuelve a preguntar", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: "server_error" }, { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const proxy = createApiProxy({ productCode: "tramites", config: () => config });
+    const cookie = await sessionCookieHeader({ accessToken: jwt({}), refreshToken: "r9", expiresAt: now() - 5 });
+    const call = () => proxy(new Request(`${APP}/api/v1/x`, { headers: { host: "dev.tramites.flitsas.online", cookie } }), ["x"]);
+
+    await call();
+    await call();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("si el refresh ya no sirve, borra la sesión y responde SESSION_EXPIRED", async () => {
