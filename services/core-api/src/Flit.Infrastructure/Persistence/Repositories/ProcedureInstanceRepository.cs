@@ -275,19 +275,33 @@ internal sealed partial class ProcedureInstanceRepository(
     public async Task<IReadOnlyList<ProcedureInstance>> ListPendientesDeFirmaPorSujetoAsync(
         Guid tenantId, string tipoDoc, string documento, CancellationToken ct)
     {
+        // Bug #13194 (review PR #510, MENOR-5) — tipo y número se comparan SIN distinguir mayúsculas
+        // (el consumidor filtra después en memoria con OrdinalIgnoreCase; aquí no se puede perder un trámite
+        // por un «cc» frente a «CC»). Columnas: upper() sobre ambos lados.
+        var tipoUpper = tipoDoc.Trim().ToUpperInvariant();
+        var documentoUpper = documento.Trim().ToUpperInvariant();
+
         // Persona jurídica: el sujeto es el representante legal en actor.metadata (jsonb, camelCase como
-        // lo serializa ActorMetadataReader). `@>` con un documento serializado aquí: parametrizado, sin
-        // concatenar SQL.
-        var representanteJson = JsonSerializer.Serialize(new
+        // lo serializa ActorMetadataReader). `@>` distingue mayúsculas: se prueba el documento tal cual, en
+        // MAYÚSCULAS y en minúsculas. Parametrizado, sin concatenar SQL.
+        static string Representante(string t, string d) => JsonSerializer.Serialize(new
         {
-            representanteLegal = new { tipoDocumento = tipoDoc, numeroDocumento = documento },
+            representanteLegal = new { tipoDocumento = t, numeroDocumento = d },
         });
+        var representanteTalCual = Representante(tipoDoc.Trim(), documento.Trim());
+        var representanteMayus = Representante(tipoUpper, documentoUpper);
+        var representanteMinus = Representante(tipoDoc.Trim().ToLowerInvariant(), documento.Trim().ToLowerInvariant());
         var radicadosPendientes = TramiteFirmaPendiente.EstadosRadicadosPendientes.ToList();
 
         return await db.ProcedureInstances
             // ADR-0050 — el consumidor lee `instance.Family` para decidir el reparto por partes.
             .Include(i => i.ProcedureType)
             .Include(i => i.Actors)
+            // Review PR #510 (MAYOR-2 ii) — el consumidor omite lo ya firmado: FUR vigente posterior a la
+            // aprobación (adjuntos) o compraventa firmada por la parte (firmas).
+            .Include(i => i.Attachments)
+            .Include(i => i.Signatures)
+            .AsSplitQuery()
             .Where(i => i.TenantId == tenantId
                 && i.DeletedAt == null
                 && ((i.Status == TramiteEstado.Borrador && i.DraftFinalizedAt != null)
@@ -295,8 +309,10 @@ internal sealed partial class ProcedureInstanceRepository(
                     || radicadosPendientes.Contains(i.Status))
                 && i.Actors.Any(a =>
                     (a.ActorType == BiometricRules.ParteComprador || a.ActorType == BiometricRules.ParteVendedor)
-                    && ((a.DocumentType == tipoDoc && a.DocumentNumber == documento)
-                        || EF.Functions.JsonContains(a.Metadata, representanteJson))))
+                    && ((a.DocumentType.ToUpper() == tipoUpper && a.DocumentNumber.ToUpper() == documentoUpper)
+                        || EF.Functions.JsonContains(a.Metadata, representanteTalCual)
+                        || EF.Functions.JsonContains(a.Metadata, representanteMayus)
+                        || EF.Functions.JsonContains(a.Metadata, representanteMinus))))
             .OrderBy(i => i.DraftFinalizedAt)
             .ThenBy(i => i.Consecutivo)
             .ToListAsync(ct);

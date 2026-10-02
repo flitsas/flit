@@ -7,6 +7,8 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Tramites.Application.Identity;
 
@@ -39,12 +41,32 @@ public sealed record IdentityValidationConsumeResult(
 /// <c>firma_auto_solicitada</c> correlacionado con el <c>validationId</c>. Ese evento es también la llave de
 /// idempotencia: una re-entrega del mismo evento omite los trámites que ya lo tienen. Tolera errores por
 /// trámite (uno aún no apto no detiene al resto). La firma NUNCA se dispara desde el webhook.</para>
+/// <para><b>Review PR #510 (MAYOR-2, versión acotada).</b> (i) Cada trámite corre en su propio SAVEPOINT
+/// (<see cref="ISavepointScope"/>) con try/catch: una excepción de un trámite se revierte solo hasta su
+/// savepoint, se registra sin PII y el lote sigue; la transacción del outbox no se aborta. (ii) Se omiten los
+/// trámites que ya están firmados por esta persona (<see cref="OmitidoYaFirmado"/>). (iii) Si el sujeto no es
+/// actor de ninguna parte del trámite se omite (<see cref="OmitidoSujetoNoEsParte"/>): ya NO se cae a la
+/// parte validada (L2 de security). Deuda documentada: una cola por trámite en lugar del lote dentro de la
+/// transacción del outbox.</para>
 /// </summary>
 public sealed class IdentityValidationCompletedConsumer(
     IProcedureInstanceRepository repo,
     SolicitarFirmaHandler firmaHandler,
-    GenerarFurHandler furHandler)
+    GenerarFurHandler furHandler,
+    ISavepointScope? savepoints = null,
+    ILogger<IdentityValidationCompletedConsumer>? logger = null)
 {
+    private readonly ILogger _logger = logger ?? NullLogger<IdentityValidationCompletedConsumer>.Instance;
+
+    /// <summary>Motivo de omisión: el trámite ya tiene la firma de esta persona (FUR vigente o compraventa firmada).</summary>
+    public const string OmitidoYaFirmado = "ya_firmado";
+
+    /// <summary>Motivo de omisión: la persona validada no es el sujeto de identidad de ninguna parte.</summary>
+    public const string OmitidoSujetoNoEsParte = "sujeto_no_es_parte";
+
+    /// <summary>Motivo de omisión: el trámite lanzó una excepción; se revirtió su savepoint y el lote siguió.</summary>
+    public const string OmitidoExcepcion = "excepcion";
+
     /// <summary>Tipo del evento de bitácora del lote (y llave de idempotencia por validación).</summary>
     public const string EventoFirmaAutoSolicitada = "firma_auto_solicitada";
 
@@ -70,7 +92,7 @@ public sealed class IdentityValidationCompletedConsumer(
 
         var tipoDoc = validation.DocumentType.Trim();
         var documento = validation.DocumentNumber.Trim();
-        var parteValidada = validation.PartyRole ?? BiometricRules.ParteComprador;
+        var aprobadaEn = validation.ValidatedAt ?? validation.CreatedAt;
 
         var instances = await repo.ListPendientesDeFirmaPorSujetoAsync(validation.TenantId, tipoDoc, documento, ct);
         if (instances.Count == 0)
@@ -99,7 +121,13 @@ public sealed class IdentityValidationCompletedConsumer(
                 continue;
             }
 
-            var partes = PartesDelSujeto(instance, tipoDoc, documento, parteValidada);
+            // (iii) L2 — sin parte cuyo sujeto sea esta persona no se firma nada (antes caía a la parte validada).
+            var partes = PartesDelSujeto(instance, tipoDoc, documento);
+            if (partes.Count == 0)
+            {
+                skipped.Add($"{instance.ReferenceNumber}:{OmitidoSujetoNoEsParte}");
+                continue;
+            }
 
             // ADR-0051 — lo que decide el encadenamiento es si el expediente autogenera compraventa
             // (ADR-0035), no la familia. En `TRASPASO_UNILATERAL` (familia TRASPASO sin compraventa) pedir
@@ -107,24 +135,27 @@ public sealed class IdentityValidationCompletedConsumer(
             var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
             var generaCompraventa = profile.GeneratesSaleDocumentAllowed(instance.ProcedureType?.Family);
 
-            string? error = null;
-            string accion;
-            if (generaCompraventa)
+            // (ii) Ya firmado por esta persona: nada que hacer.
+            if (YaFirmado(instance, partes, generaCompraventa, aprobadaEn))
             {
-                accion = "firma_compraventa";
-                foreach (var parte in partes)
-                {
-                    (_, error) = await firmaHandler.HandleAsync(
-                        instance.Id, validation.TenantId, new SolicitarFirmaInput(parte, null), ct);
-                    if (error is not null)
-                        break;
-                }
+                skipped.Add($"{instance.ReferenceNumber}:{OmitidoYaFirmado}");
+                continue;
             }
-            else
+
+            string? error;
+            try
             {
-                // Un solo FUR basta aunque la persona firme por dos partes: el generador sella todas.
-                accion = "fur";
-                (_, error) = await furHandler.HandleAsync(instance.Id, validation.TenantId, ct);
+                // (i) Savepoint por trámite: si este falla, solo se revierte lo suyo y el lote sigue.
+                error = savepoints is null
+                    ? await FirmarAsync(instance, validation.TenantId, evt.ValidationId, partes, generaCompraventa, ct)
+                    : await savepoints.EjecutarAsync(
+                        () => FirmarAsync(instance, validation.TenantId, evt.ValidationId, partes, generaCompraventa, ct), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                IdentityValidationConsumerLog.TramiteFallido(_logger, ex.GetType().Name, instance.Id, evt.ValidationId);
+                skipped.Add($"{instance.ReferenceNumber}:{OmitidoExcepcion}");
+                continue;
             }
 
             if (error is not null)
@@ -134,25 +165,6 @@ public sealed class IdentityValidationCompletedConsumer(
                 continue;
             }
 
-            // Bitácora correlacionada con la validación (AC5) y llave de idempotencia.
-            repo.Add(new ProcedureInstanceEvent
-            {
-                Id = Guid.NewGuid(),
-                TenantId = validation.TenantId,
-                ProcedureInstanceId = instance.Id,
-                Tipo = EventoFirmaAutoSolicitada,
-                Payload = JsonSerializer.Serialize(new
-                {
-                    validation_id = evt.ValidationId,
-                    parte = partes[0],
-                    partes,
-                    estado = instance.Status,
-                    modalidad = instance.FamilyCode,
-                    accion,
-                }),
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await repo.SaveChangesAsync(ct);
             processed++;
         }
 
@@ -161,12 +173,91 @@ public sealed class IdentityValidationCompletedConsumer(
     }
 
     /// <summary>
+    /// Firma un trámite (compraventa por parte, o un FUR) y deja la bitácora/llave de idempotencia. Devuelve
+    /// el código de error del handler si el trámite aún no es apto, o null si quedó firmado.
+    /// </summary>
+    private async Task<string?> FirmarAsync(
+        ProcedureInstance instance, Guid tenantId, Guid validationId, List<string> partes,
+        bool generaCompraventa, CancellationToken ct)
+    {
+        string? error = null;
+        string accion;
+        if (generaCompraventa)
+        {
+            accion = "firma_compraventa";
+            foreach (var parte in partes)
+            {
+                (_, error) = await firmaHandler.HandleAsync(
+                    instance.Id, tenantId, new SolicitarFirmaInput(parte, null), ct);
+                if (error is not null)
+                    break;
+            }
+        }
+        else
+        {
+            // Un solo FUR basta aunque la persona firme por dos partes: el generador sella todas.
+            accion = "fur";
+            (_, error) = await furHandler.HandleAsync(instance.Id, tenantId, ct);
+        }
+
+        if (error is not null)
+            return error;
+
+        // Bitácora correlacionada con la validación (AC5) y llave de idempotencia.
+        repo.Add(new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = EventoFirmaAutoSolicitada,
+            Payload = JsonSerializer.Serialize(new
+            {
+                validation_id = validationId,
+                parte = partes[0],
+                partes,
+                estado = instance.Status,
+                modalidad = instance.FamilyCode,
+                accion,
+            }),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await repo.SaveChangesAsync(ct);
+        return null;
+    }
+
+    /// <summary>
+    /// (ii) ¿El trámite ya tiene la firma de esta persona? Con compraventa: cada parte del sujeto ya firmó el
+    /// contrato. Sin compraventa: hay un FUR generado por el sistema DESPUÉS de la aprobación (lleva el sello
+    /// de esta validación) y no quedó desactualizado por un cambio posterior del expediente.
+    /// </summary>
+    private static bool YaFirmado(
+        ProcedureInstance instance, List<string> partes, bool generaCompraventa, DateTimeOffset aprobadaEn)
+    {
+        if (generaCompraventa)
+        {
+            return partes.All(parte => instance.Signatures.Any(s =>
+                string.Equals(s.Parte, parte, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase)
+                && s.Estado == SignatureEstados.Firmada));
+        }
+
+        var fur = instance.Attachments
+            .Where(a => string.Equals(a.Tipo, FurVigenciaExpediente.TipoFur, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(a => a.UploadedAt)
+            .FirstOrDefault();
+        return fur is not null
+            && !string.Equals(fur.Source, "user", StringComparison.OrdinalIgnoreCase)
+            && fur.UploadedAt >= aprobadaEn
+            && !FurVigenciaExpediente.FurDesactualizado(instance);
+    }
+
+    /// <summary>
     /// Partes (comprador/vendedor) del trámite cuyo SUJETO DE IDENTIDAD es la persona validada: el actor
     /// en persona natural, el representante legal en persona jurídica (<see cref="IdentitySubjectResolver"/>).
-    /// Si el grafo no trae actores (no debería: el repositorio los incluye), cae a la parte validada.
+    /// Review PR #510 (L2): vacío si ninguna parte es la persona — el llamador omite el trámite.
     /// </summary>
     private static List<string> PartesDelSujeto(
-        ProcedureInstance instance, string tipoDoc, string documento, string parteValidada)
+        ProcedureInstance instance, string tipoDoc, string documento)
     {
         var partes = instance.Actors
             .Where(a => a.ActorType is BiometricRules.ParteComprador or BiometricRules.ParteVendedor)
@@ -179,6 +270,14 @@ public sealed class IdentityValidationCompletedConsumer(
             .Select(a => a.ActorType)
             .Distinct(StringComparer.Ordinal)
             .ToList();
-        return partes.Count > 0 ? partes : [parteValidada];
+        return partes;
     }
+}
+
+/// <summary>Logs sin PII (solo ids y tipo de excepción) del consumidor de identidad aprobada.</summary>
+internal static partial class IdentityValidationConsumerLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Bug #13194 — la firma automática del trámite {InstanceId} (validación {ValidationId}) falló con {ExceptionType}; se revirtió su savepoint y el lote siguió.")]
+    public static partial void TramiteFallido(ILogger logger, string exceptionType, Guid instanceId, Guid validationId);
 }
