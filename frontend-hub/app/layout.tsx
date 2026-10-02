@@ -3,6 +3,7 @@ import { Poppins } from "next/font/google";
 import { BrandProvider } from "@flit/brand/BrandProvider";
 import { BrandStyle } from "@flit/brand/BrandStyle";
 import { resolveBrand } from "@flit/brand/resolve-brand.server";
+import { THEME_INIT_SCRIPT } from "@flit/shell/theme-script";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -26,8 +27,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const brand = await resolveBrand();
 
   return (
-    <html lang="es" suppressHydrationWarning className={`${poppins.variable} h-full`}>
+    <html lang="es" suppressHydrationWarning className={`${poppins.variable} h-full scroll-smooth`}>
       <head>
+        {/* Tema claro/oscuro antes de pintar, sin destello (la preferencia es la misma que en Trámites). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <BrandStyle brand={brand} />
       </head>
       <body suppressHydrationWarning className="h-full font-sans antialiased">
