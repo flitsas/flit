@@ -1,20 +1,23 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Clock, ScanFace, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Clock, ScanFace, ShieldCheck } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import type { ManualDetail } from '@/lib/api/types/manual-review';
 import { formatEspera, manualOriginLabel } from '@/lib/identidad/manual-review-meta';
+import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { formatFechaHora } from '@/lib/format/date';
 import { ManualImageGallery } from './ManualImageGallery';
+import { ManualReviewActions } from './ManualReviewActions';
 import { ManualStatusBadge } from './ManualStatusBadge';
 
 /**
  * Detalle de una validación manual (modal ancho, no lateral). HU-C5 lo abre con los datos del registro;
- * HU-C6 añade las 4 capturas con visor y la constancia de consentimiento; HU-C7, aprobar y rechazar.
+ * HU-C6 añade las 4 capturas con visor y la constancia de consentimiento; HU-C7, aprobar y rechazar (solo con
+ * el registro pendiente de revisión), actualizando el detalle y la fila sin recargar.
  */
 
 type Carga = 'loading' | 'error' | 'ready';
@@ -32,15 +35,20 @@ export function ManualReviewDetailModal({
   id,
   client,
   onClose,
+  onChanged,
 }: {
   id: string | null;
   client: ManualReviewClient;
   onClose: () => void;
+  /** El registro cambió (aprobado o rechazado): la tabla refresca su fila. */
+  onChanged?: () => void;
 }) {
   const [detail, setDetail] = useState<ManualDetail | null>(null);
   const [carga, setCarga] = useState<Carga>('loading');
   const [intento, setIntento] = useState(0);
   const [visorAbierto, setVisorAbierto] = useState(false);
+  const [accionAbierta, setAccionAbierta] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -62,9 +70,18 @@ export function ManualReviewDetailModal({
 
   if (!id) return null;
 
+  /** Vuelve a pedir el detalle sin pasar por el estado «cargando»: el registro se actualiza en su sitio. */
+  const refrescar = async () => {
+    try {
+      setDetail(await client.getManualDetail(id));
+    } catch {
+      /* se conserva el detalle anterior; la acción ya se informó */
+    }
+  };
+
   return (
-    // Con el visor de una imagen abierto, Escape cierra solo el visor: el detalle queda `busy`.
-    <Modal open onClose={onClose} busy={visorAbierto} title="Detalle de validación manual" icon={ScanFace} size="xl">
+    // Con el visor o un diálogo de confirmación abiertos, Escape cierra solo ese: el detalle queda `busy`.
+    <Modal open onClose={onClose} busy={visorAbierto || accionAbierta} title="Detalle de validación manual" icon={ScanFace} size="xl">
       <DetalleCuerpo
         id={id}
         client={client}
@@ -73,6 +90,18 @@ export function ManualReviewDetailModal({
         carga={carga}
         onRetry={() => setIntento((n) => n + 1)}
         onViewerChange={setVisorAbierto}
+        mensaje={mensaje}
+        onDialogChange={setAccionAbierta}
+        onDone={(m) => {
+          setMensaje(m);
+          void refrescar();
+          onChanged?.();
+        }}
+        onStale={() => {
+          setMensaje(null);
+          void refrescar();
+          onChanged?.();
+        }}
       />
     </Modal>
   );
@@ -86,6 +115,10 @@ function DetalleCuerpo({
   carga,
   onRetry,
   onViewerChange,
+  mensaje,
+  onDialogChange,
+  onDone,
+  onStale,
 }: {
   id: string;
   client: ManualReviewClient;
@@ -94,6 +127,10 @@ function DetalleCuerpo({
   carga: Carga;
   onRetry: () => void;
   onViewerChange: (open: boolean) => void;
+  mensaje: string | null;
+  onDialogChange: (open: boolean) => void;
+  onDone: (message: string) => void;
+  onStale: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useWizardFocusTrap(panelRef, { active: true });
@@ -121,6 +158,11 @@ function DetalleCuerpo({
               </Dato>
               <Dato label="Fecha de activación">{formatFechaHora(detail.activatedAt)}</Dato>
               <Dato label="Tiempo en espera">{formatEspera(detail.waitingMinutes)}</Dato>
+              {detail.status === 'rechazado' && detail.rejectionReasonCode && (
+                <Dato label="Motivo del rechazo">
+                  {etiquetaMotivoRechazoManual(detail.rejectionReasonCode) ?? detail.rejectionReasonCode}
+                </Dato>
+              )}
             </dl>
 
             <section aria-labelledby={`${id}-consent`} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
@@ -157,7 +199,27 @@ function DetalleCuerpo({
           </>
         )}
       </UiStateBoundary>
-      <div className="flex justify-end">
+      {mensaje && (
+        <p role="status" className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm font-semibold">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#557EFF]" aria-hidden /> {mensaje}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {detail && (
+          <ManualReviewActions
+            detail={detail}
+            client={client}
+            onDialogChange={onDialogChange}
+            onDone={(m) => {
+              onDone(m);
+              panelRef.current?.focus();
+            }}
+            onStale={() => {
+              onStale();
+              panelRef.current?.focus();
+            }}
+          />
+        )}
         <button
           type="button"
           onClick={onClose}

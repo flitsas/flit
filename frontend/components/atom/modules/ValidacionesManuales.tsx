@@ -217,6 +217,7 @@ export function ValidacionesManuales({ client }: { client?: ManualReviewClient }
         id={detalleId}
         client={api}
         onClose={() => setDetalleId(null)}
+        onChanged={recargar}
       />
     </div>
   );
