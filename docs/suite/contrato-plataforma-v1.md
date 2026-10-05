@@ -218,6 +218,12 @@ Configuración por ambiente (appsettings y configuración runtime del frontend).
 | `Suite:TramitesHost:Enabled` | A | Activa el reparto de rutas hacia `<ambiente>.tramites.` |
 | `Suite:Consultas:ServiceApi` | C | Expone `/platform/consultas` a otros servicios |
 
+> **Cómo quedaron implementadas (2026-10-05).** Tres de estas banderas no existen con ese nombre en el código:
+> `Suite:LegacySession:Enabled` es `FLIT_SESSION_MODE` (`legacy`/`oidc`) de cada front; `Suite:Hub:Enabled` es el
+> perfil `suite` de compose más el `proxy_pass` de la raíz en nginx; `Suite:TramitesHost:Enabled` es
+> `FLIT_TRAMITES_HOST_ENABLED` del hub. `Suite:Consultas:ServiceApi` no se implementó. Las vigentes, con sus
+> variables: [mapa-y-banderas.md](mapa-y-banderas.md) y [handoff-vps-suite.md](handoff-vps-suite.md).
+
 ## 10. Errores
 
 RFC 7807 con `code` estable:

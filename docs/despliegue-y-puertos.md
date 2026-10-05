@@ -143,19 +143,21 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
 
 Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
 Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
-(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` y `x030` migración)
+(`x001` frontend, `x002` gateway, `x003` core-api, `x004` core-identity, `x012` python-ml, `x020` core-ict, `x030` migración)
 no se reutilizan.
 
 | Servicio | Local y DEV | QA | PDN |
 |----------|-------------|----|-----|
 | `frontend-hub` | `4040` | `5040` | `6040` |
-| `core-demo` / `frontend-demo` | `4050` / `4051` | — | — |
+| `core-identity` | `4004` | `5004` | `6004` |
 | `core-comparendos` / `frontend-comparendos` | `4060` / `4061` | `5060` / `5061` | `6060` / `6061` |
 | `core-diagnostico` / `frontend-diagnostico` | `4070` / `4071` | `5070` / `5071` | `6070` / `6071` |
 
 - En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
-- Las variables de ambiente y el `setup` del CD para estos servicios se agregan cuando cada
-  uno se despliegue por primera vez (L-10).
+- `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
+  `CORE_IDENTITY_PORT`); los de Comparendos y Diagnóstico se agregan cuando cada uno se
+  despliegue por primera vez (L-10). El producto `demo` se retiró (DDL 125).
+- Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
 
 ---
 
@@ -485,7 +487,7 @@ Un job `setup` resuelve el mapeo y los jobs siguientes lo consumen:
 |------|:---------------------:|-------|---------------|------------------------------|
 | `develop` | `dev` | `dev.flitsas.online` | `api.dev.flitsas.online` | `dev` (móvil) |
 | `staging` | `qa` | `qa.flitsas.online` | `api.qa.flitsas.online` | `qa` (móvil) |
-| `release` | `pdn` | `pdn.flitsas.online` | `api.pdn.flitsas.online` | `sha-<commit>` (**inmutable**) |
+| `release` | `pdn` | `flitsas.online` | `api.flitsas.online` | `sha-<commit>` (**inmutable**) |
 
 - **Tags publicados vs. tag de deploy:** cada build publica **3 tags** — `sha-<commit>`
   (inmutable, formato largo), el tag móvil del ambiente (`dev`/`qa`/`pdn`) y `latest`

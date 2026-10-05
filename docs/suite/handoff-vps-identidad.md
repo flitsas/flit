@@ -10,6 +10,9 @@ despliega.
 
 ## Requisitos
 
+- La suite ya encendida en el ambiente (fases 0 a 3 de [handoff-vps-suite.md](handoff-vps-suite.md)), con el bloque
+  «Lo que exporta el CD» en el `.env`: los pasos de abajo son comandos a mano y sin esas variables el compose usaría
+  los puertos y tags de DEV (y no arranca sin `FLIT_SUITE_ENV`).
 - El PR de la suite fusionado en la rama del ambiente y desplegado (trae el servicio `core-identity` en
   `docker-compose.prod.yml`, la bandera del gateway y el CD por servicio).
 - Acceso a la carpeta del despliegue (`$HOSTINGER_DEPLOY_PATH`) y a su `.env`.
@@ -136,7 +139,8 @@ FLIT_DEPLOY_ROLLING = true
 | `.env` | `FLIT_IDENTITY_CLUSTER_ENABLED` | `true` |
 | GitHub Environment | `FLIT_DEPLOY_ROLLING` | `true` |
 
-`CORE_IDENTITY_PORT` y `CORE_IDENTITY_TAG` los exporta el CD; no hacen falta en el `.env`.
+`CORE_IDENTITY_PORT` y `CORE_IDENTITY_TAG` los exporta el CD, pero los pasos 1 y 2 son a mano: van también en el `.env`
+(§4.2 de [handoff-vps-suite.md](handoff-vps-suite.md)).
 
 ## Si algo sale mal
 

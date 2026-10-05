@@ -130,9 +130,9 @@ el gateway.
 | `FLIT_OIDC_INTERNAL_URL` | frontend, frontend-hub | Adónde canjea y renueva tokens el servidor | igual a `FLIT_HUB_URL` | `http://gateway:<puerto>` (red interna) |
 | `CORE_API_ORIGIN` | frontend, frontend-hub | Destino del proxy `/api/v1` | `http://127.0.0.1:4003` | `http://gateway:<puerto>` |
 | `TRAMITES_URL` (`FLIT_TRAMITES_URL` en el `.env`) | frontend-hub | URL de Trámites | `http://127.0.0.1:3000` | la pone el CD: `https://dev.tramites.flitsas.online`… |
-| `FLIT_SUITE_ENV` → `Suite:Hosts:Environment` | core-api | Prefijo de ambiente para armar los hosts de cada producto | vacío + `Overrides` | `dev`, `qa`, vacío en PDN (la pone el CD) |
+| `FLIT_SUITE_ENV` → `Suite:Hosts:Environment` | core-api | Prefijo de ambiente para armar los hosts de cada producto | vacío + `Overrides` | `dev`, `qa`, vacío en PDN (la pone el CD; también va en el `.env`, el compose no arranca sin ella) |
 | `Suite:Hosts:Overrides:<producto>` | core-api | URL fija por producto | `plataforma`, `tramites` con `127.0.0.1` | no se usa |
-| `Suite:Hosts:ComingSoon` | core-api, core-identity | Productos sin app desplegada todavía: su enlace lleva a `/proximamente/<código>` del hub | `comparendos`, `diagnostico`, `demo` (en `appsettings.json`) | igual; al desplegar un producto en un ambiente, se quita de la lista de ese ambiente |
+| `Suite:Hosts:ComingSoon` | core-api, core-identity | Productos sin app desplegada todavía: su enlace lleva a `/proximamente/<código>` del hub | `comparendos`, `diagnostico` (en `appsettings.json`) | igual; al desplegar un producto en un ambiente, se quita de la lista de ese ambiente |
 | `FLIT_APP_URL` | cada front | URL pública de la app, si el `Host` no sirve | no hace falta | no hace falta |
 | `FLIT_HOSTS` | frontend-hub | Qué hosts son marca FLIT (el resto, Marca Blanca) | por defecto | por defecto del compose |
 

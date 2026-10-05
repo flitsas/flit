@@ -195,7 +195,7 @@ márcalo explícitamente al ejecutar, no antes.
 |---|---|---|---|
 | `FLIT_INTERNAL_API_KEY` | _(vacía)_ | `gateway`, `core-api` | Generar por ambiente, nunca commitear. Vacía = fail-closed. |
 | `FLIT_INTERNAL_SUBNET` | `10.114.40.0/24` | red `default` del compose, `gateway` (`DomainSeal__InternalAllowedNetworks__0`) | Distinto por ambiente si comparten VPS. |
-| `FLIT_HOSTS` | _(comentada, sin default activo)_ | ninguno todavía (documentado para #12418/#12419) | No alimenta ningún servicio de este compose; `NEXT_PUBLIC_FLIT_HOSTS` se hornea en build (`cd.yml`), no aquí. |
+| `FLIT_HOSTS` | default del compose (comodines de `flitsas.online`/`flitsas.com`) | `frontend-hub` (runtime) | En Trámites no es runtime: `NEXT_PUBLIC_FLIT_HOSTS` se hornea en build (`cd.yml`). |
 
 ## Riesgos y límites conocidos
 
@@ -225,5 +225,5 @@ márcalo explícitamente al ejecutar, no antes.
   real, un dominio de cliente sigue activándose con certificado manual. Gap declarado en
   `deploy/edge/acme/README.md`: el endpoint que lista dominios `verified` sin certificado
   (`.../internal/domains/pending-certificate`) es una propuesta, no un contrato confirmado.
-- **`FLIT_HOSTS`/`NEXT_PUBLIC_FLIT_HOSTS` sin cablear:** el nombre está reservado y documentado
-  (`.env.prod.example`), pero ningún servicio lo consume todavía — corresponde a #12418/#12419.
+- **`FLIT_HOSTS`:** la consume el hub de la FLIT Suite (`frontend-hub`) en runtime; Trámites usa
+  `NEXT_PUBLIC_FLIT_HOSTS`, horneada en build.
