@@ -676,6 +676,8 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.GetFurTemplateFormatHandle
 Flit.Tramites.Application.UseCases.ProcedureInstances.GetIdentityAuditByValidationHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetIdentityAuditByValidationHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GetIdentityAuditHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetIdentityAuditHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GetMandateSignerPrevistoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetMandateSignerPrevistoHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.GetManualDetailHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetManualDetailHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.GetManualImageHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetManualImageHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GetPortalByTokenHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetPortalByTokenHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GetPreflightHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetPreflightHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GetPrendaVigenteHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GetPrendaVigenteHandler (Scoped)

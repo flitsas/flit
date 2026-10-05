@@ -139,6 +139,13 @@ public static class IdentityValidationAuditStages
     /// regeneración ya estaban confirmadas; el Super Admin puede regenerar. Sin correo, sin token y sin PII.
     /// </summary>
     public const string ManualCorreoFallido = "manual_correo_fallido";
+
+    /// <summary>
+    /// HU #13297 (Feature #13282 C) — el Super Admin consultó el detalle de una validación manual o una de sus imágenes
+    /// (rostro, documento, firma). Sin PII ni rutas de storage: solo el usuario y qué se consultó (<c>recurso=detalle</c> o
+    /// <c>recurso=imagen:&lt;kind&gt;</c>).
+    /// </summary>
+    public const string ManualImagenesConsultadas = "manual_imagenes_consultadas";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

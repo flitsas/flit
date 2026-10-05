@@ -30,15 +30,7 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
 
         return CrossTenantRead.ExecuteAsync(db, async () =>
         {
-            var query = db.ProcedureInstanceBiometricValidations
-                .AsNoTracking()
-                .Where(v => v.Provider == BiometricProviders.Manual
-                    && (v.Status == BiometricEstados.ManualActivo
-                        || v.Status == BiometricEstados.PendienteRevisionManual
-                        || v.Status == BiometricEstados.Rechazado
-                        || v.Status == BiometricEstados.Expirado
-                        || (v.Status == BiometricEstados.Aprobado
-                            && v.ApprovalOrigin == BiometricApprovalOrigins.Manual)));
+            var query = ManualValidations();
 
             if (filter.Status is { } status)
                 query = query.Where(v => v.Status == status);
@@ -109,6 +101,96 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
             return (items, total);
         }, ct);
     }
+
+    public Task<ManualIdentityReviewDetailRow?> GetDetailAsync(Guid id, CancellationToken ct = default) =>
+        CrossTenantRead.ExecuteAsync(db, async () =>
+        {
+            var row = await ManualValidations()
+                .Where(v => v.Id == id)
+                .Join(db.Tenants, v => v.TenantId, t => t.Id, (v, t) => new { v, TenantName = t.LegalName })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (row is null)
+                return null;
+
+            var v = row.v;
+            string? reviewerName = null;
+            if (v.ReviewedBy is { } reviewerId)
+            {
+                reviewerName = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == reviewerId)
+                    .Select(u => u.DisplayName)
+                    .FirstOrDefaultAsync(ct)
+                    .ConfigureAwait(false);
+            }
+
+            var current = TieneCapturaVigente(v.Status);
+            var consentCurrent = v.ConsentAt is { } consent && v.ManualActivatedAt is { } activated && consent >= activated;
+            // reviewedBy: el nombre visible del revisor; si ya no se resuelve, su id (nunca vacío si hubo revisión).
+            var reviewer = v.ReviewedBy is null ? null
+                : string.IsNullOrWhiteSpace(reviewerName) ? v.ReviewedBy.Value.ToString() : reviewerName;
+
+            return new ManualIdentityReviewDetailRow(
+                v.Id, v.TenantId, v.ProcedureInstanceId, v.PartyRole, v.Name, v.DocumentNumber, row.TenantName,
+                OriginOf(v.PartyRole, v.ProcedureInstanceId), v.Status, v.ManualActivatedAt,
+                consentCurrent ? v.ConsentAt : null, consentCurrent ? v.ConsentTextVersion : null,
+                current && !string.IsNullOrWhiteSpace(v.FacePhotoPath),
+                current && !string.IsNullOrWhiteSpace(v.IdFrontPhotoPath),
+                current && !string.IsNullOrWhiteSpace(v.IdBackPhotoPath),
+                current && !string.IsNullOrWhiteSpace(v.SignatureImagePath),
+                v.ReviewedAt, reviewer, v.RejectionReasonCode,
+                v.Status == BiometricEstados.ManualActivo ? v.ExpiresAt : null);
+        }, ct);
+
+    public Task<ManualIdentityImageRef?> GetImageRefAsync(Guid id, string kind, CancellationToken ct = default) =>
+        CrossTenantRead.ExecuteAsync(db, async () =>
+        {
+            var row = await ManualValidations()
+                .Where(v => v.Id == id)
+                .Select(v => new
+                {
+                    v.Id, v.TenantId, v.ProcedureInstanceId, v.PartyRole, v.Status,
+                    v.FacePhotoPath, v.IdFrontPhotoPath, v.IdBackPhotoPath, v.SignatureImagePath,
+                })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (row is null)
+                return null;
+
+            var path = !TieneCapturaVigente(row.Status) ? null : kind switch
+            {
+                ManualImageKinds.Rostro => row.FacePhotoPath,
+                ManualImageKinds.Anverso => row.IdFrontPhotoPath,
+                ManualImageKinds.Reverso => row.IdBackPhotoPath,
+                ManualImageKinds.Firma => row.SignatureImagePath,
+                _ => null,
+            };
+            return new ManualIdentityImageRef(
+                row.Id, row.TenantId, row.ProcedureInstanceId, row.PartyRole, string.IsNullOrWhiteSpace(path) ? null : path);
+        }, ct);
+
+    /// <summary>
+    /// Las validaciones del flujo manual (mismo conjunto que el listado): <c>provider = 'manual'</c> con estado manual; una
+    /// aprobada solo entra si su <c>approval_origin</c> es <c>manual</c>.
+    /// </summary>
+    private IQueryable<ProcedureInstanceBiometricValidation> ManualValidations() =>
+        db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.Provider == BiometricProviders.Manual
+                && (v.Status == BiometricEstados.ManualActivo
+                    || v.Status == BiometricEstados.PendienteRevisionManual
+                    || v.Status == BiometricEstados.Rechazado
+                    || v.Status == BiometricEstados.Expirado
+                    || (v.Status == BiometricEstados.Aprobado
+                        && v.ApprovalOrigin == BiometricApprovalOrigins.Manual)));
+
+    /// <summary>
+    /// ¿Las rutas de imagen de la fila son las del ciclo ACTUAL? Solo con la captura recibida y sin descartar: pendiente de
+    /// revisión o aprobada. En <c>manual_activo</c> (p. ej. tras un rechazo que reactivó la captura) las rutas son las del ciclo
+    /// anterior: se conservan en storage y en la fila, pero no se muestran.
+    /// </summary>
+    private static bool TieneCapturaVigente(string status) =>
+        status is BiometricEstados.PendienteRevisionManual or BiometricEstados.Aprobado;
 
     /// <summary>
     /// Origen según el modelo actual: la ficha de mandatario manda; luego el trámite; el resto es prevalidación

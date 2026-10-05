@@ -6469,6 +6469,86 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: flujo_manual_no_activo (la validación no está en manual_activo).
+  /api/v1/tramites/biometric-validations/{id}/manual-detail:
+    get:
+      operationId: getManualIdentityValidationDetail
+      tags: [Tramites, Identidad]
+      summary: Detalle de una validación manual (solo Super Admin) — HU #13297, Épica #13202
+      description: >
+        Detalle de una validación del flujo manual de CUALQUIER compañía (el tenant sale de la fila). Solo Super Admin
+        (403 al resto, 401 anónimo). Trae el `ManualListItem` más la constancia de consentimiento (solo la del ciclo actual),
+        el estado de las 4 imágenes (`images[].available`, solo con captura del ciclo ACTUAL: pendiente de revisión o
+        aprobada manualmente), la revisión (`reviewedAt`, `reviewedBy` con el nombre visible del revisor,
+        `rejectionReasonCode`) y `linkExpiresAt` (solo en `manual_activo`). Tras un rechazo (HU #13299) el estado visible es
+        `manual_activo` con `rejectionReasonCode` no nulo: las imágenes del ciclo anterior se conservan en storage pero
+        no se muestran (todas `available: false`). Sin captura aún tampoco hay imágenes. Nunca expone rutas de storage ni la
+        IP del consentimiento. Cada consulta queda auditada (`manual_imagenes_consultadas`, `recurso=detalle`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Detalle de la validación manual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualDetail"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Validación inexistente o que no es del flujo manual (code not_found).
+
+  /api/v1/tramites/biometric-validations/{id}/manual-images/{kind}:
+    get:
+      operationId: getManualIdentityValidationImage
+      tags: [Tramites, Identidad]
+      summary: Imagen de la captura manual (solo Super Admin) — HU #13297, Épica #13202
+      description: >
+        Entrega los bytes de una imagen del ciclo ACTUAL desde el almacenamiento, con su Content-Type real (detectado por
+        el contenido) y `Cache-Control: no-store`. Es el único acceso: no hay URL pública ni firmada ni ruta de storage.
+        Solo Super Admin (403 al resto, 401 anónimo); el JWT viaja en la cabecera Authorization. `kind` ∈ `rostro`,
+        `anverso`, `reverso`, `firma`; 404 si el kind es otro, la validación no existe o no es manual, o esa imagen no
+        existe en el ciclo actual (p. ej. `manual_activo` tras un rechazo). Cada entrega queda auditada
+        (`manual_imagenes_consultadas`, `recurso=imagen:<kind>`, sin rutas ni PII).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [rostro, anverso, reverso, firma]
+      responses:
+        "200":
+          description: Contenido de la imagen.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Kind inválido, validación inexistente o sin esa imagen en el ciclo actual (code not_found).
+
   /api/v1/public/manual-capture/{token}:
     get:
       operationId: getPublicManualCapture
@@ -16410,6 +16490,45 @@ components:
         expiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
         activatedAt: { type: string, format: date-time, nullable: true, description: Cuándo se activó el flujo manual. }
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió; se puede volver a regenerar. }
+    ManualDetail:
+      type: object
+      required: [id, fullName, documentNumber, tenantName, origin, status, waitingMinutes, images]
+      description: >
+        Detalle de una validación manual (HU #13297): `ManualListItem` + consentimiento del ciclo actual, estado de las 4
+        imágenes, revisión y vencimiento del enlace. Sin rutas de storage ni IP.
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        documentNumber: { type: string }
+        tenantName: { type: string }
+        origin:
+          type: string
+          enum: [tramite, prevalidacion, mandatario, representante_legal]
+        status:
+          type: string
+          enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
+        activatedAt: { type: string, format: date-time, nullable: true }
+        waitingMinutes: { type: integer }
+        consentAt: { type: string, format: date-time, nullable: true, description: Solo la constancia del ciclo actual. }
+        consentTextVersion: { type: string, nullable: true }
+        images:
+          type: array
+          description: Siempre las 4, en orden rostro, anverso, reverso, firma. `available` solo con captura del ciclo actual.
+          items:
+            type: object
+            required: [kind, available]
+            properties:
+              kind: { type: string, enum: [rostro, anverso, reverso, firma] }
+              available: { type: boolean }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+        reviewedBy: { type: string, nullable: true, description: Nombre visible del revisor (su id si ya no se resuelve). }
+        rejectionReasonCode:
+          type: string
+          nullable: true
+          description: >
+            Código del último rechazo. Tras rechazar (HU #13299) el estado visible es `manual_activo` con este campo no nulo
+            hasta que el cliente envíe la nueva captura.
+        linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo en manual_activo. }
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]
