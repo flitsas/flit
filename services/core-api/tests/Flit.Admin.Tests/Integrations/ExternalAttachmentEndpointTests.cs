@@ -58,8 +58,57 @@ public sealed class ExternalAttachmentEndpointTests : IClassFixture<ExternalAtta
         body.GetProperty("sha256").GetString().Should().Be(Convert.ToHexStringLower(SHA256.HashData(Pdf)));
         body.GetProperty("reemplazoDe").ValueKind.Should().Be(JsonValueKind.Null, "el campo se envía siempre, también null");
         body.GetProperty("enMatriz").GetBoolean().Should().BeTrue();
-        body.GetProperty("pagadoMarcado").GetBoolean().Should().BeFalse();
+        body.GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue("el trámite está en asignado: el comprobante marca el impuesto como pagado");
+        _factory.Envio.Marcas.Should().Be(1);
         _factory.Envio.Escritos.Should().ContainSingle().Which.Filename.Should().Be("recibo.pdf");
+    }
+
+    [Theory]
+    [InlineData("preasignacion", false, true)]
+    [InlineData("rechazado", true, true)]
+    [InlineData("entregado", false, false)]
+    public async Task AC1_PagadoMarcadoDelCuerpoSigueAlEstadoDelTramite(string estado, bool subsanacion, bool marca)
+    {
+        _factory.Envio.Reiniciar(Target(estado) with { SubsanacionActiva = subsanacion });
+
+        var response = await Post(Url, Pdf, cliente: "adj-pagado");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("pagadoMarcado").GetBoolean().Should().Be(marca);
+        _factory.Envio.Marcas.Should().Be(marca ? 1 : 0);
+    }
+
+    [Theory]
+    [InlineData("asignado", false, false, 200, true, 1)]
+    [InlineData("entregado", false, false, 200, false, 0)]
+    [InlineData("asignado", false, true, 200, true, 0)]
+    public async Task El200IdempotentePoneLaMarcaSoloSiElEstadoMarcaYFalta(
+        string estado, bool subsanacion, bool marcaVigente, int status, bool pagado, int marcas)
+    {
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Convert.ToHexStringLower(SHA256.HashData(Pdf)), "fm-1");
+        _factory.Envio.Reiniciar(Target(estado) with { SubsanacionActiva = subsanacion, Vigentes = [vigente], PagadoMarcado = marcaVigente });
+
+        var response = await Post(Url, Pdf, cliente: "adj-200");
+
+        ((int)response.StatusCode).Should().Be(status);
+        var body = await Json(response);
+        body.GetProperty("pagadoMarcado").GetBoolean().Should().Be(pagado);
+        body.GetProperty("reemplazoDe").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("adjuntoId").GetGuid().Should().Be(vigente.Id);
+        _factory.Envio.Marcas.Should().Be(marcas);
+        _factory.Envio.Escritos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AC2_EnEntregadoConMarcaPreviaDeFlitoLaRespuestaLaReflejaSinEscribir()
+    {
+        _factory.Envio.Reiniciar(Target("entregado") with { PagadoMarcado = true });
+
+        var response = await Post(Url, Pdf, cliente: "adj-ac2");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
+        _factory.Envio.Marcas.Should().Be(0);
     }
 
     [Fact]

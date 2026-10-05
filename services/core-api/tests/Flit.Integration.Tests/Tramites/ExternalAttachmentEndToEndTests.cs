@@ -52,7 +52,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         body.GetProperty("tipo").GetString().Should().Be(Tipo);
         body.GetProperty("sha256").GetString().Should().Be(FixtureSha);
         body.GetProperty("reemplazoDe").ValueKind.Should().Be(JsonValueKind.Null);
-        body.GetProperty("pagadoMarcado").GetBoolean().Should().BeFalse();
+        body.GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue("asignado es un estado editable: el comprobante marca el pago");
 
         var filas = await FilasAsync(tramite);
         var fila = filas.Should().ContainSingle("no se genera nada más (sin OCR ni consolidado)").Subject;
@@ -257,33 +257,148 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         conMatriz.GetProperty("enMatriz").GetBoolean().Should().BeTrue();
     }
 
+    // ── HU #13264: impuesto pagado marcado por FLITO ─────────────────────────
+
     [PostgresTheory]
-    [InlineData("asignado")]
-    [InlineData("entregado")]
-    public async Task PagadoMarcado_ReflejaLaMarcaVigenteDelConsumidorYNoLaEscribe(string estado)
+    [InlineData("preasignacion", false)]
+    [InlineData("asignado", false)]
+    [InlineData("rechazado", true)]
+    public async Task AC1_ElComprobanteMarcaElImpuestoComoPagadoConSourceFlito_YElReemplazoLaConserva(string estado, bool subsanacion)
     {
         await SembrarAsync();
-        var conMarca = await RadicadoAsync("borrador");
-        var sinMarca = await RadicadoAsync(estado);
-        var marcaDelGestor = await RadicadoAsync("borrador");
-        await SembrarMarcaAsync(conMarca, source: "flito");
-        await SembrarMarcaAsync(marcaDelGestor, source: "user");
-        foreach (var id in (Guid[])[conMarca, marcaDelGestor])
-        {
-            await EjecutarAsync("UPDATE tramites.procedure_instances SET status = @estado WHERE id = @id", ("id", id), ("estado", estado));
-        }
-
+        var tramite = await RadicadoAsync(estado, subsanacion);
         await using var almacen = new AlmacenFactory(Fixture);
 
-        (await Json(await Post(almacen, conMarca, "%PDF-1.4 a"u8.ToArray()))).GetProperty("pagadoMarcado").GetBoolean()
-            .Should().BeTrue("la marca vigente del consumidor se devuelve, también en entregado");
-        (await Json(await Post(almacen, sinMarca, "%PDF-1.4 b"u8.ToArray()))).GetProperty("pagadoMarcado").GetBoolean()
-            .Should().BeFalse("esta HU no escribe la marca");
-        (await Json(await Post(almacen, marcaDelGestor, "%PDF-1.4 c"u8.ToArray()))).GetProperty("pagadoMarcado").GetBoolean()
-            .Should().BeFalse("la marca puesta por el gestor no es la del consumidor");
+        var primero = await Post(almacen, tramite, "%PDF-1.4 uno"u8.ToArray());
+
+        primero.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(primero)).GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
+        (await MarcaAsync(tramite)).Should().Be(("true", "flito"));
+
+        var reemplazo = await Post(almacen, tramite, "%PDF-1.4 dos"u8.ToArray());
+
+        reemplazo.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(reemplazo)).GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
+        (await MarcaAsync(tramite)).Should().Be(("true", "flito"));
+        (await ContarMarcasAsync(tramite)).Should().Be(1);
+        (await FilasAsync(tramite)).Should().ContainSingle();
+    }
+
+    [PostgresTheory]
+    [InlineData("true", "user")]
+    [InlineData("false", "user")]
+    [InlineData("false", "flito")]
+    public async Task AC1_UnaMarcaPreviaDelGestorOFalsaSeReemplazaPorTrueConSourceFlito(string valor, string fuente)
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("borrador");
+        await SembrarMarcaAsync(tramite, fuente, valor);
+        await EjecutarAsync("UPDATE tramites.procedure_instances SET status = 'asignado' WHERE id = @id", ("id", tramite));
+        await using var almacen = new AlmacenFactory(Fixture);
+
+        var response = await Post(almacen, tramite, "%PDF-1.4 pisa"u8.ToArray());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
+        (await MarcaAsync(tramite)).Should().Be(("true", "flito"));
+        (await ContarMarcasAsync(tramite)).Should().Be(1);
+    }
+
+    [PostgresFact]
+    public async Task AC1_LaMarcaYElAdjuntoSeConfirmanJuntos_UnRechazoNoDejaMarca()
+    {
+        await SembrarAsync();
+        var delGestor = await RadicadoAsync("asignado");
+        await InsertarAdjuntoAsync(delGestor, provider: null, sha: "gestor", path: "fm-gestor");
+        await using var almacen = new AlmacenFactory(Fixture);
+
+        var response = await Post(almacen, delGestor, "%PDF-1.4 rechazado"u8.ToArray());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ContarMarcasAsync(delGestor)).Should().Be(0, "sin adjunto de Flito no hay marca");
+    }
+
+    [PostgresFact]
+    public async Task AC2_EnEntregadoSeArchivaSinMarcar_YLaRespuestaDiceFalse()
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("entregado");
+        await using var almacen = new AlmacenFactory(Fixture);
+
+        var response = await Post(almacen, tramite, "%PDF-1.4 entregado"u8.ToArray());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("pagadoMarcado").GetBoolean().Should().BeFalse();
+        (await FilasAsync(tramite)).Should().ContainSingle("el adjunto se archiva");
+        (await ContarMarcasAsync(tramite)).Should().Be(0, "impuesto_departamental_pagado no cambia");
+    }
+
+    [PostgresTheory]
+    [InlineData("flito", true)]
+    [InlineData("user", false)]
+    public async Task AC2_EnEntregadoLaMarcaPreviaNoCambiaYLaRespuestaReflejaLaVigenteDelConsumidor(string fuente, bool esperado)
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("borrador");
+        await SembrarMarcaAsync(tramite, fuente, "true");
+        await EjecutarAsync("UPDATE tramites.procedure_instances SET status = 'entregado' WHERE id = @id", ("id", tramite));
+        await using var almacen = new AlmacenFactory(Fixture);
+
+        var response = await Post(almacen, tramite, "%PDF-1.4 previa"u8.ToArray());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("pagadoMarcado").GetBoolean().Should().Be(esperado);
+        (await MarcaAsync(tramite)).Should().Be(("true", fuente), "la marca previa queda intacta");
+    }
+
+    [PostgresFact]
+    public async Task ElIdempotente200PoneLaMarcaFaltanteCuandoElTramiteVuelveAUnEstadoEditable()
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("entregado");
+        await using var almacen = new AlmacenFactory(Fixture);
+        var pdf = "%PDF-1.4 hueco"u8.ToArray();
+        var primero = await Json(await Post(almacen, tramite, pdf));
+        (await ContarMarcasAsync(tramite)).Should().Be(0, "en entregado no se marcó");
+
+        var sigueEnEntregado = await Post(almacen, tramite, pdf);
+        sigueEnEntregado.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(sigueEnEntregado)).GetProperty("pagadoMarcado").GetBoolean().Should().BeFalse();
+        (await ContarMarcasAsync(tramite)).Should().Be(0, "el 200 en entregado no escribe nada");
+
+        await EjecutarAsync("UPDATE tramites.procedure_instances SET status = 'preasignacion' WHERE id = @id", ("id", tramite));
+        var repetido = await Post(almacen, tramite, pdf);
+
+        repetido.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await Json(repetido);
+        cuerpo.GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
+        cuerpo.GetProperty("adjuntoId").GetGuid().Should().Be(primero.GetProperty("adjuntoId").GetGuid());
+        cuerpo.GetProperty("reemplazoDe").ValueKind.Should().Be(JsonValueKind.Null);
+        (await MarcaAsync(tramite)).Should().Be(("true", "flito"));
+        (await FilasAsync(tramite)).Should().ContainSingle("el adjunto no se toca");
+        almacen.Almacen.Guardados.Should().HaveCount(1);
+    }
+
+    [PostgresFact]
+    public async Task ElIdempotente200NoReescribeUnaMarcaYaVigente()
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("asignado");
+        await using var almacen = new AlmacenFactory(Fixture);
+        var pdf = "%PDF-1.4 vigente"u8.ToArray();
+        (await Post(almacen, tramite, pdf)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var antes = await EscalarAsync(
+            "SELECT count(*) FROM tramites.procedure_instance_field_values WHERE procedure_instance_id = @id AND field_key = 'impuesto_departamental_pagado' AND updated_at IS NULL",
+            ("id", tramite));
+
+        var repetido = await Post(almacen, tramite, pdf);
+
+        repetido.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(repetido)).GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
+        antes.Should().Be(1);
         (await EscalarAsync(
-            "SELECT count(*) FROM tramites.procedure_instance_field_values WHERE procedure_instance_id = @id AND field_key = 'impuesto_departamental_pagado'",
-            ("id", sinMarca))).Should().Be(0);
+            "SELECT count(*) FROM tramites.procedure_instance_field_values WHERE procedure_instance_id = @id AND field_key = 'impuesto_departamental_pagado' AND updated_at IS NULL",
+            ("id", tramite))).Should().Be(1, "la fila no se reescribió");
     }
 
     [PostgresFact]
@@ -459,12 +574,29 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         return id;
     }
 
-    private async Task SembrarMarcaAsync(Guid tramite, string source) =>
+    private async Task SembrarMarcaAsync(Guid tramite, string source, string valor = "true") =>
         await EjecutarAsync(
             "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, form_field_id, field_key, value_text, source) "
-            + "SELECT pi.tenant_id, pi.id, (SELECT id FROM tramites.form_fields ORDER BY id LIMIT 1), 'impuesto_departamental_pagado', 'true', @source "
+            + "SELECT pi.tenant_id, pi.id, (SELECT id FROM tramites.form_fields ORDER BY id LIMIT 1), 'impuesto_departamental_pagado', @valor, @source "
             + "FROM tramites.procedure_instances pi WHERE pi.id = @id",
-            ("id", tramite), ("source", source));
+            ("id", tramite), ("source", source), ("valor", valor));
+
+    private async Task<(string? Valor, string? Source)> MarcaAsync(Guid tramite)
+    {
+        await using var conn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(
+            "SELECT value_text, source FROM tramites.procedure_instance_field_values WHERE procedure_instance_id = @id AND field_key = 'impuesto_departamental_pagado'",
+            conn);
+        cmd.Parameters.AddWithValue("id", tramite);
+        await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue("la marca existe");
+        return (reader.GetString(0), reader.GetString(1));
+    }
+
+    private async Task<long> ContarMarcasAsync(Guid tramite) =>
+        await EscalarAsync(
+            "SELECT count(*) FROM tramites.procedure_instance_field_values WHERE procedure_instance_id = @id AND field_key = 'impuesto_departamental_pagado'",
+            ("id", tramite));
 
     private async Task<Guid> InsertarAdjuntoAsync(Guid tramite, string? provider, string sha, string path)
     {

@@ -18,9 +18,13 @@ public sealed class EnvioEnMemoria : IExternalAttachmentRepository, IExternalAtt
 
     public List<Guid> Retirados { get; } = [];
 
+    /// <summary>Veces que se pidió marcar <c>impuesto_departamental_pagado</c> (HU #13264).</summary>
+    public int Marcas { get; private set; }
+
     public void Reiniciar(ExternalAttachmentTarget? target)
     {
         Target = target;
+        Marcas = 0;
         Escritos.Clear();
         Retirados.Clear();
     }
@@ -36,6 +40,12 @@ public sealed class EnvioEnMemoria : IExternalAttachmentRepository, IExternalAtt
         Escritos.Add(attachment);
         Retirados.AddRange(retire);
         return Task.FromResult(Guid.CreateVersion7());
+    }
+
+    public Task MarkTaxPaidAsync(CancellationToken cancellationToken)
+    {
+        Marcas++;
+        return Task.CompletedTask;
     }
 }
 
