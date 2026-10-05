@@ -901,13 +901,14 @@ describe("Excel del informe", () => {
     expect(xml).toContain("REF-100");
   });
 
-  it("escribe las fechas como fechas, en el día de Bogotá", () => {
+  it("escribe las fechas como fechas, con la hora de Bogotá", () => {
     const xml = sheetXmlOf(["radicado_en"]);
 
-    // 01/08/2026 14:00 UTC son las 09:00 en Bogotá: el mismo día que muestra la pantalla. Con el
-    // instante UTC crudo, un trámite de las 22:00 saltaría al día siguiente solo en el Excel.
-    const serial = (Date.UTC(2026, 7, 1) - Date.UTC(1899, 11, 30)) / 86_400_000;
-    expect(xml).toContain(`<c r="A2" s="2"><v>${serial}</v></c>`);
+    // 01/08/2026 14:00 UTC son las 09:00 en Bogotá: la misma fecha Y hora que muestra la pantalla
+    // (DD/MM/YYYY HH:mm). Con el instante UTC crudo, un trámite de las 22:00 saltaría al día
+    // siguiente solo en el Excel; con solo el día, perdería la hora que la pantalla sí enseña.
+    const serial = (Date.UTC(2026, 7, 1) - Date.UTC(1899, 11, 30)) / 86_400_000 + 9 / 24;
+    expect(xml).toContain(`<c r="A2" s="3"><v>${serial}</v></c>`);
   });
 
   it("lleva la unidad al encabezado cuando la celda exporta el número desnudo", () => {
