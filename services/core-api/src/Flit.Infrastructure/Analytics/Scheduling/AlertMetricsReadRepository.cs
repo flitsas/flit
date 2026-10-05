@@ -25,7 +25,9 @@ internal sealed class AlertMetricsReadRepository(
     /// Const string para poder interpolarlo en el SQL const (C# solo permite const strings ahí).</summary>
     private const string StuckDays = "7";
 
-    /// <summary>Estados biométricos "pendiente / en proceso" (estado actual, la ventana no aplica).</summary>
+    /// <summary>Estados biométricos "pendiente / en proceso" (estado actual, la ventana no aplica).
+    /// HU #13283: los estados manuales (<c>manual_activo</c>, <c>pendiente_revision_manual</c>) NO entran aquí a
+    /// propósito: no están atascados en Kyverum, esperan a la persona o a la revisión humana.</summary>
     private const string PendingBiometricStatuses = "'enviado','en_proceso','pendiente_envio'";
 
     // rechazados / (aprobados + rechazados) * 100 sobre transiciones dentro de la ventana; 0 sin decididos.

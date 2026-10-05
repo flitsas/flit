@@ -51,7 +51,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public string RegisteredEmail { get; set; } = string.Empty;
 
-    /// <summary>enviado | en_proceso | aprobado | rechazado | expirado.</summary>
+    /// <summary>enviado | en_proceso | aprobado | rechazado | expirado | pendiente_envio | error_envio |
+    /// manual_activo | pendiente_revision_manual (ver <see cref="BiometricEstados"/>; CHECK en BD, DDL 130).</summary>
     public string Status { get; set; } = BiometricEstados.Enviado;
 
     /// <summary>SHA-256 (hex) del token enviado por magic-link. El token crudo nunca se persiste.</summary>
@@ -60,7 +61,7 @@ public sealed class ProcedureInstanceBiometricValidation
 
     // ── Proveedor de validación de identidad (HU #10233 — Kyverum Verify) ────────
 
-    /// <summary>'mock' | 'kyverum'. Default 'mock' (flujo determinista de 3 fotos). 'kyverum' = validación
+    /// <summary>'mock' | 'kyverum' | 'migracion_v1' | 'manual' (ver <see cref="BiometricProviders"/>). Default 'mock' (flujo determinista de 3 fotos). 'kyverum' = validación
     /// remota delegada al proveedor externo Kyverum Verify (captura + webhook firmado).</summary>
     public string Provider { get; set; } = BiometricProviders.Mock;
 
@@ -154,6 +155,38 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public DateTimeOffset? LastResentAt { get; set; }
 
+    // ── Identidad manual (HU #13283, Feature #13280 A1, Épica #13202; DDL 130) ───────────────
+    // Todas NULL salvo que el flujo manual (o la aprobación) las estampe. La firma trazada reutiliza
+    // SignatureImagePath / SignatureImageSha256 (ADR-0054): no hay columna de firma propia.
+
+    /// <summary>'automatica' | 'manual' (<see cref="BiometricApprovalOrigins"/>). Null mientras no esté aprobada;
+    /// el backfill del DDL 130 dejó 'automatica' en las ya aprobadas.</summary>
+    public string? ApprovalOrigin { get; set; }
+
+    /// <summary>Usuario (identity.users.id) que activó el flujo manual. Sin FK, como created_by.</summary>
+    public Guid? ManualActivatedBy { get; set; }
+
+    /// <summary>Momento de activación del flujo manual.</summary>
+    public DateTimeOffset? ManualActivatedAt { get; set; }
+
+    /// <summary>Momento en que la persona aceptó el consentimiento en el flujo manual.</summary>
+    public DateTimeOffset? ConsentAt { get; set; }
+
+    /// <summary>IP desde la que se aceptó el consentimiento. PII media (Habeas Data).</summary>
+    public string? ConsentIp { get; set; }
+
+    /// <summary>Versión del texto de consentimiento aceptado.</summary>
+    public string? ConsentTextVersion { get; set; }
+
+    /// <summary>Usuario (identity.users.id) que revisó la validación manual. Sin FK, como created_by.</summary>
+    public Guid? ReviewedBy { get; set; }
+
+    /// <summary>Momento de la revisión humana.</summary>
+    public DateTimeOffset? ReviewedAt { get; set; }
+
+    /// <summary>Código (lista cerrada, constante en código) del motivo de rechazo de la revisión manual.</summary>
+    public string? RejectionReasonCode { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 
     /// <summary>
@@ -208,6 +241,24 @@ public static class BiometricProviders
     /// </para>
     /// </summary>
     public const string MigracionV1 = "migracion_v1";
+
+    /// <summary>
+    /// Identidad manual (Épica #13202): el flujo manual cancela la verificación de Kyverum y la persona captura
+    /// fotos, documento y firma por un enlace propio; un humano revisa. No hay proveedor externo ni score.
+    /// Como <see cref="MigracionV1"/>, no debe apalancar el reuso automático de identidad sin pasar por la regla
+    /// de aprobación (hoy solo cuenta como aprobada la fila en estado <see cref="BiometricEstados.Aprobado"/>).
+    /// </summary>
+    public const string Manual = "manual";
+
+    /// <summary>Todos los valores aceptados por <c>ck_biometric_validations_provider</c>.</summary>
+    public static readonly IReadOnlyList<string> Todos = [Mock, Kyverum, MigracionV1, Manual];
+}
+
+/// <summary>Origen de la aprobación de una identidad (columna <c>approval_origin</c>, HU #13283).</summary>
+public static class BiometricApprovalOrigins
+{
+    public const string Automatica = "automatica";
+    public const string Manual = "manual";
 }
 
 /// <summary>Estados de la máquina de biométrica.</summary>
@@ -228,6 +279,21 @@ public static class BiometricEstados
 
     /// <summary>El envío al proveedor agotó los reintentos (o falló de forma definitiva) → requiere acción.</summary>
     public const string ErrorEnvio = "error_envio";
+
+    /// <summary>
+    /// HU #13283 — el flujo manual está activo: Kyverum se canceló y la persona completa la captura por el
+    /// enlace manual. NO es "en vuelo" de Kyverum (no lo cuentan las alertas de atascados ni los reintentos).
+    /// </summary>
+    public const string ManualActivo = "manual_activo";
+
+    /// <summary>HU #13283 — la persona terminó la captura manual y espera la revisión humana.</summary>
+    public const string PendienteRevisionManual = "pendiente_revision_manual";
+
+    /// <summary>Todos los valores aceptados por <c>ck_biometric_validations_status</c>.</summary>
+    public static readonly IReadOnlyList<string> Todos =
+    [
+        Enviado, EnProceso, Aprobado, Rechazado, Expirado, PendienteEnvio, ErrorEnvio, ManualActivo, PendienteRevisionManual,
+    ];
 }
 
 /// <summary>
@@ -414,7 +480,7 @@ public static class IdentityVigenciaEstados
     /// o falló su envío: ver nota de diseño en <see cref="IdentityVigenciaClassifier"/>).</summary>
     public const string SinValidacion = "sin_validacion";
 
-    /// <summary>Hay una validación no terminal (enviada, en proceso o encolada de envío).</summary>
+    /// <summary>Hay una validación no terminal (enviada, en proceso, encolada de envío o en flujo manual).</summary>
     public const string EnCurso = "en_curso";
 
     /// <summary>Aprobada y dentro de la ventana de <see cref="BiometricRules.VigenciaDias"/>.</summary>
@@ -456,7 +522,9 @@ public static class IdentityVigenciaClassifier
                 ? IdentityVigenciaEstados.AprobadaVigente
                 : IdentityVigenciaEstados.Vencida,
             BiometricEstados.Expirado => IdentityVigenciaEstados.Vencida,
+            // HU #13283 — los estados manuales siguen en curso: nunca vigentes hasta que la revisión apruebe.
             BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.PendienteEnvio
+                or BiometricEstados.ManualActivo or BiometricEstados.PendienteRevisionManual
                 => IdentityVigenciaEstados.EnCurso,
             // Rechazado, error_envio o cualquier estado futuro no contemplado: sin_validacion (ver nota
             // de diseño arriba).
