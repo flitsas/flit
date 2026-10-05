@@ -203,7 +203,15 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
                 ("sha256", NpgsqlDbType.Varchar, attachment.Sha256),
                 ("storage_path", NpgsqlDbType.Varchar, attachment.StoragePath),
                 ("provider", NpgsqlDbType.Varchar, ExternalAttachmentRules.Provider));
-            return (Guid)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+            try
+            {
+                return (Guid)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+            }
+            catch (PostgresException ex) when (ExternalAttachmentFirstWins.Is(ex))
+            {
+                // HU #13265 — el motor lo rechazó (DDL 131): la transacción queda abortada y el handler responde attachment_exists.
+                throw new AttachmentFirstWinsConflictException(ex);
+            }
         }
 
         public async Task MarkTaxPaidAsync(CancellationToken cancellationToken)
@@ -215,5 +223,24 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
                 ("source", NpgsqlDbType.Varchar, ExternalAttachmentRules.FieldSource));
             await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+}
+
+/// <summary>HU #13265 — reconoce el rechazo del trigger del DDL 131 (también cuando EF lo envuelve en <c>DbUpdateException</c>).</summary>
+internal static class ExternalAttachmentFirstWins
+{
+    public static bool Is(Exception? ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is PostgresException pg
+                && pg.SqlState == PostgresErrorCodes.UniqueViolation
+                && string.Equals(pg.ConstraintName, ExternalAttachmentRules.FirstWinsConstraint, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
