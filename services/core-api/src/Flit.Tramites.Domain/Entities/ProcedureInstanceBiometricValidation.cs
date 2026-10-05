@@ -323,6 +323,37 @@ public sealed class ProcedureInstanceBiometricValidation
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// HU #13290 — registra la captura recibida: rutas de rostro, anverso, reverso y firma (ADR-0054: la firma reutiliza
+    /// <see cref="SignatureImagePath"/>/<see cref="SignatureImageSha256"/>) y pasa a
+    /// <see cref="BiometricEstados.PendienteRevisionManual"/>. Solo desde <see cref="BiometricEstados.ManualActivo"/>, con la
+    /// sesión vigente y consentimiento del ciclo actual; consume el enlace (un segundo envío ya no es
+    /// <c>manual_activo</c>). Las rutas del intento previo se pisan aquí, pero los archivos NO se borran (el caso de uso las
+    /// deja en auditoría).
+    /// </summary>
+    /// <exception cref="ManualCaptureStateException">Sesión no vigente o sin consentimiento del ciclo actual.</exception>
+    /// <exception cref="ArgumentException">Falta alguna ruta o el hash de la firma no es SHA-256.</exception>
+    public void RegistrarCapturaManual(
+        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now)
+    {
+        AsegurarSesionManualVigente(now);
+        if (!TieneConsentimientoManualVigente)
+            throw new ManualCaptureStateException(ManualCaptureStateCodes.ConsentimientoRequerido);
+        if (string.IsNullOrWhiteSpace(facePath) || string.IsNullOrWhiteSpace(idFrontPath)
+            || string.IsNullOrWhiteSpace(idBackPath) || string.IsNullOrWhiteSpace(signaturePath))
+            throw new ArgumentException("La captura manual exige las 4 rutas de imagen.");
+        if (string.IsNullOrWhiteSpace(signatureSha256) || signatureSha256.Length != 64)
+            throw new ArgumentException("El hash de la firma debe ser SHA-256 (64 hex).", nameof(signatureSha256));
+
+        FacePhotoPath = facePath;
+        IdFrontPhotoPath = idFrontPath;
+        IdBackPhotoPath = idBackPath;
+        SignatureImagePath = signaturePath;
+        SignatureImageSha256 = signatureSha256;
+        Status = BiometricEstados.PendienteRevisionManual;
+        UpdatedAt = now;
+    }
+
     private void AsegurarSesionManualVigente(DateTimeOffset now)
     {
         switch (EstadoSesionManual(now))

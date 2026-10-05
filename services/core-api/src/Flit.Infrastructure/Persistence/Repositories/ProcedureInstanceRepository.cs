@@ -1687,6 +1687,45 @@ internal sealed partial class ProcedureInstanceRepository(
         return affected > 0;
     }
 
+    // HU #13290 — UPDATE atómico de la captura manual: la guarda por proveedor/estado (más el row-lock del UPDATE) hace que, de
+    // dos envíos simultáneos con el mismo token, solo uno consuma el enlace. Escribe los valores que ya dejó en memoria
+    // RegistrarCapturaManual; el UPDATE no pasa por el change tracker, así que se marca la entidad como sin cambios.
+    public async Task<bool> TryPersistManualCaptureAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        var face = validation.FacePhotoPath;
+        var front = validation.IdFrontPhotoPath;
+        var back = validation.IdBackPhotoPath;
+        var signature = validation.SignatureImagePath;
+        var signatureSha = validation.SignatureImageSha256;
+        var status = validation.Status;
+        var updatedAt = validation.UpdatedAt;
+
+        var affected = await db.ProcedureInstanceBiometricValidations
+            .Where(x => x.Id == validation.Id
+                        && x.Provider == BiometricProviders.Manual
+                        && x.Status == BiometricEstados.ManualActivo)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.FacePhotoPath, face)
+                .SetProperty(x => x.IdFrontPhotoPath, front)
+                .SetProperty(x => x.IdBackPhotoPath, back)
+                .SetProperty(x => x.SignatureImagePath, signature)
+                .SetProperty(x => x.SignatureImageSha256, signatureSha)
+                .SetProperty(x => x.Status, status)
+                .SetProperty(x => x.UpdatedAt, updatedAt), ct);
+
+        if (affected > 0)
+        {
+            // Los valores ya están en la BD: se igualan los originales a los actuales ANTES de marcar la entidad sin
+            // cambios (pasar de Modified a Unchanged a secas revertiría las propiedades al valor original).
+            var entry = db.Entry(validation);
+            entry.OriginalValues.SetValues(entry.CurrentValues);
+            entry.State = EntityState.Unchanged;
+        }
+
+        return affected > 0;
+    }
+
     public Task ReloadBiometricAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct) =>
         db.Entry(validation).ReloadAsync(ct);
 

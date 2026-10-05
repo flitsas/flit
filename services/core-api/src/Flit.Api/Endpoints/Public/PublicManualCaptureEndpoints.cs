@@ -3,6 +3,7 @@ using Flit.Api.RateLimiting;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Flit.Api.Endpoints.Public;
@@ -64,8 +65,52 @@ internal static class PublicManualCaptureEndpoints
         .Produces<ManualCaptureError>(StatusCodes.Status409Conflict)
         .Produces<ManualCaptureError>(StatusCodes.Status410Gone);
 
+        // HU #13290 — un solo POST final multipart con los 4 archivos. Se leen del IFormFileCollection por nombre de campo
+        // (mismo motivo que /public/biometric: Swashbuckle no soporta IFormFile como parámetro). Antiforgery deshabilitado
+        // (público). Tope de la petición completa: Kestrel responde 413 al excederlo.
+        app.MapPost("/api/v1/public/manual-capture/{token}/submit", async (
+            string token,
+            IFormFileCollection files,
+            HttpContext http,
+            EnviarCapturaManualHandler handler,
+            CancellationToken ct) =>
+        {
+            await using var rostro = files["rostro"]?.OpenReadStream();
+            await using var anverso = files["anverso"]?.OpenReadStream();
+            await using var reverso = files["reverso"]?.OpenReadStream();
+            await using var firma = files["firma"]?.OpenReadStream();
+
+            var ua = http.Request.Headers.UserAgent.ToString();
+            var command = new EnviarCapturaManualCommand(
+                token,
+                Upload(files["rostro"], rostro),
+                Upload(files["anverso"], anverso),
+                Upload(files["reverso"], reverso),
+                Upload(files["firma"], firma),
+                string.IsNullOrWhiteSpace(ua) ? null : ua);
+
+            var (result, error) = await handler.HandleAsync(command, ct);
+            return error is null ? Results.Ok(result) : Error(error);
+        })
+        .WithName("SubmitPublicManualCapture")
+        .WithSummary("Envía rostro, anverso, reverso y firma de la captura manual")
+        .AllowAnonymous()
+        .DisableAntiforgery()
+        .WithMetadata(new RequestSizeLimitAttribute(ManualCaptureImages.MaxRequestBytes))
+        .RequireRateLimiting(ManualCaptureRateLimit.PolicyName)
+        .Produces<EnviarCapturaManualResult>(StatusCodes.Status200OK)
+        .Produces<ManualCaptureError>(StatusCodes.Status404NotFound)
+        .Produces<ManualCaptureError>(StatusCodes.Status409Conflict)
+        .Produces<ManualCaptureError>(StatusCodes.Status410Gone)
+        .Produces<ManualCaptureError>(StatusCodes.Status413PayloadTooLarge)
+        .Produces<ManualCaptureError>(StatusCodes.Status415UnsupportedMediaType)
+        .Produces<ManualCaptureError>(StatusCodes.Status422UnprocessableEntity);
+
         return app;
     }
+
+    private static ManualCaptureUpload? Upload(IFormFile? file, Stream? stream) =>
+        file is null || stream is null ? null : new ManualCaptureUpload(stream, file.Length);
 
     /// <summary>
     /// IP del cliente con el mismo criterio del proyecto (<c>HttpAuditContextAccessor</c> y los límites de tasa): primer hop de
@@ -85,6 +130,10 @@ internal static class PublicManualCaptureEndpoints
         ManualCaptureErrors.ConsentimientoRequerido => Json(code, "Falta aceptar el consentimiento.", StatusCodes.Status409Conflict),
         ManualCaptureErrors.ConsentimientoNoAceptado => Json(code, "Debe aceptar el consentimiento para continuar.", StatusCodes.Status400BadRequest),
         ManualCaptureErrors.VersionTextoInvalida => Json(code, "La versión del texto de consentimiento no es la vigente.", StatusCodes.Status400BadRequest),
+        ManualCaptureErrors.FirmaRequerida => Json(code, "La firma es obligatoria.", StatusCodes.Status422UnprocessableEntity),
+        ManualCaptureErrors.ArchivoRequerido => Json(code, "Faltan imágenes: se requieren rostro, anverso y reverso.", StatusCodes.Status422UnprocessableEntity),
+        ManualCaptureErrors.TipoNoSoportado => Json(code, "Formato de imagen no admitido (JPEG, PNG o WebP; la firma, PNG).", StatusCodes.Status415UnsupportedMediaType),
+        ManualCaptureErrors.ArchivoDemasiadoGrande => Json(code, "Una imagen supera el tamaño máximo permitido.", StatusCodes.Status413PayloadTooLarge),
         _ => Json(code, "No se pudo procesar la solicitud.", StatusCodes.Status422UnprocessableEntity),
     };
 

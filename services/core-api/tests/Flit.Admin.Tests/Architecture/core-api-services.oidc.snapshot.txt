@@ -711,6 +711,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.ListStuckIdentityValidatio
 Flit.Tramites.Application.UseCases.ProcedureInstances.ListTenantBiometricPersonsHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.ListTenantBiometricPersonsHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ListTenantBiometricValidationsHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.ListTenantBiometricValidationsHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEvaluator => Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEvaluator (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture.EnviarCapturaManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture.EnviarCapturaManualHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture.GetManualCaptureHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture.GetManualCaptureHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture.RegistrarConsentimientoManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture.RegistrarConsentimientoManualHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.MarcarFirmaPosteriorHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.MarcarFirmaPosteriorHandler (Scoped)

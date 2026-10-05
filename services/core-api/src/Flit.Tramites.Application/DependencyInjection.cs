@@ -276,6 +276,7 @@ public static class DependencyInjection
         // HU #13289/#13290 (Feature #13281 B) — captura manual pública por token.
         services.AddScoped<UseCases.ProcedureInstances.ManualCapture.GetManualCaptureHandler>();
         services.AddScoped<UseCases.ProcedureInstances.ManualCapture.RegistrarConsentimientoManualHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.EnviarCapturaManualHandler>();
         // HU #12162 — reasignar el gestor responsable del trámite (AssignedToUserId), sin tocar
         // CreatedByUserId (quién radicó).
         services.AddScoped<AdminReasignarGestorHandler>();
