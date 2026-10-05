@@ -755,7 +755,7 @@
         ],
         "operationId": "enviarAdjunto",
         "summary": "Adjuntar un documento al trámite",
-        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si el gestor ya cargó ese tipo responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si el estado marca y la marca falta, la pone); (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
+        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si en FLIT ya se cargó ese tipo (gestor o portal) responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si el estado marca y la marca falta, la pone); (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
         "parameters": [
           {
             "name": "id",
@@ -932,7 +932,7 @@
             }
           },
           "409": {
-            "description": "El trámite no admite el envío. not_allowed_in_state: decidir por terminal (true: definitivo; false: reintentar con espera). attachment_exists: el gestor ya cargó ese tipo; definitivo, no reintentar.",
+            "description": "El trámite no admite el envío. not_allowed_in_state: decidir por terminal (true: definitivo; false: reintentar con espera). attachment_exists: ese tipo ya lo cargó alguien en FLIT (gestor o portal); definitivo, no reintentar.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -966,7 +966,7 @@
                       "type": "about:blank",
                       "title": "attachment_exists",
                       "status": 409,
-                      "detail": "El trámite ya tiene un documento de este tipo cargado por el gestor.",
+                      "detail": "El trámite ya tiene este documento cargado en FLIT (gestor o portal); su archivo se conserva.",
                       "code": "attachment_exists"
                     }
                   }

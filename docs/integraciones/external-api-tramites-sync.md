@@ -379,7 +379,7 @@ Reglas:
 
 - **Estados que aceptan el envío:** `preasignacion`, `asignado`, `entregado` y `rechazado` con subsanación
   activa. Los demás responden `409 not_allowed_in_state` sin archivar (ver la tabla de abajo).
-- **Gana quien carga primero.** Si el gestor ya cargó ese tipo, responde `409 attachment_exists` y su archivo
+- **Gana quien carga primero.** Si en FLIT ya se cargó ese tipo (el gestor o el portal de participantes), responde `409 attachment_exists` y su archivo
   se conserva: es definitivo, no reintentar. Si el consumidor cargó primero, el gestor **no** puede
   reemplazarlo ni borrarlo; en FLIT lo ve como «Cargado por FLITO».
 - **Corrección:** un nuevo envío del consumidor con otro archivo reemplaza el suyo anterior (`reemplazoDe`).
@@ -406,7 +406,7 @@ Errores (problem+json, decidir siempre por `code`):
 | 403 | `insufficient_scope` | Falta `external.tramites.attachments.write` en el cliente; avisar a FLIT. |
 | 404 | `procedure_not_found` | Trámite inexistente o fuera de alcance. Definitivo. |
 | 409 | `not_allowed_in_state` | Lleva `estado` (estado actual) y `terminal`. `terminal: true` (`aprobado`, `anulado`, `revocado`): definitivo. `terminal: false`: reintentar con espera creciente. |
-| 409 | `attachment_exists` | El gestor ya cargó el comprobante. Definitivo. |
+| 409 | `attachment_exists` | El comprobante ya se cargó en FLIT (gestor o portal). Definitivo. |
 | 429 | `rate_limited` | Esperar `Retry-After`. |
 | 503 | `storage_unavailable` | Transitorio: reintentar con la misma petición. |
 
