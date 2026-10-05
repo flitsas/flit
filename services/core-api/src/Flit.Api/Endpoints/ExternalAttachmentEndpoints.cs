@@ -109,7 +109,7 @@ public static class ExternalAttachmentEndpoints
         "file_too_large" => "El archivo excede los 20 MB permitidos.",
         "procedure_not_found" => "El trámite no existe o está fuera de alcance.",
         "not_allowed_in_state" => "El trámite está en un estado que no admite este envío.",
-        "attachment_exists" => "El gestor ya cargó este documento en el trámite; su archivo se conserva.",
+        "attachment_exists" => "El trámite ya tiene este documento cargado en FLIT (gestor o portal); su archivo se conserva.",
         "storage_unavailable" => "El almacenamiento de archivos no está disponible; reintentar más tarde.",
         _ => "Solicitud no válida.",
     };
