@@ -12,6 +12,7 @@ import {
 import { CaptureCard } from "./CaptureCard";
 import { LinkTerminal } from "./LinkTerminal";
 import { StepBar } from "./StepBar";
+import { PasoDatos } from "./PasoDatos";
 import { StepPlaceholder } from "./StepPlaceholder";
 
 type Load =
@@ -92,6 +93,8 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
         <p className="mt-6 text-base text-flit-primary" role="status">
           Flujo completado.
         </p>
+      ) : steps.current === 0 ? (
+        <PasoDatos token={token} view={load.view} client={api} onDone={() => dispatch({ type: "next" })} />
       ) : (
         <StepPlaceholder
           label={step.label}

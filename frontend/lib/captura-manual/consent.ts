@@ -6,10 +6,13 @@ export const CONSENT_TEXT_VERSION = "kyverum-2026-10-05";
 // PENDIENTE VALIDACIÓN LEGAL (Ley 1581 de 2012): la frase «Kyverum ... no conserva las imágenes» es
 // falsa en el flujo manual (FLIT sí conserva las imágenes). Se deja tal cual por petición del PO.
 // Cualquier cambio de redacción exige subir CONSENT_TEXT_VERSION.
-export const CONSENT_TEXT =
+export const CONSENT_TEXT_BODY =
   "Autorizo de forma libre, previa y expresa a Flit, que es quien guarda mis datos, el tratamiento de mis datos biométricos (dato sensible) para verificar mi identidad (Ley 1581 de 2012). No estoy obligado(a). Kyverum, empresa de Estados Unidos, solo hace la verificación y no conserva las imágenes.";
 
 export const CONSENT_PRIVACY_LABEL = "Aviso de privacidad";
+
+/** Texto literal completo de Kyverum (cuerpo + «Aviso de privacidad.»). */
+export const CONSENT_TEXT = `${CONSENT_TEXT_BODY} ${CONSENT_PRIVACY_LABEL}.`;
 
 export const CAPTURE_TIPS = [
   "Busca buena luz, sin reflejos.",

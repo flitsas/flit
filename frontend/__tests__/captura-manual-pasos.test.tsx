@@ -86,7 +86,9 @@ describe("CapturaManualFlow", () => {
     expect(await screen.findByRole("navigation", { name: /progreso/i })).toBeInTheDocument();
     expect(screen.getByAltText("flit")).toBeInTheDocument();
     expect(screen.getByText("Verify")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar verificación" }));
+    await screen.findByRole("heading", { name: "Rostro" });
     expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("completado");
   });
 

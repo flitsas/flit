@@ -1,0 +1,134 @@
+"use client";
+
+import { useId, useState } from "react";
+import {
+  CAPTURE_TIPS,
+  CONSENT_PRIVACY_LABEL,
+  CONSENT_TEXT_BODY,
+  CONSENT_TEXT_VERSION,
+  CONTACT_EMAIL,
+  LEGAL_FOOTER_PREFIX,
+  LEGAL_FOOTER_SUFFIX,
+} from "@/lib/captura-manual/consent";
+import type { ManualCaptureClient, ManualCaptureView } from "@/lib/captura-manual/types";
+
+/** Paso 1 — Datos (HU #13292): datos de solo lectura, consejos y consentimiento biométrico. */
+export function PasoDatos({
+  token,
+  view,
+  client,
+  onDone,
+}: {
+  token: string;
+  view: ManualCaptureView;
+  client: ManualCaptureClient;
+  onDone: () => void;
+}) {
+  const checkId = useId();
+  const [accepted, setAccepted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function start() {
+    setSending(true);
+    setError(false);
+    try {
+      await client.postConsent(token, { accepted: true, textVersion: CONSENT_TEXT_VERSION });
+      onDone();
+    } catch {
+      // La casilla se conserva: el cliente reintenta sin volver a marcarla.
+      setError(true);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="paso-datos-titulo" className="mt-6 flex flex-col gap-4">
+      <div>
+        <h1 id="paso-datos-titulo" className="text-xl font-bold text-flit-primary">
+          Hola {view.fullName}
+        </h1>
+        <p className="mt-1 text-base text-muted-foreground">
+          {view.productName} necesita verificar tu identidad para continuar con tu trámite.
+        </p>
+      </div>
+
+      <table className="w-full border-collapse text-base">
+        <caption className="sr-only">Tus datos</caption>
+        <tbody>
+          <tr className="border-b border-flit-gray">
+            <th scope="row" className="py-2 pr-3 text-left text-sm font-medium text-muted-foreground">
+              Nombre
+            </th>
+            <td className="py-2 text-right font-semibold text-flit-primary">{view.fullName}</td>
+          </tr>
+          <tr className="border-b border-flit-gray">
+            <th scope="row" className="py-2 pr-3 text-left text-sm font-medium text-muted-foreground">
+              Documento
+            </th>
+            <td className="py-2 text-right font-semibold text-flit-primary">
+              {view.documentType} {view.documentNumber}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p className="text-base text-muted-foreground">
+        Estos datos ya los tiene quien te envió el enlace. No tienes que escribirlos otra vez. Haremos una
+        verificación facial, de tu documento (anverso y reverso) y tu firma. Toma menos de un minuto.
+      </p>
+
+      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-flit-bg p-4">
+        <h2 id="consejos-titulo" className="text-base font-semibold text-flit-primary">
+          Para que salga bien
+        </h2>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-base text-flit-primary">
+          {CAPTURE_TIPS.map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
+        </ul>
+      </aside>
+
+      <div className="flex items-start gap-3">
+        <input
+          id={checkId}
+          type="checkbox"
+          checked={accepted}
+          onChange={(e) => setAccepted(e.target.checked)}
+          className="mt-1 size-5 shrink-0 accent-flit-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+        />
+        <label htmlFor={checkId} className="min-h-11 text-sm text-flit-primary">
+          {CONSENT_TEXT_BODY}{" "}
+          <span className="underline">{CONSENT_PRIVACY_LABEL}</span>.
+        </label>
+      </div>
+
+      {error ? (
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+          No pudimos registrar tu autorización. Inténtalo de nuevo.
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        disabled={!accepted || sending}
+        onClick={() => void start()}
+        className="min-h-12 w-full rounded-xl bg-flit-brand px-4 text-base font-semibold text-flit-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {sending ? "Registrando…" : "Iniciar verificación"}
+      </button>
+
+      <p className="text-xs text-muted-foreground">
+        {LEGAL_FOOTER_PREFIX}{" "}
+        <a
+          href={`mailto:${CONTACT_EMAIL}`}
+          className="underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+        >
+          {CONTACT_EMAIL}
+        </a>
+        . {LEGAL_FOOTER_SUFFIX}
+      </p>
+    </section>
+  );
+}
