@@ -221,10 +221,14 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     const user = userEvent.setup();
     renderPanel();
 
-    // Consulta: la fila muestra los organismos donde aplica, no solo uno.
+    // Consulta: la fila resume los organismos en una píldora y el modal los detalla, no solo uno.
     const fila = (await screen.findByText("Ana Restrepo")).closest("tr")!;
-    expect(within(fila).getByText(/Secretaría de Movilidad de Medellín/)).toBeInTheDocument();
-    expect(within(fila).getByText(/Tránsito de Envigado/)).toBeInTheDocument();
+    await user.click(within(fila).getByRole("button", { name: /ver organismos de ana restrepo/i }));
+    const detalle = await screen.findByRole("dialog");
+    expect(within(detalle).getByText(/Secretaría de Movilidad de Medellín/)).toBeInTheDocument();
+    expect(within(detalle).getByText(/Tránsito de Envigado/)).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     // Edición: el formulario llega precargado y quitar un organismo lo retira.
     await pulsarAccion(user, /editar mandatario ana restrepo/i, fila);
