@@ -311,6 +311,22 @@ public interface IProcedureInstanceRepository
     /// fila por persona (la más reciente); ausentes en <paramref name="documents"/> sin ninguna
     /// validación simplemente no aparecen en el resultado.
     /// </summary>
+    /// <summary>
+    /// HU #13246/#13247 (Feature #13245) — validaciones lanzadas PARA los mandatarios indicados (party_role
+    /// <c>mandatario</c> + <c>mandate_signer_id</c>), de la más reciente a la más antigua. Es la ÚNICA lectura que
+    /// alimenta la identidad del mandatario: no mira el documento ni el tenant, así que la aprobación de un comprador,
+    /// un vendedor o una prevalidación con la misma cédula jamás aparece aquí. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListMandatarioValidationsAsync(
+        IReadOnlyCollection<Guid> mandateSignerIds,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13246 — marca como <c>expirado</c> las validaciones EN VUELO del mandatario (la anterior deja de contar al
+    /// lanzar una nueva: reenvío, cambio de documento, paso de baúl a biometría) y persiste. Devuelve cuántas cerró.
+    /// </summary>
+    Task<int> SupersedeMandatarioInFlightAsync(Guid mandateSignerId, DateTimeOffset now, CancellationToken ct = default);
+
     Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListLatestBiometricValidationsByPersonsAsync(
         Guid tenantId,
         IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,

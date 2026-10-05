@@ -2,11 +2,17 @@
 
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { Modal, type ModalSize } from "@/components/atom/Modal";
 
-/** Panel lateral con overlay — patrón FLIT admin (drawer AC2 webhooks). */
+/**
+ * Antes era un panel lateral con overlay. Ahora se muestra como el modal normal de los demás módulos
+ * (`@flit/ui` Modal), centrado y ajustado al alto de su contenido. Se conserva el nombre y la API para no
+ * tocar a los consumidores (reglas, etiquetas, webhooks, guía de documentos…).
+ */
 export interface OtSidePanelProps {
   open: boolean;
   title: string;
+  /** Nombre accesible del diálogo (los lectores de pantalla y las pruebas lo usan). */
   ariaLabel: string;
   onClose: () => void;
   children: ReactNode;
@@ -14,20 +20,23 @@ export interface OtSidePanelProps {
   disabled?: boolean;
   /** Clase de z-index del overlay (p. ej. cuando hay otro modal encima). */
   zClassName?: string;
-  /**
-   * Ancho del drawer. `lg` para paneles densos; `xl` / `2xl` para fichas con grid (p. ej. RL).
-   */
+  /** Ancho del modal: `md` formularios cortos, `lg` densos, `xl` / `2xl` fichas con grid. */
   width?: "md" | "lg" | "xl" | "2xl";
-  /**
-   * Superficie del panel. `modal` usa el fondo claro del prototipo FLIT (`#EEF5FF`).
-   */
+  /** `modal` usa el fondo claro del prototipo FLIT (`#EEF5FF`). */
   surface?: "card" | "modal";
   /**
-   * Scroll vertical del cuerpo. `false` para paneles que maquetan su propio alto (p. ej. la guía
+   * Scroll vertical del cuerpo. `false` para contenidos que maquetan su propio alto (p. ej. la guía
    * informativa de documentos, que reparte el contenido en una grilla sin desbordar).
    */
   scrollable?: boolean;
 }
+
+const SIZE: Record<NonNullable<OtSidePanelProps["width"]>, ModalSize> = {
+  md: "md",
+  lg: "lg",
+  xl: "xl",
+  "2xl": "2xl",
+};
 
 export function OtSidePanel({
   open,
@@ -42,57 +51,36 @@ export function OtSidePanel({
   surface = "card",
   scrollable = true,
 }: OtSidePanelProps) {
-  if (!open) {
-    return null;
-  }
-
-  const maxW =
-    width === "2xl"
-      ? "max-w-4xl"
-      : width === "xl"
-        ? "max-w-3xl"
-        : width === "lg"
-          ? "max-w-lg"
-          : "max-w-md";
-
-  const surfaceStyle =
-    surface === "modal" ? { background: "#EEF5FF" } : undefined;
-
   return (
-    <div className={`fixed inset-0 ${zClassName} flex justify-end`}>
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-        aria-label="Cerrar panel"
-        onClick={onClose}
-        disabled={disabled}
-      />
-      <aside
-        className={`relative flex h-full w-full ${maxW} flex-col border-l shadow-2xl ${surface === "card" ? "bg-card" : ""}`}
-        style={surfaceStyle}
-        role="dialog"
-        aria-modal="true"
-        aria-label={ariaLabel}
-      >
-        <div
-          className="flex items-center justify-between border-b px-4 py-3"
-        >
-          <h2 className="text-sm font-bold text-foreground">
+    <Modal
+      open={open}
+      title={title}
+      onClose={onClose}
+      busy={disabled}
+      size={SIZE[width]}
+      zClassName={zClassName}
+      panelClassName={surface === "modal" ? "!bg-[#EEF5FF] dark:!bg-[#0B0F14]" : ""}
+      bodyClassName={scrollable ? "" : "!overflow-y-hidden"}
+      header={({ titleId }) => (
+        <div className="flex items-start justify-between gap-3">
+          {/* El nombre accesible del diálogo es `ariaLabel`; el texto visible es `title`. */}
+          <h2 id={titleId} aria-label={ariaLabel} className="text-base font-bold text-[#162744] dark:text-white">
             {title}
           </h2>
-          <button type="button" aria-label="Cerrar" onClick={onClose} disabled={disabled}>
-            <X className="h-4 w-4" />
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={onClose}
+            disabled={disabled}
+            className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
-        <div className={`flex-1 p-4 ${scrollable ? "overflow-y-auto" : "min-h-0 overflow-hidden"}`}>
-          {children}
-        </div>
-        {footer && (
-          <div className="border-t p-4">
-            {footer}
-          </div>
-        )}
-      </aside>
-    </div>
+      )}
+      footer={footer}
+    >
+      {children}
+    </Modal>
   );
 }

@@ -104,7 +104,11 @@ internal static class ProcedureInstanceEndpoints
                 "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
                 "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
                 "DUPLICATE_ACTIVE_PROCEDURE" => Results.Problem(statusCode: 409, title: "DUPLICATE_ACTIVE_PROCEDURE", detail: "Ya existe un trámite activo del mismo tipo para la placa/VIN."),
-                _ => Results.Created($"/api/v1/tramites/instances/{result!.Id}", result)
+                // Gate de creación (HU #12348 / #12409): ot_not_permitted, tenant_inactive, network_inactive.
+                _ => MapRadicationGateError(error)
+                    ?? (result is null
+                        ? Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "No se pudo crear el trámite.")
+                        : Results.Created($"/api/v1/tramites/instances/{result.Id}", result))
             };
         }).WithName("CreateProcedureInstance");
 
@@ -426,12 +430,15 @@ internal static class ProcedureInstanceEndpoints
             return Results.Ok(new { items });
         }).WithName("ListEnabledTransitOffices");
 
-        // HU #11203 — mandatarios que pueden firmar el mandato de este trámite, con su documento y la
-        // vigencia de su identidad, más cuál está elegido. Se consulta al registrar, no al aprobar.
-        group.MapGet("/instances/{id:guid}/mandate-signers", async (
+        // HU #13145 (ADR-0066) — el firmante PREVISTO, de solo lectura: estado (valido, sin_mandatario,
+        // firma_invalida, no_aplica, pendiente_organismo, pendiente_eleccion_ot), nombre y forma de firma
+        // (solo con valido) y el modo vigente de la validación. Reutiliza el evaluador del gate de radicación.
+        // El trámite se busca en el tenant de la petición (otro tenant = 404) y la respuesta nunca trae el
+        // documento ni la ruta de firma del mandatario (Ley 1581).
+        group.MapGet("/instances/{id:guid}/mandate-signer", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            ListMandateSignerOptionsHandler handler,
+            GetMandateSignerPrevistoHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -441,38 +448,7 @@ internal static class ProcedureInstanceEndpoints
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
-        }).WithName("ListProcedureInstanceMandateSigners");
-
-        // HU #11203 (AC4/AC5) — fija quién firma. Solo en borrador o subsanación.
-        group.MapPut("/instances/{id:guid}/mandate-signer", async (
-            Guid id,
-            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            SetMandateSignerBody body,
-            SetMandateSignerHandler handler,
-            CancellationToken ct) =>
-        {
-            if (tenantId is null || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
-
-            var error = await handler.HandleAsync(id, tenantId.Value, body.MandateSignerId, ct);
-            return error switch
-            {
-                null => Results.NoContent(),
-                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(
-                    statusCode: 409,
-                    title: "Conflict",
-                    detail: "El trámite ya salió de borrador: el mandatario que firma no puede cambiarse."),
-                "sin_organismo" => Results.Problem(
-                    statusCode: 409,
-                    title: "Conflict",
-                    detail: "El trámite todavía no tiene organismo de tránsito."),
-                _ => Results.Problem(
-                    statusCode: 422,
-                    title: "Unprocessable Entity",
-                    detail: "El mandatario no está habilitado para el organismo de tránsito del trámite."),
-            };
-        }).WithName("SetProcedureInstanceMandateSigner");
+        }).WithName("GetProcedureInstanceMandateSigner");
 
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
@@ -704,6 +680,9 @@ internal static class ProcedureInstanceEndpoints
                 // HU #10518 — OT con grant pero desactivado/sin tenant a nivel plataforma.
                 "organismo_no_operable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito no está operativo en FLIT."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
+                // HU #13144 (ADR-0066) — gate de mandatario al radicar en modo block. Sin este mapeo el default
+                // los devolvería como 422; son 409 igual que documentos_incompletos.
+                TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida => MandatarioGateProblem.For(error, null),
                 "biometria_requerida_ot" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Se requiere validación biométrica según reglas OT."),
                 // R10 (HU #10597) — gate de prenda del traspaso.
                 TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
@@ -936,6 +915,10 @@ internal static class ProcedureInstanceEndpoints
                 // (409, subsanable reintentando con mandateSignerId).
                 TramiteEstadoErrores.MandatarioRequerido =>
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
+                // HU #13144 (ADR-0066) — gate de mandatario al radicar (modo block): 409 subsanable, el
+                // organismo o la compañía registran un mandatario.
+                TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida =>
+                    MandatarioGateProblem.For(errorCode, errorDetail),
                 // Bug #13194 (P4, D2) — gate de firma (409): el detalle nombra las partes sin firmar.
                 TramiteEstadoErrores.FirmaPendiente =>
                     FirmaPendienteProblem.Crear(errorCode, errorDetail, bloqueoFirma.PartesSinFirma),
@@ -1278,6 +1261,25 @@ internal static class ProcedureInstanceEndpoints
     }
 
     /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>
+    /// <summary>
+    /// Traduce las denegaciones del gate de creación (<see cref="Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons"/>)
+    /// a 403 con un mensaje claro. Antes caían al caso por defecto y respondían 500 (NullReferenceException).
+    /// Devuelve <c>null</c> si el código no es del gate.
+    /// </summary>
+    internal static IResult? MapRadicationGateError(string? error) => error switch
+    {
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.OtNotPermitted => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La compañía no tiene habilitado este organismo de tránsito. Contacta al administrador."),
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.TenantInactive => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La compañía está inactiva y no puede crear trámites."),
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.NetworkInactive => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La red de la compañía está inactiva y no puede crear trámites."),
+        _ => null,
+    };
+
     private static bool EsMatriculaInicial(string? modalidad) =>
         string.Equals(
             modalidad?.Trim(),
@@ -1335,9 +1337,6 @@ internal sealed record EnviarAlOtResponse(
 /// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin
 /// <c>X-Tenant-Id</c>; para un usuario de compañía el backend lo impone desde el JWT.
 /// </summary>
-/// <summary>HU #11203 — cuerpo de la elección del mandatario que firma el mandato del trámite.</summary>
-internal sealed record SetMandateSignerBody(Guid MandateSignerId);
-
 internal sealed record PreflightPreviewBody(
     Guid TenantId,
     string Modalidad,
@@ -1454,4 +1453,20 @@ internal record TramitesSearchRequest
         // Default DESC, igual que el GET: solo "asc" invierte.
         SortDescending = !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase),
     };
+}
+
+/// <summary>
+/// HU #13144 (ADR-0066) — respuesta 409 del gate de mandatario al radicar. Compartida por <c>/submit</c> y
+/// <c>/transition</c> (ambos pasan por <c>TramiteLifecycleService</c>): sin este mapeo el <c>default</c> de cada
+/// endpoint devolvería 422. El mensaje explica cómo resolverlo y nunca lleva datos del mandatario.
+/// </summary>
+internal static class MandatarioGateProblem
+{
+    public static IResult For(string errorCode, string? detail) =>
+        Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: errorCode,
+            detail: detail ?? (errorCode == TramiteEstadoErrores.MandatarioFirmaInvalida
+                ? MandateSignerEstados.MensajeFirmaInvalida
+                : MandateSignerEstados.MensajeSinMandatario));
 }

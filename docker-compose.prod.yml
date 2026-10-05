@@ -207,8 +207,13 @@ services:
       TramiteValidations__VehicleRegistrationState__Mode: ${TRAMITE_VALIDATION_VEHICLE_STATE_MODE:-block}
       # Cambio de carrocería sobre un vehículo que el RUNT reporta SIN CARROCERIA (o sin el dato).
       TramiteValidations__VehicleBodyTypeRequired__Mode: ${TRAMITE_VALIDATION_BODY_TYPE_MODE:-block}
-      # Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen.
-      TramiteValidations__VehiclePrendaRequired__Mode: ${TRAMITE_VALIDATION_PRENDA_MODE:-block}
+      # HU #13143 (ADR-0066) — el trámite que se radica necesita un mandatario activo, vigente y con firma
+      # válida (409 mandatario_no_configurado / mandatario_firma_invalida). EXCEPCIÓN DELIBERADA al patrón
+      # block de las demás: el default es warn porque el código nuevo con datos sin migrar (firma física,
+      # OT legados sin mandatarios) detendría radicaciones en PDN. El paso a block es solo esta variable en
+      # el .env del VPS (TRAMITE_VALIDATION_MANDATARIO_MODE=block) más un reinicio, sin despliegue; lo decide
+      # el Líder Técnico tras migrar la firma física. En código, ausente o inválido resuelve a block.
+      TramiteValidations__MandatarioRequerido__Mode: ${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}
       # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}

@@ -9,23 +9,26 @@ namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 /// huella con la fecha de registro original y persiste con auditoría atómica (RF28). Los
 /// mandatos ya emitidos conservan su huella previa (no se tocan).
 ///
-/// HU #11764 (ADR-0050) — la edición YA NO dispara la validación de identidad, se agregue o no el
-/// correo por primera vez: el módulo Identidad es la única fuente que puede originar una fila de
-/// validación (y el único disparador de ese correo). El disparo que existía aquí desde la HU
-/// #10993 (<c>IAdminIdentityValidationService.ResendAsync</c>, best-effort) se retira; el correo
-/// se sigue capturando y persistiendo como dato de contacto.
+/// HU #11764 (ADR-0050) retiró el disparo antiguo de la edición. HU #13246 (Feature #13245) lo restablece acotado: solo
+/// el cambio de tipo o número de documento y el paso de baúl a biometría lanzan una validación propia nueva.
 /// </summary>
 public sealed class UpdateMandateSignerHandler
 {
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
+    private readonly IMandatarioAssociableCompanies? _associable;
+    private readonly IMandateSignerIdentityLauncher? _identityLauncher;
 
     public UpdateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
-        IMandateSignerRepository repository)
+        IMandateSignerRepository repository,
+        IMandatarioAssociableCompanies? associable = null,
+        IMandateSignerIdentityLauncher? identityLauncher = null)
     {
+        _identityLauncher = identityLauncher;
+        _associable = associable;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -53,7 +56,6 @@ public sealed class UpdateMandateSignerHandler
         IReadOnlyList<Guid> companyIds = command.CompanyTenantIds ?? [];
         var companiesToValidate = companyIds;
         var transitOfficeIds = command.TransitOfficeIds;
-        var physicalSignatureOfficeIds = command.PhysicalSignatureOfficeIds;
 
         // Bug #12912 (2ª vuelta review PR #442) — la edición desde el organismo solo gestiona SU fila,
         // leyendo el estado persistido (no el cuerpo, que al OT le llega recortado):
@@ -72,14 +74,67 @@ public sealed class UpdateMandateSignerHandler
             companiesToValidate = [.. companyIds.Where(id => !persistidas.Contains(id)).Distinct()];
             companyIds = [.. companyIds.Union(persistidas.Where(id => !visibles.Contains(id)))];
             transitOfficeIds = null;
-            physicalSignatureOfficeIds = null;
         }
+
+        // HU #13179 — compañías asociadas (403 fuera de alcance; 422 por elemento; RF33 para el OT). Los
+        // organismos del mandatario son los que quedan tras la edición, o los persistidos si no se tocan.
+        var mandatarioOffices = (transitOfficeIds is { Count: > 0 }
+                ? transitOfficeIds
+                : [.. signer.TransitOfficeIds, signer.TransitOfficeId, command.TransitOfficeId])
+            .ToHashSet();
+        var associationErrors = await MandateSignerAssociationRules.ValidateAsync(
+                _associable, _reader, command.OfficeCompanies, companyIds, mandatarioOffices,
+                command.ConfiguredByScope, cancellationToken)
+            .ConfigureAwait(false);
 
         var otStatus = await _otStatus
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
 
+        // HU #13129 — modelo, forma de firma y vigencia; lo que no se manda se conserva (solo natural).
+        var (profile, profileErrors) = MandateSignerModelRules.Evaluate(
+            new MandateSignerProfileInput(
+                command.SignerModel,
+                command.SignatureMethod,
+                command.ValidityKind,
+                command.ValidFrom,
+                command.ValidTo,
+                command.FullName,
+                command.DocumentType,
+                command.DocumentNumber,
+                command.Email,
+                command.ActualizaFirma ? command.SignatureVaultId : null),
+            signer);
+
+        var exigeCompania = string.Equals(
+            command.ConfiguredByScope, "compania", StringComparison.Ordinal);
         var (otTenantId, errors) = MandateSignerValidation.ValidateBase(
-            otStatus, command.FullName, command.DocumentNumber, companyIds);
+            otStatus,
+            profile.FullName,
+            profile.DocumentNumber,
+            companyIds,
+            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco,
+            requireCompanies: exigeCompania);
+        errors.AddRange(profileErrors);
+        errors.AddRange(associationErrors);
+
+        // Forma de firma baúl: la firma elegida (o la ya guardada, si el llamante no gestiona la firma).
+        var efectiveVaultId = command.ActualizaFirma ? command.SignatureVaultId : signer.SignatureVaultId;
+        if (errors.Count == 0
+            && profile.SignatureMethod == MandateSignatureMethods.Baul)
+        {
+            var offices = transitOfficeIds is { Count: > 0 }
+                ? transitOfficeIds
+                : (signer.TransitOfficeIds.Count > 0 ? signer.TransitOfficeIds : [command.TransitOfficeId]);
+            var baulError = MandateSignerSigningCapability.Validate(
+                offices,
+                efectiveVaultId,
+                existente: null,
+                MandateSignatureMethods.Baul);
+            if (baulError is not null)
+            {
+                errors.Add(baulError);
+            }
+        }
 
         if (otTenantId is not null && companiesToValidate.Count > 0)
         {
@@ -89,10 +144,11 @@ public sealed class UpdateMandateSignerHandler
                     command.TransitOfficeId,
                     companiesToValidate,
                     transitOfficeIds,
-                    command.OfficeCompanies,
                     command.MandateSignerId,
                     command.CompanyVisibility,
-                    cancellationToken)
+                    cancellationToken,
+                    associable: _associable,
+                    configuredByScope: command.ConfiguredByScope)
                 .ConfigureAwait(false);
         }
 
@@ -101,10 +157,16 @@ public sealed class UpdateMandateSignerHandler
             return UpdateMandateSignerResult.Invalid(errors);
         }
 
-        var fullName = command.FullName.Trim();
-        var documentNumber = command.DocumentNumber.Trim();
-        var documentType = string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim();
+        var fullName = profile.FullName;
+        var documentNumber = profile.DocumentNumber;
+        var documentType = profile.DocumentType;
         var email = string.IsNullOrWhiteSpace(command.Email) ? null : command.Email.Trim();
+
+        // El vínculo al baúl solo existe con forma de firma baúl: al pasar a biometría o a un modelo sin
+        // firma personal se desvincula (elección explícita, sin caída de un medio al otro, ADR-0061).
+        var conservaBaul = profile.SignatureMethod == MandateSignatureMethods.Baul;
+        var actualizaFirma = command.ActualizaFirma || !conservaBaul;
+        var vaultId = conservaBaul ? command.SignatureVaultId : null;
         // Regenera la huella con la MISMA fecha de registro original (RF: huella determinista).
         var integrityHash = MandateSignerIntegrityHash.Compute(fullName, documentNumber, signer.RegisteredAt);
 
@@ -122,18 +184,47 @@ public sealed class UpdateMandateSignerHandler
                 email,
                 command.UserId,
                 transitOfficeIds,
-                physicalSignatureOfficeIds,
-                command.SignatureVaultId,
+                null, // HU #13131: no se toca la marca histórica de firma física (se conserva tal cual).
+                vaultId,
                 command.OfficeCompanies,
-                command.ActualizaFirma,
+                actualizaFirma,
                 // Tras la edición, el organismo bajo el que se editó es el primario. Solo cambia algo
                 // cuando la lista retira al primario anterior; en la edición desde el perfil del
                 // organismo ambos coinciden y esto es un no-op.
-                NuevoOrganismoPrimario: command.TransitOfficeId),
+                NuevoOrganismoPrimario: command.TransitOfficeId,
+                SignerModel: profile.Model,
+                SignatureMethod: profile.SignatureMethod,
+                ValidityKind: profile.ValidityKind,
+                ValidFrom: profile.ValidFrom,
+                ValidTo: profile.ValidTo,
+                ConfiguredByScope: command.ConfiguredByScope),
             cancellationToken).ConfigureAwait(false);
 
-        return updated
-            ? UpdateMandateSignerResult.Updated(integrityHash)
-            : UpdateMandateSignerResult.NotFound();
+        if (!updated)
+        {
+            return UpdateMandateSignerResult.NotFound();
+        }
+
+        // HU #13246 (decisión 3 del Líder Técnico) — nueva validación propia cuando cambia el tipo o el número de documento
+        // (la anterior deja de contar) o la forma de firma pasa de baúl a biometría. Editar sin esos cambios no la dispara,
+        // y reactivar tampoco. El tenant es el de la compañía del mandatario.
+        var identity = MandateSignerIdentityOutcome.NotAttempted;
+        if (MandateSignerIdentityLaunch.RequiresValidation(profile.Model, profile.SignatureMethod))
+        {
+            var documentChanged = !MandateSignerIdentityLaunch.SameDocument(
+                signer.DocumentType, signer.DocumentNumber, documentType, documentNumber);
+            var toBiometria = MandateSignerIdentityLaunch.EffectiveMethod(signer) != MandateSignatureMethods.Biometria;
+            if (documentChanged || toBiometria)
+            {
+                var launchTenant = companyIds.Count > 0 ? companyIds[0] : otTenantId!.Value;
+                identity = await MandateSignerIdentityLaunch
+                    .TryLaunchAsync(
+                        _identityLauncher, command.MandateSignerId, launchTenant, documentType, documentNumber,
+                        fullName, email, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return UpdateMandateSignerResult.Updated(integrityHash, identity);
     }
 }

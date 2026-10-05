@@ -13,8 +13,11 @@ public sealed class UpdateMandateSignerResult
     private UpdateMandateSignerResult(
         UpdateMandateSignerOutcome outcome,
         string? integrityHash,
-        IReadOnlyList<MandateSignerValidationError> errors)
+        IReadOnlyList<MandateSignerValidationError> errors,
+        Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner.MandateSignerIdentityOutcome identity =
+            Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner.MandateSignerIdentityOutcome.NotAttempted)
     {
+        Identity = identity;
         Outcome = outcome;
         IntegrityHash = integrityHash;
         Errors = errors;
@@ -24,8 +27,17 @@ public sealed class UpdateMandateSignerResult
     public string? IntegrityHash { get; }
     public IReadOnlyList<MandateSignerValidationError> Errors { get; }
 
-    public static UpdateMandateSignerResult Updated(string integrityHash) =>
-        new(UpdateMandateSignerOutcome.Updated, integrityHash, []);
+    /// <summary>
+    /// HU #13246 — desenlace de la validación de identidad propia lanzada por la edición (cambio de documento o paso de
+    /// baúl a biometría); <c>NotAttempted</c> cuando la edición no la dispara.
+    /// </summary>
+    public Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner.MandateSignerIdentityOutcome Identity { get; }
+
+    public static UpdateMandateSignerResult Updated(
+        string integrityHash,
+        Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner.MandateSignerIdentityOutcome identity =
+            Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner.MandateSignerIdentityOutcome.NotAttempted) =>
+        new(UpdateMandateSignerOutcome.Updated, integrityHash, [], identity);
 
     public static UpdateMandateSignerResult NotFound() =>
         new(UpdateMandateSignerOutcome.NotFound, null, []);

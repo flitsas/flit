@@ -10,6 +10,11 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// <see cref="DbSignatureVaultReader"/>. En proveedor InMemory (tests) delega directo, sin
 /// transacción ni set_config. Extraído para no duplicar el bloque en los repos/readers del
 /// directorio de representantes legales (HU #10900).
+///
+/// <para>HU #13137 — si el contexto YA tiene una transacción abierta (p. ej. la baja de un mandatario, que
+/// reasigna trámites evaluando el mandatario con lectores tenant-scoped dentro de su propia transacción) no se abre
+/// otra —EF lanza «already in a transaction»—: se fija el tenant con <c>set_config(..., is_local := true)</c> durante
+/// la operación y se restaura el valor anterior al terminar.</para>
 /// </summary>
 /// <remarks>
 /// <para><b>Bug #13194 (P4) — transacción ambiente.</b> Si el contexto YA tiene una transacción abierta
@@ -48,6 +53,8 @@ internal static class TenantRlsScope
             return await operation().ConfigureAwait(false);
         }
 
+        // HU #13137 y Bug #13194: si ya hay transacción, no se abre otra. El savepoint de DEV restaura
+        // el tenant anterior (lo que pedía la baja del mandatario) y deja viva la transacción ambiente.
         if (context.Database.CurrentTransaction is { } ambiente)
         {
             return await ExecuteInAmbientTransactionAsync(context, ambiente, tenantId, operation, cancellationToken)

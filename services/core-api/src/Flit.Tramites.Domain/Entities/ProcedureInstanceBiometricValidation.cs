@@ -24,8 +24,16 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public Guid? PersonId { get; set; }
 
-    /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial o en prevalidación standalone.</summary>
+    /// <summary>'comprador' | 'vendedor' | 'mandatario'. Null en matrícula inicial o en prevalidación standalone.</summary>
     public string? PartyRole { get; set; }
+
+    /// <summary>
+    /// HU #13246 (Feature #13245, Épica #13090) — ficha del mandatario (<c>admin.mandate_signers.id</c>) para la que se
+    /// lanzó esta validación. Solo se rellena con <see cref="PartyRole"/> = <c>mandatario</c> (CHECK en BD): la validación
+    /// del mandatario es EXCLUSIVA, solo cuenta para esa ficha y no entra en las consultas por documento del trámite, la
+    /// prevalidación ni el módulo Identidad. Sin persona ni trámite (el ancla es esta ficha).
+    /// </summary>
+    public Guid? MandateSignerId { get; set; }
 
     public string Name { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
@@ -265,6 +273,9 @@ public static class BiometricRules
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
+
+    /// <summary>HU #13246 — rol de la validación lanzada para un mandatario (con <c>MandateSignerId</c>).</summary>
+    public const string ParteMandatario = "mandatario";
 
     /// <summary>
     /// Vigencia (días CALENDARIO) de una validación de identidad APROBADA, contada desde la fecha de

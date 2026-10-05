@@ -623,6 +623,7 @@ internal sealed partial class ProcedureInstanceRepository(
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
+                && v.MandateSignerId == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
@@ -669,6 +670,7 @@ internal sealed partial class ProcedureInstanceRepository(
         var fromBio = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
+                && v.MandateSignerId == null
                 && v.ProcedureInstanceId != null
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null
@@ -874,6 +876,44 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListMandatarioValidationsAsync(
+        IReadOnlyCollection<Guid> mandateSignerIds, CancellationToken ct = default)
+    {
+        if (mandateSignerIds.Count == 0)
+            return [];
+
+        var ids = mandateSignerIds.Distinct().ToList();
+        return await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.MandateSignerId != null
+                && ids.Contains(v.MandateSignerId.Value)
+                && v.PartyRole == BiometricRules.ParteMandatario)
+            .OrderByDescending(v => v.CreatedAt)
+            .ThenByDescending(v => v.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<int> SupersedeMandatarioInFlightAsync(
+        Guid mandateSignerId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var enVuelo = await db.ProcedureInstanceBiometricValidations
+            .Where(v => v.MandateSignerId == mandateSignerId
+                && (v.Status == BiometricEstados.PendienteEnvio
+                    || v.Status == BiometricEstados.Enviado
+                    || v.Status == BiometricEstados.EnProceso))
+            .ToListAsync(ct);
+        foreach (var v in enVuelo)
+        {
+            v.Status = BiometricEstados.Expirado;
+            v.UpdatedAt = now;
+        }
+
+        if (enVuelo.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return enVuelo.Count;
+    }
+
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>>
         ListLatestBiometricValidationsByPersonsAsync(
             Guid tenantId,
@@ -994,6 +1034,8 @@ internal sealed partial class ProcedureInstanceRepository(
                 -- devuelve filas: cerrado por defecto, nunca «sin filtro».
                 WHERE ({0}::uuid[] IS NULL OR v.tenant_id = ANY({0}::uuid[]))
                   AND v.deleted_at IS NULL
+                  -- HU #13246 — la validación del mandatario no se lista en el módulo Identidad.
+                  AND v.mandate_signer_id IS NULL
                   AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
                   AND ({1}::text IS NULL OR upper(btrim(v.document_type)) = {1})
                   -- Documento por COINCIDENCIA PARCIAL, igual que el listado plano: el gestor teclea
@@ -1436,6 +1478,8 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Include(v => v.ProcedureInstance)
             .WhereTenantInScope(scope, v => v.TenantId)
+            // HU #13246 — las validaciones del mandatario no se listan en el módulo Identidad ni alimentan sus consultas.
+            .Where(v => v.MandateSignerId == null)
             .Where(v => v.ProcedureInstanceId == null
                 || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null));
 
@@ -1445,6 +1489,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .Include(v => v.ProcedureInstance)
             // HU #10867 — incluir prevalidaciones standalone (ProcedureInstanceId IS NULL) + las ligadas a instancias no eliminadas.
             .Where(v => v.TenantId == tenantId
+                && v.MandateSignerId == null
                 && (v.ProcedureInstanceId == null
                     || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)));
 
@@ -1808,10 +1853,14 @@ internal sealed partial class ProcedureInstanceRepository(
 
     private const string BiometricInFlightUniqueIndex = "uq_biometric_validations_inflight_doc_norm";
 
+    /// <summary>HU #13246 — a lo sumo una validación en vuelo por mandatario (DDL 129).</summary>
+    private const string BiometricInFlightMandatarioIndex = "uq_biometric_validations_inflight_mandate_signer";
+
     private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
-        && string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal);
+        && (string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal)
+            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal));
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();
