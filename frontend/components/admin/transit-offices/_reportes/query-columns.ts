@@ -5,7 +5,7 @@
 // licencia de tránsito, transformaciones, comprador y vendedor—, que son justo las que el usuario
 // viene a buscar cuando arma su propia consulta.
 
-import { bogotaClock, bogotaDay } from "@/lib/xlsx";
+import { bogotaClock } from "@/lib/xlsx";
 import type { OtQueryRow } from "@/lib/api/ot-queries";
 import {
   buildCsv,
@@ -184,8 +184,8 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     group: "Fechas",
     xlsxHeader: "Fecha de radicación",
     value: (r) => formatDateTime(r.radicadoEn),
-    raw: (r) => bogotaDay(r.radicadoEn),
-    width: 14,
+    raw: (r) => bogotaClock(r.radicadoEn),
+    width: 18,
     sort: "radicado",
     defaultVisible: true,
   },
@@ -195,8 +195,8 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     group: "Fechas",
     xlsxHeader: "Fecha de decisión",
     value: (r) => formatDateTime(r.decididoEn),
-    raw: (r) => bogotaDay(r.decididoEn),
-    width: 14,
+    raw: (r) => bogotaClock(r.decididoEn),
+    width: 18,
     sort: "decidido",
   },
   {
@@ -205,8 +205,8 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     group: "Fechas",
     xlsxHeader: "Fecha de aprobación",
     value: (r) => formatDateTime(r.aprobadoEn),
-    raw: (r) => bogotaDay(r.aprobadoEn),
-    width: 14,
+    raw: (r) => bogotaClock(r.aprobadoEn),
+    width: 18,
   },
   {
     id: "actualizado_en",

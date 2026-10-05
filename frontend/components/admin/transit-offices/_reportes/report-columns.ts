@@ -7,7 +7,7 @@
 
 import type { OtReportRow, OtReportSort } from "@/lib/api/ot-metrics";
 import { OT_REPORT_ESTADOS, OT_REPORT_SORT } from "@/lib/api/ot-metrics";
-import { bogotaClock, bogotaDay } from "@/lib/xlsx";
+import { bogotaClock } from "@/lib/xlsx";
 import {
   activePreset,
   buildCsv,
@@ -186,8 +186,8 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Radicado el",
     group: "Tiempos",
     value: (r) => formatDateTime(r.radicadoEn),
-    raw: (r) => bogotaDay(r.radicadoEn),
-    width: 13,
+    raw: (r) => bogotaClock(r.radicadoEn),
+    width: 18,
     sort: OT_REPORT_SORT.radicado,
     defaultVisible: true,
   },
@@ -204,8 +204,8 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Decidido el",
     group: "Tiempos",
     value: (r) => formatDateTime(r.decididoEn),
-    raw: (r) => bogotaDay(r.decididoEn),
-    width: 13,
+    raw: (r) => bogotaClock(r.decididoEn),
+    width: 18,
     sort: OT_REPORT_SORT.decidido,
     defaultVisible: true,
   },
