@@ -21,8 +21,8 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "acceso",
         title: "1. Cómo entrar",
         paragraphs: [
-          "Con rol ot_admin, abre Trámites en el dock. Te lleva al hub del organismo: /admin/transit-offices/{id}/client-procedures.
-          "Las pestañas Todos, Matrículas, Traspaso y Otros trámites acotan la tabla y las tarjetas a esa familia; en Traspaso y Otros no hay Preasignación ni Asignado.",",
+          "Con rol ot_admin, abre Trámites en el dock. Te lleva al hub del organismo: /admin/transit-offices/{id}/client-procedures.",
+          "Las pestañas Todos, Matrículas, Traspaso y Otros trámites acotan la tabla y las tarjetas a esa familia; en Traspaso y Otros no hay Preasignación ni Asignado.",
           "El ID del organismo se resuelve al navegar (URL, sessionStorage o perfil OT). No viaja en el JWT como campo visible.",
         ],
       },
