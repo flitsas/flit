@@ -298,6 +298,7 @@ app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
 app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token
+app.MapExternalAttachmentEndpoints(); // HU #13263 (Épica #12741) — POST /api/v1/external/tramites/{id}/adjuntos
 app.MapExternalSyncEndpoints(); // HU #13081 (Épica #12737) — GET /api/v1/external/tramites/sync
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();

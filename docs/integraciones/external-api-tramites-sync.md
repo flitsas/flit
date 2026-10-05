@@ -8,7 +8,7 @@
 > Feature [#13261](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13261)): primera operación de
 > **escritura**. El consumidor adjunta al trámite el comprobante de pago del impuesto departamental con
 > `POST /api/v1/external/tramites/{id}/adjuntos` y el permiso nuevo `external.tramites.attachments.write` (§7).
-> Estado: **anunciada** (contrato publicado; el servidor la expone en la HU #13263). Lo demás, sin cambios.
+> Estado: **implementada** (HU #13263). Lo demás, sin cambios.
 >
 > **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
 > otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
@@ -324,8 +324,7 @@ personales conforme a la Ley 1581 de 2012 y de no exponerlos en logs ni document
 
 ### `POST /api/v1/external/tramites/{id}/adjuntos`
 
-> Estado: **anunciada**. El contrato es definitivo; el servidor la expone con la HU #13263. Hasta entonces
-> responde 404 (ruta inexistente) y el consumidor debe trabajar contra un doble.
+> Estado: **implementada** (HU #13263). El contrato es el acordado con Flito, sin cambios.
 
 Adjunta al trámite el **comprobante de pago del impuesto vehicular departamental** (recibo de impuesto o
 recibo de caja). No es el paz y salvo: ese certificado no se envía por aquí.
@@ -372,7 +371,7 @@ Respuesta `201` (adjunto nuevo) o `200` (reenvío idempotente), **mismo cuerpo**
 | `sha256` | SHA-256 hexadecimal en minúsculas de los bytes recibidos. |
 | `reemplazoDe` | id del adjunto anterior **del consumidor** que este envío retiró; `null` si no había o si es el 200 idempotente. |
 | `enMatriz` | `true` si el tipo está en la matriz documental del gestor para ese trámite (completa una casilla de su checklist). `false`: queda archivado sin casilla. |
-| `pagadoMarcado` | `true` si el trámite tiene el impuesto departamental marcado como pagado por el consumidor. |
+| `pagadoMarcado` | `true` si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en `entregado` no marca, pero si la marca ya existía devuelve `true`. |
 
 Reglas:
 
@@ -387,7 +386,8 @@ Reglas:
   consumidor, responde `200` con el mismo cuerpo y no escribe nada. Un reintento de red no duplica.
 - **Impuesto pagado:** al aceptar el archivo se marca el impuesto departamental como pagado en
   `preasignacion`, `asignado` y `rechazado` con subsanación. En `entregado` **no** se marca (el trámite está
-  en el organismo) y `pagadoMarcado` vale `false`. El gestor no puede desmarcar lo que marcó el consumidor.
+  en el organismo); `pagadoMarcado` refleja la marca vigente del consumidor, así que vale `true` si ya existía y
+  `false` si no. El gestor no puede desmarcar lo que marcó el consumidor.
 - **Reversa en el consumidor:** si el consumidor reversa el pago, no avisa a FLIT; el adjunto y la marca
   quedan. Un nuevo comprobante posterior se reenvía y reemplaza el anterior.
 - **Solo archiva:** no corre OCR ni regenera el consolidado del trámite.

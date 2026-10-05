@@ -2,10 +2,12 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Admin.Domain.Integrations;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.ExternalSync;
+using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -156,17 +158,20 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
     }
 
     /// <summary>
-    /// HU #13262 (Feature #13261, Épica #12741) — una operación con <c>x-estado: anunciada</c> se publica antes de
-    /// existir para que el consumidor implemente en paralelo. Mientras la API no la exponga, la marca es obligatoria;
-    /// en cuanto la exponga, esta prueba falla hasta quitar la marca y la ruta pasa a la verificación de arriba.
+    /// HU #13262/#13263 (Feature #13261, Épica #12741) — una operación con <c>x-estado: anunciada</c> se publica antes de
+    /// existir para que el consumidor implemente en paralelo; mientras la API no la exponga la marca es obligatoria. La HU
+    /// #13263 expuso el envío de adjuntos: ya no está anunciado y la verificación de rutas de arriba lo cubre.
     /// </summary>
     [Fact]
     public void AC4_LasOperacionesAnunciadasNoExistenTodaviaEnLaApi()
     {
+        const string envio = "POST /api/v1/external/tramites/{id}/adjuntos";
         var anunciadas = Operaciones(Contrato.Value.RootElement).Where(o => o.Anunciada).Select(o => o.Ruta).ToList();
 
-        anunciadas.Should().Contain("POST /api/v1/external/tramites/{id}/adjuntos");
-        RutasExternasDeLaApi().Should().NotIntersectWith(anunciadas, "al implementarla se quita x-estado: anunciada del contrato");
+        anunciadas.Should().NotContain(envio, "la HU #13263 la expone: se quitó x-estado: anunciada del contrato");
+        RutasExternasDeLaApi().Should().NotIntersectWith(anunciadas, "una operación anunciada aún no existe en la API");
+        RutasExternasDeLaApi().Should().Contain(envio);
+        Operaciones(Contrato.Value.RootElement).Select(o => o.Ruta).Should().Contain(envio);
     }
 
     /// <summary>
@@ -212,6 +217,57 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
 
         Contrato.Value.RootElement.GetProperty("components").GetProperty("securitySchemes").GetProperty("externalClient")
             .GetProperty("description").GetString().Should().Contain("external.tramites.attachments.write");
+    }
+
+    /// <summary>
+    /// HU #13263 — las respuestas reales del envío (201, 200 y los errores con y sin <c>estado</c>/<c>terminal</c>) cumplen
+    /// los esquemas del contrato y cada código está documentado en su estado HTTP.
+    /// </summary>
+    [Fact]
+    public async Task AC4_LasRespuestasRealesDelEnvioCumplenSusEsquemas()
+    {
+        const string ruta = "/api/v1/external/tramites/{id}/adjuntos";
+        var tramite = Guid.CreateVersion7();
+        var pdf = "%PDF-1.4 contrato"u8.ToArray();
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Convert.ToHexStringLower(SHA256.HashData(pdf)), "fm-1");
+        ExternalAttachmentTarget Target(string estado, params ExternalAttachmentExisting[] vigentes) =>
+            new(tramite, Guid.CreateVersion7(), estado, false, Guid.CreateVersion7(), null, true, vigentes);
+
+        var casos = new (ExternalAttachmentTarget? Target, string Tipo, int Status, string Esquema)[]
+        {
+            (Target("asignado"), "liquidacion_impuesto", 201, "AdjuntoRecibido"),
+            (Target("asignado", vigente), "liquidacion_impuesto", 200, "AdjuntoRecibido"),
+            (Target("asignado", new ExternalAttachmentExisting(Guid.CreateVersion7(), null, "otro", "fm-g")), "liquidacion_impuesto", 409, "Problem"),
+            (Target("aprobado"), "liquidacion_impuesto", 409, "Problem"),
+            (Target("asignado"), "otro", 400, "Problem"),
+            (null, "liquidacion_impuesto", 404, "Problem"),
+        };
+
+        foreach (var (target, tipo, status, esquema) in casos)
+        {
+            _factory.Envio.Reiniciar(target);
+            using var scope = _factory.Services.CreateScope();
+            var pase = scope.ServiceProvider.GetRequiredService<IExternalClientTokenIssuer>().Issue("contrato-test", ExternalScopes.Todos).Token;
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/external/tramites/{tramite}/adjuntos")
+            {
+                Content = new MultipartFormDataContent
+                {
+                    { new StringContent(tipo), "tipo" },
+                    { new ByteArrayContent(pdf) { Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") } }, "file", "recibo.pdf" },
+                },
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pase);
+
+            var response = await _factory.CreateClient().SendAsync(request, TestContext.Current.CancellationToken);
+
+            ((int)response.StatusCode).Should().Be(status);
+            var body = await Json(response);
+            Validar(body, esquema);
+            if (esquema == "Problem")
+            {
+                CodigosDocumentados(ruta, "post", status).Should().Contain(body.GetProperty("code").GetString());
+            }
+        }
     }
 
     private static IEnumerable<(string Ruta, bool Anunciada)> Operaciones(JsonElement raiz) =>
@@ -466,6 +522,8 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
 
         public ClientesEnMemoria Clientes { get; } = new();
 
+        public EnvioEnMemoria Envio { get; } = new();
+
         protected override void ConfigureWebHost(IWebHostBuilder builder) =>
             builder.ConfigureTestServices(services =>
             {
@@ -477,6 +535,11 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
                 services.AddSingleton<IExternalClientRepository>(Clientes);
                 services.RemoveAll<IExternalAccessLogRepository>();
                 services.AddSingleton<IExternalAccessLogRepository, SinBitacora>();
+                // HU #13263 — envío de adjuntos: repositorio, almacenamiento y matriz en memoria.
+                services.RemoveAll<IExternalAttachmentRepository>();
+                services.AddSingleton<IExternalAttachmentRepository>(Envio);
+                services.RemoveAll<IResolvedChecklistMatrixProvider>();
+                services.AddSingleton<IResolvedChecklistMatrixProvider, MatrizFija>();
             });
     }
 
@@ -501,13 +564,20 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
         public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(("https://almacen.ejemplo.test/fm-contrato?firma=x", DateTimeOffset.UtcNow.AddMinutes(10)));
 
-        public Task<StoredFile> SaveAsync(Guid procedureInstanceId, string tipo, string originalFilename, Stream content, CancellationToken ct = default) =>
-            throw new NotSupportedException();
+        public async Task<StoredFile> SaveAsync(Guid procedureInstanceId, string tipo, string originalFilename, Stream content, CancellationToken ct = default)
+        {
+            using var ms = new MemoryStream();
+            await content.CopyToAsync(ms, ct);
+            return new StoredFile("fm-contrato-envio", Convert.ToHexStringLower(SHA256.HashData(ms.ToArray())), ms.Length);
+        }
 
         public Task<PresignedUpload> CreatePresignedUploadAsync(Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public void Delete(string storagePath) => throw new NotSupportedException();
+        public void Delete(string storagePath)
+        {
+            // El retiro del binario anterior no se observa aquí.
+        }
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) => throw new NotSupportedException();
     }
