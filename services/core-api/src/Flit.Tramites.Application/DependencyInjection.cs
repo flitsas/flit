@@ -22,6 +22,7 @@ public static class DependencyInjection
         // IBusinessDayCalculator sobre por qué es una versión simple sin festivos colombianos).
         services.AddSingleton<IBusinessDayCalculator, BusinessDayCalculator>();
 
+        services.AddScoped<Flit.Tramites.Application.UseCases.ExternalAttachments.SubmitExternalAttachmentHandler>(); // HU #13263
         services.AddScoped<CreateProcedureTypeHandler>();
         services.AddScoped<ListProcedureTypesHandler>();
         services.AddScoped<GetProcedureTypeHandler>();

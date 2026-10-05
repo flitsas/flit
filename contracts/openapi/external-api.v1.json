@@ -755,8 +755,7 @@
         ],
         "operationId": "enviarAdjunto",
         "summary": "Adjuntar un documento al trámite",
-        "x-estado": "anunciada",
-        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si el gestor ya cargó ese tipo responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe; (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra. x-estado: anunciada — publicada para que el consumidor implemente; el servidor la expone en la HU #13263.",
+        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si el gestor ya cargó ese tipo responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe; (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
         "parameters": [
           {
             "name": "id",
@@ -1162,7 +1161,8 @@
               "type": "string",
               "enum": [
                 "external.tramites.read",
-                "external.tramites.pii.read"
+                "external.tramites.pii.read",
+                "external.tramites.attachments.write"
               ]
             }
           }
@@ -1695,7 +1695,7 @@
           },
           "pagadoMarcado": {
             "type": "boolean",
-            "description": "true si el trámite tiene el impuesto departamental marcado como pagado por el consumidor. Se marca en preasignacion, asignado y rechazado con subsanación; en entregado no (el trámite está en el organismo) y vale false."
+            "description": "true si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en entregado no marca, pero si la marca ya existía devuelve true."
           }
         }
       }
