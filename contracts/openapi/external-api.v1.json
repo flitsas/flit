@@ -755,7 +755,7 @@
         ],
         "operationId": "enviarAdjunto",
         "summary": "Adjuntar un documento al trámite",
-        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si el gestor ya cargó ese tipo responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe; (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
+        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si el gestor ya cargó ese tipo responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si el estado marca y la marca falta, la pone); (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
         "parameters": [
           {
             "name": "id",
@@ -803,7 +803,7 @@
             }
           },
           "200": {
-            "description": "Reenvío idempotente: el adjunto vigente del consumidor ya tiene ese mismo contenido. No se escribe nada; mismo cuerpo que el 201 con reemplazoDe null.",
+            "description": "Reenvío idempotente: el adjunto vigente del consumidor ya tiene ese mismo contenido. No se escribe el adjunto; si el trámite está en un estado que marca el pago y la marca faltaba, se pone (pagadoMarcado true). Mismo cuerpo que el 201 con reemplazoDe null.",
             "content": {
               "application/json": {
                 "schema": {

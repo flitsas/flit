@@ -17,7 +17,7 @@ public enum SubmitExternalAttachmentStatus
     /// <summary>Adjunto archivado (201).</summary>
     Created,
 
-    /// <summary>Mismo contenido que el adjunto vigente de Flito: no se escribió nada (200).</summary>
+    /// <summary>Mismo contenido que el adjunto vigente de Flito: el adjunto no se toca (200); solo se pone la marca de pago si el estado marca y faltaba.</summary>
     Unchanged,
 
     /// <summary>Rechazado: ver <see cref="SubmitExternalAttachmentResult.Error"/>.</summary>
@@ -45,6 +45,8 @@ public sealed record SubmitExternalAttachmentResult(
 /// reemplaza el suyo anterior (<c>reemplazoDe</c>) y el mismo contenido es idempotente. Todo ocurre con la fila del
 /// trámite bloqueada. El archivo se guarda en el almacenamiento ANTES de tocar la base y el binario viejo se retira
 /// DESPUÉS de confirmar: si algo falla el cliente conserva lo que tenía.</para>
+/// <para>HU #13264: en preasignación, asignado y rechazado con subsanación el 201 también deja
+/// <c>impuesto_departamental_pagado = true</c> (<c>source = flito</c>) en la misma transacción; en entregado no.</para>
 /// </summary>
 public sealed class SubmitExternalAttachmentHandler(
     IExternalAttachmentRepository repository,
@@ -114,8 +116,17 @@ public sealed class SubmitExternalAttachmentHandler(
         var igual = propios.FirstOrDefault(a => string.Equals(a.Sha256, sha256, StringComparison.OrdinalIgnoreCase));
         if (igual is not null)
         {
+            // HU #13264 — el 200 no toca el adjunto, pero si el estado marca y la marca de flito falta (p. ej. el adjunto se
+            // cargó en entregado y el trámite volvió a un estado editable) la pone, en la misma transacción bloqueada.
+            var marcado = target.PagadoMarcado;
+            if (!marcado && ExternalAttachmentRules.MarksPaid(target.Status, target.SubsanacionActiva))
+            {
+                await writer.MarkTaxPaidAsync(ct).ConfigureAwait(false);
+                marcado = true;
+            }
+
             return new(new(SubmitExternalAttachmentStatus.Unchanged,
-                new ExternalAttachmentReceipt(igual.Id, tipo, sha256, null, enMatriz, target.PagadoMarcado),
+                new ExternalAttachmentReceipt(igual.Id, tipo, sha256, null, enMatriz, marcado),
                 TenantId: target.TenantId), []);
         }
 
@@ -137,8 +148,17 @@ public sealed class SubmitExternalAttachmentHandler(
             [.. propios.Select(a => a.Id)],
             ct).ConfigureAwait(false);
 
+        // HU #13264 — en los estados editables el comprobante marca el impuesto como pagado (misma transacción que el
+        // insert); en entregado se archiva sin tocar la marca y la respuesta refleja la que ya hubiera.
+        var pagadoMarcado = target.PagadoMarcado;
+        if (ExternalAttachmentRules.MarksPaid(target.Status, target.SubsanacionActiva))
+        {
+            await writer.MarkTaxPaidAsync(ct).ConfigureAwait(false);
+            pagadoMarcado = true;
+        }
+
         return new(new(SubmitExternalAttachmentStatus.Created,
-                new ExternalAttachmentReceipt(adjuntoId, tipo, stored.Sha256, propios.Count > 0 ? propios[0].Id : null, enMatriz, target.PagadoMarcado),
+                new ExternalAttachmentReceipt(adjuntoId, tipo, stored.Sha256, propios.Count > 0 ? propios[0].Id : null, enMatriz, pagadoMarcado),
                 TenantId: target.TenantId),
             [.. propios.Select(a => a.StoragePath)]);
     }

@@ -54,6 +54,19 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
                           AND f.source = @source)
         """;
 
+    // Upsert de la marca sobre uq_procedure_instance_field_values_instance_key. form_field_id queda NULL (valor
+    // «suelto», DDL 19) como lo escribe «Enviar al OT». No reescribe la fila si la marca ya está vigente.
+    private const string MarkPaidSql = """
+        INSERT INTO tramites.procedure_instance_field_values
+            (tenant_id, procedure_instance_id, field_key, value_text, source, created_at)
+        VALUES
+            (@tenant_id, @procedure_id, 'impuesto_departamental_pagado', 'true', @source, now())
+        ON CONFLICT (procedure_instance_id, field_key) DO UPDATE
+           SET value_text = 'true', source = EXCLUDED.source, updated_at = now()
+         WHERE procedure_instance_field_values.value_text IS DISTINCT FROM 'true'
+            OR procedure_instance_field_values.source IS DISTINCT FROM EXCLUDED.source
+        """;
+
     private const string DeleteSql = """
         DELETE FROM tramites.procedure_instance_attachments
          WHERE procedure_instance_id = @procedure_id AND id = ANY(@ids)
@@ -191,6 +204,16 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
                 ("storage_path", NpgsqlDbType.Varchar, attachment.StoragePath),
                 ("provider", NpgsqlDbType.Varchar, ExternalAttachmentRules.Provider));
             return (Guid)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        public async Task MarkTaxPaidAsync(CancellationToken cancellationToken)
+        {
+            var t = target ?? throw new InvalidOperationException("No hay trámite sobre el que escribir.");
+            await using var upsert = Command(conn, tx, MarkPaidSql,
+                ("tenant_id", NpgsqlDbType.Uuid, t.TenantId),
+                ("procedure_id", NpgsqlDbType.Uuid, t.ProcedureId),
+                ("source", NpgsqlDbType.Varchar, ExternalAttachmentRules.FieldSource));
+            await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

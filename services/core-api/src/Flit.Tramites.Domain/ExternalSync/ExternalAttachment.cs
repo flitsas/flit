@@ -51,6 +51,22 @@ public static class ExternalAttachmentRules
         return sizeBytes > MaxSizeBytes ? "file_too_large" : null;
     }
 
+    /// <summary>
+    /// HU #13264 — ¿el envío en este estado marca <c>impuesto_departamental_pagado</c>? Sí en <c>preasignacion</c>, <c>asignado</c>
+    /// y <c>rechazado</c> con subsanación activa (los estados editables); en <c>entregado</c> el adjunto solo se archiva.
+    /// </summary>
+    public static bool MarksPaid(string? status, bool subsanacionActiva) =>
+        Is(status, TramiteEstado.Preasignacion) || Is(status, TramiteEstado.Asignado)
+        || (Is(status, TramiteEstado.Rechazado) && subsanacionActiva);
+
+    /// <summary>
+    /// HU #13264 — la marca de pago puesta por el consumidor (<c>source = flito</c>) no la sobrescribe el gestor: ni «Enviar al
+    /// OT» ni el PATCH de campos de la subsanación. Solo FLITO (o una nueva carga suya) la cambia.
+    /// </summary>
+    public static bool IsProtectedFlitoMark(string? fieldKey, string? source) =>
+        string.Equals(fieldKey, EnvioOtCheckFields.ImpuestoDepartamentalPagado, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(source, FieldSource, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Solo el tipo MIME, sin parámetros (<c>; charset=…</c>) y en minúscula.</summary>
     public static string NormalizeMimeType(string? contentType)
     {
@@ -93,7 +109,7 @@ public sealed record ExternalAttachmentExisting(Guid Id, string? Provider, strin
 
 /// <summary>El trámite sobre el que se envía, leído con su fila bloqueada.</summary>
 /// <param name="PagadoMarcado">
-/// Marca VIGENTE del consumidor: <c>impuesto_departamental_pagado = true</c> con <c>source = flito</c>. En esta HU solo se lee.
+/// Marca VIGENTE del consumidor: <c>impuesto_departamental_pagado = true</c> con <c>source = flito</c>, leída con la fila bloqueada.
 /// </param>
 /// <param name="Vigentes">Adjuntos vigentes del tipo enviado, el más reciente primero.</param>
 public sealed record ExternalAttachmentTarget(
@@ -117,6 +133,12 @@ public interface IExternalAttachmentWriter
     /// borrado de fila que usa el gestor al reemplazar. Devuelve el id del adjunto nuevo.
     /// </summary>
     Task<Guid> ReplaceAsync(NewExternalAttachment attachment, IReadOnlyCollection<Guid> retire, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// HU #13264 — upsert de <c>impuesto_departamental_pagado = true</c> con <c>source = flito</c> en la MISMA transacción
+    /// del adjunto (cualquier valor o fuente previa se reemplaza). No hace nada si la marca ya está vigente.
+    /// </summary>
+    Task MarkTaxPaidAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>

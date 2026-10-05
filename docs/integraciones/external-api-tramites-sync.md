@@ -9,6 +9,8 @@
 > **escritura**. El consumidor adjunta al trámite el comprobante de pago del impuesto departamental con
 > `POST /api/v1/external/tramites/{id}/adjuntos` y el permiso nuevo `external.tramites.attachments.write` (§7).
 > Estado: **implementada** (HU #13263). Lo demás, sin cambios.
+> **Aclaración** (2026-10-05, HU #13264): el `200` idempotente no escribe el adjunto, pero si el trámite está en un
+> estado que marca el pago y la marca falta, la pone (`pagadoMarcado: true`).
 >
 > **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
 > otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
@@ -383,7 +385,8 @@ Reglas:
 - **Corrección:** un nuevo envío del consumidor con otro archivo reemplaza el suyo anterior (`reemplazoDe`).
   Es la única vía de corrección; FLIT no la ofrece al gestor.
 - **Idempotencia por contenido:** si el archivo es idéntico (mismo SHA-256) al adjunto vigente del
-  consumidor, responde `200` con el mismo cuerpo y no escribe nada. Un reintento de red no duplica.
+  consumidor, responde `200` con el mismo cuerpo y no escribe el adjunto; si el trámite está en un estado que
+  marca (`preasignacion`, `asignado`, `rechazado` con subsanación) y la marca falta, la pone. Un reintento de red no duplica.
 - **Impuesto pagado:** al aceptar el archivo se marca el impuesto departamental como pagado en
   `preasignacion`, `asignado` y `rechazado` con subsanación. En `entregado` **no** se marca (el trámite está
   en el organismo); `pagadoMarcado` refleja la marca vigente del consumidor, así que vale `true` si ya existía y

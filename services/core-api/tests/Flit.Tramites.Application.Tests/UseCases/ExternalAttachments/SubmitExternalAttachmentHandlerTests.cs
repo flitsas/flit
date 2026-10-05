@@ -45,7 +45,8 @@ public sealed class SubmitExternalAttachmentHandlerTests
         receipt.Sha256.Should().Be(Sha(Pdf));
         receipt.ReemplazoDe.Should().BeNull();
         receipt.EnMatriz.Should().BeTrue();
-        receipt.PagadoMarcado.Should().BeFalse("esta HU no escribe la marca");
+        receipt.PagadoMarcado.Should().BeTrue("en asignado el comprobante marca el impuesto como pagado");
+        _repo.Marcas.Should().Be(1);
         _repo.Escritos.Should().ContainSingle().Which.Should().Match<NewExternalAttachment>(a =>
             a.Tipo == "liquidacion_impuesto" && a.Mimetype == "application/pdf" && a.Sha256 == Sha(Pdf) && a.StoragePath == "fm-1");
         _repo.Escritos[0].SizeBytes.Should().Be(Pdf.Length);
@@ -69,15 +70,138 @@ public sealed class SubmitExternalAttachmentHandlerTests
             .Receipt!.EnMatriz.Should().BeFalse("una casilla generada por el sistema no la completa el consumidor");
     }
 
+    [Theory]
+    [InlineData("preasignacion", false)]
+    [InlineData("asignado", false)]
+    [InlineData("rechazado", true)]
+    public async Task AC1_EnLosEstadosEditablesElComprobanteMarcaElImpuestoComoPagado(string estado, bool subsanacion)
+    {
+        _repo.Target = Target(estado, subsanacion);
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        result.Receipt!.PagadoMarcado.Should().BeTrue();
+        _repo.Marcas.Should().Be(1);
+        _repo.Eventos.Should().Equal("reemplazar", "marcar", "confirmar");
+    }
+
     [Fact]
-    public async Task AC1_PagadoMarcadoRefleja_LaMarcaVigenteDelConsumidorAunEnEntregado()
+    public async Task AC1_ElReemplazoTambienMarca()
+    {
+        var anterior = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-viejo");
+        _repo.Target = Target("asignado") with { Vigentes = [anterior], PagadoMarcado = false };
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(OtroPdf), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        result.Receipt!.ReemplazoDe.Should().Be(anterior.Id);
+        result.Receipt.PagadoMarcado.Should().BeTrue();
+        _repo.Marcas.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AC2_EnEntregadoSeArchivaSinMarcarYLaRespuestaDiceFalseSiNoHabiaMarcaPrevia()
+    {
+        _repo.Target = Target("entregado");
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        result.Receipt!.PagadoMarcado.Should().BeFalse();
+        _repo.Escritos.Should().ContainSingle("el adjunto se archiva");
+        _repo.Marcas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AC2_EnEntregadoConMarcaPreviaDeFlitoLaRespuestaDiceTrueSinEscribir()
     {
         _repo.Target = Target("entregado") with { PagadoMarcado = true };
 
         var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
 
         result.Receipt!.PagadoMarcado.Should().BeTrue("la marca ya existía y se lee, no se escribe");
+        _repo.Marcas.Should().Be(0);
     }
+
+    [Theory]
+    [InlineData("preasignacion", false)]
+    [InlineData("asignado", false)]
+    [InlineData("rechazado", true)]
+    public async Task ElIdempotente200PoneLaMarcaFaltanteSinTocarElAdjunto(string estado, bool subsanacion)
+    {
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
+        _repo.Target = Target(estado, subsanacion) with { Vigentes = [vigente], PagadoMarcado = false };
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
+        result.Receipt!.PagadoMarcado.Should().BeTrue();
+        result.Receipt.AdjuntoId.Should().Be(vigente.Id);
+        result.Receipt.ReemplazoDe.Should().BeNull();
+        _repo.Marcas.Should().Be(1);
+        _repo.Escritos.Should().BeEmpty("el adjunto no se toca");
+        _repo.Retirados.Should().BeEmpty();
+        _storage.Guardados.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ElIdempotente200EnEntregadoNoEscribeNada()
+    {
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
+        _repo.Target = Target("entregado") with { Vigentes = [vigente], PagadoMarcado = false };
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
+        result.Receipt!.PagadoMarcado.Should().BeFalse();
+        _repo.Marcas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ElIdempotente200NoReescribeUnaMarcaYaVigente()
+    {
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
+        _repo.Target = Target("asignado") with { Vigentes = [vigente], PagadoMarcado = true };
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
+        result.Receipt!.PagadoMarcado.Should().BeTrue();
+        _repo.Marcas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UnRechazoNoMarcaNada()
+    {
+        _repo.Target = Target("asignado") with
+        {
+            Vigentes = [new ExternalAttachmentExisting(Guid.CreateVersion7(), null, Sha(Pdf), "fm-gestor")],
+        };
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Error.Should().Be("attachment_exists");
+        _repo.Marcas.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("impuesto_departamental_pagado", "flito", true)]
+    [InlineData("IMPUESTO_DEPARTAMENTAL_PAGADO", "Flito", true)]
+    [InlineData("impuesto_departamental_pagado", "user", false)]
+    [InlineData("soat_pagado", "flito", false)]
+    public void LaMarcaDeFlitoSoloProtegeElImpuestoConFuenteFlito(string clave, string fuente, bool protegida) =>
+        ExternalAttachmentRules.IsProtectedFlitoMark(clave, fuente).Should().Be(protegida);
+
+    [Theory]
+    [InlineData("preasignacion", false, true)]
+    [InlineData("asignado", false, true)]
+    [InlineData("rechazado", true, true)]
+    [InlineData("rechazado", false, false)]
+    [InlineData("entregado", false, false)]
+    [InlineData("borrador", false, false)]
+    public void MarksPaidSoloEnLosEstadosEditables(string estado, bool subsanacion, bool marca) =>
+        ExternalAttachmentRules.MarksPaid(estado, subsanacion).Should().Be(marca);
 
     [Theory]
     [InlineData("preasignacion", false)]
@@ -227,7 +351,7 @@ public sealed class SubmitExternalAttachmentHandlerTests
     }
 
     [Fact]
-    public async Task AC5_ElMismoSha256DevuelveElMismoCuerpoSinEscribirNada()
+    public async Task AC5_ElMismoSha256DevuelveElMismoCuerpoSinTocarElAdjunto()
     {
         var anterior = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-anterior");
         _repo.Target = Target("asignado") with { Vigentes = [anterior] };
@@ -235,7 +359,7 @@ public sealed class SubmitExternalAttachmentHandlerTests
         var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
-        result.Receipt.Should().Be(new ExternalAttachmentReceipt(anterior.Id, "liquidacion_impuesto", Sha(Pdf), null, false, false));
+        result.Receipt.Should().Be(new ExternalAttachmentReceipt(anterior.Id, "liquidacion_impuesto", Sha(Pdf), null, false, true));
         _storage.Guardados.Should().BeEmpty("no se vuelve a subir el archivo");
         _storage.Borrados.Should().BeEmpty();
         _repo.Escritos.Should().BeEmpty();
@@ -313,6 +437,10 @@ public sealed class SubmitExternalAttachmentHandlerTests
 
         public bool Confirmado { get; private set; }
 
+        public int Marcas { get; private set; }
+
+        public List<string> Eventos { get; } = [];
+
         public async Task<T> RunLockedAsync<T>(
             Guid procedureId, string tipo,
             Func<ExternalAttachmentTarget?, IExternalAttachmentWriter, CancellationToken, Task<T>> work,
@@ -321,16 +449,25 @@ public sealed class SubmitExternalAttachmentHandlerTests
             Consultas++;
             var result = await work(Target, this, cancellationToken);
             Confirmado = true;
+            Eventos.Add("confirmar");
             return result;
         }
 
         public Task<Guid> ReplaceAsync(NewExternalAttachment attachment, IReadOnlyCollection<Guid> retire, CancellationToken cancellationToken)
         {
             Escritos.Add(attachment);
+            Eventos.Add("reemplazar");
             Retirados.AddRange(retire);
             var id = Guid.CreateVersion7();
             IdsEmitidos.Add(id);
             return Task.FromResult(id);
+        }
+
+        public Task MarkTaxPaidAsync(CancellationToken cancellationToken)
+        {
+            Marcas++;
+            Eventos.Add("marcar");
+            return Task.CompletedTask;
         }
     }
 
