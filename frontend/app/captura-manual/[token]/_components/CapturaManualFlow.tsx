@@ -14,8 +14,9 @@ import { LinkTerminal } from "./LinkTerminal";
 import { StepBar } from "./StepBar";
 import { PasoDatos } from "./PasoDatos";
 import { PasoCaptura } from "./PasoCaptura";
-import { StepPlaceholder } from "./StepPlaceholder";
-import type { Captures } from "@/lib/captura-manual/captures";
+import { PasoFirma, type SubmitOutcome } from "./PasoFirma";
+import { EnvioExitoso } from "./EnvioExitoso";
+import { CAPTURE_STEP_INDEX, STEP_INDEX_DATOS, type Captures } from "@/lib/captura-manual/captures";
 
 type Load =
   | { kind: "loading" }
@@ -37,6 +38,8 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
   const [captures, setCaptures] = useState<Captures>({});
   // El consentimiento ya se registró: volver a Datos no lo re-envía ni desmarca la casilla.
   const [consented, setConsented] = useState(false);
+  // Aviso al volver a un paso por un error del envío (413/415 o consentimiento requerido).
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +55,22 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
       cancelled = true;
     };
   }, [api, token, attempt]);
+
+  function onOutcome(o: SubmitOutcome) {
+    if (o.kind === "success") {
+      setNotice(null);
+      dispatch({ type: "next" }); // completa el paso 5: finished
+    } else if (o.kind === "terminal") {
+      setLoad({ kind: "terminal", terminal: o.terminal });
+    } else if (o.kind === "consent") {
+      setConsented(false);
+      setNotice("Necesitamos tu autorización para continuar. Márcala de nuevo y vuelve a enviar.");
+      dispatch({ type: "goto", index: STEP_INDEX_DATOS });
+    } else {
+      setNotice("Una de tus imágenes es demasiado grande o su formato no es válido. Repite esa captura.");
+      dispatch({ type: "goto", index: CAPTURE_STEP_INDEX[o.capture] });
+    }
+  }
 
   const retry = () => {
     setLoad({ kind: "loading" });
@@ -95,34 +114,44 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
   return (
     <CaptureCard productName={load.view.productName}>
       <StepBar state={steps} />
-      {steps.finished ? (
-        <p className="mt-6 text-base text-flit-primary" role="status">
-          Flujo completado.
+      {notice && !steps.finished ? (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-900">
+          {notice}
         </p>
-      ) : steps.current === 0 ? (
+      ) : null}
+      {steps.finished ? (
+        <EnvioExitoso />
+      ) : step.id === "datos" ? (
         <PasoDatos
           token={token}
           view={load.view}
           client={api}
           consentRegistered={consented}
           onConsentRegistered={() => setConsented(true)}
-          onDone={() => dispatch({ type: "next" })}
+          onDone={() => {
+            setNotice(null);
+            dispatch({ type: "next" });
+          }}
         />
-      ) : step.id === "rostro" || step.id === "anverso" || step.id === "reverso" ? (
+      ) : step.id === "firma" ? (
+        <PasoFirma
+          token={token}
+          client={api}
+          captures={captures}
+          onSignature={(png) => setCaptures((c) => ({ ...c, firma: png ?? undefined }))}
+          onOutcome={onOutcome}
+          onBack={() => dispatch({ type: "back" })}
+        />
+      ) : (
         <PasoCaptura
           key={step.id}
           kind={step.id}
           blob={captures[step.id]}
           onCaptured={(blob) => {
+            setNotice(null);
             setCaptures((c) => ({ ...c, [step.id]: blob }));
             dispatch({ type: "next" });
           }}
-          onBack={() => dispatch({ type: "back" })}
-        />
-      ) : (
-        <StepPlaceholder
-          label={step.label}
-          onNext={() => dispatch({ type: "next" })}
           onBack={() => dispatch({ type: "back" })}
         />
       )}

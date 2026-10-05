@@ -47,6 +47,15 @@ describe("stepsReducer", () => {
     expect(s.completed).toEqual([0]);
   });
 
+  it("goto salta a un paso anterior des-completando los siguientes y rechaza índices inválidos", () => {
+    let s = initialStepsState;
+    for (let i = 0; i < 4; i++) s = stepsReducer(s, { type: "next" });
+    s = stepsReducer(s, { type: "goto", index: 2 });
+    expect(s.current).toBe(2);
+    expect(s.completed).toEqual([0, 1]);
+    expect(stepsReducer(s, { type: "goto", index: 9 })).toBe(s);
+  });
+
   it("no retrocede del primer paso", () => {
     expect(stepsReducer(initialStepsState, { type: "back" })).toBe(initialStepsState);
   });

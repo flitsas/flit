@@ -19,7 +19,7 @@ export interface StepsState {
   finished: boolean;
 }
 
-export type StepsAction = { type: "next" } | { type: "back" };
+export type StepsAction = { type: "next" } | { type: "back" } | { type: "goto"; index: number };
 
 export const initialStepsState: StepsState = { current: 0, completed: [], finished: false };
 
@@ -39,6 +39,11 @@ export function stepsReducer(state: StepsState, action: StepsAction): StepsState
       const current = state.current - 1;
       // Al volver se «des-completa» el paso al que se regresa y los posteriores.
       return { ...state, current, completed: state.completed.filter((i) => i < current) };
+    }
+    case "goto": {
+      // Salto hacia atrás (p. ej. un error del envío señala el paso a repetir). Solo pasos válidos.
+      if (action.index < 0 || action.index > last) return state;
+      return { current: action.index, completed: state.completed.filter((i) => i < action.index), finished: false };
     }
     default:
       return state;
