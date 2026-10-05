@@ -68,7 +68,7 @@ public sealed class ForgotPasswordHandlerTests
             _userAccountRepository, _tokenRepository, _tokenGenerator, _emailSender, _options,
             _auditWriter, _auditContext, _networkMembership, _domainContext, _urlBaseResolver,
             NullLogger<ForgotPasswordHandler>.Instance,
-            emailLinks: new EmailLinksOptions { AssetsBaseUrl = "https://qa.flitsas.online/email-assets" });
+            emailAssets: new SecurityEmailAssetsOptions { BaseUrl = "https://qa.flitsas.online/email-assets" });
         _userAccountRepository.FindActiveByEmailAsync("demo@flit.local", Arg.Any<CancellationToken>())
             .Returns(new PasswordRecoveryUser(Guid.NewGuid(), "demo@flit.local", "Demo User", Guid.NewGuid()));
         _tokenGenerator.Generate().Returns(new GeneratedToken("raw-token", "hash-token"));

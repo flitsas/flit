@@ -80,51 +80,40 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
         return reader;
     }
 
-    private static IProcedureInstanceRepository RepoStub(ProcedureInstanceBiometricValidation? latest)
+    /// <summary>
+    /// HU #13247 — el repositorio devuelve SOLO las validaciones lanzadas para el mandatario (party_role mandatario + su
+    /// ficha); la aprobación de un comprador, un vendedor o una prevalidación con el mismo documento nunca llega aquí.
+    /// </summary>
+    private static IProcedureInstanceRepository RepoStub(params ProcedureInstanceBiometricValidation[] propias)
     {
-        IReadOnlyList<ProcedureInstanceBiometricValidation> rows =
-            latest is null ? [] : [latest];
         var repo = Substitute.For<IProcedureInstanceRepository>();
-        repo.ListBiometricValidationsByPersonAsync(
-                OtTenant, "CC", Documento, 0, 1, Arg.Any<CancellationToken>())
-            .Returns((rows, rows.Count, false));
+        repo.ListMandatarioValidationsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<ProcedureInstanceBiometricValidation>)propias);
         return repo;
     }
 
-    [Fact]
-    public async Task GetCandidatesAsync_ConIdentidadAprobadaVigenteEnElTenantDelOt_MarcaVigente()
+    private static ProcedureInstanceBiometricValidation Aprobada(string numero = Documento) => new()
     {
-        var ct = TestContext.Current.CancellationToken;
-        await using var ctx = await SeedAsync();
-        var aprobada = new ProcedureInstanceBiometricValidation
-        {
-            Status = BiometricEstados.Aprobado,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            ValidatedAt = Now.AddDays(-1),
-            ValidUntil = Now.AddDays(29),
-            CertificateHash = "hash-mandatario",
-        };
-        var directorio = new MandateSignerDirectory(
-            ctx, ReaderConTenant(OtTenant),
-            new IdentityVigenciaPorDocumentoResolver(RepoStub(aprobada)));
-
-        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
-
-        var candidato = candidatos.Should().ContainSingle().Subject;
-        candidato.IdentityVigente.Should().BeTrue();
-        candidato.CertificadoIdentidad.Should().Be("hash-mandatario");
-        candidato.IdentityValidUntil.Should().Be(aprobada.ValidUntil);
-    }
+        Status = BiometricEstados.Aprobado,
+        PartyRole = BiometricRules.ParteMandatario,
+        MandateSignerId = Signer,
+        DocumentType = "CC",
+        DocumentNumber = numero,
+        ValidatedAt = Now.AddDays(-1),
+        ValidUntil = Now.AddDays(29),
+        CertificateHash = "hash-mandatario",
+        CreatedAt = Now.AddDays(-1),
+    };
 
     [Fact]
-    public async Task GetCandidatesAsync_SinValidacionEnElModuloIdentidad_NoQuedaVigente()
+    public async Task GetCandidatesAsync_SinValidacionPropia_NoHaySello_AunqueOtroRolTengaAprobadoElMismoDocumento()
     {
+        // HU #13247 AC2: la aprobación de un comprador/vendedor/prevalidación (que no llega al repositorio de mandatarios)
+        // no estampa sello ni habilita la firma del mandatario.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
         var directorio = new MandateSignerDirectory(
-            ctx, ReaderConTenant(OtTenant),
-            new IdentityVigenciaPorDocumentoResolver(RepoStub(null)));
+            ctx, ReaderConTenant(OtTenant), new IdentityVigenciaPorDocumentoResolver(RepoStub()));
 
         var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
 
@@ -134,23 +123,55 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
     }
 
     [Fact]
-    public async Task GetCandidatesAsync_AprobadaPeroVencida_NoCuentaComoVigente()
+    public async Task GetCandidatesAsync_ValidacionPropiaVigente_NoDependeDelTenantNiDeLasCompaniasVinculadas()
     {
-        // La clasificación "vencida" (HU #11751) no debe apalancar la firma: es exactamente el defecto
-        // que el ADR-0050 quiere evitar.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var vencida = new ProcedureInstanceBiometricValidation
+        ctx.MandateSignerCompanies.Add(new MandateSignerCompany
         {
-            Status = BiometricEstados.Aprobado,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            ValidatedAt = Now.AddDays(-40),
-            ValidUntil = Now.AddDays(-10),
-        };
+            Id = Guid.NewGuid(),
+            MandateSignerId = Signer,
+            TransitOfficeId = Ot,
+            CompanyTenantId = Guid.NewGuid(),
+            IsActive = true,
+            CreatedAt = Now,
+        });
+        await ctx.SaveChangesAsync(ct);
+        var directorio = new MandateSignerDirectory(
+            ctx, ReaderConTenant(null), new IdentityVigenciaPorDocumentoResolver(RepoStub(Aprobada())));
+
+        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
+
+        var candidato = candidatos.Should().ContainSingle().Subject;
+        candidato.IdentityVigente.Should().BeTrue();
+        candidato.CertificadoIdentidad.Should().Be("hash-mandatario");
+    }
+
+    [Fact]
+    public async Task GetCandidatesAsync_ConValidacionPropiaAprobada_MarcaVigente_SinFechaDeFin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        var directorio = new MandateSignerDirectory(
+            ctx, ReaderConTenant(OtTenant), new IdentityVigenciaPorDocumentoResolver(RepoStub(Aprobada())));
+
+        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
+
+        var candidato = candidatos.Should().ContainSingle().Subject;
+        candidato.IdentityVigente.Should().BeTrue();
+        candidato.CertificadoIdentidad.Should().Be("hash-mandatario");
+        candidato.IdentityValidUntil.Should().BeNull("el mandatario no renueva su identidad (HU #13130b): no hay fecha de fin");
+    }
+
+    [Fact]
+    public async Task GetCandidatesAsync_PropiaAprobadaDeUnDocumentoAnterior_NoQuedaVigente()
+    {
+        // HU #13247 AC3: tras cambiar el documento de la ficha, la aprobación del documento anterior no cuenta.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
         var directorio = new MandateSignerDirectory(
             ctx, ReaderConTenant(OtTenant),
-            new IdentityVigenciaPorDocumentoResolver(RepoStub(vencida)));
+            new IdentityVigenciaPorDocumentoResolver(RepoStub(Aprobada(numero: "999000111"))));
 
         var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
 
@@ -158,81 +179,36 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
     }
 
     [Fact]
-    public async Task GetCandidatesAsync_OtSinTenant_NoConsultaIdentidad_YQuedaSinVigencia()
+    public async Task GetCandidatesAsync_AprobadaHace40Dias_CuentaComoVigenteParaElMandatario()
     {
-        // Sin tenant del OT no hay contra qué resolver identidad: se degrada a "sin vigencia" sin
-        // lanzar, y el resolver de Identidad NUNCA se invoca (repo.DidNotReceive).
+        // HU #13130b (decisión del PO, 01-oct): la ventana de 30 días del trámite no aplica al mandatario;
+        // una aprobación propia basta mientras su vigencia propia esté activa.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var vieja = Aprobada();
+        vieja.ValidatedAt = Now.AddDays(-40);
+        vieja.ValidUntil = Now.AddDays(-10);
+        vieja.CreatedAt = Now.AddDays(-40);
         var directorio = new MandateSignerDirectory(
-            ctx, ReaderConTenant(null), new IdentityVigenciaPorDocumentoResolver(repo));
+            ctx, ReaderConTenant(OtTenant), new IdentityVigenciaPorDocumentoResolver(RepoStub(vieja)));
 
         var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
 
-        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeFalse();
-        await repo.DidNotReceive().ListBiometricValidationsByPersonAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
-            Arg.Any<CancellationToken>());
+        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeTrue();
     }
 
     [Fact]
-    public async Task GetByIdAsync_ResuelveIdentidadPorElTenantDelOtDelMandatario()
+    public async Task GetByIdAsync_ResuelveIdentidadPorLaFichaDelMandatario()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var aprobada = new ProcedureInstanceBiometricValidation
-        {
-            Status = BiometricEstados.Aprobado,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            ValidatedAt = Now.AddDays(-1),
-            ValidUntil = Now.AddDays(29),
-            CertificateHash = "hash-mandatario",
-        };
         var directorio = new MandateSignerDirectory(
-            ctx, ReaderConTenant(OtTenant),
-            new IdentityVigenciaPorDocumentoResolver(RepoStub(aprobada)));
+            ctx, ReaderConTenant(OtTenant), new IdentityVigenciaPorDocumentoResolver(RepoStub(Aprobada())));
 
         var signer = await directorio.GetByIdAsync(Signer, ct);
 
         signer.Should().NotBeNull();
         signer!.IdentityVigente.Should().BeTrue();
         signer.CertificadoIdentidad.Should().Be("hash-mandatario");
-    }
-
-    [Fact]
-    public async Task NingunaConsultaVaHaciaAdminIdentityValidations()
-    {
-        // Guardrail explícito del AC de la HU #11752: no debe quedar ninguna lectura de
-        // admin.admin_identity_validations en la cascada del directorio.
-        var ct = TestContext.Current.CancellationToken;
-        await using var ctx = await SeedAsync();
-        ctx.AdminIdentityValidations.Add(new AdminIdentityValidationEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = OtTenant,
-            SubjectType = "mandate_signer",
-            SubjectRef = Signer,
-            Name = "Ana Restrepo",
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            Email = "sin-correo@flit.local",
-            Status = "aprobado",
-            ValidUntil = Now.AddDays(60),
-            CreatedAt = Now,
-            UpdatedAt = Now,
-        });
-        await ctx.SaveChangesAsync(ct);
-
-        // El resolver de Identidad no ve NINGUNA validación (fuente única, HU #11751): aunque la tabla
-        // admin diga "aprobado y vigente", el candidato debe salir SIN vigencia.
-        var directorio = new MandateSignerDirectory(
-            ctx, ReaderConTenant(OtTenant),
-            new IdentityVigenciaPorDocumentoResolver(RepoStub(null)));
-
-        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
-
-        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeFalse();
     }
 }

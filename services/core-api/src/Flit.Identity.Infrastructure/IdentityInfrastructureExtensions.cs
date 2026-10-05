@@ -98,13 +98,6 @@ public static class IdentityInfrastructureExtensions
 
         // HU #13003 (A-12): URLs de los correos de seguridad por ambiente. Sin sección propia, se derivan de las que ya
         // configura cada ambiente (recursos de correo y URL pública de la marca).
-        var emailLinks = configuration.GetSection(EmailLinksOptions.SectionName).Get<EmailLinksOptions>() ?? new EmailLinksOptions();
-        if (string.IsNullOrWhiteSpace(emailLinks.AssetsBaseUrl))
-            emailLinks.AssetsBaseUrl = configuration["Notifications:EmailAssets:BaseUrl"] ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(emailLinks.LoginUrl) && configuration["PublicBranding:PublicBaseUrl"] is { Length: > 0 } publicBase)
-            emailLinks.LoginUrl = publicBase.TrimEnd('/') + "/login";
-        services.AddSingleton(emailLinks);
-
         var emailSettings = configuration
             .GetSection(EmailSettings.SectionName)
             .Get<EmailSettings>() ?? new EmailSettings();
@@ -116,6 +109,13 @@ public static class IdentityInfrastructureExtensions
         services.AddSingleton(Options.Create(emailAssets));
         services.Configure<NotificationEmailAssetsOptions>(
             configuration.GetSection(NotificationEmailAssetsOptions.SectionName));
+        // Bug #13194 — los correos del módulo Security (Application, sin acceso a Infrastructure)
+        // leen la MISMA clave Notifications:EmailAssets:BaseUrl; sin ella, respaldo local del layout.
+        services.AddSingleton(new SecurityEmailAssetsOptions
+        {
+            BaseUrl = configuration.GetSection(SecurityEmailAssetsOptions.SectionName)[nameof(SecurityEmailAssetsOptions.BaseUrl)]
+                ?? string.Empty,
+        });
 
         // SMTP real, o consola cuando no hay host configurado y Smtp:UseConsoleWhenNoHost está encendida (HU #12895,
         // A-02: por defecto, solo en Development).

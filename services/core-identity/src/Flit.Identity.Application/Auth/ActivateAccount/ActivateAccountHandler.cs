@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Logging;
@@ -17,9 +18,17 @@ public sealed partial class ActivateAccountHandler(
     IDomainContextAccessor domainContext,
     ILogger<ActivateAccountHandler> logger,
     IEmailThemeResolver? themeResolver = null,
-    EmailLinksOptions? emailLinks = null)
+    InvitationOptions? invitationOptions = null,
+    INetworkUrlBaseResolver? urlBaseResolver = null,
+    SecurityEmailAssetsOptions? emailAssets = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
+    // Bug #13194 — parámetros opcionales (mismo patrón que themeResolver): en DI siempre están
+    // registrados; los tests que no ejercitan el enlace no cambian su construcción.
+    private readonly InvitationOptions _invitationOptions = invitationOptions ?? new InvitationOptions();
+    private readonly INetworkUrlBaseResolver _urlBaseResolver =
+        urlBaseResolver ?? new NetworkUrlBaseResolver(networkMembership);
 
     public async Task<AccountActivatedResult> HandleAsync(
         ActivateAccountCommand command,
@@ -84,8 +93,17 @@ public sealed partial class ActivateAccountHandler(
         try
         {
             var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
+            // Bug #13194 — login del MISMO frontend que emitió la invitación (Invitations:ActivateUrlBase,
+            // inyectada por ambiente) y resuelto por tenant como el enlace de activación: red
+            // MARCA_BLANCA con dominio activo ⇒ ese dominio; si no, la base configurada literal.
+            var loginUrl = await _urlBaseResolver
+                .ForTenantAsync(
+                    invitation.TenantId,
+                    WelcomeRegistrationEmailTemplate.BuildLoginUrl(_invitationOptions.ActivateUrlBase),
+                    cancellationToken)
+                .ConfigureAwait(false);
             var composed = WelcomeRegistrationEmailTemplate.Compose(
-                loginUrl: emailLinks?.LoginUrl, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
+                loginUrl, SecurityEmailAssets.BaseOrNull(emailAssets), theme);
             var message = new EmailMessage(
                 invitation.TenantId,
                 "security.welcome-registration",

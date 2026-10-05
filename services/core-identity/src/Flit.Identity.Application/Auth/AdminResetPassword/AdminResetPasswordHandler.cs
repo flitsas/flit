@@ -25,7 +25,7 @@ public sealed partial class AdminResetPasswordHandler(
     IAuditContextAccessor auditContext,
     ILogger<AdminResetPasswordHandler> logger,
     IEmailThemeResolver? themeResolver = null,
-    EmailLinksOptions? emailLinks = null)
+    SecurityEmailAssetsOptions? emailAssets = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
 
@@ -109,7 +109,8 @@ public sealed partial class AdminResetPasswordHandler(
             target.UserId, hash, DateTimeOffset.UtcNow, mustChangePassword: true, cancellationToken);
 
         var theme = await _themeResolver.ResolveAsync(target.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
+        var composed = AdminResetPasswordEmailTemplate.Compose(
+            target.DisplayName, temporaryPassword, SecurityEmailAssets.BaseOrNull(emailAssets), theme);
         // HU #11363 AC1 — id estable del catálogo (TemplateIds.AdminResetPassword en Flit.Infrastructure).
         var message = new EmailMessage(
             target.TenantId, "security.admin-reset-password", target.Email, target.DisplayName, composed.Subject, composed.HtmlBody)

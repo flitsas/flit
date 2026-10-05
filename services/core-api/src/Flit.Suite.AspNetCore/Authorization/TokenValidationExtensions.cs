@@ -16,6 +16,12 @@ namespace Flit.Api.Authorization;
 /// </summary>
 public static class TokenValidationExtensions
 {
+    /// <summary>
+    /// Emisor por defecto del pase de los clientes de integración externos (<c>ExternalJwt:Issuer</c>, HU #13087). El
+    /// esquema de la plataforma lo rechaza siempre: un pase externo nunca autentica en la plataforma.
+    /// </summary>
+    public const string DefaultExternalIssuer = "flit-core-external";
+
     /// <summary>Esquema JwtBearer por defecto de la plataforma. Salió de <c>ApiSecurityExtensions.AddApiSecurity</c>.</summary>
     public static IServiceCollection AddFlitTokenValidation(
         this IServiceCollection services,
@@ -30,6 +36,7 @@ public static class TokenValidationExtensions
         var issuer = jwtSection["Issuer"];
         var audience = jwtSection["Audience"];
         var signingKey = ResolveSigningKey(jwtSection, environment);
+        var externalIssuer = configuration["ExternalJwt:Issuer"] ?? DefaultExternalIssuer;
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -44,8 +51,11 @@ public static class TokenValidationExtensions
                 {
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
-                        ValidateIssuer = !string.IsNullOrWhiteSpace(issuer),
+                        // HU #13087 AC5 — además del emisor configurado, rechaza siempre el pase externo.
+                        ValidateIssuer = true,
+                        // ValidIssuer se conserva aunque decida el validador: la aceptación OIDC lo lee como emisor de siempre.
                         ValidIssuer = issuer,
+                        IssuerValidator = (tokenIssuer, _, _) => ValidatePlatformIssuer(tokenIssuer, issuer, externalIssuer),
                         ValidateAudience = !string.IsNullOrWhiteSpace(audience),
                         ValidAudience = audience,
                         ValidateLifetime = true,
@@ -59,9 +69,12 @@ public static class TokenValidationExtensions
 
                 // Sin llave de firma: se acepta el token sin validar firma (login no
                 // obligatorio aún). El rol SuperAdmin sigue exigiéndose vía policy.
+                // HU #13087 AC5 — incluso en este modo, un pase externo NO autentica en la plataforma:
+                // sin esta comprobación entraría en todo endpoint que solo exige estar autenticado.
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer = false,
+                    ValidateIssuer = true,
+                    IssuerValidator = (tokenIssuer, _, _) => ValidatePlatformIssuer(tokenIssuer, null, externalIssuer),
                     ValidateAudience = false,
                     ValidateLifetime = false,
                     ValidateIssuerSigningKey = false,
@@ -82,6 +95,8 @@ public static class TokenValidationExtensions
                     {
                         ValidateIssuer = true,
                         ValidIssuer = keyMaterial.Issuer,
+                        // HU #13087 AC5 — el pase externo nunca autentica en la plataforma, tampoco aquí.
+                        IssuerValidator = (tokenIssuer, _, _) => ValidatePlatformIssuer(tokenIssuer, keyMaterial.Issuer, externalIssuer),
                         ValidateAudience = true,
                         ValidAudience = keyMaterial.Audience,
                         ValidateLifetime = true,
@@ -93,6 +108,21 @@ public static class TokenValidationExtensions
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Emisor aceptado por el esquema de la plataforma: nunca el del pase externo y, si hay emisor configurado, solo
+    /// ese (HU #13087, viene de <c>ApiSecurityExtensions</c> en develop).
+    /// </summary>
+    internal static string ValidatePlatformIssuer(string tokenIssuer, string? platformIssuer, string externalIssuer)
+    {
+        if (string.Equals(tokenIssuer, externalIssuer, StringComparison.Ordinal)
+            || (!string.IsNullOrWhiteSpace(platformIssuer) && !string.Equals(tokenIssuer, platformIssuer, StringComparison.Ordinal)))
+        {
+            throw new SecurityTokenInvalidIssuerException($"Emisor no aceptado: {tokenIssuer}") { InvalidIssuer = tokenIssuer };
+        }
+
+        return tokenIssuer;
     }
 
     /// <summary>

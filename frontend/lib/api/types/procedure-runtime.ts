@@ -1438,8 +1438,11 @@ export interface WizardState {
   /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
   allowedTransitions: string[];
   /**
-   * HU #10549 — si el OT destino tiene la validación de identidad deshabilitada es `false` y el
-   * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
+   * HU #10549 — si el OT destino tenía la validación de identidad deshabilitada llegaba en `false` y
+   * el wizard ocultaba el paso de identidad.
+   *
+   * @deprecated Bug #13194 (P4) — la firma se exige siempre: el backend lo manda siempre en `true` y
+   * la UI ya no lo lee (el paso de identidad se muestra siempre). Se conserva solo por compatibilidad.
    */
   identityValidationEnabled?: boolean;
   /**
@@ -1471,6 +1474,13 @@ export interface WizardState {
    * el trámite). Ausente ⇒ se trata como obligatorio.
    */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda»: hay gravamen RUNT y la
+   * familia lo admite (Matrícula Inicial siempre; Traspaso y el resto solo con el certificado de
+   * prenda opcional en el OT, CF-06). El front no replica la regla: solo lee este booleano.
+   * Ausente ⇒ compatibilidad con clientes previos (traspaso: `!prendaDocumentRequired`; matrícula: no).
+   */
+  prendaOmitAllowed?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -2529,42 +2539,38 @@ export interface NotificationDispatchesResponse {
 }
 
 /**
- * HU #11203 — un mandatario que puede firmar el mandato del trámite.
- *
- * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
- * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
- * capaz de firmar— se anunciaba como si le faltara algo.
+ * HU #13145 / #13146 (ADR-0066) — firmante previsto del mandato, de solo lectura. Lo calcula el mismo
+ * evaluador que el gate de radicación. Nunca trae documento de identidad ni ruta de la firma.
  */
-export interface MandateSignerOption {
-  id: string;
-  nombre: string;
-  tipoDocumento: string;
-  documento: string;
-  identidadVigente: boolean;
-  identidadHasta: string | null;
-  firmaBaulVigente?: boolean;
+export type MandateSignerPrevistoEstado =
+  | 'valido'
+  | 'sin_mandatario'
+  | 'firma_invalida'
+  | 'no_aplica'
+  | 'pendiente_organismo'
+  | 'pendiente_eleccion_ot';
+
+export type MandateSignerNivel =
+  | 'explicita'
+  | 'ot_para_compania'
+  | 'propio_de_compania'
+  | 'asociado_de_otra_compania'
+  | 'default_del_ot';
+
+export interface MandateSignerPrevisto {
+  estado: MandateSignerPrevistoEstado;
+  /** Solo con `estado = valido`. */
+  nombre?: string | null;
+  /** Solo con `estado = valido`. */
+  formaFirma?: 'baul' | 'biometria' | null;
   /**
-   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
-   * anteriores: el documento le deja la línea y él la suscribe.
+   * HU #13180/#13183 — nivel de la prelación que eligió al mandatario (solo con `estado = valido`):
+   * `explicita`, `ot_para_compania`, `propio_de_compania`, `asociado_de_otra_compania` o
+   * `default_del_ot`. Nunca trae la compañía de origen.
    */
-  firmaFisica?: boolean;
-}
-
-/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
-export interface MandateSignerSelection {
-  opciones: MandateSignerOption[];
-  elegidoId: string | null;
-  editable: boolean;
-}
-
-/**
- * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
- * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
- * vigente el tramite puede firmarse ya y la opcion no se ofrece.
- */
-export interface FirmaPosteriorEstado {
-  aplica: boolean;
-  marcado: boolean;
-  representanteNombre?: string | null;
-  marcadoAt?: string | null;
+  nivel?: MandateSignerNivel | null;
+  /** Vocabulario estable de ADR-0066 (p. ej. `sin_validacion_aprobada`). */
+  motivo?: string | null;
+  /** Modo vigente de la validación al radicar. */
+  modo: 'block' | 'warn' | 'off';
 }

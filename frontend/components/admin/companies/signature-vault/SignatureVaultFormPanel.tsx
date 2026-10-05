@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
+import { Modal } from "@/components/atom/Modal";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
 import type {
@@ -157,12 +157,12 @@ export function SignatureVaultFormPanel({
     fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
 
   return (
-    <OtSidePanel
+    <Modal
       open={open}
-      title="Registrar firma"
-      ariaLabel="Registrar firma del apoderado"
+      title="Registrar firma del apoderado"
       onClose={onClose}
-      disabled={submitting}
+      busy={submitting}
+      size="lg"
       footer={footer}
     >
       <div className="space-y-4">
@@ -303,7 +303,7 @@ export function SignatureVaultFormPanel({
           />
         </fieldset>
       </div>
-    </OtSidePanel>
+    </Modal>
   );
 }
 

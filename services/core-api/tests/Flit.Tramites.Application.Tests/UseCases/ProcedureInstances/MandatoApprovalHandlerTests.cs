@@ -138,15 +138,18 @@ public sealed class MandatoApprovalHandlerTests
     }
 
     [Fact]
-    public async Task NoCandidates_Institutional_IsNotApplicable()
+    public async Task NoCandidates_SignerMode_RequiresSelectionWithEmptyCandidates()
     {
         var instance = SeedInstance();
         Candidates();
 
         var decision = await Handler().CheckAsync(instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
 
-        // Sabaneta (mandatario institucional, sin firmante persona): aprobar sin firmante, sin 409.
-        decision.Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
+        // HU #13147b (AC3) — tipo Persona natural, sin mandatario resoluble: NO se aprueba sin firmante;
+        // el endpoint responde 409 mandatario_requerido con la lista de candidatos vacía.
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.RequiereSeleccion);
+        decision.MandateSignerId.Should().BeNull();
+        decision.Candidatos.Should().NotBeNull().And.BeEmpty();
     }
 
     // ---- HU #11317 (Feature #11309, ADR-0042 §supersede parcial) — el gate no exige mandatario cuando
@@ -237,5 +240,31 @@ public sealed class MandatoApprovalHandlerTests
         decision.Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
         await _directory.DidNotReceive().GetCandidatesAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── HU #13137 — mensaje corregido del 409 mandatario_requerido ───────────────────────────────
+
+    [Fact]
+    public async Task HU13137_EleccionExplicitaInvalida_SinNingunCandidato_RequiereSeleccionConListaVacia()
+    {
+        // Tras dar de baja al mandatario asignado no queda ninguno: el OT eligió uno que ya no es válido.
+        var instance = SeedInstance();
+        Candidates();
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.RequiereSeleccion);
+        decision.Candidatos.Should().BeEmpty("el endpoint lo traduce a «no hay mandatario activo», no a «hay varios»");
+    }
+
+    [Fact]
+    public void HU13137_LosMensajesDelConflictoDistinguenCeroCandidatosDeVarios()
+    {
+        Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeSinMandatarioAlAprobar
+            .Should().Contain("No hay un mandatario disponible")
+            .And.NotContainEquivalentOf("hay varios");
+        Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeEleccionRequerida
+            .Should().Contain("Selecciona uno");
     }
 }

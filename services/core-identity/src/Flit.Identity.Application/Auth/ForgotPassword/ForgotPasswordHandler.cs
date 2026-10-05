@@ -32,7 +32,7 @@ public sealed partial class ForgotPasswordHandler(
     INetworkUrlBaseResolver urlBaseResolver,
     ILogger<ForgotPasswordHandler> logger,
     IEmailThemeResolver? themeResolver = null,
-    EmailLinksOptions? emailLinks = null)
+    SecurityEmailAssetsOptions? emailAssets = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
 
@@ -62,7 +62,8 @@ public sealed partial class ForgotPasswordHandler(
         var resetUrlBase = urlBaseResolver.ForRequestDomain(domainContext, options.ResetUrlBase);
         var link = ForgotPasswordEmailTemplate.BuildResetLink(resetUrlBase, token.RawToken);
         var theme = await _themeResolver.ResolveAsync(user.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
+        var composed = ForgotPasswordEmailTemplate.Compose(
+            user.DisplayName, link, options.TokenLifetimeMinutes, SecurityEmailAssets.BaseOrNull(emailAssets), theme);
         // HU #11363 AC1 — id estable del catálogo (NotificationTemplateCatalog.TemplateIds.ForgotPassword
         // en Flit.Infrastructure); literal a mano porque este proyecto no depende de Infrastructure.
         var message = new EmailMessage(

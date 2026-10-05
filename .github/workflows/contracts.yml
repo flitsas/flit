@@ -24,6 +24,10 @@ jobs:
           else
             echo "::notice::contracts/openapi/core-api.v1.yaml aún no existe, omitido"
           fi
+      # HU #13082 (Épica #12737) — contrato de la API externa (clientes de integración, p. ej. Flito).
+      # Sin el «if -f» de los demás: si el archivo desaparece o queda inválido, el job falla.
+      - name: Lint external API OpenAPI
+        run: npx -y @redocly/cli@latest lint contracts/openapi/external-api.v1.json
       - name: Lint python-ml OpenAPI
         run: |
           if [ -f contracts/openapi/python-ml.v1.yaml ]; then

@@ -24,8 +24,16 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public Guid? PersonId { get; set; }
 
-    /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial o en prevalidación standalone.</summary>
+    /// <summary>'comprador' | 'vendedor' | 'mandatario'. Null en matrícula inicial o en prevalidación standalone.</summary>
     public string? PartyRole { get; set; }
+
+    /// <summary>
+    /// HU #13246 (Feature #13245, Épica #13090) — ficha del mandatario (<c>admin.mandate_signers.id</c>) para la que se
+    /// lanzó esta validación. Solo se rellena con <see cref="PartyRole"/> = <c>mandatario</c> (CHECK en BD): la validación
+    /// del mandatario es EXCLUSIVA, solo cuenta para esa ficha y no entra en las consultas por documento del trámite, la
+    /// prevalidación ni el módulo Identidad. Sin persona ni trámite (el ancla es esta ficha).
+    /// </summary>
+    public Guid? MandateSignerId { get; set; }
 
     public string Name { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
@@ -266,6 +274,9 @@ public static class BiometricRules
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
 
+    /// <summary>HU #13246 — rol de la validación lanzada para un mandatario (con <c>MandateSignerId</c>).</summary>
+    public const string ParteMandatario = "mandatario";
+
     /// <summary>
     /// Vigencia (días CALENDARIO) de una validación de identidad APROBADA, contada desde la fecha de
     /// aprobación (<c>ValidadoAt</c>). El día de aprobación es el día 1; vence en el día 31, es decir,
@@ -366,16 +377,23 @@ public static class BiometricRules
     /// validaciones de una persona anterior cuando el gestor cambia el documento, el gate NO debe contar
     /// como aprobada una validación cuyo documento difiera del actor actual (p.ej. si esa invalidación no
     /// llegó a correr, falló de red o se saltó). El gate deja de depender de un mejor-esfuerzo del frontend.
-    /// <para>Lenient: si la validación o el actor no tienen documento (fixtures/datos parciales), no se
-    /// descarta por documento — sólo se descarta cuando AMBOS números están presentes y difieren. El tipo
-    /// de documento sólo descarta cuando ambos están presentes y difieren.</para>
+    /// <para><b>Bug #13194 (P4, D4) — fail-closed.</b> Antes era «lenient»: si la validación o el sujeto
+    /// no tenían número de documento, coincidía siempre. Eso dejaba aprobar a una persona DISTINTA del
+    /// mismo tenant (una validación sin documento, o un sujeto sin documento, servía para cualquiera). Ahora
+    /// sin los dos números no hay coincidencia: no se puede afirmar que la validación sea de este sujeto.
+    /// Todos los caminos de creación vigentes (Kyverum, magic-link, prevalidación) exigen el documento, y la
+    /// vigencia de una identidad es de 30 días, así que ninguna validación legítima vigente queda fuera.
+    /// Los guardas de idempotencia (no iniciar una segunda validación) también usan esta regla, pero solo
+    /// con 2+ actores en el rol: ahí una fila sin documento ya no bloquea al copropietario (con un solo
+    /// actor el guarda no mira el documento y no cambia nada).
+    /// El tipo de documento sigue descartando solo cuando ambos están presentes y difieren.</para>
     /// </summary>
     public static bool DocumentoCoincide(
         ProcedureInstanceBiometricValidation validation, string? tipoDoc, string? documento)
     {
         ArgumentNullException.ThrowIfNull(validation);
         if (string.IsNullOrWhiteSpace(documento) || string.IsNullOrWhiteSpace(validation.DocumentNumber))
-            return true;
+            return false;
         if (!string.Equals(validation.DocumentNumber.Trim(), documento.Trim(), StringComparison.OrdinalIgnoreCase))
             return false;
         if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(validation.DocumentType))

@@ -68,4 +68,15 @@ public interface IMandateSignerReader
     Task<IReadOnlyList<CompanyTransitOfficeOption>> ListCompanyTransitOfficesAsync(
         Guid companyTenantId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13134 — origen del mandatario (<see cref="MandateSignerOriginRules.Organismo"/> o
+    /// <see cref="MandateSignerOriginRules.Compania"/>) visto desde <paramref name="companyTenantId"/>: se calcula
+    /// con los vínculos (activos o no) del mandatario con ESA compañía. <c>null</c> si no existe, está eliminado o
+    /// no tiene ningún vínculo con la compañía (la ruta responde 404 sin revelar si existe).
+    /// </summary>
+    Task<string?> GetOriginForCompanyAsync(
+        Guid mandateSignerId,
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default);
 }

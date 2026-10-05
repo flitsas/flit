@@ -14,20 +14,19 @@ namespace Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 /// <see cref="InvitationNotCancelledException"/>.
 ///
 /// Orden de validación (contrato de la HU): alcance (404) → está "cancelled" (409) → correo
-/// libre (409, tres sub-chequeos) → roles vigentes (409) → cooldown anti-abuso (429, compartido
+/// libre (409, dos sub-chequeos) → roles vigentes (409) → cooldown anti-abuso (429, compartido
 /// con <see cref="ResendInvitation.ResendInvitationHandler"/> para que cancel→reactivate en bucle
 /// no sea un bypass).
 /// </summary>
 public sealed partial class ReactivateInvitationHandler(
     IInvitationRepository invitationRepository,
-    IUserManagementRepository userManagementRepository,
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
     INetworkUrlBaseResolver urlBaseResolver,
     ILogger<ReactivateInvitationHandler> logger,
     IEmailThemeResolver? themeResolver = null,
-    EmailLinksOptions? emailLinks = null)
+    SecurityEmailAssetsOptions? emailAssets = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
 
@@ -47,13 +46,10 @@ public sealed partial class ReactivateInvitationHandler(
             throw new InvitationNotCancelledException();
 
         // ── Correo libre ──────────────────────────────────────────────────────────────────
-        // Mismo trío de chequeos que CreateInvitationHandler, en el mismo orden: cuenta
-        // soft-deleted, otra invitación pendiente, usuario activo.
-        var existingByEmail = await userManagementRepository.FindByEmailIncludingDeletedAsync(
-            invitation.Email, cancellationToken);
-        if (existingByEmail is { IsDeleted: true })
-            throw new UserEmailBelongsToDeletedAccountException();
-
+        // Mismos chequeos que CreateInvitationHandler, en el mismo orden: otra invitación
+        // pendiente y usuario VIVO. Bug #13194: un usuario eliminado ya no ocupa el correo
+        // (uq_users_email es parcial por deleted_at IS NULL) — reactivar crea, al activarse,
+        // una fila de usuario nueva y el historial de la eliminada queda intacto.
         var hasPending = await invitationRepository.ExistsPendingAsync(
             invitation.TenantId, invitation.Email, cancellationToken);
         if (hasPending)
@@ -97,7 +93,7 @@ public sealed partial class ReactivateInvitationHandler(
             .ConfigureAwait(false);
         var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, SecurityEmailAssets.BaseOrNull(emailAssets), theme);
         var message = new EmailMessage(
             invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody)
         {

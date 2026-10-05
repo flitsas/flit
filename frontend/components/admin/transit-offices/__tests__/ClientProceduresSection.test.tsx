@@ -32,6 +32,8 @@ vi.mock("@/lib/auth/jwt", async (importOriginal) => {
   return { ...actual, isSuperAdmin: () => mockSuperAdmin };
 });
 
+// HU #13147 — el diálogo «Elegir mandatario» ya NO consulta la lista del organismo: los candidatos
+// vienen en el 409. Se mockea igual para poder afirmar que no se llama.
 vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchMandateSigners: vi.fn(),
 }));
@@ -161,44 +163,101 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(screen.queryByRole("status", { name: "Estado: Aprobado" })).not.toBeInTheDocument();
   });
 
-  it("ADR-0036 §D9: 409 mandatario_requerido abre el diálogo y reintenta con el elegido", async () => {
-    const user = userEvent.setup();
-    const signerBase = {
-      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-      documentType: "CC",
-      integrityHash: "h",
-      email: null,
-      userId: null,
-      identityValidationRef: null,
-      identityStatus: "none" as const,
-      signatureVaultId: null,
-      registeredAt: "2026-07-01T00:00:00Z",
-      isActive: true,
-      companyTenantIds: ["client-tenant-aaaa"],
-    };
-    vi.mocked(fetchMandateSigners).mockResolvedValue([
-      { ...signerBase, id: "signer-1", fullName: "Ana Gómez", documentNumber: "52123456" },
-      { ...signerBase, id: "signer-2", fullName: "Luis Ríos", documentNumber: "70111222" },
-    ]);
-    vi.mocked(approveOtClientProcedure)
-      .mockRejectedValueOnce(new ApiError(409, "mandatario_requerido", { error: "mandatario_requerido" }))
-      .mockResolvedValueOnce({ ...procedure, status: "aprobado" });
-
-    renderSection();
-    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+  async function aprobarHastaElDialogo(user: ReturnType<typeof userEvent.setup>) {
     await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
     await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
+  }
 
-    // Aparece el diálogo de selección de mandatario (varios sin cotejo).
+  it("ADR-0036 §D9 / HU13147 AC1: 409 mandatario_requerido lista los candidatos del backend y reintenta con el elegido", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approveOtClientProcedure)
+      .mockRejectedValueOnce(
+        new ApiError(409, "mandatario_requerido", {
+          error: "mandatario_requerido",
+          candidatos: [
+            { id: "signer-1", nombre: "Ana Gómez", formaFirma: "baul" },
+            { id: "signer-2", nombre: "Luis Ríos", formaFirma: "biometria" },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce({ ...procedure, status: "aprobado" });
+
+    renderSection();
+    await aprobarHastaElDialogo(user);
+
     expect(await screen.findByText(/Elige el mandatario que firma/i)).toBeInTheDocument();
-    // Elige el segundo mandatario y reintenta.
+    // Exactamente los candidatos del backend, con nombre y forma de firma.
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getByRole("radio", { name: /Ana Gómez.*Baúl de firmas/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Luis Ríos.*Validación de identidad/i })).toBeInTheDocument();
+    // Sin consultar la lista completa del organismo desde el cliente (HU13147 AC2).
+    expect(fetchMandateSigners).not.toHaveBeenCalled();
+
     await user.click(screen.getByRole("radio", { name: /Luis Ríos/i }));
     await user.click(screen.getByRole("button", { name: /Aprobar con este mandatario/i }));
 
     await waitFor(() => expect(approveOtClientProcedure).toHaveBeenLastCalledWith("proc-1", "signer-2"));
-    // Aprobado → sale de «Por decidir» (ADR-0059: la fila no se queda en una tarjeta que ya no es la suya).
     await waitFor(() => expect(screen.queryByText("RAD-2026-101")).not.toBeInTheDocument());
+  });
+
+  it("HU13147 AC2: con el organismo de la ruta (Super Admin) lista los candidatos del backend sin consultar el organismo", async () => {
+    // El organismo llega por la ruta (`transitOfficeId`, la vista del Super Admin): antes el cliente lo
+    // usaba para bajar la lista completa del organismo y filtrarla; ahora solo manda el backend.
+    const user = userEvent.setup();
+    vi.mocked(approveOtClientProcedure).mockRejectedValueOnce(
+      new ApiError(409, "mandatario_requerido", {
+        error: "mandatario_requerido",
+        candidatos: [{ id: "signer-9", nombre: "Marta Niño", formaFirma: "baul" }],
+      }),
+    );
+    renderSection("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    await aprobarHastaElDialogo(user);
+
+    expect(await screen.findByRole("radio", { name: /Marta Niño/i })).toBeInTheDocument();
+    expect(fetchMandateSigners).not.toHaveBeenCalled();
+  });
+
+  it("HU13147 AC3: sin candidatos válidos el diálogo explica qué hacer y no deja confirmar", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approveOtClientProcedure).mockRejectedValueOnce(
+      new ApiError(409, "mandatario_requerido", { error: "mandatario_requerido", candidatos: [] }),
+    );
+    renderSection();
+    await aprobarHastaElDialogo(user);
+
+    const aviso = await screen.findByTestId("mandatario-sin-candidatos");
+    expect(aviso).toHaveTextContent(/No hay mandatarios válidos/i);
+    expect(aviso).toHaveTextContent(/Registra uno en «Mandatos y mandatarios» del organismo/i);
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Aprobar con este mandatario/i })).toBeDisabled();
+  });
+
+  it("HU13147 AC4: si la respuesta no trae candidatos muestra el error de aprobación, no un diálogo vacío", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approveOtClientProcedure).mockRejectedValueOnce(
+      new ApiError(409, "mandatario_requerido", { error: "mandatario_requerido" }),
+    );
+    renderSection();
+    await aprobarHastaElDialogo(user);
+
+    expect(await screen.findByText("No se pudo aprobar el trámite.")).toBeInTheDocument();
+    expect(screen.queryByText(/Elige el mandatario que firma/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mandatario-sin-candidatos")).not.toBeInTheDocument();
+  });
+
+  it("HU13162: un 409 mandatario_identidad_requerida ya no tiene texto propio (código retirado)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approveOtClientProcedure).mockRejectedValueOnce(
+      new ApiError(409, "mandatario_identidad_requerida", { error: "mandatario_identidad_requerida" }),
+    );
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
+    await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
+
+    expect(await screen.findByText("No se pudo aprobar el trámite.")).toBeInTheDocument();
+    expect(screen.queryByText(/pestaña Mandatarios|se la envía/i)).not.toBeInTheDocument();
   });
 
   it("AC3 rechazar deshabilita confirmar sin motivo", async () => {

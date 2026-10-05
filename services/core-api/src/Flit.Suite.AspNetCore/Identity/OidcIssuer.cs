@@ -8,7 +8,7 @@ namespace Flit.Api.Identity;
 /// Emisor OIDC de una petición (FLIT Suite A-05, HU #12990; espiga A-04, pregunta 2). Sale SOLO del host sellado por el
 /// gateway (<c>X-Flit-Domain</c>, ADR-0060), nunca de un parámetro, <c>Origin</c> ni <c>Referer</c>:
 /// <list type="bullet">
-/// <item>el host de la plataforma en este ambiente (<c>dev.flitsas.online</c>) o el dominio de una red ⇒ ese host;</item>
+/// <item>el host de la plataforma en este ambiente (p. ej. <c>qa.flitsas.online</c>) o el dominio de una red ⇒ ese host;</item>
 /// <item>en local, un host de loopback con reemplazo de <c>plataforma</c> en <c>Suite:Hosts:Overrides</c> ⇒ ese reemplazo;</item>
 /// <item>cualquier otro caso (un servicio que llama por la red interna, un host de producto, sin sello) ⇒ el hub del
 /// ambiente, para que el token de servicio lleve un emisor conocido.</item>

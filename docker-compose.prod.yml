@@ -31,7 +31,9 @@
 #
 # Variables requeridas en .env (junto al compose):
 #   CONNECTION_STRING_CORE  cadena Npgsql .NET (Host=...;Port=5432;Database=...;Username=...;Password=...)
-#   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online)
+#   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online) y URL
+#                           base de los enlaces de los correos de core-api (Bug #13194).
+#                           OBLIGATORIA: sin ella `docker compose` aborta (ver servicio core-api)
 #   CORS_ORIGIN_MARCA_BLANCA  segundo origen del gateway: dominio de marca blanca
 #                             (https://marcablanca<env>.flitsas.online, mismo front)
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
@@ -135,7 +137,21 @@ services:
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
-      Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      Cors__AllowedOrigins: ${CORS_ORIGIN}
+      # URLs publicas que viajan en los CORREOS (Bug #13194). Este servicio corre con
+      # ASPNETCORE_ENVIRONMENT=Development en los tres ambientes, asi que appsettings.QA.json
+      # nunca se carga y sin estas lineas gana appsettings.json, que apunta a DEV: en QA y PDN
+      # los enlaces de activacion y de recuperacion llevaban a dev.flitsas.online.
+      # Salen de CORS_ORIGIN porque ya es "el front de ESTE ambiente" (sin barra final: el
+      # navegador no la admite en un Origin) y QA/PDN ya la tienen bien, o su CORS fallaria.
+      # SIN valor por defecto a proposito: un respaldo a DEV repetiria el bug en silencio.
+      # Si falta, `docker compose` aborta antes de crear contenedores con el mensaje de abajo.
+      # Los sufijos son los de appsettings.json; si cambian alla, cambian aqui. La recuperacion va a
+      # /auth/reset-password: es la pagina que existe en el front (la /reset-password de appsettings.json no).
+      Invitations__ActivateUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/invite/activate
+      PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/auth/reset-password
+      Notifications__EmailAssets__BaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/email-assets
+      PublicBranding__PublicBaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}
       # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
       # de abajo. Si difieren, el Gateway no puede autenticar GET /internal/domains/active
       # (responde 401 SIEMPRE) y su CORS dinamico cae a la lista fija de Cors__AllowedOrigins__0
@@ -179,13 +195,6 @@ services:
       Suite__Hosts__Environment: ${FLIT_SUITE_ENV:-}
       # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
       Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
-      # HU #13003 (A-12) — URLs de los correos por ambiente. Antes no se pasaban y QA y PDN enviaban enlaces e imágenes
-      # de DEV (appsettings.json). FLIT_HUB_URL la exporta el CD (https://<dominio del front de este ambiente>).
-      # La recuperación va a /auth/reset-password: la ruta /reset-password de appsettings.json no existe en el front.
-      PasswordRecovery__ResetUrlBase: ${FLIT_HUB_URL:-https://dev.flitsas.online}/auth/reset-password
-      Invitations__ActivateUrlBase: ${FLIT_HUB_URL:-https://dev.flitsas.online}/invite/activate
-      Notifications__EmailAssets__BaseUrl: ${FLIT_HUB_URL:-https://dev.flitsas.online}/email-assets
-      PublicBranding__PublicBaseUrl: ${FLIT_HUB_URL:-https://dev.flitsas.online}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
@@ -226,8 +235,13 @@ services:
       TramiteValidations__VehicleRegistrationState__Mode: ${TRAMITE_VALIDATION_VEHICLE_STATE_MODE:-block}
       # Cambio de carrocería sobre un vehículo que el RUNT reporta SIN CARROCERIA (o sin el dato).
       TramiteValidations__VehicleBodyTypeRequired__Mode: ${TRAMITE_VALIDATION_BODY_TYPE_MODE:-block}
-      # Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen.
-      TramiteValidations__VehiclePrendaRequired__Mode: ${TRAMITE_VALIDATION_PRENDA_MODE:-block}
+      # HU #13143 (ADR-0066) — el trámite que se radica necesita un mandatario activo, vigente y con firma
+      # válida (409 mandatario_no_configurado / mandatario_firma_invalida). EXCEPCIÓN DELIBERADA al patrón
+      # block de las demás: el default es warn porque el código nuevo con datos sin migrar (firma física,
+      # OT legados sin mandatarios) detendría radicaciones en PDN. El paso a block es solo esta variable en
+      # el .env del VPS (TRAMITE_VALIDATION_MANDATARIO_MODE=block) más un reinicio, sin despliegue; lo decide
+      # el Líder Técnico tras migrar la firma física. En código, ausente o inválido resuelve a block.
+      TramiteValidations__MandatarioRequerido__Mode: ${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}
       # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}
@@ -546,7 +560,7 @@ services:
       # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
-      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN}
       # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
       # contenedor, otro vhost de nginx) y por tanto llama al mismo gateway.
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_MARCA_BLANCA:-https://marcablancadev.flitsas.online}

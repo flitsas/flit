@@ -412,7 +412,9 @@ export type AdminAuditModule =
   | "security"
   | "config"
   // Epic #12543 — aceptación de Términos y Condiciones al crear trámite (operation `accept_terms`).
-  | "tramites";
+  | "tramites"
+  // HU #13138 — ciclo de vida de mandatarios (baja, reactivación, eliminación, default, reasignación).
+  | "mandatarios";
 export type AdminAuditResult = "success" | "failure";
 
 export interface AdminAuditLogEntry {

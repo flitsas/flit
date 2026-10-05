@@ -63,10 +63,12 @@ export function ConfiguracionEmpresaTab({
           consola de rangos ya no existe (HU-A2) y la ruta de placa preasignada de la compañía se
           apaga en backend (HU-A5). El campo preasignacionPlacaActiva se sigue enviando en el PUT
           (se ignora del lado del backend) para no romper el contrato de TenantSettingsUpdate. */}
+      {/* Bug #13194 P3 — solo texto: la semántica (ON = continúa con advertencia, OFF = bloquea) no
+          cambia; el rótulo anterior sugería lo contrario. */}
       <ToggleSwitch
         id="validarSoatConRunt"
-        label="Validar SOAT ante el RUNT al enviar al OT"
-        description="Al enviar al OT un trámite en estado Asignado se consulta el SOAT en el RUNT. Con la opción activa, si el RUNT no reporta un SOAT vigente el hallazgo solo se informa y el trámite continúa. Desactivada, el trámite no avanza y se muestra el error."
+        label="Permitir enviar al OT sin SOAT vigente en el RUNT"
+        description="Activo: se consulta el RUNT y, si no reporta SOAT vigente, el trámite continúa con una advertencia. Inactivo: sin SOAT vigente en el RUNT, el envío al OT se bloquea."
         checked={form.validarSoatConRunt}
         onChange={(v) => onChange({ validarSoatConRunt: v })}
       />

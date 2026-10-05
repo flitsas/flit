@@ -90,7 +90,18 @@ public sealed class RegisterIctBatchHandler(
             // retención, que filtran por created_at.
             master.CreatedAt = DateTime.UtcNow;
             master.CreatedBy = currentTenant.IntegrationClientId;
-            await repository.AddAsync(master, tenantId.Value, ct);
+
+            // Bug #13109 punto 7: la misma clave contra lo ya guardado del tenant en estado interno 1 o 2. La
+            // fila no entra y el detalle lo explica; el lote sigue respondiendo 200. Novedad (4), borrador (5)
+            // y anulado (6) no bloquean. Consulta + insert van serializados por (tenant, clave) en el repositorio.
+            var alta = await repository.AddIfNoActiveDuplicateAsync(master, tenantId.Value, ct);
+            if (alta == PreTramiteAlta.DuplicadoActivo)
+            {
+                details.Add(new RegisterDetail(plateLabel, 2,
+                    "registro duplicado: ya existe un pre-trámite en proceso con la misma placa o VIN", flit));
+                continue;
+            }
+
             processed++;
             // TransactionFlit devuelto = el número secuencial que asigna FLIT (paridad v1). La secuencia
             // lo genera en el INSERT y EF lo lee de vuelta (RETURNING); el manager_id_transaction sigue

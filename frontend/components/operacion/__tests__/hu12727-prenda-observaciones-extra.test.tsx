@@ -100,7 +100,7 @@ describe('HU #12727 — AC2 grilla de tres columnas (prenda + certificado)', () 
     expect(g.querySelector('.md\\:col-span-3')).toBeNull();
   });
 
-  it('edge: sin acreedor ni documento la grilla no fuerza tres columnas', async () => {
+  it('edge: con omitir no hay columna de certificado (HU #13112: el acreedor queda visible y deshabilitado)', async () => {
     const { container } = render(
       <PrendaForm
         instanceId="hu12727"
@@ -116,7 +116,11 @@ describe('HU #12727 — AC2 grilla de tres columnas (prenda + certificado)', () 
       target: { value: 'omitir' },
     });
 
-    expect(container.querySelector('.md\\:grid-cols-3')).toBeNull();
+    // HU #13112 (AC5): el acreedor se muestra vacío y deshabilitado, así que su columna existe;
+    // lo que no aparece con omitir es la columna del certificado.
+    expect(container.querySelector('.md\\:grid-cols-3')).toBeTruthy();
+    expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeDisabled();
+    expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
     expect(screen.queryByText('Certificado / registro de prenda')).not.toBeInTheDocument();
   });
 

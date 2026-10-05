@@ -44,8 +44,11 @@ public sealed class TransitOfficeMandateConfigEntity
     public string AssignmentMode { get; set; } = "open";
 
     /// <summary>
-    /// HU-L8 — mandatario persona por defecto de este OT. Gana al default de la compañía aunque no
-    /// esté vinculado a esa gestora. Nulo al nacer el OT.
+    /// HU-L8 — mandatario persona por defecto GENERAL de este OT. Según la prelación de ADR-0066 (HU #13142)
+    /// es el ÚLTIMO nivel antes del bloqueo: solo entra cuando el trámite no trae elección válida ni hay un
+    /// mandatario vigente con firma válida configurado por el OT para la compañía ni propio de la compañía;
+    /// en ese caso aplica aunque no esté vinculado a la gestora, y solo si está vigente y con firma válida.
+    /// Nulo al nacer el OT.
     /// </summary>
     public Guid? DefaultMandateSignerId { get; set; }
 
@@ -59,8 +62,10 @@ public sealed class TransitOfficeMandateConfigEntity
     /// <summary>Cuerpo del editor (texto/HTML simple con placeholders). Sin firmas.</summary>
     public string? CustomTemplateBody { get; set; }
 
-    /// <summary>Manifest de coordenadas overlay (JSON); opcional.</summary>
-    public string? CustomFieldManifest { get; set; }
+    /// <summary>
+    /// HU #13128 (ADR-0061) — origen de la configuración: <c>organismo</c> | <c>compania</c> | <c>super_admin</c>.
+    /// </summary>
+    public string ConfiguredByScope { get; set; } = "organismo";
 
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

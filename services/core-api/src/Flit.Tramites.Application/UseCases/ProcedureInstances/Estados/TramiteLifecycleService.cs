@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -32,7 +33,9 @@ public sealed class TramiteLifecycleService(
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
     ITramiteTransitionPublisher publisher,
+#pragma warning disable CS9113 // Bug #13194 (D2): se conserva la firma (DI y llamadores posicionales); ya no relaja la identidad.
     IIdentityValidationPolicy? identityPolicy = null,
+#pragma warning restore CS9113
     IProcedureInstancePrendaRepository? prendaRepo = null,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
@@ -50,7 +53,14 @@ public sealed class TramiteLifecycleService(
     ILogger<TramiteLifecycleService>? logger = null,
     // HU #12775 AC3 — al final por la misma razón que el anterior. Null en tests que no lo ejercitan:
     // sin resolutor el gate de Cámara de Comercio se omite (comportamiento previo a la HU).
-    CamaraComercioRequirementResolver? camaraComercioResolver = null) : ITramiteLifecycleService
+    CamaraComercioRequirementResolver? camaraComercioResolver = null,
+    // HU #13144 (ADR-0066) — para excluir del gate el mandato personalizado de la compañía (ADR-0042). AL FINAL
+    // por la misma razón que los anteriores. Null ⇒ nunca hay mandato personalizado.
+    IPersonalizedDocumentResolver? personalizedDocumentResolver = null,
+    // Bug #13194 (P4, D2) — al final por la misma razón. Null ⇒ el gate bloquea igual, sin notificar.
+    IFirmaPendienteNotifier? firmaNotifier = null,
+    // Bug #13194 (MAYOR-1) — accesor scoped para la extensión `partesSinFirma` del 409. Null en tests.
+    UltimoBloqueoFirma? ultimoBloqueo = null) : ITramiteLifecycleService
 {
     private readonly ILogger<TramiteLifecycleService> _logger =
         logger ?? NullLogger<TramiteLifecycleService>.Instance;
@@ -63,15 +73,22 @@ public sealed class TramiteLifecycleService(
     // Default seguro (NUNCA resuelve candidatos) en tests que no lo ejercitan.
     private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
 
+    // HU #13144 (ADR-0066) — evaluador ÚNICO del mandatario para el gate de radicación. Solo existe si el
+    // directorio se cableó de verdad: con mandateDirectory nulo (tests que no lo ejercitan) el chequeo NO se
+    // evalúa, igual que matrixCompleteness. No basta con NullMandateSignerDirectory: devolvería cero
+    // candidatos y bloquearía todo.
+    private readonly MandateSignerEvaluator? _mandateEvaluator = mandateDirectory is null
+        ? null
+        : new MandateSignerEvaluator(mandateDirectory, mandatePolicy, vaultPolicy, personalizedDocumentResolver);
+
     // HU #10970 — modo por ambiente de CF-03 en el gate de radicación. Sin inyectar ⇒ bloqueo duro
     // (comportamiento previo a esta historia).
     private readonly TramiteValidationPolicy _validationPolicy =
         validationPolicy ?? TramiteValidationPolicy.BlockAll;
 
-    // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
-    // Default permisivo (siempre exige) cuando no hay política cableada (tests).
-    private readonly IIdentityValidationPolicy _identityPolicy =
-        identityPolicy ?? NullIdentityValidationPolicy.Instance;
+    // Bug #13194 (P4, D2) — la política de identidad por OT (HU #10548) YA NO relaja ningún gate: «no se
+    // permite enviar al OT trámites sin firmar», tampoco en un OT con la validación deshabilitada. El
+    // parámetro `identityPolicy` se conserva sin uso para no romper la composición ni los llamadores.
 
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → SubmitGate estático).
     private readonly IDynamicProceduresPolicy _dynamicPolicy =
@@ -168,16 +185,67 @@ public sealed class TramiteLifecycleService(
         {
             var gatePreparacionError = await EvaluarGatePreparacionAsync(instance, command, ct).ConfigureAwait(false);
             if (gatePreparacionError is var (code, detail) && code is not null)
+            {
+                // Bug #13194 (P4, D2) — borrador→preparado bloqueado: si además faltan firmas, se dispara el
+                // correo de validación de cada parte (idempotente). El código del gate no cambia.
+                if (from == TramiteEstado.Borrador && FirmaGate.Aplica(command.ToStatus, command.Actor))
+                {
+                    var faltantes = await FirmaGate
+                        .PartesSinFirmaAsync(repo, instance, _vaultPolicy, DateTimeOffset.UtcNow, ct)
+                        .ConfigureAwait(false);
+                    if (faltantes.Count > 0)
+                    {
+                        var notificadas = await NotificarPartesSinFirmaAsync(instance, faltantes, ct)
+                            .ConfigureAwait(false);
+                        RegistrarBloqueo(notificadas);
+                        return TramiteTransitionOutcome.Fail(
+                                code, $"{detail} Firma pendiente de: {FirmaGate.PartesConNotificacion(notificadas)}.")
+                            with { PartesSinFirma = notificadas };
+                    }
+                }
+
                 return TramiteTransitionOutcome.Fail(code, detail);
+            }
+        }
+
+        // Bug #13194 (P4, D2) — gate de FIRMA único: «no se permite enviar al OT trámites sin firmar».
+        // Corre en TODA llegada a preparado / preasignacion / entregado del gestor o el sistema (preparar,
+        // radicar, re-radicar, «Enviar al OT», cambio de estado admin), sin relajación por OT. Va después
+        // del gate de preparación para que borrador→preparado siga reportando su lista completa
+        // (identidad_no_aprobada incluida) y antes de los gates de entrega, que promueven el OT.
+        if (FirmaGate.Aplica(command.ToStatus, command.Actor))
+        {
+            var sinFirma = await FirmaGate
+                .PartesSinFirmaAsync(repo, instance, _vaultPolicy, DateTimeOffset.UtcNow, ct)
+                .ConfigureAwait(false);
+            if (sinFirma.Count > 0)
+            {
+                // Cada parte sin firma (baúl o VID ausentes o vencidos) recibe el correo de validación. Un
+                // fallo de la notificación no cambia el 409: queda como estado «fallida» de esa parte.
+                var notificadas = await NotificarPartesSinFirmaAsync(instance, sinFirma, ct).ConfigureAwait(false);
+                RegistrarBloqueo(notificadas);
+                return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(notificadas))
+                    with { PartesSinFirma = notificadas };
+            }
         }
 
         // Gates OT de entrega (heredados del submit HU #10217/#2). HU #10872 (AC1) — este es el GATE
         // FINAL de radicación: corre SIEMPRE, sin importar el diff de campos corregidos.
+        var metadataTransicion = command.Metadata;
         if (esRadicacion)
         {
             var entregaError = await EvaluarEntregaAsync(instance, ct).ConfigureAwait(false);
             if (entregaError is var (code, detail) && code is not null)
                 return TramiteTransitionOutcome.Fail(code, detail);
+
+            // HU #13144 (ADR-0066) — mandatario activo, vigente y con firma válida. DESPUÉS de grant,
+            // operabilidad y reglas OT (no tapa sus mensajes), cuando el organismo ya está promovido. Cubre la
+            // primera radicación y la re-radicación desde subsanación, y los dos destinos de /submit.
+            var mandatarioGate = await EvaluarMandatarioAlRadicarAsync(instance, ct).ConfigureAwait(false);
+            if (mandatarioGate.Code is not null)
+                return TramiteTransitionOutcome.Fail(mandatarioGate.Code, mandatarioGate.Detail);
+            if (mandatarioGate.Aviso is not null)
+                metadataTransicion = MergeMetadata(metadataTransicion, mandatarioGate.Aviso);
         }
 
         // ADR-0036 §D9 (HU #10916) — al APROBAR, resolver el mandatario que firma el mandato: automático
@@ -186,9 +254,10 @@ public sealed class TramiteLifecycleService(
         // la regeneración del PDF del mandato con el firmante la dispara el handler tras el commit.
         if (command.ToStatus == TramiteEstado.Aprobado)
         {
-            var mandatoError = await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
+            var (mandatoError, sinCandidatos) =
+                await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
             if (mandatoError is not null)
-                return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError));
+                return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError, sinCandidatos));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -231,7 +300,7 @@ public sealed class TramiteLifecycleService(
             command.Reason,
             command.ChangedByUserId,
             now,
-            command.Metadata);
+            metadataTransicion);
 
         // Historial (RF05) + publicación (RNF01) se ENCOLAN en la misma unidad de trabajo;
         // el commit único de abajo los persiste o descarta en bloque.
@@ -267,6 +336,24 @@ public sealed class TramiteLifecycleService(
         return TramiteTransitionOutcome.Ok(instance);
     }
 
+    /// <summary>Bug #13194 (MAYOR-1) — deja las partes del bloqueo en el accesor scoped de la petición.</summary>
+    private void RegistrarBloqueo(IReadOnlyList<ParteSinFirma> partes)
+    {
+        if (ultimoBloqueo is not null)
+            ultimoBloqueo.PartesSinFirma = partes;
+    }
+
+    /// <summary>
+    /// Bug #13194 (P4, D2) — notifica (correo de validación) cada parte sin firma. Nunca lanza: una excepción
+    /// del notificador se registra sin PII y la parte queda en <see cref="FirmaNotificacionEstados.Fallida"/>.
+    /// </summary>
+    private Task<IReadOnlyList<ParteSinFirma>> NotificarPartesSinFirmaAsync(
+        ProcedureInstance instance, IReadOnlyList<string> partes, CancellationToken ct) =>
+        FirmaGate.NotificarAsync(
+            firmaNotifier, instance.Id, instance.TenantId, partes,
+            (tipo, parte) => TramiteLifecycleLog.NotificacionFirmaFallida(_logger, tipo, instance.Id, parte),
+            ct);
+
     /// <summary>
     /// HU #12796 — pide la regeneración anticipada sin afectar al hito: la cola no bloquea y un descarte
     /// (<c>false</c>) solo se registra, porque la bandera ya quedó abajo y el perezoso lo reconstruye.
@@ -281,12 +368,78 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
+    /// HU #13144 (ADR-0066) — gate de radicación del mandatario. <c>off</c> o evaluador no cableado: no se
+    /// consulta el directorio ni se registra nada. <c>block</c>: rechaza con <c>mandatario_no_configurado</c> o
+    /// <c>mandatario_firma_invalida</c>. <c>warn</c>: radica y devuelve el aviso (motivo, organismo y compañía,
+    /// sin datos personales) para el log estructurado y la clave <c>mandatario_aviso</c> de los metadatos de la
+    /// transición, que es la fuente persistente para medir el volumen.
+    /// </summary>
+    private async Task<(string? Code, string? Detail, JsonObject? Aviso)> EvaluarMandatarioAlRadicarAsync(
+        ProcedureInstance instance, CancellationToken ct)
+    {
+        var modo = _validationPolicy.MandatarioRequerido;
+        if (_mandateEvaluator is null || modo == TramiteValidationMode.Off)
+            return (null, null, null);
+
+        MandateSignerEvaluacion evaluacion;
+        try
+        {
+            evaluacion = await _mandateEvaluator.EvaluateAsync(instance, null, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (modo == TramiteValidationMode.Warn && ex is not OperationCanceledException)
+        {
+            // En warn la medición nunca detiene una radicación.
+            TramiteLifecycleLog.MandatarioEvaluacionFallida(_logger, instance.Id, instance.TenantId, ex);
+            return (null, null, null);
+        }
+
+        if (evaluacion.CodigoDeError is not { } codigo)
+            return (null, null, null);
+
+        if (modo == TramiteValidationMode.Block)
+            return (codigo, evaluacion.MensajeDeError, null);
+
+        var motivo = evaluacion.Motivo ?? MandateSignerEstados.MotivoSinCandidatos;
+        TramiteLifecycleLog.MandatarioAviso(
+            _logger, instance.Id, codigo, motivo, evaluacion.TransitOfficeId, instance.TenantId);
+
+        return (null, null, new JsonObject
+        {
+            ["modo"] = "warn",
+            ["codigo"] = codigo,
+            ["estado"] = MandateSignerEstados.ToCode(evaluacion.Estado),
+            ["motivo"] = motivo,
+            ["transitOfficeId"] = evaluacion.TransitOfficeId?.ToString(),
+            ["companyTenantId"] = instance.TenantId.ToString(),
+        });
+    }
+
+    /// <summary>Agrega <c>mandatario_aviso</c> a los metadatos de la transición sin perder lo que ya traían.</summary>
+    private static string MergeMetadata(string? existing, JsonObject aviso)
+    {
+        JsonObject root;
+        try
+        {
+            root = string.IsNullOrWhiteSpace(existing)
+                ? []
+                : JsonNode.Parse(existing) as JsonObject ?? new JsonObject { ["original"] = existing };
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject { ["original"] = existing };
+        }
+
+        root["mandatario_aviso"] = aviso;
+        return root.ToJsonString();
+    }
+
+    /// <summary>
     /// ADR-0036 §D9 (HU #10916) — resuelve el mandatario del mandato al aprobar. Devuelve el código de
     /// error (<c>mandatario_requerido</c>) si hay varios mandatarios y ninguno cotejó; <c>null</c> si no
     /// hay nada que resolver (el mandato no aplica, o el mandatario es institucional sin firmante persona)
     /// o si el firmante quedó fijado en <c>instance.MandateSignerId</c>.
     /// </summary>
-    private async Task<string?> ResolverMandatarioAlAprobarAsync(
+    private async Task<(string? Code, bool SinCandidatos)> ResolverMandatarioAlAprobarAsync(
         ProcedureInstance instance, TramiteTransitionCommand command, CancellationToken ct)
     {
         // Producto: el mandato aplica siempre (PN y PJ); aquí solo resolvemos firmante / plantilla.
@@ -298,49 +451,45 @@ public sealed class TramiteLifecycleService(
 
         // Institucional u abierto (regla compañía×OT): no hay firmante persona que resolver.
         if (MandatoAssignmentModeCodes.SkipsPersonSigner(config?.AssignmentMode))
-            return null;
+            return (null, false);
 
         // El OT debe estar promovido (se hizo en la entrega). Sin él no podemos consultar el directorio.
         if (instance.TransitOfficeId is not { } transitOfficeId)
-            return null;
+            return (null, false);
 
-        var candidates = await _mandateDirectory
-            .GetCandidatesAsync(
-                transitOfficeId, instance.TenantId,
-                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
-            .ConfigureAwait(false);
-        candidates = await MandateSignerSelectionResolver
-            .WithOtDefaultAsync(candidates, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+        var (prelacion, _) = await MandateSignerPrelacionLoader
+            .ResolveAsync(
+                _mandateDirectory, _vaultPolicy, transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), config,
+                command.MandateSignerId, instance.MandateSignerId, ct)
             .ConfigureAwait(false);
 
-        var elegido = MandateSignerDefaultResolver.Resolve(
-            candidates.Select(c => c.Id).ToList(),
-            command.MandateSignerId ?? instance.MandateSignerId,
-            config?.OtDefaultMandateSignerId,
-            config?.DefaultMandateSignerId);
-
-        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, elegido);
+        var resolution = MandateSignerPrelacionLoader.Decidir(prelacion, command.ChangedByUserId);
 
         switch (resolution.Status)
         {
             case MandateSignerResolutionStatus.Resolved:
                 instance.MandateSignerId = resolution.Signer!.Id;
-                return null;
+                return (null, false);
             case MandateSignerResolutionStatus.RequiereSeleccion:
-                return TramiteEstadoErrores.MandatarioRequerido;
+                // HU #13137 — con cero candidatos válidos el mensaje NO dice «hay varios»: no queda mandatario.
+                return (TramiteEstadoErrores.MandatarioRequerido, prelacion.Validos.Count == 0);
             default:
                 // NoConfigurado: el OT no tiene mandatarios; se aprueba sin firmante (el mandato queda con
                 // placeholder hasta que el OT registre uno y se regenere). No bloquea la aprobación.
-                return null;
+                return (null, false);
         }
     }
 
     /// <summary>Detalle del error de mandatario para el mensaje al usuario (ADR-0036 §D9).</summary>
-    private static string DetalleMandatario(string code) => code switch
+    private static string DetalleMandatario(string code, bool sinCandidatos = false) => code switch
     {
+        TramiteEstadoErrores.MandatarioRequerido when sinCandidatos =>
+            MandateSignerEstados.MensajeSinMandatarioAlAprobar,
         TramiteEstadoErrores.MandatarioRequerido =>
-            "Hay varios mandatarios para la compañía en este organismo y ninguno corresponde a su usuario. " +
-            "Elija el mandatario que firma el mandato e intente aprobar de nuevo.",
+            "El mandatario que firma el mandato debe elegirse entre los mandatarios vigentes de la compañía " +
+            "en este organismo: ninguno quedó determinado (o el elegido ya no es válido). " +
+            "Elija uno e intente aprobar de nuevo.",
         _ => "No se pudo resolver el mandatario del mandato.",
     };
 
@@ -386,14 +535,10 @@ public sealed class TramiteLifecycleService(
         // (HU #10350 rediseño #87): fila propia del trámite O identidad vigente de la persona
         // en otro trámite del tenant, sin clonar. HU #10872 (AC2) — es la MISMA resolución de siempre:
         // no dispara ninguna solicitud nueva, solo consulta vigencia de lo ya validado.
+        // Bug #13194 (P4, D2) — sin relajación por OT: un OT con la validación de identidad deshabilitada
+        // (HU #10548) ya no da la identidad por satisfecha.
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy).ConfigureAwait(false);
-        // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
-        // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
-        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
-            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct).ConfigureAwait(false);
-        if (!identityRequired)
-            identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
 
         // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
         var docsCompletos = matrixCompleteness is null
@@ -462,7 +607,7 @@ public sealed class TramiteLifecycleService(
 
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
         // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
-        // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
+        // «Omitir prenda» (decisión válida sin documento). Solo con el repo cableado.
         return await EvaluarPrendaGateAsync(instance, ct).ConfigureAwait(false);
     }
 
@@ -552,18 +697,6 @@ public sealed class TramiteLifecycleService(
     /// <c>transit_office_id</c> (lo persiste el wizard al seleccionar). <c>null</c> si no hay
     /// selección o no es un GUID válido (p. ej. instancias previas a la persistencia del id).
     /// </summary>
-    /// <summary>
-    /// Marca la identidad de ambas partes (comprador y vendedor) como satisfecha, uniéndolas al set
-    /// aprobado. Se usa cuando el OT destino deshabilita la validación de identidad (HU #10548): así
-    /// el <see cref="SubmitGate"/> no exige identidad sin tocar su firma.
-    /// </summary>
-    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
-        new(approved, StringComparer.OrdinalIgnoreCase)
-        {
-            BiometricRules.ParteComprador,
-            BiometricRules.ParteVendedor,
-        };
-
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
     {
         var raw = instance.FieldValues.FirstOrDefault(f =>
@@ -908,4 +1041,20 @@ internal static partial class TramiteLifecycleLog
         Message = "HU #12796 — la regeneración anticipada del consolidado {Documento} del trámite {InstanceId} (tenant {TenantId}) se descartó; lo cubre la regeneración perezosa.")]
     public static partial void RegeneracionAnticipadaDescartada(
         ILogger logger, Guid instanceId, Guid tenantId, TipoConsolidado documento);
+
+    // HU #13144 (ADR-0066) — aviso del gate de mandatario en modo warn. SIN datos personales: solo ids y el
+    // motivo del vocabulario estable (nunca documento, correo ni ruta de firma del mandatario).
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Flit.TramiteValidations MandatarioRequerido (warn): el trámite {InstanceId} se radica sin mandatario válido. Codigo={Codigo}, Motivo={Motivo}, TransitOfficeId={TransitOfficeId}, CompanyTenantId={CompanyTenantId}.")]
+    public static partial void MandatarioAviso(
+        ILogger logger, Guid instanceId, string codigo, string motivo, Guid? transitOfficeId, Guid companyTenantId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "HU #13144 — no se pudo evaluar el mandatario del trámite {InstanceId} (tenant {TenantId}); en modo warn la radicación continúa.")]
+    public static partial void MandatarioEvaluacionFallida(
+        ILogger logger, Guid instanceId, Guid tenantId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Bug #13194 — no se pudo notificar la firma pendiente ({ExceptionType}) del trámite {InstanceId}, parte {Parte}; el bloqueo se mantiene.")]
+    public static partial void NotificacionFirmaFallida(ILogger logger, string exceptionType, Guid instanceId, string parte);
 }

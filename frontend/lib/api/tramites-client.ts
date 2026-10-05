@@ -50,8 +50,7 @@ import type {
   InstanceEstadoCountsResponse,
   InstancesResponse,
   ListInstancesParams,
-  FirmaPosteriorEstado,
-  MandateSignerSelection,
+  MandateSignerPrevisto,
   TransitOfficeOption,
   TransitOfficesResponse,
   VehicleServiceTypeOption,
@@ -153,6 +152,7 @@ import type {
 } from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
+import { esFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { resolveApiBase } from './base-url';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
@@ -527,7 +527,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    const problem = parseProblem(body);
+    // Bug #13194 (P4) — el gate de firma tiene copy propio (partes + correo de VID); el resto, el detail.
+    const message = esFirmaPendiente(problem)
+      ? mensajeFirmaPendiente(problem)
+      : problemMessage(res, body);
+    throw new TramitesApiError(res.status, message, problem);
   }
 
   if (res.status === 204) {
@@ -1104,35 +1109,11 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
-  // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
-  // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
-  listMandateSigners: (id: string, tenantId?: string) =>
-    request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+  // HU #13146 — quién firmará el mandato (solo lectura). La elección la hace la prelación y, cuando hace
+  // falta, el OT al aprobar: no existe PUT para fijarlo.
+  getMandateSigner: (id: string, tenantId?: string) =>
+    request<MandateSignerPrevisto>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
       headers: tenantHeader(tenantId),
-    }),
-
-  // HU #11203 — fija quién firma. 409 fuera de borrador; 422 si no está habilitado para el organismo.
-  setMandateSigner: (id: string, mandateSignerId: string, tenantId?: string) =>
-    request<void>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
-      method: 'PUT',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ mandateSignerId }),
-    }),
-
-  // HU #11197 — ¿se ofrece la firma a posteriori para esta parte y ya está marcada? En persona natural
-  // responde `aplica:false` en vez de un error: para el gestor la opción sencillamente no existe.
-  getFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
-    request<FirmaPosteriorEstado>(
-      `/api/v1/tramites/instances/${id}/deferred-signature?parte=${encodeURIComponent(parte)}`,
-      { headers: tenantHeader(tenantId) },
-    ),
-
-  // HU #11196 — marca el trámite para firmarse cuando el representante valide su identidad. Idempotente.
-  marcarFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
-    request<FirmaPosteriorEstado>(`/api/v1/tramites/instances/${id}/deferred-signature`, {
-      method: 'POST',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ parte }),
     }),
 
   getInstance: (id: string, tenantId?: string) =>
@@ -1543,7 +1524,8 @@ export const tramitesClient = {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(problemMessage(res, body));
+      // Bug #13194 (P3) — en 'asignado' el 409 `soporte_soat_requerido` tiene que poder distinguirse.
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
     }
     return JSON.parse(await res.text()) as PersistOcrFieldsResult;
   },
@@ -2591,18 +2573,16 @@ export const tramitesClient = {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      let code: string | undefined;
-      let detail: string | undefined;
-      try {
-        const problem = JSON.parse(body) as { title?: string; detail?: string };
-        code = problem.title;
-        detail = problem.detail;
-      } catch {
-        // cuerpo no-JSON (gateway) → mensaje genérico abajo.
-      }
-      throw new Error(
-        (code && TRANSITION_ERROR_COPY[code]) ?? detail ?? problemMessage(res, body),
-      );
+      // Cuerpo no-JSON (gateway) → parseProblem da null y cae al mensaje genérico.
+      const problem = parseProblem(body);
+      const code = typeof problem?.title === 'string' ? problem.title : undefined;
+      const detail = typeof problem?.detail === 'string' ? problem.detail : undefined;
+      // Bug #13194 (P4) — `firma_pendiente`: el detail nombra las partes; el helper arma el copy.
+      // Se lanza TramitesApiError (subclase de Error) para que el caller pueda leer el código.
+      const message = esFirmaPendiente(problem)
+        ? mensajeFirmaPendiente(problem)
+        : ((code && TRANSITION_ERROR_COPY[code]) ?? detail ?? problemMessage(res, body));
+      throw new TramitesApiError(res.status, message, problem);
     }
     return (await res.json()) as InstanceSummary;
   },
@@ -2800,6 +2780,9 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   transicion_no_permitida: 'La transición de estado solicitada no está permitida.',
   estado_final: 'El trámite está en un estado final y no admite cambios.',
   identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada.',
+  // Bug #13194 (P4) — respaldo; el copy real lo arma mensajeFirmaPendiente (partes + correo de VID).
+  firma_pendiente:
+    'Falta la validación de identidad o firma de una de las partes: no se puede enviar al organismo de tránsito un trámite sin firmar.',
   documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
   // HU #12775 AC3 — parte jurídica sin firma precargada ni escritura vigente y sin certificado.
   camara_comercio_pendiente: 'Falta el certificado de Cámara de Comercio de una parte persona jurídica.',

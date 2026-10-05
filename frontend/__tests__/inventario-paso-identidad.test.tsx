@@ -406,9 +406,11 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
 describe('BiometricStep — inventario: identidad cubierta por la firma del baúl', () => {
   // HU #10646 — la parte jurídica que firma con el baúl no necesita biométrica; lo que no puede es
   // quedarse sin explicación, porque el gestor la vería como «pendiente» para siempre.
+  // Bug #13194 (P4) — solo el estado del servidor cubre la parte; la señal del registro (prop) ya no
+  // basta por sí sola (ver el caso fail-closed de abajo).
   it.each([
-    ['la señal del registro (prop)', { vaultCoveredPartes: ['comprador' as const] }, [] as string[]],
     ['el estado del servidor', {}, ['comprador']],
+    ['el estado del servidor (con la señal del registro)', { vaultCoveredPartes: ['comprador' as const] }, ['comprador']],
   ])('se anuncia como firma electrónica desde %s', async (_origen, props, firmaBaulPartes) => {
     mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'kyverum', firmaBaulPartes });
     await renderPaso('matricula_inicial', props);
@@ -421,6 +423,15 @@ describe('BiometricStep — inventario: identidad cubierta por la firma del baú
     // Sin biométrica que iniciar ni historial que auditar.
     expect(within(comprador).queryByRole('button', { name: /validación de identidad/i })).toBeNull();
     expect(within(comprador).queryByText(/Historial de validaciones/)).toBeNull();
+  });
+
+  it('Bug #13194 — la señal del registro sin el servidor no se anuncia como firma del baúl', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'kyverum', firmaBaulPartes: [] });
+    await renderPaso('matricula_inicial', { vaultCoveredPartes: ['comprador' as const] });
+
+    const comprador = await screen.findByRole('group', { name: 'Biométrica Comprador' });
+    await waitFor(() => expect(mocks.getBiometricState).toHaveBeenCalled());
+    expect(within(comprador).queryByText('Firma electrónica (baúl)')).toBeNull();
   });
 
   it('en traspaso cubre solo a la parte que firmó con el baúl', async () => {

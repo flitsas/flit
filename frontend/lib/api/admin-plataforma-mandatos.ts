@@ -2,11 +2,7 @@
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { sessionAwareBase } from "@/lib/api/base-url";
 import { ApiError } from "./types";
-import type {
-  MandateAssignmentMode,
-  MandatoConfiguredTemplateCode,
-  MandatoTemplateCode,
-} from "@/lib/plataforma/mandato-templates";
+import type { MandateAssignmentMode } from "@/lib/plataforma/mandato-templates";
 
 const base = "/api/v1/admin/plataforma/mandatos";
 
@@ -18,13 +14,13 @@ export interface MandateOtConfigView {
   code: string;
   name: string;
   /** Redacción EFECTIVA que se emite hoy para este OT (con `auto` ya resuelto). */
-  templateCode: MandatoTemplateCode | string;
+  templateCode: string;
   /**
    * Redacción ELEGIDA, tal cual está guardada (`auto` si el OT no fija ninguna). Es la que
    * preselecciona el selector: preseleccionar con la efectiva convertiría un "automática" en una
    * redacción fija al guardar sin tocar nada.
    */
-  configuredTemplateCode: MandatoConfiguredTemplateCode | string;
+  configuredTemplateCode: string;
   requiresForNaturalPerson: boolean;
   mandataryFamily: MandataryFamilyCode | string;
   assignmentMode: MandateAssignmentMode | string;
@@ -44,6 +40,10 @@ export interface MandateOtConfigView {
   defaultMandateSignerDocumentType: string | null;
   defaultMandateSignerDocumentNumber: string | null;
   defaultMandateSignerIntegrityHash: string | null;
+  /** Compañías con Persona jurídica explícita. El resto usa Persona natural. */
+  explicitPersonaJuridica: number;
+  /** Compañías con Mandato abierto explícito. */
+  explicitMandatoAbierto: number;
 }
 
 export interface UpsertMandateOtConfigBody {
@@ -57,18 +57,6 @@ export interface UpsertMandateOtConfigBody {
   mandatarySigla?: string | null;
   rowVersion?: number | null;
   defaultMandateSignerId?: string | null;
-}
-
-export interface MandateConfigExtractResult {
-  suggestedTemplateCode: string;
-  requiresForNaturalPerson: boolean;
-  mandataryFamily: string;
-  assignmentMode: string;
-  institutionalMandataryName: string | null;
-  institutionalMandataryNit: string | null;
-  chamberCity: string | null;
-  mandatarySigla: string | null;
-  notes: string | null;
 }
 
 function mapView(raw: Record<string, unknown>): MandateOtConfigView {
@@ -125,6 +113,8 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       optionalString(raw.defaultMandateSignerDocumentNumber ?? raw.DefaultMandateSignerDocumentNumber),
     defaultMandateSignerIntegrityHash:
       optionalString(raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash),
+    explicitPersonaJuridica: Number(raw.explicitPersonaJuridica ?? raw.ExplicitPersonaJuridica ?? 0) || 0,
+    explicitMandatoAbierto: Number(raw.explicitMandatoAbierto ?? raw.ExplicitMandatoAbierto ?? 0) || 0,
   };
 }
 
@@ -229,8 +219,173 @@ export async function deleteMandateOtCustomTemplate(
   return mapView(data as unknown as Record<string, unknown>);
 }
 
+/**
+ * HU #13174 — formato de contrato del catálogo del backend (GET /mandatos/formatos). Es la única fuente
+ * de códigos y nombres: el frontend no mantiene una lista propia.
+ */
+export interface MandatoFormatView {
+  code: string;
+  /** Nombre vigente (el que edita el Super Admin). */
+  name: string;
+  /** Tipo de mandato por defecto de la redacción. */
+  assignmentMode: MandateAssignmentMode | string;
+  /** Redacción base que emite el generador; null en la automática, que solo delega. */
+  baseRedaction: string | null;
+  selectableAsRedaction: boolean;
+  delegatesToOfficeTemplate: boolean;
+  /** HU #13175 — número de la versión vigente de la plantilla (0 = la de fábrica). */
+  currentVersion: number;
+  hasCustomTemplate: boolean;
+  /** Control de concurrencia del PUT; null mientras el formato no tenga fila propia. */
+  rowVersion: number | null;
+  /** Última edición (ISO) o null si nunca se editó. */
+  updatedAt: string | null;
+}
+
+function mapFormat(raw: Record<string, unknown>): MandatoFormatView {
+  const baseRedaction = typeof raw.baseRedaction === "string" ? raw.baseRedaction : null;
+  return {
+    code: String(raw.code ?? ""),
+    name: String(raw.name ?? raw.code ?? ""),
+    assignmentMode: String(raw.assignmentMode ?? "signer"),
+    baseRedaction,
+    selectableAsRedaction: raw.selectableAsRedaction === true || baseRedaction !== null,
+    delegatesToOfficeTemplate: raw.delegatesToOfficeTemplate === true,
+    currentVersion: typeof raw.currentVersion === "number" ? raw.currentVersion : 0,
+    hasCustomTemplate: raw.hasCustomTemplate === true,
+    rowVersion: parseRowVersion(raw.rowVersion),
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+  };
+}
+
+/** Versión publicada de la plantilla de un formato (sin el texto). */
+export interface MandatoFormatVersionInfo {
+  versionNumber: number;
+  sha256: string;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+export interface MandatoFormatDetail {
+  format: MandatoFormatView;
+  /** Texto de la versión vigente, o null si el formato usa la redacción de fábrica. */
+  body: string | null;
+  versions: MandatoFormatVersionInfo[];
+}
+
+function mapVersion(raw: Record<string, unknown>): MandatoFormatVersionInfo {
+  return {
+    versionNumber: Number(raw.versionNumber ?? 0),
+    sha256: String(raw.sha256 ?? ""),
+    createdAt: String(raw.createdAt ?? ""),
+    createdBy: typeof raw.createdBy === "string" ? raw.createdBy : null,
+  };
+}
+
+export async function getMandatoFormat(code: string, signal?: AbortSignal): Promise<MandatoFormatDetail> {
+  const data = await apiFetch<Record<string, unknown>>(`${base}/formatos/${encodeURIComponent(code)}`, { signal });
+  const versions = Array.isArray(data.versions) ? (data.versions as Record<string, unknown>[]) : [];
+  return {
+    format: mapFormat((data.format ?? {}) as Record<string, unknown>),
+    body: typeof data.body === "string" ? data.body : null,
+    versions: versions.map(mapVersion),
+  };
+}
+
+export async function getMandatoFormatVersion(
+  code: string,
+  versionNumber: number,
+  signal?: AbortSignal,
+): Promise<MandatoFormatVersionInfo & { body: string }> {
+  const data = await apiFetch<Record<string, unknown>>(
+    `${base}/formatos/${encodeURIComponent(code)}/versions/${versionNumber}`,
+    { signal },
+  );
+  return { ...mapVersion(data), body: String(data.body ?? "") };
+}
+
+/** Campo ausente = no tocar; `body` publica una versión nueva de la plantilla. */
+export interface UpdateMandatoFormatBody {
+  rowVersion: number | null;
+  name?: string;
+  assignmentMode?: string;
+  body?: string;
+}
+
+export interface UpdateMandatoFormatResult {
+  format: MandatoFormatView;
+  changed: boolean;
+  publishedVersion: number | null;
+}
+
+export async function updateMandatoFormat(
+  code: string,
+  body: UpdateMandatoFormatBody,
+  signal?: AbortSignal,
+): Promise<UpdateMandatoFormatResult> {
+  const data = await apiFetch<Record<string, unknown>>(`${base}/formatos/${encodeURIComponent(code)}`, {
+    method: "PUT",
+    body,
+    signal,
+  });
+  return {
+    format: mapFormat((data.format ?? {}) as Record<string, unknown>),
+    changed: data.changed === true,
+    publishedVersion: typeof data.publishedVersion === "number" ? data.publishedVersion : null,
+  };
+}
+
+/** Vista previa (PDF de muestra) de la plantilla en borrador; no publica ninguna versión. */
+export async function previewMandatoFormatDraft(
+  code: string,
+  body: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return postPdf(`${base}/formatos/${encodeURIComponent(code)}/preview`, { body }, signal);
+}
+
+/** Variable desconocida que devuelve el API al guardar o previsualizar (400 plantilla_variable_invalida). */
+export interface MandatoUnknownVariable {
+  name: string;
+  line?: number;
+  column?: number;
+}
+
+/** Extrae `{ error, unknownVariables }` del cuerpo de un ApiError del editor de formatos. */
+export function readFormatError(body: unknown): { error: string | null; unknownVariables: MandatoUnknownVariable[] } {
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const vars = Array.isArray(raw.unknownVariables) ? (raw.unknownVariables as Record<string, unknown>[]) : [];
+  return {
+    error: typeof raw.error === "string" ? raw.error : null,
+    unknownVariables: vars.map((v) => ({
+      name: String(v.name ?? ""),
+      line: typeof v.line === "number" ? v.line : undefined,
+      column: typeof v.column === "number" ? v.column : undefined,
+    })),
+  };
+}
+
+export async function listMandatoFormats(signal?: AbortSignal): Promise<MandatoFormatView[]> {
+  const data = await apiFetch<{ items?: Record<string, unknown>[] }>(`${base}/formatos`, { signal });
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(mapFormat);
+}
+
+/** HU #13174 — el hub OT lee el mismo catálogo (nombres, sin el cuerpo de la plantilla). */
+export async function listOtMandatoFormats(
+  officeId: string,
+  signal?: AbortSignal,
+): Promise<MandatoFormatView[]> {
+  const data = await apiFetch<{ items?: Record<string, unknown>[] }>(
+    `/api/v1/admin/ot/offices/${encodeURIComponent(officeId)}/mandatos/formatos`,
+    { signal },
+  );
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(mapFormat);
+}
+
 export async function fetchMandatoTemplatePreview(
-  templateCode: MandatoTemplateCode | string,
+  templateCode: string,
   signal?: AbortSignal,
   officeId?: string,
 ): Promise<Blob> {
@@ -257,7 +412,7 @@ export interface CompanyOtMandateRuleView {
   chamberCity: string | null;
   mandatarySigla: string | null;
   hasExplicitRule: boolean;
-  /** Mandatario persona preferido (solo Persona/RL). */
+  /** Mandatario persona preferido (solo Persona natural). */
   defaultMandateSignerId: string | null;
   companyTaxId: string | null;
   companyCode: string | null;
@@ -265,6 +420,8 @@ export interface CompanyOtMandateRuleView {
   defaultMandateSignerDocumentType: string | null;
   defaultMandateSignerDocumentNumber: string | null;
   defaultMandateSignerIntegrityHash: string | null;
+  /** Token de concurrencia de la regla (HU #13148); null si la compañía hereda el default. */
+  rowVersion: number | null;
 }
 
 export interface UpsertCompanyOtMandateRuleBody {
@@ -275,9 +432,11 @@ export interface UpsertCompanyOtMandateRuleBody {
   chamberCity?: string | null;
   mandatarySigla?: string | null;
   defaultMandateSignerId?: string | null;
+  /** Obligatorio cuando la regla ya existe: el API responde 409 row_version_conflict si quedó vieja. */
+  rowVersion?: number | null;
 }
 
-function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView {
+export function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView {
   const defaultId =
     (raw.defaultMandateSignerId as string | null | undefined) ??
     (raw.DefaultMandateSignerId as string | null | undefined) ??
@@ -319,6 +478,7 @@ function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView 
     defaultMandateSignerIntegrityHash: optionalString(
       raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash,
     ),
+    rowVersion: parseRowVersion(raw.rowVersion ?? raw.RowVersion),
   };
 }
 
@@ -373,10 +533,11 @@ export async function setCompanyDefaultSigner(
   companyTenantId: string,
   defaultMandateSignerId: string | null,
   signal?: AbortSignal,
+  rowVersion?: number | null,
 ): Promise<CompanyOtMandateRuleView> {
   const data = await apiFetch<CompanyOtMandateRuleView>(
     `${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}/default-signer`,
-    { method: "PATCH", body: { defaultMandateSignerId }, signal },
+    { method: "PATCH", body: { defaultMandateSignerId, rowVersion }, signal },
   );
   return mapCompanyRule(data as unknown as Record<string, unknown>);
 }
@@ -385,61 +546,13 @@ export async function deleteCompanyOtMandateRule(
   officeId: string,
   companyTenantId: string,
   signal?: AbortSignal,
+  rowVersion?: number | null,
 ): Promise<void> {
-  await apiFetch<void>(`${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}`, {
+  const query = rowVersion != null ? `?rowVersion=${encodeURIComponent(String(rowVersion))}` : "";
+  await apiFetch<void>(`${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}${query}`, {
     method: "DELETE",
     signal,
   });
-}
-
-export async function extractMandateConfigFromFile(
-  file: File,
-  signal?: AbortSignal,
-): Promise<MandateConfigExtractResult> {
-  const baseUrl =
-    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
-  const url = new URL(`${base}/extract`, baseUrl);
-  const token = getToken();
-  const form = new FormData();
-  form.append("file", file);
-
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch(url.toString(), { method: "POST", headers, body: form, signal });
-  if (!response.ok) {
-    let detail: unknown = null;
-    try {
-      detail = await response.json();
-    } catch {
-      /* ignore */
-    }
-    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
-    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
-  }
-
-  const raw = (await response.json()) as Record<string, unknown>;
-  return {
-    suggestedTemplateCode: String(raw.suggestedTemplateCode ?? raw.SuggestedTemplateCode ?? "generico"),
-    requiresForNaturalPerson: Boolean(
-      raw.requiresForNaturalPerson ?? raw.RequiresForNaturalPerson,
-    ),
-    mandataryFamily: String(raw.mandataryFamily ?? raw.MandataryFamily ?? "individuo"),
-    assignmentMode: String(raw.assignmentMode ?? raw.AssignmentMode ?? "signer"),
-    institutionalMandataryName:
-      (raw.institutionalMandataryName as string | null) ??
-      (raw.InstitutionalMandataryName as string | null) ??
-      null,
-    institutionalMandataryNit:
-      (raw.institutionalMandataryNit as string | null) ??
-      (raw.InstitutionalMandataryNit as string | null) ??
-      null,
-    chamberCity:
-      (raw.chamberCity as string | null) ?? (raw.ChamberCity as string | null) ?? null,
-    mandatarySigla:
-      (raw.mandatarySigla as string | null) ?? (raw.MandatarySigla as string | null) ?? null,
-    notes: (raw.notes as string | null) ?? (raw.Notes as string | null) ?? null,
-  };
 }
 
 /** Escenario del simulador (HU #11707). */

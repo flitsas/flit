@@ -10,4 +10,5 @@ public static class SchemaNames
     public const string Catalogs = "catalogs";
     public const string Audit = "audit";
     public const string Platform = "platform";
+    public const string Integrations = "integrations";
 }

@@ -45,6 +45,9 @@ public static class SecurityEmailPreviewSample
     private const string ActivateUrlBase = "https://app.flit.test/invite/activate";
     private const string ResetUrlBase = "https://app.flit.test/password/reset";
 
+    /// <summary>Bug #13194 — login de muestra (mismo host ficticio que las demás muestras).</summary>
+    public const string SampleLoginUrl = "https://app.flit.test/login";
+
     /// <summary>Muestra de <see cref="InvitationEmailTemplate"/> (plantilla <c>security.invitation</c>).</summary>
     public static ComposedEmail BuildInvitation(string? assetsBaseUrl = null, EmailTheme? theme = null)
     {
@@ -69,11 +72,11 @@ public static class SecurityEmailPreviewSample
 
     /// <summary>
     /// Muestra de <see cref="WelcomeRegistrationEmailTemplate"/> (plantilla
-    /// <c>security.welcome-registration</c>). Enlace fijo al login principal.
+    /// <c>security.welcome-registration</c>). Enlace de login de muestra (<see cref="SampleLoginUrl"/>).
     /// </summary>
     public static ComposedEmail BuildWelcomeRegistration(string? assetsBaseUrl = null, EmailTheme? theme = null) =>
         WelcomeRegistrationEmailTemplate.Compose(
-            WelcomeRegistrationEmailTemplate.DefaultLoginUrl,
+            SampleLoginUrl,
             assetsBaseUrl,
             theme);
 }

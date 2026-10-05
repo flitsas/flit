@@ -1,6 +1,5 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
-using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -31,7 +30,10 @@ internal static class BiometricDocumentMatchQuery
         string? documentNumber)
     {
         var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
-        return query.Where(v => v.DocumentType.Trim().ToUpper() == tipo
+        // HU #13246 — la validación del mandatario es EXCLUSIVA de su ficha: nunca cuenta como identidad del
+        // comprador, el vendedor, el representante legal ni la prevalidación con el mismo documento.
+        return query.Where(v => v.MandateSignerId == null
+            && v.DocumentType.Trim().ToUpper() == tipo
             && v.DocumentNumber.Trim().ToUpper() == numero);
     }
 
@@ -56,14 +58,9 @@ internal static class BiometricDocumentMatchQuery
     /// <c>ProcedureInstance != null</c> (defecto 2, Bug #11583): una identidad validada FUERA de un
     /// trámite quedaba invisible para el resolutor de representante legal aunque
     /// <c>FindVigenteApprovedByDocumentAsync</c> (comprador/vendedor) ya la viera.
-    /// <para>Bug #13055 — tampoco cuenta la validación de un trámite anulado o revocado: ni como identidad
-    /// vigente reutilizable ni como envío "en vuelo" que bloquee uno nuevo para la misma persona.</para>
     /// </summary>
     public static IQueryable<ProcedureInstanceBiometricValidation> WhereInstanciaVigente(
         this IQueryable<ProcedureInstanceBiometricValidation> query) =>
         query.Where(v => v.ProcedureInstanceId == null
-            || (v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null
-                && v.ProcedureInstance.Status != TramiteEstado.Anulado
-                && v.ProcedureInstance.Status != TramiteEstado.Revocado));
+            || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null));
 }

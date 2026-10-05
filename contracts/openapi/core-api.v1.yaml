@@ -429,6 +429,680 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}:
+    delete:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersDelete
+      summary: Elimina (baja lógica) un mandatario del organismo
+      description: >
+        HU #13135/#13137 (Feature #13115). Baja lógica (`deleted_at`, `deleted_by`): el mandatario desaparece de listas y
+        candidatos, se retiran los defaults que apuntaban a él, se reasignan con la prelación del OT (ADR-0066) los
+        trámites radicados sin aprobar y se conserva el historial de los ya firmados. Todo en una transacción.
+        Con impacto no vacío exige `confirmarImpacto=true` (409 `mandatario_baja_requiere_confirmacion`).
+        Los conteos de la reasignación viajan en las cabeceras `X-Mandatario-Reasignados` y
+        `X-Mandatario-Pendientes-Decision-OT`. Permisos: un mandatario configurado por el organismo solo lo eliminan
+        el Admin OT y el Super Admin (403 `mandatario_configurado_por_organismo` para la compañía).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: confirmarImpacto
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Confirmación explícita cuando la baja tiene impacto (único activo, defaults o trámites sin aprobar).
+      responses:
+        "204":
+          description: "Eliminado. Cabeceras con los conteos de la reasignación de trámites."
+          headers:
+            X-Mandatario-Reasignados: { schema: { type: integer } }
+            X-Mandatario-Pendientes-Decision-OT: { schema: { type: integer } }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o ya estaba eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La baja tiene impacto y falta `confirmarImpacto` (`mandatario_baja_requiere_confirmacion`, con el impacto en `impact`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}/impact:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersImpact
+      summary: Impacto de dar de baja al mandatario
+      description: >
+        HU #13135 (Feature #13115). Solo lectura: compañías y organismos donde el mandatario es el ÚNICO activo de
+        esa compañía, los defaults (de compañía y del organismo) que perdería y el número de trámites radicados
+        sin aprobar que hoy lo usan. Solo identificadores y conteos (sin datos personales).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Impacto de la baja.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/MandateSignerImpact" }
+        "403":
+          description: "Sin permiso: usuario sin rol de gestión o mandatario configurado por el organismo (`mandatario_configurado_por_organismo`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no pertenece al alcance (no se revela más).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}/reactivate:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersReactivate
+      summary: Reactiva un mandatario restaurando sus vínculos
+      description: >
+        HU #13136 (Feature #13115). Reactiva un mandatario inactivado y restaura los vínculos con compañías y
+        organismos que retiró la baja, sin desplazar al default vigente (solo recupera un default que quedó vacío).
+        Un vínculo que chocaría con otro mandatario activo del mismo origen para la compañía y el organismo
+        (índice único) se restaura inactivo y se informa en `conflictLinks`; si TODOS chocan no se reactiva nada
+        (409 `mandatario_activo_existente`). Un mandatario eliminado no se reactiva (404).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Reactivado; detalle de lo restaurado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerReactivation" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o ya estaba activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Todos los vínculos chocan con otro mandatario activo (`mandatario_activo_existente`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}:
+    delete:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersDelete
+      summary: Elimina (baja lógica) un mandatario de la compañía
+      description: >
+        HU #13135/#13137 (Feature #13115). Baja lógica (`deleted_at`, `deleted_by`): el mandatario desaparece de listas y
+        candidatos, se retiran los defaults que apuntaban a él, se reasignan con la prelación del OT (ADR-0066) los
+        trámites radicados sin aprobar y se conserva el historial de los ya firmados. Todo en una transacción.
+        Con impacto no vacío exige `confirmarImpacto=true` (409 `mandatario_baja_requiere_confirmacion`).
+        Los conteos de la reasignación viajan en las cabeceras `X-Mandatario-Reasignados` y
+        `X-Mandatario-Pendientes-Decision-OT`. Permisos: un mandatario configurado por el organismo solo lo eliminan
+        el Admin OT y el Super Admin (403 `mandatario_configurado_por_organismo` para la compañía).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: confirmarImpacto
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Confirmación explícita cuando la baja tiene impacto (único activo, defaults o trámites sin aprobar).
+      responses:
+        "204":
+          description: "Eliminado. Cabeceras con los conteos de la reasignación de trámites."
+          headers:
+            X-Mandatario-Reasignados: { schema: { type: integer } }
+            X-Mandatario-Pendientes-Decision-OT: { schema: { type: integer } }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o ya estaba eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La baja tiene impacto y falta `confirmarImpacto` (`mandatario_baja_requiere_confirmacion`, con el impacto en `impact`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}/impact:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersImpact
+      summary: Impacto de dar de baja al mandatario de la compañía
+      description: >
+        HU #13135 (Feature #13115). Solo lectura: compañías y organismos donde el mandatario es el ÚNICO activo de
+        esa compañía, los defaults (de compañía y del organismo) que perdería y el número de trámites radicados
+        sin aprobar que hoy lo usan. Solo identificadores y conteos (sin datos personales).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Impacto de la baja.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/MandateSignerImpact" }
+        "403":
+          description: "Sin permiso: usuario sin rol de gestión o mandatario configurado por el organismo (`mandatario_configurado_por_organismo`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no pertenece al alcance (no se revela más).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}/reactivate:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersReactivate
+      summary: Reactiva un mandatario de la compañía restaurando sus vínculos
+      description: >
+        HU #13136 (Feature #13115). Reactiva un mandatario inactivado y restaura los vínculos con compañías y
+        organismos que retiró la baja, sin desplazar al default vigente (solo recupera un default que quedó vacío).
+        Un vínculo que chocaría con otro mandatario activo del mismo origen para la compañía y el organismo
+        (índice único) se restaura inactivo y se informa en `conflictLinks`; si TODOS chocan no se reactiva nada
+        (409 `mandatario_activo_existente`). Un mandatario eliminado no se reactiva (404).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Reactivado; detalle de lo restaurado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerReactivation" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o ya estaba activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Todos los vínculos chocan con otro mandatario activo (`mandatario_activo_existente`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/mandate-signers/physical-signature-migration-report:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersPhysicalSignatureMigrationReport
+      summary: Reporte de migración de la firma física (HU #13131)
+      description: >
+        Mandatarios Persona natural activos que dependen SOLO de la firma física (`signs_physically`
+        verdadero), sin firma del baúl y sin validación biométrica aprobada (el mandatario no renueva su
+        identidad: una aprobación basta). Cada fila trae compañía, organismo, forma de firma actual, forma declarada y el
+        dato que le falta. Un mandatario al que se le vincula una firma del baúl o se le aprueba la validación
+        sale del reporte en la siguiente consulta. NO incluye documento ni correo (Ley 1581). Solo SuperAdmin.
+        Con `format=csv` se exporta como `text/csv`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por organismo de tránsito.
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        "200":
+          description: Filas del reporte.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PhysicalSignatureMigrationRow"
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin (no se entregan datos de otros tenants).
+
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}/identity-validation/resend:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersIdentityValidationResend
+      summary: Reenvía la validación de identidad propia del mandatario (HU #13246)
+      description: >
+        HU #13246 (Feature #13245, Épica #13090). Desde el hub OT (ot_admin o Super Admin). Lanza una validación de identidad NUEVA para el mandatario
+        (party_role `mandatario` + referencia a su ficha), con el mismo flujo del trámite (Kyverum: enlace al correo,
+        captura y webhook; mock en local), registrada en el tenant de la COMPAÑÍA del mandatario. La anterior en vuelo se
+        cierra y, por contar solo la más reciente, una aprobación anterior deja de contar hasta que la nueva se apruebe.
+        Dos reenvíos simultáneos dejan una sola validación activa. Solo aplica a Persona natural con forma de firma
+        `biometria`. Las rutas `identity/send`, `identity/resend` e `identity/link` siguen respondiendo 410.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Validación lanzada. `identity` = `sent` (enlace enviado) o `queued` (proveedor caído; reintento automático).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerIdentityResend" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no es de ese organismo o compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Persona jurídica, Formato en blanco o forma de firma baúl (`code = mandatario_no_requiere_validacion`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: La ficha no tiene correo (obligatorio con biometría); `errors[].field = email`.
+        "502":
+          description: El proveedor rechazó el envío de forma definitiva (`code = proveedor_error`).
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}/identity-validation/resend:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersIdentityValidationResend
+      summary: Reenvía la validación de identidad propia del mandatario (HU #13246)
+      description: >
+        HU #13246 (Feature #13245, Épica #13090). Desde la compañía (mismo candado por origen que editar). Lanza una validación de identidad NUEVA para el mandatario
+        (party_role `mandatario` + referencia a su ficha), con el mismo flujo del trámite (Kyverum: enlace al correo,
+        captura y webhook; mock en local), registrada en el tenant de la COMPAÑÍA del mandatario. La anterior en vuelo se
+        cierra y, por contar solo la más reciente, una aprobación anterior deja de contar hasta que la nueva se apruebe.
+        Dos reenvíos simultáneos dejan una sola validación activa. Solo aplica a Persona natural con forma de firma
+        `biometria`. Las rutas `identity/send`, `identity/resend` e `identity/link` siguen respondiendo 410.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Validación lanzada. `identity` = `sent` (enlace enviado) o `queued` (proveedor caído; reintento automático).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerIdentityResend" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no es de ese organismo o compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Persona jurídica, Formato en blanco o forma de firma baúl (`code = mandatario_no_requiere_validacion`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: La ficha no tiene correo (obligatorio con biometría); `errors[].field = email`.
+        "502":
+          description: El proveedor rechazó el envío de forma definitiva (`code = proveedor_error`).
+
+  /api/v1/admin/mandate-signers/identity-validation-report:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersIdentityValidationReport
+      summary: Mandatarios con biometría sin validación propia aprobada (HU #13247)
+      description: >
+        HU #13247 (Feature #13245). Mandatarios Persona natural activos con forma de firma `biometria` que NO tienen una
+        validación propia aprobada: pierden la firma hasta validarse por el flujo nuevo (sin backfill desde validaciones de
+        trámites). Una fila por vínculo con compañía; trae compañía, organismo y CORREO para avisarles antes de desplegar
+        (dato personal, Ley 1581: solo SuperAdmin, nunca en logs). `identityStatus`: `none` (pendiente de validación),
+        `pending` (en curso) o `expired`. Con `format=csv` se exporta como `text/csv`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        "200":
+          description: Filas del reporte.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MandateIdentityAffectedRow"
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
+  /api/v1/admin/mandate-signers/represented-associations/impact-report:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersRepresentedAssociationImpactReport
+      summary: Mandatarios impactados por el retiro de las asociaciones por Representante Legal (HU #13176)
+      description: >
+        Mandatarios activos con asociaciones activas en `mandate_signer_represented_companies`. Por compañía y
+        organismo: nombre de la compañía, organismo, nombre del mandatario, cantidad de empresas asociadas y sus
+        NIT. NO incluye documento de identidad ni ruta de firma (Ley 1581). Solo SuperAdmin. Con `format=csv`
+        se descarga como `text/csv` para el aviso a los clientes. Orden de despliegue: reporte, aviso, retiro.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        "200":
+          description: Filas del reporte (vacío si no hay asociaciones activas).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RepresentedAssociationImpactRow"
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
+  /api/v1/admin/mandate-signers/represented-associations/retire:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersRepresentedAssociationRetire
+      summary: Retira las asociaciones por Representante Legal con aviso previo (HU #13176)
+      description: >
+        Elimina las filas activas de asociación por Representante Legal; los mandatarios afectados pasan a
+        aplicar a toda su compañía en el organismo. Solo se ejecuta con `confirmaAvisoEnviado` verdadero
+        (dato del request, no un estado guardado); si falta o es falso responde 409 `aviso_no_confirmado` y no
+        modifica nada. Repetirlo responde 200 con `filasRetiradas` 0. Deja auditoría con cantidad, fecha y rol,
+        sin nombres personales. Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirmaAvisoEnviado: { type: boolean }
+      responses:
+        "200":
+          description: Retiro ejecutado (o sin filas que retirar).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [filasRetiradas, fecha]
+                properties:
+                  filasRetiradas: { type: integer }
+                  fecha: { type: string, format: date-time }
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "409":
+          description: El aviso a los clientes no fue confirmado (`aviso_no_confirmado`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: aviso_no_confirmado }
+                  error: { type: string }
+
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/associable-companies:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersAssociableCompanies
+      summary: Compañías gestoras asociables al mandatario, vista OT y Super Admin (HU #13178)
+      description: >
+        Todas las compañías gestoras ACTIVAS de FLIT, sin duplicados por NIT, con búsqueda por nombre y NIT. Solo id,
+        nombre y NIT (Ley 1581). Un OT ve compañías que nunca le han radicado. Solo SuperAdmin u ot_admin del propio
+        organismo (403 a Gestor y a otros perfiles). No modifica la visibilidad de la bandeja de trámites (Bug #12912).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, minLength: 2 }
+          description: >
+            Texto literal por nombre o NIT (mínimo 2 caracteres; el NIT ignora puntos y guion de verificación).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: all
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Con true devuelve la lista completa en una sola respuesta (tope de 1000; ignora page y pageSize). Lo usa el
+            selector con buscador del formulario del mandatario (HU #13248b).
+      responses:
+        "200":
+          description: Página de compañías asociables (solo id, nombre y NIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssociableCompaniesPage"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Perfil o tenant fuera de alcance.
+        "422":
+          description: Búsqueda de menos de 2 caracteres.
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/associable-companies:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersAssociableCompanies
+      summary: Compañías hijas asociables al mandatario, vista Admin de Compañía (HU #13178)
+      description: >
+        Solo las hijas directas activas de la compañía (`identity.tenants.parent_tenant_id`). Sin red:
+        `items` vacío y `aplicaSoloASuCompania` verdadero. La lista completa nunca sale por esta ruta.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, minLength: 2 }
+          description: >
+            Texto literal por nombre o NIT (mínimo 2 caracteres; el NIT ignora puntos y guion de verificación).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: all
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Con true devuelve la lista completa en una sola respuesta (tope de 1000; ignora page y pageSize). Lo usa el
+            selector con buscador del formulario del mandatario (HU #13248b).
+      responses:
+        "200":
+          description: Página de compañías asociables (solo id, nombre y NIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssociableCompaniesPage"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Perfil o tenant fuera de alcance.
+        "422":
+          description: Búsqueda de menos de 2 caracteres.
+
+  /api/v1/admin/companies/{headTenantId}/children/{childTenantId}/mandate-signers/associable-companies:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyChildMandateSignersAssociableCompanies
+      summary: Compañías asociables al mandatario de un cliente hijo (HU #13178)
+      description: >
+        Hijas directas activas del cliente hijo (por jerarquía de profundidad máxima 2 no tiene: lista vacía y
+        `aplicaSoloASuCompania` verdadero). Mismo contrato que la ruta de la compañía.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: headTenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: childTenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, minLength: 2 }
+          description: >
+            Texto literal por nombre o NIT (mínimo 2 caracteres; el NIT ignora puntos y guion de verificación).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: all
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Con true devuelve la lista completa en una sola respuesta (tope de 1000; ignora page y pageSize). Lo usa el
+            selector con buscador del formulario del mandatario (HU #13248b).
+      responses:
+        "200":
+          description: Página de compañías asociables (solo id, nombre y NIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssociableCompaniesPage"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Perfil o tenant fuera de alcance.
+        "422":
+          description: Búsqueda de menos de 2 caracteres.
+
   /api/v1/admin/ict/job-settings:
     get:
       tags: [Admin · ICT · Jobs]
@@ -2733,7 +3407,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar.
+          description: >
+            El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar —,
+            o su correo ya lo usa otra cuenta activa (`USER_EMAIL_IN_USE`, Bug #13194:
+            "Ya existe una cuenta activa con ese correo").
           content:
             application/json:
               schema:
@@ -5855,8 +6532,12 @@ paths:
       description: >
         No estaba documentado hasta ahora (brecha preexistente, cerrada en HU #12129/ADR-0055).
         Registra la decisión de prenda (gravamen) vigente del trámite: `solicitar`/`registrar`
-        (constituye), `levantar` (levanta), `omitir` (asumo el riesgo, si el organismo lo permite) o
-        `sin_prenda` (declara ausencia de gravamen). Versionado por reemplazo: si ya hay una decisión
+        (constituye), `levantar` (levanta), `omitir` (Omitir prenda: el gravamen sigue vigente en el
+        RUNT; no se inscribe ni se levanta) o `sin_prenda` (declara ausencia de gravamen). `omitir`: en
+        la familia Matrículas (Matrícula Inicial, Matrícula Leasing, Rematrícula) siempre se admite; en
+        Traspaso y en el resto, solo si el organismo tiene el certificado de prenda como opcional (CF-06).
+        Cancelación de matrícula no tiene dimensión de gravamen (`prenda_no_admitida_en_tipo`). Con `omitir`, `acreedorNombre`,
+        `acreedorDocumento` y `levantamientoEntidad` se ignoran y se devuelven null. Versionado por reemplazo: si ya hay una decisión
         vigente de la MISMA familia (`constitucion`=solicitar/registrar, `levantamiento`=levantar), se
         marca `reemplazada` y esta queda como la nueva vigente (R17, HU #10599).
 
@@ -5907,7 +6588,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >
-            `prenda_omitir_no_admitido` (el organismo exige el certificado, CF-06/HU #10881),
+            `prenda_omitir_no_admitido` (el organismo exige el certificado, CF-06/HU #10881; no aplica
+            a la familia Matrículas, Feature #13110),
             `prenda_no_admitida_en_tipo` (el tipo no tiene dimensión de gravamen, ADR-0050),
             `estado_final` (trámite en estado final, R17) o `prenda_segunda_decision_no_admitida`
             (Matrícula/Traspaso: ya hay una vigente y el tipo no admite la acción complementaria,
@@ -9868,16 +10550,14 @@ paths:
       description: >
         HU #11197 (AC1/AC2/AC4). `aplica` es true solo cuando el firmante de esa parte tiene la identidad
         Y la firma del baúl vencidas: con cualquiera de las dos vigente el trámite puede firmarse ya y la
-        opción no se ofrece. En persona natural, o sin mandatario elegido, responde
-        `{aplica:false, marcado:false}`, no un error.
-        `mandatario` es el firmante del contrato de mandato: su identidad vive en la configuración del
-        organismo, así que su marca no la cierra el lote por validación sino la regeneración del
-        expediente al entregar o aprobar.
+        opción no se ofrece. En persona natural o sin representante responde
+        `{aplica:false, marcado:false}`, no un error. HU #13157: la parte `mandatario` se retiró y responde
+        400 `parte_invalida` (use comprador|vendedor).
       parameters:
         - name: parte
           in: query
           required: true
-          schema: { type: string, enum: [comprador, vendedor, mandatario] }
+          schema: { type: string, enum: [comprador, vendedor] }
         - name: documento
           in: query
           required: false
@@ -9906,8 +10586,7 @@ paths:
         HU #11196 (AC1). Idempotente: volver a marcar no crea una segunda marca ni mueve la fecha
         original. Para comprador/vendedor, cuando esa persona apruebe su validación TODOS sus trámites
         marcados del tenant que sigan en borrador o subsanación se firman de una (el estado se revalida al
-        aplicar, no al marcar). Para `mandatario` la marca se cierra al regenerarse el expediente en la
-        entrega o la aprobación, que es cuando recoge la firma del baúl o la identidad que tenga entonces.
+        aplicar, no al marcar). HU #13157: la parte `mandatario` ya no se acepta (400 `parte_invalida`).
       requestBody:
         required: true
         content:
@@ -9915,7 +10594,7 @@ paths:
             schema:
               type: object
               properties:
-                parte: { type: string, enum: [comprador, vendedor, mandatario] }
+                parte: { type: string, enum: [comprador, vendedor] }
                 documento:
                   type: string
                   nullable: true
@@ -9939,48 +10618,7 @@ paths:
         "422":
           description: >
             no_aplica (la parte no es persona jurídica), sin_representante (el representante declarado no
-            tiene documento con el que validar), sin_mandatario (el trámite no tiene mandatario elegido
-            con documento registrado) o firma_disponible (ya puede firmarse ahora).
-
-  /api/v1/tramites/instances/{id}/mandate-signers:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { type: string, format: uuid }
-      - $ref: "#/components/parameters/TenantIdHeader"
-    get:
-      operationId: listProcedureInstanceMandateSigners
-      tags: ["Trámites · Traspaso"]
-      security:
-        - bearerAuth: []
-      summary: "Mandatarios que pueden firmar el mandato de este trámite"
-      description: >
-        HU #11203. Adelanta al REGISTRO lo que antes se resolvía al aprobar: el gestor ve desde el
-        principio quién va a firmar el contrato de mandato, en vez de descubrirlo al final o tener que
-        decidirlo el organismo.
-
-
-        Los candidatos son los mandatarios activos de la compañía gestora habilitados para el organismo
-        del trámite. El organismo se resuelve de `field_values.transit_office_id` durante el asistente
-        —la columna solo se fija al radicar—, así que **sin organismo elegido todavía la lista viene
-        vacía**, no es un error.
-
-
-        Cada opción dice con QUÉ puede firmar esa persona: `firmaBaulVigente` o `identidadVigente`. Son
-        vías ALTERNATIVAS, no requisitos acumulativos — con cualquiera de las dos el mandato puede
-        firmarse. Sin ninguna, el trámite puede marcarse para firma a posteriori
-        (`POST /instances/{id}/deferred-signature` con `parte: mandatario`).
-      responses:
-        "200":
-          description: "Mandatarios disponibles y cuál está elegido."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MandateSignerSelectionResponse"
-        "400": { description: "Falta el header X-Tenant-Id." }
-        "401": { description: "No autenticado." }
-        "404": { description: "Trámite no encontrado." }
+            tiene documento con el que validar) o firma_disponible (ya puede firmarse ahora).
 
   /api/v1/tramites/instances/{id}/mandate-signer:
     parameters:
@@ -9989,40 +10627,36 @@ paths:
         required: true
         schema: { type: string, format: uuid }
       - $ref: "#/components/parameters/TenantIdHeader"
-    put:
-      operationId: setProcedureInstanceMandateSigner
+    get:
+      operationId: getProcedureInstanceMandateSigner
       tags: ["Trámites · Traspaso"]
       security:
         - bearerAuth: []
-      summary: "Fija qué mandatario firma el mandato del trámite"
+      summary: "Firmante previsto del mandato (solo lectura)"
       description: >
-        HU #11203 (AC4/AC5). Solo en borrador o con subsanación activa: una vez el trámite salió de
-        ahí, cambiar quién firma alteraría un documento ya generado y radicado.
+        HU #13145 (ADR-0066). Quién firmará el mandato del trámite según la prelación del mandatario
+        (Explícita, OT para la compañía, propio de la compañía, asociado, default del OT), calculado por el
+        MISMO evaluador que usa el gate de radicación: la pantalla y la radicación nunca discrepan.
 
 
-        El elegido debe estar entre los habilitados para el organismo del trámite y esa compañía.
-        Aceptar cualquier id dejaría el trámite apuntando a un mandatario que no puede firmarlo, y eso
-        solo se descubriría al aprobar.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                mandateSignerId: { type: string, format: uuid }
-              required: [mandateSignerId]
+        `estado`: `valido` (con `nombre` y `formaFirma`), `sin_mandatario` o `firma_invalida` (con `motivo`),
+        `no_aplica` (mandato Persona jurídica, Mandato abierto o mandato personalizado de la compañía),
+        `pendiente_organismo` (sin organismo elegido) o `pendiente_eleccion_ot` (varios válidos: el OT
+        elige al aprobar). `modo` es el modo vigente de la validación (`block` | `warn` | `off`).
+
+
+        Solo `nombre` y `formaFirma`: nunca el documento de identidad ni la ruta de la firma (Ley 1581). El
+        trámite se busca en el tenant de la petición; uno de otro tenant responde 404.
       responses:
-        "204": { description: "Mandatario fijado." }
+        "200":
+          description: "Firmante previsto."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MandateSignerPrevistoResponse"
         "400": { description: "Falta el header X-Tenant-Id." }
         "401": { description: "No autenticado." }
-        "404": { description: "Trámite no encontrado." }
-        "409":
-          description: >
-            not_draft (el trámite ya salió de borrador) o sin_organismo (todavía no tiene organismo de
-            tránsito, así que no hay candidatos contra los que validar).
-        "422":
-          description: "mandatario_no_habilitado — no está habilitado para el organismo del trámite."
+        "404": { description: "Trámite no encontrado (o de otro tenant)." }
 
   /api/v1/me/ui-preferences/{scope}:
     parameters:
@@ -11644,51 +12278,214 @@ components:
           type: string
           format: date-time
           nullable: true
-    MandateSignerOption:
+    MandateSignerImpact:
       type: object
       description: >
-        Un mandatario elegible para firmar el mandato. `firmaBaulVigente` e `identidadVigente` son las
-        dos vías ALTERNATIVAS de firmar: basta cualquiera de las dos.
-      required: [id, nombre, tipoDocumento, documento, identidadVigente]
+        HU #13135 — impacto de dar de baja a un mandatario. Solo identificadores y conteos; sin datos personales.
+      required: [hasImpact, onlyActiveFor, defaults, pendingProcedures]
       properties:
-        id: { type: string, format: uuid }
-        nombre: { type: string }
-        tipoDocumento: { type: string, example: CC }
-        documento: { type: string }
-        identidadVigente:
-          type: boolean
-          description: "Tiene una validación de identidad admin aprobada y vigente."
-        identidadHasta:
-          type: string
-          format: date-time
-          nullable: true
-          description: "Hasta cuándo vale su validación de identidad; null si no tiene o no vence."
-        firmaBaulVigente:
-          type: boolean
-          description: >
-            Tiene una firma del baúl activa y vigente. Se resuelve por su DOCUMENTO y contra el tenant
-            de la compañía gestora, igual que hace el generador del mandato:
-            `mandate_signers.signature_vault_id` no se escribe, así que esa referencia no sirve para
-            saberlo.
-    MandateSignerSelectionResponse:
+        hasImpact: { type: boolean }
+        onlyActiveFor:
+          type: array
+          description: Compañías y organismos donde el mandatario es el único activo.
+          items:
+            type: object
+            required: [transitOfficeId, companyTenantId]
+            properties:
+              transitOfficeId: { type: string, format: uuid }
+              companyTenantId: { type: string, format: uuid }
+        defaults:
+          type: array
+          description: Defaults que quedarían en nulo.
+          items:
+            type: object
+            required: [kind, transitOfficeId]
+            properties:
+              kind: { type: string, enum: [company_rule, office] }
+              transitOfficeId: { type: string, format: uuid }
+              companyTenantId: { type: string, format: uuid, nullable: true }
+        pendingProcedures:
+          type: integer
+          description: Trámites radicados sin aprobar (preasignación, asignado, entregado) que usan al mandatario.
+
+    MandateSignerReactivation:
       type: object
-      required: [opciones, elegidoId, editable]
+      description: HU #13136 — vínculos restaurados por la reactivación y los que quedaron inactivos por conflicto.
+      required: [restoredLinks, conflictLinks, restoredDefaults]
       properties:
-        opciones:
+        restoredLinks:
+          type: array
+          items: { $ref: "#/components/schemas/MandateSignerLink" }
+        conflictLinks:
+          type: array
+          items: { $ref: "#/components/schemas/MandateSignerLink" }
+        restoredDefaults: { type: integer }
+
+    MandateSignerLink:
+      type: object
+      required: [transitOfficeId, companyTenantId]
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        companyTenantId: { type: string, format: uuid }
+
+    PhysicalSignatureMigrationRow:
+      type: object
+      description: >
+        Mandatario que depende solo de la firma física ante un organismo (HU #13131). Sin documento ni correo.
+      required: [mandateSignerId, fullName, transitOfficeId, transitOfficeCode, transitOfficeName, currentSignatureForm, missingData]
+      properties:
+        mandateSignerId: { type: string, format: uuid }
+        fullName: { type: string }
+        companyTenantId: { type: string, format: uuid, nullable: true }
+        companyName: { type: string, nullable: true }
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeCode: { type: string }
+        transitOfficeName: { type: string }
+        currentSignatureForm:
+          type: string
+          enum: [firma_fisica]
+        declaredSignatureMethod:
+          type: string
+          nullable: true
+          enum: [baul, biometria]
+          description: "Forma de firma declarada en la ficha; null si no la declaró."
+        missingData:
+          type: string
+          enum: [firma_baul_o_validacion_biometrica, firma_baul, validacion_biometrica, validacion_biometrica_vigente]
+    RepresentedAssociationImpactRow:
+      type: object
+      description: >
+        Mandatario que depende de una asociación por Representante Legal (HU #13176). Sin documento de identidad
+        ni ruta de firma.
+      required: [companyTenantId, companyName, transitOfficeId, transitOfficeName, mandateSignerId, mandateSignerName, associatedCount, associatedNits]
+      properties:
+        companyTenantId: { type: string, format: uuid }
+        companyName: { type: string }
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeName: { type: string }
+        mandateSignerId: { type: string, format: uuid }
+        mandateSignerName: { type: string }
+        associatedCount: { type: integer }
+        associatedNits:
+          type: array
+          items: { type: string }
+    AssociableCompaniesPage:
+      type: object
+      description: Compañías a las que se puede asociar un mandatario (HU #13178). Solo id, nombre y NIT por elemento.
+      required: [items, total, page, pageSize, aplicaSoloASuCompania]
+      properties:
+        items:
           type: array
           items:
-            $ref: "#/components/schemas/MandateSignerOption"
-          description: "Vacío si el trámite todavía no tiene organismo, o si no hay mandatarios."
-        elegidoId:
+            type: object
+            required: [id, name, nit]
+            properties:
+              id: { type: string, format: uuid, description: "Tenant de la compañía." }
+              name: { type: string }
+              nit: { type: string }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        aplicaSoloASuCompania:
+          type: boolean
+          description: "Verdadero si la compañía que consulta no tiene red: no hay lista y el mandatario aplica solo a ella."
+    MandateSignerOfficeCompanies:
+      type: object
+      description: >
+        HU #13179 — compañías de FLIT (por tenant) a las que se asocia un mandatario en un organismo
+        (`officeCompanies` del alta y la edición de mandatarios; reemplaza a `representedCompanyIds`). Lista vacía
+        o ausente ⇒ el mandatario aplica solo a su propia compañía. En la edición, `officeCompanies` ausente no
+        toca nada y cada organismo presente reemplaza su conjunto. Errores: 403 `compania_asociada_fuera_de_alcance`
+        (el Admin de Compañía envía una que no es su hija; no se guarda nada) y 422 por elemento (propia, inactiva,
+        inexistente o, para el OT, que no opera en el organismo).
+      required: [transitOfficeId, associatedCompanyTenantIds]
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        associatedCompanyTenantIds:
+          type: array
+          items: { type: string, format: uuid }
+        associatedCompanies:
+          type: array
+          nullable: true
+          description: >
+            HU #13179b. Solo en LECTURA (se ignora al guardar): id, nombre y NIT de cada compañía asociada, para
+            que el formulario del OT, del Super Admin y de la compañía las muestre sin pedirlas una a una. Solo
+            esos tres datos (Ley 1581). Un id que ya no es compañía gestora queda únicamente en
+            `associatedCompanyTenantIds`.
+          items:
+            type: object
+            required: [id, name, nit]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              nit: { type: string }
+    MandateSignerPrevistoResponse:
+      type: object
+      description: >
+        HU #13145 (ADR-0066). Firmante previsto del mandato. Nunca incluye documento de identidad ni ruta de
+        firma del mandatario.
+      required: [estado, modo]
+      properties:
+        estado:
+          type: string
+          enum: [valido, sin_mandatario, firma_invalida, no_aplica, pendiente_organismo, pendiente_eleccion_ot]
+        nombre:
+          type: string
+          nullable: true
+          description: "Solo con `estado = valido`."
+        formaFirma:
+          type: string
+          nullable: true
+          enum: [baul, biometria]
+          description: "Solo con `estado = valido`; nula en Persona jurídica y Formato en blanco."
+        motivo:
+          type: string
+          nullable: true
+          description: >
+            Vocabulario estable de ADR-0066: sin_mandatario_configurado, mandatario_fuera_de_vigencia,
+            mandatario_inactivo, mandatario_eliminado, sin_validacion_aprobada,
+            baul_sin_firma_vigente, firma_fisica_sin_migrar (y, con `no_aplica`, mandato_sin_firmante_persona o
+            mandato_personalizado_de_compania).
+        modo:
+          type: string
+          enum: [block, warn, off]
+          description: "Modo vigente de `TramiteValidations:MandatarioRequerido`."
+        nivel:
+          type: string
+          nullable: true
+          enum: [explicita, ot_para_compania, propio_de_compania, asociado_de_otra_compania, default_del_ot]
+          description: >
+            HU #13180. Nivel de la prelación en el que se resolvió el firmante; solo con `estado = valido`. El
+            indicador «Firmará» lo usa para mostrar si viene del OT, de la compañía, de otra compañía asociada o
+            del default del OT. Prelación: explícita, OT para la compañía, propio de la compañía, asociado de otra
+            compañía, default del OT, bloqueo.
+    MandateSignerIdentityResend:
+      type: object
+      description: HU #13246. Respuesta de «Reenviar validación» del mandatario.
+      required: [identity]
+      properties:
+        identity:
+          type: string
+          enum: [sent, queued]
+          description: "`sent` = enlace enviado al correo; `queued` = proveedor caído, la validación quedó encolada para reintento."
+        validationId:
           type: string
           format: uuid
           nullable: true
-          description: >
-            El elegido explícitamente; si no hay ninguno y solo existe un candidato, ese candidato (no
-            hay nada que decidir).
-        editable:
-          type: boolean
-          description: "Falso fuera de borrador/subsanación: el mandatario se muestra pero no se cambia."
+    MandateIdentityAffectedRow:
+      type: object
+      description: HU #13247. Mandatario con biometría sin validación propia aprobada (incluye correo, PII).
+      required: [mandateSignerId, fullName, transitOfficeId, transitOfficeCode, transitOfficeName, identityStatus]
+      properties:
+        mandateSignerId: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, nullable: true }
+        companyTenantId: { type: string, format: uuid, nullable: true }
+        companyName: { type: string, nullable: true }
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeCode: { type: string }
+        transitOfficeName: { type: string }
+        identityStatus: { type: string, enum: [none, pending, expired] }
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object
@@ -14708,14 +15505,16 @@ components:
         acreedorNombre:
           type: string
           nullable: true
-          description: Beneficiario del gravamen de ESTE hecho (constitución o levantamiento, según `decision`).
+          description: >
+            Beneficiario del gravamen de ESTE hecho (constitución o levantamiento, según `decision`).
+            Ignorado con `omitir` (Feature #13110).
         acreedorDocumento:
           type: string
           nullable: true
           description: >
             Documento del acreedor de ESTE hecho. `@pii:medium` — con captura dual (ADR-0055) cada
             familia trae el SUYO propio; no se mezcla con el de la familia contraria en ningún shape
-            de respuesta (Security, ADR-0055).
+            de respuesta (Security, ADR-0055). Ignorado con `omitir` (Feature #13110).
         levantamientoEntidad:
           type: string
           nullable: true

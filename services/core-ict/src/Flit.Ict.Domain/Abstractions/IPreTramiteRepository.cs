@@ -8,8 +8,17 @@ namespace Flit.Ict.Domain.Abstractions;
 /// </summary>
 public interface IPreTramiteRepository
 {
-    /// <summary>Inserta un pre-trámite con sus actores. Devuelve el id generado.</summary>
-    Task<Guid> AddAsync(ExternalIntegrationMaster master, Guid tenantId, CancellationToken ct = default);
+    /// <summary>
+    /// Bug #13109 (punto 7): inserta el pre-trámite solo si en el mismo tenant no hay otro EN PROCESO
+    /// (<c>process_status_id</c> 1 o 2, sin borrar) con la misma clave de deduplicación
+    /// (<see cref="PreTramiteClave"/>). Consulta e inserción van en la misma transacción, serializadas por
+    /// un advisory lock transaccional de (tenant, clave), para que dos registros simultáneos no entren
+    /// ambos.
+    /// </summary>
+    Task<PreTramiteAlta> AddIfNoActiveDuplicateAsync(
+        ExternalIntegrationMaster master,
+        Guid tenantId,
+        CancellationToken ct = default);
 
     /// <summary>Carga un pre-trámite (con actores) del tenant por su id, o null.</summary>
     Task<ExternalIntegrationMaster?> GetAsync(Guid id, Guid tenantId, CancellationToken ct = default);

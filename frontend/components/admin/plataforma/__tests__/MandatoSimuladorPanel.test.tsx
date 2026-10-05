@@ -197,14 +197,14 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     );
   });
 
-  it("el tipo de mandatario queda fijo en Persona o RL", async () => {
+  it("el tipo de mandatario queda fijo en Persona natural", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
     await screen.findByRole("option", { name: /Ana Gestora/ });
 
-    expect(screen.getByTestId("simulador-tipo")).toHaveTextContent(/persona o rl/i);
+    expect(screen.getByTestId("simulador-tipo")).toHaveTextContent(/^persona natural$/i);
     expect(screen.getByTestId("simulador-mandatario")).not.toBeDisabled();
   });
 

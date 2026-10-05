@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using Flit.Admin.Domain.Integrations;
+using Flit.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -61,6 +63,45 @@ public static class ApiSecurityExtensions
             };
         });
 
+        // HU #13087 (Épica #12737, ADR-0067) — pase de los clientes de integración externos: esquema
+        // APARTE con emisor, audiencia y llave propios (ExternalJwtKeyMaterial, compartida con el emisor en
+        // este mismo proceso). Sin llave fuera de Development la llave existe pero nada la firma: cerrado.
+        services.AddAuthentication().AddJwtBearer(ExternalClientAuthorization.Scheme, _ => { });
+        services.AddOptions<JwtBearerOptions>(ExternalClientAuthorization.Scheme)
+            .Configure<ExternalJwtKeyMaterial>((options, keyMaterial) =>
+            {
+                options.MapInboundClaims = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = keyMaterial.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = keyMaterial.Audience,
+                    ValidateLifetime = true,
+                    RequireExpirationTime = true,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = keyMaterial.IsAvailable
+                        ? keyMaterial.SigningKey
+                        : new RsaSecurityKey(RSA.Create(2048)),
+                    ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+                    ClockSkew = TimeSpan.FromSeconds(30),
+                };
+
+                // HU #13081 — sin pase, pase caducado o de otro emisor: 401 en problem+json con code
+                // invalid_token, como el resto de errores externos (contrato v3.1 §2).
+                options.Events = new JwtBearerEvents
+                {
+                    OnChallenge = async context =>
+                    {
+                        context.HandleResponse();
+                        context.Response.Headers.WWWAuthenticate = "Bearer";
+                        await ExternalProblem.WriteAsync(context.HttpContext, StatusCodes.Status401Unauthorized,
+                            "invalid_token", "Falta el pase o no es válido para este recurso.",
+                            context.HttpContext.RequestAborted).ConfigureAwait(false);
+                    },
+                };
+            });
+
         services.AddAuthorizationBuilder()
             .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy.RequireSuperAdmin())
             .AddPolicy(AdminAuthorization.AdminCompanyPolicy, policy => policy
@@ -93,7 +134,16 @@ public static class ApiSecurityExtensions
             .AddPolicy(IctServicePolicy, policy => policy
                 .AddAuthenticationSchemes(IctServiceScheme)
                 .RequireAuthenticatedUser()
-                .RequireClaim("scope", "ict.orchestration"));
+                .RequireClaim("scope", "ict.orchestration"))
+            // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.
+            .AddPolicy(ExternalClientAuthorization.TramitesReadPolicy, policy => policy
+                .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)
+                .RequireAuthenticatedUser()
+                .RequireClaim(ExternalClientAuthorization.ScopeClaim, ExternalScopes.TramitesRead))
+            .AddPolicy(ExternalClientAuthorization.TramitesPiiReadPolicy, policy => policy
+                .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)
+                .RequireAuthenticatedUser()
+                .RequireClaim(ExternalClientAuthorization.ScopeClaim, ExternalScopes.TramitesPiiRead));
 
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, SuperAdminForbiddenResultHandler>();
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Flit.Admin.Domain.Companies.Domains;
 using Flit.Infrastructure.Security;
 using Flit.Modules.Platform.Application.Hosts;
@@ -39,8 +40,11 @@ internal static class OidcTokenAcceptance
                 tvp.IssuerSigningKeys = [.. tvp.IssuerSigningKeys ?? [], .. tvp.IssuerSigningKey is { } legacy ? [legacy] : Array.Empty<SecurityKey>(), oidcPublic];
 
                 var legacyIssuer = tvp.ValidIssuer;
+                var externalIssuer = sp.GetRequiredService<IConfiguration>()["ExternalJwt:Issuer"] ?? Flit.Api.Authorization.TokenValidationExtensions.DefaultExternalIssuer;
+                // HU #13087 AC5 — el pase de los clientes externos nunca autentica en la plataforma.
                 tvp.IssuerValidator = (issuer, _, _) =>
-                    string.Equals(issuer, legacyIssuer, StringComparison.Ordinal) || registry.IsValid(issuer)
+                    !string.Equals(issuer, externalIssuer, StringComparison.Ordinal)
+                    && (string.Equals(issuer, legacyIssuer, StringComparison.Ordinal) || registry.IsValid(issuer))
                         ? issuer
                         : throw new SecurityTokenInvalidIssuerException($"Emisor no aceptado: {issuer}") { InvalidIssuer = issuer };
 

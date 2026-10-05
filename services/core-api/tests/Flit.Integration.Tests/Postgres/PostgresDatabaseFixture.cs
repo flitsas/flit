@@ -77,6 +77,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "identity.hierarchy_switches",
         // Catálogo de productos de la FLIT Suite (HU #12958, DDL 119).
         "platform.products",
+        // Catálogo global de formatos de mandato (HU #13169, DDL 124): una fila por formato, sin tenant.
+        "admin.mandate_format_settings",
     };
 
     /// <summary>

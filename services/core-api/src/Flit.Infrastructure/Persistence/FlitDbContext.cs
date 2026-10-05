@@ -2,6 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Integrations;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
@@ -125,9 +126,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<MandateSignerRepresentedCompany> MandateSignerRepresentedCompanies =>
         Set<MandateSignerRepresentedCompany>();
 
+    /// <summary>HU #13177 — compañías de FLIT (por tenant) a las que se asocia cada mandatario, por organismo.</summary>
+    public DbSet<MandateSignerAssociatedCompany> MandateSignerAssociatedCompanies =>
+        Set<MandateSignerAssociatedCompany>();
+
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
+
+    /// <summary>Personalización por formato de contrato de mandato (HU #13169).</summary>
+    public DbSet<MandateFormatSettingEntity> MandateFormatSettings => Set<MandateFormatSettingEntity>();
+
+    /// <summary>Versiones inmutables de la plantilla de cada formato (HU #13169).</summary>
+    public DbSet<MandateFormatVersionEntity> MandateFormatVersions => Set<MandateFormatVersionEntity>();
 
     /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
     public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
@@ -167,10 +178,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantDomainEntity> TenantDomains => Set<TenantDomainEntity>();
 
     public DbSet<ActiveNetworkDomainView> ActiveNetworkDomains => Set<ActiveNetworkDomainView>();
-
-    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
-    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
-        Set<AdminIdentityValidationEntity>();
 
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
@@ -235,6 +242,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
     public DbSet<Banner> Banners => Set<Banner>();
+
+    /// <summary>HU #13084 — clientes de integración externos (<c>integrations.external_clients</c>).</summary>
+    public DbSet<ExternalClient> ExternalClients => Set<ExternalClient>();
 
     public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
 
@@ -434,10 +444,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         var candidatas = ConsolidadoVigenciaTracker.Candidatas(ChangeTracker);
         var afectadas = base.SaveChanges(acceptAllChangesOnSuccess);
 
-        if (ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
-                .GetAwaiter().GetResult())
+        var tocadas = ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        if (tocadas.Count > 0)
         {
             base.SaveChanges(acceptAllChangesOnSuccess);
+            // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
+            ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
 
         ConsolidadoVigenciaTracker
@@ -455,10 +468,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         var afectadas = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken)
             .ConfigureAwait(false);
 
-        if (await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
-                .ConfigureAwait(false))
+        var tocadas = await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
+            .ConfigureAwait(false);
+        if (tocadas.Count > 0)
         {
             await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+            // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
+            ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
 
         await ConsolidadoVigenciaTracker

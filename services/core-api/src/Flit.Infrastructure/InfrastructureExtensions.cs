@@ -93,6 +93,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // Bug #13194 (review PR #510, MAYOR-2) — savepoint por trámite en el lote del outbox de identidad.
+        services.AddScoped<ISavepointScope, Persistence.EfSavepointScope>();
         // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
         services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
         // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
@@ -208,27 +210,12 @@ public static class InfrastructureExtensions
         // block (default fail-safe) / warn / off. Se configura por el .env de cada VPS
         // (TramiteValidations__<Validación>__Mode) porque DEV, QA y PDN corren TODOS con
         // ASPNETCORE_ENVIRONMENT=Development y appsettings.{Environment}.json no los distingue.
-        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>(
-            configuration.GetSection(
-                Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions.SectionName));
-        // Igual que ImprontaValidation: Application consume la política YA resuelta, sin IOptions.
-        services.AddSingleton(sp =>
-        {
-            var options = sp.GetRequiredService<
-                IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>>().Value;
-            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.TramiteValidations");
-            var policy = Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicy.Resolve(
-                options,
-                (name, raw) => TramiteValidationLog.UnrecognizedMode(logger, name, raw));
-            TramiteValidationLog.PolicyResolved(
-                logger,
-                policy.DuplicateActiveProcedure,
-                policy.VehicleRegistrationState);
-            return policy;
-        });
+        services.AddTramiteValidationPolicy(configuration);
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        // HU #13076 (Épica #12737) — lectura entre compañías del feed de sincronización externa (ámbito exclusivo).
+        services.AddScoped<Flit.Tramites.Domain.ExternalSync.IProcedureSyncReadRepository, ProcedureSyncReadRepository>();
         services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
@@ -301,6 +288,9 @@ public static class InfrastructureExtensions
         // ── Seguridad / login (HU #10168, #10169) — Epic #13217 (HU #13232): lo que comparte con core-identity vive en
         // Flit.Identity.Infrastructure (IdentityInfrastructureExtensions); aquí quedan los CRUD de seguridad de core-api.
         services.AddIdentityLoginServices(configuration, environment);
+
+        // HU #13087 — pase de los clientes de integración externos (llave, emisor y audiencia propios). Solo core-api.
+        services.AddExternalClientAuth(configuration);
 
         // HU #10161 — CRUD módulos dinámicos Super Admin
         services.AddScoped<ISecurityModuleRepository, SecurityModuleRepository>();

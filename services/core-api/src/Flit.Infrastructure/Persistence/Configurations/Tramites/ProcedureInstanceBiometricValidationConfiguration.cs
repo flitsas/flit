@@ -17,6 +17,12 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
         builder.Property(x => x.PartyRole).HasColumnName("party_role").HasMaxLength(20);
+        // HU #13246 — ficha del mandatario dueña de la validación (party_role = 'mandatario'). FK a admin.mandate_signers
+        // (RESTRICT) y CHECKs de coherencia viven en el DDL 129; aquí solo el mapeo de la columna y su índice.
+        builder.Property(x => x.MandateSignerId).HasColumnName("mandate_signer_id");
+        builder.HasIndex(x => new { x.MandateSignerId, x.CreatedAt })
+            .HasDatabaseName("ix_biometric_validations_mandate_signer")
+            .HasFilter("mandate_signer_id IS NOT NULL");
         builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();

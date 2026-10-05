@@ -110,7 +110,7 @@
     "concurrently": "^9.0.1"
   },
   "dependencies": {
-    "next": "16.3.4"
+    "next": "16.3.8"
   },
   "engines": {
     "node": ">=22.0.0",

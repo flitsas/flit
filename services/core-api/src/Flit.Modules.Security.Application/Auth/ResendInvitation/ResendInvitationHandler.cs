@@ -20,7 +20,7 @@ public sealed partial class ResendInvitationHandler(
     INetworkUrlBaseResolver urlBaseResolver,
     ILogger<ResendInvitationHandler> logger,
     IEmailThemeResolver? themeResolver = null,
-    EmailLinksOptions? emailLinks = null)
+    SecurityEmailAssetsOptions? emailAssets = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
 
@@ -58,7 +58,7 @@ public sealed partial class ResendInvitationHandler(
             .ConfigureAwait(false);
         var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, SecurityEmailAssets.BaseOrNull(emailAssets), theme);
         // HU #11363 AC1 — mismo id que CreateInvitationHandler: es la misma plantilla, dos disparadores.
         var message = new EmailMessage(
             invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody)

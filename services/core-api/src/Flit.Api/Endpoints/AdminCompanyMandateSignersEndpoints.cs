@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners;
-using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
+using Flit.Admin.Application.Companies.MandateSigners.IdentityValidation;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
@@ -28,6 +30,8 @@ public static class AdminCompanyMandateSignersEndpoints
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/mandate-signers")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #13195 — el índice «un activo por origen» responde 409, no 500.
+            .AddEndpointFilter<MandateSignerLinkConflictFilter>()
             .WithTags("Admin · Mandatarios de la compañía");
 
         group.MapGet("", ListAsync)
@@ -63,37 +67,70 @@ public static class AdminCompanyMandateSignersEndpoints
 
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateAsync)
             .WithName("AdminCompanyMandateSignersInactivate")
-            .WithSummary("Inactiva un mandatario de la compañía")
+            .WithSummary("Inactiva un mandatario de la compañía, retira sus defaults y reasigna sus trámites sin aprobar")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateAsync)
             .WithName("AdminCompanyMandateSignersReactivate")
-            .WithSummary("Reactiva un mandatario inactivado de la compañía")
+            .WithSummary("Reactiva un mandatario inactivado y restaura sus vínculos sin desplazar el default vigente")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // HU #13135 — baja lógica (deleted_at) con confirmación del impacto.
+        group.MapDelete("/{mandateSignerId:guid}", DeleteAsync)
+            .WithName("AdminCompanyMandateSignersDelete")
+            .WithSummary("Elimina (baja lógica) un mandatario de la compañía; con impacto exige confirmarImpacto=true")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // HU #13246 — «Reenviar validación» de la identidad propia del mandatario (ruta NUEVA; identity/send|resend|link
+        // siguen en 410). Mismo candado por origen que editar: la compañía no reenvía lo que configuró el organismo.
+        group.MapPost("/{mandateSignerId:guid}/identity-validation/resend", ResendIdentityAsync)
+            .WithName("AdminCompanyMandateSignersIdentityValidationResend")
+            .WithSummary("Reenvía la validación de identidad propia del mandatario (Persona natural con biometría)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .Produces(StatusCodes.Status502BadGateway);
+
+        group.MapGet("/{mandateSignerId:guid}/impact", ImpactAsync)
+            .WithName("AdminCompanyMandateSignersImpact")
+            .WithSummary("Impacto de dar de baja al mandatario (solo lectura)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
-        // Empresas representadas de la compañía: las que se dan de alta dentro del formulario del
-        // representante legal. Son la lista que el formulario del mandatario ofrece para acotar para
-        // quién firma en cada organismo. Ya vienen únicas por (tenant, NIT).
-        group.MapGet("/represented-companies", async (
+        // HU #13178 — compañías a las que el Admin de Compañía puede asociar su mandatario: solo sus hijas directas
+        // activas. Sin red: lista vacía y aplicaSoloASuCompania verdadero. La lista completa NUNCA sale por aquí.
+        group.MapGet("/associable-companies", async (
                 Guid tenantId,
-                [FromServices] ILegalRepresentativeReader reader,
+                [FromQuery] string? search,
+                [FromQuery] int? page,
+                [FromQuery] int? pageSize,
+                [FromQuery] bool? all,
+                [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
                 CancellationToken ct) =>
-            {
-                var empresas = await reader.ListRepresentedCompaniesAsync(tenantId, ct).ConfigureAwait(false);
-                return Results.Ok(new
-                {
-                    items = empresas.Select(e => new
-                    {
-                        id = e.Id,
-                        documentNumber = e.DocumentNumber,
-                        name = e.Name,
-                    }),
-                });
-            })
-            .WithName("AdminCompanyMandateSignerRepresentedCompanies")
-            .WithSummary("Empresas representadas de la compañía, para acotar para quién firma el mandatario");
+                AssociableCompaniesHttp.ToResult(
+                    await service.ListForCompanyAsync(tenantId, search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), ct)
+                        .ConfigureAwait(false)))
+            .WithName("AdminCompanyMandateSignersAssociableCompanies")
+            .WithSummary("Compañías hijas a las que el Admin de Compañía puede asociar su mandatario")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // HU #13179 — la ruta represented-companies de mandatarios se RETIRA: la lista del formulario ya no sale de las
+        // fichas de Representantes Legales sino de associable-companies (HU #13178). ListRepresentedCompaniesAsync
+        // se conserva: lo usa el flujo de escrituras (admin-deeds). HU #13179b: ver MapRetiredRepresentedCompanies.
+        group.MapRetiredRepresentedCompanies();
 
         // HU #11758 (ADR-0050) — las tres rutas de identidad del mandatario desde el configurador de la
         // COMPAÑÍA (send/resend/link) se RETIRAN: el módulo Identidad es la única fuente que puede
@@ -118,10 +155,14 @@ public static class AdminCompanyMandateSignersEndpoints
 
     private static async Task<IResult> ListAsync(
         Guid tenantId,
+        HttpContext httpContext,
         [FromServices] ListCompanyMandateSignersHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        // HU #13134 — origen y banderas puedeEditar/puedeEliminar calculadas con el rol de quien consulta.
+        var result = await handler
+            .HandleAsync(tenantId, MandateSignerActors.ForCompany(httpContext.User), cancellationToken)
+            .ConfigureAwait(false);
         // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
         // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
         return Results.Ok(new { data = result });
@@ -144,7 +185,8 @@ public static class AdminCompanyMandateSignersEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler
-            .HandleAsync(tenantId, request, ResolveUserId(httpContext.User), cancellationToken)
+            .HandleAsync(
+                tenantId, request, MandateEndpointHelpers.ResolveUserId(httpContext.User), OrigenDeLaCompania(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
 
         return result.IsValid
@@ -154,6 +196,7 @@ public static class AdminCompanyMandateSignersEndpoints
                 {
                     id = result.MandateSignerId,
                     integrityHash = result.IntegrityHash,
+                    // HU #13246 — sent | queued (proveedor caído: encolada para reintento) | failed | notattempted.
                     identity = result.Identity.ToString().ToLowerInvariant(),
                 })
             : ValidationProblem(result.Errors);
@@ -164,94 +207,105 @@ public static class AdminCompanyMandateSignersEndpoints
         Guid mandateSignerId,
         CompanyMandateSignerRequest request,
         HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
         [FromServices] UpdateCompanyMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        // HU #13134 — candado: la compañía no edita lo que configuró el organismo de tránsito (403).
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var result = await handler
-            .HandleAsync(tenantId, mandateSignerId, request, ResolveUserId(httpContext.User), cancellationToken)
+            .HandleAsync(
+                tenantId, mandateSignerId, request, MandateEndpointHelpers.ResolveUserId(httpContext.User), OrigenDeLaCompania(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
 
         return result.Outcome switch
         {
-            UpdateMandateSignerOutcome.Updated => Results.Ok(new { integrityHash = result.IntegrityHash }),
+            UpdateMandateSignerOutcome.Updated => Results.Ok(new
+            {
+                integrityHash = result.IntegrityHash,
+                // HU #13246 — desenlace de la validación propia lanzada por la edición (cambio de documento o baúl a biometría).
+                identity = result.Identity.ToString().ToLowerInvariant(),
+            }),
             UpdateMandateSignerOutcome.NotFound =>
                 Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId}." }),
             _ => ValidationProblem(result.Errors),
         };
     }
 
-    private static async Task<IResult> InactivateAsync(
+    private static async Task<IResult> ResendIdentityAsync(
         Guid tenantId,
         Guid mandateSignerId,
         HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
+        [FromServices] ResendMandateSignerIdentityHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
+        var result = await handler
+            .HandleAsync(mandateSignerId, null, tenantId, cancellationToken)
+            .ConfigureAwait(false);
+        return MandateSignerIdentityHttp.ToResult(result, mandateSignerId);
+    }
+
+    private static Task<IResult> InactivateAsync(
+        Guid tenantId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] InactivateMandateSignerHandler handler,
-        CancellationToken cancellationToken)
-    {
-        var transitOfficeId = await ResolverOrganismoPrimarioAsync(
-            listHandler, tenantId, mandateSignerId, cancellationToken).ConfigureAwait(false);
-        if (transitOfficeId is null)
-        {
-            return Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en esta compañía." });
-        }
+        CancellationToken cancellationToken) =>
+        MandateSignerLifecycleResponses.CompanyInactivateAsync(
+            httpContext, tenantId, mandateSignerId, guard, listHandler, handler, cancellationToken);
 
-        var outcome = await handler.HandleAsync(
-            new InactivateMandateSignerCommand
-            {
-                TransitOfficeId = transitOfficeId.Value,
-                MandateSignerId = mandateSignerId,
-                ChangedBy = ResolveUserId(httpContext.User),
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        return outcome == InactivateMandateSignerOutcome.Inactivated
-            ? Results.NoContent()
-            : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en esta compañía." });
-    }
-
-    private static async Task<IResult> ReactivateAsync(
+    private static Task<IResult> ReactivateAsync(
         Guid tenantId,
         Guid mandateSignerId,
         HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] ReactivateMandateSignerHandler handler,
-        CancellationToken cancellationToken)
-    {
-        var transitOfficeId = await ResolverOrganismoPrimarioAsync(
-            listHandler, tenantId, mandateSignerId, cancellationToken).ConfigureAwait(false);
-        if (transitOfficeId is null)
-        {
-            return Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en esta compañía." });
-        }
+        CancellationToken cancellationToken) =>
+        MandateSignerLifecycleResponses.CompanyReactivateAsync(
+            httpContext, tenantId, mandateSignerId, guard, listHandler, handler, cancellationToken);
 
-        var outcome = await handler.HandleAsync(
-            new ReactivateMandateSignerCommand
-            {
-                TransitOfficeId = transitOfficeId.Value,
-                MandateSignerId = mandateSignerId,
-                ChangedBy = ResolveUserId(httpContext.User),
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        return outcome == ReactivateMandateSignerOutcome.Reactivated
-            ? Results.NoContent()
-            : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en esta compañía." });
-    }
-
-    /// <summary>
-    /// Organismo con el que atribuir la auditoría de la baja/alta lógica. Se toma del propio mandatario
-    /// —no de la petición— y de paso confirma que pertenece a esta compañía: así el endpoint por
-    /// compañía no puede usarse para tocar mandatarios ajenos.
-    /// </summary>
-    private static async Task<Guid?> ResolverOrganismoPrimarioAsync(
-        ListCompanyMandateSignersHandler listHandler,
+    private static Task<IResult> DeleteAsync(
         Guid tenantId,
         Guid mandateSignerId,
-        CancellationToken cancellationToken)
-    {
-        var signers = await listHandler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        return signers.FirstOrDefault(s => s.Id == mandateSignerId)?.TransitOfficeId;
-    }
+        HttpContext httpContext,
+        [FromQuery] bool? confirmarImpacto,
+        [FromServices] MandateSignerAccessGuard guard,
+        [FromServices] ListCompanyMandateSignersHandler listHandler,
+        [FromServices] DeleteMandateSignerHandler handler,
+        CancellationToken cancellationToken) =>
+        MandateSignerLifecycleResponses.CompanyDeleteAsync(
+            httpContext, tenantId, mandateSignerId, confirmarImpacto ?? false, guard, listHandler, handler,
+            cancellationToken);
+
+    private static Task<IResult> ImpactAsync(
+        Guid tenantId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
+        [FromServices] ListCompanyMandateSignersHandler listHandler,
+        [FromServices] GetMandateSignerImpactHandler handler,
+        CancellationToken cancellationToken) =>
+        MandateSignerLifecycleResponses.CompanyImpactAsync(
+            httpContext, tenantId, mandateSignerId, guard, listHandler, handler, cancellationToken);
 
     /// <summary>422 con el sobre estándar de errores; nunca incluye PII.</summary>
     private static IResult ValidationProblem(IReadOnlyList<MandateSignerValidationError> errors) =>
@@ -259,10 +313,27 @@ public static class AdminCompanyMandateSignersEndpoints
             new { errors = errors.Select(e => new { field = e.Field, message = e.Message, value = e.Value }) },
             statusCode: StatusCodes.Status422UnprocessableEntity);
 
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
+    /// <summary>HU #13195c — origen del vínculo: Super Admin → super_admin; Admin de Compañía → compania.</summary>
+    internal static string OrigenDeLaCompania(System.Security.Claims.ClaimsPrincipal user) =>
+        user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "compania";
+}
+
+/// <summary>
+/// HU #13179b (AC6) — lápida de la ruta retirada <c>mandate-signers/represented-companies</c>. Sin ella el enrutador
+/// la confunde con <c>PUT …/mandate-signers/{mandateSignerId:guid}</c> (la restricción guid se evalúa después de la
+/// política de método) y contesta 405 con «Allow: PUT»; el AC pide 404. No hay lógica ni datos: solo 404.
+/// </summary>
+internal sealed class RetiredRouteMarker;
+
+internal static class RetiredRepresentedCompaniesRoute
+{
+    private static readonly string[] Methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+    public static RouteGroupBuilder MapRetiredRepresentedCompanies(this RouteGroupBuilder group)
     {
-        var raw = user.FindFirst("sub")?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
+        group.MapMethods("/represented-companies", Methods, () => Results.NotFound())
+            .WithMetadata(new RetiredRouteMarker())
+            .ExcludeFromDescription();
+        return group;
     }
 }

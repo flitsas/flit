@@ -153,6 +153,20 @@ public static class AdminInfrastructureExtensions
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
+        // HU #13135 — impacto de dar de baja a un mandatario (solo lectura).
+        services.AddScoped<IMandateSignerImpactReader, DbMandateSignerImpactReader>();
+        // HU #13137 — reasignación de trámites radicados sin aprobar al dar de baja un mandatario (prelación ADR-0066).
+        services.AddScoped<IMandateSignerProcedureReassigner, Flit.Infrastructure.OtRules.MandateSignerProcedureReassigner>();
+        // HU #13246 (Feature #13245) — lanza la validación de identidad PROPIA del mandatario por el flujo del trámite
+        // (Kyverum; mock en local). Sustituye al lector de aprobación por documento de la HU #13123.
+        services.AddScoped<IMandateSignerIdentityLauncher, Persistence.Repositories.MandateSignerIdentityLauncher>();
+        // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
+        services.AddScoped<IPhysicalSignatureMigrationReader, DbPhysicalSignatureMigrationReader>();
+        services.AddScoped<IMandateSignerLinkCollapseReader, DbMandateSignerLinkCollapseReader>();
+        // HU #13247 — reporte de mandatarios con biometría sin validación propia aprobada (solo Super Admin).
+        services.AddScoped<IMandateIdentityAffectedReader, DbMandateIdentityAffectedReader>();
+        services.AddScoped<IRepresentedAssociationRetirementStore, RepresentedAssociationRetirementStore>();
+        services.AddScoped<IManagingCompanyDirectory, ManagingCompanyDirectory>();
 
         // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
         services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();
@@ -183,6 +197,14 @@ public static class AdminInfrastructureExtensions
         // Plataforma → Mandatos: CRUD SuperAdmin de config por OT + extract OCR de referencia.
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateConfigAdminService,
             Flit.Infrastructure.OtRules.MandateConfigAdminService>();
+        // HU #13169 — personalización y versiones inmutables de cada formato de contrato de mandato.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatRepository,
+            Flit.Infrastructure.OtRules.MandateFormatRepository>();
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatAdminService,
+            Flit.Infrastructure.OtRules.MandateFormatAdminService>();
+        // HU #13172 — plantilla publicada de cada formato para generar el contrato (y el simulador).
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateFormatTemplateProvider,
+            Flit.Infrastructure.OtRules.MandateFormatTemplateProvider>();
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
             Flit.Infrastructure.Storage.MandateTemplateStorage>();
         // Simulador de mandatos (HU #11706): reusa la política del trámite, no una propia.
@@ -256,9 +278,11 @@ public static class AdminInfrastructureExtensions
         // la única fuente que puede originar una validación). Se fueron IAdminIdentityValidationService/
         // Provider/Repository/SubjectLinker/PersonIdentityLookup y sus implementaciones
         // (AdminIdentityValidationRepository, AdminIdentitySubjectLinker, PersonIdentityLookup,
-        // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations y su
-        // lectura de vigencia (AdminIdentityVigencia, vía EF directo) NO se tocan: siguen alimentando el
-        // estado de identidad que muestra la consola.
+        // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations queda sin
+        // lectores de identidad: el estado que muestra la consola (ficha de mandatarios y representantes)
+        // sale del módulo Identidad (IdentityVigenciaPorDocumentoResolver, HU #11765), en el tenant de la
+        // compañía que registró a la persona (HU #13121). El retiro físico de la tabla y de las dos columnas huérfanas
+        // (HU #13160, fase 2) es el script manual docs/sql/127-HU13160-fase2-drop-identidad-mandatario.sql, no una migración.
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
@@ -271,6 +295,14 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Persistence.Repositories.BannerRepository>();
         services.AddScoped<Flit.Admin.Application.Banners.Ports.IBannerImageStorage,
             Flit.Infrastructure.Storage.BannerImageStorage>();
+
+        // HU #13084 (Épica #12737) — clientes de integración externos (integrations.external_clients).
+        // Entidad de plataforma sin tenant: la administra el SuperAdmin y el login la busca por client_id.
+        services.AddScoped<Flit.Admin.Domain.Integrations.IExternalClientRepository,
+            ExternalClientRepository>();
+        // HU #13086 — bitácora de accesos externos (integrations.external_access_log).
+        services.AddScoped<Flit.Admin.Domain.Integrations.IExternalAccessLogRepository,
+            ExternalAccessLogRepository>();
 
         // Causales de rechazo — catálogo global (CRUD SuperAdmin) y validación de las causales
         // que llegan en el rechazo del organismo.

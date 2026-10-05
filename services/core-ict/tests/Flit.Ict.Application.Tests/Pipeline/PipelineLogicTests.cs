@@ -42,12 +42,33 @@ public sealed class ExternalSourceValidatorsTests
         ExternalSourceValidators.Warnings(ok).Should().BeEmpty();
     }
 
-    [Fact]
-    public void Paz_y_salvo_false_is_an_informative_warning_not_a_blocking_issue()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Bug13109_P9_Driver_sin_paz_y_salvo_bloquea(int transactionType)
     {
-        // DRIVER (paz y salvo del conductor): fiel a v1, es INFORMATIVO — no bloquea el paso a borrador.
-        var result = new ConsultationResult(SoatStatus: "VIGENTE", RtmStatus: "VIGENTE", VehicleModelYear: 2024, PazYSalvo: false);
-        ExternalSourceValidators.Validate(3, "DRIVER", result, CurrentYear).Should().BeEmpty();
+        // Bug #13109 punto 9: la fuente dice explícitamente «no» → novedad de validación externa, y
+        // SendToCoreApiJob no materializa (el master queda en ps=4).
+        var result = new ConsultationResult(PazYSalvo: false);
+
+        ExternalSourceValidators.Validate(transactionType, "DRIVER", result, CurrentYear)
+            .Should().ContainSingle().Which.Should().Contain("sin paz y salvo");
+    }
+
+    [Fact]
+    public void Bug13109_P9_Driver_sin_dato_de_paz_y_salvo_no_bloquea()
+    {
+        ExternalSourceValidators.Validate(3, "DRIVER", new ConsultationResult(PazYSalvo: null), CurrentYear)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Bug13109_P9_Paz_y_salvo_de_otra_consulta_no_cambia()
+    {
+        // Solo la consulta de conductor (DRIVER) bloquea; el resto (p. ej. RUES) queda como estaba.
+        var result = new ConsultationResult(PazYSalvo: false);
+        ExternalSourceValidators.Validate(3, "RUES", result, CurrentYear).Should().BeEmpty();
         ExternalSourceValidators.Warnings(result).Should().ContainSingle().Which.Should().Contain("paz y salvo");
     }
 

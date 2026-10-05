@@ -89,6 +89,9 @@ public static class DependencyInjection
         // de outbox hacia webhooks OT (HU-3) se registra en Infraestructura
         // (ProcedureStateChangeOutboxPublisher, InfrastructureExtensions).
         services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
+        // Bug #13194 (P4, D2) — gate de firma para módulos que deciden un envío al OT fuera de una
+        // transición (encolado de Quipux). Misma regla que el ciclo de vida.
+        services.AddScoped<ITramiteFirmaGate, TramiteFirmaGate>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<CancelSubsanacionHandler>();
@@ -144,8 +147,9 @@ public static class DependencyInjection
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
-        services.AddScoped<ListMandateSignerOptionsHandler>();
-        services.AddScoped<SetMandateSignerHandler>();
+        // HU #13144/#13145 (ADR-0066) — evaluador único del mandatario y firmante previsto de solo lectura.
+        services.AddScoped<MandateSignerEvaluator>();
+        services.AddScoped<GetMandateSignerPrevistoHandler>();
 
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
@@ -177,6 +181,14 @@ public static class DependencyInjection
         services.AddScoped<SimularBiometriaHandler>();
         // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
         services.AddScoped<EnsureIdentityHandler>();
+        // Bug #13194 (punto 4) — asegurar identidad + disparar el correo de validación (reutilizable por
+        // ICT y por el gate de envío al organismo) y completar el RL de una PJ desde el directorio.
+        services.AddScoped<EnsureIdentityAndNotifyHandler>();
+        // Bug #13194 (P4, D2) — el gate de firma notifica cada parte sin firma vía este adaptador.
+        services.AddScoped<IFirmaPendienteNotifier, EnsureIdentityFirmaPendienteNotifier>();
+        // Bug #13194 (MAYOR-1) — partes del último bloqueo de firma de la petición (extensión del 409).
+        services.AddScoped<UltimoBloqueoFirma>();
+        services.AddScoped<RepresentanteLegalDesdeDirectorio>();
 
         // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
         // la entidad Person + inicio de validación biométrica con ProcedureInstanceId=null.
