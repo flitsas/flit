@@ -7,11 +7,14 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -48,8 +51,14 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
 
     public ActivarIdentidadManualEndpointTests(WebApplicationFactory<Program> factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient();
+        // El correo real (HU #13287) no debe salir ni ensuciar la auditoría con 'manual_correo_fallido': estas pruebas
+        // verifican la activación; el envío del correo se cubre en RegenerarEnlaceManualEndpointTests.
+        _factory = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll<IManualCaptureLinkNotifier>();
+            s.AddSingleton<IManualCaptureLinkNotifier, SinCorreoNotifier>();
+        }));
+        _client = _factory.CreateClient();
         using var db = NewDb();
         db.Tenants.AddRange(NewTenant(_dueno, "Compania duena HU13284"), NewTenant(_otraCompania, "Otra compania HU13284"),
             NewTenant(_tenantSuperAdmin, "Super admin HU13284"));
@@ -88,7 +97,10 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         v.WebhookSecretEncrypted.Should().BeNull();
         v.CaptureUrl.Should().BeNull();
 
-        var audit = await db.IdentityValidationAudits.AsNoTracking().Where(a => a.ValidationId == id).ToListAsync(Ct);
+        // El worker de reconciliación del host puede reclamar la fila Kyverum en vuelo justo antes de la activación y escribir su propio
+        // evento 'reconcile': es ajeno a lo que se prueba aquí (las etapas de la activación manual).
+        var audit = await db.IdentityValidationAudits.AsNoTracking()
+            .Where(a => a.ValidationId == id && a.Stage != IdentityValidationAuditStages.Reconcile).ToListAsync(Ct);
         audit.Select(a => a.Stage).Should().BeEquivalentTo(
             [IdentityValidationAuditStages.ManualActivado, IdentityValidationAuditStages.KyverumCanceladoPorManual]);
         audit.Should().OnlyContain(a => a.TenantId == _dueno);
@@ -314,6 +326,10 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         }
     }
 
+    // Hash único por siembra y ExpiresAt a futuro: la base es compartida entre clases de prueba (violaría la unicidad de token_hash)
+    // y el worker de expiración del host de pruebas pasaría a 'expirado' una fila en vuelo sembrada con vencimiento pasado.
+    private static string HashUnico() => Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+
     private async Task<Guid> SeedAsync(string status, bool kyverum, bool vigente = false, bool juridica = false)
     {
         await using var db = NewDb();
@@ -335,7 +351,7 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
             Name = persona.FullName, DocumentType = "CC", DocumentNumber = documento, Email = persona.Email,
             RegisteredEmail = persona.Email, Status = status,
             Provider = kyverum ? BiometricProviders.Kyverum : BiometricProviders.Mock,
-            TokenHash = new string('0', 64), ExpiresAt = now.AddHours(-1),
+            TokenHash = HashUnico(), ExpiresAt = now.AddHours(1),
             KyverumVerificationId = kyverum ? "kyv_ext_13284" : null,
             CaptureUrl = kyverum ? "https://captura.example.test/x" : null,
             WebhookSecretEncrypted = kyverum ? "cifrado" : null,
@@ -385,7 +401,7 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
             PartyRole = "mandatario", MandateSignerId = signer.Id,
             Name = signer.FullName, DocumentType = "CC", DocumentNumber = documento, Email = signer.Email!,
             RegisteredEmail = signer.Email!, Status = status, Provider = BiometricProviders.Kyverum,
-            TokenHash = new string('0', 64), ExpiresAt = now.AddHours(-1), KyverumVerificationId = "kyv_ext_13285",
+            TokenHash = HashUnico(), ExpiresAt = now.AddHours(1), KyverumVerificationId = "kyv_ext_13285",
             CaptureUrl = "https://captura.example.test/m", WebhookSecretEncrypted = "cifrado", CreatedAt = now.AddDays(-1),
         };
         if (status == BiometricEstados.Aprobado)
@@ -423,6 +439,12 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
             Expires = DateTime.UtcNow.AddHours(1),
             SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
         });
+
+    /// <summary>Notificador de prueba: no envía nada y reporta éxito.</summary>
+    private sealed class SinCorreoNotifier : IManualCaptureLinkNotifier
+    {
+        public Task<bool> NotifyAsync(ManualCaptureLink link, CancellationToken ct = default) => Task.FromResult(true);
+    }
 
     public void Dispose()
     {

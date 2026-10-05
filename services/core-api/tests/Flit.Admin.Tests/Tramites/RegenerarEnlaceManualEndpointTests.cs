@@ -212,7 +212,10 @@ public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<WebApplic
             Id = Guid.NewGuid(), TenantId = _dueno, ProcedureInstanceId = null, PersonId = persona.Id,
             Name = persona.FullName, DocumentType = "CC", DocumentNumber = documento, Email = persona.Email,
             RegisteredEmail = persona.Email, Status = status, Provider = provider,
-            TokenHash = hash, ExpiresAt = now.AddHours(-2), CreatedAt = now.AddDays(-2),
+            TokenHash = hash,
+            // Vencido solo si es manual (regenerar un enlace vencido es válido). Una fila Kyverum en vuelo con vencimiento pasado
+            // la pasaría a 'expirado' el worker de fondo del host de pruebas en mitad de la prueba.
+            ExpiresAt = provider == BiometricProviders.Manual ? now.AddHours(-2) : now.AddHours(1), CreatedAt = now.AddDays(-2),
             ManualActivatedBy = provider == BiometricProviders.Manual ? _superAdmin : null,
             ManualActivatedAt = provider == BiometricProviders.Manual ? now.AddDays(-1) : null,
         };
