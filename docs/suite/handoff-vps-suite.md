@@ -12,6 +12,56 @@ que va a mano es el `.env`, nginx, DNS y certificados.
 
 ---
 
+## 0. Paso a paso: antes y después de fusionar
+
+La configuración de la VPS se parte en dos: lo que no cambia nada para los usuarios va **antes** de fusionar; lo que
+enciende la suite va **después**, porque necesita el código desplegado. En DEV, **fusionar el PR en `develop` es
+desplegar**: el CD arranca solo. Por eso la preparación tiene que estar terminada antes de fusionar.
+
+### Antes de fusionar (no cambia nada para nadie)
+
+- [ ] **1. Samuel** — Abrir el PR contra `develop`; revisión y CI en verde. **No fusionar todavía.**
+- [ ] **2. Jorman** — Fase 0 (§8): copia del `.env`, bloque «Lo que exporta el CD» (§4.2), `FLIT_SESSION_SECRET`
+  nueva, `FLIT_INTERNAL_API_KEY` con valor, `docker compose -f docker-compose.prod.yml config` sin errores. Las
+  banderas de la suite siguen apagadas.
+- [ ] **3. Jorman** — Respaldo de la base de DEV (`pg_dump`).
+- [ ] **4. Jorman** — Fase 2 (§5, §6.1): DNS y certificado de `dev.tramites.flitsas.online` y su server{} en nginx.
+  Sin efecto hasta que el hub redirija; se hace antes porque el DNS y el certificado pueden tardar.
+- [ ] **5. Jorman** — Avisar a Samuel que 2, 3 y 4 están listos.
+- [ ] **6. Samuel** — Avisar al equipo y a los usuarios de DEV: tras el despliegue inician sesión una vez más, y el
+  enlace de recuperación de contraseña pasa a `/auth/reset-password`.
+
+### Fusionar (el CD despliega con todo apagado)
+
+- [ ] **7. Samuel** — Fusionar el PR. El CD despliega la fase 1 (§8): Trámites sigue igual, con su login de siempre.
+- [ ] **8. Samuel y Jorman** — Comprobar la fase 1: CD en verde, todo `healthy`, migraciones aplicadas, y en el
+  navegador login, trámites, reportes, usuarios y roles, ICT y configuración de compañía. Si algo falla aquí es del
+  código, no de la configuración: vuelta atrás de la fase 1.
+
+### Después de fusionar (enciende la suite)
+
+- [ ] **9. Jorman** — Fase 3 (§8), en horario de bajo uso: variables de la suite, `docker compose up -d`, raíz de
+  nginx al hub. Necesita la imagen del hub, que solo existe después del paso 7.
+- [ ] **10. Samuel y Jorman** — Comprobar la fase 3 (§6.3, §7.2 y la lista de §8). Si algo falla: vuelta atrás de la
+  fase 3, en minutos.
+- [ ] **11. Jorman** — Con la fase 3 estable, fase 4: identidad aparte ([handoff-vps-identidad.md](handoff-vps-identidad.md)).
+- [ ] **12. Jorman** — Fase 5: `FLIT_DEPLOY_ROLLING`, medidas de recursos para un PR, monitoreo.
+
+### QA y PDN
+
+El mismo orden por ambiente, con una diferencia: el despliegue no lo dispara el PR sino el paso de rama
+(`develop` → `staging` para QA, `staging` → `release` para PDN).
+
+- [ ] **13.** DEV encendido y estable varios días antes de pasar a QA.
+- [ ] **14. Jorman** — Pasos 2 a 5 con los valores de QA, **antes** del paso de rama a `staging`.
+- [ ] **15.** Paso de rama a `staging` y pasos 8 a 12 en QA.
+- [ ] **16.** PDN: lo mismo con los valores de PDN, ventana coordinada con el negocio y respaldo verificado antes del
+  paso a `release`.
+
+**Lo que nunca va antes de desplegar:** `FLIT_OIDC_ENABLED=true`, `COMPOSE_PROFILES=suite`, `FLIT_SESSION_MODE=oidc`,
+`FLIT_TRAMITES_HOST_ENABLED=true`, `FLIT_IDENTITY_CLUSTER_ENABLED=true` ni la raíz de nginx al hub. Sin el código
+nuevo, el hub y las tablas de login no existen y el ambiente se queda sin login.
+
 ## 1. Resumen en una página
 
 **Qué trae la suite.** Un **hub** (`frontend-hub`) que pasa a ocupar la raíz de cada ambiente (`dev.flitsas.online`,
