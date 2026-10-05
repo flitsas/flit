@@ -68,8 +68,25 @@ describe("SuiteShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Productos" }));
     const panel = screen.getByRole("region", { name: "Productos" });
-    expect(within(panel).getByRole("link", { name: "Inicio" })).toHaveAttribute("href", "https://dev.flitsas.online/?inicio=1");
-    expect(within(panel).getByRole("link", { name: "Trámites" })).toHaveAttribute("aria-current", "page");
+    expect(within(panel).getByRole("link", { name: "Ir al inicio" })).toHaveAttribute("href", "https://dev.flitsas.online/?inicio=1");
+    expect(within(panel).getByRole("link", { name: /^Trámites/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("el menú de productos dice qué se hace ahí, qué es cada producto y cuál está por llegar", () => {
+    const apps = [
+      { code: "plataforma", name: "Plataforma", icon: "layout-grid", url: "https://dev.flitsas.online", current: false },
+      { code: "tramites", name: "Trámites", icon: "file-text", url: "https://dev.tramites.flitsas.online", current: true },
+      { code: "comparendos", name: "Comparendos", icon: "ticket", url: "https://dev.flitsas.online/proximamente/comparendos", current: false, comingSoon: true },
+    ];
+    render(<SuiteShell productCode="tramites" productName="Trámites" nav={nav} user={user} apps={apps}>x</SuiteShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Productos" }));
+    const panel = screen.getByRole("region", { name: "Productos" });
+    expect(within(panel).getByText("¿En qué quieres trabajar hoy?")).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: /^Trámites.*Estás aquí/ })).toHaveTextContent("Matrículas, traspasos y trámites vehiculares");
+    expect(within(panel).getByRole("link", { name: /^Comparendos.*Próximamente/ })).toHaveAttribute("href", "https://dev.flitsas.online/proximamente/comparendos");
+    // La plataforma no es una fila de producto: es «Ir al inicio», al pie.
+    expect(within(panel).queryByRole("link", { name: /^Plataforma/ })).toBeNull();
   });
 });
 

@@ -21,6 +21,17 @@ const ICONS: Record<string, NavIcon> = {
   "flask-conical": FlaskConical,
 };
 
+/** Una línea de qué hace cada producto, para el menú de productos (▦). Un código nuevo sin texto se muestra sin ella. */
+const TAGLINES: Record<string, string> = {
+  tramites: "Matrículas, traspasos y trámites vehiculares",
+  comparendos: "Los comparendos de tu flota, a tiempo",
+  diagnostico: "Estado legal y documental de tus vehículos",
+};
+
+export function appTagline(code: string): string | undefined {
+  return Object.hasOwn(TAGLINES, code) ? TAGLINES[code] : undefined;
+}
+
 export function appIcon(name: string): NavIcon {
   return ICONS[name] ?? Box;
 }
