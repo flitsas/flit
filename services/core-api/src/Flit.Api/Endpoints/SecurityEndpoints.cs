@@ -476,12 +476,12 @@ public static class SecurityEndpoints
             // de AdminCompany/OtAdmin) y NO debe listar roles inactivos ni el rol de sistema
             // SuperAdmin. NO tocar ListByTargetEntityTypeAsync ni ListRolesHandler — ese mismo
             // método lo usa la pantalla RBAC de SuperAdmin, que sí necesita ver TODOS los roles.
-            // HU #12964: admin_tramites no se ofrece; lo crea y lo quita el espejo de AdminCompany hasta
-            // que el hub asigne un rol por producto (B-12).
+            // HU #12964/#12967: el admin de cada producto (admin_tramites, admin_comparendos…) no se ofrece;
+            // lo crea y lo quita el espejo de AdminCompany hasta que el hub asigne un rol por producto (B-12).
             var roles = (await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken))
                 .Where(r => r.IsActive
                     && !string.Equals(r.Code, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(r.Code, ProductRoleCodes.AdminTramites, StringComparison.Ordinal))
+                    && !ProductRoleCodes.IsProductAdmin(r.Code))
                 .ToList();
             return Results.Ok(roles);
         });
@@ -1265,13 +1265,13 @@ public static class SecurityEndpoints
     /// incluye el tenant porque un usuario sí puede pertenecer a más de uno, con un rol en cada.
     /// </summary>
     /// <remarks>
-    /// HU #12964 (decisión D1): un AdminCompany tiene además admin_tramites, su espejo en Trámites. Se
-    /// muestra el rol que no es espejo, para que el listado y el diálogo de edición sigan viendo AdminCompany.
+    /// HU #12964 (decisión D1) y #12967: un AdminCompany tiene además el admin de cada producto (admin_tramites,
+    /// admin_comparendos…), sus espejos. Se muestra el rol que no es espejo, para que el listado y el diálogo de edición sigan viendo AdminCompany.
     /// </remarks>
     private static List<TenantUserDto> WithProfile(IEnumerable<TenantUserDto> rows) =>
         rows.Select(r => r with { Profile = ResolveProfile(r.RoleCode, r.TenantType) })
             .GroupBy(r => (r.Id, r.TenantId))
-            .Select(g => g.OrderBy(r => r.RoleCode == ProductRoleCodes.AdminTramites ? 1 : 0).First())
+            .Select(g => g.OrderBy(r => ProductRoleCodes.IsProductAdmin(r.RoleCode) ? 1 : 0).First())
             .ToList();
 
     /// <summary>

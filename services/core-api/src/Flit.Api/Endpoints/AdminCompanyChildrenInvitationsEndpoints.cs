@@ -227,11 +227,11 @@ public static class AdminCompanyChildrenInvitationsEndpoints
                 status = u.Status,
             }).ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        // HU #12964 (decisión D1): un AdminCompany tiene además admin_tramites. Una fila por usuario,
+        // HU #12964 (decisión D1) y #12967: un AdminCompany tiene además el admin de cada producto. Una fila por usuario,
         // con el rol que no es espejo.
         var items = users
             .GroupBy(x => x.userId)
-            .Select(g => g.OrderBy(x => x.roleCode == ProductRoleCodes.AdminTramites ? 1 : 0).First())
+            .Select(g => g.OrderBy(x => ProductRoleCodes.IsProductAdmin(x.roleCode) ? 1 : 0).First())
             .ToList();
 
         return Results.Ok(new { items });
