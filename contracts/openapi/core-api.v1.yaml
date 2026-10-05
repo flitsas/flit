@@ -6181,6 +6181,77 @@ paths:
         "404":
           description: Sin validaciones para ese documento.
 
+  /api/v1/tramites/biometric-validations/manual:
+    get:
+      operationId: listManualIdentityValidations
+      tags: [Tramites, Identidad]
+      summary: Validaciones de identidad manuales de todas las compañías (HU #13296, Épica #13202)
+      description: >
+        Solo Super Admin (403 al resto, 401 anónimo). Lista las validaciones con proveedor `manual`
+        (estados manual_activo, pendiente_revision_manual, aprobado con origen manual, rechazado, expirado)
+        de todas las compañías. Orden: pendientes de revisión primero, los más antiguos arriba.
+        `waitingMinutes` es 0 en las cerradas. `origin`: tramite, prevalidacion, mandatario o
+        representante_legal (este último aún no lo produce ninguna fila).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
+        - name: origin
+          in: query
+          schema:
+            type: string
+            enum: [tramite, prevalidacion, mandatario, representante_legal]
+        - name: q
+          in: query
+          description: Texto en nombre o número de documento (máx. 100 caracteres).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Página de validaciones manuales.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, pageSize]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, fullName, documentNumber, tenantName, origin, status, waitingMinutes]
+                      properties:
+                        id: { type: string, format: uuid }
+                        fullName: { type: string }
+                        documentNumber: { type: string }
+                        tenantName: { type: string }
+                        origin:
+                          type: string
+                          enum: [tramite, prevalidacion, mandatario, representante_legal]
+                        status:
+                          type: string
+                          enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
+                        activatedAt: { type: string, format: date-time, nullable: true }
+                        waitingMinutes: { type: integer }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+        "400":
+          description: Estado u origen inválido.
+        "401":
+          description: Sin autenticación.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+
   /api/v1/tramites/biometric-validations/{id}:
     get:
       operationId: getPrevalidacionDetail

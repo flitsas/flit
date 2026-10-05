@@ -170,6 +170,8 @@ public static class DependencyInjection
         services.AddScoped<ListBiometriaHandler>();
         // HU #10234 — vista transversal del submódulo "Validaciones de Identidad" (todas las instancias).
         services.AddScoped<ListTenantBiometricValidationsHandler>();
+        // HU #13296 — listado de validaciones manuales del Super Admin (cross-tenant).
+        services.AddScoped<ListManualIdentityValidationsHandler>();
         // HU #11270 — vista agrupada por persona (ADR-0040); endpoint propio.
         services.AddScoped<ListTenantBiometricPersonsHandler>();
         // HU #12708 — Validación de Identidad de la red (cabeza de grupo, solo lectura).
