@@ -63,7 +63,7 @@ jobs:
           # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
           # FLIT_INTERNAL_SUBNET (Marca Blanca #12421): CIDR distinto por stack si DEV/QA/PDN
           # comparten VPS — Docker rechaza subredes solapadas ("Pool overlaps...").
-          # Convencion: DEV 172.28.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
+          # Convencion: DEV 10.114.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
           case "${{ github.ref_name }}" in
             release)
               env_name=pdn

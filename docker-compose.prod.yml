@@ -192,7 +192,7 @@ services:
       Jwt__ValidateIssuedTokens: ${JWT_VALIDATE_ISSUED_TOKENS:-true}
       # FLIT Suite — prefijo de ambiente de los hosts (contrato §1): dev, qa o vacío en PDN. Lo exporta el CD según la
       # rama; sin él, me/apps y el emisor OIDC apuntarían a los hosts de PDN.
-      Suite__Hosts__Environment: ${FLIT_SUITE_ENV:-}
+      Suite__Hosts__Environment: ${FLIT_SUITE_ENV?FLIT_SUITE_ENV debe estar definida (dev, qa o vacía en PDN); sin ella los clientes OIDC se reescriben con los hosts de PDN}
       # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
       Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
@@ -596,7 +596,7 @@ services:
       # (BRANDING_INTERNAL_API_URL, servicio frontend abajo), NUNCA trafico publico via
       # nginx. Vacio/no listado = nunca se confia en el sello entrante (fail-closed, el
       # Gateway usa siempre Request.Host.Host — comportamiento de hoy).
-      DomainSeal__InternalAllowedNetworks__0: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}
+      DomainSeal__InternalAllowedNetworks__0: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-4002}:${GATEWAY_PORT:-4002}"
     depends_on:
@@ -757,11 +757,11 @@ services:
 # OJO si DEV/QA/PDN comparten el mismo VPS (topologia real de este repo, ver
 # cabecera del archivo): cada stack necesita un FLIT_INTERNAL_SUBNET DISTINTO —
 # Docker rechaza crear dos redes con subredes que se solapan en el mismo host
-# ("Pool overlaps with other one on this address space"). Convencion sugerida,
-# documentada en deploy/edge/README.md: DEV 172.28.40.0/24 · QA 172.28.50.0/24 ·
-# PDN 172.28.60.0/24 (mismo digito de decenas que los puertos 4xxx/5xxx/6xxx).
+# ("Pool overlaps with other one on this address space"). Los que exporta el CD (cd.yml):
+# DEV 10.114.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24 (mismo digito de decenas
+# que los puertos 4xxx/5xxx/6xxx; 172.28.x ya estaba ocupado en el VPS compartido).
 networks:
   default:
     ipam:
       config:
-        - subnet: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}
+        - subnet: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
