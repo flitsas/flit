@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { ApprovalOriginChip } from '@/components/atom/modules/ApprovalOriginChip';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import {
   AssociatedProceduresList,
@@ -388,6 +389,14 @@ function ValidationAccordionItem({
               value={v.score != null ? String(v.score) : '—'}
             />
             <SessionStat label="Fecha aprobación" value={formatFecha(v.validatedAt)} />
+            {v.approvalOrigin ? (
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">Origen de la aprobación</p>
+                <div className="mt-1">
+                  <ApprovalOriginChip origin={v.approvalOrigin} />
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {!soloConsulta && onManualChanged && (

@@ -1650,6 +1650,12 @@ export interface BiometricValidation {
    * `null`/ausente en filas anteriores a este campo — el consumidor cae a `email`.
    */
   registeredEmail?: string | null;
+  /**
+   * Épica #13202 (HU-C8) — cómo se aprobó la validación: `automatica` (Kyverum) o `manual` (revisión del
+   * Super Admin). `null`/ausente = no aprobada o respuesta anterior a este campo: la UI no muestra la fila.
+   * Nunca trae el nombre del revisor.
+   */
+  approvalOrigin?: 'automatica' | 'manual' | null;
 }
 
 /**
