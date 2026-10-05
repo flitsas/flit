@@ -157,4 +157,25 @@ public sealed class ReconciliarIdentidadHandlerTests
 
         error.Should().Be("proveedor_error");
     }
+
+    // ── HU #13286 (Épica #13202): una fila manual no se reconcilia contra Kyverum ───────────────────────
+
+    [Theory]
+    [InlineData(BiometricEstados.ManualActivo, null)]
+    [InlineData(BiometricEstados.PendienteRevisionManual, null)]
+    [InlineData(BiometricEstados.ManualActivo, "kyv-residual")] // aun con un id residual, el proveedor manda
+    public async Task Reconcile_ManualRow_Returns409Code_AndNeverCallsKyverum(string estado, string? verificationId)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(status: estado, provider: BiometricProviders.Manual, verificationId: verificationId);
+
+        var (result, error) = await _handler.HandleAsync(_instance, _tenant, _validation, ct);
+
+        result.Should().BeNull();
+        error.Should().Be("no_kyverum"); // el endpoint lo mapea a 409 Conflict
+        v.Status.Should().Be(estado);
+        await _kyverum.DidNotReceiveWithAnyArgs().GetStatusAsync(default!, default!, ct);
+        await _repo.DidNotReceiveWithAnyArgs().SaveChangesAsync(ct);
+        await _events.DidNotReceiveWithAnyArgs().PublishAsync(default!, ct);
+    }
 }

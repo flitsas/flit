@@ -109,6 +109,12 @@ public static class IdentityValidationAuditStages
     /// trazabilidad; en la fila de la validación ya no existe.
     /// </summary>
     public const string KyverumCanceladoPorManual = "kyverum_cancelado_por_manual";
+
+    /// <summary>
+    /// HU #13286 — llegó un webhook de Kyverum para una validación que ya es del flujo manual: se responde 200
+    /// (para que Kyverum no reintente) sin aplicar nada. Sin payload, sin firma y sin secretos en el evento.
+    /// </summary>
+    public const string WebhookIgnoradoManual = "webhook_ignorado_manual";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>
