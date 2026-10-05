@@ -544,6 +544,13 @@ public interface IProcedureInstanceRepository
     bool IsConcurrencyConflict(Exception ex) => false;
 
     /// <summary>
+    /// HU #13265 — ¿<paramref name="ex"/> es el rechazo del motor «gana quien carga primero» (23505 con
+    /// <c>ck_attachments_flito_gana_primero</c>, DDL 131)? Pasa solo si FLITO y el gestor/portal cargan el mismo tipo a la vez.
+    /// Por defecto <c>false</c> (dobles de prueba).
+    /// </summary>
+    bool IsFlitoFirstWinsConflict(Exception ex) => false;
+
+    /// <summary>
     /// HU #12797 (Épica #12760) — difiere <paramref name="alConfirmar"/> hasta que la transacción AMBIENTE
     /// (abierta por quien envuelve el caso de uso, p. ej. el scope de tenant de la consola OT) confirme de
     /// verdad, y <paramref name="alRevertir"/> hasta que se revierta. Devuelve <c>false</c> si no hay una

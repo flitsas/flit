@@ -143,10 +143,22 @@ public sealed class SubmitExternalAttachmentHandler(
             return new(Rejected("storage_unavailable", target.TenantId), []);
         }
 
-        var adjuntoId = await writer.ReplaceAsync(
-            new NewExternalAttachment(tipo, file.FileName, mime, stored.SizeBytes, stored.Sha256, stored.StoragePath),
-            [.. propios.Select(a => a.Id)],
-            ct).ConfigureAwait(false);
+        Guid adjuntoId;
+        try
+        {
+            adjuntoId = await writer.ReplaceAsync(
+                new NewExternalAttachment(tipo, file.FileName, mime, stored.SizeBytes, stored.Sha256, stored.StoragePath),
+                [.. propios.Select(a => a.Id)],
+                ct).ConfigureAwait(false);
+        }
+        catch (AttachmentFirstWinsConflictException)
+        {
+            // HU #13265 — el motor (DDL 131) vio un vigente del otro bando que esta lectura no veía: la transacción se
+            // revierte entera (el adjunto propio anterior se conserva, con su binario) y el binario recién guardado,
+            // que ninguna fila referencia, se retira.
+            storage.Delete(stored.StoragePath);
+            return new(Rejected("attachment_exists", target.TenantId), []);
+        }
 
         // HU #13264 — en los estados editables el comprobante marca el impuesto como pagado (misma transacción que el
         // insert); en entregado se archiva sin tocar la marca y la respuesta refleja la que ya hubiera.

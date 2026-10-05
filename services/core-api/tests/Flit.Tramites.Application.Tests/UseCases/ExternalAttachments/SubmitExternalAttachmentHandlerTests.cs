@@ -56,6 +56,20 @@ public sealed class SubmitExternalAttachmentHandlerTests
     }
 
     [Fact]
+    public async Task HU13265_SiElMotorRechazaPorCarreraConElGestor_409AttachmentExists_YRetiraElBinarioNuevo()
+    {
+        _repo.Target = Target("asignado");
+        _repo.FalloAlReemplazar = new AttachmentFirstWinsConflictException(new InvalidOperationException("23505"));
+
+        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Rejected);
+        result.Error.Should().Be("attachment_exists");
+        _repo.Marcas.Should().Be(0, "la marca de pago solo se escribe si el adjunto se archivó");
+        _storage.Borrados.Should().ContainSingle().Which.Should().Be("fm-1");
+    }
+
+    [Fact]
     public async Task AC1_EnMatrizEsFalsoSiElTipoNoEstaEnLaMatrizOSoloComoGeneradoPorElSistema()
     {
         _repo.Target = Target("entregado");
@@ -437,6 +451,8 @@ public sealed class SubmitExternalAttachmentHandlerTests
 
         public bool Confirmado { get; private set; }
 
+        public Exception? FalloAlReemplazar { get; set; }
+
         public int Marcas { get; private set; }
 
         public List<string> Eventos { get; } = [];
@@ -455,6 +471,11 @@ public sealed class SubmitExternalAttachmentHandlerTests
 
         public Task<Guid> ReplaceAsync(NewExternalAttachment attachment, IReadOnlyCollection<Guid> retire, CancellationToken cancellationToken)
         {
+            if (FalloAlReemplazar is not null)
+            {
+                throw FalloAlReemplazar;
+            }
+
             Escritos.Add(attachment);
             Eventos.Add("reemplazar");
             Retirados.AddRange(retire);

@@ -15,6 +15,19 @@ public static class ExternalAttachmentRules
     /// <summary><c>procedure_instance_field_values.source</c> de la marca de pago puesta por el consumidor.</summary>
     public const string FieldSource = "flito";
 
+    /// <summary>
+    /// HU #13265 — código de error (409) cuando el gestor intenta subir, pedir presign o registrar un adjunto de un tipo que
+    /// ya tiene un adjunto vigente cargado por el cliente externo («gana quien carga primero»).
+    /// </summary>
+    public const string BlockedCode = "adjunto_bloqueado_flito";
+
+    /// <summary>HU #13265 — constraint con la que el trigger del DDL 131 rechaza (23505) la carga del que llegó segundo.</summary>
+    public const string FirstWinsConstraint = "ck_attachments_flito_gana_primero";
+
+    /// <summary>HU #13265 — ¿el adjunto lo cargó el cliente externo (<c>provider = flito</c>)?</summary>
+    public static bool IsFromProvider(string? provider) =>
+        string.Equals(provider?.Trim(), Provider, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Tipo documental que acepta la v3.2. Ampliar la lista no cambia el endpoint.</summary>
     public const string LiquidacionImpuesto = "liquidacion_impuesto";
 
@@ -101,10 +114,17 @@ public static class ExternalAttachmentRules
         string.Equals(status, expected, StringComparison.OrdinalIgnoreCase);
 }
 
+/// <summary>
+/// HU #13265 — el motor rechazó el insert del adjunto porque en el trámite ya hay un vigente del mismo tipo del «otro bando»
+/// (flito vs. cualquier otro proveedor): gana quien cargó primero. Lo lanza <see cref="IExternalAttachmentWriter"/>.
+/// </summary>
+public sealed class AttachmentFirstWinsConflictException(Exception inner)
+    : Exception("Ya hay un adjunto vigente de ese tipo cargado por el otro bando (gana quien carga primero).", inner);
+
 /// <summary>Un adjunto vigente del tipo, tal como lo ve la decisión del envío.</summary>
 public sealed record ExternalAttachmentExisting(Guid Id, string? Provider, string Sha256, string StoragePath)
 {
-    public bool IsFromExternalClient => string.Equals(Provider, ExternalAttachmentRules.Provider, StringComparison.OrdinalIgnoreCase);
+    public bool IsFromExternalClient => ExternalAttachmentRules.IsFromProvider(Provider);
 }
 
 /// <summary>El trámite sobre el que se envía, leído con su fila bloqueada.</summary>
