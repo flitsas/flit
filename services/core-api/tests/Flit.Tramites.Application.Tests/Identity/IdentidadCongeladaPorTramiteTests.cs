@@ -149,6 +149,26 @@ public sealed class IdentidadCongeladaPorTramiteTests
         v.Status.Should().Be(BiometricEstados.Enviado);
     }
 
+    [Fact]
+    public async Task CompletarBiometriaMock_ValidacionManual_NoSePuedeCompletarNiAprobarPorElMagicLinkMock()
+    {
+        // HU #13284 — el token del flujo manual se busca por el mismo hash que el magic-link mock.
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var v = Validacion(BiometricEstados.ManualActivo, null);
+        v.Provider = BiometricProviders.Manual;
+        v.ExpiresAt = Now.AddYears(10);
+        repo.GetBiometricByTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(v);
+        var scorer = Substitute.For<Flit.Tramites.Application.Biometrics.IBiometricScorer>();
+        var handler = new CompletarBiometriaHandler(
+            repo, Substitute.For<Flit.Tramites.Application.Storage.IAttachmentStorage>(), scorer);
+
+        var (_, error) = await handler.HandleAsync("token", new CompletarBiometriaInput(null, null, null), Ct);
+
+        error.Should().Be("estado_invalido");
+        v.Status.Should().Be(BiometricEstados.ManualActivo);
+        scorer.ReceivedCalls().Should().BeEmpty();
+    }
+
     // ── Fixtures ────────────────────────────────────────────────────────────────────────────────
 
     private IdentityValidationResultApplier Applier() => new(_events);

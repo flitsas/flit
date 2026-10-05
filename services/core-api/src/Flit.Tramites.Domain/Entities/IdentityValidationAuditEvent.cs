@@ -96,6 +96,19 @@ public static class IdentityValidationAuditStages
 
     /// <summary>HU #10943 (CF-03) — se reenvió la validación (manual o automático por cambio de correo).</summary>
     public const string Resend = "resend";
+
+    /// <summary>
+    /// HU #13284 (Épica #13202) — el Super Admin activó el flujo manual sobre la validación. Sin PII, sin secretos y
+    /// sin el token del enlace: solo ids, estado y proveedor previos y la vigencia.
+    /// </summary>
+    public const string ManualActivado = "manual_activado";
+
+    /// <summary>
+    /// HU #13284 — la activación del flujo manual canceló una verificación Kyverum en curso (enviada, en proceso,
+    /// encolada o con error de envío). <c>KyverumVerificationId</c> del evento conserva el id externo solo como
+    /// trazabilidad; en la fila de la validación ya no existe.
+    /// </summary>
+    public const string KyverumCanceladoPorManual = "kyverum_cancelado_por_manual";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

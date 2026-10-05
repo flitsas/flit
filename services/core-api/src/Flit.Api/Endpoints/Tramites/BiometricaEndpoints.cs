@@ -632,6 +632,50 @@ internal static class BiometricaEndpoints
         .WithName("EnsureProcedureInstanceIdentity")
         .Produces<EnsureIdentityResult>(StatusCodes.Status200OK);
 
+        // POST activar el flujo manual de identidad (HU #13284, Feature #13280, Épica #13202) sobre una validación de
+        // trámite o de prevalidación standalone que NO esté aprobada y vigente. SOLO Super Admin (policy real por rol del
+        // JWT: 401 sin sesión, 403 al resto, incluido AdminCompany).
+        // Cross-tenant: NO lee X-Tenant-Id. El Super Admin opera sobre cualquier compañía, así que el handler resuelve la
+        // validación por id y escribe/audita con el tenant de LA FILA (la ruta normal filtra por el tenant del caller y
+        // daría 404 al Super Admin que mira otra compañía).
+        // El token del enlace NO viaja en esta respuesta: el handler lo entrega al puerto IManualCaptureLinkNotifier
+        // (A5 lo manda por correo). Responde el estado resultante.
+        group.MapPost("/biometric-validations/{id:guid}/activate-manual", async (
+            Guid id,
+            HttpContext http,
+            ActivarIdentidadManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que activa el flujo manual.");
+
+            var (result, error) = await handler.HandleAsync(new ActivarIdentidadManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                ActivarIdentidadManualHandler.NoEncontrada => Results.Problem(
+                    statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                ActivarIdentidadManualHandler.AprobadaVigente => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "La identidad está aprobada y vigente: no se puede activar el flujo manual."),
+                ActivarIdentidadManualHandler.TramiteInactivo => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "El trámite está anulado o revocado: la validación de identidad se conserva sin cambios."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo activar el flujo manual."),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("ActivarIdentidadManual")
+        .WithSummary("Activa el flujo manual de identidad (solo Super Admin); cancela Kyverum y envía el enlace por correo")
+        .Produces<ActivarIdentidadManualResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
         return app;
     }
 

@@ -1,4 +1,5 @@
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Domain.Identity;
 
 namespace Flit.Tramites.Domain.Entities;
 
@@ -200,6 +201,55 @@ public sealed class ProcedureInstanceBiometricValidation
 
     /// <summary>HU #10865 — navegación a la entidad persona del tenant.</summary>
     public Person? Person { get; set; }
+
+    /// <summary>
+    /// HU #13284 (Feature #13280 A2) — ¿se puede activar el flujo manual sobre esta validación? Solo si NO está
+    /// aprobada y vigente (<see cref="BiometricRules.EsAprobadaVigente"/>, la misma regla de vigencia de siempre):
+    /// rechazada, expirada, vencida (aprobada fuera de ventana) o en curso sí. No evalúa el trámite dueño
+    /// (<see cref="CongeladaPorTramite"/>): eso lo decide el caso de uso.
+    /// </summary>
+    public bool PuedeActivarFlujoManual(DateTimeOffset now) => !BiometricRules.EsAprobadaVigente(this, now);
+
+    /// <summary>
+    /// HU #13284 — activa el flujo manual SOBRE ESTA MISMA FILA (una sola fuente de vigencia, ADR-0050): pasa a
+    /// <see cref="BiometricProviders.Manual"/> / <see cref="BiometricEstados.ManualActivo"/>, deja el enlace de captura
+    /// vigente <see cref="BiometricRules.TokenTtlHoras"/> horas (<paramref name="tokenHash"/> es el SHA-256 hex del
+    /// token; el crudo jamás entra a la entidad) y estampa quién y cuándo lo activó.
+    /// <para>
+    /// Cancela la verificación Kyverum para FLIT: limpia <see cref="KyverumVerificationId"/>, <see cref="CaptureUrl"/>
+    /// y <see cref="WebhookSecretEncrypted"/> (sin secreto ni id, un webhook posterior no se puede verificar ni
+    /// correlacionar) y reinicia los contadores propios de Kyverum. El id externo NO se conserva aquí: el caso de uso lo
+    /// deja en la bitácora de auditoría. Todo lo demás (fotos, aprobación previa vencida, consentimiento y revisión de un
+    /// ciclo manual anterior) se conserva como historia: las pisan la nueva captura y la nueva revisión.
+    /// </para>
+    /// </summary>
+    /// <exception cref="IdentidadManualNoActivableException">Aprobada y vigente.</exception>
+    public void ActivarFlujoManual(Guid userId, DateTimeOffset now, string tokenHash)
+    {
+        if (userId == Guid.Empty)
+            throw new ArgumentException("El usuario que activa el flujo manual es obligatorio.", nameof(userId));
+        if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
+            throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
+        if (!PuedeActivarFlujoManual(now))
+            throw new IdentidadManualNoActivableException();
+
+        Provider = BiometricProviders.Manual;
+        Status = BiometricEstados.ManualActivo;
+        TokenHash = tokenHash;
+        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ManualActivatedBy = userId;
+        ManualActivatedAt = now;
+        UpdatedAt = now;
+
+        // Cancelación de Kyverum para FLIT.
+        KyverumVerificationId = null;
+        CaptureUrl = null;
+        WebhookSecretEncrypted = null;
+        ProviderStatus = null;
+        Attempts = 0;
+        ReconcilePollCount = 0;
+        LastAttemptAt = null;
+    }
 
     /// <summary>
     /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y
