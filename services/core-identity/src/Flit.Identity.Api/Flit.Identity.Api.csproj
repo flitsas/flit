@@ -24,7 +24,7 @@
   -->
   <ItemGroup>
     <Content Include="..\..\..\core-api\src\Flit.Api\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\..\..\core-api\src\Flit.Api\appsettings.Development.json" Link="appsettings.Development.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Condition="Exists('..\..\..\core-api\src\Flit.Api\appsettings.Development.json')" Include="..\..\..\core-api\src\Flit.Api\appsettings.Development.json" Link="appsettings.Development.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

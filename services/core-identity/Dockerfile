@@ -22,8 +22,10 @@ COPY core-api/src/Flit.Modules.Security.Application/ /services/core-api/src/Flit
 COPY core-api/src/Flit.Modules.Security.Domain/ /services/core-api/src/Flit.Modules.Security.Domain/
 COPY core-api/src/Flit.Queries.Domain/ /services/core-api/src/Flit.Queries.Domain/
 COPY core-api/src/Flit.Suite.AspNetCore/ /services/core-api/src/Flit.Suite.AspNetCore/
-# Configuración base compartida con core-api (Flit.Identity.Api la enlaza: mismo emisor, llaves y clientes OIDC).
-COPY core-api/src/Flit.Api/appsettings.json core-api/src/Flit.Api/appsettings.Development.json /services/core-api/src/Flit.Api/
+# Configuración base compartida con core-api (Flit.Identity.Api la enlaza: mismo emisor, llaves y clientes OIDC). Solo
+# appsettings.json: appsettings.Development.json no está en git (lleva secretos locales) y no va en la imagen, igual que
+# en la de core-api; en el servidor la configuración por ambiente llega por variables del compose.
+COPY core-api/src/Flit.Api/appsettings.json /services/core-api/src/Flit.Api/
 # El servicio.
 COPY core-identity/src/ ./src/
 # Framework-dependent (JIT), como core-api: sin AOT ni sus analizadores (rompen el publish con TreatWarningsAsErrors).
