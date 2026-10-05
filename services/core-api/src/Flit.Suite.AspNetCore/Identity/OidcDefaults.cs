@@ -19,4 +19,10 @@ public static class OidcDefaults
 
     /// <summary>Autorizaciones OIDC abiertas desde esta sesión del hub (A-13): se revocan al cerrarla.</summary>
     public const string AuthorizationClaim = "oidc_authz";
+
+    /// <summary>
+    /// Origen de cada producto que abrió sesión desde esta sesión del hub (sale de su <c>redirect_uri</c> validado). Al
+    /// cerrar sesión se le pide a cada uno que borre su cookie (front-channel logout, HU #13004).
+    /// </summary>
+    public const string RelyingPartyClaim = "oidc_rp";
 }

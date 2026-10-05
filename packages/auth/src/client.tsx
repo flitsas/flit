@@ -66,6 +66,11 @@ export function reauthenticate({
   return true;
 }
 
+/** `true` mientras la app va camino al hub a pedir una sesión nueva (la página está por recargarse). */
+export function isReauthenticating(): boolean {
+  return redirecting;
+}
+
 export function signOut(): void {
   window.location.assign("/auth/logout");
 }

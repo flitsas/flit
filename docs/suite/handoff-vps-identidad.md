@@ -145,3 +145,4 @@ FLIT_DEPLOY_ROLLING = true
 | `core-identity` no queda `healthy` y `/health/ready` dice `pending_migrations` | `core-api` todavía no migró: esperar a que esté `healthy` y reiniciar `core-identity` |
 | Nadie puede entrar después del paso 2 | Volver atrás del paso 2 (bandera en `false`) y revisar `logs core-identity` |
 | Los tokens de un proceso no sirven en el otro | El bloque de variables de los dos debe ser el mismo (ancla en el compose); revisar que nadie lo haya cambiado a mano |
+| Al salir desde el hub y volver a entrar, un producto muestra «Reconectando tu sesión…» cada vez | El cierre de sesión no le llega al producto: su `/auth/frontchannel-logout` se abre dentro de la página del hub (front-channel logout, H8 de `matriz-pruebas.md`). Revisar que nginx no bloquee esa ruta ni le quite la cabecera `Content-Security-Policy` que la deja cargarse ahí; `curl -I https://<host del producto>/auth/frontchannel-logout` debe responder 200 con `frame-ancestors *` |

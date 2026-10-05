@@ -174,13 +174,48 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         var logout = await browser.GetAsync(
             $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
 
-        logout.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        logout.Headers.Location!.ToString().Should().StartWith("https://dev.tramites.flitsas.online/");
+        // Front-channel logout: una página que avisa a Trámites (borra su cookie) y sigue al post_logout_redirect_uri.
+        logout.StatusCode.Should().Be(HttpStatusCode.OK);
+        var page = await logout.Content.ReadAsStringAsync(ct);
+        page.Should().Contain("https://dev.tramites.flitsas.online/auth/frontchannel-logout");
+        page.Should().Contain("url=https://dev.tramites.flitsas.online/");
+        logout.Headers.CacheControl!.NoStore.Should().BeTrue();
         (await OidcServerTests.RefreshAsync(browser, refreshHere, ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest, "la sesión de este navegador se cerró");
         (await OidcServerTests.RefreshAsync(otherDevice, refreshThere, ct)).StatusCode.Should().Be(HttpStatusCode.OK, "otro dispositivo conserva su sesión");
 
         var reauthorize = await browser.GetAsync(OidcServerTests.AuthorizeUrl("tramites", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"), ct);
         reauthorize.Headers.Location!.AbsolutePath.Should().Be("/login", "la sesión del hub también se cerró");
+    }
+
+    [Fact]
+    public async Task CerrarSesion_SinProductosConSesion_RedirigeComoSiempre()
+    {
+        // HU #13004: si desde esta sesión del hub no se abrió ningún producto, no hay a quién avisar.
+        var ct = TestContext.Current.CancellationToken;
+        var browser = await LoggedInAsync(ct);
+
+        var logout = await browser.GetAsync(
+            $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
+
+        logout.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        logout.Headers.Location!.ToString().Should().StartWith("https://dev.tramites.flitsas.online/");
+    }
+
+    [Fact]
+    public async Task CerrarSesion_AvisaACadaProductoUnaSolaVez_YLaPaginaNoEjecutaScriptsAjenos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var browser = await LoggedInAsync(ct);
+        await OidcServerTests.CodeFlowAsync(browser, "tramites", ct);
+        await OidcServerTests.CodeFlowAsync(browser, "tramites", ct);
+
+        var logout = await browser.GetAsync(
+            $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
+        var page = await logout.Content.ReadAsStringAsync(ct);
+
+        System.Text.RegularExpressions.Regex.Matches(page, "<iframe ").Count.Should().Be(1, "un aviso por producto, aunque haya abierto sesión dos veces");
+        var csp = logout.Headers.GetValues("Content-Security-Policy").Single();
+        csp.Should().Contain("script-src 'nonce-").And.Contain("frame-src https://dev.tramites.flitsas.online").And.Contain("frame-ancestors 'none'");
     }
 
     [Fact]

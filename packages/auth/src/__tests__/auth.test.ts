@@ -266,6 +266,27 @@ describe("renovación y proxy", () => {
     expect(response.headers.getSetCookie().some((c) => c.startsWith(`${SESSION}=;`) && c.includes("Max-Age=0"))).toBe(true);
   });
 
+  // HU #13004 — front-channel logout: la página de cierre del hub abre esta ruta y la app borra su sesión.
+  it("frontchannel-logout borra la sesión de la app y se deja cargar dentro del hub", async () => {
+    const response = await routes.frontchannelLogout(new Request(`${APP}/auth/frontchannel-logout`, {
+      headers: { host: "dev.tramites.flitsas.online", "sec-fetch-site": "same-site", cookie: await sessionCookieHeader({ accessToken: jwt({}), refreshToken: "r1", expiresAt: now() + 900 }) },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.getSetCookie().some((c) => c.startsWith(`${SESSION}=;`) && c.includes("Max-Age=0"))).toBe(true);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("content-security-policy")).toContain("frame-ancestors *");
+  });
+
+  it("frontchannel-logout desde otro sitio no borra nada (otra web no puede cerrar la sesión)", async () => {
+    const response = await routes.frontchannelLogout(new Request(`${APP}/auth/frontchannel-logout`, {
+      headers: { host: "dev.tramites.flitsas.online", "sec-fetch-site": "cross-site" },
+    }));
+
+    expect(response.status).toBe(403);
+    expect(response.headers.getSetCookie()).toEqual([]);
+  });
+
   it("sin sesión el proxy no llama a la API", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

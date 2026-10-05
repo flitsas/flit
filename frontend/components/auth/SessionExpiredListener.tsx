@@ -16,12 +16,16 @@ import { isOidcSession } from "@/lib/auth/session-mode";
 
 export function SessionExpiredListener() {
   const [open, setOpen] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     const handler = () => {
-      if (isOidcSession() && reauthenticate()) return;
+      if (isOidcSession() && reauthenticate()) {
+        setReconnecting(true);
+        return;
+      }
       setOpen(true);
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, handler);
@@ -32,6 +36,20 @@ export function SessionExpiredListener() {
     setOpen(false);
     const returnUrl = encodeURIComponent(pathname || "/");
     router.push(`/login?returnUrl=${returnUrl}`);
+  }
+
+  if (reconnecting) {
+    // HU #13004 — mientras se pide la sesión nueva al hub: tapa la pantalla para que no se vean errores sueltos.
+    return (
+      <div
+        className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-[#eef5ff]/95 backdrop-blur-sm dark:bg-[#05060A]/95"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#557eff] border-t-transparent" aria-hidden="true" />
+        <p className="text-sm font-medium text-[#162744] dark:text-white">Reconectando tu sesión…</p>
+      </div>
+    );
   }
 
   if (!open) {

@@ -64,7 +64,10 @@ sin mostrar nada. Si no, vuelve con `sso=0` y muestra la portada, sin repetir el
 ### Cerrar sesión
 
 `/auth/logout` de cualquier app → `/connect/logout`: se revocan las autorizaciones de **esa** sesión del hub y sus
-tokens, y se borra `flit_hub`. En los demás productos de ese navegador, la siguiente llamada a la API da 401 (la
+tokens, y se borra `flit_hub`. La respuesta es una página corta («Cerrando sesión…») que abre en segundo plano
+`/auth/frontchannel-logout` de cada producto que inició sesión desde esa sesión del hub (front-channel logout de OIDC):
+cada uno borra su cookie al instante y la página sigue a su destino (como máximo 2,5 s). Los productos se anotan en la
+sesión del hub al entrar (claim `oidc_rp`, el origen de su `redirect_uri`). En los demás productos de ese navegador, la siguiente llamada a la API da 401 (la
 revisión de sesión cerrada tarda como mucho 15 s) y @flit/auth borra su sesión. Otros dispositivos no se tocan.
 
 ## 3. Dónde vive cada cosa
@@ -186,6 +189,7 @@ sesión una vez más con el login de siempre.
 | Un producto encendido no le aparece a un usuario | Le falta un rol en ese producto. El Admin de Compañía lo recibe solo (`admin_<producto>`, DDL 126); a los demás se lo asigna él | Pestaña «Productos» de la compañía; `security.user_role_assignments` del usuario con `product_code` |
 | 403 «Tu empresa no tiene Trámites» | La empresa no tiene el producto en `platform.tenant_products`, o el usuario no tiene rol en Trámites | `GET /api/v1/platform/me/apps`; configuración de la compañía (SuperAdmin) |
 | Entra pero los menús salen vacíos | Los claims del token no traen roles/permisos del producto | Decodificar el token (`/auth/claims` en local) y revisar `roles` y `permissions` |
+| «Reconectando tu sesión…» un segundo al abrir un producto | La cookie del producto tenía una sesión revocada (cerrada desde otro lado); el producto pidió una nueva al hub sin errores. Si pasa siempre al salir desde el hub, el front-channel logout no está llegando: algo en el borde bloquea `/auth/frontchannel-logout` dentro de la página del hub | Log del producto: `GET /auth/frontchannel-logout` al cerrar sesión; cabeceras del borde (`X-Frame-Options`) |
 | «Tu sesión expiró» justo después de iniciar sesión | La cookie del producto era de una sesión ya cerrada (se salió desde otra app) o se reusó un refresh (H3 y H4 de [matriz-pruebas.md](matriz-pruebas.md)). Hoy la app pide una sesión nueva sola; el aviso solo sale si eso falla dos veces en menos de 10 s | Log de core-identity: `already been redeemed` o `were revoked to prevent a potential token replay attack` |
 | Cerró sesión y otro producto sigue abierto | Normal hasta 15 s (caché de sesión cerrada) o hasta la siguiente llamada a la API | Esperar o recargar; si persiste, log de core-api por `SESSION_EXPIRED` |
 | Todos los usuarios tienen que volver a entrar | Cambió `FLIT_SESSION_SECRET`, el `SigningKeyId` o el anillo de Data Protection | `.env` del ambiente; tabla de llaves |

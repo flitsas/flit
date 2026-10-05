@@ -51,6 +51,8 @@ describe("SessionExpiredListener (HU #10172 AC2)", () => {
 
     expect(reauthenticate).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
+    // HU #13004: mientras recarga, una capa «Reconectando…» tapa los errores sueltos de la pantalla.
+    expect(screen.getByRole("status")).toHaveTextContent("Reconectando tu sesión…");
   });
 
   it("con la sesión de la suite muestra el modal si ya se pidió una sesión nueva hace poco (sin bucle)", () => {

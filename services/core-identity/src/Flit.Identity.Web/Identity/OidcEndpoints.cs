@@ -123,21 +123,36 @@ public static class OidcEndpoints
             ct).ConfigureAwait(false);
         var authorizationId = (await authorizations.GetIdAsync(authorization, ct).ConfigureAwait(false))!;
         grant.Principal.SetAuthorizationId(authorizationId);
-        await RememberAuthorizationAsync(http, session, authorizationId).ConfigureAwait(false);
+        await RememberAuthorizationAsync(http, session, authorizationId, OidcFrontChannelLogout.OriginOf(request.RedirectUri)).ConfigureAwait(false);
 
         return Results.SignIn(grant.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    /// <summary>Agrega la autorización a la sesión del hub (se guardan las últimas <see cref="MaxSessionAuthorizations"/>).</summary>
-    private static async Task RememberAuthorizationAsync(HttpContext http, AuthenticateResult session, string authorizationId)
+    /// <summary>
+    /// Agrega a la sesión del hub la autorización (se guardan las últimas <see cref="MaxSessionAuthorizations"/>) y el
+    /// origen del producto que la pidió (front-channel logout; los últimos <see cref="MaxSessionRelyingParties"/>, sin
+    /// repetir).
+    /// </summary>
+    private static async Task RememberAuthorizationAsync(HttpContext http, AuthenticateResult session, string authorizationId, string? relyingPartyOrigin)
     {
-        var identity = new ClaimsIdentity(session.Principal!.Claims.Where(c => c.Type != OidcDefaults.AuthorizationClaim), OidcDefaults.HubSessionScheme);
-        foreach (var id in session.Principal!.FindAll(OidcDefaults.AuthorizationClaim).Select(c => c.Value).Append(authorizationId).TakeLast(MaxSessionAuthorizations))
+        var principal = session.Principal!;
+        var identity = new ClaimsIdentity(
+            principal.Claims.Where(c => c.Type != OidcDefaults.AuthorizationClaim && c.Type != OidcDefaults.RelyingPartyClaim),
+            OidcDefaults.HubSessionScheme);
+        foreach (var id in principal.FindAll(OidcDefaults.AuthorizationClaim).Select(c => c.Value).Append(authorizationId).TakeLast(MaxSessionAuthorizations))
             identity.AddClaim(new Claim(OidcDefaults.AuthorizationClaim, id));
+
+        var origins = principal.FindAll(OidcDefaults.RelyingPartyClaim).Select(c => c.Value).Where(o => o != relyingPartyOrigin);
+        if (relyingPartyOrigin is not null)
+            origins = origins.Append(relyingPartyOrigin);
+        foreach (var origin in origins.TakeLast(MaxSessionRelyingParties))
+            identity.AddClaim(new Claim(OidcDefaults.RelyingPartyClaim, origin));
+
         await http.SignInAsync(OidcDefaults.HubSessionScheme, new ClaimsPrincipal(identity), session.Properties).ConfigureAwait(false);
     }
 
     private const int MaxSessionAuthorizations = 20;
+    private const int MaxSessionRelyingParties = 10;
 
     private static async Task<IResult> TokenAsync(HttpContext http, OidcPrincipalFactory factory, CancellationToken ct)
     {
@@ -164,8 +179,8 @@ public static class OidcEndpoints
 
     /// <summary>
     /// Cierra la sesión del hub y vuelve al <c>post_logout_redirect_uri</c> registrado del producto. HU #13004 (A-13):
-    /// revoca las autorizaciones de esta sesión y sus tokens, así los demás productos abiertos en este navegador pierden
-    /// la sesión en su siguiente renovación (≤ 15 min). Las sesiones de otros dispositivos no se tocan.
+    /// revoca las autorizaciones de esta sesión y sus tokens, y avisa a cada producto que abrió sesión desde ella para que
+    /// borre su cookie al instante (<see cref="OidcFrontChannelLogout"/>). Las sesiones de otros dispositivos no se tocan.
     /// </summary>
     private static async Task<IResult> LogoutAsync(HttpContext http, IOpenIddictAuthorizationManager authorizations, IOpenIddictTokenManager tokens, CancellationToken ct)
     {
@@ -177,8 +192,16 @@ public static class OidcEndpoints
                 await authorizations.TryRevokeAsync(authorization, ct).ConfigureAwait(false);
         }
 
+        var relyingParties = session.Principal?.FindAll(OidcDefaults.RelyingPartyClaim).Select(c => c.Value).Distinct().ToList() ?? [];
         await http.SignOutAsync(OidcDefaults.HubSessionScheme).ConfigureAwait(false);
-        return Results.SignOut(new AuthenticationProperties { RedirectUri = "/" }, [OpenIddictServerAspNetCoreDefaults.AuthenticationScheme]);
+
+        // Sin productos que avisar (sesión anterior a este cambio), el cierre de siempre: OpenIddict redirige.
+        if (relyingParties.Count == 0)
+            return Results.SignOut(new AuthenticationProperties { RedirectUri = "/" }, [OpenIddictServerAspNetCoreDefaults.AuthenticationScheme]);
+
+        // El post_logout_redirect_uri ya lo validó OidcNetworkRedirects (registrado o dominio activo de la red).
+        var target = http.GetOpenIddictServerRequest()?.PostLogoutRedirectUri is { Length: > 0 } uri ? uri : "/";
+        return OidcFrontChannelLogout.Page(relyingParties, target);
     }
 
     private static IResult Forbid(string error, string description) =>

@@ -1,5 +1,5 @@
-// Rutas de sesión de una app (contrato §8): /auth/login, /auth/callback, /auth/logout, /auth/refresh y
-// /auth/session. Authorization code con PKCE contra el hub; el token nunca llega al navegador.
+// Rutas de sesión de una app (contrato §8): /auth/login, /auth/callback, /auth/logout, /auth/refresh,
+// /auth/session y /auth/frontchannel-logout. Authorization code con PKCE contra el hub; el token nunca llega al navegador.
 import { sessionUser } from "./claims";
 import { appOrigin, authConfig, type AuthConfig } from "./config";
 import { parseCookies, serializeCookie, txCookie } from "./cookies";
@@ -27,7 +27,7 @@ export interface AuthRoutesOptions {
   config?: () => AuthConfig;
 }
 
-export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "callback" | "logout" | "refresh" | "session" | "claims", RouteHandler> {
+export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "callback" | "logout" | "frontchannelLogout" | "refresh" | "session" | "claims", RouteHandler> {
   const callbackPath = options.callbackPath ?? "/auth/callback";
   const errorPath = options.errorPath ?? "/403";
   const config = options.config ?? (() => authConfig(options.productCode));
@@ -102,6 +102,25 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
         post_logout_redirect_uri: appOrigin(request, cfg) + "/",
       }).toString();
       return redirect(endSession.toString(), clearSessionCookies(request, cfg));
+    },
+
+    /**
+     * GET /auth/frontchannel-logout → borra la sesión de esta app. La abre en segundo plano la página de cierre de
+     * sesión del hub (front-channel logout, HU #13004), así ninguna app queda con la cookie de una sesión ya revocada.
+     * Se rechaza solo lo que viene de otro sitio (`Sec-Fetch-Site: cross-site`): otra web no puede cerrarle la sesión a
+     * nadie. El hub del ambiente o de la red es el mismo sitio; abrir la ruta a mano (`none`) o un navegador viejo sin
+     * la cabecera se aceptan: lo peor que pasa es cerrar una sesión.
+     */
+    async frontchannelLogout(request) {
+      if (request.headers.get("sec-fetch-site") === "cross-site") return new Response(null, { status: 403 });
+      const headers = new Headers({
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        // Se carga dentro de la página del hub; frame-ancestors gana a un X-Frame-Options del borde.
+        "content-security-policy": "default-src 'none'; frame-ancestors *",
+      });
+      for (const cookie of clearSessionCookies(request, config())) headers.append("set-cookie", cookie);
+      return new Response("<!doctype html><title>Sesión cerrada</title>", { status: 200, headers });
     },
 
     /** POST /auth/refresh → renueva si hace falta; 401 si la sesión ya no sirve. */
