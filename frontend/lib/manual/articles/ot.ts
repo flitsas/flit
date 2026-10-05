@@ -172,7 +172,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
         ],
         bullets: [
-          "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios posibles, eliges uno. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
+          "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios válidos, eliges uno de los que te muestra el sistema. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
           "Rechazar: marca las causales del catálogo que apliquen (dependen de la familia: matrícula o traspaso) y describe qué debe corregirse. El gestor podrá subsanar y reenviar sin volver a borrador.",
           "Decidir revocatoria: solo en aprobados con solicitud activa (ver «Decidir solicitudes de revocatoria»).",
         ],
@@ -538,10 +538,13 @@ export const OT_ARTICLES: ManualArticle[] = [
       "contrato de mandato",
       "mandatario general",
       "tipo de firma",
-      "firma fisica",
+      "vigencia del mandatario",
+      "por vencer",
       "empresas que radican",
+      "compañías activas",
       "ver firma",
       "vista previa de la firma",
+      "registrar mandatario",
     ],
     summary: "Quién firma el contrato de mandato ante tu organismo y cómo se configura desde el hub.",
     blocks: [
@@ -555,11 +558,13 @@ export const OT_ARTICLES: ManualArticle[] = [
       {
         id: "hub",
         title: "2. Pestaña Mandatos del hub",
-        paragraphs: ["Administración → Mandatos muestra tres bloques:"],
+        paragraphs: [
+          "Administración → Mandatos se organiza en dos pestañas: «Mandatarios» (la que abre por defecto, con el número de personas) y «Compañías». En cada fila, todas las opciones están dentro de un único botón «Acciones»: pulsa para ver el menú (Editar, Reenviar validación, Desactivar o Reactivar, Eliminar, Ver firma). Las opciones de desactivar y eliminar salen en naranja.",
+        ],
         bullets: [
-          "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, tipo de firma).",
-          "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su tipo de firma (estampada desde el baúl o física). El botón «Ver firma» de cada fila abre una vista previa de la firma registrada en el baúl, para comprobar cuál quedará estampada antes de usarla en un mandato.",
-          "Empresas que radican en este organismo: busca por razón social o NIT y revisa qué mandatario aplica por defecto a cada una.",
+          "Pestaña «Mandatarios» · Mandatario general del organismo: una tarjeta destacada arriba con el nombre, el documento, el modelo, la vigencia, la validación y la forma de firma de quien firma por defecto cuando la compañía no tiene uno propio. «Cambiar mandatario» elige a otra persona, y su botón «Acciones» permite editarla, desactivarla o ver su firma. Arriba a la derecha, «Nuevo mandatario» (solo Admin OT) registra a otra persona en este organismo. Encima de las pestañas se lee «Formato de contrato» con el nombre vigente del catálogo (el que el Super Admin editó); si el catálogo no carga, se muestra el código guardado.",
+          "Pestaña «Mandatarios» · Otros mandatarios del organismo: debajo de la tarjeta, las demás personas habilitadas para firmar mandatos ante tu OT, con su modelo (Persona natural, Persona jurídica o Formato en blanco), su tipo de firma (baúl de firmas o validación de identidad), el estado de su validación de identidad («Pendiente de validación», «En curso», «Aprobada» o «Enlace vencido») y una etiqueta de vigencia: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» cuando el rango todavía no empieza. La etiqueta siempre lleva el estado escrito, no depende del color. Persona jurídica y Formato en blanco no tienen vigencia: muestran un guion. Con el icono «Reenviar validación» (Admin OT) vuelves a enviar el enlace a un mandatario con validación de identidad que aún no la tiene aprobada; la ficha también lo ofrece y muestra el estado. Con el lápiz editas un mandatario (Admin OT); el Operador OT no ve esa acción. Con los iconos de desactivar (o reactivar) y eliminar das de baja a un mandatario: antes se te muestra qué compañías y defaults quedarían sin mandatario y cuántos trámites radicados sin aprobar se reasignan con la prelación; si no queda nadie, decides tú al aprobar. Eliminar conserva el historial, y reactivar no desplaza al mandatario vigente. El botón «Ver firma» (solo en Persona natural) abre una vista previa de la firma registrada, para comprobar cuál quedará estampada antes de usarla en un mandato. La firma física ya no existe. Un mandatario eliminado no aparece en la lista.",
+          "Pestaña «Compañías»: aquí ves todas las compañías activas, también las que aún no te han radicado ningún trámite. Busca por nombre o NIT (mínimo 2 caracteres), cambia las «Filas por página» y revisa qué mandatario aplica por defecto a cada una; «Sin definir» significa que aún no tiene. «Sin mandatario» (en naranja) indica que la compañía no tiene ningún mandatario activo en el organismo (ni propio ni general): regístrale uno para que sus trámites puedan radicarse. Solo se muestran nombre y NIT. La bandeja de trámites y las métricas no cambian: siguen mostrando solo las compañías que te radican.",
         ],
         callouts: [
           {
@@ -569,10 +574,36 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "aprobacion",
-        title: "3. Al aprobar un trámite",
+        id: "registrar",
+        title: "3. Registrar un mandatario",
         paragraphs: [
-          "Si hay varios mandatarios posibles y el sistema no puede decidir solo, al aprobar verás «Elegir mandatario del mandato». El mandatario debe tener validación de identidad vigente antes de firmar; si no la tiene, la compañía se la envía desde su pestaña «Mandatarios».",
+          "Solo el administrador del organismo (Admin OT) puede registrar mandatarios; el Operador OT no ve el botón.",
+        ],
+        bullets: [
+          "En la pestaña «Mandatarios», pulsa «Nuevo mandatario». El organismo queda fijo: es el tuyo. El Super Admin llega al mismo lugar desde Plataforma → Mandatos → Configuración por organismo → Acciones → «Mandatarios del organismo». También puedes registrar desde «Compañías» → Acciones → «Editar mandatario» → «Registrar mandatario», indicando la empresa si hay varias.",
+          "Elige el modelo: Persona natural (nombre completo, tipo y número de documento, correo opcional, forma de firma y vigencia), Persona jurídica (nombre y NIT de la entidad) o Formato en blanco (sin datos: el sistema solo entrega el PDF sin firma).",
+          "En Persona natural elige la forma de firma: Baúl de firmas (se usa la firma vigente que la persona tenga en el baúl de la empresa) o Validación de identidad. Luego la vigencia: Fija, o Rango de fechas con inicio y fin (el fin no puede ser anterior al inicio).",
+          "Compañías asociadas (opcional): ves la lista completa de compañías de FLIT, sin páginas; escribe parte del nombre o del NIT para filtrarla, marca las compañías a las que también aplica el mandatario (quedan como chips arriba, con contador y una «x» para quitarlas) y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Solo se muestran nombre y NIT. Si no marcas ninguna, el mandatario queda en el organismo y puedes asignarlo después. Si una compañía no se puede asociar (por ejemplo, está inactiva), el formulario te dice el motivo junto a ella y conservas lo escrito.",
+          "Si eliges Validación de identidad, el correo es obligatorio: ahí enviamos el enlace para que la persona valide su identidad al guardar (el formulario lo avisa). Con Baúl de firmas el correo es opcional. Pulsa «Guardar». Verás el aviso «Mandatario registrado» y la persona queda lista para elegirla como general o como default de la empresa.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Desde el organismo no se ve el baúl de firmas de la empresa, por eso no hay selector de firma. Si eliges Baúl de firmas y la persona no tiene firma vigente allí, o si eliges Validación de identidad, el sistema te lo indica al guardar; el mensaje aparece junto al campo y conservas lo escrito.",
+          },
+          {
+            variant: "info",
+            text: "Si la empresa ya tiene un mandatario en tu organismo, el formulario te lo avisa y no guarda un segundo. Si te aparece un mensaje de falta de permiso, tu rol no puede registrar mandatarios: pídeselo al Admin OT.",
+          },
+        ],
+      },
+      {
+        id: "aprobacion",
+        title: "4. Al aprobar un trámite",
+        paragraphs: [
+          "Si hay varios mandatarios posibles y el sistema no puede decidir solo, al aprobar verás «Elegir mandatario del mandato». La lista muestra únicamente a los mandatarios válidos para ese trámite, con su nombre y su forma de firma (Baúl de firmas o Validación de identidad): activos, dentro de su vigencia y con la firma o la validación de identidad al día. Quienes no cumplen no aparecen. Elige uno y pulsa «Aprobar con este mandatario».",
+          "Si no hay ningún mandatario válido, el diálogo te lo explica («No hay mandatarios válidos para aprobar este trámite») y no te deja aprobar. Registra uno en «Mandatos y mandatarios» del organismo (lo hace el Admin OT) o renueva la firma o la validación de identidad del existente, y vuelve a aprobar.",
+          "Si el mandatario elegido necesita una validación de identidad vigente o su firma en el baúl para firmar, el aviso te lo indica; la validación se reenvía desde la ficha del mandatario con «Reenviar validación».",
         ],
       },
     ],

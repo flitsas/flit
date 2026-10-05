@@ -21,14 +21,14 @@ public static class MandateSignerIntegrityHash
     /// serializa en formato round-trip ("O") para que el resultado sea estable e
     /// independiente del huso horario del proceso.
     /// </summary>
-    public static string Compute(string fullName, string documentNumber, DateTimeOffset registeredAt)
+    public static string Compute(string fullName, string? documentNumber, DateTimeOffset registeredAt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fullName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+        // HU #13129: el Formato en blanco no tiene documento; el resto de modelos lo exige la validación.
 
         var normalizedDate = registeredAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
         // Separador de campo para evitar colisiones por concatenación ("ab"+"c" vs "a"+"bc").
-        var payload = $"{fullName.Trim()}{documentNumber.Trim()}{normalizedDate}";
+        var payload = $"{fullName.Trim()}{documentNumber?.Trim()}{normalizedDate}";
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return Convert.ToHexStringLower(bytes);

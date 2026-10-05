@@ -48,6 +48,19 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<Guid>> ListEnabledTenantIdsForOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.TenantTransitOfficeGrants
+            .AsNoTracking()
+            .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
+            .Select(g => g.TenantId)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<string?> GetGrantSourceAsync(
         Guid tenantId,
         Guid transitOfficeId,

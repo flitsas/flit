@@ -523,9 +523,10 @@ public sealed class GenerarConsolidadoHandler(
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// HU #12784 — hay un mandatario elegido pero ningún adjunto <c>mandato</c>: es lo que deja
-    /// <see cref="SetMandateSignerHandler"/> al cambiar el firmante (retira el mandato generado con el
-    /// anterior). Sin esta condición, con el FUR ya persistido el consolidado solo re-fusionaría y
+    /// HU #12784 — hay un mandatario elegido pero ningún adjunto <c>mandato</c>: pasa cuando el mandato
+    /// generado con el firmante anterior se retira al cambiar el firmante (hoy lo decide la prelación y, cuando
+    /// hace falta, el OT al aprobar; el PUT del gestor se retiró en la HU #13156).
+    /// Sin esta condición, con el FUR ya persistido el consolidado solo re-fusionaría y
     /// saldría SIN mandato. Solo en estados editables: sobre un trámite radicado o final nunca se
     /// dispara la cascada por esta vía (la documentación definitiva no se altera).
     /// </summary>

@@ -1,13 +1,32 @@
 import { describe, expect, it } from "vitest";
+import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import {
-  assignmentModeFromTemplateCode,
+  MANDATO_TIPOS,
+  assignmentModeFromFormat,
+  mandatoFormatName,
+  resumenTiposPorCompania,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
-  systemTemplateLabel,
   tipoNegocioLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
+
+const fmt = (code: string, name: string, assignmentMode = "signer"): MandatoFormatView => ({
+  code,
+  name,
+  assignmentMode,
+  baseRedaction: code === "auto" ? null : code,
+  selectableAsRedaction: code !== "auto",
+  delegatesToOfficeTemplate: code === "auto", currentVersion: 0, hasCustomTemplate: false, rowVersion: 1, updatedAt: null,
+});
+const FORMATOS: MandatoFormatView[] = [
+  fmt("auto", "Automática"),
+  fmt("generico", "Genérico"),
+  fmt("sabaneta", "Sabaneta", "institutional"),
+  fmt("bello", "Bello"),
+  fmt("municipio", "Envigado, Funza y Medellín"),
+];
 
 describe("mandato-templates tipos de negocio", () => {
   it("mapea assignment_mode → tipo UI", () => {
@@ -30,26 +49,38 @@ describe("mandato-templates tipos de negocio", () => {
     expect(suggestedFamilyForTipo("abierto", "sabaneta")).toBe("individuo");
   });
 
-  it("el modo persistido sale de la plantilla: Sabaneta institucional, el resto Persona o RL", () => {
-    expect(assignmentModeFromTemplateCode("sabaneta")).toBe("institutional");
-    expect(assignmentModeFromTemplateCode("generico")).toBe("signer");
-    expect(assignmentModeFromTemplateCode("bello")).toBe("signer");
-    expect(assignmentModeFromTemplateCode("municipio")).toBe("signer");
-    expect(assignmentModeFromTemplateCode("auto")).toBe("signer");
+  it("el modo persistido sale del tipo por defecto del formato del catálogo", () => {
+    expect(assignmentModeFromFormat(FORMATOS, "sabaneta")).toBe("institutional");
+    expect(assignmentModeFromFormat(FORMATOS, "generico")).toBe("signer");
+    expect(assignmentModeFromFormat(FORMATOS, "bello")).toBe("signer");
+    expect(assignmentModeFromFormat(FORMATOS, "auto")).toBe("signer");
+    // Un código que ya no está en el catálogo cae en Persona natural.
+    expect(assignmentModeFromFormat(FORMATOS, "retirado")).toBe("signer");
+    // Si el backend cambia el tipo de un formato, se sigue el catálogo y no una constante.
+    expect(assignmentModeFromFormat([fmt("bello", "Bello", "institutional")], "bello")).toBe(
+      "institutional",
+    );
   });
 
   it("expone labels de producto", () => {
-    expect(tipoNegocioLabel("persona_rl")).toMatch(/persona/i);
-    expect(tipoNegocioLabel("institucional")).toMatch(/institucional/i);
-    expect(tipoNegocioLabel("abierto")).toMatch(/abierto/i);
+    expect(MANDATO_TIPOS.map((t) => t.label).join(" ")).not.toMatch(/persona o rl|institucional|sin asumir/i);
+    expect(MANDATO_TIPOS.find((t) => t.value === "abierto")?.summary).not.toMatch(/default de modo/i);
+    expect(tipoNegocioLabel("persona_rl")).toBe("Persona natural");
+    expect(tipoNegocioLabel("institucional")).toBe("Persona jurídica");
+    expect(tipoNegocioLabel("abierto")).toBe("Mandato abierto");
   });
 
-  it("etiqueta la redacción del sistema para el badge", () => {
-    expect(systemTemplateLabel("generico")).toBe("Genérico");
-    expect(systemTemplateLabel("sabaneta")).toBe("Sabaneta");
-    expect(systemTemplateLabel("bello")).toBe("Bello");
-    expect(systemTemplateLabel("municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
-    expect(systemTemplateLabel(null)).toBe("Genérico");
+  it("muestra el nombre vigente del catálogo y, si el código ya no existe, el código guardado", () => {
+    expect(mandatoFormatName(FORMATOS, "generico")).toBe("Genérico");
+    expect(mandatoFormatName(FORMATOS, "municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
+    expect(mandatoFormatName([fmt("bello", "Bello Renombrado")], "bello")).toBe("Bello Renombrado");
+    expect(mandatoFormatName(FORMATOS, "retirado")).toBe("retirado");
+    expect(mandatoFormatName(FORMATOS, null)).toBe("");
+  });
+
+  it("resume los tipos por compañía: Persona natural siempre, y las excepciones con su cantidad", () => {
+    expect(resumenTiposPorCompania(0, 0)).toBe("Persona natural");
+    expect(resumenTiposPorCompania(2, 1)).toBe("Persona natural · Persona jurídica (2) · Mandato abierto (1)");
   });
 });
 

@@ -9,6 +9,8 @@ using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
@@ -217,7 +219,19 @@ public static class DependencyInjection
         services.AddScoped<UpdateMandateSignerHandler>();
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ReactivateMandateSignerHandler>();
+        // HU #13246/#13247 (Feature #13245) — «Reenviar validación» del mandatario y reporte de afectados.
+        services.AddScoped<Companies.MandateSigners.IdentityValidation.ResendMandateSignerIdentityHandler>();
+        services.AddScoped<Companies.MandateSigners.IdentityValidation.GetMandateIdentityAffectedReportHandler>();
+        // HU #13134/#13135 — permisos por origen y rol; eliminación (baja lógica) e impacto previo.
+        services.AddScoped<Companies.MandateSigners.MandateSignerAccessGuard>();
+        services.AddScoped<DeleteMandateSignerHandler>();
+        services.AddScoped<GetMandateSignerImpactHandler>();
         services.AddScoped<ListMandateSignersHandler>();
+        services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetPhysicalSignatureMigrationReportHandler>();
+        services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetMandateLinkCollapseReportHandler>();
+        services.AddScoped<Companies.MandateSigners.RepresentedAssociations.GetRepresentedAssociationImpactReportHandler>();
+        services.AddScoped<Companies.MandateSigners.RepresentedAssociations.RetireRepresentedAssociationsHandler>();
+        services.AddScoped<Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies, Companies.MandateSigners.AssociableCompanies.MandatarioAssociableCompanies>();
         services.AddScoped<GetMandateSignerSignatureImageHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
 

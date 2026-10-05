@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, type LucideIcon } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import type { ComponentType } from "react";
 
 // Menú de acciones accesible "⋯ Acciones" (HU #10194 — consolidación de config OT en
 // tabla). Genérico para columnas de acciones de cualquier tabla admin: botón disparador
@@ -15,11 +16,15 @@ import { ChevronDown, type LucideIcon } from "lucide-react";
 export interface ActionsMenuItem {
   key: string;
   label: string;
-  icon?: LucideIcon;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   onSelect: () => void;
   disabled?: boolean;
   /** Motivo del deshabilitado; se usa como tooltip cuando `disabled` es true. */
   disabledReason?: string;
+  /** Nombre accesible completo si el texto visible es corto (p. ej. «Editar» → «Editar mandatario Ana»). */
+  ariaLabel?: string;
+  /** `danger` pinta el ítem de naranja de marca (acciones destructivas: desactivar, eliminar). */
+  tone?: "default" | "danger";
   /**
    * Destaca el ítem (punto ámbar) cuando el disparador tiene `attention` por esta acción
    * (p. ej. "Procesar" pendiente tras asignar placa).
@@ -190,7 +195,8 @@ export function ActionsMenu({
               role="menuitem"
               disabled={item.disabled}
               aria-disabled={item.disabled || undefined}
-              title={item.disabled ? (item.disabledReason ?? item.label) : item.label}
+              aria-label={item.ariaLabel}
+              title={item.disabled ? (item.disabledReason ?? item.ariaLabel ?? item.label) : (item.ariaLabel ?? item.label)}
               onClick={() => {
                 if (item.disabled) {
                   return;
@@ -201,7 +207,9 @@ export function ActionsMenu({
               className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
                 item.attention
                   ? "bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200"
-                  : ""
+                  : item.tone === "danger"
+                    ? "text-[#FF4E00]"
+                    : ""
               }`}
             >
               {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}

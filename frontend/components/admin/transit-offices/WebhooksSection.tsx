@@ -392,8 +392,8 @@ export function WebhooksSection() {
 
       <OtSidePanel
         open={selectedLog !== null}
-        title="Detalle de llamada"
-        ariaLabel="Detalle de log"
+        title="Detalle de la llamada"
+        ariaLabel="Detalle de la llamada"
         onClose={() => setSelectedLog(null)}
       >
         {selectedLog && (

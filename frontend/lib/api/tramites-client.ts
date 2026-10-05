@@ -50,8 +50,7 @@ import type {
   InstanceEstadoCountsResponse,
   InstancesResponse,
   ListInstancesParams,
-  FirmaPosteriorEstado,
-  MandateSignerSelection,
+  MandateSignerPrevisto,
   TransitOfficeOption,
   TransitOfficesResponse,
   VehicleServiceTypeOption,
@@ -1110,35 +1109,11 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
-  // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
-  // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
-  listMandateSigners: (id: string, tenantId?: string) =>
-    request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+  // HU #13146 — quién firmará el mandato (solo lectura). La elección la hace la prelación y, cuando hace
+  // falta, el OT al aprobar: no existe PUT para fijarlo.
+  getMandateSigner: (id: string, tenantId?: string) =>
+    request<MandateSignerPrevisto>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
       headers: tenantHeader(tenantId),
-    }),
-
-  // HU #11203 — fija quién firma. 409 fuera de borrador; 422 si no está habilitado para el organismo.
-  setMandateSigner: (id: string, mandateSignerId: string, tenantId?: string) =>
-    request<void>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
-      method: 'PUT',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ mandateSignerId }),
-    }),
-
-  // HU #11197 — ¿se ofrece la firma a posteriori para esta parte y ya está marcada? En persona natural
-  // responde `aplica:false` en vez de un error: para el gestor la opción sencillamente no existe.
-  getFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
-    request<FirmaPosteriorEstado>(
-      `/api/v1/tramites/instances/${id}/deferred-signature?parte=${encodeURIComponent(parte)}`,
-      { headers: tenantHeader(tenantId) },
-    ),
-
-  // HU #11196 — marca el trámite para firmarse cuando el representante valide su identidad. Idempotente.
-  marcarFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
-    request<FirmaPosteriorEstado>(`/api/v1/tramites/instances/${id}/deferred-signature`, {
-      method: 'POST',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ parte }),
     }),
 
   getInstance: (id: string, tenantId?: string) =>

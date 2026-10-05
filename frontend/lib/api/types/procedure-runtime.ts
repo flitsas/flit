@@ -2532,42 +2532,38 @@ export interface NotificationDispatchesResponse {
 }
 
 /**
- * HU #11203 — un mandatario que puede firmar el mandato del trámite.
- *
- * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
- * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
- * capaz de firmar— se anunciaba como si le faltara algo.
+ * HU #13145 / #13146 (ADR-0066) — firmante previsto del mandato, de solo lectura. Lo calcula el mismo
+ * evaluador que el gate de radicación. Nunca trae documento de identidad ni ruta de la firma.
  */
-export interface MandateSignerOption {
-  id: string;
-  nombre: string;
-  tipoDocumento: string;
-  documento: string;
-  identidadVigente: boolean;
-  identidadHasta: string | null;
-  firmaBaulVigente?: boolean;
+export type MandateSignerPrevistoEstado =
+  | 'valido'
+  | 'sin_mandatario'
+  | 'firma_invalida'
+  | 'no_aplica'
+  | 'pendiente_organismo'
+  | 'pendiente_eleccion_ot';
+
+export type MandateSignerNivel =
+  | 'explicita'
+  | 'ot_para_compania'
+  | 'propio_de_compania'
+  | 'asociado_de_otra_compania'
+  | 'default_del_ot';
+
+export interface MandateSignerPrevisto {
+  estado: MandateSignerPrevistoEstado;
+  /** Solo con `estado = valido`. */
+  nombre?: string | null;
+  /** Solo con `estado = valido`. */
+  formaFirma?: 'baul' | 'biometria' | null;
   /**
-   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
-   * anteriores: el documento le deja la línea y él la suscribe.
+   * HU #13180/#13183 — nivel de la prelación que eligió al mandatario (solo con `estado = valido`):
+   * `explicita`, `ot_para_compania`, `propio_de_compania`, `asociado_de_otra_compania` o
+   * `default_del_ot`. Nunca trae la compañía de origen.
    */
-  firmaFisica?: boolean;
-}
-
-/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
-export interface MandateSignerSelection {
-  opciones: MandateSignerOption[];
-  elegidoId: string | null;
-  editable: boolean;
-}
-
-/**
- * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
- * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
- * vigente el tramite puede firmarse ya y la opcion no se ofrece.
- */
-export interface FirmaPosteriorEstado {
-  aplica: boolean;
-  marcado: boolean;
-  representanteNombre?: string | null;
-  marcadoAt?: string | null;
+  nivel?: MandateSignerNivel | null;
+  /** Vocabulario estable de ADR-0066 (p. ej. `sin_validacion_aprobada`). */
+  motivo?: string | null;
+  /** Modo vigente de la validación al radicar. */
+  modo: 'block' | 'warn' | 'off';
 }

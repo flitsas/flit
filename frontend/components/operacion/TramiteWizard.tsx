@@ -59,6 +59,13 @@ import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
+import {
+  MANDATARIO_ALERTA_ID,
+  MandatarioFirmaIndicator,
+  mandatarioBloqueaRadicacion,
+  mensajeRechazoMandatario,
+  useMandatarioPrevisto,
+} from './MandatarioFirmaIndicator';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { DeclaracionesTramite } from './DeclaracionesTramite';
@@ -889,7 +896,10 @@ export function TramiteWizard(props: Props) {
       show('Trámite re-radicado a tránsito correctamente.', 'success');
       onExit();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'No se pudo re-radicar el trámite.');
+      setSubmitError(
+        mensajeRechazoMandatario(err) ??
+          (err instanceof Error ? err.message : 'No se pudo re-radicar el trámite.'),
+      );
       setReradicando(false);
     }
   }, [instanceId, reradicando, telemetry, show, onExit]);
@@ -926,9 +936,21 @@ export function TramiteWizard(props: Props) {
     }
   };
 
+  // HU #13146 — quién firmará el mandato (solo lectura) y gate de radicación en modo block. Solo se
+  // consulta en el paso de decisión; un fallo de consulta no bloquea (decide el backend al radicar).
+  const { data: mandatarioPrevisto, loading: mandatarioCargando } = useMandatarioPrevisto(
+    instanceId,
+    activeStep?.key === 'fur',
+    `${instanceStatus ?? ''}|${
+      state.detail?.fieldValues?.find((f) => f.fieldKey === 'transit_office_name')?.valueText ?? ''
+    }`,
+  );
+  const mandatarioBloquea = mandatarioBloqueaRadicacion(mandatarioPrevisto);
+
   // Gate de Re-radicar (Feature #11066): checklist del OT resuelto + al menos una edición guardada
   // y sin cambios sueltos. Los tres motivos se explican en el `title` del botón, no solo con el gris.
   const reradicarHabilitado =
+    !mandatarioBloquea &&
     !!instanceId &&
     inSubsanacion &&
     checklistResuelto &&
@@ -1313,7 +1335,8 @@ export function TramiteWizard(props: Props) {
       setSubmitting(false);
     } catch (err) {
       setSubmitError(
-        err instanceof Error ? err.message : 'Error al enviar el trámite',
+        mensajeRechazoMandatario(err) ??
+          (err instanceof Error ? err.message : 'Error al enviar el trámite'),
       );
       setSubmitting(false);
     }
@@ -2024,6 +2047,16 @@ export function TramiteWizard(props: Props) {
               </InlineAlert>
             )}
 
+          {/* HU #13146 — «Firmará: {nombre} / {forma}» de solo lectura, o la alerta de falta de
+              mandatario (error en block, aviso en warn). */}
+          {isDecisionStep && (
+            <MandatarioFirmaIndicator
+              data={mandatarioPrevisto}
+              loading={mandatarioCargando}
+              className="mt-6"
+            />
+          )}
+
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
             <InlineAlert
@@ -2054,12 +2087,16 @@ export function TramiteWizard(props: Props) {
                   onClick={() => setConfirmRadicar(true)}
                   disabled={
                     submitting ||
+                    mandatarioBloquea ||
                     (!fullReadOnly && !canRadicar && draftFinalized)
                   }
+                  aria-describedby={mandatarioBloquea ? MANDATARIO_ALERTA_ID : undefined}
                   className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT_DONE }}
                   title={
-                    fullReadOnly
+                    mandatarioBloquea
+                      ? 'Sin mandatario válido no se puede radicar: pide que lo configuren'
+                      : fullReadOnly
                       ? 'Entrega el trámite al organismo de tránsito'
                       : canRadicar
                         ? 'Prepara y radica el trámite en un solo paso'
