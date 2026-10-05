@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
+import { SectionTabs } from '@/components/atom/SectionTabs';
+import { ValidacionesManuales } from './ValidacionesManuales';
 import { COPY } from '@/lib/copy/copy-catalog';
 
 /** H1 canónico del módulo Identidad (HU #12699 / A17). El id SPA permanece `validaciones`. */
@@ -313,7 +315,32 @@ interface ResendResultState {
   notice?: string;
 }
 
+/**
+ * Módulo Validaciones. Para el Super Admin añade la pestaña «Manuales» (Épica #13202, HU-C5) junto a la lista
+ * actual, que no cambia; el resto de roles ve exactamente la lista de siempre, sin pestañas.
+ */
 export function Validaciones() {
+  const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>('validaciones');
+  if (!esSuperAdmin) return <ValidacionesLista />;
+  return (
+    <ValidacionesLista
+      renderTabs={(lista) => (
+        <SectionTabs
+          ariaLabel="Secciones de validaciones"
+          active={pestana}
+          onChange={setPestana}
+          tabs={[
+            { id: 'validaciones', label: 'Validaciones', content: <div className="flex flex-col gap-4">{lista}</div> },
+            { id: 'manuales', label: 'Manuales', content: <ValidacionesManuales /> },
+          ]}
+        />
+      )}
+    />
+  );
+}
+
+function ValidacionesLista({ renderTabs }: { renderTabs?: (lista: ReactNode) => ReactNode } = {}) {
   // HU #12706/#12707 — el admin FLIT ve por defecto TODAS las compañías («Todas») y puede acotar a una.
   // El alcance del listado y de las incidencias viaja EXPLÍCITO en cada llamada (`listTenant`): ya no se
   // fija global con `setActiveTramitesTenant`, porque en «Todas» cada fila es de una compañía distinta.
@@ -1019,6 +1046,7 @@ export function Validaciones() {
         }
       />
 
+      {(renderTabs ?? ((c: ReactNode) => c))(<>
       {stuckLoading ? (
         <div className="sr-only" role="status" aria-label="Cargando validaciones atascadas">
           Cargando validaciones atascadas
@@ -1373,6 +1401,7 @@ export function Validaciones() {
           onError={handleAdminReenviarError}
         />
       )}
+      </>)}
     </div>
   );
 }
