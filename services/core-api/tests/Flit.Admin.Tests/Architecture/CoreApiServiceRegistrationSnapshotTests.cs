@@ -28,6 +28,12 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
 
     private const string OidcSnapshotFile = "core-api-services.oidc.snapshot.txt";
 
+    private static readonly HashSet<string?> EnvironmentDependent =
+    [
+        "Flit.Infrastructure.Email.SmtpEmailSender",
+        "Flit.Infrastructure.Email.ConsoleEmailSender",
+    ];
+
     private static void AssertSnapshot(string snapshotFile, bool oidc)
     {
         IReadOnlyList<ServiceDescriptor> captured = [];
@@ -44,7 +50,9 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
         });
         _ = factory.Services; // construye el host
 
-        var actual = Describe(captured);
+        // El transporte de correo (Smtp o consola) lo decide Smtp:Host, que en local suele venir del
+        // appsettings.Development.json (fuera de git) y en CI no: es del ambiente, no del código, y queda fuera de la foto.
+        var actual = Describe(captured.Where(d => !EnvironmentDependent.Contains(d.ServiceType.FullName)));
         var path = Path.Combine(SourceDirectory(), snapshotFile);
         if (Environment.GetEnvironmentVariable("FLIT_UPDATE_DI_SNAPSHOT") == "1")
         {
