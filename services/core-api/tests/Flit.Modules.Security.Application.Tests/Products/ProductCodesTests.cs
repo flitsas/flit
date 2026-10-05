@@ -14,7 +14,7 @@ public sealed class ProductCodesTests
     [Fact]
     public void All_son_los_cinco_codigos_del_contrato_v1()
     {
-        ProductCodes.All.Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "demo");
+        ProductCodes.All.Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
     }
 
     [Fact]

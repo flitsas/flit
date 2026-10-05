@@ -32,7 +32,6 @@
 | `tramites` | Trámites | `tramites.flitsas.online` | `qa.tramites.flitsas.online` | `dev.tramites.flitsas.online` |
 | `comparendos` | Comparendos | `comparendos.flitsas.online` | `qa.comparendos.flitsas.online` | `dev.comparendos.flitsas.online` |
 | `diagnostico` | Diagnóstico | `diagnostico.flitsas.online` | `qa.diagnostico.flitsas.online` | `dev.diagnostico.flitsas.online` |
-| `demo` | Producto de prueba de la plantilla | — | — | `dev.demo.flitsas.online` |
 
 - El código es el mismo en carpeta (`core-<código>`, `frontend-<código>`), schema, `aud` del token, roles y aplicación de Argo CD. Excepción histórica: Trámites vive en `services/core-api` y `frontend/`.
 - La API para integradores sigue en `api.<ambiente>.flitsas.online` (`api.flitsas.online` en PDN).
@@ -128,7 +127,7 @@ Todos bajo `/api/v1/platform/**`, documentados en `contracts/openapi/platform.v1
 
 | Método y ruta | Dueño | Auth | Respuesta |
 |---|---|---|---|
-| `GET /me/apps` | B | Token de usuario, cualquier `aud` | `[{ code, name, icon, url, current }]` con los productos que el usuario puede abrir en su host actual. Al SuperAdmin le devuelve todos |
+| `GET /me/apps` | B | Token de usuario, cualquier `aud` | `[{ code, name, icon, url, current, comingSoon }]` (`comingSoon`: aún no desplegado en el ambiente; `url` lleva a su «Próximamente» del hub, v1.2) con los productos que el usuario puede abrir en su host actual. Al SuperAdmin le devuelve todos |
 | `PUT /products/{code}/manifest` | B | Servicio, scope `platform.manifest` | Idempotente. Cuerpo: `{ version, modules:[{code,name,permissions:[{slug,name}]}], defaultRoles:[{code,name,permissions:[…]}] }` |
 | `GET /admin/tenants/{tenantId}/products` | B | SuperAdmin | `[{ productCode, enabled, notes, updatedAt, updatedBy }]` |
 | `PUT /admin/tenants/{tenantId}/products/{productCode}` | B | SuperAdmin | `{ enabled, notes }`; idempotente y auditado. Apagar la cabeza apaga también a sus hijas |
@@ -219,6 +218,12 @@ Configuración por ambiente (appsettings y configuración runtime del frontend).
 | `Suite:TramitesHost:Enabled` | A | Activa el reparto de rutas hacia `<ambiente>.tramites.` |
 | `Suite:Consultas:ServiceApi` | C | Expone `/platform/consultas` a otros servicios |
 
+> **Cómo quedaron implementadas (2026-10-05).** Tres de estas banderas no existen con ese nombre en el código:
+> `Suite:LegacySession:Enabled` es `FLIT_SESSION_MODE` (`legacy`/`oidc`) de cada front; `Suite:Hub:Enabled` es el
+> perfil `suite` de compose más el `proxy_pass` de la raíz en nginx; `Suite:TramitesHost:Enabled` es
+> `FLIT_TRAMITES_HOST_ENABLED` del hub. `Suite:Consultas:ServiceApi` no se implementó. Las vigentes, con sus
+> variables: [mapa-y-banderas.md](mapa-y-banderas.md) y [handoff-vps-suite.md](handoff-vps-suite.md).
+
 ## 10. Errores
 
 RFC 7807 con `code` estable:
@@ -247,7 +252,6 @@ Puertos nuevos, siguiendo el esquema actual (DEV y local `40xx`, QA `50xx`, PDN 
 | Servicio | DEV y local | QA | PDN |
 |---|---|---|---|
 | `frontend-hub` | 4040 | 5040 | 6040 |
-| `core-demo` / `frontend-demo` | 4050 / 4051 | — | — |
 | `core-comparendos` / `frontend-comparendos` | 4060 / 4061 | 5060 / 5061 | 6060 / 6061 |
 | `core-diagnostico` / `frontend-diagnostico` | 4070 / 4071 | 5070 / 5071 | 6070 / 6071 |
 
@@ -260,3 +264,4 @@ El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 | v1-borrador | 2026-09-24 | Primera propuesta | — |
 | v1 | 2026-09-24 | Resoluciones y Flotas fuera de v1; SuperAdmin con bypass en todos los productos (§2.1); ubicación de `IProductAccessResolver`; habilitación de producto encendido/apagado en lugar de suscripción (§4, §6, §7, §9, §10); `DomainContext` sin romper constructores; formato de slugs del manifiesto; `SessionUser`; puertos | Cerrado por Samuel Cardenas (en rol de líder técnico) |
 | v1.1 | 2026-09-24 | §4: la carpeta de la interfaz pasa de `ProductAccess/` a `Products/` (evita CS0118) | Samuel Cardenas (frente B) |
+| v1.2 | 2026-10-02 | §1: se retira el producto `demo` (y sus puertos 4050/4051); la plantilla se valida con Comparendos o Diagnóstico. Migración `20261002120000_Suite_RetirarProductoDemo` | Samuel Cardenas |

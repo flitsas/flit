@@ -11,6 +11,7 @@
     ".": "./src/index.ts",
     "./tokens": "./src/tokens.ts",
     "./tokens.css": "./src/styles/tokens.css",
+    "./cursor.css": "./src/styles/cursor.css",
     "./cn": "./src/cn.ts",
     "./DataTable": "./src/DataTable.tsx",
     "./InlineAlert": "./src/InlineAlert.tsx",

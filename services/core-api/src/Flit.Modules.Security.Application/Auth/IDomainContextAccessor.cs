@@ -30,4 +30,11 @@ public interface IDomainContextAccessor
 
     /// <summary><see cref="DomainKind.Network"/> ⇒ tenant de la cabeza MARCA_BLANCA dueña del dominio.</summary>
     Guid? HeadTenantId { get; }
+
+    /// <summary>
+    /// Producto de la petición (contrato v1 §5, HU #12968): en hosts FLIT sale del host
+    /// (<c>&lt;ambiente&gt;.&lt;producto&gt;.&lt;raíz&gt;</c>); en dominios de red, de <c>admin.tenant_domains.purpose</c>.
+    /// Sin dato, <c>plataforma</c>.
+    /// </summary>
+    string ProductCode => Products.ProductCodes.Plataforma;
 }

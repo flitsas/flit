@@ -6,6 +6,7 @@
  * descarga se resuelve después con `requestStandaloneDocumentDownload`.
  */
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
 import type {
@@ -191,7 +192,7 @@ export async function createStandaloneBatch(
   signal?: AbortSignal,
 ): Promise<StandaloneBatchCreateResult> {
   const origin =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${GENERACION_DOCUMENTAL_API_BASE}/lotes`, origin);
 
   const formData = new FormData();

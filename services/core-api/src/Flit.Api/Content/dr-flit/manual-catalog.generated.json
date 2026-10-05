@@ -231,7 +231,7 @@
           "id": "cambiar-contrasena",
           "title": "4. Cambiar tu contraseña",
           "paragraphs": [
-            "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú ⋮ (arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma."
+            "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú de tu cuenta (tu nombre, arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma."
           ],
           "bullets": [],
           "callouts": []
@@ -240,7 +240,7 @@
           "id": "cerrar-sesion",
           "title": "5. Cerrar sesión",
           "paragraphs": [
-            "Desde el mismo menú ⋮ selecciona «Salir» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido."
+            "Desde el mismo menú de tu cuenta selecciona «Cerrar sesión» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido."
           ],
           "bullets": [],
           "callouts": []
@@ -474,7 +474,7 @@
           "id": "que-es",
           "title": "1. Qué es el Inicio",
           "paragraphs": [
-            "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
+            "El botón central flotante (FAB) «Inicio Trámites» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
             "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
             "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
             "El volumen se resume en cinco tarjetas: Total trámites, Matrículas, Traspasos, Otros Trámites (cualquier trámite que no sea matrícula ni traspaso) y Completados."

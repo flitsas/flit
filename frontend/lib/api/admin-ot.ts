@@ -1,5 +1,6 @@
 // Cliente tipado de la API admin OT (HU #10215–#10220).
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
 import type { QueryField } from "./queries";
@@ -394,7 +395,7 @@ export async function adjuntarOtLicenciaTransito(
   ocrData?: Record<string, unknown> | null,
 ): Promise<AdjuntarLtResult> {
   const origin =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/client-procedures/${id}/attachments`, origin);
   if (scope?.transitOfficeId) {
     url.searchParams.set("transitOfficeId", scope.transitOfficeId);

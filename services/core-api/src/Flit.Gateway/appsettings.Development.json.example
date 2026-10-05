@@ -13,6 +13,12 @@
           "core-api-1": { "Address": "http://localhost:4003/" }
         }
       },
+      "core-identity-cluster": {
+        "Destinations": {
+          "a-core-identity": { "Address": "http://localhost:4004/" },
+          "b-core-api": { "Address": "http://localhost:4003/" }
+        }
+      },
       "python-ml-cluster": {
         "Destinations": {
           "python-ml-1": { "Address": "http://localhost:4012/" }

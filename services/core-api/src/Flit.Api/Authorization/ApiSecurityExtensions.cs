@@ -15,7 +15,8 @@ namespace Flit.Api.Authorization;
 /// La validación SuperAdmin vive en Flit.Api (no en el Gateway, que relaja JWT en
 /// Development). Si no hay llave pública configurada (<c>Jwt:PublicKeyPem</c> o
 /// <c>Jwt:PublicKeyPath</c>) se autentica el token sin validar la firma — modo
-/// transitorio coherente con el Gateway mientras el login no es obligatorio.
+/// transitorio coherente con el Gateway mientras el login no es obligatorio — salvo que
+/// <c>Jwt:ValidateIssuedTokens</c> esté encendida (HU #12896): entonces valida con la llave de firma propia.
 /// </summary>
 public static class ApiSecurityExtensions
 {
@@ -32,54 +33,8 @@ public static class ApiSecurityExtensions
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
 
-        var jwtSection = configuration.GetSection("Jwt");
-        var issuer = jwtSection["Issuer"];
-        var audience = jwtSection["Audience"];
-        var signingKey = ResolveSigningKey(jwtSection, environment);
-        var externalIssuer = configuration["ExternalJwt:Issuer"] ?? ExternalClientAuthorization.DefaultIssuer;
-
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                // No remapear claims inbound: el claim de rol viaja como "role" y la
-                // policy SuperAdmin lo exige vía RoleClaimType="role". Con el mapeo por
-                // defecto (true), JWT Bearer renombra "role" al URI largo de .NET y
-                // RequireRole nunca encuentra match → todo SuperAdmin recibiría 403.
-                options.MapInboundClaims = false;
-
-                if (signingKey is not null)
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        // HU #13087 AC5 — además del emisor configurado, rechaza siempre el pase externo.
-                        ValidateIssuer = true,
-                        IssuerValidator = (tokenIssuer, _, _) => ValidatePlatformIssuer(tokenIssuer, issuer, externalIssuer),
-                        ValidateAudience = !string.IsNullOrWhiteSpace(audience),
-                        ValidAudience = audience,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = signingKey,
-                        RoleClaimType = AdminAuthorization.RoleClaimType,
-                        ClockSkew = TimeSpan.FromSeconds(30),
-                    };
-                    return;
-                }
-
-                // Sin llave de firma: se acepta el token sin validar firma (login no
-                // obligatorio aún). El rol SuperAdmin sigue exigiéndose vía policy.
-                // HU #13087 AC5 — incluso en este modo, un pase externo NO autentica en la plataforma:
-                // sin esta comprobación entraría en todo endpoint que solo exige estar autenticado.
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    IssuerValidator = (tokenIssuer, _, _) => ValidatePlatformIssuer(tokenIssuer, null, externalIssuer),
-                    ValidateAudience = false,
-                    ValidateLifetime = false,
-                    ValidateIssuerSigningKey = false,
-                    RoleClaimType = AdminAuthorization.RoleClaimType,
-                    SignatureValidator = static (token, _) => new JsonWebToken(token),
-                };
-            });
+        // Epic #13217 (HU #13232): el JWT de la plataforma (de siempre y del hub) se valida igual en core-identity.
+        services.AddFlitTokenValidation(configuration, environment);
 
         // Service-token gRPC este-oeste (ICT): esquema JwtBearer APARTE con secreto compartido (HMAC),
         // aislado del token de plataforma. Solo lo consume la policy IctServicePolicy en los gRPC services
@@ -148,9 +103,7 @@ public static class ApiSecurityExtensions
             });
 
         services.AddAuthorizationBuilder()
-            .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy
-                .RequireAuthenticatedUser()
-                .RequireRole(AdminAuthorization.SuperAdminRole))
+            .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy.RequireSuperAdmin())
             .AddPolicy(AdminAuthorization.AdminCompanyPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .AddRequirements(new AdminCompanyRequirement()))
@@ -195,49 +148,5 @@ public static class ApiSecurityExtensions
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, SuperAdminForbiddenResultHandler>();
 
         return services;
-    }
-
-    /// <summary>
-    /// Emisor aceptado por el esquema de la plataforma: nunca el del pase externo y, si hay emisor
-    /// configurado, solo ese.
-    /// </summary>
-    internal static string ValidatePlatformIssuer(string tokenIssuer, string? platformIssuer, string externalIssuer)
-    {
-        if (string.Equals(tokenIssuer, externalIssuer, StringComparison.Ordinal)
-            || (!string.IsNullOrWhiteSpace(platformIssuer) && !string.Equals(tokenIssuer, platformIssuer, StringComparison.Ordinal)))
-        {
-            throw new SecurityTokenInvalidIssuerException($"Emisor no aceptado: {tokenIssuer}") { InvalidIssuer = tokenIssuer };
-        }
-
-        return tokenIssuer;
-    }
-
-    private static RsaSecurityKey? ResolveSigningKey(IConfiguration jwtSection, IHostEnvironment environment)
-    {
-        var pem = jwtSection["PublicKeyPem"];
-
-        if (string.IsNullOrWhiteSpace(pem))
-        {
-            var path = jwtSection["PublicKeyPath"];
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                var resolved = Path.IsPathRooted(path)
-                    ? path
-                    : Path.Combine(environment.ContentRootPath, path);
-                if (File.Exists(resolved))
-                {
-                    pem = File.ReadAllText(resolved);
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(pem))
-        {
-            return null;
-        }
-
-        var rsa = RSA.Create();
-        rsa.ImportFromPem(pem);
-        return new RsaSecurityKey(rsa);
     }
 }

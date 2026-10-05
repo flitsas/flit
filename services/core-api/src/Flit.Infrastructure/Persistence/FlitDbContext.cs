@@ -17,8 +17,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace Flit.Infrastructure.Persistence;
 
 public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
-    : DbContext(options), IDataProtectionKeyContext
+    : DbContext(options), IDataProtectionKeyContext, IIdentityDb
 {
+    // Epic #13217 (HU #13231): en core-api, los repositorios de identidad usan este mismo contexto vía IIdentityDb.
+    DbSet<Entities.Admin.NotificationDeliveryLogEntity> IIdentityDb.NotificationDeliveryLogs => NotificationDeliveryLogs;
+
     /// <summary>
     /// HU #12797 (F2) — acciones diferidas al fin de la transacción ambiente gestionada (borrados del
     /// reemplazo seguro del consolidado, bitácora de fallos). No es un mapeo: EF no lo toca.
@@ -412,6 +415,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
+        // Epic #13217 (HU #13231): las tablas de identidad viven en su propia librería, compartida con core-identity.
+        modelBuilder.ApplyConfigurationsFromAssembly(IdentityPersistence.Assembly);
+
+        // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
+        Configurations.Identity.OidcModel.Map(modelBuilder);
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

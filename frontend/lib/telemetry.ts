@@ -10,6 +10,7 @@
 // visibilitychange→hidden): sendBeacon no permite el header Authorization y el
 // endpoint exige el JWT, así que se usa solo fetch keepalive (decisión del contrato).
 import { API_BASE_URL, getToken } from "@/lib/api/client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 
 /** Taxonomía de eventos emitibles desde el front (contrato §7). */
 const FRONT_EVENT_TYPES = new Set([
@@ -110,7 +111,7 @@ export async function flushTelemetry(): Promise<void> {
     if (!token) return; // sin sesión no hay a quién atribuir: se descarta.
 
     const base =
-      API_BASE_URL ||
+      sessionAwareBase(API_BASE_URL) ||
       (typeof window !== "undefined" ? window.location.origin : "");
     if (!base) return;
 

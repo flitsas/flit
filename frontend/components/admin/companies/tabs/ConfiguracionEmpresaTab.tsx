@@ -244,23 +244,9 @@ export function ConfiguracionEmpresaTab({
       <fieldset className="flex flex-col gap-2">
         <legend className="text-xs font-semibold">Módulos activos del dashboard</legend>
         <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
-          Decide qué servicios ve esta compañía en su dashboard. No hay regla de &ldquo;al menos
-          uno activo&rdquo;: se pueden apagar los 3 sin bloquear el guardado.
+          Decide qué servicios ve esta compañía en su dashboard. Los productos de la suite (Trámites,
+          Comparendos, Diagnóstico) se encienden en la pestaña «Productos».
         </p>
-        <ToggleSwitch
-          id="tramitesModuleEnabled"
-          label="Módulo de Trámites"
-          description="Habilita el módulo de Trámites en el dashboard de la compañía."
-          checked={form.tramitesModuleEnabled}
-          onChange={(v) => onChange({ tramitesModuleEnabled: v })}
-        />
-        <ToggleSwitch
-          id="comparendosModuleEnabled"
-          label="Módulo de Comparendos"
-          description="Habilita el módulo de Comparendos en el dashboard de la compañía."
-          checked={form.comparendosModuleEnabled}
-          onChange={(v) => onChange({ comparendosModuleEnabled: v })}
-        />
         <ToggleSwitch
           id="resolucionesModuleEnabled"
           label="Módulo de Resoluciones"

@@ -117,12 +117,18 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
     public async Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(
         IReadOnlyList<string> permissionSlugs,
         bool includeAll,
+        string? productCode,
         CancellationToken ct)
     {
         var query = from m in db.SecurityModules.AsNoTracking()
                     join a in db.RbacActions.AsNoTracking() on m.Id equals a.ModuleId
                     where m.IsActive && m.DeletedAt == null && a.IsActive && a.DeletedAt == null
-                    select new { m.Id, m.Code, m.Name, m.SortOrder, ActionId = a.Id, ActionSlug = a.Slug, ActionName = a.Name };
+                    select new { m.Id, m.Code, m.Name, m.SortOrder, m.ProductCode, ActionId = a.Id, ActionSlug = a.Slug, ActionName = a.Name };
+
+        // HU #12964: GET /security/modules?product= — el constructor de roles muestra solo los módulos
+        // del producto del rol.
+        if (productCode is not null)
+            query = query.Where(x => x.ProductCode == productCode);
 
         // RBAC puro (HU #10664): el acceso a módulos se gobierna únicamente por los roles; los módulos
         // son transversales, sin habilitación por empresa. El constructor de roles SuperAdmin
@@ -137,13 +143,14 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
             .ToListAsync(ct);
 
         return rows
-            .GroupBy(x => new { x.Id, x.Code, x.Name, x.SortOrder })
+            .GroupBy(x => new { x.Id, x.Code, x.Name, x.SortOrder, x.ProductCode })
             .Select(g => new AccessibleModuleDto(
                 g.Key.Id,
                 g.Key.Code,
                 g.Key.Name,
                 g.Key.SortOrder,
-                g.Select(x => new AccessibleActionDto(x.ActionId, x.ActionSlug, x.ActionName)).ToList()))
+                g.Select(x => new AccessibleActionDto(x.ActionId, x.ActionSlug, x.ActionName)).ToList(),
+                g.Key.ProductCode))
             .ToList();
     }
 }

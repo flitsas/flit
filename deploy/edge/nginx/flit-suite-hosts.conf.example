@@ -1,0 +1,66 @@
+# deploy/edge/nginx/flit-suite-hosts.conf.example
+#
+# FLIT Suite (A-11, HU #13002) — el hub ocupa la raíz de cada ambiente y Trámites pasa a su propio host
+# (plan maestro §4.3). Plantilla para el nginx EXTERNO del VPS; el nginx real no se toca desde este repo.
+# Ejemplo para DEV; en QA y PDN cambian los hosts y los puertos (HUB_PORT 4040/5040/6040, FRONTEND_PORT 4001/5001/6001).
+#
+# ORDEN PARA ENCENDERLO EN UN AMBIENTE (y cómo volver atrás):
+#   1. DNS y certificado de dev.tramites.flitsas.online (mismo VPS).
+#   2. En el .env: COMPOSE_PROFILES=suite, FLIT_SESSION_SECRET, FLIT_OIDC_ENABLED=true,
+#      FLIT_SESSION_MODE=oidc y FLIT_TRAMITES_HOST_ENABLED=true. Recrear contenedores (el CD o `docker compose up -d`).
+#   3. Agregar el server{} de dev.tramites.flitsas.online de abajo y, en el server{} que HOY sirve dev.flitsas.online,
+#      cambiar proxy_pass del puerto del frontend (FRONTEND_PORT) al del hub (HUB_PORT). nginx -t && nginx -s reload.
+#   Volver atrás: proxy_pass de dev.flitsas.online otra vez a FRONTEND_PORT, FLIT_SESSION_MODE=legacy y
+#   FLIT_TRAMITES_HOST_ENABLED=false en el .env. Los usuarios inician sesión una vez más.
+#
+# QUÉ VA A CADA CONTENEDOR: todo. El hub reenvía él mismo /api/v1, /connect y /.well-known al gateway (con el sello
+# de dominio y, en /api/v1, el Bearer de la sesión); Trámites en modo oidc hace lo mismo con /api/v1 (BFF). El borde
+# ya no necesita locations separadas para la API en estos dos hosts. api.dev.flitsas.online sigue igual.
+
+# ── Trámites en su host ─────────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name dev.tramites.flitsas.online;
+
+    ssl_certificate     /etc/letsencrypt/live/dev.tramites.flitsas.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dev.tramites.flitsas.online/privkey.pem;
+
+    # Las consultas RUNT/SIMIT del pre-vuelo tardan 8-10 s y las migraciones más: mismo valor que el server{} actual.
+    proxy_read_timeout 60s;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:4001;
+    }
+}
+
+# ── Hub en la raíz (reemplaza el destino del server{} actual de dev.flitsas.online) ─
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name dev.flitsas.online;
+
+    ssl_certificate     /etc/letsencrypt/live/dev.flitsas.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dev.flitsas.online/privkey.pem;
+
+    proxy_read_timeout 60s;
+    proxy_http_version 1.1;
+    # El hub arma el sello X-Flit-Domain con este Host: tiene que llegar tal cual.
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:4040;
+    }
+}

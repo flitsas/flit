@@ -122,12 +122,21 @@ builder.Services.AddOpenTelemetry()
 var reverseProxyBuilder = builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
     .AddTransforms<DomainSealTransform>();
-if (builder.Environment.IsDevelopment())
+// HU #12895 (FLIT Suite A-02): el filtro lo decide Gateway:DisableJwtPolicy, por defecto solo en Development. Hoy no
+// cambia nada funcional —JwtRequired deja pasar todo—; la API es quien valida el token (HU #12896).
+if (builder.Configuration.GetValue("Gateway:DisableJwtPolicy", builder.Environment.IsDevelopment()))
 {
     Log.Warning(
-        "Development: JWT no exigido en rutas YARP (sin login en frontend). " +
+        "JWT no exigido en rutas YARP (Gateway:DisableJwtPolicy). " +
         "Activar JwtRequired al integrar autenticación.");
     reverseProxyBuilder.AddConfigFilter<DevelopmentNoJwtProxyConfigFilter>();
+}
+
+// HU #13225 (Epic #13217): las rutas del login van a core-identity solo con esta bandera; apagada, todo a core-api.
+if (builder.Configuration.GetValue<bool>(IdentityClusterProxyConfigFilter.EnabledKey))
+{
+    Log.Information("Rutas de identidad hacia {Cluster} ({Flag}).", IdentityClusterProxyConfigFilter.ClusterId, IdentityClusterProxyConfigFilter.EnabledKey);
+    reverseProxyBuilder.AddConfigFilter<IdentityClusterProxyConfigFilter>();
 }
 
 builder.Services.AddHealthChecks();
@@ -173,3 +182,6 @@ app.MapHealthEndpoints();
 app.MapReverseProxy();
 
 app.Run();
+
+/// <summary>Punto de entrada expuesto para pruebas (WebApplicationFactory, HU #13225).</summary>
+public partial class Program;

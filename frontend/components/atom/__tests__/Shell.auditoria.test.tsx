@@ -13,7 +13,7 @@ vi.mock("next/navigation", () => ({
 
 function renderShell() {
   return render(
-    <Shell active="dashboard" onNav={vi.fn()}>
+    <Shell visibleModuleCodes={[]}>
       <div>contenido</div>
     </Shell>,
   );
@@ -28,12 +28,12 @@ describe("Shell — dock Auditoría (HU #10680, AC1)", () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    expect(screen.getByRole("button", { name: "Auditoría" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
   });
 
   it("no muestra la entrada 'Auditoría' sin sesión SuperAdmin", () => {
     renderShell();
     expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Auditoría" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Auditoría" })).not.toBeInTheDocument();
   });
 });

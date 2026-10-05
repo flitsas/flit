@@ -4489,11 +4489,13 @@ ON CONFLICT (code) DO UPDATE SET
     city_code = EXCLUDED.city_code,
     is_active = EXCLUDED.is_active;
 
--- Grant opcional dev: Funza habilitado para FLITDEV (pruebas B11 auto-bind).
+-- Grant opcional dev: Funza habilitado para FLITDEV (pruebas B11 auto-bind). HU #12895 (A-02): solo si FLITDEV existe;
+-- el catálogo corre también en bases sin datos demo, donde ese tenant no está.
 INSERT INTO admin.tenant_transit_office_grants (id, tenant_id, transit_office_id, is_enabled, created_at)
 SELECT uuidv7(), '11111111-1111-1111-1111-111111111111'::uuid, id, true, now()
 FROM catalogs.transit_offices
 WHERE code = '25286000'
+  AND EXISTS (SELECT 1 FROM identity.tenants WHERE id = '11111111-1111-1111-1111-111111111111'::uuid)
 ON CONFLICT (tenant_id, transit_office_id) DO NOTHING;
 
 COMMIT;

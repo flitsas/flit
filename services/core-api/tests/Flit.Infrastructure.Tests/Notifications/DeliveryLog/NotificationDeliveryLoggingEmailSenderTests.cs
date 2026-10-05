@@ -501,6 +501,8 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
     {
         var services = new ServiceCollection();
         services.AddDbContext<FlitDbContext>(o => o.UseInMemoryDatabase(dbName));
+        // HU #13231: los escritores resuelven IIdentityDb en su propio scope, como en producción.
+        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
         services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
         return services.BuildServiceProvider();
     }

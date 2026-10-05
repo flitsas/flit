@@ -1,4 +1,8 @@
+using Flit.Modules.Platform.Application.Access;
+using Flit.Modules.Platform.Application.Apps;
+using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
+using Flit.Modules.Security.Application.Products;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Platform;
@@ -17,6 +21,11 @@ public static class PlatformModuleExtensions
     {
         services.AddScoped<SetTenantProductEnabledHandler>();
         services.AddScoped<ListTenantProductsHandler>();
+        // HU #12965 (B-05): implementación real del contrato §4.
+        services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
+        // HU #12966 (B-06): me/apps y manifiesto. IProductHosts lo registra la API.
+        services.AddScoped<ListMyAppsHandler>();
+        services.AddScoped<ApplyProductManifestHandler>();
         return services;
     }
 }

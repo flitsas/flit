@@ -19,9 +19,13 @@ env:
   # el pull del docker-compose.prod.yml en el VPS. El ambiente se diferencia por TAG
   # (dev/qa/pdn), no por nombre de repo.
   CORE_API_IMAGE: ghcr.io/flitsas/flitdev/core-api
+  # Epic #13217 (HU #13234): el servicio de identidad, con su propia imagen y su propio build.
+  CORE_IDENTITY_IMAGE: ghcr.io/flitsas/flitdev/core-identity
   CORE_ICT_IMAGE: ghcr.io/flitsas/flitdev/core-ict
   FRONTEND_IMAGE: ghcr.io/flitsas/flitdev/frontend
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
+  # FLIT Suite (B-09): hub en flitsas.online. Una sola imagen por ambiente, sin build-args (config en runtime).
+  FRONTEND_HUB_IMAGE: ghcr.io/flitsas/flitdev/frontend-hub
 
 jobs:
   # ── Resolver ambiente segun la rama ─────────────────────────────────────────
@@ -42,6 +46,10 @@ jobs:
       core_port: ${{ steps.env.outputs.core_port }}
       python_port: ${{ steps.env.outputs.python_port }}
       migracion_port: ${{ steps.env.outputs.migracion_port }}
+      hub_port: ${{ steps.env.outputs.hub_port }}
+      identity_port: ${{ steps.env.outputs.identity_port }}
+      suite_env: ${{ steps.env.outputs.suite_env }}
+      tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       internal_subnet: ${{ steps.env.outputs.internal_subnet }}
     steps:
       - name: Map branch to environment
@@ -55,7 +63,7 @@ jobs:
           # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
           # FLIT_INTERNAL_SUBNET (Marca Blanca #12421): CIDR distinto por stack si DEV/QA/PDN
           # comparten VPS — Docker rechaza subredes solapadas ("Pool overlaps...").
-          # Convencion: DEV 172.28.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
+          # Convencion: DEV 10.114.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
           case "${{ github.ref_name }}" in
             release)
               env_name=pdn
@@ -64,7 +72,10 @@ jobs:
               front_domain=flitsas.online
               api_domain=api.flitsas.online
               image_tag=pdn
-              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030
+              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6040; identity_port=6004
+              # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
+              suite_env=
+              tramites_domain=tramites.flitsas.online
               internal_subnet=10.114.60.0/24
               ;;
             staging)
@@ -73,7 +84,9 @@ jobs:
               front_domain=qa.flitsas.online
               api_domain=api.qa.flitsas.online
               image_tag=qa
-              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030
+              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5040; identity_port=5004
+              suite_env=qa
+              tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
               ;;
             develop)
@@ -82,7 +95,9 @@ jobs:
               front_domain=dev.flitsas.online
               api_domain=api.dev.flitsas.online
               image_tag=dev
-              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030
+              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4040; identity_port=4004
+              suite_env=dev
+              tramites_domain=dev.tramites.flitsas.online
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
               # CIDR 10.114.x/24: el rango 172.28.x/24 choca en el VPS compartido (Pool overlaps).
               internal_subnet=10.114.40.0/24
@@ -112,6 +127,10 @@ jobs:
             echo "core_port=$core_port"
             echo "python_port=$python_port"
             echo "migracion_port=$migracion_port"
+            echo "hub_port=$hub_port"
+            echo "identity_port=$identity_port"
+            echo "suite_env=$suite_env"
+            echo "tramites_domain=$tramites_domain"
             echo "internal_subnet=$internal_subnet"
           } >> "$GITHUB_OUTPUT"
           echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag | subnet: $internal_subnet"
@@ -125,6 +144,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -150,8 +171,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Epic #13217 (HU #13234): si nada de lo que compila core-api cambió desde la imagen vigente del ambiente, se
+      # reetiqueta esa imagen con este commit en vez de reconstruirla. La comparación es contra el commit con que se
+      # construyó (etiqueta org.opencontainers.image.revision), no contra otra rama: si un build anterior falló, sus
+      # cambios siguen pendientes y se construye. Sin etiqueta, sin historial o en un despliegue manual, se construye.
+      - name: Reuse previous core-api image when unchanged
+        id: reuse
+        run: |
+          set -euo pipefail
+          src="${{ env.CORE_API_IMAGE }}:${{ needs.setup.outputs.image_tag }}"
+          # Lo que compila la imagen de core-api (ver su Dockerfile).
+          paths=(
+            services/core-api
+            services/core-ict/Directory.Build.props
+            services/core-ict/Directory.Packages.props
+            services/core-ict/src/Flit.Ict.Grpc.Contracts
+            # Transición (hasta el corte, HU #13235): core-api todavía compila estos proyectos de identidad.
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Identity.Application
+            services/core-identity/src/Flit.Identity.Web
+          )
+          rev=$(docker buildx imagetools inspect "$src" --format '{{ json .Image }}' 2>/dev/null \
+            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] // empty else ([to_entries[] | select(.key != "unknown/unknown")][0].value.config.Labels["org.opencontainers.image.revision"] // empty) end' || true)
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$rev" ] && git cat-file -e "$rev^{commit}" 2>/dev/null \
+             && git diff --quiet "$rev" "$GITHUB_SHA" -- "${paths[@]}"; then
+            tags=(-t "${{ env.CORE_API_IMAGE }}:sha-${GITHUB_SHA}")
+            if [ "${{ github.ref_name }}" = "release" ]; then tags+=(-t "${{ env.CORE_API_IMAGE }}:latest"); fi
+            docker buildx imagetools create "${tags[@]}" "$src"
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+            echo "core-api sin cambios desde $rev: se reutiliza $src"
+          else
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "core-api: se construye (cambios desde '${rev:-sin etiqueta}' o despliegue manual)"
+          fi
+
       - name: Extract metadata — core-api
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.CORE_API_IMAGE }}
@@ -161,6 +218,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-api
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
@@ -171,6 +229,104 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=core-api
           cache-to: type=gha,mode=max,scope=core-api
+
+  build-core-identity:
+    name: Build & push core-identity (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Epic #13217 (HU #13234): si nada de lo que compila core-identity cambió desde la imagen vigente del ambiente, se
+      # reetiqueta esa imagen con este commit en vez de reconstruirla. La comparación es contra el commit con que se
+      # construyó (etiqueta org.opencontainers.image.revision), no contra otra rama: si un build anterior falló, sus
+      # cambios siguen pendientes y se construye. Sin etiqueta, sin historial o en un despliegue manual, se construye.
+      - name: Reuse previous core-identity image when unchanged
+        id: reuse
+        run: |
+          set -euo pipefail
+          src="${{ env.CORE_IDENTITY_IMAGE }}:${{ needs.setup.outputs.image_tag }}"
+          # El árbol de core-identity (BuildClosureTests exige que esta lista lo cubra).
+          paths=(
+            services/core-identity
+            services/core-api/global.json
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Api/appsettings.json
+            services/core-api/src/Flit.Api/appsettings.Development.json
+            services/core-api/src/Flit.Admin.Application
+            services/core-api/src/Flit.Admin.Domain
+            services/core-api/src/Flit.Identity.Infrastructure
+            services/core-api/src/Flit.Modules.Improntas.Domain
+            services/core-api/src/Flit.Modules.Platform
+            services/core-api/src/Flit.Modules.Security.Application
+            services/core-api/src/Flit.Modules.Security.Domain
+            services/core-api/src/Flit.Queries.Domain
+            services/core-api/src/Flit.Suite.AspNetCore
+          )
+          rev=$(docker buildx imagetools inspect "$src" --format '{{ json .Image }}' 2>/dev/null \
+            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] // empty else ([to_entries[] | select(.key != "unknown/unknown")][0].value.config.Labels["org.opencontainers.image.revision"] // empty) end' || true)
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$rev" ] && git cat-file -e "$rev^{commit}" 2>/dev/null \
+             && git diff --quiet "$rev" "$GITHUB_SHA" -- "${paths[@]}"; then
+            tags=(-t "${{ env.CORE_IDENTITY_IMAGE }}:sha-${GITHUB_SHA}")
+            if [ "${{ github.ref_name }}" = "release" ]; then tags+=(-t "${{ env.CORE_IDENTITY_IMAGE }}:latest"); fi
+            docker buildx imagetools create "${tags[@]}" "$src"
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+            echo "core-identity sin cambios desde $rev: se reutiliza $src"
+          else
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "core-identity: se construye (cambios desde '${rev:-sin etiqueta}' o despliegue manual)"
+          fi
+
+      - name: Extract metadata — core-identity
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_IDENTITY_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-identity
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: core-identity compila librerías compartidas de core-api (ver su Dockerfile).
+          context: ./services
+          file: ./services/core-identity/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-identity
+          cache-to: type=gha,mode=max,scope=core-identity
 
 
   build-frontend:
@@ -244,6 +400,60 @@ jobs:
             NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  # FLIT Suite (B-09) — hub. Sin build-args: la misma imagen sirve a los tres ambientes y lee su
+  # configuración en runtime. En los servidores no arranca hasta encender el perfil `suite` del compose.
+  build-frontend-hub:
+    name: Build & push frontend-hub image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata — frontend-hub
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_HUB_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-hub/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-hub
+          cache-to: type=gha,mode=max,scope=frontend-hub
 
   build-python-ml:
     name: Build & push python-ml image
@@ -354,7 +564,7 @@ jobs:
 
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
     runs-on: ubuntu-latest
     # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
     timeout-minutes: 15
@@ -445,20 +655,38 @@ jobs:
             # Tag + puertos segun ambiente (override del .env del VPS).
             # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
             export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export CORE_IDENTITY_TAG=${{ needs.setup.outputs.deploy_tag }}
             export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export FRONTEND_HUB_TAG=${{ needs.setup.outputs.deploy_tag }}
             export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
             export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
             export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
             export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
+            export HUB_PORT=${{ needs.setup.outputs.hub_port }}
+            # HU #13226 (Epic #13217): core-identity (perfil "identity"); sin el perfil no se levanta.
+            export CORE_IDENTITY_PORT=${{ needs.setup.outputs.identity_port }}
+            # FLIT Suite: hosts de los productos en este ambiente (Suite:Hosts:Environment de core-api).
+            export FLIT_SUITE_ENV=${{ needs.setup.outputs.suite_env }}
+            # URL pública del hub (emisor OIDC) para @flit/auth.
+            export FLIT_HUB_URL=https://${{ needs.setup.outputs.front_domain }}
+            # Host propio de Trámites en la suite (A-11); el hub redirige ahí cuando FLIT_TRAMITES_HOST_ENABLED=true.
+            export FLIT_TRAMITES_URL=https://${{ needs.setup.outputs.tramites_domain }}
             # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
             export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
 
-            # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
-            # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
-            docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            # Feature #13220 (Epic #13217): despliegue por servicio, detrás de la variable FLIT_DEPLOY_ROLLING del
+            # GitHub Environment. Sin ella (hoy) se hace como siempre: down de todo el stack y up.
+            # Con "true": sin down global; core-api primero (migra), luego el resto y core-identity al final, así el
+            # login nunca se cae junto con core-api (ver docs/suite/identidad-frontera.md §9).
+            ROLLING="${{ vars.FLIT_DEPLOY_ROLLING }}"
+            if [ "$ROLLING" != "true" ]; then
+              # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
+              # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
+              docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            fi
 
             # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
             # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
@@ -478,7 +706,26 @@ jobs:
 
             # Pull latest images and restart services
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            if [ "$ROLLING" != "true" ]; then
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            else
+              wait_healthy() {
+                for i in $(seq 1 30); do
+                  state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose -f docker-compose.prod.yml ps -q "$1")" 2>/dev/null || echo missing)
+                  [ "$state" = "healthy" ] && return 0
+                  sleep 5
+                done
+                echo "::error::$1 no quedó healthy"; docker compose -f docker-compose.prod.yml logs --tail=100 "$1"; return 1
+              }
+              docker compose -f docker-compose.prod.yml up -d --no-deps core-api
+              wait_healthy core-api
+              others=$(docker compose -f docker-compose.prod.yml config --services | grep -vx -e core-api -e core-identity | tr '\n' ' ')
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans $others
+              if docker compose -f docker-compose.prod.yml config --services | grep -qx core-identity; then
+                docker compose -f docker-compose.prod.yml up -d --no-deps core-identity
+                wait_healthy core-identity
+              fi
+            fi
 
             # Remove dangling images to free space
             docker image prune -f
@@ -503,6 +750,15 @@ jobs:
               docker compose -f docker-compose.prod.yml ps
               docker compose -f docker-compose.prod.yml logs --tail=100
               exit 1
+            fi
+            # HU #13226: si core-identity corre (perfil "identity"), también tiene que estar listo.
+            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q core-identity 2>/dev/null)" ]; then
+              if ! curl -fsS http://127.0.0.1:${{ needs.setup.outputs.identity_port }}/health/ready > /dev/null; then
+                echo "::error::core-identity no está listo (/health/ready)"
+                docker compose -f docker-compose.prod.yml logs --tail=100 core-identity
+                exit 1
+              fi
+              echo "core-identity listo."
             fi
             echo "Deploy OK."
 

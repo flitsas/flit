@@ -15,6 +15,9 @@ public sealed class TenantProductException : Exception
     /// <summary><c>plataforma</c> es el hub: siempre está encendido y no se habilita por empresa (400).</summary>
     public const string ProductAlwaysOn = "PRODUCT_ALWAYS_ON";
 
+    /// <summary>Una empresa hija no puede encender un producto que su cabeza tiene apagado (409, ADR-0057).</summary>
+    public const string ProductNotEnabledForHead = "PRODUCT_NOT_ENABLED_FOR_HEAD";
+
     /// <summary>Las notas pasan de <see cref="SetTenantProductEnabledHandler.NotesMaxLength"/> caracteres (400).</summary>
     public const string NotesTooLong = "PRODUCT_NOTES_TOO_LONG";
 

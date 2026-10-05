@@ -18,10 +18,12 @@ namespace Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 public sealed class UpdateTenantSettingsHandler
 {
     private readonly ITenantSettingsRepository _repository;
+    private readonly ITenantProductFlags _products;
 
-    public UpdateTenantSettingsHandler(ITenantSettingsRepository repository)
+    public UpdateTenantSettingsHandler(ITenantSettingsRepository repository, ITenantProductFlags products)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _products = products ?? throw new ArgumentNullException(nameof(products));
     }
 
     public async Task<UpdateTenantSettingsResult> HandleAsync(
@@ -171,8 +173,11 @@ public sealed class UpdateTenantSettingsHandler
             FinesQuerySource = finesQuerySource ?? previous.FinesQuerySource,
             // HU #12250 (Feature #12249) — flags de módulos del dashboard: opcionales, si el
             // request los omite se conserva el valor previo (AC4).
-            TramitesModuleEnabled = request.TramitesModuleEnabled ?? previous.TramitesModuleEnabled,
-            ComparendosModuleEnabled = request.ComparendosModuleEnabled ?? previous.ComparendosModuleEnabled,
+            // HU #12967 (B-07): Trámites y Comparendos ya no se escriben aquí. Son la habilitación de
+            // productos (platform.tenant_products) y solo la cambia el SuperAdmin por
+            // PUT /api/v1/platform/admin/tenants/{id}/products/{code}. Se ignora lo que traiga el request.
+            TramitesModuleEnabled = previous.TramitesModuleEnabled,
+            ComparendosModuleEnabled = previous.ComparendosModuleEnabled,
             ResolucionesModuleEnabled = request.ResolucionesModuleEnabled ?? previous.ResolucionesModuleEnabled,
         };
 
@@ -182,6 +187,11 @@ public sealed class UpdateTenantSettingsHandler
             .SaveAsync(updated, changes, command.ChangedBy, command.CorrelationId, cancellationToken)
             .ConfigureAwait(false);
 
-        return UpdateTenantSettingsResult.Success(SettingsMapper.ToResponse(updated));
+        var products = await _products.GetAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        return UpdateTenantSettingsResult.Success(SettingsMapper.ToResponse(updated) with
+        {
+            TramitesModuleEnabled = products.Tramites,
+            ComparendosModuleEnabled = products.Comparendos,
+        });
     }
 }

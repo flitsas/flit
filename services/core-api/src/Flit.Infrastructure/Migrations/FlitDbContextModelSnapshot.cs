@@ -34,6 +34,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(253)")
                         .HasColumnName("host");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("purpose");
+
                     b.ToTable((string)null);
 
                     b.ToView("v_active_network_domains", "admin");
@@ -2991,6 +2997,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("next_check_at");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("HUB")
+                        .HasColumnName("purpose");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
@@ -3049,9 +3063,9 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("uq_tenant_domains_host")
                         .HasFilter("deleted_at IS NULL");
 
-                    b.HasIndex(new[] { "TenantId" }, "uq_tenant_domains_tenant_id")
+                    b.HasIndex(new[] { "TenantId", "Purpose" }, "uq_tenant_domains_tenant_purpose")
                         .IsUnique()
-                        .HasDatabaseName("uq_tenant_domains_tenant_id")
+                        .HasDatabaseName("uq_tenant_domains_tenant_purpose")
                         .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex(new[] { "VerificationToken" }, "uq_tenant_domains_verification_token")
@@ -5627,6 +5641,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("tramites")
+                        .HasColumnName("product_code");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint")
@@ -5735,6 +5757,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("tramites")
+                        .HasColumnName("product_code");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()

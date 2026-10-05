@@ -1,12 +1,10 @@
 "use client";
 
-import { ReactNode, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
+import { useSuiteTheme } from "@flit/shell/theme";
 import {
-  canAccessRuntConfirmation,
-  canManageBanners,
-  canReadIctLogs,
-  canReadLogQx,
   decodeJwtPayload,
   isAdminCompany,
   isGroupParent,
@@ -15,63 +13,11 @@ import {
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
 } from "@/lib/auth/jwt";
-import { CONFIRMACION_RUNT_BASE_PATH } from "@/components/admin/plataforma/confirmacion-runt/confirmacion-runt-nav";
+import { apiFetch } from "@/lib/api/client";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
-import {
-  isOtHubSegmentActive,
-  OT_ADM_DOCK,
-  otHubListPath,
-  resolveOtHubHref,
-  type OtHubTabId,
-} from "@/components/admin/transit-offices/ot-nav";
-import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
-import {
-  canSeeGeneracionDocumental,
-  GENERACION_DOCUMENTAL_BASE_PATH,
-} from "@/components/admin/generacion-documental/generacion-documental-nav";
-import { useDockScrollCondense } from "./useDockScrollCondense";
-import { buildDockGroups, flattenDockEntries, SPA_DOCK_ITEM_LABEL } from "./dock/dockGroups";
-import { COPY } from "@/lib/copy/copy-catalog";
-import { DockDesktop } from "./dock/DockDesktop";
+import { extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import { DrFlitAssistant } from "@/components/dr-flit";
-import { BrandLogo } from "@/components/brand/BrandLogo";
-
-const fabIcon = "/assets/favicon.svg";
-import {
-  LayoutGrid,
-  FileStack,
-  BarChart3,
-  FileSpreadsheet,
-  ShieldCheck,
-  Users,
-  HelpCircle,
-  Building2,
-  Bell,
-  Sun,
-  Moon,
-  MoreVertical,
-  KeyRound,
-  LogOut,
-  FolderCog,
-  Lock,
-  Landmark,
-  Fingerprint,
-  Send,
-  ScrollText,
-  Radar,
-  Network,
-  Route,
-  X,
-  FileText,
-  ClipboardList,
-  ListChecks,
-  Monitor,
-  FileSignature,
-  History,
-  Image as ImageIcon,
-  BadgeCheck,
-  Timer,
-} from "lucide-react";
+import { tramitesNav } from "./dock/tramitesNav";
 
 export type ModuleId =
   | "dashboard"
@@ -89,42 +35,8 @@ export type ModuleId =
   | "ict-reportes"
   | "ict-trazabilidad";
 
-const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
-  // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
-  { id: "tramites", label: SPA_DOCK_ITEM_LABEL.tramites, icon: FileStack },
-  { id: "reportes", label: SPA_DOCK_ITEM_LABEL.reportes, icon: BarChart3 },
-  { id: "reportes-detallados", label: SPA_DOCK_ITEM_LABEL["reportes-detallados"], icon: FileSpreadsheet },
-  { id: "validaciones", label: SPA_DOCK_ITEM_LABEL.validaciones, icon: ShieldCheck },
-  // HU #12194 — historial operativo por placa. El id coincide con el `Code` del módulo RBAC
-  // (`historial-placa`): el dock lo filtra con `visibleModuleCodes.includes(it.id)`, así que un
-  // id distinto del slug del permiso dejaría la entrada invisible para todos.
-  { id: "historial-placa", label: SPA_DOCK_ITEM_LABEL["historial-placa"], icon: History },
-  { id: "usuarios", label: SPA_DOCK_ITEM_LABEL.usuarios, icon: Users },
-];
-
-// Entrada normalizada del dock: módulos de la SPA y accesos admin/empresa comparten
-// la misma forma para poder repartirse balanceadamente alrededor del FAB.
-type DockEntry = {
-  key: string;
-  label: string;
-  icon: typeof LayoutGrid;
-  active: boolean;
-  onClick: () => void;
-  /** Submenú anidado (Administradores → Plataforma → Mandatos). */
-  children?: DockEntry[];
-};
-
-function useTheme() {
-  const [dark, setDark] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("flit-theme") === "dark";
-  });
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    localStorage.setItem("flit-theme", dark ? "dark" : "light");
-  }, [dark]);
-  return { dark, toggle: () => setDark((d) => !d) };
-}
+/** Productos del usuario por el cliente de la API (Bearer con la sesión antigua; BFF con la de @flit/auth). */
+const loadApps = (signal: AbortSignal) => apiFetch<SuiteApp[]>("/api/v1/platform/me/apps", { signal });
 
 function useCurrentUser() {
   const [user] = useState(() => {
@@ -145,22 +57,14 @@ function useCurrentUser() {
       if (typeof payload.role_code === "string") roleCodes.push(payload.role_code);
       else if (typeof payload.role === "string") roleCodes.push(payload.role);
     }
-    const roleLabel = roleCodes.includes("SuperAdmin")
-      ? "Super Admin"
-      : roleCodes.includes("AdminCompany")
-        ? "Admin de Compañía"
-        : roleCodes.includes("ot_admin")
-          ? "Admin OT"
-          : isOtUser(payload)
-            ? roleCodes[0] || "Usuario OT"
-            : roleCodes[0] || "Usuario";
     return {
-      displayName:
-        (payload.display_name as string | undefined) ??
-        (payload.email as string | undefined) ??
-        "Usuario",
+      displayName: (payload.display_name as string | undefined) ?? null,
       email: (payload.email as string | undefined) ?? "",
-      roleLabel,
+      roles: roleCodes,
+      // El token compara permisos sin mayúsculas (`hasPermission`); el catálogo los declara en minúscula.
+      permissions: Array.isArray(payload.permissions)
+        ? payload.permissions.filter((p): p is string => typeof p === "string").map((p) => p.toLowerCase())
+        : [],
       tenantName: payload.tenant_name ?? null,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
@@ -169,688 +73,118 @@ function useCurrentUser() {
       // Cualquier rol de un tenant OT (no solo ot_admin) opera la superficie del organismo.
       isOtUser: isOtUser(payload),
       tenantId: (payload.tenant_id as string) ?? null,
-      canReadLogQx: canReadLogQx(payload),
-      canReadIctLogs: canReadIctLogs(payload),
-      canManageBanners: canManageBanners(payload),
-      canAccessRuntConfirmation: canAccessRuntConfirmation(payload),
     };
   });
   return user;
 }
 
-export function Shell({
-  children,
-  active,
-  onNav,
-  onLogout,
-  visibleModuleCodes,
-}: {
-  children: ReactNode;
-  active: ModuleId;
-  onNav: (v: ModuleId) => void;
-  onLogout?: () => void;
-  /** When provided, only dock items whose id is in this list are shown. */
-  visibleModuleCodes?: string[];
-}) {
-  const { dark, toggle } = useTheme();
-  const currentUser = useCurrentUser();
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  // HU #10844 — En <lg el dock horizontal (hasta ~14 entradas para SuperAdmin) no cabe;
-  // se colapsa a un lanzador que abre una grilla de apps controlada por este estado.
-  const [dockOpen, setDockOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const contentScrollRef = useRef<HTMLDivElement>(null);
-  const dockLauncherRef = useRef<HTMLButtonElement>(null);
-  const condensed = useDockScrollCondense(contentScrollRef);
-
+/** Organismo del usuario OT: el de la ruta, el recordado en la sesión o el de su perfil. */
+function useOtTransitOfficeId(enabled: boolean, pathname: string): string | null {
+  const fromPath = enabled ? extractTransitOfficeIdFromPath(pathname) : null;
+  const [resolved, setResolved] = useState<string | null>(null);
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    if (!enabled || fromPath) return;
+    let alive = true;
+    resolveOtTransitOfficeId(async () => (await fetchOtProfile()).transitOfficeId)
+      .then((id) => alive && setResolved(id))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
     };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  // Menú móvil: Escape cierra y devuelve el foco al lanzador (GUIA-DOCK §9).
-  useEffect(() => {
-    if (!dockOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setDockOpen(false);
-      dockLauncherRef.current?.focus();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [dockOpen]);
-
-  // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
-  // está disponible. "Ayuda" vive en el menú de usuario (⋮) → /manual (HU #12723).
-  // Admin OT: las pestañas del hub viven en el dock (Trámites / Usuarios / Reportes / …);
-  // se omiten los módulos SPA homónimos para no duplicar píldoras (OT_ADMIN_SPA_OMIT
-  // compartido con resolveNavigableModuleIds — invariante dock ≡ URL).
-  const visibleDock = (visibleModuleCodes
-    ? DOCK.filter((it) => visibleModuleCodes.includes(it.id))
-    : DOCK
-  ).filter((it) => !(currentUser?.isOtUser && OT_ADMIN_SPA_OMIT.has(it.id)));
-
-  // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
-  // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
-  // de forma balanceada a izquierda/derecha; si se agregan más, se redistribuyen solas.
-  const pathname = usePathname() ?? "";
-  const router = useRouter();
-  const onAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/empresa");
-
-  const goOtHub = (tab: OtHubTabId) => {
-    void resolveOtHubHref(tab, pathname, "ot_admin", async () => {
-      const profile = await fetchOtProfile();
-      return profile.transitOfficeId;
-    }).then((href) => {
-      router.push(href);
-    });
-  };
-
-  const entries: DockEntry[] = visibleDock.map((it) => ({
-    key: it.id,
-    label: it.label,
-    icon: it.icon,
-    active: !onAdminRoute && active === it.id,
-    onClick: () => onNav(it.id),
-  }));
-
-  if (currentUser?.isSuperAdmin) {
-    entries.push(
-      {
-        key: "admin-companies",
-        label: "Compañías",
-        icon: Building2,
-        active: pathname.startsWith("/admin/companies"),
-        onClick: () => router.push("/admin/companies"),
-      },
-      {
-        // Tránsito pasa a ser contenedor (mismo patrón que Plataforma): el catálogo de causales
-        // alimenta el modal de rechazo del organismo, así que cuelga de aquí y no de Compañías.
-        key: "admin-transit",
-        label: "Tránsito",
-        icon: Landmark,
-        active:
-          pathname.startsWith("/admin/transit-offices") ||
-          pathname.startsWith("/admin/causales-rechazo"),
-        onClick: () => undefined,
-        children: [
-          {
-            key: "admin-transit-offices",
-            label: "Organismos",
-            icon: Landmark,
-            active: pathname.startsWith("/admin/transit-offices"),
-            onClick: () => router.push(otHubListPath()),
-          },
-          {
-            key: "admin-rejection-reasons",
-            label: "Causales de rechazo",
-            icon: ClipboardList,
-            active: pathname.startsWith("/admin/causales-rechazo"),
-            onClick: () => router.push("/admin/causales-rechazo"),
-          },
-        ],
-      },
-      {
-        key: "admin-documents",
-        label: "Documental",
-        icon: FolderCog,
-        active: pathname.startsWith("/admin/documents"),
-        onClick: () => router.push("/admin/documents"),
-      },
-      {
-        key: "admin-improntas",
-        label: "Improntas",
-        icon: Fingerprint,
-        active: pathname.startsWith("/admin/improntas"),
-        onClick: () => router.push("/admin/improntas"),
-      },
-      {
-        key: "admin-quipux",
-        label: "Quipux",
-        icon: Send,
-        active: pathname.startsWith("/admin/quipux"),
-        onClick: () => router.push("/admin/quipux"),
-      },
-      {
-        key: "admin-jobs",
-        label: "Procesos periódicos",
-        icon: Timer,
-        active: pathname.startsWith("/admin/jobs"),
-        onClick: () => router.push("/admin/jobs"),
-      },
-      {
-        key: "rbac",
-        label: "RBAC Admin",
-        icon: Lock,
-        active: !onAdminRoute && active === "rbac",
-        onClick: () => onNav("rbac"),
-      },
-      {
-        key: "auditoria",
-        label: "Auditoría",
-        icon: ScrollText,
-        active: !onAdminRoute && active === "auditoria",
-        onClick: () => onNav("auditoria"),
-      },
-    );
-  }
-
-  // Plataforma es contenedor (mismo patrón que Tránsito): cuelga los sub-módulos de
-  // configuración de plataforma. Sus hijos "core" (tipos de trámite, mandatos, FUR,
-  // notificaciones) siguen exclusivos de SuperAdmin; Banners (HU #12241, Feature #12236)
-  // cuelga aparte del permiso `banners.manage` del JWT (bypass SuperAdmin incluido en
-  // `canManageBanners`), para que un AdminCompany con el módulo concedido también lo vea —
-  // por eso el contenedor se construye con una lista de hijos armada dinámicamente en vez
-  // de vivir dentro del bloque `if (currentUser?.isSuperAdmin)` de arriba.
-  const platformaChildren: DockEntry[] = [];
-  if (currentUser?.isSuperAdmin) {
-    platformaChildren.push(
-      {
-        key: "admin-tipos-tramite",
-        label: "Tipos de trámites",
-        icon: ListChecks,
-        active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
-        onClick: () => router.push("/admin/plataforma/tipos-tramite"),
-      },
-      {
-        key: "admin-mandatos",
-        label: "Mandatos",
-        icon: FileSignature,
-        active: pathname.startsWith("/admin/plataforma/mandatos"),
-        onClick: () => router.push("/admin/plataforma/mandatos"),
-      },
-      {
-        key: "admin-fur",
-        label: "FUR",
-        icon: FileText,
-        active: pathname.startsWith("/admin/plataforma/fur"),
-        onClick: () => router.push("/admin/plataforma/fur"),
-      },
-      {
-        key: "admin-notificaciones",
-        label: "Notificaciones",
-        icon: Bell,
-        active: pathname.startsWith("/admin/plataforma/notificaciones"),
-        onClick: () => router.push("/admin/plataforma/notificaciones"),
-      },
-    );
-  }
-  // Confirmación RUNT (Feature #12276, HU #12313): gateado por PERMISO (`runt_confirmation.settings.manage`
-  // o `.history.read`), no por rol; SuperAdmin lo ve por el bypass de `canAccessRuntConfirmation`.
-  // Va justo después de «Tipos de trámites» (AC4 de la HU); para un rol sin lo demás, es la única entrada.
-  if (currentUser?.canAccessRuntConfirmation) {
-    const posicion = platformaChildren.findIndex((c) => c.key === "admin-tipos-tramite") + 1;
-    platformaChildren.splice(posicion, 0, {
-      key: "admin-confirmacion-runt",
-      label: "Confirmación RUNT",
-      icon: BadgeCheck,
-      active: pathname.startsWith(CONFIRMACION_RUNT_BASE_PATH),
-      onClick: () => router.push(CONFIRMACION_RUNT_BASE_PATH),
-    });
-  }
-  if (currentUser?.canManageBanners) {
-    platformaChildren.push({
-      key: "admin-banners",
-      label: "Banners",
-      icon: ImageIcon,
-      active: pathname.startsWith("/admin/banners"),
-      onClick: () => router.push("/admin/banners"),
-    });
-  }
-  if (platformaChildren.length > 0) {
-    entries.push({
-      key: "admin-plataforma",
-      label: "Plataforma",
-      icon: Monitor,
-      active:
-        pathname.startsWith("/admin/plataforma") || pathname.startsWith("/admin/banners"),
-      onClick: () => undefined,
-      children: platformaChildren,
-    });
-  }
-
-  // Generación documental (HU-01, Feature #12201) — R12: esta entrada NO cuelga de
-  // `currentUser?.isSuperAdmin` como el resto de accesos admin de arriba, sino de los
-  // MÓDULOS ACCESIBLES del usuario (`visibleModuleCodes`, que viene de
-  // `useAccessibleModules` → /api/v1/security/modules). Colgarla del rol dejaría a un
-  // AdminCompany con el permiso `generacion-documental.read` sin ver jamás el módulo, que
-  // es justo el criterio de aceptación principal de la HU.
-  if (canSeeGeneracionDocumental(visibleModuleCodes)) {
-    entries.push({
-      key: "admin-generacion-documental",
-      label: "Generación documental",
-      icon: FileText,
-      active: pathname.startsWith(GENERACION_DOCUMENTAL_BASE_PATH),
-      onClick: () => router.push(GENERACION_DOCUMENTAL_BASE_PATH),
-    });
-  }
-
-  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Documentos;
-  // Trámites, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
-  // Todo rol de un tenant OT entra aquí; "Usuarios" y "Documentos" quedan solo para ot_admin
-  // porque su API sigue siendo de administradores (UserAdminPolicy / OtAdminOrSuperAdminPolicy).
-  // HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos dejó de existir.
-  // HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración salen del dock para TODO
-  // usuario de un tenant OT (admin u operador): la API ya los restringe a Super Admin (HU-B2) y el
-  // guard de `lib/auth/guard.ts` bloquea también la URL directa. Super Admin los sigue viendo desde
-  // su barra de pestañas del hub (OtHubLayout / OT_HUB_TABS), que no pasa por este bloque.
-  // HU #12860 (Feature #12848) — Documentos se restringe a ot_admin, mismo patrón que Usuarios: el
-  // Operador OT (`gestor_tramites_ot`) y roles OT personalizados dejan de verla (la API ya exige
-  // rol SuperAdmin u ot_admin, HU-C2 backend, y el guard bloquea también la URL directa).
-  if (currentUser?.isOtUser) {
-    entries.push(
-      {
-        key: OT_ADM_DOCK.tramites,
-        label: COPY.B21Tramites,
-        icon: FileStack,
-        active: isOtHubSegmentActive(pathname, "client-procedures"),
-        onClick: () => goOtHub("client-procedures"),
-      },
-      ...(currentUser.isOtAdmin
-        ? [
-            {
-              key: OT_ADM_DOCK.documents,
-              label: "Documentos",
-              icon: FileText,
-              active: isOtHubSegmentActive(pathname, "documents"),
-              onClick: () => goOtHub("documents"),
-            },
-            {
-              key: OT_ADM_DOCK.usuarios,
-              label: COPY.B21Usuarios,
-              icon: Users,
-              active: isOtHubSegmentActive(pathname, "usuarios"),
-              onClick: () => goOtHub("usuarios"),
-            },
-          ]
-        : []),
-      {
-        key: OT_ADM_DOCK.reportes,
-        label: COPY.B21Reportes,
-        icon: BarChart3,
-        active: isOtHubSegmentActive(pathname, "reportes"),
-        onClick: () => goOtHub("reportes"),
-      },
-      {
-        key: OT_ADM_DOCK.mandatos,
-        label: "Mandatos",
-        icon: FileSignature,
-        active: isOtHubSegmentActive(pathname, "mandatos"),
-        onClick: () => goOtHub("mandatos"),
-      },
-      {
-        key: OT_ADM_DOCK.imprintValidation,
-        label: "Validar impronta",
-        icon: Fingerprint,
-        active: isOtHubSegmentActive(pathname, "imprint-validation"),
-        onClick: () => goOtHub("imprint-validation"),
-      },
-    );
-  }
-
-  if (currentUser?.isAdminCompany) {
-    // Gestor: una sola entrada "Administración" → consola de su compañía (RL, baúl, escrituras…).
-    // No se empuja "Usuarios" en este menú (req. menú admin gestor); el módulo Usuarios sigue
-    // disponible vía dock RBAC `usuarios` si el rol lo tiene concedido.
-    entries.push({
-      key: "admin-companies",
-      label: "Administración",
-      icon: Building2,
-      // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
-      // `/children` es «Red de clientes»: no marcar Administración como activa ahí.
-      active: pathname.startsWith("/admin/companies") && !pathname.includes("/children"),
-      onClick: () => router.push("/admin/companies"),
-    });
-    if (currentUser.isGroupParent && currentUser.tenantId) {
-      entries.push({
-        key: "admin-network",
-        label: "Red de clientes",
-        icon: Building2,
-        active: pathname.includes("/admin/companies/") && pathname.endsWith("/children"),
-        onClick: () => router.push(`/admin/companies/${currentUser.tenantId}/children`),
-      });
-    }
-  }
-
-  // LOG QX (HU #10795): trazabilidad Quipux. Agrupador "Integraciones" (ex Soporte),
-  // gateado por `logqx.read` (o SuperAdmin vía canReadLogQx). No se duplica en el bloque
-  // isSuperAdmin de arriba.
-  if (currentUser?.canReadLogQx) {
-    entries.push({
-      key: "log-qx",
-      label: "Log QX",
-      icon: Radar,
-      active: !onAdminRoute && active === "log-qx",
-      onClick: () => onNav("log-qx"),
-    });
-  }
-
-  // ICT (Integración con Terceros, HU10893) — gate por el permiso `ict.logs.read` (o SuperAdmin).
-  // Vive en el agrupador "Integraciones" junto a LOG QX.
-  //
-  // Es contenedor, no destino (mismo patrón que Tránsito y Plataforma): cuelga "Log ICT" —los logs
-  // técnicos y sus alertas— y "Reportes ICT" —informes en vivo, consultas y programación (HU
-  // #11619)—. Separarlos en dos píldoras hermanas dejaba dos entradas sueltas sin decir que hablan
-  // del mismo sistema; anidarlas bajo "ICT" nombra primero el sistema y luego qué se quiere de él.
-  // Ambas hojas comparten gate: es el mismo público.
-  if (currentUser?.canReadIctLogs) {
-    entries.push({
-      key: "ict",
-      label: "ICT",
-      icon: Network,
-      active: !onAdminRoute
-        && (active === "ict-logs" || active === "ict-reportes" || active === "ict-trazabilidad"),
-      onClick: () => undefined,
-      children: [
-        {
-          key: "ict-logs",
-          label: "Log ICT",
-          icon: Network,
-          active: !onAdminRoute && active === "ict-logs",
-          onClick: () => onNav("ict-logs"),
-        },
-        {
-          key: "ict-trazabilidad",
-          label: "Trazabilidad ICT",
-          icon: Route,
-          active: !onAdminRoute && active === "ict-trazabilidad",
-          onClick: () => onNav("ict-trazabilidad"),
-        },
-        {
-          key: "ict-reportes",
-          label: "Reportes ICT",
-          icon: BarChart3,
-          active: !onAdminRoute && active === "ict-reportes",
-          onClick: () => onNav("ict-reportes"),
-        },
-      ],
-    });
-  }
-
-  // Agrupadores del dock (menú / submenú). Solo se muestran grupos con al menos
-  // un ítem visible según permisos/rol. FAB de inicio queda centrado entre grupos.
-  const groups = buildDockGroups(entries);
-  const atBottom = condensed;
-
-  return (
-    <div
-      className="h-screen w-full overflow-hidden flex flex-col"
-      style={{
-        background: dark ? "#05060A" : "var(--color-flit-bg)",
-        color: dark ? "#FFFFFF" : "var(--color-flit-primary)",
-        fontFamily: "Poppins, sans-serif",
-      }}
-    >
-      {/* Header */}
-      <header
-        className="shrink-0 flex items-center justify-between px-4 md:px-6 py-3 border-b"
-        style={{ borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)" }}
-      >
-        <div className="flex items-center gap-3">
-          <BrandLogo variant={dark ? "white" : "dark"} className="h-10 w-auto" />
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Theme toggle */}
-          <button
-            onClick={toggle}
-            aria-label="Cambiar tema"
-            className="flex items-center gap-1 rounded-full px-1 py-1 transition"
-            style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
-          >
-            <span className={`h-7 w-7 grid place-items-center rounded-full ${dark ? "" : "bg-white"}`}>
-              <Sun className="h-3.5 w-3.5" />
-            </span>
-            <span className={`h-7 w-7 grid place-items-center rounded-full ${dark ? "bg-white" : ""}`}>
-              <Moon className="h-3.5 w-3.5" />
-            </span>
-          </button>
-          <div className="hidden sm:flex flex-col items-end leading-tight">
-            <span className="text-[10px] font-medium" style={{ color: "var(--color-flit-brand)" }}>
-              {currentUser?.roleLabel ?? "—"}
-            </span>
-            {currentUser?.tenantName && (
-              <span className="text-[10px] opacity-55">
-                {currentUser.tenantName}
-              </span>
-            )}
-            <span className="text-xs font-semibold">
-              {currentUser?.displayName ?? currentUser?.email ?? "—"}
-            </span>
-          </div>
-          <div
-            className="h-9 w-9 rounded-full grid place-items-center border-2 text-xs font-bold text-white select-none"
-            style={{
-              borderColor: "var(--color-flit-tech)",
-              background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
-            }}
-            aria-label="Avatar"
-          >
-            {(currentUser?.displayName?.[0] ?? currentUser?.email?.[0] ?? "U").toUpperCase()}
-          </div>
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
-              aria-label="Menú de usuario"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
-            {menuOpen && (
-              <div
-                className="absolute right-0 top-full mt-2 w-60 rounded-xl py-1.5 z-50 text-xs"
-                style={{
-                  background: dark ? "#0B0F14" : "#FFFFFF",
-                  border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "var(--color-flit-gray)"}`,
-                  boxShadow: "0 18px 40px -10px rgba(22,39,68,0.25)",
-                  color: dark ? "#FFFFFF" : "var(--color-flit-primary)",
-                }}
-              >
-                <MenuItem
-                  icon={HelpCircle}
-                  label={COPY.B21Ayuda}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push("/manual");
-                  }}
-                />
-                <MenuItem
-                  icon={KeyRound}
-                  label="Cambio de contraseña"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push("/profile/change-password");
-                  }}
-                />
-                <div className="h-px my-1" style={{ background: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)" }} />
-                <MenuItem
-                  icon={LogOut}
-                  label="Salir de la plataforma"
-                  danger
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onLogout?.();
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Main */}
-      <main className="flex-1 min-h-0 overflow-hidden relative">
-        {/* AC1 #10498: el scroll ocurre DENTRO del área de contenido (no se clipa) y el
-            padding inferior libera el dock flotante para que nada quede oculto tras él.
-            `data-shell-scroll` lo usa el wizard (tracker sticky al tope de este contenedor). */}
-        <div
-          ref={contentScrollRef}
-          className="absolute inset-0 overflow-y-auto pb-28"
-          data-shell-scroll
-        >
-          {children}
-        </div>
-
-        <DockDesktop
-          groups={groups}
-          atBottom={atBottom}
-          onHome={() => onNav("dashboard")}
-          homeActive={!onAdminRoute && active === "dashboard"}
-        />
-
-        {/* DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance). */}
-        <DrFlitAssistant
-          displayName={currentUser?.displayName ?? currentUser?.email ?? null}
-          routeScope={`${pathname}|${active}`}
-          // Mismo criterio que el dock: sin filtro RBAC se ve todo; con filtro, solo si el módulo viene.
-          historialPlacaEnabled={
-            visibleModuleCodes ? visibleModuleCodes.includes("historial-placa") : true
-          }
-          canSearchValidaciones={visibleDock.some((it) => it.id === "validaciones")}
-          // Épica #12718 — el JWT no trae display_name: currentUser.displayName cae al correo o a
-          // «Usuario». Al caso de soporte solo va un nombre real; si no hay, la persona lo escribe.
-          supportContact={{
-            name:
-              currentUser?.displayName && currentUser.displayName !== currentUser.email && currentUser.displayName !== "Usuario"
-                ? currentUser.displayName
-                : null,
-            email: currentUser?.email ?? null,
-          }}
-        />
-
-        {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}
-        <div className="lg:hidden">
-          <button
-            ref={dockLauncherRef}
-            onClick={() => setDockOpen(true)}
-            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2"
-            style={{ boxShadow: "var(--nav-sombra-activo)" }}
-            aria-label="Abrir menú de navegación"
-            aria-expanded={dockOpen}
-            aria-controls="dock-mobile-sheet"
-          >
-            <img src={fabIcon} alt="" aria-hidden="true" className="h-full w-full object-cover" />
-          </button>
-
-          {dockOpen && (
-            <div
-              className="absolute inset-0 z-50 flex items-end justify-center p-4"
-              style={{ background: "rgba(22, 39, 68, 0.45)", backdropFilter: "blur(4px)" }}
-              onPointerDown={(e) => {
-                if (e.target === e.currentTarget) {
-                  setDockOpen(false);
-                  dockLauncherRef.current?.focus();
-                }
-              }}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Navegación"
-            >
-              <div
-                id="dock-mobile-sheet"
-                className="dock-sheet w-full max-w-sm max-h-[min(70vh,32rem)] overflow-y-auto rounded-[var(--nav-radio-panel)] p-4"
-                style={{
-                  background: "var(--nav-panel-bg)",
-                  border: "1px solid var(--nav-borde)",
-                  boxShadow: "var(--nav-sombra-panel)",
-                }}
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold tracking-wide text-[var(--nav-texto-tenue)] uppercase">
-                    Navegación
-                  </span>
-                  <button
-                    onClick={() => {
-                      setDockOpen(false);
-                      dockLauncherRef.current?.focus();
-                    }}
-                    className="p-1 rounded-md hover:bg-[var(--nav-app-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]"
-                    aria-label="Cerrar menú"
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
-                <div className="flex flex-col gap-3">
-                  {groups.map((g) => (
-                    <div key={g.id}>
-                      <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--nav-texto-tenue)]">
-                        {g.label}
-                      </p>
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                        {flattenDockEntries(g.items).map((it) => {
-                          const Icon = it.icon;
-                          return (
-                            <button
-                              key={it.key}
-                              onClick={() => {
-                                setDockOpen(false);
-                                it.onClick();
-                              }}
-                              className={`dock-pill flex flex-col items-center gap-1 rounded-xl p-2 text-center transition-colors duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] ${
-                                it.active ? "font-semibold text-white" : "font-medium"
-                              }`}
-                              style={
-                                it.active
-                                  ? {
-                                      background: "var(--nav-activo)",
-                                      boxShadow: "var(--nav-sombra-activo)",
-                                      color: "#ffffff",
-                                    }
-                                  : undefined
-                              }
-                              aria-current={it.active ? "page" : undefined}
-                            >
-                              <Icon className="h-5 w-5" strokeWidth={it.active ? 2.4 : 1.8} aria-hidden="true" />
-                              <span className="text-[10px] leading-tight line-clamp-2">{it.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer
-        className="shrink-0 px-4 md:px-6 py-2 border-t text-[10px] text-center"
-        style={{
-          borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)",
-          color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
-        }}
-      >
-        Políticas de Privacidad y Términos de Uso · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
-      </footer>
-    </div>
-  );
+  }, [enabled, fromPath]);
+  return fromPath ?? resolved;
 }
 
-function MenuItem({
-  icon: Icon,
-  label,
-  onClick,
-  danger,
+/**
+ * Barra de Trámites (B-13): la barra común de la suite (`@flit/shell`) con el catálogo de Trámites. Aquí queda solo lo
+ * propio del producto: quién es el usuario (sesión antigua o claims de @flit/auth, las dos en `flit:jwt`), el tema,
+ * Dr. FLIT y el pie. El dock ya no recibe el módulo activo ni un `onNav`: cada entrada es un enlace y la activa sale de
+ * la URL.
+ */
+export function Shell({
+  children,
+  onLogout,
+  visibleModuleCodes,
+  search = "",
 }: {
-  icon: typeof LayoutGrid;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
+  children: ReactNode;
+  onLogout?: () => void;
+  /** Módulos RBAC accesibles (`useAccessibleModules`); sin la lista no se filtran los módulos de la SPA. */
+  visibleModuleCodes?: string[];
+  /** Consulta actual (`?m=…`) para marcar el módulo de la SPA; solo la página `/` la necesita. */
+  search?: string;
 }) {
+  const { dark } = useSuiteTheme();
+  const currentUser = useCurrentUser();
+  const pathname = usePathname() ?? "";
+  const otTransitOfficeId = useOtTransitOfficeId(Boolean(currentUser?.isOtUser), pathname);
+
+  const nav = useMemo(
+    () =>
+      tramitesNav({
+        isOtUser: Boolean(currentUser?.isOtUser),
+        isOtAdmin: Boolean(currentUser?.isOtAdmin),
+        isAdminCompany: Boolean(currentUser?.isAdminCompany),
+        isGroupParent: Boolean(currentUser?.isGroupParent),
+        tenantId: currentUser?.tenantId ?? null,
+        otTransitOfficeId,
+      }),
+    [currentUser, otTransitOfficeId],
+  );
+
+  const user = useMemo(
+    () => ({
+      email: currentUser?.email ?? "",
+      displayName: currentUser?.displayName ?? null,
+      tenantName: currentUser?.tenantName ?? null,
+      permissions: currentUser?.permissions ?? [],
+      roles: currentUser?.roles ?? [],
+      isSuperAdmin: Boolean(currentUser?.isSuperAdmin),
+      modules: visibleModuleCodes,
+    }),
+    [currentUser, visibleModuleCodes],
+  );
+
+  const activeModule = pathname.startsWith("/tramites") ? "tramites" : (new URLSearchParams(search).get("m") ?? "dashboard");
+  // Mismo criterio que el dock: sin filtro RBAC se ve todo; con filtro, solo si el módulo viene.
+  const hasModule = (code: string) => (visibleModuleCodes ? visibleModuleCodes.includes(code) : true);
+
   return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-black/5 dark:hover:bg-white/10 transition"
-      style={{ color: danger ? "var(--color-flit-alert)" : undefined }}
+    <SuiteShell
+      productCode="tramites"
+      productName="Trámites"
+      nav={nav}
+      user={user}
+      loadApps={loadApps}
+      homeHref="/"
+      search={search}
+      onLogout={onLogout}
+      layout="app"
+      overlay={
+        // DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance).
+        <DrFlitAssistant
+          displayName={currentUser?.displayName ?? currentUser?.email ?? null}
+          routeScope={`${pathname}|${activeModule}`}
+          historialPlacaEnabled={hasModule("historial-placa")}
+          canSearchValidaciones={hasModule("validaciones")}
+          // Épica #12718 — al caso de soporte solo va un nombre real: `displayName` es null si el token no lo trae
+          // (no cae al correo); sin nombre, la persona lo escribe.
+          supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email || null }}
+        />
+      }
+      footer={
+        <footer
+          className="shrink-0 px-4 md:px-6 py-2 border-t text-[10px] text-center"
+          style={{
+            borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)",
+            color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
+          }}
+        >
+          Políticas de Privacidad y Términos de Uso · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
+        </footer>
+      }
     >
-      <Icon className="h-4 w-4" />
-      <span className="font-medium">{label}</span>
-    </button>
+      {children}
+    </SuiteShell>
   );
 }

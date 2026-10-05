@@ -21,7 +21,7 @@ Las demás 15 reglas se conservan tal cual:
 6. Sin placeholders (TODO, TBD, XXX) en items Active
 7. Bugs PDN: SIEMPRE al Líder Técnico
 8. PRs target: SIEMPRE `develop`, nunca `main`
-9. PRs ≤ 800 líneas
+9. PRs ≤ 800 líneas (excepción: los PRs de la FLIT Suite van uno por Feature de ADO y sin este límite, con commits `HU<id>:` por HU; ver `docs/suite/reglas-trabajo-paralelo.md` R1)
 10. Cero threads activos sin resolver
 11. Code Review + Security succeeded antes de mergear
 12. ≥1 reviewer humano

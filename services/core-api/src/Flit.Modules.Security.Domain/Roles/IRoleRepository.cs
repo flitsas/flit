@@ -12,9 +12,15 @@ public interface IRoleRepository
 
     /// <summary>Activa/desactiva un rol del catálogo global (HU #10505). Gobernanza SuperAdmin (HU #10508).</summary>
     Task SetActiveAsync(Guid roleId, bool isActive, CancellationToken ct);
+
+    /// <summary>
+    /// Productos (<c>security.modules.product_code</c>) de los módulos a los que pertenecen esos permisos
+    /// (HU #12964). Un rol solo puede tener permisos de su producto.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetPermissionProductCodesAsync(IReadOnlyList<Guid> permissionIds, CancellationToken ct);
 }
 
-public sealed record CreateRoleData(string TargetEntityType, string Code, string Name, string? Description);
+public sealed record CreateRoleData(string TargetEntityType, string Code, string Name, string? Description, string ProductCode = "tramites");
 
 public sealed record RoleDetail(
     Guid Id,
@@ -24,7 +30,8 @@ public sealed record RoleDetail(
     string? Description,
     bool IsSystem,
     bool IsActive,
-    IReadOnlyList<PermissionSlug> Permissions);
+    IReadOnlyList<PermissionSlug> Permissions,
+    string ProductCode = "tramites");
 
 public sealed record PermissionSlug(Guid Id, string Slug, string Name);
 
@@ -37,4 +44,5 @@ public sealed record RoleSummary(
     bool IsSystem,
     bool IsActive,
     int PermissionCount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string ProductCode = "tramites");

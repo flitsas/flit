@@ -3,17 +3,31 @@
 // Modal global de sesión expirada (HU #10172, AC2). Escucha el evento emitido por
 // el cliente HTTP cuando la API responde SESSION_EXPIRED y redirige a /login
 // preservando la ruta actual como returnUrl. Accesible (role=dialog, aria-modal).
+//
+// Con la sesión de la suite (FLIT_SESSION_MODE=oidc) casi nunca es que la sesión venció: es que esta cookie quedó de
+// una sesión que se cerró desde otro producto, o de otro usuario que ya no es el del hub. Entonces se pide una sesión
+// nueva al hub sin mostrar nada (si el hub tiene sesión, el usuario ni lo nota); el modal queda para cuando eso ya se
+// intentó hace poco y la API sigue rechazando.
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { reauthenticate } from "@flit/auth/client";
 import { SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
+import { isOidcSession } from "@/lib/auth/session-mode";
 
 export function SessionExpiredListener() {
   const [open, setOpen] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    const handler = () => setOpen(true);
+    const handler = () => {
+      if (isOidcSession() && reauthenticate()) {
+        setReconnecting(true);
+        return;
+      }
+      setOpen(true);
+    };
     window.addEventListener(SESSION_EXPIRED_EVENT, handler);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handler);
   }, []);
@@ -22,6 +36,20 @@ export function SessionExpiredListener() {
     setOpen(false);
     const returnUrl = encodeURIComponent(pathname || "/");
     router.push(`/login?returnUrl=${returnUrl}`);
+  }
+
+  if (reconnecting) {
+    // HU #13004 — mientras se pide la sesión nueva al hub: tapa la pantalla para que no se vean errores sueltos.
+    return (
+      <div
+        className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-[#eef5ff]/95 backdrop-blur-sm dark:bg-[#05060A]/95"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#557eff] border-t-transparent" aria-hidden="true" />
+        <p className="text-sm font-medium text-[#162744] dark:text-white">Reconectando tu sesión…</p>
+      </div>
+    );
   }
 
   if (!open) {

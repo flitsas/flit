@@ -28,7 +28,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "que-es",
         title: "1. Qué es el Inicio",
         paragraphs: [
-          "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
+          "El botón central flotante (FAB) «Inicio Trámites» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
           "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
           "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
           "El volumen se resume en cinco tarjetas: Total trámites, Matrículas, Traspasos, Otros Trámites (cualquier trámite que no sea matrícula ni traspaso) y Completados.",

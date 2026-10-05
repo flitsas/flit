@@ -128,8 +128,13 @@ services:
     working_dir: /app/api
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
+    # HU #13226: ancla — core-identity reusa TODO este bloque (misma llave de firma, clientes OIDC, correo, base), así
+    # los dos procesos no pueden quedar con valores distintos. Lo que cambie aquí cambia en los dos.
+    environment: &core-api-env
+      # HU #12895 (FLIT Suite A-02) — nombre del ambiente .NET, igual en core-api, core-ict y gateway. Sin la variable
+      # sigue en Development, como hoy. Tiene nombre propio (no ASPNETCORE_ENVIRONMENT) para que otra variable del .env
+      # no lo cambie sin querer. Qué depende del nombre: docs/suite/frentes/a-inventario-ambientes.md.
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN}
@@ -141,9 +146,10 @@ services:
       # navegador no la admite en un Origin) y QA/PDN ya la tienen bien, o su CORS fallaria.
       # SIN valor por defecto a proposito: un respaldo a DEV repetiria el bug en silencio.
       # Si falta, `docker compose` aborta antes de crear contenedores con el mensaje de abajo.
-      # Los sufijos son los de appsettings.json; si cambian alla, cambian aqui.
+      # Los sufijos son los de appsettings.json; si cambian alla, cambian aqui. La recuperacion va a
+      # /auth/reset-password: es la pagina que existe en el front (la /reset-password de appsettings.json no).
       Invitations__ActivateUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/invite/activate
-      PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/reset-password
+      PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/auth/reset-password
       Notifications__EmailAssets__BaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/email-assets
       PublicBranding__PublicBaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}
       # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
@@ -164,9 +170,31 @@ services:
       # El file-manager sobre Contabo (filemanager.flitsas.com) SI lo exige y responde
       # 401 sin el. Tiene que ir en el MISMO valor que en core-ict (ADR-0057).
       FileManager__AuthToken: ${FILE_MANAGER_AUTH_TOKEN:-}
-      # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
-      # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
-      Jwt__DevGenerate: "true"
+      # HU #12895 (A-02) — lo que antes decidía el nombre del ambiente, ahora explícito. Los valores por defecto son los
+      # de hoy (los tres ambientes corren como Development), así que desplegar esto no cambia nada. Cada uno se apaga
+      # con una línea en el .env:
+      #   FLIT_SEED_RBAC_CATALOG  roles de sistema, módulos, permisos y catálogo de organismos (dejar en true)
+      #   FLIT_SEED_DEMO_USERS    cuentas demo con contraseña fija y sus empresas (false fuera de DEV)
+      #   FLIT_SWAGGER_ENABLED    /swagger público (false en PDN)
+      #   SMTP_USE_CONSOLE_WHEN_NO_HOST  sin SMTP_HOST, el correo sale por consola en vez de fallar
+      #   FLIT_DEV_SEED           las migraciones de datos demo también siembran con otro nombre de ambiente
+      Seed__RbacCatalog: ${FLIT_SEED_RBAC_CATALOG:-true}
+      Seed__DemoUsers: ${FLIT_SEED_DEMO_USERS:-true}
+      Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
+      Smtp__UseConsoleWhenNoHost: ${SMTP_USE_CONSOLE_WHEN_NO_HOST:-true}
+      FLIT_DEV_SEED: ${FLIT_DEV_SEED:-}
+      # HU #12896 (FLIT Suite A-03) — la API firma con una llave PERSISTENTE (security.jwt_signing_keys,
+      # cifrada con Data Protection) en vez de una efímera que cambiaba en cada despliegue, y VALIDA firma,
+      # emisor, audiencia y vencimiento de sus tokens. Antes aceptaba cualquier token (a-inventario-ambientes.md,
+      # punto 4). No requiere llaves en el .env. Si algo fallara, poner JWT_VALIDATE_ISSUED_TOKENS=false en el .env
+      # vuelve al comportamiento anterior sin redesplegar código.
+      Jwt__PersistSigningKey: ${JWT_PERSIST_SIGNING_KEY:-true}
+      Jwt__ValidateIssuedTokens: ${JWT_VALIDATE_ISSUED_TOKENS:-true}
+      # FLIT Suite — prefijo de ambiente de los hosts (contrato §1): dev, qa o vacío en PDN. Lo exporta el CD según la
+      # rama; sin él, me/apps y el emisor OIDC apuntarían a los hosts de PDN.
+      Suite__Hosts__Environment: ${FLIT_SUITE_ENV?FLIT_SUITE_ENV debe estar definida (dev, qa o vacía en PDN); sin ella los clientes OIDC se reescriben con los hosts de PDN}
+      # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
+      Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
@@ -348,6 +376,38 @@ services:
     restart: *restart
     logging: *default-logging
 
+  # ── core-identity (Epic #13217, HU #13233) — CORE_IDENTITY_PORT ──────────────
+  # El servicio de identidad de la FLIT Suite, con su propia imagen (services/core-identity): login (el de siempre y
+  # OIDC del hub), recuperación de cuenta, productos de la empresa y marca pública. No carga Trámites ni corre procesos
+  # de negocio ni migraciones (las corre core-api). Ver docs/suite/identidad-frontera.md.
+  # Perfil "identity": no arranca si no se pide (COMPOSE_PROFILES=identity), y aun arrancado no recibe tráfico hasta
+  # que el gateway tenga FLIT_IDENTITY_CLUSTER_ENABLED=true. Volver atrás = apagar esa bandera.
+  # Sin depends_on de core-api a propósito: tiene que poder arrancar aunque core-api esté caído.
+  core-identity:
+    profiles: ["identity"]
+    image: ghcr.io/flitsas/flitdev/core-identity:${CORE_IDENTITY_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Mismo bloque de variables que core-api (ancla): llave de firma, clientes OIDC, correo, base. Lo que cambie allá
+      # cambia aquí; si difirieran, un proceso rechazaría los tokens del otro.
+      <<: *core-api-env
+      ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4004}
+    volumes:
+      # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
+    ports:
+      - "127.0.0.1:${CORE_IDENTITY_PORT:-4004}:${CORE_IDENTITY_PORT:-4004}"
+    healthcheck:
+      # Listo = base alcanzable y sin migraciones que falten (no solo «vivo»). El gateway también lo consulta.
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_IDENTITY_PORT:-4004}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    logging: *default-logging
+
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
   core-ict:
     image: ghcr.io/flitsas/flitdev/core-ict:${CORE_ICT_TAG:-latest}
@@ -356,9 +416,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${CORE_ICT_PORT:-4020}
       Urls: http://0.0.0.0:${CORE_ICT_PORT:-4020}
+      # HU #12895 (A-02) — misma variable que core-api.
+      Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
@@ -494,7 +557,8 @@ services:
     # content root = working_dir, para que YARP cargue sus rutas de appsettings.json
     working_dir: /app/gateway
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN}
       # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
@@ -505,12 +569,19 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
+      # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
+      # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
+      Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}
+      # Primero core-identity y de respaldo core-api (el gateway elige el primero sano por /health/ready).
+      ReverseProxy__Clusters__core-identity-cluster__Destinations__a-core-identity__Address: http://core-identity:${CORE_IDENTITY_PORT:-4004}/
+      ReverseProxy__Clusters__core-identity-cluster__Destinations__b-core-api__Address: http://core-api:${CORE_API_PORT:-4003}/
       # MISMA variable que el ASPNETCORE_URLS de migracion-api. appsettings.json trae
       # el 4030 de DEV/local; sin este override, en QA/PDN el gateway apunta a un
       # puerto donde nadie escucha y responde 502 sin cuerpo.
       ReverseProxy__Clusters__migracion-cluster__Destinations__migracion-api-1__Address: http://migracion-api:${MIGRACION_API_PORT:-4030}/
-      # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
-      # ni exige autenticación (ver Flit.Gateway/Program.cs).
+      # El gateway no valida el token ni exige autenticación (ver Flit.Gateway/Program.cs): lo hace core-api con su
+      # llave persistente (HU #12896). El filtro que quita la policy de las rutas lo decide Gateway__DisableJwtPolicy
+      # (por defecto, solo en Development); sin efecto funcional mientras JwtRequired deje pasar todo.
       # ── Marca Blanca (#12417/#12421) ────────────────────────────────────────
       # Como llega a core-api para resolver la lista de dominios activos (CORS dinamico)
       # y la MISMA clave que Internal__ApiKey de core-api arriba (ver ese comentario si
@@ -525,7 +596,7 @@ services:
       # (BRANDING_INTERNAL_API_URL, servicio frontend abajo), NUNCA trafico publico via
       # nginx. Vacio/no listado = nunca se confia en el sello entrante (fail-closed, el
       # Gateway usa siempre Request.Host.Host — comportamiento de hoy).
-      DomainSeal__InternalAllowedNetworks__0: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}
+      DomainSeal__InternalAllowedNetworks__0: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-4002}:${GATEWAY_PORT:-4002}"
     depends_on:
@@ -613,8 +684,56 @@ services:
       CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
       # ict-admin-route del Gateway (/api/v1/ict/{**catch-all}) -> core-ict-cluster.
       CORE_ICT_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+      # HU #13001 (FLIT Suite A-10) — sesión de Trámites. legacy (por defecto) = la de siempre. oidc = login por el hub
+      # con @flit/auth: el token queda en el servidor y el navegador llama /api/v1 por el mismo origen. Encender oidc
+      # exige el hub desplegado en FLIT_HUB_URL y Trámites en su propio host (A-11); se revierte volviendo a legacy.
+      FLIT_SESSION_MODE: ${FLIT_SESSION_MODE:-legacy}
+      FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_SESSION_SECRET: ${FLIT_SESSION_SECRET:-}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
+    depends_on:
+      - gateway
+    restart: *restart
+    logging: *default-logging
+
+  # ── FLIT Suite: hub en flitsas.online (B-09) — HUB_PORT ────────────────────
+  # Perfil `suite`: `docker compose up` NO lo levanta todavía. Se enciende agregando
+  # COMPOSE_PROFILES=suite al .env del ambiente, cuando el borde (nginx, DNS y certificado)
+  # tenga el host del hub. Mientras tanto el CD construye la imagen y no cambia nada en el servidor.
+  # Una sola imagen para DEV, QA y PDN: todo lo de abajo se lee en runtime (frontend-hub/lib/config.server.ts).
+  frontend-hub:
+    profiles: ["suite"]
+    image: ghcr.io/flitsas/flitdev/frontend-hub:${FRONTEND_HUB_TAG:-latest}
+    environment:
+      PORT: "${HUB_PORT:-4040}"
+      HOSTNAME: "0.0.0.0"
+      # /api/v1/* del navegador y la marca del host van al gateway por la red interna, con el
+      # sello X-Flit-Domain y la clave interna (mismo criterio que el servicio frontend).
+      CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+      BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
+      # @flit/auth (HU #13000, A-09): el hub es cliente `plataforma` de su propio servidor OIDC. FLIT_HUB_URL es la URL
+      # pública del hub (la exporta el CD); el canje de tokens va por la red interna al gateway. FLIT_SESSION_SECRET
+      # cifra la cookie de sesión: obligatoria, al menos 32 caracteres, distinta por ambiente y solo en el .env.
+      FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_SESSION_SECRET: ${FLIT_SESSION_SECRET:-}
+      # HU #13002 (A-11): con true el hub ocupa la raíz y redirige con 308 las rutas de Trámites a su host. Se enciende
+      # junto con el cambio del borde (deploy/edge/nginx/flit-suite-hosts.conf.example). FLIT_TRAMITES_URL la exporta el CD.
+      FLIT_TRAMITES_HOST_ENABLED: ${FLIT_TRAMITES_HOST_ENABLED:-false}
+      TRAMITES_URL: ${FLIT_TRAMITES_URL:-https://dev.tramites.flitsas.online}
+      # Hosts FLIT (sin marca de red). Mismo valor que NEXT_PUBLIC_FLIT_HOSTS de Trámites en cd.yml.
+      FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online}
+    ports:
+      - "127.0.0.1:${HUB_PORT:-4040}:${HUB_PORT:-4040}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HUB_PORT:-4040}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       - gateway
     restart: *restart
@@ -638,11 +757,11 @@ services:
 # OJO si DEV/QA/PDN comparten el mismo VPS (topologia real de este repo, ver
 # cabecera del archivo): cada stack necesita un FLIT_INTERNAL_SUBNET DISTINTO —
 # Docker rechaza crear dos redes con subredes que se solapan en el mismo host
-# ("Pool overlaps with other one on this address space"). Convencion sugerida,
-# documentada en deploy/edge/README.md: DEV 172.28.40.0/24 · QA 172.28.50.0/24 ·
-# PDN 172.28.60.0/24 (mismo digito de decenas que los puertos 4xxx/5xxx/6xxx).
+# ("Pool overlaps with other one on this address space"). Los que exporta el CD (cd.yml):
+# DEV 10.114.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24 (mismo digito de decenas
+# que los puertos 4xxx/5xxx/6xxx; 172.28.x ya estaba ocupado en el VPS compartido).
 networks:
   default:
     ipam:
       config:
-        - subnet: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}
+        - subnet: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}

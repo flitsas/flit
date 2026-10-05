@@ -17,7 +17,7 @@ namespace Flit.Infrastructure.Tests.Security;
 /// <code>
 /// await DevelopmentAuthSeeder.SeedGeneracionDocumentalPermissionsAsync(db, ct);
 /// // → módulo "generacion-documental" (SortOrder 10) + permisos .read/.generate
-/// //   concedidos a SuperAdmin y AdminCompany.
+/// //   concedidos a SuperAdmin y admin_tramites (HU #12964: los permisos de Trámites ya no van a AdminCompany).
 /// </code>
 /// Cubre los AC «El módulo se siembra en una base ya sembrada» y «El seeder es idempotente».
 /// </remarks>
@@ -66,7 +66,7 @@ public sealed class SeedGeneracionDocumentalPermissionsTests
         db.Roles.Add(new Role
         {
             Id = Guid.CreateVersion7(),
-            Code = "AdminCompany",
+            Code = "admin_tramites",
             Name = "Administrador de Compañía",
             TargetEntityType = "COMPANY",
             IsSystem = true,
@@ -128,9 +128,9 @@ public sealed class SeedGeneracionDocumentalPermissionsTests
     [Theory]
     [InlineData("SuperAdmin", ReadSlug)]
     [InlineData("SuperAdmin", GenerateSlug)]
-    [InlineData("AdminCompany", ReadSlug)]
-    [InlineData("AdminCompany", GenerateSlug)]
-    public async Task Seed_OtorgaAmbosPermisos_ASuperAdminYAdminCompany(string roleCode, string slug)
+    [InlineData("admin_tramites", ReadSlug)]
+    [InlineData("admin_tramites", GenerateSlug)]
+    public async Task Seed_OtorgaAmbosPermisos_ASuperAdminYAdminTramites(string roleCode, string slug)
     {
         var ct = TestContext.Current.CancellationToken;
         await using var db = NewDb("grants-" + roleCode + "-" + slug);
@@ -164,7 +164,7 @@ public sealed class SeedGeneracionDocumentalPermissionsTests
             .Select(a => a.Id)
             .ToListAsync(ct);
         var roleIds = await db.Roles
-            .Where(r => r.Code == "SuperAdmin" || r.Code == "AdminCompany")
+            .Where(r => r.Code == "SuperAdmin" || r.Code == "admin_tramites")
             .Select(r => r.Id)
             .ToListAsync(ct);
 

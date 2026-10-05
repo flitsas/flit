@@ -130,3 +130,6 @@ scripts/dev/
 # Contienen datos personales (nombres, documentos, direcciones, acreedor prendario):
 # son evidencia local, nunca van al repo (Ley 1581).
 services/core-api/artifacts/fur-analysis*/
+
+# Caché de pnpm: si alguien instala con --store-dir dentro del repo, no debe aparecer como cambios.
+.pnpm-store/

@@ -20,7 +20,7 @@ public static class ExternalClientAuthorization
     public const string ScopeClaim = "scope";
 
     /// <summary>Emisor por defecto del pase externo (<c>ExternalJwt:Issuer</c>).</summary>
-    public const string DefaultIssuer = "flit-core-external";
+    public const string DefaultIssuer = TokenValidationExtensions.DefaultExternalIssuer;
 
     /// <summary>Prefijo de las rutas externas.</summary>
     public const string RoutePrefix = "/api/v1/external";
