@@ -301,18 +301,33 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
 
     private FlitDbContext CreateDbContext() => _factory.Services.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
 
-    /// <summary>Asigna AdminCompany en la empresa de prueba; el espejo de la base agrega el admin de cada producto.</summary>
+    /// <summary>
+    /// Asigna AdminCompany en la empresa de prueba; el espejo de la base agrega el admin de cada producto. El rol lo
+    /// siembra el arranque de la API, no las migraciones: en una base solo migrada (CI) se crea aquí.
+    /// </summary>
     private async Task AssignAdminCompanyAsync()
     {
         await using var db = CreateDbContext();
+        var ct = TestContext.Current.CancellationToken;
         var adminCompany = await db.Roles.AsNoTracking()
-            .SingleAsync(r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null, TestContext.Current.CancellationToken);
+            .SingleOrDefaultAsync(r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null, ct);
+        if (adminCompany is null)
+        {
+            adminCompany = new Role
+            {
+                Id = Guid.CreateVersion7(), Code = "AdminCompany", Name = "Administrador de Compañía", TargetEntityType = "COMPANY",
+                ProductCode = "plataforma", IsSystem = true, IsActive = true, CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Roles.Add(adminCompany);
+            await db.SaveChangesAsync(ct);
+        }
+
         db.UserRoleAssignments.Add(new UserRoleAssignment
         {
             Id = Guid.CreateVersion7(), TenantId = _tenantId, UserId = _adminId, RoleId = adminCompany.Id,
             AssignedAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
         });
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task SetTramitesAsync(bool enabled)
