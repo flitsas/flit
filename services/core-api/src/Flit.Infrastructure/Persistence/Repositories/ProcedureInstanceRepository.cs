@@ -1654,6 +1654,7 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance) // Bug #13055 — CongeladaPorTramite necesita el estado del trámite.
+                .ThenInclude(i => i!.ProcedureType) // HU #13289 — nombre del producto en la vista de captura manual.
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
