@@ -14,6 +14,8 @@ export interface CameraViewerProps {
   hint?: string;
   /** Se llama con el Blob JPEG cuando el cliente pulsa «Continuar» sobre la vista previa. */
   onContinue: (blob: Blob) => void;
+  /** Captura ya tomada (al volver con «Atrás»): abre directo la vista previa, sin reabrir la cámara. */
+  initialBlob?: Blob;
 }
 
 const btnBase =
@@ -24,12 +26,19 @@ const btnBase =
  * lista, capturada, permiso denegado, sin cámara y navegador no compatible/sin HTTPS.
  * Sin selector de archivos en ningún punto.
  */
-export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint, onContinue }: CameraViewerProps) {
+export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint, onContinue, initialBlob }: CameraViewerProps) {
   const [facing, setFacing] = useState<CameraFacing>(initialFacing);
-  const [captured, setCaptured] = useState<{ blob: Blob; url: string } | null>(null);
-  const { videoRef, status, restart, capture } = useLiveCamera({ facing, enabled: !captured });
   const urlRef = useRef<string | null>(null);
+  const [captured, setCaptured] = useState<{ blob: Blob; url: string } | null>(() => {
+    if (!initialBlob) return null;
+    return { blob: initialBlob, url: URL.createObjectURL(initialBlob) };
+  });
+  const { videoRef, status, restart, capture } = useLiveCamera({ facing, enabled: !captured });
 
+  // urlRef refleja la URL vigente para liberarla al desmontar.
+  useEffect(() => {
+    urlRef.current = captured?.url ?? null;
+  }, [captured]);
   useEffect(
     () => () => {
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -40,14 +49,11 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
   async function take() {
     const blob = await capture();
     if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    urlRef.current = url;
-    setCaptured({ blob, url });
+    setCaptured({ blob, url: URL.createObjectURL(blob) });
   }
 
   function repeat() {
     if (captured) URL.revokeObjectURL(captured.url);
-    urlRef.current = null;
     setCaptured(null);
     restart();
   }

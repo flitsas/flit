@@ -13,7 +13,9 @@ import { CaptureCard } from "./CaptureCard";
 import { LinkTerminal } from "./LinkTerminal";
 import { StepBar } from "./StepBar";
 import { PasoDatos } from "./PasoDatos";
+import { PasoCaptura } from "./PasoCaptura";
 import { StepPlaceholder } from "./StepPlaceholder";
+import type { Captures } from "@/lib/captura-manual/captures";
 
 type Load =
   | { kind: "loading" }
@@ -31,6 +33,10 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
   const [steps, dispatch] = useReducer(stepsReducer, initialStepsState);
 
   const [attempt, setAttempt] = useState(0);
+  // Las imágenes (Blob) viven solo en memoria del flujo hasta el envío final; recargar reinicia en Datos.
+  const [captures, setCaptures] = useState<Captures>({});
+  // El consentimiento ya se registró: volver a Datos no lo re-envía ni desmarca la casilla.
+  const [consented, setConsented] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,7 +100,25 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           Flujo completado.
         </p>
       ) : steps.current === 0 ? (
-        <PasoDatos token={token} view={load.view} client={api} onDone={() => dispatch({ type: "next" })} />
+        <PasoDatos
+          token={token}
+          view={load.view}
+          client={api}
+          consentRegistered={consented}
+          onConsentRegistered={() => setConsented(true)}
+          onDone={() => dispatch({ type: "next" })}
+        />
+      ) : step.id === "rostro" || step.id === "anverso" || step.id === "reverso" ? (
+        <PasoCaptura
+          key={step.id}
+          kind={step.id}
+          blob={captures[step.id]}
+          onCaptured={(blob) => {
+            setCaptures((c) => ({ ...c, [step.id]: blob }));
+            dispatch({ type: "next" });
+          }}
+          onBack={() => dispatch({ type: "back" })}
+        />
       ) : (
         <StepPlaceholder
           label={step.label}

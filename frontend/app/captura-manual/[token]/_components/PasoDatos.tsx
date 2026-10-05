@@ -17,15 +17,20 @@ export function PasoDatos({
   token,
   view,
   client,
+  consentRegistered = false,
+  onConsentRegistered,
   onDone,
 }: {
   token: string;
   view: ManualCaptureView;
   client: ManualCaptureClient;
+  /** El consentimiento ya se registró en esta sesión (el cliente volvió a Datos con «Atrás»). */
+  consentRegistered?: boolean;
+  onConsentRegistered?: () => void;
   onDone: () => void;
 }) {
   const checkId = useId();
-  const [accepted, setAccepted] = useState(false);
+  const [accepted, setAccepted] = useState(consentRegistered);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
 
@@ -33,7 +38,11 @@ export function PasoDatos({
     setSending(true);
     setError(false);
     try {
-      await client.postConsent(token, { accepted: true, textVersion: CONSENT_TEXT_VERSION });
+      // Si ya se registró (volvió con «Atrás»), no se vuelve a enviar: solo se avanza.
+      if (!consentRegistered) {
+        await client.postConsent(token, { accepted: true, textVersion: CONSENT_TEXT_VERSION });
+        onConsentRegistered?.();
+      }
       onDone();
     } catch {
       // La casilla se conserva: el cliente reintenta sin volver a marcarla.
@@ -95,6 +104,7 @@ export function PasoDatos({
           id={checkId}
           type="checkbox"
           checked={accepted}
+          disabled={consentRegistered}
           onChange={(e) => setAccepted(e.target.checked)}
           className="mt-1 size-5 shrink-0 accent-flit-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
         />
