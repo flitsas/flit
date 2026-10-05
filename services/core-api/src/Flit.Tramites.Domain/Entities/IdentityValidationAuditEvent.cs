@@ -115,6 +115,17 @@ public static class IdentityValidationAuditStages
     /// (para que Kyverum no reintente) sin aplicar nada. Sin payload, sin firma y sin secretos en el evento.
     /// </summary>
     public const string WebhookIgnoradoManual = "webhook_ignorado_manual";
+
+    /// <summary>
+    /// HU #13287 — el Super Admin regeneró el enlace de captura manual: el token anterior dejó de valer. Sin PII ni token.
+    /// </summary>
+    public const string ManualEnlaceRegenerado = "manual_enlace_regenerado";
+
+    /// <summary>
+    /// HU #13287 — el correo con el enlace de captura manual NO salió (titular sin correo o fallo de envío). La activación o la
+    /// regeneración ya estaban confirmadas; el Super Admin puede regenerar. Sin correo, sin token y sin PII.
+    /// </summary>
+    public const string ManualCorreoFallido = "manual_correo_fallido";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

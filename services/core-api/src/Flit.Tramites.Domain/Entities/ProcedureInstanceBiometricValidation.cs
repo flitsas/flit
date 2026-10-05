@@ -252,6 +252,39 @@ public sealed class ProcedureInstanceBiometricValidation
     }
 
     /// <summary>
+    /// HU #13287 (Feature #13280 A5) — ¿se puede regenerar el enlace de captura? Solo con el flujo manual esperando captura
+    /// (<see cref="BiometricProviders.Manual"/> + <see cref="BiometricEstados.ManualActivo"/>). Un enlace vencido (más de
+    /// <see cref="BiometricRules.TokenTtlHoras"/> h) sí se regenera: es el caso de uso principal.
+    /// </summary>
+    public bool PuedeRegenerarEnlaceManual =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal);
+
+    /// <summary>
+    /// HU #13287 — emite un enlace de captura NUEVO que REEMPLAZA al anterior: <paramref name="tokenHash"/> (SHA-256 hex del
+    /// token nuevo; el crudo jamás entra a la entidad) sustituye a <see cref="TokenHash"/>, así el token viejo deja de
+    /// encontrarse por hash, y la vigencia se reinicia a <see cref="BiometricRules.TokenTtlHoras"/> horas desde
+    /// <paramref name="now"/>. Cuenta el reenvío (<see cref="ResendCount"/>, <see cref="LastResentAt"/>). No toca el estado,
+    /// quién ni cuándo se activó, ni las fotos o el consentimiento.
+    /// </summary>
+    /// <exception cref="FlujoManualNoActivoException">No está en <c>manual_activo</c>.</exception>
+    public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash)
+    {
+        if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
+            throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
+        if (!PuedeRegenerarEnlaceManual)
+            throw new Flit.Tramites.Domain.Identity.FlujoManualNoActivoException();
+        if (string.Equals(tokenHash, TokenHash, StringComparison.Ordinal))
+            throw new ArgumentException("El enlace regenerado debe ser distinto del anterior.", nameof(tokenHash));
+
+        TokenHash = tokenHash;
+        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ResendCount++;
+        LastResentAt = now;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
     /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y
     /// ESTAMPA la fecha de fin de vigencia (<c>now + VigenciaDias</c>, medianoche Colombia). Punto ÚNICO de
     /// aprobación: garantiza que <see cref="ValidUntil"/> quede siempre en sync con <see cref="ValidatedAt"/>

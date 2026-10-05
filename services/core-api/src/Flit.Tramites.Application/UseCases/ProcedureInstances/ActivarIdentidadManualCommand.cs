@@ -23,7 +23,8 @@ public sealed record ActivarIdentidadManualResult(
     DateTimeOffset ExpiresAt,
     DateTimeOffset ActivatedAt,
     bool KyverumCancelado,
-    string Origin);
+    string Origin,
+    bool EmailEnviado);
 
 /// <summary>
 /// Activa el flujo manual sobre una validación que NO esté aprobada y vigente: la MISMA fila pasa a proveedor
@@ -98,10 +99,11 @@ public sealed class ActivarIdentidadManualHandler(
             Detail: $"origen={origen}; usuario={command.ActivatedByUserId}; estado_previo={estadoPrevio}; proveedor_previo={proveedorPrevio}; "
                 + $"kyverum_cancelado={cancelaKyverum}; expira_at={v.ExpiresAt:O}"), ct).ConfigureAwait(false);
 
-        // El token en claro sale de aquí solo hacia el puerto (A5 lo manda por correo).
-        await notifier.NotifyAsync(new ManualCaptureLink(v.Id, v.TenantId, token, v.ExpiresAt), ct).ConfigureAwait(false);
+        // El token en claro sale de aquí solo hacia el puerto (HU #13287: correo al titular). Si el correo no sale, la activación
+        // ya confirmada NO se revierte: se audita 'manual_correo_fallido' y el resultado lo informa (EmailEnviado = false).
+        var emailEnviado = await ManualCaptureLinkDelivery.SendAsync(notifier, audit, v, token, ct).ConfigureAwait(false);
 
         return (new ActivarIdentidadManualResult(
-            v.Id, v.TenantId, v.ProcedureInstanceId, v.Provider, v.Status, v.ExpiresAt, now, cancelaKyverum, origen), null);
+            v.Id, v.TenantId, v.ProcedureInstanceId, v.Provider, v.Status, v.ExpiresAt, now, cancelaKyverum, origen, emailEnviado), null);
     }
 }

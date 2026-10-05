@@ -26,6 +26,12 @@ public sealed class ActivarIdentidadManualHandlerTests
     private readonly IIdentityValidationAuditLog _audit = Substitute.For<IIdentityValidationAuditLog>();
     private readonly IManualCaptureLinkNotifier _notifier = Substitute.For<IManualCaptureLinkNotifier>();
 
+    public ActivarIdentidadManualHandlerTests()
+    {
+        // Por defecto el correo sale; los casos de fallo lo reconfiguran.
+        _notifier.NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>()).Returns(true);
+    }
+
     private ActivarIdentidadManualHandler Handler() => new(_repo, _audit, _notifier, new FixedTime(Now));
 
     private ProcedureInstanceBiometricValidation Fila(
@@ -43,6 +49,8 @@ public sealed class ActivarIdentidadManualHandlerTests
             PartyRole = instanceId is null ? null : BiometricRules.ParteComprador,
             Status = status,
             Provider = provider,
+            Name = "Persona de prueba",
+            Email = "persona@example.test",
             TokenHash = new string('0', 64),
             ExpiresAt = Now.AddHours(-2),
             KyverumVerificationId = provider == BiometricProviders.Kyverum ? "kyv_ext_9" : null,
@@ -106,6 +114,75 @@ public sealed class ActivarIdentidadManualHandlerTests
         {
             (e.Message + e.Detail).Should().NotContain(token!).And.NotContain("cifrado").And.NotContain("captura.example");
         }
+    }
+
+    // ── HU #13287 — correo con el enlace ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A5_ActivacionExitosa_EnviaElCorreoUnaSolaVez_ConElDestinatarioDeLaFila()
+    {
+        var v = Fila(BiometricEstados.Rechazado, instanceId: Guid.NewGuid(), tramiteStatus: TramiteEstado.Entregado);
+        var entradas = new List<IdentityValidationAuditEntry>();
+        await _audit.LogAsync(Arg.Do<IdentityValidationAuditEntry>(entradas.Add), Arg.Any<CancellationToken>());
+
+        var (result, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        error.Should().BeNull();
+        result!.EmailEnviado.Should().BeTrue();
+        await _notifier.Received(1).NotifyAsync(
+            Arg.Is<ManualCaptureLink>(l => l.RecipientEmail == "persona@example.test" && l.RecipientName == "Persona de prueba"
+                && l.ValidationId == v.Id),
+            Arg.Any<CancellationToken>());
+        entradas.Should().NotContain(e => e.Stage == IdentityValidationAuditStages.ManualCorreoFallido);
+    }
+
+    [Fact]
+    public async Task A5_ElCorreoNoSale_NoRevierteLaActivacion_AuditaSinPII_YLoInformaEnElResultado()
+    {
+        var v = Fila(BiometricEstados.Rechazado, instanceId: Guid.NewGuid(), tramiteStatus: TramiteEstado.Entregado);
+        _notifier.NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>()).Returns(false);
+        var entradas = new List<IdentityValidationAuditEntry>();
+        await _audit.LogAsync(Arg.Do<IdentityValidationAuditEntry>(entradas.Add), Arg.Any<CancellationToken>());
+
+        var (result, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        error.Should().BeNull();
+        result!.EmailEnviado.Should().BeFalse();
+        result.Status.Should().Be("manual_activo");
+        v.Status.Should().Be(BiometricEstados.ManualActivo, "la activación ya estaba confirmada");
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        var fallo = entradas.Should().ContainSingle(e => e.Stage == IdentityValidationAuditStages.ManualCorreoFallido).Subject;
+        (fallo.Message + fallo.Detail).Should().NotContain("persona@example.test").And.NotContain("Persona de prueba");
+    }
+
+    [Fact]
+    public async Task A5_ElNotificadorLanza_NoRevierteLaActivacion()
+    {
+        var v = Fila(BiometricEstados.Rechazado, instanceId: Guid.NewGuid(), tramiteStatus: TramiteEstado.Entregado);
+        _notifier.NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>())
+            .Returns<Task<bool>>(_ => throw new InvalidOperationException("smtp caido"));
+
+        var (result, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        error.Should().BeNull();
+        result!.EmailEnviado.Should().BeFalse();
+        v.Status.Should().Be(BiometricEstados.ManualActivo);
+    }
+
+    [Fact]
+    public async Task A5_TitularSinCorreo_NoIntentaEnviar_YAuditaElFallo()
+    {
+        var v = Fila(BiometricEstados.Rechazado, instanceId: Guid.NewGuid(), tramiteStatus: TramiteEstado.Entregado);
+        v.Email = "  ";
+        var entradas = new List<IdentityValidationAuditEntry>();
+        await _audit.LogAsync(Arg.Do<IdentityValidationAuditEntry>(entradas.Add), Arg.Any<CancellationToken>());
+
+        var (result, _) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        result!.EmailEnviado.Should().BeFalse();
+        await _notifier.DidNotReceive().NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>());
+        entradas.Should().ContainSingle(e => e.Stage == IdentityValidationAuditStages.ManualCorreoFallido)
+            .Which.Detail.Should().Be("causa=sin_correo");
     }
 
     // ── AC2 — aprobada y vigente: 409 y la fila no cambia ───────────────────────────────────────

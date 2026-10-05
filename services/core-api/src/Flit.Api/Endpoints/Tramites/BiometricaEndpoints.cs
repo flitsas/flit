@@ -682,6 +682,43 @@ internal static class BiometricaEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status409Conflict);
 
+        // POST regenerar el enlace de captura manual (HU #13287, Feature #13280, Épica #13202). SOLO Super Admin (misma policy
+        // que activate-manual). Emite un token nuevo de 24 h (solo su hash en BD) que REEMPLAZA al anterior: el viejo deja de
+        // encontrarse por hash (el público recibe 404, igual que ante un enlace inválido). Cross-tenant: el tenant sale de la
+        // fila, no de X-Tenant-Id. El token NO viaja en la respuesta: se entrega por correo; `emailEnviado` avisa si no salió.
+        group.MapPost("/biometric-validations/{id:guid}/regenerate-manual-link", async (
+            Guid id,
+            HttpContext http,
+            RegenerarEnlaceManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que regenera el enlace.");
+
+            var (result, error) = await handler.HandleAsync(new RegenerarEnlaceManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                RegenerarEnlaceManualHandler.NoEncontrada => Results.Problem(
+                    statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                RegenerarEnlaceManualHandler.FlujoManualNoActivo => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "La validación no está en flujo manual activo: no hay enlace que regenerar."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo regenerar el enlace."),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("RegenerarEnlaceManual")
+        .WithSummary("Regenera el enlace de captura manual (solo Super Admin); invalida el anterior y lo envía por correo")
+        .Produces<RegenerarEnlaceManualResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
         return app;
     }
 
