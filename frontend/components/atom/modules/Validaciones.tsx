@@ -65,6 +65,7 @@ import {
   isScopeRejection,
 } from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import {
   PrevalidacionForm,
   PrevalidacionSuccessPanel,
@@ -134,11 +135,13 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   expirado: { label: 'Expirado', tone: 'neutral' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
+  ...MANUAL_ESTADO_META,
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
   mock: 'Simulado',
   kyverum: 'Kyverum',
+  manual: 'Manual',
 };
 
 /** Formatea una fecha ISO a texto legible (es-CO). Devuelve el ISO crudo si no parsea. */

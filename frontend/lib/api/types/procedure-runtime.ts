@@ -1584,7 +1584,10 @@ export type BiometricEstado =
   | 'expirado'
   // Cola de envío (provider-agnostic): el envío al proveedor falló y se reintenta / agotó intentos.
   | 'pendiente_envio'
-  | 'error_envio';
+  | 'error_envio'
+  // Flujo manual de identidad (Épica #13202): esperando la captura del cliente / pendiente de revisión.
+  | 'manual_activo'
+  | 'pendiente_revision_manual';
 
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
@@ -1594,7 +1597,7 @@ export type BiometricParte = 'comprador' | 'vendedor';
  * `migracion_v1` = identidad que ya venía validada de V1 y la migración trajo como hecho
  * consumado; no hubo captura ni proveedor externo, y solo acredita a su propio trámite.
  */
-export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1';
+export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1' | 'manual';
 
 /** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
 export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';
@@ -1656,6 +1659,36 @@ export interface BiometricValidation {
 export interface ReconcileIdentityResult {
   status: BiometricEstado;
   updated: boolean;
+}
+
+/**
+ * HU #13288 (Épica #13202) — respuesta de POST /api/v1/tramites/biometric-validations/{id}/activate-manual
+ * (espejo de `ActivarIdentidadManualResult`). El token del enlace NO viaja: se entrega por correo.
+ */
+export interface ActivarIdentidadManualResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  provider: string;
+  status: BiometricEstado;
+  expiresAt: string;
+  activatedAt: string;
+  kyverumCancelado: boolean;
+  origin: string;
+  /** false = el correo no salió (p. ej. el titular no tiene correo válido): la activación SÍ quedó hecha. */
+  emailEnviado: boolean;
+}
+
+/** Respuesta de POST .../biometric-validations/{id}/regenerate-manual-link (`RegenerarEnlaceManualResult`). */
+export interface RegenerarEnlaceManualResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  provider: string;
+  status: BiometricEstado;
+  expiresAt: string;
+  activatedAt: string;
+  emailEnviado: boolean;
 }
 
 /**

@@ -19,6 +19,8 @@ import {
   hasKyverumCaptureQr,
   IdentityCaptureLinkBlock,
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
+import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityManualFlowActions';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import type {
@@ -43,6 +45,7 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   expirado: { label: 'Expirado', tone: 'warning' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
+  ...MANUAL_ESTADO_META,
 };
 
 const POLL_MS = 5000;
@@ -300,6 +303,7 @@ export function PersonIdentityDetailDrawer({
                     defaultOpen={idx === 0}
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
+                    onManualChanged={() => void load()}
                   />
                 ))}
               </div>
@@ -317,8 +321,11 @@ function ValidationAccordionItem({
   defaultOpen,
   trackingTick,
   soloConsulta = false,
+  onManualChanged,
 }: {
   validation: BiometricValidation;
+  /** HU #13288 — recarga el detalle tras activar el flujo manual o regenerar el enlace. */
+  onManualChanged?: () => void;
   /** HU #12709 — persona de una compañía hija vista por la cabeza: sin captura ni enlaces a trámites. */
   soloConsulta?: boolean;
   index: number;
@@ -381,6 +388,10 @@ function ValidationAccordionItem({
             />
             <SessionStat label="Fecha aprobación" value={formatFecha(v.validatedAt)} />
           </div>
+
+          {!soloConsulta && onManualChanged && (
+            <IdentityManualFlowActions validation={v} onChanged={onManualChanged} />
+          )}
 
           {associated.length > 0 && (
             <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
