@@ -1659,6 +1659,7 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance)
+            .Include(x => x.Person) // HU #13285 — ManualValidationOrigin distingue al representante legal por la persona jurídica.
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     // HU #10943 (CF-03) — TRACKEADA (editar/reenviar la modifica) + Person incluida (ResolveSubject).

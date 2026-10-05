@@ -4,6 +4,8 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
@@ -39,6 +41,8 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
     private readonly Guid _adminOtra = Guid.NewGuid();
     private readonly List<Guid> _validaciones = [];
     private readonly List<Guid> _personas = [];
+    private readonly List<Guid> _firmantes = [];
+    private readonly Guid _oficina = Guid.NewGuid();
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -177,6 +181,116 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // ── HU #13285 (A3) — mandatario y representante legal por el mismo endpoint ─────────────────
+
+    [Fact]
+    public async Task A3_Mandatario_no_aprobado_se_activa_conserva_MandateSignerId_y_no_crea_otra_validacion()
+    {
+        var (id, signer) = await SeedMandatarioAsync(BiometricEstados.EnProceso);
+        Authenticate("SuperAdmin", _tenantSuperAdmin, _superAdmin);
+
+        var response = await Post(id);
+
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        using var json = JsonDocument.Parse(body);
+        json.RootElement.GetProperty("status").GetString().Should().Be("manual_activo");
+        json.RootElement.GetProperty("provider").GetString().Should().Be("manual");
+        json.RootElement.GetProperty("origin").GetString().Should().Be("mandatario");
+
+        await using var db = NewDb();
+        var filas = await db.ProcedureInstanceBiometricValidations.AsNoTracking()
+            .Where(x => x.MandateSignerId == signer).ToListAsync(Ct);
+        filas.Should().ContainSingle("la activacion reutiliza la fila: una validacion propia por mandatario (HU #13246)");
+        var v = filas.Single();
+        v.Id.Should().Be(id);
+        v.MandateSignerId.Should().Be(signer);
+        v.PartyRole.Should().Be("mandatario");
+        v.ProcedureInstanceId.Should().BeNull();
+        v.PersonId.Should().BeNull();
+        v.Status.Should().Be(BiometricEstados.ManualActivo);
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(24), TimeSpan.FromMinutes(2));
+        var audit = await db.IdentityValidationAudits.AsNoTracking().Where(a => a.ValidationId == id).ToListAsync(Ct);
+        audit.Should().OnlyContain(a => a.PartyRole == "mandatario" && a.TenantId == _dueno);
+    }
+
+    [Fact]
+    public async Task A3_Mandatario_enviado_activado_sigue_siendo_la_unica_validacion_de_la_ficha()
+    {
+        var (id, signer) = await SeedMandatarioAsync(BiometricEstados.Enviado);
+        Authenticate("SuperAdmin", _tenantSuperAdmin, _superAdmin);
+
+        (await Post(id)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = NewDb();
+        (await db.ProcedureInstanceBiometricValidations.CountAsync(x => x.MandateSignerId == signer, Ct)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A3_Mandatario_aprobado_y_vigente_responde_409_y_no_cambia()
+    {
+        var (id, signer) = await SeedMandatarioAsync(BiometricEstados.Aprobado, vigente: true);
+        Authenticate("SuperAdmin", _tenantSuperAdmin, _superAdmin);
+
+        var response = await Post(id);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("identidad_aprobada_vigente");
+        await using var db = NewDb();
+        var v = await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.MandateSignerId.Should().Be(signer);
+        v.ManualActivatedBy.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A3_Mandatario_AdminCompany_recibe_403()
+    {
+        var (id, _) = await SeedMandatarioAsync(BiometricEstados.EnProceso);
+        Authenticate("AdminCompany", _dueno, _adminDueno);
+
+        (await Post(id)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await using var db = NewDb();
+        (await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct))
+            .Status.Should().Be(BiometricEstados.EnProceso);
+    }
+
+    [Fact]
+    public async Task A3_RepresentanteLegal_persona_juridica_standalone_se_activa_con_origen_representante_legal()
+    {
+        var id = await SeedAsync(BiometricEstados.Rechazado, kyverum: true, juridica: true);
+        Authenticate("SuperAdmin", _tenantSuperAdmin, _superAdmin);
+
+        var response = await Post(id);
+
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        using var json = JsonDocument.Parse(body);
+        json.RootElement.GetProperty("status").GetString().Should().Be("manual_activo");
+        json.RootElement.GetProperty("origin").GetString().Should().Be("representante_legal");
+    }
+
+    [Fact]
+    public async Task A3_RepresentanteLegal_aprobado_y_vigente_responde_409()
+    {
+        var id = await SeedAsync(BiometricEstados.Aprobado, kyverum: false, vigente: true, juridica: true);
+        Authenticate("SuperAdmin", _tenantSuperAdmin, _superAdmin);
+
+        (await Post(id)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task A3_Prevalidacion_natural_reporta_origen_prevalidacion()
+    {
+        var id = await SeedAsync(BiometricEstados.Rechazado, kyverum: false);
+        Authenticate("SuperAdmin", _tenantSuperAdmin, _superAdmin);
+
+        var response = await Post(id);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+        json.RootElement.GetProperty("origin").GetString().Should().Be("prevalidacion");
+    }
+
     // ── Infraestructura ─────────────────────────────────────────────────────────────────────────
 
     private async Task<HttpResponseMessage> Post(Guid id, Guid? tenantHeader = null)
@@ -200,7 +314,7 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         }
     }
 
-    private async Task<Guid> SeedAsync(string status, bool kyverum, bool vigente = false)
+    private async Task<Guid> SeedAsync(string status, bool kyverum, bool vigente = false, bool juridica = false)
     {
         await using var db = NewDb();
         var now = DateTimeOffset.UtcNow;
@@ -208,7 +322,7 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         var persona = new Person
         {
             Id = Guid.NewGuid(), TenantId = _dueno, DocumentType = "CC", DocumentNumber = documento,
-            FullName = "Persona de prueba", Email = $"p{documento}@example.test", PersonType = PersonTypes.Natural,
+            FullName = "Persona de prueba", Email = $"p{documento}@example.test", PersonType = juridica ? PersonTypes.Juridical : PersonTypes.Natural,
             CreatedAt = now,
         };
         db.Persons.Add(persona);
@@ -237,6 +351,53 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         await db.SaveChangesAsync(Ct);
         _validaciones.Add(v.Id);
         return v.Id;
+    }
+
+    private async Task<(Guid ValidationId, Guid SignerId)> SeedMandatarioAsync(string status, bool vigente = false)
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        if (!await db.TransitOffices.AnyAsync(o => o.Id == _oficina, Ct))
+        {
+            db.TransitOffices.Add(new TransitOffice
+            {
+                Id = _oficina, Code = $"R{Guid.NewGuid():N}"[..10], Name = "OT HU13285", DepartmentCode = "99",
+                CityCode = "99999", IsActive = true,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var documento = $"8{Random.Shared.NextInt64(10_000_000, 99_999_999)}";
+        var signer = new MandateSigner
+        {
+            Id = Guid.NewGuid(), TransitOfficeId = _oficina, FullName = "Mandatario HU13285", DocumentType = "CC",
+            DocumentNumber = documento, Email = $"m{documento}@example.test", IntegrityHash = new string('a', 64),
+            RegisteredAt = now, IsActive = true, SignerModel = "natural", SignatureMethod = "biometria",
+            ValidityKind = "fixed", CreatedAt = now,
+        };
+        db.MandateSigners.Add(signer);
+        await db.SaveChangesAsync(Ct);
+        _firmantes.Add(signer.Id);
+
+        var v = new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(), TenantId = _dueno, ProcedureInstanceId = null, PersonId = null,
+            PartyRole = "mandatario", MandateSignerId = signer.Id,
+            Name = signer.FullName, DocumentType = "CC", DocumentNumber = documento, Email = signer.Email!,
+            RegisteredEmail = signer.Email!, Status = status, Provider = BiometricProviders.Kyverum,
+            TokenHash = new string('0', 64), ExpiresAt = now.AddHours(-1), KyverumVerificationId = "kyv_ext_13285",
+            CaptureUrl = "https://captura.example.test/m", WebhookSecretEncrypted = "cifrado", CreatedAt = now.AddDays(-1),
+        };
+        if (status == BiometricEstados.Aprobado)
+        {
+            v.ValidatedAt = vigente ? now.AddDays(-1) : now.AddDays(-60);
+            v.ValidUntil = vigente ? now.AddDays(29) : now.AddDays(-30);
+        }
+
+        db.ProcedureInstanceBiometricValidations.Add(v);
+        await db.SaveChangesAsync(Ct);
+        _validaciones.Add(v.Id);
+        return (v.Id, signer.Id);
     }
 
     private void Authenticate(string role, Guid tenant, Guid user) =>
@@ -269,6 +430,8 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
         db.IdentityValidationAudits.Where(a => a.TenantId == _dueno).ExecuteDelete();
         db.ProcedureInstanceBiometricValidations.Where(v => _validaciones.Contains(v.Id)).ExecuteDelete();
         db.Persons.Where(p => _personas.Contains(p.Id)).ExecuteDelete();
+        db.MandateSigners.Where(m => _firmantes.Contains(m.Id)).ExecuteDelete();
+        db.TransitOffices.Where(o => o.Id == _oficina).ExecuteDelete();
         db.Tenants.Where(t => t.Id == _dueno || t.Id == _otraCompania || t.Id == _tenantSuperAdmin).ExecuteDelete();
     }
 }

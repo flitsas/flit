@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
@@ -182,6 +183,87 @@ public sealed class ActivarIdentidadManualHandlerTests
         cancelado.KyverumVerificationId.Should().Be("kyv_ext_9", "el id externo se conserva solo como trazabilidad");
         cancelado.Detail.Should().Contain(origen);
         entradas.Should().ContainSingle(e => e.Stage == IdentityValidationAuditStages.ManualActivado);
+    }
+
+    // ── HU #13285 (A3) — mandatario y representante legal ───────────────────────────────────────
+
+    [Fact]
+    public async Task A3_Mandatario_SeActiva_ConservaMandateSignerIdYReportaOrigen()
+    {
+        var v = Fila(BiometricEstados.EnProceso, instanceId: null);
+        var signer = Guid.NewGuid();
+        v.PersonId = null;
+        v.PartyRole = BiometricRules.ParteMandatario;
+        v.MandateSignerId = signer;
+        var entradas = new List<IdentityValidationAuditEntry>();
+        await _audit.LogAsync(Arg.Do<IdentityValidationAuditEntry>(entradas.Add), Arg.Any<CancellationToken>());
+
+        var (result, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        error.Should().BeNull();
+        result!.Origin.Should().Be(ManualValidationOrigin.Mandatario);
+        v.Status.Should().Be(BiometricEstados.ManualActivo);
+        v.MandateSignerId.Should().Be(signer);
+        v.PartyRole.Should().Be(BiometricRules.ParteMandatario);
+        v.PersonId.Should().BeNull();
+        v.ProcedureInstanceId.Should().BeNull();
+        entradas.Should().OnlyContain(e => e.PartyRole == BiometricRules.ParteMandatario);
+        entradas.Single(e => e.Stage == IdentityValidationAuditStages.ManualActivado).Detail.Should().Contain("origen=mandatario");
+    }
+
+    [Fact]
+    public async Task A3_MandatarioAprobadoYVigente_Responde409()
+    {
+        var v = Fila(BiometricEstados.Aprobado, instanceId: null);
+        v.PersonId = null;
+        v.PartyRole = BiometricRules.ParteMandatario;
+        v.MandateSignerId = Guid.NewGuid();
+        v.ValidatedAt = Now.AddDays(-1);
+        v.ValidUntil = Now.AddDays(29);
+
+        var (result, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        result.Should().BeNull();
+        error.Should().Be(ActivarIdentidadManualHandler.AprobadaVigente);
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+    }
+
+    [Fact]
+    public async Task A3_RepresentanteLegal_PersonaJuridicaStandalone_ReportaOrigen()
+    {
+        var v = Fila(BiometricEstados.Rechazado, instanceId: null);
+        v.Person = new Person { Id = v.PersonId!.Value, PersonType = PersonTypes.Juridical };
+
+        var (result, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        error.Should().BeNull();
+        result!.Origin.Should().Be(ManualValidationOrigin.RepresentanteLegal);
+        v.Status.Should().Be(BiometricEstados.ManualActivo);
+    }
+
+    [Fact]
+    public async Task A3_RepresentanteLegal_AprobadoYVigente_Responde409()
+    {
+        var v = Fila(BiometricEstados.Aprobado, instanceId: null);
+        v.Person = new Person { Id = v.PersonId!.Value, PersonType = PersonTypes.Juridical };
+        v.ValidatedAt = Now.AddDays(-1);
+        v.ValidUntil = Now.AddDays(29);
+
+        var (_, error) = await Handler().HandleAsync(new ActivarIdentidadManualCommand(v.Id, User), Ct);
+
+        error.Should().Be(ActivarIdentidadManualHandler.AprobadaVigente);
+    }
+
+    [Fact]
+    public async Task A3_OrigenDeTramiteYPrevalidacion()
+    {
+        var tramite = Fila(BiometricEstados.EnProceso, instanceId: Guid.NewGuid(), tramiteStatus: TramiteEstado.Entregado);
+        var prevalidacion = Fila(BiometricEstados.EnProceso, instanceId: null);
+
+        (await Handler().HandleAsync(new ActivarIdentidadManualCommand(tramite.Id, User), Ct)).Result!
+            .Origin.Should().Be(ManualValidationOrigin.Tramite);
+        (await Handler().HandleAsync(new ActivarIdentidadManualCommand(prevalidacion.Id, User), Ct)).Result!
+            .Origin.Should().Be(ManualValidationOrigin.Prevalidacion);
     }
 
     // ── Bordes ──────────────────────────────────────────────────────────────────────────────────

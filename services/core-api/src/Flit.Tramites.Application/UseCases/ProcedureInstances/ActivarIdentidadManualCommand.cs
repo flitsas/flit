@@ -1,13 +1,14 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Orden de activación del flujo manual de identidad (HU #13284, Feature #13280, Épica #13202). Común a validaciones de
-/// trámite y de prevalidación standalone (<c>ProcedureInstanceId</c> nulo, anclada a su persona); HU-A3 lo reutiliza para
-/// mandatarios y representante legal. NO lleva tenant: el Super Admin opera sobre cualquier compañía y el tenant sale de LA
+/// trámite y de prevalidación standalone (<c>ProcedureInstanceId</c> nulo, anclada a su persona); HU #13285 (A3) lo aplica tal cual a
+/// mandatarios (fila con <c>MandateSignerId</c>, se conserva) y representante legal: sin rutas propias (las de admin están retiradas, 410). NO lleva tenant: el Super Admin opera sobre cualquier compañía y el tenant sale de LA
 /// FILA, así toda escritura y auditoría usa el tenant dueño (el endpoint no confía en <c>X-Tenant-Id</c>).
 /// </summary>
 public sealed record ActivarIdentidadManualCommand(Guid ValidationId, Guid ActivatedByUserId);
@@ -21,7 +22,8 @@ public sealed record ActivarIdentidadManualResult(
     string Status,
     DateTimeOffset ExpiresAt,
     DateTimeOffset ActivatedAt,
-    bool KyverumCancelado);
+    bool KyverumCancelado,
+    string Origin);
 
 /// <summary>
 /// Activa el flujo manual sobre una validación que NO esté aprobada y vigente: la MISMA fila pasa a proveedor
@@ -64,6 +66,8 @@ public sealed class ActivarIdentidadManualHandler(
         if (!v.PuedeActivarFlujoManual(now))
             return (null, AprobadaVigente);
 
+        // HU #13285: mandatarios (MandateSignerId) y representante legal se activan igual que el resto; el origen solo se reporta.
+        var origen = ManualValidationOrigin.From(v);
         var cancelaKyverum = KyverumEnVuelo(v);
         var kyverumIdPrevio = v.KyverumVerificationId;
         var estadoPrevio = v.Status;
@@ -91,13 +95,13 @@ public sealed class ActivarIdentidadManualHandler(
             KyverumVerificationId: kyverumIdPrevio, PartyRole: v.PartyRole,
             Message: $"Flujo manual activado por el usuario {command.ActivatedByUserId}; enlace de captura vigente "
                 + $"{BiometricRules.TokenTtlHoras} h.",
-            Detail: $"usuario={command.ActivatedByUserId}; estado_previo={estadoPrevio}; proveedor_previo={proveedorPrevio}; "
+            Detail: $"origen={origen}; usuario={command.ActivatedByUserId}; estado_previo={estadoPrevio}; proveedor_previo={proveedorPrevio}; "
                 + $"kyverum_cancelado={cancelaKyverum}; expira_at={v.ExpiresAt:O}"), ct).ConfigureAwait(false);
 
         // El token en claro sale de aquí solo hacia el puerto (A5 lo manda por correo).
         await notifier.NotifyAsync(new ManualCaptureLink(v.Id, v.TenantId, token, v.ExpiresAt), ct).ConfigureAwait(false);
 
         return (new ActivarIdentidadManualResult(
-            v.Id, v.TenantId, v.ProcedureInstanceId, v.Provider, v.Status, v.ExpiresAt, now, cancelaKyverum), null);
+            v.Id, v.TenantId, v.ProcedureInstanceId, v.Provider, v.Status, v.ExpiresAt, now, cancelaKyverum, origen), null);
     }
 }

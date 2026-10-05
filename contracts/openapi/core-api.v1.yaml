@@ -6330,7 +6330,8 @@ paths:
       tags: [Tramites, Identidad]
       summary: Activar el flujo manual de identidad (solo Super Admin) — HU #13284, Épica #13202
       description: >
-        Activa el flujo manual sobre una validación de trámite o de prevalidación standalone que NO esté
+        Activa el flujo manual sobre una validación de trámite, de prevalidación standalone, de mandatario o de
+        representante legal (HU #13285: mismo endpoint por id; no hay rutas propias, las de admin están retiradas) que NO esté
         aprobada y vigente (rechazada, expirada, vencida o en curso sí). La misma fila pasa a proveedor
         `manual` y estado `manual_activo`, con un enlace de captura de 24 h cuyo token se guarda solo como
         hash. Si había una verificación Kyverum en curso queda cancelada para FLIT (se audita; el id de
@@ -16117,6 +16118,12 @@ components:
         expiresAt: { type: string, format: date-time, description: Vencimiento del enlace (24 h). }
         activatedAt: { type: string, format: date-time }
         kyverumCancelado: { type: boolean, description: true si había una verificación Kyverum en curso que se canceló. }
+        origin:
+          type: string
+          enum: [tramite, prevalidacion, mandatario, representante_legal]
+          description: >
+            Origen de la validación (HU #13285). `mandatario` = fila con MandateSignerId (se conserva);
+            `representante_legal` = prevalidación standalone de persona jurídica.
     ReenviarPrevalidacionResult:
       type: object
       required: [validation, captureUrl]
