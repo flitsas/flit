@@ -1,4 +1,4 @@
-import { bogotaDay, type XlsxCell } from '@/lib/xlsx';
+import { bogotaClock, type XlsxCell } from '@/lib/xlsx';
 import { formatFechaHora } from '@/lib/format/date';
 import { estadoLabelConOrigen } from '@/lib/tramites/estados';
 import {
@@ -413,10 +413,10 @@ const CAMPO_FECHA_CREACION: TramitesExportField = {
   sort: 'createdAt',
   sortKind: 'fecha',
   value: (row) => formatFechaHora(row.createdAt),
-  // `bogotaDay` y no el instante UTC crudo: Excel no guarda husos, así que un trámite creado a las
+  // `bogotaClock` (día y hora de Bogotá, como la pantalla) y no el instante UTC crudo: Excel no guarda husos, así que un trámite creado a las
   // 22:00 saltaría al día siguiente solo dentro del archivo y contradiría la pantalla.
-  raw: (row) => bogotaDay(row.createdAt),
-  width: 16,
+  raw: (row) => bogotaClock(row.createdAt),
+  width: 18,
 };
 
 const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
@@ -425,7 +425,7 @@ const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
   sort: 'updatedAt',
   sortKind: 'fecha',
   value: (row) => (row.updatedAt ? formatFechaHora(row.updatedAt) : '—'),
-  raw: (row) => bogotaDay(row.updatedAt ?? null),
+  raw: (row) => bogotaClock(row.updatedAt ?? null),
   width: 18,
 };
 

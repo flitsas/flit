@@ -189,7 +189,7 @@ describe('HU #12104 — AC4: los valores llegan tipados', () => {
     // 03:00 UTC del 18 de junio son las 22:00 del 17 en Bogotá: sin el huso, el Excel diría 18 y
     // contradiría la pantalla.
     const raw = campo('fechaCreacion').raw(makeInstance(1));
-    expect(raw).toEqual({ year: 2026, month: 6, day: 17 });
+    expect(raw).toEqual({ year: 2026, month: 6, day: 17, hour: 22, minute: 0 });
   });
 
   it('HU #12154 — el consecutivo va como TEXTO, no como número', () => {
