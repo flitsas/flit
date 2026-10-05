@@ -10,7 +10,7 @@ import { useEdgeClamp } from "./useEdgeClamp";
 
 // Dock inferior flotante de la suite (GUIA-DOCK-INFERIOR-FLOTANTE.md), portado del de Trámites sin su catálogo:
 // recibe los grupos ya filtrados (buildDock) y no sabe de ningún producto. Escritorio (lg+); en pantallas pequeñas
-// la navegación va en el menú móvil de SuiteShell, con los mismos grupos.
+// la navegación va en DockMobile (lanzador + hoja), con los mismos grupos.
 
 type Props = {
   groups: DockGroup[];

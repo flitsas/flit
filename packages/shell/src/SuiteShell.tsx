@@ -9,6 +9,7 @@ import { suiteAccountLinks, suiteRoleLabel, type AccountLink } from "./account";
 import { AccountMenu, type ShellUser } from "./AccountMenu";
 import type { SuiteApp } from "./apps";
 import { Dock } from "./dock/Dock";
+import { DockMobile } from "./dock/DockMobile";
 import { buildDock, isActive, type NavCatalog, type NavViewer } from "./nav";
 import { ProductMenu } from "./ProductMenu";
 import { ThemeToggle } from "./theme";
@@ -127,15 +128,19 @@ export function SuiteShell({
     </header>
   );
 
+  // Escritorio (lg+): el dock. Móvil y tableta: un lanzador con los mismos grupos en una hoja.
   const dock = (
-    <Dock
-      groups={groups}
-      homeHref={homeHref}
-      homeLabel={`Inicio ${productName}`}
-      homeIconSrc={homeIconSrc}
-      homeActive={homeActive}
-      scrollRef={app ? scrollRef : undefined}
-    />
+    <>
+      <Dock
+        groups={groups}
+        homeHref={homeHref}
+        homeLabel={`Inicio ${productName}`}
+        homeIconSrc={homeIconSrc}
+        homeActive={homeActive}
+        scrollRef={app ? scrollRef : undefined}
+      />
+      <DockMobile groups={groups} homeIconSrc={homeIconSrc} scrollRef={app ? scrollRef : undefined} />
+    </>
   );
 
   if (app) {

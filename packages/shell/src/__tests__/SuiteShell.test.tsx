@@ -15,6 +15,21 @@ const nav = {
 const user = { email: "ana@empresa.co", tenantName: "Empresa Uno", permissions: [], isSuperAdmin: false };
 
 describe("SuiteShell", () => {
+  it("en móvil y tableta, un lanzador abre la hoja con los mismos grupos del dock; Escape la cierra", () => {
+    render(<SuiteShell productCode="tramites" productName="Trámites" nav={nav} user={user}>x</SuiteShell>);
+
+    const launcher = screen.getByRole("button", { name: "Abrir menú de navegación" });
+    expect(launcher.closest(".lg\\:hidden")).not.toBeNull();
+    fireEvent.click(launcher);
+    const sheet = screen.getByRole("dialog", { name: "Navegación" });
+    expect(within(sheet).getByText("Operación")).toBeInTheDocument();
+    expect(within(sheet).getByRole("link", { name: "Trámites" })).toHaveAttribute("aria-current", "page");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Navegación" })).toBeNull();
+    expect(document.activeElement).toBe(launcher);
+  });
+
   it("dibuja marca, producto, cuenta y el dock del catálogo con la ruta activa", () => {
     render(<SuiteShell productCode="tramites" productName="Trámites" nav={nav} user={user}>contenido</SuiteShell>);
 
