@@ -93,8 +93,9 @@ describe("CapturaManualFlow", () => {
   it("con sesión válida muestra la barra y avanza de paso", async () => {
     render(<CapturaManualFlow token="ok" client={fakeClient()} />);
     expect(await screen.findByRole("navigation", { name: /progreso/i })).toBeInTheDocument();
-    expect(screen.getByAltText("flit")).toBeInTheDocument();
-    expect(screen.getByText("Verify")).toBeInTheDocument();
+    expect(screen.getByAltText("FLIT")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "FLIT" })).toHaveLength(1);
+    expect(screen.queryByText("Verify")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Iniciar verificación" }));
     await screen.findByRole("heading", { name: "Verificación facial" });
