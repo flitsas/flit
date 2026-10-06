@@ -23,7 +23,7 @@ public sealed class EmailManualCaptureLinkNotifierRechazoTests
 {
     private static readonly Guid Tenant = Guid.Parse("55555555-5555-4555-8555-555555555555");
     private static readonly DateTimeOffset Vence = new(2026, 10, 7, 14, 30, 0, TimeSpan.Zero); // 09:30 hora Colombia
-    private const string Token = "tok_NUEVO-456_xyz";
+    private const string Token = "enlace-de-prueba-dos";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly IEmailSender _sender = Substitute.For<IEmailSender>();
@@ -61,7 +61,7 @@ public sealed class EmailManualCaptureLinkNotifierRechazoTests
         enviado.ToEmail.Should().Be("titular@example.test");
         enviado.Subject.Should().Contain("Repite tu verificación de identidad");
         enviado.HtmlBody.Should().Contain(Html("Motivo: " + etiqueta))
-            .And.Contain("https://app.flit.example/verificacion/tok_NUEVO-456_xyz")
+            .And.Contain("https://app.flit.example/verificacion/enlace-de-prueba-dos")
             .And.Contain("24 horas").And.Contain("Hola Ana Perez.")
             .And.Contain(Html("Repetir mi verificación")).And.Contain(Html("Verificación de identidad"));
         enviado.HtmlBody.Should().NotContain("rostro_no_coincide", "el cliente ve el texto, no el código");
