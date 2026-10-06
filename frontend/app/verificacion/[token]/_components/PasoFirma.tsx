@@ -25,7 +25,6 @@ export function PasoFirma({
   captures,
   onSignature,
   onOutcome,
-  onBack,
   onSendingChange,
 }: {
   token: string;
@@ -33,7 +32,6 @@ export function PasoFirma({
   captures: Captures;
   onSignature: (png: Blob | null) => void;
   onOutcome: (o: SubmitOutcome) => void;
-  onBack: () => void;
   /** El Flow oculta este paso y muestra la pantalla «Enviando…» mientras dura el POST final. */
   onSendingChange?: (sending: boolean) => void;
 }) {
@@ -62,7 +60,7 @@ export function PasoFirma({
           setError(
             e.code === "firma_requerida"
               ? "Falta tu firma. Trázala de nuevo y envía otra vez."
-              : "Falta alguna de las imágenes. Vuelve con «Atrás» para repetir las fotos y envía otra vez.",
+              : "Falta alguna de las imágenes. Recarga la página para repetir las fotos y envía otra vez.",
           );
           return;
         }
@@ -71,7 +69,7 @@ export function PasoFirma({
           if (capture && capture !== "firma") return onOutcome({ kind: "repeat", capture });
           const what = e.status === 413 ? "Una imagen es demasiado grande" : "El formato de una imagen no es válido";
           setError(
-            `${what}. Repite esa captura: borra la firma y trázala de nuevo, o vuelve con «Atrás» para repetir una foto.`,
+            `${what}. Repite esa captura: borra la firma y trázala de nuevo, o recarga la página para repetir una foto.`,
           );
           return;
         }
@@ -127,14 +125,6 @@ export function PasoFirma({
           Firmar y autorizar
         </button>
       </div>
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={sending}
-        className="min-h-11 w-full rounded-xl px-4 text-base font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Atrás
-      </button>
     </section>
   );
 }

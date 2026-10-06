@@ -90,7 +90,7 @@ describe("pasos Rostro, Anverso y Reverso (HU #13294)", () => {
     expect(screen.getByTestId("guia-documento")).toBeInTheDocument();
   });
 
-  it("repetir vuelve al visor y la captura se conserva al ir Atrás", async () => {
+  it("repetir vuelve al visor y el flujo no ofrece «Atrás» (como en Kyverum)", async () => {
     await toRostro();
     await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Capturar rostro/ }));
@@ -99,21 +99,6 @@ describe("pasos Rostro, Anverso y Reverso (HU #13294)", () => {
     await capture(/Capturar rostro/);
 
     await screen.findByRole("heading", { name: "Documento — anverso" });
-    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
-    await screen.findByRole("heading", { name: "Verificación facial" });
-    // Vuelve directo a la vista previa de lo ya capturado, sin reabrir la cámara.
-    expect(screen.getByAltText("Vista previa de la foto capturada")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirmar" })).toBeInTheDocument();
-  });
-
-  it("volver a Datos no re-envía el consentimiento ni desmarca la casilla", async () => {
-    const client = await toRostro();
-    expect(client.postConsent).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
-    const check = await screen.findByRole("checkbox");
-    expect(check).toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: "Iniciar verificación" }));
-    await screen.findByRole("heading", { name: "Verificación facial" });
-    expect(client.postConsent).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Atrás" })).not.toBeInTheDocument();
   });
 });
