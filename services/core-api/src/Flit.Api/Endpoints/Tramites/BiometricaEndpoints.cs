@@ -610,15 +610,10 @@ internal static class BiometricaEndpoints
             if (error is "not_found")
                 return Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.");
 
-            // El flujo manual es una herramienta interna del Super Admin FLIT: sus eventos (etapas `manual_*`) no los
-            // ve la compañía ni el cliente.
+            // El flujo manual es una herramienta interna del Super Admin FLIT: la compañía y el cliente ven la bitácora
+            // de una validación biométrica normal (los eventos manuales se traducen a su equivalente normal).
             if (result is not null && !CompanyTenantAccess.IsSuperAdmin(http.User))
-                result = result with
-                {
-                    Events = result.Events
-                        .Where(e => !e.Stage.StartsWith("manual_", StringComparison.Ordinal))
-                        .ToList(),
-                };
+                result = result with { Events = IdentityAuditParaCliente.Aplicar(result.Events) };
             return Results.Ok(result);
         })
         .WithName("GetIdentityAuditByValidation")
