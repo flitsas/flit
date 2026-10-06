@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { Eye, Info } from 'lucide-react';
 import {
@@ -23,7 +23,6 @@ import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
-import { EtiquetaCargadoPorFlito } from './EtiquetaCargadoPorFlito';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -731,12 +730,11 @@ export function DocumentSlot({
   const [localError, setLocalError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const readOnly = useWizardReadOnly();
-  const etiquetaFlitoId = useId();
 
   const tipo = item.docTipo ?? item.key;
   const caption = catalogDocumentTitle(tipo, item.label);
   // HU #13266 (AC1) — gana quien carga primero (HU #13265): el adjunto de FLITO no se reemplaza ni se
-  // borra desde aquí (el backend respondería 409); la casilla lo dice y solo deja previsualizarlo.
+  // borra desde aquí (el backend respondería 409); la casilla solo deja previsualizarlo.
   const deFlito = esAdjuntoDeFlito(attachment);
   const done = item.satisfied || !!attachment;
   const busy = uploading || analyzing || deleting || generating;
@@ -855,7 +853,6 @@ export function DocumentSlot({
           {attachment.filename} · {formatSize(attachment.sizeBytes)}
         </p>
       )}
-      {deFlito && !isAuto && <EtiquetaCargadoPorFlito id={etiquetaFlitoId} className="mt-1" />}
       {isImpronta && attachment?.digitallySigned && !readOnly && (
         <div className="mt-2">
           <InlineAlert tone="warning" title="Impronta ya firmada digitalmente">
@@ -894,7 +891,6 @@ export function DocumentSlot({
               className="text-xs font-semibold"
               style={{ color: '#557EFF' }}
               aria-label={`Previsualizar ${caption}`}
-              aria-describedby={deFlito ? etiquetaFlitoId : undefined}
             >
               Ver
             </button>
@@ -908,8 +904,7 @@ export function DocumentSlot({
                 className="rounded-lg border p-1 disabled:opacity-60"
                 style={{ color: '#557EFF' }}
                 aria-label={`Previsualizar ${caption}`}
-                aria-describedby={deFlito ? etiquetaFlitoId : undefined}
-              >
+                >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
