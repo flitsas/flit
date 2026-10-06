@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CameraViewer } from "@/app/captura-manual/[token]/_components/CameraViewer";
 
@@ -152,6 +153,46 @@ describe("CameraViewer", () => {
     fireEvent.click(screen.getByRole("button", { name: /Capturar rostro/ }));
     expect(await screen.findByText("La cámara aún no está lista, inténtalo de nuevo")).toBeInTheDocument();
     expect(screen.queryByAltText("Vista previa de la foto capturada")).not.toBeInTheDocument();
+  });
+
+  describe("ciclo de vida de la URL blob de la vista previa", () => {
+    let n = 0;
+    beforeEach(() => {
+      n = 0;
+      URL.createObjectURL = vi.fn(() => `blob:preview-${++n}`);
+    });
+    const revoked = () => (URL.revokeObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+
+    it("no revoca la URL mientras la vista previa la usa, y la revoca al repetir (reemplazo)", async () => {
+      mockMedia(() => Promise.resolve(makeStream().stream));
+      view();
+      await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
+      fireEvent.click(screen.getByRole("button", { name: /Capturar rostro/ }));
+      const img = await screen.findByAltText("Vista previa de la foto capturada");
+      expect(img).toHaveAttribute("src", "blob:preview-1");
+      expect(revoked()).not.toContain("blob:preview-1");
+      fireEvent.click(screen.getByRole("button", { name: "Repetir" }));
+      expect(revoked()).toContain("blob:preview-1");
+      await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
+      fireEvent.click(screen.getByRole("button", { name: /Capturar rostro/ }));
+      const img2 = await screen.findByAltText("Vista previa de la foto capturada");
+      expect(img2).toHaveAttribute("src", "blob:preview-2");
+      expect(revoked()).not.toContain("blob:preview-2");
+    });
+
+    it("al volver con «Atrás» (initialBlob) la URL en uso no se revoca, ni siquiera en StrictMode, y se revoca al desmontar", () => {
+      const { unmount } = render(
+        <StrictMode>
+          <CameraViewer shape="oval" facing="user" captureLabel="Capturar rostro" onContinue={vi.fn()} initialBlob={new Blob(["x"])} />
+        </StrictMode>,
+      );
+      const img = screen.getByAltText("Vista previa de la foto capturada");
+      const current = img.getAttribute("src") as string;
+      expect(current).toMatch(/^blob:preview-/);
+      expect(revoked()).not.toContain(current);
+      unmount();
+      expect(revoked()).toContain(current);
+    });
   });
 
   it("detiene todos los tracks al desmontar", async () => {

@@ -30,23 +30,23 @@ const btnBase =
 export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint, onContinue, initialBlob }: CameraViewerProps) {
   const [facing, setFacing] = useState<CameraFacing>(initialFacing);
   const [notice, setNotice] = useState<string | null>(null);
-  const urlRef = useRef<string | null>(null);
-  const [captured, setCaptured] = useState<{ blob: Blob; url: string } | null>(() => {
-    if (!initialBlob) return null;
-    return { blob: initialBlob, url: URL.createObjectURL(initialBlob) };
-  });
+  const [captured, setCaptured] = useState<Blob | null>(initialBlob ?? null);
+  const previewRef = useRef<HTMLImageElement | null>(null);
   const { videoRef, status, restart, capture } = useLiveCamera({ facing, enabled: !captured });
 
-  // urlRef refleja la URL vigente para liberarla al desmontar.
+  // La URL blob vive exactamente lo que dura el efecto que la creó: se revoca en su cleanup (al
+  // reemplazar la captura, al repetir o al desmontar), cuando la <img> ya no la usa. Nunca se
+  // revoca durante el render ni se reutiliza una URL ya revocada (StrictMode vuelve a crearla).
   useEffect(() => {
-    urlRef.current = captured?.url ?? null;
+    const img = previewRef.current;
+    if (!captured || !img) return;
+    const url = URL.createObjectURL(captured);
+    img.src = url;
+    return () => {
+      img.removeAttribute("src");
+      URL.revokeObjectURL(url);
+    };
   }, [captured]);
-  useEffect(
-    () => () => {
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    },
-    [],
-  );
 
   async function take() {
     const blob = await capture();
@@ -55,11 +55,10 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
       return;
     }
     setNotice(null);
-    setCaptured({ blob, url: URL.createObjectURL(blob) });
+    setCaptured(blob);
   }
 
   function repeat() {
-    if (captured) URL.revokeObjectURL(captured.url);
     setCaptured(null);
     setNotice(null);
     restart();
@@ -70,13 +69,13 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
       <div className="flex flex-col gap-3">
         <div className="relative aspect-square overflow-hidden rounded-2xl bg-slate-900">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={captured.url} alt="Vista previa de la foto capturada" className="size-full object-contain" />
+          <img ref={previewRef} alt="Vista previa de la foto capturada" className="size-full object-contain" />
         </div>
         <div className="flex gap-3">
           <button type="button" onClick={repeat} className={`${btnBase} border border-flit-brand-ink text-base font-semibold text-flit-brand-ink`}>
             Repetir
           </button>
-          <button type="button" onClick={() => onContinue(captured.blob)} className={`${btnBase} ${BRAND_BTN}`}>
+          <button type="button" onClick={() => onContinue(captured)} className={`${btnBase} ${BRAND_BTN}`}>
             Continuar
           </button>
         </div>
