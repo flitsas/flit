@@ -53,6 +53,10 @@ public sealed class OidcServerTests : IClassFixture<WebApplicationFactory<Progra
             b.UseSetting("Suite:Hosts:Environment", "dev");
             b.UseSetting("Suite:Oidc:ServiceClients:svc-prueba:Secret", ServiceSecret);
             b.UseSetting("Suite:Oidc:ServiceClients:svc-prueba:Scopes:0", "platform.manifest");
+            // HU #13333: un cliente con scopes de varios servicios, para la audiencia por servicio destino.
+            b.UseSetting("Suite:Oidc:ServiceClients:svc-tramites-prueba:Secret", ServiceSecret);
+            b.UseSetting("Suite:Oidc:ServiceClients:svc-tramites-prueba:Scopes:0", "platform.consultas");
+            b.UseSetting("Suite:Oidc:ServiceClients:svc-tramites-prueba:Scopes:1", "platform.identidad.read");
         });
 
     private HttpClient NewClient(string host = Hub)
@@ -204,6 +208,65 @@ public sealed class OidcServerTests : IClassFixture<WebApplicationFactory<Progra
         }), ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ── HU #13333 (Epic #13316, contrato v1.3 §3): audiencia por servicio destino ─────────────────────────────────
+
+    private async Task<HttpResponseMessage> PedirTokenDeServicioAsync(string clientId, string secret, string scope, CancellationToken ct) =>
+        await NewClient().PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "client_credentials", ["client_id"] = clientId, ["client_secret"] = secret, ["scope"] = scope,
+        }), ct);
+
+    [Fact]
+    public async Task TokenDeServicio_LaAudienciaEsElServicioQueAtiendeElScope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await PedirTokenDeServicioAsync("svc-tramites-prueba", ServiceSecret, "platform.consultas", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+        var jwt = new JsonWebToken((await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("access_token").GetString());
+        jwt.Subject.Should().Be("svc-tramites-prueba");
+        jwt.Audiences.Should().Equal("consultas");
+        jwt.GetClaim("scope").Value.Should().Be("platform.consultas");
+    }
+
+    [Fact]
+    public async Task TokenDeServicio_ConScopesDeVariosServicios_LlevaTodasLasAudiencias()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await PedirTokenDeServicioAsync("svc-tramites-prueba", ServiceSecret, "platform.consultas platform.identidad.read", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+        var jwt = new JsonWebToken((await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("access_token").GetString());
+        jwt.Audiences.Should().BeEquivalentTo("consultas", "plataforma");
+    }
+
+    [Fact]
+    public async Task TokenDeServicio_SecretoIncorrecto_InvalidClient()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await PedirTokenDeServicioAsync("svc-tramites-prueba", "no-es-el-secreto", "platform.consultas", ct);
+
+        response.IsSuccessStatusCode.Should().BeFalse();
+        (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString().Should().Be("invalid_client");
+    }
+
+    /// <remarks>
+    /// OpenIddict niega un scope que el cliente no tiene concedido con <c>invalid_request</c> (no <c>invalid_scope</c>) y
+    /// lo explica en <c>error_description</c>. Se respeta su comportamiento: lo que importa es que no hay token.
+    /// </remarks>
+    [Fact]
+    public async Task TokenDeServicio_ScopeNoConcedido_SeNiega()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await PedirTokenDeServicioAsync("svc-tramites-prueba", ServiceSecret, "platform.tramites.ict", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        body.GetProperty("error").GetString().Should().Be("invalid_request");
+        body.GetProperty("error_description").GetString().Should().Contain("scope");
+        body.TryGetProperty("access_token", out _).Should().BeFalse();
     }
 
     [Fact]

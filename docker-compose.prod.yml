@@ -197,6 +197,13 @@ services:
       Suite__Hosts__Environment: ${FLIT_SUITE_ENV?FLIT_SUITE_ENV debe estar definida (dev, qa o vacía en PDN); sin ella los clientes OIDC se reescriben con los hosts de PDN}
       # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
       Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
+      # HU #13333 (Epic #13316, contrato v1.3 §3): secretos de los clientes de servicio, uno por servicio y por ambiente.
+      # Vacío = el cliente no se registra (como hasta ahora). Los scopes de cada uno están en appsettings.json.
+      Suite__Oidc__ServiceClients__svc-tramites__Secret: ${SVC_TRAMITES_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-ict__Secret: ${SVC_ICT_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-consultas__Secret: ${SVC_CONSULTAS_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-notificaciones__Secret: ${SVC_NOTIFICACIONES_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-identidad__Secret: ${SVC_IDENTIDAD_CLIENT_SECRET:-}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.

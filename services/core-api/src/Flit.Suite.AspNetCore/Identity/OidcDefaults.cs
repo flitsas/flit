@@ -9,8 +9,38 @@ public static class OidcDefaults
     /// <summary>Cookie de la sesión del hub. <c>HttpOnly</c>, <c>SameSite=Lax</c> y sin <c>Domain</c> (contrato §8).</summary>
     public const string HubSessionCookie = "flit_hub";
 
+    /// <summary>
+    /// Scopes de servicio (contrato §3) y el servicio que atiende cada uno, que es el <c>aud</c> del token (contrato v1.3,
+    /// Epic #13316, HU #13333). Un token con scopes de varios servicios lleva todas sus audiencias.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> ServiceScopeAudiences = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["platform.manifest"] = ServiceAudiences.Plataforma,
+        ["platform.me.read"] = ServiceAudiences.Plataforma,
+        ["platform.identidad.read"] = ServiceAudiences.Plataforma,
+        ["platform.consultas"] = ServiceAudiences.Consultas,
+        ["platform.notificaciones.send"] = ServiceAudiences.Notificaciones,
+        ["platform.tramites.ict"] = ServiceAudiences.Tramites,
+    };
+
     /// <summary>Scopes de servicio (contrato §3).</summary>
-    public static readonly string[] ServiceScopes = ["platform.manifest", "platform.consultas", "platform.me.read"];
+    public static readonly string[] ServiceScopes = [.. ServiceScopeAudiences.Keys];
+
+    /// <summary>
+    /// Audiencias de un token de servicio con estos scopes, sin repetir y en orden. Un scope que no es de servicio no
+    /// aporta audiencia; si ninguno la aporta, <c>plataforma</c> (el comportamiento de antes del contrato v1.3).
+    /// </summary>
+    public static IReadOnlyList<string> AudiencesForServiceScopes(IEnumerable<string> scopes)
+    {
+        ArgumentNullException.ThrowIfNull(scopes);
+        var audiences = scopes
+            .Select(s => ServiceScopeAudiences.TryGetValue(s, out var aud) ? aud : null)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        return audiences.Count > 0 ? audiences : [ServiceAudiences.Plataforma];
+    }
 
     // Claims propios de la sesión del hub.
     public const string TenantIdClaim = "tenant_id";
@@ -25,4 +55,16 @@ public static class OidcDefaults
     /// cerrar sesión se le pide a cada uno que borre su cookie (front-channel logout, HU #13004).
     /// </summary>
     public const string RelyingPartyClaim = "oidc_rp";
+}
+
+/// <summary>
+/// Audiencia (<c>aud</c>) de los tokens de servicio: el código del servicio que recibe la llamada (contrato v1.3 §3).
+/// <c>plataforma</c> es Identidad, que también atiende los endpoints de plataforma.
+/// </summary>
+public static class ServiceAudiences
+{
+    public const string Plataforma = "plataforma";
+    public const string Consultas = "consultas";
+    public const string Notificaciones = "notificaciones";
+    public const string Tramites = "tramites";
 }
