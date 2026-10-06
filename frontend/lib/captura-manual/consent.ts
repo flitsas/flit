@@ -1,11 +1,15 @@
 // Textos literales del paso Datos (réplica de Kyverum, decisión del PO, Épica #13202).
 
-/** Versión del texto de consentimiento; se envía al backend y queda en la constancia. */
-export const CONSENT_TEXT_VERSION = "kyverum-2026-10-05";
+/**
+ * Versión del TEXTO de consentimiento que este front renderiza. Debe coincidir con la vigente del backend
+ * (`ManualCaptureConsent.TextVersion`, que devuelve el GET en `consentTextVersion`); al aceptar se envía la que
+ * devolvió el GET y, si no coincide con esta, la página bloquea el avance (el texto cambió: recargar).
+ */
+export const RENDERED_CONSENT_TEXT_VERSION = "manual-ley1581-v1";
 
 // PENDIENTE VALIDACIÓN LEGAL (Ley 1581 de 2012): la frase «Kyverum ... no conserva las imágenes» es
 // falsa en el flujo manual (FLIT sí conserva las imágenes). Se deja tal cual por petición del PO.
-// Cualquier cambio de redacción exige subir CONSENT_TEXT_VERSION.
+// Cualquier cambio de redacción exige subir RENDERED_CONSENT_TEXT_VERSION (y la del backend).
 export const CONSENT_TEXT_BODY =
   "Autorizo de forma libre, previa y expresa a Flit, que es quien guarda mis datos, el tratamiento de mis datos biométricos (dato sensible) para verificar mi identidad (Ley 1581 de 2012). No estoy obligado(a). Kyverum, empresa de Estados Unidos, solo hace la verificación y no conserva las imágenes.";
 

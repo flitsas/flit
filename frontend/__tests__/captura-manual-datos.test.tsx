@@ -1,26 +1,26 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PasoDatos } from "@/app/captura-manual/[token]/_components/PasoDatos";
-import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from "@/lib/captura-manual/consent";
-import type { ManualCaptureClient } from "@/lib/captura-manual/types";
+import { CONSENT_TEXT, RENDERED_CONSENT_TEXT_VERSION } from "@/lib/captura-manual/consent";
+import type { ManualCaptureClient, ManualCaptureView } from "@/lib/captura-manual/types";
 
-const VIEW = {
+const VIEW: ManualCaptureView = {
   fullName: "Persona de Prueba",
   documentType: "CC",
   documentNumber: "1000000000",
   productName: "FLIT 2.0",
   expiresAt: "2030-01-01T00:00:00Z",
-  consentTextVersion: CONSENT_TEXT_VERSION,
+  consentTextVersion: RENDERED_CONSENT_TEXT_VERSION,
 };
 
-function setup(postConsent = vi.fn().mockResolvedValue(undefined)) {
+function setup(postConsent = vi.fn().mockResolvedValue(undefined), view: ManualCaptureView = VIEW) {
   const client: ManualCaptureClient = {
     getManualCapture: vi.fn(),
     postConsent,
     submit: vi.fn(),
   };
   const onDone = vi.fn();
-  render(<PasoDatos token="tok" view={VIEW} client={client} onDone={onDone} />);
+  render(<PasoDatos token="tok" view={view} client={client} onDone={onDone} />);
   return { postConsent, onDone };
 }
 
@@ -58,7 +58,7 @@ describe("PasoDatos", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(button());
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: CONSENT_TEXT_VERSION });
+    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: "manual-ley1581-v1" });
   });
 
   it("si falla el registro muestra error, conserva la casilla y permite reintentar", async () => {
@@ -72,5 +72,41 @@ describe("PasoDatos", () => {
     fireEvent.click(button());
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("la versión enviada es la que devolvió el GET y coincide con la del backend", async () => {
+    expect(RENDERED_CONSENT_TEXT_VERSION).toBe("manual-ley1581-v1");
+    const { postConsent, onDone } = setup(undefined, { ...VIEW, consentTextVersion: RENDERED_CONSENT_TEXT_VERSION });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(button());
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: "manual-ley1581-v1" });
+  });
+
+  it("si el backend usa otra versión del texto bloquea con error claro y no llama a postConsent", () => {
+    const { postConsent, onDone } = setup(undefined, { ...VIEW, consentTextVersion: "manual-ley1581-v2" });
+    expect(screen.getByRole("alert")).toHaveTextContent("El texto de consentimiento cambió; recarga la página.");
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(button()).toBeDisabled();
+    fireEvent.click(button());
+    expect(postConsent).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("productName null o vacío cae a «FLIT 2.0»; con valor lo muestra", () => {
+    const { unmount } = render(
+      <PasoDatos token="t" view={{ ...VIEW, productName: null }} client={{} as ManualCaptureClient} onDone={vi.fn()} />,
+    );
+    expect(screen.getByText(/^FLIT 2\.0 necesita verificar tu identidad/)).toBeInTheDocument();
+    unmount();
+    render(
+      <PasoDatos token="t" view={{ ...VIEW, productName: "  " }} client={{} as ManualCaptureClient} onDone={vi.fn()} />,
+    );
+    expect(screen.getByText(/^FLIT 2\.0 necesita/)).toBeInTheDocument();
+    cleanup();
+    render(
+      <PasoDatos token="t" view={{ ...VIEW, productName: "Traspaso" }} client={{} as ManualCaptureClient} onDone={vi.fn()} />,
+    );
+    expect(screen.getByText(/^Traspaso necesita/)).toBeInTheDocument();
   });
 });

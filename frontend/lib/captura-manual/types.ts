@@ -5,7 +5,8 @@ export interface ManualCaptureView {
   fullName: string;
   documentType: string;
   documentNumber: string;
-  productName: string;
+  /** El backend manda null en la prevalidación standalone (sin trámite). */
+  productName: string | null;
   expiresAt: string;
   consentTextVersion: string;
 }

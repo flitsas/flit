@@ -6,7 +6,7 @@ import {
   CAPTURE_TIPS,
   CONSENT_PRIVACY_LABEL,
   CONSENT_TEXT_BODY,
-  CONSENT_TEXT_VERSION,
+  RENDERED_CONSENT_TEXT_VERSION,
   CONTACT_EMAIL,
   LEGAL_FOOTER_PREFIX,
   LEGAL_FOOTER_SUFFIX,
@@ -34,14 +34,17 @@ export function PasoDatos({
   const [accepted, setAccepted] = useState(consentRegistered);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
+  // El backend vigente usa otra versión del texto que la que este front muestra: no se avanza en silencio.
+  const versionMismatch = view.consentTextVersion !== RENDERED_CONSENT_TEXT_VERSION;
 
   async function start() {
+    if (versionMismatch) return;
     setSending(true);
     setError(false);
     try {
       // Si ya se registró (volvió con «Atrás»), no se vuelve a enviar: solo se avanza.
       if (!consentRegistered) {
-        await client.postConsent(token, { accepted: true, textVersion: CONSENT_TEXT_VERSION });
+        await client.postConsent(token, { accepted: true, textVersion: view.consentTextVersion });
         onConsentRegistered?.();
       }
       onDone();
@@ -60,7 +63,7 @@ export function PasoDatos({
           Hola {view.fullName}
         </h1>
         <p className="mt-1 text-base text-muted-foreground">
-          {view.productName} necesita verificar tu identidad para continuar con tu trámite.
+          {view.productName?.trim() || "FLIT 2.0"} necesita verificar tu identidad para continuar con tu trámite.
         </p>
       </div>
 
@@ -115,6 +118,12 @@ export function PasoDatos({
         </label>
       </div>
 
+      {versionMismatch ? (
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+          El texto de consentimiento cambió; recarga la página.
+        </p>
+      ) : null}
+
       {error ? (
         <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
           No pudimos registrar tu autorización. Inténtalo de nuevo.
@@ -123,7 +132,7 @@ export function PasoDatos({
 
       <button
         type="button"
-        disabled={!accepted || sending}
+        disabled={!accepted || sending || versionMismatch}
         onClick={() => void start()}
         className={`min-h-12 w-full rounded-xl px-4 ${BRAND_BTN} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50`}
       >

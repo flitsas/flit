@@ -10,7 +10,7 @@ const VIEW = {
   documentNumber: "1000000000",
   productName: "FLIT 2.0",
   expiresAt: "2030-01-01T00:00:00Z",
-  consentTextVersion: "v",
+  consentTextVersion: "manual-ley1581-v1",
 };
 
 function fakeClient(submit = vi.fn().mockResolvedValue({ status: "pendiente_revision_manual" })): ManualCaptureClient {

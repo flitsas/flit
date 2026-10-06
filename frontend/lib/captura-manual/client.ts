@@ -1,7 +1,7 @@
 // Cliente tipado de la captura manual pública (contrato Épica #13202 §2).
 // Adaptador simulado por defecto; el real se activa con NEXT_PUBLIC_MANUAL_CAPTURE_MOCK=false.
 import { resolveApiUrl } from "@/lib/api/client";
-import { CONSENT_TEXT_VERSION } from "./consent";
+import { RENDERED_CONSENT_TEXT_VERSION } from "./consent";
 import {
   ManualCaptureError,
   type ConsentBody,
@@ -75,7 +75,7 @@ export function createMockClient(delayMs = 250): ManualCaptureClient {
         documentNumber: "1000000000",
         productName: "FLIT 2.0",
         expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
-        consentTextVersion: CONSENT_TEXT_VERSION,
+        consentTextVersion: RENDERED_CONSENT_TEXT_VERSION,
       };
     },
     async postConsent(token) {

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
  * solo el logo de FLIT (con el nombre del producto) a la izquierda, y pie de ayuda.
  * Excepción documentada a la línea base FLIT: replica a Kyverum por decisión del PO (Épica #13202).
  */
-export function CaptureCard({ productName, children }: { productName?: string; children: ReactNode }) {
+export function CaptureCard({ productName, children }: { productName?: string | null; children: ReactNode }) {
   return (
     <main className="flex min-h-dvh justify-center bg-[#FBF7EF] px-4 py-6">
       <div className="w-full max-w-[480px]">
@@ -13,7 +13,7 @@ export function CaptureCard({ productName, children }: { productName?: string; c
           <header className="mb-4 flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/assets/logo-flit-dark.svg" alt="FLIT" className="h-7 w-auto" />
-            <span className="text-sm text-muted-foreground">{productName ?? "FLIT 2.0"}</span>
+            <span className="text-sm text-muted-foreground">{productName?.trim() || "FLIT 2.0"}</span>
           </header>
           {children}
         </div>
