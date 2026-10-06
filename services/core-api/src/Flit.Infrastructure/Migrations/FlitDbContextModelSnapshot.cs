@@ -8339,8 +8339,8 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("completed_at");
 
                     b.Property<string>("CompradorNombre")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
                         .HasColumnName("comprador_nombre");
 
                     b.Property<long>("Consecutivo")
@@ -8543,8 +8543,8 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("updated_by");
 
                     b.Property<string>("VendedorNombre")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
                         .HasColumnName("vendedor_nombre");
 
                     b.Property<string>("Vin")
@@ -8667,8 +8667,8 @@ namespace Flit.Infrastructure.Migrations
 
                     b.Property<string>("FullName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
                         .HasColumnName("full_name");
 
                     b.Property<string>("Metadata")
@@ -8694,8 +8694,8 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("person_type");
 
                     b.Property<string>("Phone")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("phone");
 
                     b.Property<Guid>("ProcedureEntityId")
@@ -8933,8 +8933,8 @@ namespace Flit.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
                         .HasColumnName("name");
 
                     b.Property<string>("PartyRole")

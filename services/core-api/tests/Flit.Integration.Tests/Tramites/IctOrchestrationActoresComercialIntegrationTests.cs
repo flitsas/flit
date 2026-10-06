@@ -31,7 +31,8 @@ public sealed class IctOrchestrationActoresComercialIntegrationTests(PostgresDat
 {
     private static readonly Guid UserId = new("b13304a8-0000-4000-8000-0000000000aa");
     private static readonly Guid SeededInstanceId = new("b13304a8-0000-4000-8000-000000000001");
-    private const string TelefonoDemasiadoLargo = "+57 300 000 0000 ext 123456789";
+    // Más largo que procedure_instance_actors.phone varchar(50) (DDL 132): provoca el 22001 al guardar.
+    private const string TelefonoDemasiadoLargo = "+57 300 000 0000 ext 123456789 / +57 310 000 0000 ext 987654321";
 
     // ── Capa 2: ningún fallo silencioso ──────────────────────────────────────
 
