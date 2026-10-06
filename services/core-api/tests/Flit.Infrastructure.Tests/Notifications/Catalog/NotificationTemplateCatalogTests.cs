@@ -16,13 +16,13 @@ public class NotificationTemplateCatalogTests
     }
 
     [Fact]
-    public void All_DebeTenerExactamenteTreceEntradas()
+    public void All_DebeTenerExactamenteCatorceEntradas()
     {
-        NotificationTemplateCatalog.All.Should().HaveCount(13);
+        NotificationTemplateCatalog.All.Should().HaveCount(14);
     }
 
     [Fact]
-    public void All_DebeCubrirLosTreceIdsEsperados()
+    public void All_DebeCubrirLosCatorceIdsEsperados()
     {
         NotificationTemplateCatalog.All.Select(t => t.Id).Should().BeEquivalentTo(
         [
@@ -39,6 +39,7 @@ public class NotificationTemplateCatalogTests
             "tramites.revocatoria-aprobada",
             "tramites.revocatoria-rechazada",
             "identidad.captura-manual",
+            "identidad.captura-manual-rechazo",
         ]);
     }
 
@@ -155,11 +156,21 @@ public class NotificationTemplateCatalogTests
     }
 
     [Fact]
-    public void All_SonCatorceDisparadoresEnTotalParaTrecePlantillas()
+    public void IdentidadCapturaManualRechazo_DeclaraManualCaptureRejected_ConModuloIdentidad()
     {
-        // Invitación declara 2; el resto 1 cada una → 14.
+        NotificationTemplateCatalog.TryResolve("identidad.captura-manual-rechazo", out var descriptor).Should().BeTrue();
+        descriptor.Name.Should().Be("Identidad: correo de rechazo de captura manual");
+        descriptor.Module.Should().Be(NotificationModule.Identidad);
+        descriptor.Triggers.Should().BeEquivalentTo([NotificationTrigger.ManualCaptureRejected]);
+        descriptor.Id.Should().Be(Flit.Infrastructure.Notifications.Identity.ManualCaptureEmailComposer.RejectionTemplateId);
+    }
+
+    [Fact]
+    public void All_SonQuinceDisparadoresEnTotalParaCatorcePlantillas()
+    {
+        // Invitación declara 2; el resto 1 cada una → 15.
         var totalTriggers = NotificationTemplateCatalog.All.Sum(t => t.Triggers.Count);
-        totalTriggers.Should().Be(14);
+        totalTriggers.Should().Be(15);
     }
 
     [Fact]

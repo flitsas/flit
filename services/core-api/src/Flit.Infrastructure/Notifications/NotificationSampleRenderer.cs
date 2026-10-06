@@ -58,6 +58,7 @@ public static class NotificationSampleRenderer
             RevocationRequestNotificationEnqueuer.DecisionTemplateKeyRechazada => ComposeRevocationRequest(
                 RevocationRequestEmailMilestone.Rechazada, channel, baseUrl, effectiveTheme),
             ManualCaptureEmailComposer.TemplateId => ManualCaptureEmailPreviewSample.Build(baseUrl, effectiveTheme),
+            ManualCaptureEmailComposer.RejectionTemplateId => ManualCaptureRejectedEmailPreviewSample.Build(baseUrl, effectiveTheme),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };
