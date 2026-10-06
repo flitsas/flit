@@ -1,0 +1,43 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — eventos de Consultas
+  version: 1.0.0
+  description: |
+    Eventos que publica Consultas (core-consultas) en el exchange `flit.consultas` (ADR-0065, ADR-0064).
+    Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos del consultado: solo la medición.
+defaultContentType: application/json
+
+channels:
+  consultas.consulta.realizada:
+    description: |
+      Terminó una consulta a un proveedor externo. Base de la medición de consumo por empresa y producto
+      (HU #13345, #13352). Se emite también cuando el resultado vino de caché.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: / }
+    subscribe:
+      operationId: consultaRealizada
+      message:
+        $ref: '#/components/messages/ConsultaRealizada'
+
+components:
+  messages:
+    ConsultaRealizada:
+      name: consultas.consulta.realizada
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [producto, fuente, proveedor, resultado, desdeCache, latenciaMs]
+                properties:
+                  producto: { type: string, description: Producto que pidió la consulta (del token de servicio). }
+                  fuente: { type: string, description: "Qué se consultó (vehículo por placa, por VIN, conductor, SIMIT, RNMC, RUES…)." }
+                  proveedor: { type: string, description: Proveedor que respondió (clave del adaptador). }
+                  resultado: { type: string, enum: [ok, no_encontrado, error] }
+                  desdeCache: { type: boolean }
+                  latenciaMs: { type: integer, minimum: 0 }

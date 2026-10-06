@@ -1,0 +1,51 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — trabajos de Notificaciones
+  version: 1.0.0
+  description: |
+    Trabajos en cola que recibe Notificaciones (core-notificaciones). A diferencia de un evento, un trabajo va
+    dirigido a un servicio concreto: cualquier servicio con el scope `platform.notificaciones.send` lo deja,
+    vía su outbox, en el exchange `flit.notificaciones` y Notificaciones lo procesa con reintentos y cola de
+    mensajes muertos (ADR-0064). Mensajes en JSON con el sobre común (comun/sobre.v1.yaml).
+defaultContentType: application/json
+
+channels:
+  notificaciones.email.send:
+    description: Enviar un correo con una plantilla, por el canal de correo de la empresa.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.notificaciones, type: topic, durable: true, autoDelete: false, vhost: / }
+    publish:
+      operationId: emailSend
+      message:
+        $ref: '#/components/messages/EmailSend'
+
+components:
+  messages:
+    EmailSend:
+      name: notificaciones.email.send
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [plantilla, destinatarios, variables]
+                properties:
+                  plantilla:
+                    type: string
+                    description: Código de la plantilla de correo (catálogo de plantillas de Notificaciones).
+                  destinatarios:
+                    type: array
+                    minItems: 1
+                    items: { type: string, format: email }
+                  variables:
+                    type: object
+                    additionalProperties: { type: string }
+                    description: Valores que la plantilla interpola.
+                  idempotencyKey:
+                    type: [string, 'null']
+                    description: Si se repite, el correo no se vuelve a enviar.
