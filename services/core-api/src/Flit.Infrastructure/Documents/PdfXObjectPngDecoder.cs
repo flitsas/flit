@@ -333,7 +333,9 @@ internal static class PdfXObjectPngDecoder
     {
         try
         {
-            using var image = Image.Load<Rgba32>(png);
+            using var image = LoadBounded(png);
+            if (image is null)
+                return png;
             long sum = 0;
             var total = Math.Max(1, image.Width * image.Height);
             for (var y = 0; y < image.Height; y++)
@@ -378,6 +380,31 @@ internal static class PdfXObjectPngDecoder
         {
             return png;
         }
+    }
+
+    /// <summary>
+    /// Bug #13304 (review de seguridad) — tope de píxeles para decodificar un artefacto de rúbrica.
+    /// <see cref="RasterToPng"/> ya limita a 2000x2000, así que nada legítimo lo supera.
+    /// </summary>
+    internal const int MaxDecodePixels = 4_000_000;
+
+    /// <summary>
+    /// Bug #13304 (review de seguridad) — decodificación acotada. ImageSharp 2.1.11 (pin de PdfSharpCore)
+    /// no tiene <c>DecoderOptions.MaxFrames</c> ni límite de asignación del allocator; el equivalente
+    /// explícito es: solo PNG/JPEG (formatos de un frame) y dimensiones leídas de la cabecera con
+    /// <c>Image.Identify</c> ANTES de reservar píxeles. Devuelve null si no cumple.
+    /// </summary>
+    private static Image<Rgba32>? LoadBounded(byte[]? bytes)
+    {
+        if (!IdentitySignatureImageFormat.IsSupported(bytes))
+            return null;
+
+        var info = Image.Identify(bytes);
+        if (info is null || info.Width <= 0 || info.Height <= 0
+            || (long)info.Width * info.Height > MaxDecodePixels)
+            return null;
+
+        return Image.Load<Rgba32>(bytes);
     }
 
     /// <summary>
@@ -430,10 +457,10 @@ internal static class PdfXObjectPngDecoder
     {
         try
         {
-            using var image = Image.Load<Rgba32>(imageBytes);
-            return CountVisibleColors(image, cap);
+            using var image = LoadBounded(imageBytes);
+            return image is null ? int.MaxValue : CountVisibleColors(image, cap);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return int.MaxValue;
         }
@@ -471,7 +498,9 @@ internal static class PdfXObjectPngDecoder
 
         try
         {
-            using var image = Image.Load<Rgba32>(bytes);
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return false;
             var total = image.Width * image.Height;
             var transparent = 0;
             for (var y = 0; y < image.Height; y++)
@@ -486,7 +515,7 @@ internal static class PdfXObjectPngDecoder
             return transparent >= total / 20
                    && CountVisibleColors(image, SignaturePaletteMax) <= SignaturePaletteMax;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return false;
         }
@@ -502,7 +531,9 @@ internal static class PdfXObjectPngDecoder
 
         try
         {
-            using var image = Image.Load<Rgba32>(bytes);
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return false;
             var total = image.Width * image.Height;
             if (total < 16)
                 return false;

@@ -107,8 +107,11 @@ public sealed class FurHandlerTests
 
         public void Delete(string storagePath) => Deleted.Add(storagePath);
 
+        /// <summary>Bug #13304 — artefactos legibles por ruta (rúbrica de identidad persistida).</summary>
+        public Dictionary<string, byte[]> Blobs { get; } = new(StringComparer.Ordinal);
+
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
-            Task.FromResult<Stream?>(null);
+            Task.FromResult<Stream?>(Blobs.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null);
 
         public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
             string storagePath, CancellationToken ct = default) =>
@@ -1469,6 +1472,61 @@ public sealed class FurHandlerTests
         // Matrícula: FUR + certificado de identidad (sin compraventa).
         result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "certificado_identidad"]);
         _certClient.RequestedIds.Should().ContainSingle().Which.Should().Be("kyv-comprador");
+    }
+
+    // Bug #13304 — paridad con la impronta: ResolveIdentitySignatureImagesAsync no usa una rúbrica
+    // persistida que el extractor no reconoce (logo «Verify»); una utilizable sí llega al FUR.
+
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaNoUtilizable_ElFurNoUsaLaImagen()
+    {
+        var (handler, capturing, id, tenant, _) = FurConRubricaPersistida(usable: false);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        (capturing.Captured!.FirmaIdentidadImagenes ?? new Dictionary<string, byte[]>())
+            .Should().BeEmpty("el logo persistido no debe estamparse; queda el sello de texto");
+        capturing.Captured.SellosIdentidad.Should().ContainKey("comprador");
+    }
+
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaUtilizable_ElFurUsaLaImagen()
+    {
+        var (handler, capturing, id, tenant, sig) = FurConRubricaPersistida(usable: true);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        capturing.Captured!.FirmaIdentidadImagenes.Should().NotBeNull();
+        capturing.Captured.FirmaIdentidadImagenes!.Values.Should().ContainSingle()
+            .Which.Should().Equal(sig);
+    }
+
+    private (GenerarFurHandler Handler, CapturingFurGenerator Capturing, Guid Id, Guid Tenant, byte[] Sig)
+        FurConRubricaPersistida(bool usable)
+    {
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR", "1"));
+        var bio = Bio(parte: "comprador");
+        bio.SignatureImagePath = "bio/rubrica.png";
+        instance.BiometricValidations.Add(bio);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);
+
+        byte[] sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4];
+        _storage.Blobs["bio/rubrica.png"] = sig;
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(usable);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance,
+            identitySignatureExtractor: extractor);
+        return (handler, capturing, id, tenant, sig);
     }
 
     [Fact]
