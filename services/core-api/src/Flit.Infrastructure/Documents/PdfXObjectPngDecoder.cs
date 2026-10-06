@@ -290,7 +290,7 @@ internal static class PdfXObjectPngDecoder
             var png = ms.ToArray();
             return IdentitySignatureImageFormat.IsPng(png) ? png : null;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return null;
         }
@@ -307,18 +307,23 @@ internal static class PdfXObjectPngDecoder
             (byte)(255 * (1f - y / 255f) * kk));
     }
 
+    /// <summary>
+    /// Bug #13304 (review de seguridad) — JPEG/PNG embebido: se decodifica con <see cref="LoadBounded"/>
+    /// para que una cabecera enorme en pocos bytes no reserve todos sus píxeles dentro de TryExtract.
+    /// </summary>
     private static byte[]? ReencodeRasterFile(byte[] bytes)
     {
         try
         {
-            using var input = new MemoryStream(bytes, writable: false);
-            using var image = Image.Load<Rgba32>(input);
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return null;
             using var ms = new MemoryStream();
             image.Save(ms, Png);
             var png = ms.ToArray();
             return IdentitySignatureImageFormat.IsPng(png) ? png : null;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return null;
         }
@@ -376,7 +381,7 @@ internal static class PdfXObjectPngDecoder
             var outPng = ms.ToArray();
             return IdentitySignatureImageFormat.IsPng(outPng) ? outPng : png;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return png;
         }
@@ -561,7 +566,7 @@ internal static class PdfXObjectPngDecoder
 
             return visibleInk >= Math.Max(20, total / 250);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return false;
         }
