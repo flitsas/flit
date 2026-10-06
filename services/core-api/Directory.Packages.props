@@ -106,6 +106,12 @@
     <PackageVersion Include="Google.Protobuf" Version="3.30.2" />
     <PackageVersion Include="Grpc.Net.ClientFactory" Version="2.71.0" />
     <PackageVersion Include="Grpc.Tools" Version="2.71.0" />
+    <!-- Epic #13316 (HU #13337) — SDK gRPC: errores con google.rpc.ErrorInfo, grpc.health.v1, reflection (solo DEV) y
+         circuito/reintentos. Polly.Core en la misma versión que ya llegaba transitiva (Microsoft.Extensions.Http.Polly). -->
+    <PackageVersion Include="Grpc.StatusProto" Version="2.71.0" />
+    <PackageVersion Include="Grpc.AspNetCore.HealthChecks" Version="2.71.0" />
+    <PackageVersion Include="Grpc.AspNetCore.Server.Reflection" Version="2.71.0" />
+    <PackageVersion Include="Polly.Core" Version="8.4.2" />
 
     <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
          AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->

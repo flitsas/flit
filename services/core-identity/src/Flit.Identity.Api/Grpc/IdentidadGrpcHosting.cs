@@ -1,4 +1,5 @@
 using Flit.Api.Identity;
+using Flit.Platform.Sdk.Grpc;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 namespace Flit.Identity.Api.Grpc;
@@ -19,9 +20,9 @@ internal static class IdentidadGrpcHosting
             return;
 
         builder.Services.AddScoped<UsuariosEmpresaQuery>();
-        builder.Services.AddGrpc()
-            .AddServiceOptions<IdentidadGrpcService>(options =>
-                options.Interceptors.Add<ServiceCallInterceptor>(IdentidadGrpcService.Scope, ServiceAudiences.Plataforma));
+        // SDK de plataforma (HU #13337): errores del §10, grpc.health.v1 y validación del token de servicio y la empresa.
+        builder.Services.AddFlitGrpcServer()
+            .RequireServiceToken<IdentidadGrpcService>(IdentidadGrpcService.Scope, ServiceAudiences.Plataforma);
 
         // h2c necesita un endpoint dedicado solo HTTP/2: Kestrel no mezcla HTTP/1.1 y HTTP/2 en texto plano en un mismo
         // puerto. Al declarar endpoints por código Kestrel ignora ASPNETCORE_URLS, así que se vuelven a declarar las
@@ -51,5 +52,6 @@ internal static class IdentidadGrpcHosting
             return;
 
         app.MapGrpcService<IdentidadGrpcService>().RequireHost($"*:{grpcPort}");
+        app.MapFlitGrpcPlatform(app.Environment, $"*:{grpcPort}");
     }
 }

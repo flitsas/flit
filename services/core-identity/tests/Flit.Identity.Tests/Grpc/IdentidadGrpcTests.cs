@@ -12,6 +12,7 @@ using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using Grpc.Health.V1;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -184,6 +185,14 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
         var call = async () => await Client(await ServiceTokenAsync(ct), port: 4025).ObtenerProductosHabilitadosAsync(
             new ObtenerProductosHabilitadosRequest(), Metadata(_empresa), cancellationToken: ct);
         (await call.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.Unimplemented);
+    }
+
+    [Fact]
+    public async Task ExponeGrpcHealthEnSuPuerto()
+    {
+        var channel = GrpcChannel.ForAddress($"http://localhost:{GrpcPort}", new GrpcChannelOptions { HttpHandler = _host.Server.CreateHandler() });
+        (await new Health.HealthClient(channel).CheckAsync(new HealthCheckRequest(), cancellationToken: TestContext.Current.CancellationToken))
+            .Status.Should().Be(HealthCheckResponse.Types.ServingStatus.Serving);
     }
 
     [Theory]

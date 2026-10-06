@@ -1,20 +1,20 @@
 using System.Security.Claims;
-using Flit.Identity.Api.Grpc;
+using Flit.Platform.Sdk.Grpc;
 using FluentAssertions;
 using Grpc.Core;
 using Xunit;
 
-namespace Flit.Identity.Tests.Grpc;
+namespace Flit.Platform.Sdk.Tests.Grpc;
 
 /// <summary>
-/// HU #13334 (Epic #13316) — validación local de una llamada gRPC entre servicios (contrato v1.3 §3 y §6.1), hasta que
-/// el SDK traiga su interceptor (HU #13337). La firma, el emisor y la vigencia los valida antes ASP.NET Core.
+/// HU #13337 (Epic #13316; nació local en core-identity con la HU #13334) — validación de una llamada gRPC entre
+/// servicios (contrato v1.3 §3 y §6.1). La firma, el emisor y la vigencia los valida antes ASP.NET Core.
 /// </summary>
-public sealed class ServiceCallInterceptorTests
+public sealed class PlatformServiceCallInterceptorTests
 {
     private const string Scope = "platform.identidad.read";
     private static readonly string Tenant = Guid.NewGuid().ToString();
-    private readonly ServiceCallInterceptor _interceptor = new(Scope, "plataforma");
+    private readonly PlatformServiceCallInterceptor _interceptor = new(Scope, "plataforma");
 
     private static ClaimsPrincipal Token(string sub, string aud = "plataforma", string scope = Scope) =>
         new(new ClaimsIdentity([new Claim("sub", sub), new Claim("aud", aud), new Claim("scope", scope)], "Bearer"));
@@ -57,13 +57,4 @@ public sealed class ServiceCallInterceptorTests
     [InlineData("00000000-0000-0000-0000-000000000000")]
     public void SinEmpresaValida_InvalidArgument(string? tenant) =>
         CodeOf(() => _interceptor.Validate(Token("svc-consultas"), tenant)).Should().Be(StatusCode.InvalidArgument);
-
-    [Fact]
-    public void PageToken_IdaYVuelta_YUnoInventadoEsInvalidArgument()
-    {
-        IdentidadGrpcService.PageToken.Decode(IdentidadGrpcService.PageToken.Encode(150)).Should().Be(150);
-        IdentidadGrpcService.PageToken.Decode(string.Empty).Should().Be(0);
-        CodeOf(() => IdentidadGrpcService.PageToken.Decode("basura")).Should().Be(StatusCode.InvalidArgument);
-        CodeOf(() => IdentidadGrpcService.PageToken.Decode(Convert.ToBase64String("v1:-3"u8.ToArray()))).Should().Be(StatusCode.InvalidArgument);
-    }
 }

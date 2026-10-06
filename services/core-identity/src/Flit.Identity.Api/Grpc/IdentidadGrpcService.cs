@@ -3,6 +3,7 @@ using System.Text;
 using Flit.Identidad.Grpc.V1;
 using Flit.Modules.Platform.Application.Access;
 using Flit.Modules.Security.Application.Products;
+using Flit.Platform.Sdk.Grpc;
 using Grpc.Core;
 
 namespace Flit.Identity.Api.Grpc;
@@ -10,7 +11,7 @@ namespace Flit.Identity.Api.Grpc;
 /// <summary>
 /// <c>flit.identidad.v1.IdentidadService</c> (Epic #13316, HU #13334; contrato de plataforma v1.3 §6.1): usuarios y
 /// productos encendidos de una empresa, para que ningún otro servicio lea las tablas de Identidad (ADR-0064 decisión
-/// 1). Todo método responde solo por la empresa de <c>x-flit-tenant-id</c>, que valida <see cref="ServiceCallInterceptor"/>.
+/// 1). Todo método responde solo por la empresa de <c>x-flit-tenant-id</c>, que valida el interceptor del SDK (<see cref="PlatformServiceCallInterceptor"/>).
 /// </summary>
 internal sealed class IdentidadGrpcService(UsuariosEmpresaQuery usuarios, ListEnabledProductsHandler productos)
     : IdentidadService.IdentidadServiceBase
@@ -25,7 +26,7 @@ internal sealed class IdentidadGrpcService(UsuariosEmpresaQuery usuarios, ListEn
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
-        var caller = ServiceCaller.From(context);
+        var caller = PlatformServiceCaller.From(context);
         var producto = Producto(request.Producto);
         var tomar = request.PageSize switch
         {
@@ -55,7 +56,7 @@ internal sealed class IdentidadGrpcService(UsuariosEmpresaQuery usuarios, ListEn
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
-        var caller = ServiceCaller.From(context);
+        var caller = PlatformServiceCaller.From(context);
         var producto = Producto(request.Producto);
         if (!Guid.TryParse(request.UsuarioId, out var usuarioId))
             throw new RpcException(new Status(StatusCode.InvalidArgument, "usuario_id debe ser un UUID."));
@@ -69,7 +70,7 @@ internal sealed class IdentidadGrpcService(UsuariosEmpresaQuery usuarios, ListEn
     public override async Task<ObtenerProductosHabilitadosResponse> ObtenerProductosHabilitados(ObtenerProductosHabilitadosRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var caller = ServiceCaller.From(context);
+        var caller = PlatformServiceCaller.From(context);
         var response = new ObtenerProductosHabilitadosResponse();
         response.Productos.AddRange(await productos.HandleAsync(caller.TenantId, context.CancellationToken).ConfigureAwait(false));
         return response;

@@ -131,28 +131,4 @@ public sealed class PlatformAuthenticationTests : IAsyncLifetime
             Expires = expires ?? DateTime.UtcNow.AddMinutes(10),
             SigningCredentials = new SigningCredentials(key ?? _key, SecurityAlgorithms.RsaSha256),
         });
-
-    private sealed class JwksHandler : HttpMessageHandler
-    {
-        private int _reads;
-
-        public IReadOnlyList<RsaSecurityKey> Keys { get; set; } = [];
-
-        public int Reads => _reads;
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Interlocked.Increment(ref _reads);
-            var set = new JsonWebKeySet();
-            foreach (var key in Keys)
-            {
-                var jwk = JsonWebKeyConverter.ConvertFromRSASecurityKey(new RsaSecurityKey(key.Rsa.ExportParameters(false)) { KeyId = key.KeyId });
-                jwk.Use = "sig";
-                jwk.Alg = SecurityAlgorithms.RsaSha256;
-                set.Keys.Add(jwk);
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { keys = set.Keys })) });
-        }
-    }
 }

@@ -9,6 +9,9 @@ de Identidad ni Trámites.
 | `AddFlitPlatformAuthentication` | Valida tokens de la plataforma contra el JWKS de Identidad: firma, emisor y la audiencia del servicio | #13336 |
 | `PlatformTenantContext` / `ForTenant` | Empresa de la petición y filtro que **falla cerrado**: sin empresa, ninguna fila; el SuperAdmin ve todas | #13336 |
 | `PlatformPrincipal` | Token de servicio (`sub = svc-…`) o de usuario, SuperAdmin, scopes | #13336 |
+| `AddFlitGrpcServer` / `RequireServiceToken<T>` / `MapFlitGrpcPlatform` | Servidor gRPC: errores del §10 con `ErrorInfo`, token de servicio + scope + audiencia + empresa, `grpc.health.v1`, reflection solo en DEV | #13337 |
+| `AddFlitGrpcClient<T>` | Cliente gRPC: token de servicio por scope (pedido y renovado), empresa, correlación y `traceparent` en la metadata, deadline 3 s, reintentos solo ante `UNAVAILABLE` y circuito por destino | #13337 |
+| `PlatformException` / `PlatformRpcErrors.Reason` | Lanzar un error del §10 en un handler y leerlo del lado del cliente | #13337 |
 | `AddFlitTelemetry` / `UseFlitCorrelationId` | Trazas y logs OTLP (solo con `OTEL_EXPORTER_OTLP_ENDPOINT`) e id de correlación | #13332 |
 | `OidcDefaults`, `ServiceAudiences`, `AdminAuthorization` | Scopes de servicio, audiencias por servicio destino, claims y roles | #13333 |
 
@@ -33,6 +36,26 @@ app.UseAuthorization();
   }
 }
 ```
+
+Atender y llamar por gRPC:
+
+```csharp
+builder.Services.AddFlitGrpcServer().RequireServiceToken<ConsultasGrpcService>("platform.consultas", ServiceAudiences.Consultas);
+builder.Services.AddFlitGrpcClient<IdentidadService.IdentidadServiceClient>(
+    builder.Configuration, new Uri("http://core-identity:8083"), "platform.identidad.read");
+
+app.MapGrpcService<ConsultasGrpcService>();
+app.MapFlitGrpcPlatform(app.Environment);
+```
+
+```json
+"Platform": {
+  "ServiceClient": { "TokenEndpoint": "http://gateway:4002/connect/token", "ClientId": "svc-consultas", "ClientSecret": "<SVC_CONSULTAS_CLIENT_SECRET>" }
+}
+```
+
+En un handler, `PlatformServiceCaller.From(context)` da el cliente y la empresa ya validados. Desde un proceso sin
+petición en curso (un job), la empresa se pasa explícita en la metadata `x-flit-tenant-id`.
 
 Leer por empresa siempre con el filtro del SDK:
 

@@ -41,6 +41,13 @@
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <!-- HU #13337: servidor y clientes gRPC entre servicios. -->
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.StatusProto" />
+    <PackageReference Include="Grpc.AspNetCore.HealthChecks" />
+    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" />
+    <PackageReference Include="Polly.Core" />
   </ItemGroup>
 
   <ItemGroup>
