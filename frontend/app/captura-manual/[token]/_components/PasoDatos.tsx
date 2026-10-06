@@ -1,5 +1,6 @@
 "use client";
 
+import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useId, useState } from "react";
 import {
   CAPTURE_TIPS,
@@ -124,7 +125,7 @@ export function PasoDatos({
         type="button"
         disabled={!accepted || sending}
         onClick={() => void start()}
-        className="min-h-12 w-full rounded-xl bg-flit-brand px-4 text-base font-semibold text-flit-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50"
+        className={`min-h-12 w-full rounded-xl px-4 ${BRAND_BTN} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50`}
       >
         {sending ? "Registrando…" : "Iniciar verificación"}
       </button>

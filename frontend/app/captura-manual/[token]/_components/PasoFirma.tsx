@@ -1,5 +1,6 @@
 "use client";
 
+import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useRef, useState } from "react";
 import { SignaturePad } from "./SignaturePad";
 import { isComplete, offendingCapture, type CaptureKey, type Captures } from "@/lib/captura-manual/captures";
@@ -69,7 +70,7 @@ export function PasoFirma({
   }
 
   const btn =
-    "min-h-11 rounded-xl px-4 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50";
+    "min-h-11 rounded-xl px-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <section aria-labelledby="paso-firma-titulo" className="mt-6 flex flex-col gap-4">
@@ -92,14 +93,14 @@ export function PasoFirma({
         </p>
       ) : null}
       <div className="flex gap-3">
-        <button type="button" onClick={onBack} disabled={sending} className={`${btn} border border-flit-brand-ink text-flit-brand-ink`}>
+        <button type="button" onClick={onBack} disabled={sending} className={`${btn} border border-flit-brand-ink text-base font-semibold text-flit-brand-ink`}>
           Atrás
         </button>
         <button
           type="button"
           onClick={() => void send()}
           disabled={!captures.firma || sending}
-          className={`${btn} flex-1 bg-flit-brand text-flit-primary`}
+          className={`${btn} flex-1 ${BRAND_BTN}`}
         >
           {sending ? "Enviando…" : "Finalizar"}
         </button>

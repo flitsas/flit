@@ -26,7 +26,7 @@ export function StepBar({ state }: { state: StepsState }) {
                   (status === "done"
                     ? "bg-flit-primary text-white"
                     : status === "active"
-                      ? "bg-flit-brand text-flit-primary ring-2 ring-flit-brand ring-offset-2"
+                      ? "bg-flit-brand text-white ring-2 ring-flit-brand ring-offset-2"
                       : "bg-flit-gray text-flit-primary")
                 }
               >

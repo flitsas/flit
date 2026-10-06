@@ -1,5 +1,6 @@
 "use client";
 
+import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { getManualCaptureClient } from "@/lib/captura-manual/client";
 import { initialStepsState, STEPS, stepsReducer } from "@/lib/captura-manual/steps";
@@ -94,7 +95,7 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           <button
             type="button"
             onClick={retry}
-            className="min-h-11 rounded-xl bg-flit-brand px-6 text-base font-semibold text-flit-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+            className={`min-h-11 rounded-xl px-6 ${BRAND_BTN} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand`}
           >
             Reintentar
           </button>

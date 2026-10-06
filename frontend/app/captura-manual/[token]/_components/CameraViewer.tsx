@@ -1,5 +1,6 @@
 "use client";
 
+import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Camera, CameraOff, Loader2, RefreshCw } from "lucide-react";
 import { useLiveCamera, type CameraFacing } from "@/lib/captura-manual/useLiveCamera";
@@ -19,7 +20,7 @@ export interface CameraViewerProps {
 }
 
 const btnBase =
-  "min-h-11 w-full rounded-xl px-4 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 w-full rounded-xl px-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Visor de cámara en vivo reutilizable (HU #13293): rostro y documento (B6). Estados: abriendo,
@@ -66,10 +67,10 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
           <img src={captured.url} alt="Vista previa de la foto capturada" className="size-full object-contain" />
         </div>
         <div className="flex gap-3">
-          <button type="button" onClick={repeat} className={`${btnBase} border border-flit-brand-ink text-flit-brand-ink`}>
+          <button type="button" onClick={repeat} className={`${btnBase} border border-flit-brand-ink text-base font-semibold text-flit-brand-ink`}>
             Repetir
           </button>
-          <button type="button" onClick={() => onContinue(captured.blob)} className={`${btnBase} bg-flit-brand text-flit-primary`}>
+          <button type="button" onClick={() => onContinue(captured.blob)} className={`${btnBase} ${BRAND_BTN}`}>
             Continuar
           </button>
         </div>
@@ -84,7 +85,7 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
         <p className="text-base font-semibold text-flit-primary">{TITLES[status]}</p>
         <p className="text-base text-muted-foreground">{BODIES[status]}</p>
         {status === "denied" || status === "error" ? (
-          <button type="button" onClick={restart} className={`${btnBase} bg-flit-brand text-flit-primary`}>
+          <button type="button" onClick={restart} className={`${btnBase} ${BRAND_BTN}`}>
             Reintentar
           </button>
         ) : null}
@@ -113,7 +114,7 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
           </>
         )}
       </div>
-      <button type="button" disabled={!ready} onClick={() => void take()} className={`${btnBase} bg-flit-brand text-flit-primary`}>
+      <button type="button" disabled={!ready} onClick={() => void take()} className={`${btnBase} ${BRAND_BTN}`}>
         <Camera aria-hidden="true" className="mr-2 inline size-5" />
         {captureLabel}
       </button>
