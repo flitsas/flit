@@ -59,4 +59,12 @@ public sealed class PendingProcedureDraftClient : IProcedureDraftClient
         string actorCompany,
         CancellationToken ct = default) =>
         Task.FromResult(new DraftActionResult(null, "grpc_unavailable"));
+
+    public Task<(bool Ok, string? Error)> UpdateCommercialAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        Guid externalRef,
+        decimal sellingPrice,
+        CancellationToken ct = default) =>
+        Task.FromResult<(bool Ok, string? Error)>((false, "grpc_unavailable"));
 }

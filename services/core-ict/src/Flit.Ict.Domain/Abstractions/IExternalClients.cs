@@ -73,4 +73,17 @@ public interface IProcedureDraftClient
         string actorMail,
         string actorCompany,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Bug #13304 — actualiza el precio de venta (datos comerciales) del borrador ya materializado en
+    /// core-api. SOLO procede mientras el trámite esté en borrador. <c>Error</c> es un código estable:
+    /// <c>not_draft</c> (ya avanzó), <c>not_found</c> (no existe en el tenant o el external_ref no coincide),
+    /// <c>invalid_*</c> (validación del comercial) o <c>grpc_unavailable</c> (canal caído).
+    /// </summary>
+    Task<(bool Ok, string? Error)> UpdateCommercialAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        Guid externalRef,
+        decimal sellingPrice,
+        CancellationToken ct = default);
 }
