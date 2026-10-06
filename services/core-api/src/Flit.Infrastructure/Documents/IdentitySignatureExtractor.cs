@@ -34,7 +34,12 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
                     if (!TryMeasure(png, out var width, out var height))
                         continue;
 
-                    var candidate = new Candidate(png, width, height);
+                    var candidate = new Candidate(
+                        png,
+                        width,
+                        height,
+                        PdfXObjectPngDecoder.HasTransparencyMask(dict),
+                        PdfXObjectPngDecoder.CountVisibleColors(png, Candidate.LowPaletteMax));
                     if (bestAny is null || candidate.Beats(bestAny))
                         bestAny = candidate;
                     if (candidate.LooksLikeSignature && (bestSignature is null || candidate.Beats(bestSignature)))
@@ -47,7 +52,7 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
                 return null;
 
             var ink = PdfXObjectPngDecoder.ToDocumentInk(best.Png);
-            return PdfXObjectPngDecoder.HasVisibleInk(ink) ? new IdentitySignatureCrop(ink) : null;
+            return PdfXObjectPngDecoder.LooksLikeSignatureArtifact(ink) ? new IdentitySignatureCrop(ink) : null;
         }
         catch (OperationCanceledException)
         {
@@ -59,8 +64,12 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
         }
     }
 
+    /// <summary>
+    /// Bug #13304 — además de tinta visible exige fondo transparente y paleta baja: el logo «Verify»
+    /// persistido por error deja de valer y la captura lo re-extrae (autocorrección).
+    /// </summary>
     public bool IsUsableInk(byte[] imageBytes) =>
-        PdfXObjectPngDecoder.HasVisibleInk(imageBytes);
+        PdfXObjectPngDecoder.LooksLikeSignatureArtifact(imageBytes);
 
     private static IEnumerable<PdfDictionary> EnumerateImageDicts(PdfPage page)
     {
@@ -135,8 +144,17 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
         }
     }
 
-    private sealed record Candidate(byte[] Png, int Width, int Height)
+    /// <summary>
+    /// Bug #13304 — señal principal: transparencia (/SMask o /Mask) y luego paleta baja; aspecto y área
+    /// quedan como desempate. Kyverum añadió un logo de cabecera 676x200 opaco y de color continuo que,
+    /// por aspecto, le ganaba a la rúbrica 672x270 con /SMask.
+    /// </summary>
+    private sealed record Candidate(byte[] Png, int Width, int Height, bool HasMask, int Colors)
     {
+        public const int LowPaletteMax = 256;
+
+        private int Score => (HasMask ? 2 : 0) + (Colors <= LowPaletteMax ? 1 : 0);
+
         public int Area => Width * Height;
 
         public double Aspect => Height == 0 ? 0 : (double)Width / Height;
@@ -146,6 +164,8 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
             Width >= 200 && Height >= 40 && Height < Width && Area is >= 8_000 and <= 400_000;
 
         public bool Beats(Candidate other) =>
-            Aspect > other.Aspect || (Math.Abs(Aspect - other.Aspect) <= 0.15 && Area < other.Area);
+            Score != other.Score
+                ? Score > other.Score
+                : Aspect > other.Aspect || (Math.Abs(Aspect - other.Aspect) <= 0.15 && Area < other.Area);
     }
 }
