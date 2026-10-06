@@ -44,6 +44,7 @@ public sealed class BuildClosureTests
             "Flit.Modules.Platform",
             "Flit.Modules.Security.Application",
             "Flit.Modules.Security.Domain",
+            "Flit.Platform.Sdk",
             "Flit.Queries.Domain",
             "Flit.Suite.AspNetCore");
     }

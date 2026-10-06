@@ -278,6 +278,7 @@ jobs:
             services/core-api/src/Flit.Modules.Platform
             services/core-api/src/Flit.Modules.Security.Application
             services/core-api/src/Flit.Modules.Security.Domain
+            services/core-api/src/Flit.Platform.Sdk
             services/core-api/src/Flit.Queries.Domain
             services/core-api/src/Flit.Suite.AspNetCore
             contracts/proto

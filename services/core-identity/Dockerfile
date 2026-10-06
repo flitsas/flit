@@ -24,6 +24,7 @@ COPY core-api/src/Flit.Modules.Improntas.Domain/ /services/core-api/src/Flit.Mod
 COPY core-api/src/Flit.Modules.Platform/ /services/core-api/src/Flit.Modules.Platform/
 COPY core-api/src/Flit.Modules.Security.Application/ /services/core-api/src/Flit.Modules.Security.Application/
 COPY core-api/src/Flit.Modules.Security.Domain/ /services/core-api/src/Flit.Modules.Security.Domain/
+COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
 COPY core-api/src/Flit.Queries.Domain/ /services/core-api/src/Flit.Queries.Domain/
 COPY core-api/src/Flit.Suite.AspNetCore/ /services/core-api/src/Flit.Suite.AspNetCore/
 # Configuración base compartida con core-api (Flit.Identity.Api la enlaza: mismo emisor, llaves y clientes OIDC). Solo
