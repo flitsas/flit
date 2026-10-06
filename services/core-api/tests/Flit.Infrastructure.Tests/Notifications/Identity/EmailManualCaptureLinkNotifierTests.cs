@@ -23,7 +23,7 @@ public sealed class EmailManualCaptureLinkNotifierTests
 {
     private static readonly Guid Tenant = Guid.Parse("44444444-4444-4444-8444-444444444444");
     private static readonly DateTimeOffset Vence = new(2026, 10, 7, 14, 30, 0, TimeSpan.Zero); // 09:30 hora Colombia
-    private const string Token = "tok_ABC-123_xyz";
+    private const string Token = "enlace-de-prueba-uno";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly IEmailSender _sender = Substitute.For<IEmailSender>();
@@ -57,7 +57,7 @@ public sealed class EmailManualCaptureLinkNotifierTests
         enviado.ToName.Should().Be("Ana Perez");
         enviado.TenantId.Should().Be(Tenant);
         enviado.TemplateKey.Should().Be("identidad.captura-manual");
-        enviado.HtmlBody.Should().Contain("https://app.flit.example/captura-manual/tok_ABC-123_xyz");
+        enviado.HtmlBody.Should().Contain("https://app.flit.example/captura-manual/enlace-de-prueba-uno");
         enviado.Subject.Should().Be("[FLIT 2.0] Verifica tu identidad");
     }
 
