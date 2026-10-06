@@ -11,11 +11,11 @@ del hub en `app/(auth)` (A-06) y proxy hacia la API y el servidor OIDC. Lo que f
 ## Correr en local
 
 ```bash
-pnpm run dev:hub          # http://localhost:4040
+pnpm run dev:hub          # http://localhost:4022
 ```
 
 Con la API en `http://localhost:4002` (gateway) basta. El login necesita el servidor OIDC encendido en la API
-(`Suite__Oidc__Enabled=true`) y `Suite__Hosts__Overrides__plataforma=http://localhost:4040`, para que el emisor sea
+(`Suite__Oidc__Enabled=true`) y `Suite__Hosts__Overrides__plataforma=http://localhost:4022`, para que el emisor sea
 este host. Para apuntar a otro lado, variables del servidor:
 
 | Variable | Para qué | Por defecto |

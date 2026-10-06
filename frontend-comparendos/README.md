@@ -5,8 +5,8 @@ App web de **Comparendos** (gestión de comparendos de tránsito) en la FLIT Sui
 
 | | DEV y local | QA | PDN |
 |---|---|---|---|
-| Puerto | 4061 | 5061 | 6061 |
-| Su API | `services/core-comparendos` (4060) | 5060 | 6060 |
+| Puerto | 4023 | 5023 | 6023 |
+| Su API | `services/core-comparendos`, por la red interna detrás del gateway (sin puerto publicado) | | |
 
 Hasta que esté desplegado, el hub lo presenta como «Próximamente»: el código `comparendos` está en
 `Suite:Hosts:ComingSoon` (`services/core-api/src/Flit.Api/appsettings.json`) y su tarjeta lleva a

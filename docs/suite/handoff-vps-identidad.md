@@ -19,9 +19,9 @@ despliega.
 
 | Ambiente | Rama | Puerto `core-identity` | GitHub Environment |
 |---|---|---|---|
-| DEV | `develop` | 4004 | `develop` |
-| QA | `staging` | 5004 | `staging` |
-| PDN | `release` | 6004 | `production` |
+| DEV | `develop` | 4025 | `develop` |
+| QA | `staging` | 5025 | `staging` |
+| PDN | `release` | 6025 | `production` |
 
 ## Paso 0 — Foto del estado actual
 

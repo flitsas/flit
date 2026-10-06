@@ -30,7 +30,7 @@ COPY packages/shell ./packages/shell
 RUN pnpm --filter @flit/frontend-hub build
 
 ENV NODE_ENV=production
-EXPOSE 4040
+EXPOSE 4022
 
 RUN chown -R node:node /app
 USER node

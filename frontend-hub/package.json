@@ -4,7 +4,7 @@
   "private": true,
   "description": "Hub de la FLIT Suite en flitsas.online: portada, login (A-06), inicio con productos (B-11) y administración de plataforma (B-12).",
   "scripts": {
-    "dev": "next dev --port 4040",
+    "dev": "next dev --port 4022",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
