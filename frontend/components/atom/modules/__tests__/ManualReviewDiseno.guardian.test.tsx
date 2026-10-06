@@ -1,7 +1,7 @@
 // Guarda de diseño FLIT de las pantallas de ADMINISTRACIÓN de la validación de identidad manual (Épica #13202).
 // Lee el código fuente (no renderiza) y falla si vuelve a entrar un color fuera de los tokens de la línea base
 // (`flit-design-guardian/references/flit_design_tokens.json`), una clase de paleta ajena de Tailwind o texto bajo 12px.
-// La página pública del cliente (`app/captura-manual/**`) queda FUERA a propósito: es la única que imita a Kyverum.
+// La página pública del cliente (`app/verificacion/**`) queda FUERA a propósito: es la única que imita a Kyverum.
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

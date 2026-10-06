@@ -17,8 +17,8 @@ public static class ManualCaptureEmailComposer
     /// <summary>HU #13299 — id estable de la variante «rechazo»: la revisión rechazó la captura y llega un enlace nuevo.</summary>
     public const string RejectionTemplateId = "identidad.captura-manual-rechazo";
 
-    /// <summary>Ruta del front de la Feature B (<c>/captura-manual/[token]</c>).</summary>
-    public const string CapturePath = "/captura-manual/";
+    /// <summary>Ruta del front de la Feature B (<c>/verificacion/[token]</c>).</summary>
+    public const string CapturePath = "/verificacion/";
 
     public static string BuildLink(string publicBaseUrl, string token)
     {

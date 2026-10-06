@@ -1,6 +1,8 @@
 'use client';
 
 import { Bot, UserCheck } from 'lucide-react';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 
 /**
@@ -15,9 +17,16 @@ const META: Record<ApprovalOrigin, { label: string; tone: StatusTone; Icon: type
   manual: { label: 'Manual', tone: 'info', Icon: UserCheck },
 };
 
+/** «Manual» es del Super Admin FLIT: la compañía y el cliente no lo ven (ni el chip ni su rótulo). */
+export function puedeVerOrigenAprobacion(origin: ApprovalOrigin | null | undefined): boolean {
+  if (!origin) return false;
+  return origin !== 'manual' || isSuperAdmin(decodeJwtPayload(getToken()));
+}
+
 export function ApprovalOriginChip({ origin }: { origin: ApprovalOrigin }) {
   const meta = META[origin];
   if (!meta) return null;
+  if (!puedeVerOrigenAprobacion(origin)) return null;
   const { Icon } = meta;
   return (
     <StatusBadge

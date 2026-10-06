@@ -188,7 +188,7 @@ function Guide({ shape, side }: { shape: "oval" | "rect"; side: "anverso" | "rev
   // Marco rectangular redondeado, borde blanco semitransparente, en la parte alta del visor (la
   // píldora de aviso queda debajo, como en Kyverum). La silueta guía vive dentro del marco.
   return (
-    <div className="pointer-events-none absolute inset-x-[8%] top-[3%] aspect-[2/1] rounded-2xl border-[3px] border-white/80">
+    <div className="pointer-events-none absolute inset-x-[6%] top-[5%] aspect-[1.586/1] rounded-2xl border-[3px] border-white/80">
       <DocumentSilhouette side={side} />
     </div>
   );
@@ -204,7 +204,7 @@ function DocumentSilhouette({ side }: { side: "anverso" | "reverso" }) {
   const stroke = "rgba(255,255,255,0.55)";
   return (
     <svg
-      viewBox="0 0 200 100"
+      viewBox="0 0 160 100"
       role="img"
       aria-label={side === "anverso" ? "Guía del anverso: líneas de datos y recuadro de tu foto" : "Guía del reverso: recuadro de huella y código de barras"}
       data-testid="guia-documento"
@@ -217,23 +217,23 @@ function DocumentSilhouette({ side }: { side: "anverso" | "reverso" }) {
     >
       {side === "anverso" ? (
         <>
-          <line x1="52" y1="30" x2="118" y2="30" />
-          <line x1="52" y1="46" x2="118" y2="46" />
-          <line x1="52" y1="62" x2="102" y2="62" />
-          <rect x="132" y="22" width="30" height="48" rx="4" />
-          <circle cx="147" cy="40" r="6" />
-          <path d="M137 63 C137 52 157 52 157 63" />
-          <text x="147" y="82" textAnchor="middle" fontSize="8" fill={stroke} stroke="none">
+          <line x1="12" y1="28" x2="88" y2="28" />
+          <line x1="12" y1="44" x2="88" y2="44" />
+          <line x1="12" y1="60" x2="70" y2="60" />
+          <rect x="102" y="16" width="44" height="56" rx="4" />
+          <circle cx="124" cy="36" r="8" />
+          <path d="M111 66 C111 52 137 52 137 66" />
+          <text x="124" y="87" textAnchor="middle" fontSize="8" fill={stroke} stroke="none">
             tu foto
           </text>
         </>
       ) : (
         <>
-          <rect x="18" y="18" width="30" height="40" rx="4" />
-          <ellipse cx="33" cy="38" rx="8" ry="11" />
-          <ellipse cx="33" cy="38" rx="4" ry="6" />
-          {[62, 70, 76, 86, 92, 102, 110, 118, 126, 136, 142, 152, 160, 170, 178].map((x) => (
-            <line key={x} x1={x} y1="68" x2={x} y2="88" />
+          <rect x="12" y="14" width="34" height="46" rx="4" />
+          <ellipse cx="29" cy="37" rx="9" ry="13" />
+          <ellipse cx="29" cy="37" rx="4.5" ry="7" />
+          {[14, 20, 24, 32, 36, 44, 50, 56, 62, 70, 74, 82, 88, 96, 100, 108, 114, 122, 128, 136, 146].map((x) => (
+            <line key={x} x1={x} y1="72" x2={x} y2="90" />
           ))}
         </>
       )}

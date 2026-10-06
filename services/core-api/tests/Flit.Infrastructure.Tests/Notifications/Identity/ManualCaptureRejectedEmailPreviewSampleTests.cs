@@ -65,7 +65,7 @@ public sealed class ManualCaptureRejectedEmailPreviewSampleTests
     public void ElMotivo_SeEscapa()
     {
         var (_, html) = ManualCaptureEmailComposer.ComposeRejected(
-            "Ana", "<script>alert(1)</script>", "https://app.flit.example/captura-manual/tok", EmailTheme.Flit, Assets);
+            "Ana", "<script>alert(1)</script>", "https://app.flit.example/verificacion/tok", EmailTheme.Flit, Assets);
 
         html.Should().NotContain("<script>").And.Contain("&lt;script&gt;");
     }

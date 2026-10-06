@@ -115,7 +115,7 @@ describe('getManualDetail → GET /biometric-validations/{id}/manual-detail', ()
       activatedAt: '2026-10-05T12:00:00+00:00',
       waitingMinutes: null,
       consentAt: '2026-10-05T12:30:00+00:00',
-      consentTextVersion: 'manual-ley1581-v1',
+      consentTextVersion: 'manual-ley1581-v2',
       images: [
         { kind: 'rostro', available: true },
         { kind: 'anverso', available: true },

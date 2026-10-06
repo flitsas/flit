@@ -599,6 +599,7 @@ internal static class BiometricaEndpoints
         group.MapGet("/biometric-validations/{validationId:guid}/audit", async (
             Guid validationId,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             GetIdentityAuditByValidationHandler handler,
             CancellationToken ct) =>
         {
@@ -606,9 +607,19 @@ internal static class BiometricaEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(tenantId.Value, validationId, ct);
-            return error is "not_found"
-                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
-                : Results.Ok(result);
+            if (error is "not_found")
+                return Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.");
+
+            // El flujo manual es una herramienta interna del Super Admin FLIT: sus eventos (etapas `manual_*`) no los
+            // ve la compañía ni el cliente.
+            if (result is not null && !CompanyTenantAccess.IsSuperAdmin(http.User))
+                result = result with
+                {
+                    Events = result.Events
+                        .Where(e => !e.Stage.StartsWith("manual_", StringComparison.Ordinal))
+                        .ToList(),
+                };
+            return Results.Ok(result);
         })
         .WithName("GetIdentityAuditByValidation")
         // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.

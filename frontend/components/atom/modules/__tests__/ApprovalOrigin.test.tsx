@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
+  superAdmin: true,
   listPersonBiometricValidations: vi.fn(),
   getPrevalidacionDetail: vi.fn(),
   getBiometricAuditByValidation: vi.fn(),
@@ -17,6 +18,11 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getPrevalidacionDetail: mocks.getPrevalidacionDetail,
     getBiometricAuditByValidation: mocks.getBiometricAuditByValidation,
   },
+}));
+
+vi.mock('@/lib/auth/jwt', async (orig) => ({
+  ...(await orig<typeof import('@/lib/auth/jwt')>()),
+  isSuperAdmin: () => mocks.superAdmin,
 }));
 
 import { PersonIdentityDetailDrawer } from '@/components/atom/modules/PersonIdentityDetailDrawer';
@@ -143,5 +149,19 @@ describe('ApprovalOriginChip', () => {
   ] as const)('%s → «%s»', (origin, texto) => {
     render(<ApprovalOriginChip origin={origin} />);
     expect(screen.getByRole('status')).toHaveTextContent(texto);
+  });
+});
+
+describe('«Manual» solo lo ve el Super Admin', () => {
+  it('sin ser Super Admin, el chip «Manual» no se pinta pero «Automática» sí', () => {
+    mocks.superAdmin = false;
+    try {
+      const { container, rerender } = render(<ApprovalOriginChip origin="manual" />);
+      expect(container).toBeEmptyDOMElement();
+      rerender(<ApprovalOriginChip origin="automatica" />);
+      expect(screen.getByText('Automática')).toBeInTheDocument();
+    } finally {
+      mocks.superAdmin = true;
+    }
   });
 });
