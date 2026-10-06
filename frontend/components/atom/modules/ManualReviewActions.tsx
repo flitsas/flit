@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Check, X } from 'lucide-react';
+import { AlertTriangle, Check, X } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
-import { MANUAL_SELECT_CLASS } from './manual-field-styles';
-import { WIZARD_CTA_GRADIENT, WIZARD_LABEL, WIZARD_SELECT } from '@/components/operacion/wizard-field-styles';
+import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO, MANUAL_FOCO, MANUAL_SELECT_CLASS } from './manual-field-styles';
+import { WIZARD_CTA_GRADIENT, WIZARD_CTA_GRADIENT_DANGER, WIZARD_LABEL, WIZARD_SELECT } from '@/components/operacion/wizard-field-styles';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { ApiError } from '@/lib/api/types';
 import type { ManualDetail } from '@/lib/api/types/manual-review';
@@ -17,11 +17,9 @@ import { MOTIVOS_RECHAZO_MANUAL } from '@/lib/identidad/motivos-rechazo-manual';
  * homologada (`motivos-rechazo-manual.ts`), la misma del correo al cliente.
  */
 
-/** Rojo del token `anulado` (`lib/tramites/estados.ts`), el mismo del DangerButton de trámites. */
-const DANGER_COLOR = '#C1272D';
-
 const BTN_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-70 ' +
+  MANUAL_FOCO;
 
 export function GradientButton({
   children,
@@ -39,14 +37,13 @@ export function DangerButton({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {
   return (
-    <button type="button" {...props} className={`${BTN_BASE} ${props.className ?? ''}`} style={{ background: DANGER_COLOR }}>
+    <button type="button" {...props} className={`${BTN_BASE} ${props.className ?? ''}`} style={{ background: WIZARD_CTA_GRADIENT_DANGER }}>
       {children}
     </button>
   );
 }
 
-const BTN_SECUNDARIO =
-  'rounded-xl border border-[#DFE5ED] px-4 py-2.5 text-sm font-medium text-[#162744] transition hover:bg-[#162744]/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-60 dark:text-white';
+const BTN_SECUNDARIO = MANUAL_BTN_SECUNDARIO;
 
 /** `code` del cuerpo de error del backend (`{ code, message }`), si lo hay. */
 function codigoDeError(err: unknown): string | undefined {
@@ -184,8 +181,8 @@ function AprobarDialog({ detail, client, onClose, onDone, onStale }: DialogoProp
           La validación de <strong>{detail.fullName}</strong> quedará vigente 30 días.
         </p>
         {error && (
-          <p role="alert" className="text-sm font-medium text-[#C1272D]">
-            {error}
+          <p role="alert" className={`${MANUAL_AVISO_BASE} items-center font-medium ${MANUAL_AVISO.danger}`}>
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> {error}
           </p>
         )}
         <div className="flex justify-end gap-3">
@@ -254,8 +251,8 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
           El cliente recibirá este motivo por correo y podrá repetir la captura.
         </p>
         {error && (
-          <p role="alert" className="text-sm font-medium text-[#C1272D]">
-            {error}
+          <p role="alert" className={`${MANUAL_AVISO_BASE} items-center font-medium ${MANUAL_AVISO.danger}`}>
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> {error}
           </p>
         )}
         <div className="flex justify-end gap-3">
