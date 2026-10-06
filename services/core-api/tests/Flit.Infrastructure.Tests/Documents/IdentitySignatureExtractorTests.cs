@@ -256,6 +256,42 @@ public sealed class IdentitySignatureExtractorTests
         await store.DidNotReceive().SaveAsync(Arg.Any<Guid>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
     }
 
+    // Bug #13304 (review de seguridad) — una imagen de pocos bytes con dimensiones enormes no se
+    // decodifica completa para contar colores ni para convertirla a tinta.
+    [Fact]
+    public void Bug13304_DimensionesEnormesEnPocosBytes_NoSeDecodificaCompleta()
+    {
+        using var huge = new Image<Rgba32>(2100, 2000, new Rgba32(255, 255, 255));
+        using var ms = new MemoryStream();
+        huge.Save(ms, new PngEncoder());
+        var png = ms.ToArray();
+        png.Length.Should().BeLessThan(IdentitySignatureImageFormat.MaxArtifactBytes);
+
+        PdfXObjectPngDecoder.CountVisibleColors(png, 256).Should().Be(int.MaxValue,
+            "4,2 Mpx supera el tope de decodificación: no se reservan sus píxeles");
+        PdfXObjectPngDecoder.LooksLikeSignatureArtifact(png).Should().BeFalse();
+        PdfXObjectPngDecoder.ToDocumentInk(png).Should().BeSameAs(png);
+    }
+
+    [Fact]
+    public void Bug13304_ImagenGrandeQueNoTieneFormaDeRubrica_NoRompeLaExtraccion()
+    {
+        var big = new byte[1990 * 1990 * 3];
+        Array.Fill(big, (byte)250);
+        var pdf = BuildPdf(
+        [
+            .. LayoutNuevo(),
+            new PdfImageSpec("/ImGrande", 1990, 1990, big, "/DeviceRGB", "/FlateDecode"),
+        ]);
+
+        var crop = new IdentitySignatureExtractor().TryExtract(pdf);
+
+        crop.Should().NotBeNull();
+        using var decoded = Image.Load<Rgba32>(crop!.PngBytes);
+        decoded.Width.Should().Be(672);
+        decoded.Height.Should().Be(270);
+    }
+
     private static (IdentitySignatureCapture Sut, IIdentitySignatureArtifactStorage Store) CaptureWithRealExtractor()
     {
         var store = Substitute.For<IIdentitySignatureArtifactStorage>();
