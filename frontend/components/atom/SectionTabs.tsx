@@ -62,13 +62,14 @@ export function SectionTabs<Id extends string>({
               tabIndex={selected ? 0 : -1}
               onClick={() => onChange(tab.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF]"
-              style={{ color: selected ? "#557EFF" : "#162744", opacity: selected ? 1 : 0.65 }}
+              className={`relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF] ${
+                selected ? "text-[#557EFF]" : "text-[#162744] opacity-65 dark:text-white/[0.78] dark:opacity-100"
+              }`}
             >
               {tab.label}
               {tab.count !== undefined && <span className="ml-1.5 font-normal opacity-80">· {tab.count}</span>}
               {selected && (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full" style={{ background: "#557EFF" }} />
+                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[#557EFF]" />
               )}
             </button>
           );
