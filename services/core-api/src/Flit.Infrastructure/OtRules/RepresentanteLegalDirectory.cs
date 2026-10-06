@@ -47,7 +47,7 @@ internal sealed class RepresentanteLegalDirectory : IRepresentanteLegalDirectory
         var tipo = string.IsNullOrWhiteSpace(documentType) ? null : documentType.Trim();
 
         var candidatos = await TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             () => (
                     from vinculo in _context.LegalRepresentativeCompanies.AsNoTracking()

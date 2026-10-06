@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, Pencil } from "lucide-react";
 import {
   superadminClient,
@@ -588,19 +588,20 @@ function ModulePermissionsChecklist({
 }
 
 /** HU #10664 — RBAC puro: los módulos son transversales (no dependen del tipo de entidad).
- * El catálogo se carga una sola vez y es el mismo para cualquier rol. */
-function useModulesCatalog() {
+ * HU #12964: un rol solo puede tener permisos de módulos de su producto, así que el catálogo se
+ * filtra por el producto del rol. Un rol nuevo es de Trámites. */
+function useModulesCatalog(product: string) {
   const [modules, setModules] = useState<AccessibleModule[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    getAccessibleModules()
+    getAccessibleModules(product)
       .then((m) => { if (active) setModules(m); })
       .catch(() => {})
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [product]);
 
   return { modules, loading };
 }
@@ -615,7 +616,7 @@ function CreateRoleModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
-  const { modules, loading: modulesLoading } = useModulesCatalog();
+  const { modules, loading: modulesLoading } = useModulesCatalog("tramites");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -720,8 +721,8 @@ function EditRolePermissionsModal({
   onClose: () => void;
   onSaved: (permissions: RbacRoleDetail["permissions"]) => void;
 }) {
-  // HU #10664 — RBAC puro: el checklist muestra todos los módulos (transversal).
-  const { modules, loading: modulesLoading } = useModulesCatalog();
+  // HU #10664 — RBAC puro. HU #12964: solo los módulos del producto del rol.
+  const { modules, loading: modulesLoading } = useModulesCatalog(role.productCode ?? "tramites");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -765,17 +766,23 @@ function EditRolePermissionsModal({
     });
   }
 
+  // HU #12964: el servidor rechaza permisos de módulos de otro producto. Un rol anterior a la separación por producto
+  // puede traer alguno; no se ve en el catálogo, así que se avisa y se quita al guardar en vez de fallar.
+  const catalogIds = useMemo(() => new Set(modules.flatMap((m) => m.actions.map((a) => a.id))), [modules]);
+  const foreignCount = modulesLoading ? 0 : [...selected].filter((id) => !catalogIds.has(id)).length;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const ids = [...selected].filter((id) => catalogIds.has(id));
     // HU #10664 AC2 — un rol debe conservar acceso a al menos un permiso (mínimo uno por módulo).
-    if (selected.size === 0) {
+    if (ids.length === 0) {
       setError("Selecciona al menos un permiso para el rol (mínimo uno por módulo).");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const detail = await superadminClient.setRolePermissions(role.id, [...selected]);
+      const detail = await superadminClient.setRolePermissions(role.id, ids);
       onSaved(detail.permissions);
     } catch {
       setError("No se pudieron actualizar los permisos.");
@@ -796,6 +803,12 @@ function EditRolePermissionsModal({
             onToggle={toggle}
             onToggleModule={toggleModule}
           />
+        )}
+        {foreignCount > 0 && (
+          <p role="status" className="rounded-xl border border-[#FF4E00]/40 px-3 py-2 text-xs">
+            Este rol tiene {foreignCount === 1 ? "1 permiso" : `${foreignCount} permisos`} de módulos de otro producto. Un
+            rol solo puede tener permisos de su producto, así que al guardar se {foreignCount === 1 ? "quita" : "quitan"}.
+          </p>
         )}
         {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
         <button

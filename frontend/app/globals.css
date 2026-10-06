@@ -2,11 +2,17 @@
 @import "tw-animate-css";
 /* Tokens de diseño FLIT: @theme, :root y .dark viven en @flit/ui (B-02). */
 @import "@flit/ui/tokens.css";
+/* Puntero de la suite (flecha de marca y mano en lo clicable), igual en todas las apps. */
+@import "@flit/ui/cursor.css";
+/* Dock y barra común de la suite (B-13): los estilos del dock salieron de aquí a @flit/shell. */
+@import "@flit/shell/shell.css";
 
 @custom-variant dark (&:is(.dark *));
 
 /* Las clases de Tailwind que usan los componentes de @flit/ui también se generan aquí. */
 @source "../../packages/ui/src";
+@source "../../packages/brand/src";
+@source "../../packages/shell/src";
 
 /* Tokens propios de Trámites (no van a @flit/ui). */
 :root {
@@ -64,31 +70,6 @@
     background-image:
       radial-gradient(at 20% 0%, rgba(85, 126, 255, 0.18), transparent 50%),
       radial-gradient(at 100% 100%, rgba(0, 219, 213, 0.12), transparent 50%);
-  }
-
-  html,
-  body {
-    cursor:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L2 18 L7 13 L11 20 L14 19 L10 12 L17 12 Z' fill='%23557eff' stroke='white' stroke-width='1'/></svg>")
-      2 2,
-      default;
-  }
-
-  html.dark,
-  html.dark body {
-    cursor:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L2 18 L7 13 L11 20 L14 19 L10 12 L17 12 Z' fill='%2300dbd5' stroke='%23162744' stroke-width='1'/></svg>")
-      2 2,
-      default;
-  }
-
-  a,
-  button,
-  [role="button"],
-  select,
-  summary,
-  label[for] {
-    cursor: pointer;
   }
 
   @keyframes flit-orbit {
@@ -156,93 +137,6 @@
   @media (prefers-reduced-motion: reduce) {
     .flit-escena-orbita,
     .flit-escena-vehiculo {
-      animation: none;
-    }
-  }
-
-  /* Cápsula del dock inferior — vidrio + sombra tokenizados (ajuste visual, sin cambio estructural). */
-  .dock-capsula {
-    background: var(--nav-vidrio);
-    border: 1px solid var(--nav-borde);
-    box-shadow: var(--nav-sombra-dock);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-radius: var(--nav-radio-pill);
-  }
-
-  .dock-pill {
-    color: var(--nav-texto);
-  }
-
-  .dock-pill:hover {
-    background: var(--nav-app-bg);
-    color: var(--nav-texto-fuerte);
-  }
-
-  .dock-pill[aria-current="page"],
-  .dock-pill[data-ancestor-active="true"] {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
-    color: #ffffff;
-    font-weight: 600;
-  }
-
-  .dock-pill[aria-current="page"] svg,
-  .dock-pill[data-ancestor-active="true"] svg {
-    color: #ffffff;
-  }
-
-  .dock-pill[aria-current="page"]:hover,
-  .dock-pill[data-ancestor-active="true"]:hover {
-    background: var(--nav-activo);
-    color: #ffffff;
-  }
-
-  .dock-panel-item[aria-current="page"] {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
-    color: #ffffff;
-    font-weight: 600;
-  }
-
-  .dock-panel-item[aria-current="page"] > svg:first-of-type {
-    color: #ffffff;
-  }
-
-  .dock-panel-item[aria-current="page"]:hover {
-    background: var(--nav-activo);
-    color: #ffffff;
-  }
-
-  .dock-fab {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
-  }
-
-  @keyframes panel-up {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.985);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  .panel-up {
-    animation: panel-up var(--nav-duracion) var(--nav-ease) both;
-    transform-origin: bottom center;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .dock-capsula,
-    .dock-pill,
-    .dock-fab {
-      transition: none !important;
-    }
-
-    .panel-up {
       animation: none;
     }
   }

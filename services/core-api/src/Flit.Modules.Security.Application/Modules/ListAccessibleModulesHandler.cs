@@ -7,8 +7,9 @@ public sealed class ListAccessibleModulesHandler(ISecurityModuleRepository repos
     public async Task<IReadOnlyList<AccessibleModuleDto>> HandleAsync(
         IReadOnlyList<string> callerPermissionSlugs,
         bool isSuperAdmin,
+        string? productCode,
         CancellationToken ct)
     {
-        return await repository.ListAccessibleAsync(callerPermissionSlugs, isSuperAdmin, ct);
+        return await repository.ListAccessibleAsync(callerPermissionSlugs, isSuperAdmin, productCode, ct);
     }
 }

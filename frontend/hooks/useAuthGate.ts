@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getToken } from "@/lib/api/client";
 import { clearToken } from "@/lib/auth/session";
 import { hasActiveSession } from "@/lib/auth/guard";
+import { isOidcSession } from "@/lib/auth/session-mode";
 
 export interface AuthGate {
   authed: boolean;
@@ -28,7 +29,9 @@ export function useAuthGate(): AuthGate {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const active = hasActiveSession(getToken());
+    // A-10 (HU #13001): con la sesión de @flit/auth, los claims del navegador son los de un access token de 15 min
+    // que el servidor renueva solo; basta con que existan. Si la sesión real vence, la API responde SESSION_EXPIRED.
+    const active = isOidcSession() ? Boolean(getToken()) : hasActiveSession(getToken());
     if (!active) {
       clearToken();
       router.replace(`/login?returnUrl=${encodeURIComponent(pathname || "/")}`);
@@ -41,6 +44,13 @@ export function useAuthGate(): AuthGate {
 
   function logout() {
     clearToken();
+    if (isOidcSession()) {
+      // Cierra la sesión de Trámites y la del hub (A-13). /auth/logout es un route handler que redirige al hub:
+      // necesita una navegación completa, no una transición del router.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/auth/logout");
+      return;
+    }
     router.replace("/login");
   }
 

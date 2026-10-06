@@ -45,9 +45,11 @@ public sealed class ExplicitChannelEmailSenderRegistrationTests
     [Fact]
     public void IExplicitChannelEmailSender_HasNoConsumersOutsideTheKnownBaseline()
     {
-        var assembly = typeof(TenantChannelEmailRouter).Assembly;
-
-        var consumers = assembly.GetTypes()
+        // HU #13232: el router vive en Flit.Identity.Infrastructure (compartido con core-identity); los consumidores
+        // posibles están en los dos ensamblados.
+        var consumers = new[] { typeof(TenantChannelEmailRouter).Assembly, typeof(InfrastructureExtensions).Assembly }
+            .Distinct()
+            .SelectMany(a => a.GetTypes())
             .Where(t => t.IsClass && !t.IsAbstract)
             .Where(t => t.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                 .Any(ctor => ctor.GetParameters()

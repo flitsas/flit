@@ -404,9 +404,10 @@ flowchart TB
 
 | Qué | Dónde |
 |---|---|
-| Construcción del dock por rol | `frontend/components/atom/Shell.tsx` |
-| Agrupadores / submenús | `frontend/components/atom/dock/dockGroups.ts` |
-| UI desktop del dock | `frontend/components/atom/dock/DockDesktop.tsx` |
+| Catálogo del dock (qué entradas hay y quién las ve) | `frontend/components/atom/dock/tramitesNav.ts` (B-13) |
+| Agrupadores / submenús y su lado | `frontend/components/atom/dock/dockGroups.ts` |
+| Usuario, tema y Dr. FLIT alrededor de la barra | `frontend/components/atom/Shell.tsx` |
+| Barra y dock (dibujo, filtro por permiso/módulo, activo por URL) | `packages/shell/src/` (`@flit/shell`, B-10/B-13) |
 | Módulos SPA visibles (RBAC) | `frontend/hooks/useAccessibleModules.ts` → `GET /api/v1/security/modules` |
 | Hub OT (tabs + keys dock) | `frontend/components/admin/transit-offices/ot-nav.ts` |
 | Pestañas consola compañía | `frontend/components/admin/companies/CompanyConfigTabs.tsx` |

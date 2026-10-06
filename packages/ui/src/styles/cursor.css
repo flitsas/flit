@@ -1,0 +1,29 @@
+/* @flit/ui — puntero de la FLIT Suite: la flecha de marca y la mano en todo lo clicable, igual en todas las apps
+   (antes solo lo tenía Trámites, así que el hub mostraba el puntero por defecto). Tailwind 4 ya no pone la mano en los
+   botones, por eso se declara aquí. */
+@layer base {
+  html,
+  body {
+    cursor:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L2 18 L7 13 L11 20 L14 19 L10 12 L17 12 Z' fill='%23557eff' stroke='white' stroke-width='1'/></svg>")
+      2 2,
+      default;
+  }
+
+  html.dark,
+  html.dark body {
+    cursor:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L2 18 L7 13 L11 20 L14 19 L10 12 L17 12 Z' fill='%2300dbd5' stroke='%23162744' stroke-width='1'/></svg>")
+      2 2,
+      default;
+  }
+
+  a,
+  button,
+  [role="button"],
+  select,
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+}

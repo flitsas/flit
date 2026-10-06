@@ -1,0 +1,4 @@
+<Project>
+  <!-- Epic #13217 — core-identity comparte las reglas de compilación de core-api (mismo código base, mismas exigencias). -->
+  <Import Project="..\core-api\Directory.Build.props" />
+</Project>

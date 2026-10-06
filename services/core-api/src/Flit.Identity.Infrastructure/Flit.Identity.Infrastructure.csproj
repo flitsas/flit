@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13217 (HU #13231) — persistencia de identidad compartida por core-api y core-identity: entidades y
+    configuraciones de EF de las tablas de identity, security, platform y las de admin que el login necesita (marca,
+    dominios, auditoría de configuración, perfil OT). Los espacios de nombres se conservan (Flit.Infrastructure.*) para
+    que el modelo de EF y el snapshot de migraciones de FlitDbContext no cambien. No puede referenciar
+    Flit.Infrastructure (arrastraría Trámites): ver docs/suite/identidad-frontera.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Infrastructure</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+    <!-- Mismas excepciones de análisis que Flit.Infrastructure para el código de EF que se mudó de allí. -->
+    <NoWarn>$(NoWarn);CA1861;CA1304;CA1310;CA1311;CA1862</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
+    <!-- Constantes de dominio de Marca Blanca (TenantDomainPurpose). Librería pura: no arrastra Trámites. -->
+    <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
+    <!-- Puertos que implementan los repositorios de identidad (HU #13231). Librerías puras: ninguna llega a Trámites. -->
+    <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Platform\Flit.Modules.Platform.csproj" />
+    <ProjectReference Include="..\Flit.Admin.Application\Flit.Admin.Application.csproj" />
+    <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Caché, logging, Data Protection y opciones: lo mismo que usa Flit.Infrastructure para este código. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+    <!-- Contraseñas (Argon2), JWT de siempre y correo (SMTP): lo que usa el login. -->
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Infrastructure" />
+    <InternalsVisibleTo Include="Flit.Api" />
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

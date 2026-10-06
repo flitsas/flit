@@ -436,7 +436,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             className="block rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
             data-testid="simulador-tipo"
           >
-            Persona o RL
+            Persona natural
           </span>
         </p>
 

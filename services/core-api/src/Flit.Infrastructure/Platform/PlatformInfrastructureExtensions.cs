@@ -1,5 +1,8 @@
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Persistence.Repositories.Platform;
 using Flit.Modules.Platform;
+using Flit.Modules.Platform.Domain.Access;
+using Flit.Modules.Platform.Domain.Manifest;
 using Flit.Modules.Platform.Domain.Products;
 using Flit.Modules.Platform.Domain.TenantProducts;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,9 +18,9 @@ internal static class PlatformInfrastructureExtensions
 {
     public static IServiceCollection AddPlatformInfrastructure(this IServiceCollection services)
     {
-        services.AddPlatformModule();
-        services.AddScoped<IProductCatalog, ProductCatalogRepository>();
-        services.AddScoped<ITenantProductRepository, TenantProductRepository>();
+        // Epic #13217 (HU #13232): catálogo, productos por empresa, acceso y manifiestos, compartidos con core-identity.
+        services.AddPlatformStores();
+        services.AddScoped<ITenantProductFlags, TenantProductFlagsReader>();
         return services;
     }
 }

@@ -38,6 +38,27 @@ public sealed class RoleHasActiveUsersException : Exception
 /// Se valida en la capa de aplicación para devolver 400 en vez de dejar que la excepción cruda
 /// del CHECK constraint burbujee como 500 sin manejar.
 /// </summary>
+/// <summary>
+/// HU #12964 (contrato v1 §4): un rol solo puede tener permisos de módulos de su producto. SuperAdmin
+/// queda exento por su bypass (§2.1).
+/// </summary>
+public sealed class RolePermissionProductMismatchException : Exception
+{
+    public RolePermissionProductMismatchException()
+        : base("A role can only include permissions from modules of its own product.")
+    {
+    }
+}
+
+/// <summary>HU #12964: el producto del rol no existe en el contrato de plataforma (§1).</summary>
+public sealed class InvalidRoleProductException : Exception
+{
+    public InvalidRoleProductException()
+        : base("ProductCode must be one of the platform product codes.")
+    {
+    }
+}
+
 public sealed class InvalidTargetEntityTypeException : Exception
 {
     public InvalidTargetEntityTypeException()

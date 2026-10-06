@@ -20,21 +20,27 @@
 # migraciones ya completadas. Ademas, asi las credenciales de V1 no viven en el proceso
 # que atiende a los clientes, y se apaga con `docker compose stop` al terminar la ola.
 #
-# Flit.Api / Flit.Infrastructure referencian
-#   ../../../core-ict/src/Flit.Ict.Grpc.Contracts
-# desde services/core-api/src/... → resuelve a /core-ict/... en la imagen
-# (WORKDIR /src + ProjectReference sube tres niveles hasta /).
+# El contenedor replica la estructura del repo bajo /services, así las ProjectReference relativas resuelven igual
+# que en local:
+#   core-api      -> ../../../core-ict/src/Flit.Ict.Grpc.Contracts            (contratos gRPC con ICT)
+#   core-api      -> ../../../core-identity/src/Flit.Identity.{Application,Web} (SOLO durante la transición del
+#                    Epic #13217; se quita en el corte, HU #13235)
+#   core-identity -> ../core-api/Directory.*.props (mismas reglas y versiones de paquetes)
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
+WORKDIR /services/core-api
 COPY core-api/global.json ./
 COPY core-api/Directory.Build.props core-api/Directory.Packages.props ./
 COPY core-api/src/ ./src/
 # Migrador V1 -> V2. Su unica dependencia es src/Flit.Infrastructure, ya copiado.
 COPY core-api/tools/ ./tools/
 # Contratos gRPC compartidos (ProjectReference fuera de core-api/).
-COPY core-ict/Directory.Build.props core-ict/Directory.Packages.props /core-ict/
-COPY core-ict/src/Flit.Ict.Grpc.Contracts/ /core-ict/src/Flit.Ict.Grpc.Contracts/
+COPY core-ict/Directory.Build.props core-ict/Directory.Packages.props /services/core-ict/
+COPY core-ict/src/Flit.Ict.Grpc.Contracts/ /services/core-ict/src/Flit.Ict.Grpc.Contracts/
+# Epic #13217 — casos de uso de identidad que core-api atiende como respaldo durante la transición.
+COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
+COPY core-identity/src/Flit.Identity.Application/ /services/core-identity/src/Flit.Identity.Application/
+COPY core-identity/src/Flit.Identity.Web/ /services/core-identity/src/Flit.Identity.Web/
 # Framework-dependent (JIT): desactivar AOT y sus analizadores (IsAotCompatible),
 # que estan en true por defecto en Directory.Build.props y rompen el publish con
 # TreatWarningsAsErrors (IL2026/IL3050) al no ser un build AOT real.

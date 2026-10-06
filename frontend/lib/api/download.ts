@@ -2,6 +2,7 @@
 // no sirve para respuestas binarias (Excel/PDF), así que este helper hace `fetch`,
 // adjunta el JWT, valida el status y dispara la descarga en el navegador.
 import { API_BASE_URL, friendlyErrorMessage, getToken } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { ApiError } from "./types";
 
 export interface DownloadOptions {
@@ -35,7 +36,7 @@ export async function downloadFile(
   options: DownloadOptions,
 ): Promise<void | Record<string, string | null>> {
   const { method = "GET", query, body, signal, fallbackFilename, captureHeaders } = options;
-  const base = API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const base = sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(path, base);
 
   if (query) {

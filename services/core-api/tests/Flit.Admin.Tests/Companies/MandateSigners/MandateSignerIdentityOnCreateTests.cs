@@ -9,11 +9,10 @@ using Xunit;
 namespace Flit.Admin.Tests.Companies.MandateSigners;
 
 /// <summary>
-/// HU #11757 (ADR-0050) — el alta de un mandatario YA NO dispara la validación de identidad. Esta
-/// suite reemplaza a la de la HU #11000 (que ejercitaba el apalancamiento vía
-/// <c>IAdminIdentityValidationService</c>): ahora prueba lo contrario — que el alta, CON o SIN correo,
-/// no crea ninguna fila de validación y no envía ningún correo. El módulo Identidad es la única fuente
-/// que puede originar una validación (ADR-0050).
+/// HU #11757 (ADR-0050) retiró el disparo antiguo del alta (<c>IAdminIdentityValidationService</c>). Con la HU #13246 el
+/// disparo vuelve de forma acotada y SOLO por el puerto <c>IMandateSignerIdentityLauncher</c> (suite
+/// <c>MandatarioIdentidadPropiaDisparoTests</c>). Aquí queda lo que no cambia: sin lanzador registrado el alta no crea ninguna
+/// fila de validación ni envía correo, y con biometría el correo es obligatorio (422, campo <c>email</c>).
 /// </summary>
 public sealed class MandateSignerIdentityOnCreateTests
 {
@@ -30,34 +29,24 @@ public sealed class MandateSignerIdentityOnCreateTests
         result.IsValid.Should().BeTrue();
         result.Identity.Should().Be(MandateSignerIdentityOutcome.NotAttempted);
 
-        var validaciones = await ctx.AdminIdentityValidations.AsNoTracking().CountAsync(Ct);
-        validaciones.Should().Be(0);
-
         var signer = await ctx.MandateSigners.AsNoTracking()
             .FirstAsync(s => s.Id == result.MandateSignerId!.Value, Ct);
-        signer.IdentityValidationRef.Should().BeNull();
         // El correo se sigue capturando como dato de contacto (no se retira la persistencia del campo).
         signer.Email.Should().Be("mandatario@x.co");
     }
 
     [Fact]
-    public async Task Create_WithoutEmail_DoesNotAttemptIdentityAndCreatesNoValidationRow()
+    public async Task Create_WithBiometriaAndNoEmail_Is422OnEmailAndCreatesNothing()
     {
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
         var handler = Handler(ctx);
 
         var result = await handler.HandleAsync(Command("Sin Correo", "333444", email: null), Ct);
 
-        result.IsValid.Should().BeTrue();
-        result.Identity.Should().Be(MandateSignerIdentityOutcome.NotAttempted);
-
-        var validaciones = await ctx.AdminIdentityValidations.AsNoTracking().CountAsync(Ct);
-        validaciones.Should().Be(0);
-
-        var signer = await ctx.MandateSigners.AsNoTracking()
-            .FirstAsync(s => s.Id == result.MandateSignerId!.Value, Ct);
-        signer.IdentityValidationRef.Should().BeNull();
-        signer.Email.Should().BeNull();
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "email");
+        (await ctx.MandateSigners.AnyAsync(Ct)).Should().BeFalse();
+        (await ctx.ProcedureInstanceBiometricValidations.AnyAsync(Ct)).Should().BeFalse();
     }
 
     private static CreateMandateSignerCommand Command(
@@ -70,6 +59,7 @@ public sealed class MandateSignerIdentityOnCreateTests
             DocumentNumber = documentNumber,
             DocumentType = "CC",
             Email = email,
+            SignatureMethod = "biometria",
             CompanyTenantIds = [MandateSignerHandlerTests.CompanyA],
             CreatedBy = MandateSignerHandlerTests.Operator,
         };

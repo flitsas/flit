@@ -24,7 +24,7 @@ internal sealed class DbDeedReader : IDeedReader
         int pageSize,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -56,7 +56,7 @@ internal sealed class DbDeedReader : IDeedReader
         Guid id,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -80,7 +80,7 @@ internal sealed class DbDeedReader : IDeedReader
         DateOnly today,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -103,7 +103,7 @@ internal sealed class DbDeedReader : IDeedReader
         Guid representedCompanyId,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

@@ -28,7 +28,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "que-es",
         title: "1. Qué es el Inicio",
         paragraphs: [
-          "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
+          "El botón central flotante (FAB) «Inicio Trámites» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
           "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
           "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
           "El volumen se resume en cinco tarjetas: Total trámites, Matrículas, Traspasos, Otros Trámites (cualquier trámite que no sea matrícula ni traspaso) y Completados.",
@@ -99,6 +99,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "terminos y condiciones",
       "carga masiva",
       "excel",
+      "quien firmara el mandato",
+      "sin mandatario configurado",
+      "no se puede radicar mandatario",
     ],
     summary: "Guía paso a paso para iniciar un trámite desde el módulo Trámites.",
     blocks: [
@@ -158,8 +161,22 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "firmante-mandato",
+        title: "4. Quién firmará el mandato",
+        paragraphs: [
+          "En el último paso del asistente (Resumen) ves, en solo lectura, quién firmará el contrato de mandato: «Firmará: nombre / forma de firma» (Baúl de firmas o Validación de identidad). Tú no eliges al mandatario: lo define el organismo de tránsito, o el Administrador de tu compañía desde su pestaña «Mandatarios».",
+          "Si tu compañía no tiene mandatario propio pero hay uno asociado a ella desde otra compañía, verás «Firmará: nombre / forma de firma» con la nota «Mandatario asociado». Solo se muestra quién firma: nunca el nombre de la otra compañía ni su documento de identidad.",
+          "Si no hay un mandatario válido, el Resumen te lo avisa con el motivo (por ejemplo, sin mandatario registrado, fuera de vigencia o con la firma o la validación de identidad vencida) y a quién pedirle que lo configure.",
+        ],
+        bullets: [
+          "Alerta roja «Sin mandatario configurado — no se puede radicar»: el botón «Finalizar y enviar trámite» queda deshabilitado hasta que el organismo o tu Administrador lo configure; al resolverlo, reabre el Resumen.",
+          "Alerta amarilla «Sin mandatario configurado»: es solo una advertencia; puedes radicar, pero conviene pedir que lo configuren.",
+          "Si el Resumen no muestra ni indicador ni alerta (mandato abierto o institucional, sin organismo elegido, o no se pudo consultar), puedes seguir; el sistema revisa el mandatario al radicar y, si falta, te explica el motivo.",
+        ],
+      },
+      {
         id: "despues",
-        title: "4. Después de radicar",
+        title: "5. Después de radicar",
         paragraphs: [
           "Un traspaso u otro trámite con placa pasa a Entregado (en revisión del organismo) y de ahí a Aprobado, Rechazado o En subsanación.",
           "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",

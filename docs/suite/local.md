@@ -1,0 +1,148 @@
+# La suite en local
+
+Cómo levantar el hub, Trámites y la API en tu máquina con el inicio de sesión único de la suite, y qué probar. Es el
+modelo del simulador de Jorman (ejemplo 2): el login vive solo en el hub, cada producto tiene su propia dirección y
+entra por redirección sin volver a pedir la contraseña.
+
+## Regla de oro: `127.0.0.1`, nunca `localhost`
+
+Abre todo por `http://127.0.0.1:<puerto>`. Las cookies no distinguen puertos: en `localhost` el navegador junta las de
+todas las apps que hayas corrido alguna vez (Trámites, V1, otros proyectos) y la cabecera `Cookie` pasa de 16 KB, el
+límite de Node. Cuando pasa, **todas** las peticiones fallan (431 o página en blanco). En `127.0.0.1` solo están las
+cookies de la suite (~1,3 KB por app).
+
+Si igual necesitas `localhost`, arranca Next con `NODE_OPTIONS=--max-http-header-size=131072`.
+
+## Qué corre y dónde
+
+En local se usan los mismos puertos que en DEV (así un número sirve en los dos lados); solo Trámites se queda en el
+3000 de siempre de Next.
+
+| App | Local | DEV | QA | PDN | Qué hace |
+|---|---|---|---|---|---|
+| Trámites (`frontend`) | `3000` | 4001 | 5001 | 6001 | El producto |
+| Hub (`frontend-hub`) | `4022` | 4022 | 5022 | 6022 | Portada, login, inicio con productos |
+| Gateway (`Flit.Gateway`) | `4002` | 4002 | 5002 | 6002 | Reparte `/api`, `/connect`, `/.well-known` (opcional en local) |
+| API (`core-api`) | `4003` | 4003 | 5003 | 6003 | La API de negocio (y, durante la transición, también el login) |
+| Identidad (`core-identity`) | `4025` | 4025 | 5025 | 6025 | Login (OIDC), usuarios, roles, productos |
+
+En los servidores los puertos los pone el CD (`.github/workflows/cd.yml`, paso `env`); en local, cada
+`launchSettings.json` y los comandos de abajo. Todo por `http://127.0.0.1:<puerto>`.
+
+## 1. API
+
+La base se migra sola al arrancar (las DDL van dentro de las migraciones). Usa una base con los usuarios de demo.
+
+```bash
+cd services/core-api/src/Flit.Api
+dotnet build
+ConnectionStrings__Core="Host=localhost;Port=5432;Database=<tu_base>;Username=<tu_usuario>" \
+ASPNETCORE_URLS=http://127.0.0.1:4003 \
+ASPNETCORE_ENVIRONMENT=Development \
+Suite__Oidc__Enabled=true \
+Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4022 \
+Suite__Hosts__Overrides__tramites=http://127.0.0.1:3000 \
+dotnet bin/Debug/net10.0/Flit.Api.dll
+```
+
+- `Suite__Oidc__Enabled=true` enciende el servidor de login. En `appsettings.Development.json` sigue apagado a
+  propósito: el DEV de la VPS también corre en `Development`.
+- Los `Overrides` le dicen a la API dónde vive cada app: con ellos arma las direcciones de retorno del login y los
+  enlaces del menú de productos (`me/apps`).
+
+## 2. Hub
+
+```bash
+cd frontend-hub
+PORT=4022 CORE_API_ORIGIN=http://127.0.0.1:4003 BRANDING_INTERNAL_API_URL=http://127.0.0.1:4003 \
+FLIT_HUB_URL=http://127.0.0.1:4022 TRAMITES_URL=http://127.0.0.1:3000 \
+npx next dev -H 127.0.0.1 -p 4022
+```
+
+## 3. Trámites con la sesión de la suite
+
+```bash
+cd frontend
+NEXT_PUBLIC_API_BASE_URL= CORE_API_ORIGIN=http://127.0.0.1:4003 BRANDING_INTERNAL_API_URL=http://127.0.0.1:4003 \
+FLIT_SESSION_MODE=oidc FLIT_HUB_URL=http://127.0.0.1:4022 \
+npx next dev -H 127.0.0.1 -p 3000
+```
+
+- `NEXT_PUBLIC_API_BASE_URL=` (vacío) hace que Trámites llame a la API por su mismo origen; el `.env.local` de siempre
+  la apunta a `localhost`.
+- Sin `FLIT_SESSION_MODE=oidc`, Trámites usa su login de siempre (el de todos los ambientes hoy).
+- `FLIT_SESSION_SECRET` no hace falta en `next dev`: se usa una clave fija de desarrollo. En un build de producción es
+  obligatoria (mínimo 32 caracteres).
+
+## 4. (Opcional) core-identity aparte
+
+El servicio de identidad (`services/core-identity`, Epic #13217, [identidad-frontera.md](identidad-frontera.md)). Se
+arranca **después** de la API, que es la que migra la base. Usa la misma configuración base que la API; su perfil de
+`launchSettings.json` ya trae OIDC encendido y los `Overrides` de `127.0.0.1`.
+
+```bash
+cd services/core-identity/src/Flit.Identity.Api
+dotnet build
+ConnectionStrings__Core="<la misma de la API>" \
+ASPNETCORE_URLS=http://127.0.0.1:4025 ASPNETCORE_ENVIRONMENT=Development \
+Suite__Oidc__Enabled=true \
+Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4022 \
+Suite__Hosts__Overrides__tramites=http://127.0.0.1:3000 \
+dotnet bin/Debug/net10.0/Flit.Identity.Api.dll
+```
+
+- El **hub** habla solo con identidad: `CORE_API_ORIGIN` y `BRANDING_INTERNAL_API_URL` a `http://127.0.0.1:4025`.
+- **Trámites** sigue con `CORE_API_ORIGIN=http://127.0.0.1:4003`: su login pasa por el hub, que ya va a identidad.
+- `curl http://127.0.0.1:4025/health/ready` responde `ready`; una ruta de negocio (por ejemplo
+  `/api/v1/public/banners/active`) responde 404 en 4025 y 200 en 4003.
+- **La prueba que importa:** apaga la API (4003) y entra por `127.0.0.1:3000`. El login funciona y Trámites abre con la
+  sesión; solo fallan sus datos. Al volver a levantar la API, recarga: los datos aparecen sin volver a iniciar sesión.
+
+## 5. (Opcional) Con el gateway, como en los servidores
+
+Para probar el reparto real (rutas de identidad a `core-identity`, con `core-api` de respaldo), los fronts hablan con
+el gateway en vez de con cada servicio. Con la API (4003) e identidad (4025) arriba:
+
+```bash
+cd services/core-api/src/Flit.Gateway
+dotnet build
+ASPNETCORE_URLS=http://127.0.0.1:4002 ASPNETCORE_ENVIRONMENT=Development \
+Gateway__IdentityCluster__Enabled=true \
+dotnet bin/Debug/net10.0/Flit.Gateway.dll
+```
+
+`appsettings.Development.json.example` del gateway ya trae `core-identity-cluster` con `localhost:4025` y `localhost:4003` (cópialo a `appsettings.Development.json` si tu copia local no lo tiene). En el hub y en Trámites,
+`CORE_API_ORIGIN`, `BRANDING_INTERNAL_API_URL` y `FLIT_OIDC_INTERNAL_URL` van a `http://127.0.0.1:4002`. Apagar
+identidad con el gateway arriba prueba el respaldo: en unos 3 s todo sigue por `core-api`.
+
+En el servidor esto no se arma a mano: es el servicio `core-identity` del compose (perfil `identity`, su propia imagen)
+y la bandera `FLIT_IDENTITY_CLUSTER_ENABLED` del gateway.
+
+## Qué probar
+
+Usuarios de las semillas (`DevelopmentAuthSeeder.cs`): `demo@flit.local` (SuperAdmin), `admin@empresa.local`
+(AdminCompany, solo Trámites) y `otadmin@flit.local` (Admin OT). Las contraseñas están en el seeder.
+
+| # | Caso | Qué debe pasar |
+|---|---|---|
+| 1 | Abrir `127.0.0.1:4022` sin sesión | Portada breve con «Iniciar sesión» |
+| 2 | Iniciar sesión en el hub con un usuario de un solo producto | Entra directo a Trámites |
+| 3 | Menú ▦ → Inicio (o `127.0.0.1:4022/?inicio=1`) | Inicio del hub con sus productos y accesos de administración, sin volver a hacer clic en «Iniciar sesión» (entra en silencio con la sesión del hub) |
+| 4 | Abrir `127.0.0.1:3000` en otra pestaña, sin haber iniciado sesión en ningún lado | Va al login del hub y, al entrar, vuelve a Trámites |
+| 5 | Con sesión en el hub, abrir `127.0.0.1:3000` | Entra sin pedir contraseña (inicio de sesión único) |
+| 6 | Apagar Trámites para la empresa (SuperAdmin, configuración de la compañía) y abrir `127.0.0.1:3000` | «Tu empresa no tiene Trámites» con «Ir a mis productos» |
+| 7 | AdminCompany en Trámites | Ve «Administración» y «Usuarios» como con el login de siempre |
+| 8 | Cerrar sesión en Trámites (o en el hub) | Se cierra en toda la suite al instante: el hub vuelve a la portada y Trámites pide login en su siguiente página |
+| 9 | Iniciar sesión en el hub con el SuperAdmin (tiene todos los productos) | Inicio del hub con una tarjeta por producto; la de Trámites entra sin pedir contraseña |
+
+## Problemas conocidos
+
+- **Página en blanco o 431:** estás en `localhost`. Ver la regla de oro.
+- **«Abriendo tu sesión…» que no termina:** el hub y la API no están arriba, o la API no tiene los `Overrides` y
+  rechaza la dirección de retorno.
+- **«El post_logout_redirect_uri no es válido» al cerrar sesión:** algo arrancó core-api o core-identity contra tu base
+  con otros hosts (por ejemplo, las pruebas de .NET, que usan los de DEV) y al arrancar reescribió los clientes de
+  login (`identity.oidc_applications`). Se arregla solo al reiniciar la API y la identidad con los `Overrides` de
+  `127.0.0.1`. Para no pisarla, corre las pruebas contra otra base (`ConnectionStrings__Core` a una `flit_ci_*` aparte).
+- **Cambiaste `FLIT_SESSION_SECRET` entre arranques:** las cookies anteriores ya no se pueden leer y el hub muestra la
+  portada; vuelve a iniciar sesión.

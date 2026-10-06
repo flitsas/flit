@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { pulsarAccion } from "@/lib/test-acciones";
 
 /**
  * HU #11202 — los mandatarios los registra la COMPAÑÍA desde su configurador.
@@ -11,9 +12,9 @@ import userEvent from "@testing-library/user-event";
 const mocks = vi.hoisted(() => ({
   fetchCompanyMandateSigners: vi.fn(),
   fetchCompanyTransitOffices: vi.fn(),
-  // El panel las carga para acotar para qué empresas firma el mandatario en cada organismo. Sin este
-  // doble, llamar a una función inexistente rompe la carga entera y el panel cae en estado de error.
-  fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
+  // HU #13181 — el formulario lista las hijas del Admin de Compañía (por defecto, sin red).
+  fetchCompanyAssociableCompanies: vi.fn(),
+  fetchOtAssociableCompanies: vi.fn(),
   createCompanyMandateSigner: vi.fn(),
   updateCompanyMandateSigner: vi.fn(),
   inactivateCompanyMandateSigner: vi.fn(),
@@ -51,9 +52,11 @@ const MANDATARIO = {
   integrityHash: "a".repeat(64),
   email: "ana@ejemplo.com",
   userId: null,
-  identityValidationRef: null,
   identityStatus: "none" as const,
   signatureVaultId: null,
+  // Con la regla vigente un mandatario necesita su forma de firma; con validación de identidad ya tiene correo.
+  signerModel: "natural" as const,
+  signatureMethod: "biometria" as const,
   registeredAt: "2026-08-01T10:00:00Z",
   isActive: true,
   companyTenantIds: ["tenant-1"],
@@ -64,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetchCompanyMandateSigners.mockResolvedValue([MANDATARIO]);
   mocks.fetchCompanyTransitOffices.mockResolvedValue(OFICINAS);
+  mocks.fetchCompanyAssociableCompanies.mockResolvedValue(SIN_RED);
   mocks.createCompanyMandateSigner.mockResolvedValue({ id: "ms-2", integrityHash: "b".repeat(64) });
   mocks.updateCompanyMandateSigner.mockResolvedValue({ id: "ms-1", integrityHash: "c".repeat(64) });
 });
@@ -72,32 +76,34 @@ function renderPanel() {
   return render(<CompanyMandatariosPanel tenantId="tenant-1" />);
 }
 
-const EMPRESAS = [
-  { id: "emp-acme", documentNumber: "900111111", name: "ACME SAS" },
-  { id: "emp-beta", documentNumber: "900222222", name: "BETA SAS" },
-];
+const SIN_RED = { items: [], total: 0, page: 1, pageSize: 100, aplicaSoloASuCompania: true };
+const HIJAS = {
+  items: [
+    { id: "emp-acme", nit: "900111111", name: "ACME SAS" },
+    { id: "emp-beta", nit: "900222222", name: "BETA SAS" },
+  ],
+  total: 2,
+  page: 1,
+  pageSize: 100,
+  aplicaSoloASuCompania: false,
+};
 
 describe("HU #11202 — mandatarios desde el configurador de la compañía", () => {
-  // ── Acotación por empresa representada ────────────────────────────────────
+  // ── Compañías asociadas (HU #13181) ───────────────────────────────────────
 
-  it("se puede acotar para qué empresas firma en cada organismo", async () => {
-    // El mandatario se llaveaba solo contra la gestora, así que no había forma de decir "firma para
-    // ESTA empresa". Las empresas se listan con su NIT, que es lo que distingue dos homónimas.
-    mocks.fetchRepresentedCompanies.mockResolvedValue(EMPRESAS);
+  it("el Admin de Compañía con hijas las marca y se envían a cada organismo elegido", async () => {
+    mocks.fetchCompanyAssociableCompanies.mockResolvedValue(HIJAS);
     const user = userEvent.setup();
     renderPanel();
 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
-    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él.
-    await user.type(screen.getByLabelText("Correo"), "ana@ejemplo.com");
+    await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
+    await user.type(screen.getByLabelText(/^Correo/), "ana@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
-
-    // La empresa se identifica por NIT, no solo por razón social.
-    await user.click(
-      screen.getByRole("checkbox", { name: /ACME SAS \(900111111\) en Secretaría de Movilidad de Medellín/ }),
-    );
+    // La compañía se identifica por NIT, no solo por razón social.
+    await user.click(await screen.findByRole("checkbox", { name: "ACME SAS (NIT 900111111)" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
@@ -105,7 +111,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
         "tenant-1",
         expect.objectContaining({
           officeCompanies: [
-            { transitOfficeId: "ot-medellin", representedCompanyIds: ["emp-acme"] },
+            { transitOfficeId: "ot-medellin", associatedCompanyTenantIds: ["emp-acme"] },
           ],
         }),
         undefined,
@@ -113,25 +119,26 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     );
   });
 
-  it("sin empresas marcadas NO se manda acotación: aplica a todas", async () => {
-    // La ausencia es lo que significa "todas". Mandar un arreglo vacío diría "ninguna" y dejaría al
-    // mandatario sin poder firmar nada.
-    mocks.fetchRepresentedCompanies.mockResolvedValue(EMPRESAS);
+  it("sin compañías marcadas se envía lista vacía: aplica solo a su compañía", async () => {
+    mocks.fetchCompanyAssociableCompanies.mockResolvedValue(HIJAS);
     const user = userEvent.setup();
     renderPanel();
 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
-    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él.
-    await user.type(screen.getByLabelText("Correo"), "ana@ejemplo.com");
+    await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
+    await user.type(screen.getByLabelText(/^Correo/), "ana@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
+    await screen.findByRole("checkbox", { name: "ACME SAS (NIT 900111111)" });
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
       expect(mocks.createCompanyMandateSigner).toHaveBeenCalledWith(
         "tenant-1",
-        expect.objectContaining({ officeCompanies: [] }),
+        expect.objectContaining({
+          officeCompanies: [{ transitOfficeId: "ot-medellin", associatedCompanyTenantIds: [] }],
+        }),
         undefined,
       ),
     );
@@ -145,7 +152,8 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
 
     await user.type(screen.getByLabelText("Nombre completo"), "Carlos Pérez");
     await user.type(screen.getByLabelText("Número de documento"), "9080706050");
-    await user.type(screen.getByLabelText("Correo"), "carlos@ejemplo.com");
+    await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
+    await user.type(screen.getByLabelText(/^Correo/), "carlos@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -178,7 +186,8 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     // Selección múltiple: los dos a la vez.
     await user.type(screen.getByLabelText("Nombre completo"), "Carlos Pérez");
     await user.type(screen.getByLabelText("Número de documento"), "9080706050");
-    await user.type(screen.getByLabelText("Correo"), "carlos@ejemplo.com");
+    await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
+    await user.type(screen.getByLabelText(/^Correo/), "carlos@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
     await user.click(screen.getByRole("checkbox", { name: "Tránsito de Envigado" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
@@ -199,9 +208,10 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Carlos Pérez");
     await user.type(screen.getByLabelText("Número de documento"), "9080706050");
+    await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect((await screen.findAllByRole("alert")).map((a) => a.textContent).join(" ")).toMatch(
       /al menos un organismo de tránsito/,
     );
     expect(mocks.createCompanyMandateSigner).not.toHaveBeenCalled();
@@ -217,7 +227,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     expect(within(fila).getByText(/Tránsito de Envigado/)).toBeInTheDocument();
 
     // Edición: el formulario llega precargado y quitar un organismo lo retira.
-    await user.click(within(fila).getByRole("button", { name: "Editar" }));
+    await pulsarAccion(user, /editar mandatario ana restrepo/i, fila);
     expect(screen.getByLabelText("Nombre completo")).toHaveValue("Ana Restrepo");
     expect(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Tránsito de Envigado" })).toBeChecked();
@@ -235,7 +245,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     );
   });
 
-  it("HU #11715: sin medio de firma no se puede guardar, y se explica por qué", async () => {
+  it("HU #13132: la Persona natural sin forma de firma no se guarda y el error sale junto al campo", async () => {
     const user = userEvent.setup();
     renderPanel();
 
@@ -243,34 +253,20 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
-
-    expect(
-      screen.getByText(/no está en condiciones de firmar/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled();
-
     await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect((await screen.findAllByRole("alert")).map((a) => a.textContent).join(" ")).toContain("Elige la forma de firma.");
     expect(mocks.createCompanyMandateSigner).not.toHaveBeenCalled();
   });
 
-  it("HU #11715: con firma de forma física sí se guarda, porque la línea en blanco es lo correcto", async () => {
+  it("HU #13132: ya no se ofrece la firma de forma física", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
-    await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
-    await user.type(screen.getByLabelText("Número de documento"), "1020304050");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
-    await user.click(
-      screen.getByRole("checkbox", {
-        name: "Firma de forma física · Secretaría de Movilidad de Medellín",
-      }),
-    );
 
-    expect(screen.queryByText(/no está en condiciones de firmar/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Guardar" }));
-
-    await waitFor(() => expect(mocks.createCompanyMandateSigner).toHaveBeenCalled());
+    expect(screen.queryByLabelText(/firma de forma física/i)).not.toBeInTheDocument();
   });
 
   it("AC4: el perfil del organismo ya no ofrece la gestión de mandatarios", () => {

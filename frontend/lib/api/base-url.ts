@@ -8,6 +8,7 @@
 // Uso de ejemplo:
 //   resolveApiBase(API_BASE_URL) // "" en dev FLIT / host de red · "https://api.dev...:.../api/v1" en prod FLIT
 import { isFlitHost } from "@/lib/brand/hosts";
+import { isOidcSession } from "@/lib/auth/session-mode";
 
 /**
  * `configuredBase` es la base ya resuelta del módulo llamante (p. ej. `API_BASE_URL` de
@@ -21,5 +22,17 @@ export function resolveApiBase(configuredBase: string): string {
     // (estos clientes se usan sobre todo desde Client Components; este camino es defensivo).
     return configuredBase;
   }
+  // A-10 (HU #13001): con la sesión de @flit/auth el token vive en el servidor de esta app, así que la API se llama
+  // SIEMPRE por el mismo origen (/api/v1 → BFF), nunca directo a api.<env>.flitsas.online.
+  if (isOidcSession()) return "";
   return isFlitHost(window.location.host) ? configuredBase : "";
+}
+
+/**
+ * A-10 (HU #13001) — para los clientes que usan la base configurada tal cual (descargas, multipart, telemetría):
+ * con la sesión de @flit/auth devuelve "" (mismo origen → BFF); con la sesión antigua, la base de siempre, sin
+ * cambiar nada.
+ */
+export function sessionAwareBase(configuredBase: string): string {
+  return isOidcSession() ? "" : configuredBase;
 }

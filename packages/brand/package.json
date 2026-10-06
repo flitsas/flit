@@ -1,0 +1,29 @@
+{
+  "name": "@flit/brand",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Marca por host de la FLIT Suite (Marca Blanca, ADR-0060 §D5): la comparten Trámites y el hub (B-09).",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./types": "./src/types.ts",
+    "./hosts": "./src/hosts.ts",
+    "./contrast": "./src/contrast.ts",
+    "./derive-dark": "./src/derive-dark.ts",
+    "./resolve-brand.server": "./src/resolve-brand.server.ts",
+    "./BrandProvider": "./src/BrandProvider.tsx",
+    "./BrandStyle": "./src/BrandStyle.tsx",
+    "./BrandLogo": "./src/BrandLogo.tsx"
+  },
+  "peerDependencies": {
+    "next": "16.3.8",
+    "react": "^19.2.4",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "next": "16.3.8",
+    "react": "19.2.4",
+    "server-only": "^0.0.1"
+  }
+}

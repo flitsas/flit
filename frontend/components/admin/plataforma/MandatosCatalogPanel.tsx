@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, FileText, RotateCcw, Search, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, FileText, RotateCcw, Search, UserRound, Users } from "lucide-react";
+import { Modal } from "@/components/atom/Modal";
+import { SectionTabs } from "@/components/atom/SectionTabs";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -10,6 +13,8 @@ import {
   MandatoOtConfigForm,
   type MandatoOtConfigPanelMode,
 } from "@/components/admin/plataforma/MandatoOtConfigForm";
+import { MandatoFormatoEditor } from "@/components/admin/plataforma/MandatoFormatoEditor";
+import { MandatosFormatosTable } from "@/components/admin/plataforma/MandatosFormatosTable";
 import { MandatoSimuladorPanel } from "@/components/admin/plataforma/MandatoSimuladorPanel";
 import {
   deleteMandateOtConfig,
@@ -18,12 +23,11 @@ import {
   type MandateOtConfigView,
 } from "@/lib/api/admin-plataforma-mandatos";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
+import { useMandatoFormatos } from "@/hooks/useMandatoFormatos";
+import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import {
-  MANDATO_TEMPLATES,
-  systemTemplateLabel,
-  tipoNegocioLabel,
-  type MandatoTemplateCode,
-  type MandatoTemplateDefinition,
+  mandatoFormatName,
+  resumenTiposPorCompania,
 } from "@/lib/plataforma/mandato-templates";
 import { useToast } from "@/components/admin/Toast";
 
@@ -31,14 +35,21 @@ import { useToast } from "@/components/admin/Toast";
  * Configurador SuperAdmin — plantillas + config por OT (Plataforma → Mandatos).
  */
 export function MandatosCatalogPanel() {
+  const router = useRouter();
+  const [seccion, setSeccion] = useState<"formatos" | "organismos" | "simulador">("formatos");
   const { show: showToast } = useToast();
+  const formatos = useMandatoFormatos();
   const [search, setSearch] = useState("");
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
   const pg = usePaginacion();
   const [rows, setRows] = useState<MandateOtConfigView[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewing, setPreviewing] = useState<string | null>(null);
+  // HU #13175 — formato abierto en el editor (nombre, tipo y plantilla).
+  const [editingFormat, setEditingFormat] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  // HU #13153 — confirmación detallada antes de restablecer.
+  const [resetTarget, setResetTarget] = useState<MandateOtConfigView | null>(null);
   const [editing, setEditing] = useState<{
     office: MandateOtConfigView;
     mode: MandatoOtConfigPanelMode;
@@ -68,13 +79,13 @@ export function MandatosCatalogPanel() {
         row.code.toLowerCase().includes(q) ||
         row.name.toLowerCase().includes(q) ||
         row.templateCode.toLowerCase().includes(q) ||
-        systemTemplateLabel(row.templateCode).toLowerCase().includes(q),
+        mandatoFormatName(formatos.formatos, row.templateCode).toLowerCase().includes(q),
     );
-  }, [rows, search]);
+  }, [rows, search, formatos.formatos]);
 
   const pageRows = pg.paginar(filtered);
 
-  const handlePreviewTemplate = async (code: MandatoTemplateCode) => {
+  const handlePreviewTemplate = async (code: string) => {
     setPreviewing(code);
     try {
       await openPdfBlobInNewTab(() => fetchMandatoTemplatePreview(code));
@@ -93,9 +104,11 @@ export function MandatosCatalogPanel() {
     setActingId(row.officeId);
     try {
       await deleteMandateOtConfig(row.officeId);
+      setResetTarget(null);
       await load();
       showToast(`Se restableció el default implícito (genérico) para ${row.name}.`, "success");
     } catch {
+      setResetTarget(null);
       showToast("No se pudo restablecer la configuración.", "error");
     } finally {
       setActingId(null);
@@ -119,7 +132,7 @@ export function MandatosCatalogPanel() {
       render: (row) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-medium text-[#162244] dark:text-white">
-            {row.hasCustomTemplate ? "Propia" : systemTemplateLabel(row.templateCode)}
+            {row.hasCustomTemplate ? "Propia" : mandatoFormatName(formatos.formatos, row.templateCode)}
           </span>
           {!row.hasCustomTemplate ? (
             <span className="font-mono text-[11px] text-[#59677D] dark:text-white/55">
@@ -131,9 +144,14 @@ export function MandatosCatalogPanel() {
     },
     {
       key: "tipo",
-      header: "Tipo",
-      render: () => (
-        <span className="text-sm text-[#59677D] dark:text-white/65">Por compañía</span>
+      header: "Tipos por compañía",
+      render: (row) => (
+        <span
+          className="text-sm text-[#162244] dark:text-white"
+          data-testid={`mandato-tipos-${row.officeId}`}
+        >
+          {resumenTiposPorCompania(row.explicitPersonaJuridica, row.explicitMandatoAbierto)}
+        </span>
       ),
     },
     {
@@ -170,13 +188,19 @@ export function MandatosCatalogPanel() {
               disabled: actingId !== null || previewing !== null,
               disabledReason: "Hay otra acción en curso.",
             },
+            {
+              key: "personas",
+              label: "Mandatarios del organismo",
+              icon: UserRound,
+              onSelect: () => router.push(`/admin/transit-offices/${row.officeId}/mandatos`),
+            },
             ...(row.hasExplicitConfig
               ? [
                   {
                     key: "default",
                     label: "Restablecer default",
                     icon: RotateCcw,
-                    onSelect: () => void handleReset(row),
+                    onSelect: () => setResetTarget(row),
                     disabled: actingId !== null,
                     disabledReason: "Hay otra acción en curso.",
                   },
@@ -190,35 +214,66 @@ export function MandatosCatalogPanel() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="mandatos-catalog-panel">
+      <SectionTabs
+        ariaLabel="Secciones de mandatos de la plataforma"
+        active={seccion}
+        onChange={setSeccion}
+        tabs={[
+          {
+            id: "formatos",
+            label: "Formatos de contrato",
+            count: formatos.status === "ready" ? formatos.formatos.length : undefined,
+            content: (
       <section aria-labelledby="mandatos-plantillas-heading" className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
           <h2
             id="mandatos-plantillas-heading"
             className="text-sm font-semibold text-[#162244] dark:text-white"
           >
-            Plantillas del sistema ({MANDATO_TEMPLATES.length})
+            Formatos de contrato{formatos.status === "ready" ? ` (${formatos.formatos.length})` : ""}
           </h2>
           <p className="text-xs text-[#59677D] dark:text-white/65">
-            Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo y el
-            default al nacer un OT (Persona o RL). Institucional u abierto solo aplican si la
+            Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo. El tipo
+            por defecto de un organismo nuevo es Persona natural. Persona jurídica y Mandato abierto solo aplican si la
             plantilla del organismo lo implica (p. ej. Sabaneta). Esta pantalla convive con el hub
             del organismo → Mandatos: es la misma configuración.
           </p>
         </div>
-        <ul className="grid gap-3 md:grid-cols-3">
-          {MANDATO_TEMPLATES.map((template) => (
-            <li key={template.code}>
-              <TemplateCard
-                template={template}
-                busy={previewing === template.code}
-                disabled={previewing !== null}
-                onPreview={handlePreviewTemplate}
-              />
-            </li>
-          ))}
-        </ul>
+        {formatos.status === "loading" ? (
+          <p role="status" aria-live="polite" className="text-xs text-[#59677D] dark:text-white/65" data-testid="mandatos-formatos-loading">
+            Cargando formatos de contrato…
+          </p>
+        ) : formatos.status === "error" ? (
+          <div
+            role="alert"
+            data-testid="mandatos-formatos-error"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+          >
+            <span>No se pudo cargar la lista de formatos de contrato.</span>
+            <button
+              type="button"
+              onClick={formatos.reload}
+              className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (
+          <MandatosFormatosTable
+            formatos={formatos.formatos}
+            previewing={previewing}
+            onEdit={setEditingFormat}
+            onPreview={handlePreviewTemplate}
+          />
+        )}
       </section>
-
+            ),
+          },
+          {
+            id: "organismos",
+            label: "Configuración por organismo",
+            count: filtered.length,
+            content: (
       <section aria-labelledby="mandatos-aplicacion-heading" className="flex flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2
@@ -265,13 +320,56 @@ export function MandatosCatalogPanel() {
           }}
         />
       </section>
-
+            ),
+          },
+          {
+            id: "simulador",
+            label: "Simulador",
+            content: (
       <MandatoSimuladorPanel offices={rows} />
+            ),
+          },
+        ]}
+      />
+
+      {resetTarget ? (
+        <ResetConfirmDialog
+          row={resetTarget}
+          formatos={formatos.formatos}
+          busy={actingId !== null}
+          onConfirm={() => void handleReset(resetTarget)}
+          onCancel={() => setResetTarget(null)}
+        />
+      ) : null}
+
+      {editingFormat ? (
+        <MandatoFormatoEditor
+          code={editingFormat}
+          onClose={() => setEditingFormat(null)}
+          onConflict={formatos.reload}
+          onSaved={(format, info) => {
+            setEditingFormat(null);
+            formatos.reload();
+            // Las filas por organismo muestran el nombre del formato: se recargan con el catálogo.
+            void load();
+            showToast(
+              info.published
+                ? `Se publicó la versión ${info.published} de «${format.name}».`
+                : info.changed
+                  ? `Se guardó el formato «${format.name}».`
+                  : `No había cambios en «${format.name}».`,
+              "success",
+            );
+          }}
+        />
+      ) : null}
 
       {editing ? (
         <MandatoOtConfigForm
           office={editing.office}
           mode={editing.mode}
+          editableCompanyType
+          formatos={formatos}
           onClose={() => setEditing(null)}
           onSaved={(view) => {
             setRows((prev) => prev.map((r) => (r.officeId === view.officeId ? view : r)));
@@ -289,51 +387,79 @@ export function MandatosCatalogPanel() {
   );
 }
 
-function TemplateCard({
-  template,
+function ResetConfirmDialog({
+  row,
+  formatos,
   busy,
-  disabled,
-  onPreview,
+  onConfirm,
+  onCancel,
 }: {
-  template: MandatoTemplateDefinition;
+  row: MandateOtConfigView;
+  formatos: readonly MandatoFormatView[];
   busy: boolean;
-  disabled: boolean;
-  onPreview: (code: MandatoTemplateCode) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
 }) {
+  const loses: string[] = [
+    `La redacción elegida (${
+      !row.configuredTemplateCode || row.configuredTemplateCode === "auto"
+        ? "Automática"
+        : mandatoFormatName(formatos, row.configuredTemplateCode)
+    }).`,
+  ];
+  if (row.defaultMandateSignerId) {
+    loses.push(
+      `El mandatario general del OT${row.defaultMandateSignerName ? ` (${row.defaultMandateSignerName})` : ""}.`,
+    );
+  }
+  if (row.hasCustomTemplate) loses.push("La plantilla propia del organismo.");
   return (
-    <article
-      className="flex h-full flex-col gap-3 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
-      data-testid={`mandato-template-${template.code}`}
+    <Modal
+      open
+      onClose={onCancel}
+      busy={busy}
+      icon={AlertTriangle}
+      iconBg="#F9AC00"
+      title="Restablecer configuración"
+      titleClassName="text-base font-bold text-[#162744]"
+      size="md"
     >
-      <div className="flex items-start gap-3">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#557EFF]/10"
-          style={{ color: "#557EFF" }}
-          aria-hidden="true"
+      <div className="space-y-3 text-xs" data-testid="mandatos-reset-dialog">
+        <p>
+          Vas a restablecer <strong>{row.name}</strong> al default. Se perderá:
+        </p>
+        <ul className="list-disc space-y-1 pl-5" data-testid="mandatos-reset-lista">
+          {loses.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+        <p
+          className="rounded-xl border px-3 py-2 leading-relaxed"
+          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          role="note"
         >
-          <FileText className="h-5 w-5" strokeWidth={1.8} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">{template.label}</h3>
-          <p className="font-mono text-[11px] text-[#59677D] dark:text-white/55">{template.code}</p>
+          Las reglas por compañía no se eliminan.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            {busy ? "Restableciendo…" : "Restablecer"}
+          </button>
         </div>
       </div>
-      <p className="text-xs leading-relaxed text-[#59677D] dark:text-white/65">{template.summary}</p>
-      <p className="text-[11px] text-[#59677D] dark:text-white/55">
-        Tipo típico: {tipoNegocioLabel(template.tipoTipico)}
-      </p>
-      <button
-        type="button"
-        onClick={() => onPreview(template.code)}
-        disabled={disabled}
-        aria-busy={busy}
-        aria-label={`Ver documento de mandato ${template.code} en una pestaña nueva`}
-        className="mt-auto inline-flex w-full items-center justify-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
-        style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
-      >
-        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-        {busy ? "Abriendo…" : "Ver documento"}
-      </button>
-    </article>
+    </Modal>
   );
 }

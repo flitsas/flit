@@ -1,77 +1,88 @@
 "use client";
 
-// HU #11757 (ADR-0050) — el mandatario adopta la misma regla que la ficha del representante legal
-// (HU #11755/#11756): el bloque de identidad pasa a SOLO CONSULTA. Ya no ofrece Enviar / Reenviar /
-// Vincular — esos 3 controles llamaban a `mandateSignerIdentityAction(tenantId, id, accion)`, que
-// también responderá 410 Gone (HU #11758). Reutiliza el MISMO módulo de copy que la ficha del RL
-// (`lib/admin/identity-vigencia.ts`) para no duplicar la lógica de precedencia D8 (baúl > identidad)
-// ni el copy por estado, incluido el caso NIT (aquí especialmente real: `CompanyMandatarioForm`
-// admite documentType="NIT").
-//
-// Nota de datos: `MandateSigner` no expone una fecha "vigente hasta" propia para la firma del baúl
-// (solo `signatureVaultId`, presencia/ausencia). Por eso `firmaBaulVigente` se deriva de
-// `Boolean(signer.signatureVaultId)` y el rótulo no puede prometer una fecha — ver informe de la HU.
+// HU #13248 (F9 #13245) — ficha del mandatario con el estado de SU validación de identidad y el botón
+// «Reenviar validación». Solo cuenta la validación lanzada para este mandatario (no la del comprador
+// ni la del módulo Identidad). Aparece únicamente con Persona natural y forma de firma «Validación de
+// identidad»; con Baúl de firmas, Persona jurídica o Formato en blanco no se muestra nada.
 
+import { useState } from "react";
+import { Send } from "lucide-react";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import type { MandateSigner, MandateSignerIdentityResend } from "@/lib/api/admin-mandate-signers";
 import {
-  identidadRotulo,
-  firmaBaulRotulo,
-  identityCopy,
-  IDENTITY_MODULE_HREF,
-} from "@/lib/admin/identity-vigencia";
-import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
+  mensajeErrorReenvio,
+  mensajeReenvio,
+  presentarValidacion,
+  puedeReenviarValidacion,
+  requiereValidacionPropia,
+} from "@/lib/plataforma/mandatario-validacion";
 
 export function MandatarioIdentidadBlock({
   signer,
+  onResend,
 }: {
   signer: MandateSigner;
+  /** Reenvía la validación (compañía u hub OT). Sin esta prop no se ofrece el botón. */
+  onResend?: () => Promise<MandateSignerIdentityResend>;
 }) {
-  const firmaBaulVigente = Boolean(signer.signatureVaultId);
-  const copy = identityCopy({
-    identityStatus: signer.identityStatus,
-    firmaBaulVigente,
-    documentType: signer.documentType,
-  });
+  const [sending, setSending] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Tras un reenvío correcto la validación queda «en curso» hasta que la lista se recargue.
+  const [enviada, setEnviada] = useState(false);
+
+  if (!requiereValidacionPropia(signer)) return null;
+
+  const estado = enviada && signer.identityStatus !== "valid" ? "pending" : signer.identityStatus;
+  const vista = presentarValidacion(estado);
+  const mostrarBoton = onResend != null && puedeReenviarValidacion(signer);
+
+  const reenviar = async () => {
+    if (!onResend || sending) return;
+    setSending(true);
+    setMensaje(null);
+    setError(null);
+    try {
+      const result = await onResend();
+      setEnviada(true);
+      setMensaje(mensajeReenvio(result, signer.email));
+    } catch (err) {
+      setError(mensajeErrorReenvio(err));
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div className="rounded-xl border p-3" data-testid="mandatario-identidad">
-      <p className="mb-1 text-xs font-semibold">Validación de identidad</p>
-
-      {/* Los dos rótulos SIEMPRE, sin fusionarse en una sola cadena (HU #11756, CF-04) */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className="text-[11px] font-medium"
-          style={{ color: "#3559c7" }}
-          data-testid="mandatario-identidad-rotulo"
-        >
-          {identidadRotulo(signer.identityStatus)}
+      <p className="mb-1.5 text-xs font-semibold">Validación de identidad</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span data-testid="mandatario-validacion-estado" data-estado={vista.estado}>
+          <StatusBadge tone={vista.tone} label={vista.texto} ariaLabel={`Validación: ${vista.texto}`} />
         </span>
-        <span
-          className="text-[11px] font-medium"
-          style={{ color: firmaBaulVigente ? "#5B8A1F" : "#7D8798" }}
-          data-testid="mandatario-firma-baul-rotulo"
-        >
-          {/* Sin fecha "hasta" disponible en MandateSigner: ver nota de datos arriba. */}
-          {firmaBaulRotulo(firmaBaulVigente, null)}
-        </span>
+        {mostrarBoton && (
+          <button
+            type="button"
+            onClick={() => void reenviar()}
+            disabled={sending}
+            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          >
+            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            {sending ? "Enviando…" : "Reenviar validación"}
+          </button>
+        )}
       </div>
-
-      {/* Copy por estado (CF-03): invita al módulo Identidad solo cuando aplica (D8 ADR-0025 manda) */}
-      {copy.message && (
-        <p className="mt-1 text-[11px] opacity-70" data-testid="mandatario-identidad-copy">
-          {copy.message}
-          {copy.showLink && (
-            <>
-              {" "}
-              <a
-                href={IDENTITY_MODULE_HREF}
-                className="font-semibold underline"
-                style={{ color: "#557EFF" }}
-                data-testid="mandatario-identidad-module-link"
-              >
-                Ir al módulo Identidad
-              </a>
-            </>
-          )}
+      <p className="mt-1 text-[11px] leading-tight opacity-70" data-testid="mandatario-validacion-detalle">
+        {vista.detalle}
+      </p>
+      {mensaje && (
+        <p className="mt-1 text-[11px] leading-tight" style={{ color: "#3f7a15" }} role="status" data-testid="mandatario-validacion-mensaje">
+          {mensaje}
+        </p>
+      )}
+      {error && (
+        <p className="mt-1 text-[11px] leading-tight" style={{ color: "#E5484D" }} role="alert">
+          {error}
         </p>
       )}
     </div>

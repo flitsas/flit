@@ -14,7 +14,7 @@ import {
 } from "@/components/consultas/columns";
 import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow } from "@/lib/api/company-queries";
-import { bogotaClock, bogotaDay } from "@/lib/xlsx";
+import { bogotaClock } from "@/lib/xlsx";
 
 const ESTADO_LABEL: Record<string, string> = {
   borrador: "Borrador",
@@ -240,8 +240,8 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     label: "Creado",
     group: GRUPO_TIEMPOS,
     value: (r) => formatDateTime(r.creadoEn),
-    raw: (r) => bogotaDay(r.creadoEn),
-    width: 12,
+    raw: (r) => bogotaClock(r.creadoEn),
+    width: 18,
     defaultVisible: true,
   },
   {

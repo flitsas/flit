@@ -36,6 +36,8 @@ export interface OtHubLayoutProps {
    * empresa gestora se monta sobre el fondo y por eso allí sí se distinguen.</p>
    */
   surface?: "panel" | "plano";
+  /** Dato del módulo que vive dentro de la tarjeta del título (p. ej. el formato de contrato). */
+  titleRight?: ReactNode;
   children: ReactNode;
 }
 
@@ -45,6 +47,7 @@ export function OtHubLayout({
   activeTab,
   moduleTitle,
   surface = "plano",
+  titleRight,
   children,
 }: OtHubLayoutProps) {
   const router = useRouter();
@@ -136,7 +139,7 @@ export function OtHubLayout({
         </button>
       )}
 
-      <ModuleTitle title={moduleTitle} subtitle={subtitle} />
+      <ModuleTitle title={moduleTitle} subtitle={subtitle} right={titleRight} />
 
       {inactiveTenant && (
         <div

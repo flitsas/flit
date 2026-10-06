@@ -17,8 +17,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace Flit.Infrastructure.Persistence;
 
 public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
-    : DbContext(options), IDataProtectionKeyContext
+    : DbContext(options), IDataProtectionKeyContext, IIdentityDb
 {
+    // Epic #13217 (HU #13231): en core-api, los repositorios de identidad usan este mismo contexto vía IIdentityDb.
+    DbSet<Entities.Admin.NotificationDeliveryLogEntity> IIdentityDb.NotificationDeliveryLogs => NotificationDeliveryLogs;
+
     /// <summary>
     /// HU #12797 (F2) — acciones diferidas al fin de la transacción ambiente gestionada (borrados del
     /// reemplazo seguro del consolidado, bitácora de fallos). No es un mapeo: EF no lo toca.
@@ -123,9 +126,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<MandateSignerRepresentedCompany> MandateSignerRepresentedCompanies =>
         Set<MandateSignerRepresentedCompany>();
 
+    /// <summary>HU #13177 — compañías de FLIT (por tenant) a las que se asocia cada mandatario, por organismo.</summary>
+    public DbSet<MandateSignerAssociatedCompany> MandateSignerAssociatedCompanies =>
+        Set<MandateSignerAssociatedCompany>();
+
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
+
+    /// <summary>Personalización por formato de contrato de mandato (HU #13169).</summary>
+    public DbSet<MandateFormatSettingEntity> MandateFormatSettings => Set<MandateFormatSettingEntity>();
+
+    /// <summary>Versiones inmutables de la plantilla de cada formato (HU #13169).</summary>
+    public DbSet<MandateFormatVersionEntity> MandateFormatVersions => Set<MandateFormatVersionEntity>();
 
     /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
     public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
@@ -165,10 +178,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantDomainEntity> TenantDomains => Set<TenantDomainEntity>();
 
     public DbSet<ActiveNetworkDomainView> ActiveNetworkDomains => Set<ActiveNetworkDomainView>();
-
-    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
-    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
-        Set<AdminIdentityValidationEntity>();
 
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
@@ -406,6 +415,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
+        // Epic #13217 (HU #13231): las tablas de identidad viven en su propia librería, compartida con core-identity.
+        modelBuilder.ApplyConfigurationsFromAssembly(IdentityPersistence.Assembly);
+
+        // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
+        Configurations.Identity.OidcModel.Map(modelBuilder);
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

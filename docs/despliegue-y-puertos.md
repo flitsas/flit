@@ -143,19 +143,23 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
 
 Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
 Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
-(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` y `x030` migración)
+(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager (repo aparte), `x030` migración)
 no se reutilizan.
 
 | Servicio | Local y DEV | QA | PDN |
 |----------|-------------|----|-----|
-| `frontend-hub` | `4040` | `5040` | `6040` |
-| `core-demo` / `frontend-demo` | `4050` / `4051` | — | — |
-| `core-comparendos` / `frontend-comparendos` | `4060` / `4061` | `5060` / `5061` | `6060` / `6061` |
-| `core-diagnostico` / `frontend-diagnostico` | `4070` / `4071` | `5070` / `5071` | `6070` / `6071` |
+| `frontend-hub` | `4022` | `5022` | `6022` |
+| Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
+| Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
+| `core-identity` | `4025` | `5025` | `6025` |
 
+- Bloque `x022`–`x025` (2026-10-06): un puerto por producto, el de su app web, que es a donde apunta nginx. Si un
+  producto tiene API propia, va por la red interna detrás del gateway, sin puerto publicado.
 - En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
-- Las variables de ambiente y el `setup` del CD para estos servicios se agregan cuando cada
-  uno se despliegue por primera vez (L-10).
+- `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
+  `CORE_IDENTITY_PORT`); los de Comparendos y Diagnóstico se agregan cuando cada uno se
+  despliegue por primera vez (L-10). El producto `demo` se retiró (DDL 125).
+- Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
 
 ---
 
@@ -297,6 +301,7 @@ sin relajar producción:
 |------------|---------|------------------------------------|
 | CF-01 duplicidad de trámite en curso | `TramiteValidations:DuplicateActiveProcedure:Mode` | `409 DUPLICATE_ACTIVE_PROCEDURE` (VIN en Matrícula Inicial, placa en Traspaso) |
 | CF-03 precondición registral | `TramiteValidations:VehicleRegistrationState:Mode` | `422 VEHICLE_STATE_INVALID_FOR_TYPE` (vehículo ya matriculado, fuente RUNT o FLIT) |
+| Mandatario requerido al radicar (HU #13143, ADR-0066) | `TramiteValidations:MandatarioRequerido:Mode` | `409 mandatario_no_configurado` / `409 mandatario_firma_invalida` (el trámite no tiene mandatario activo, vigente y con firma válida) |
 
 | Modo | Efecto |
 |------|--------|
@@ -316,6 +321,19 @@ TRAMITE_VALIDATION_VEHICLE_STATE_MODE=warn    # DEV: warn · QA: warn  · PDN: b
 ```
 
 Sin esas variables el compose inyecta `block` en ambas: **un ambiente nunca se relaja por olvido**.
+
+**Excepción deliberada: mandatario al radicar (HU #13143).** Su variable es
+`TRAMITE_VALIDATION_MANDATARIO_MODE` (en el compose, `TramiteValidations__MandatarioRequerido__Mode`) y el
+compose la entrega en **`warn`** (`${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}`), igual que `appsettings.json`:
+código nuevo con datos sin migrar (firma física, organismos sin mandatarios) detendría radicaciones en PDN. En
+**código** sigue el fail-safe: ausente, vacío o no reconocido resuelve a `block`. Calendario: DEV y QA arrancan
+en `warn`; PDN pasa a `block` solo con el reporte de firma física vacío, 14 días en `warn` sin avisos y la
+confirmación escrita del Líder Técnico (ADR-0066). El paso a `block` es **cambiar esta variable en el `.env` del
+VPS y reiniciar, sin despliegue de código**:
+
+```bash
+TRAMITE_VALIDATION_MANDATARIO_MODE=warn   # DEV: warn · QA: warn (ensayo: block) · PDN: warn hasta la confirmación
+```
 Un valor no reconocido (`false`, `desactivado`, …) también resuelve a `block` y deja un `warning` en
 el log de arranque. El modo efectivo de cada validación se registra al arrancar con la categoría
 `Flit.TramiteValidations`.
@@ -326,7 +344,8 @@ sección a su copia:
 ```jsonc
 "TramiteValidations": {
   "DuplicateActiveProcedure": { "Mode": "off" },
-  "VehicleRegistrationState": { "Mode": "off" }
+  "VehicleRegistrationState": { "Mode": "off" },
+  "MandatarioRequerido": { "Mode": "warn" }
 }
 ```
 
@@ -470,7 +489,7 @@ Un job `setup` resuelve el mapeo y los jobs siguientes lo consumen:
 |------|:---------------------:|-------|---------------|------------------------------|
 | `develop` | `dev` | `dev.flitsas.online` | `api.dev.flitsas.online` | `dev` (móvil) |
 | `staging` | `qa` | `qa.flitsas.online` | `api.qa.flitsas.online` | `qa` (móvil) |
-| `release` | `pdn` | `pdn.flitsas.online` | `api.pdn.flitsas.online` | `sha-<commit>` (**inmutable**) |
+| `release` | `pdn` | `flitsas.online` | `api.flitsas.online` | `sha-<commit>` (**inmutable**) |
 
 - **Tags publicados vs. tag de deploy:** cada build publica **3 tags** — `sha-<commit>`
   (inmutable, formato largo), el tag móvil del ambiente (`dev`/`qa`/`pdn`) y `latest`

@@ -66,7 +66,7 @@ public sealed class SettingsDiffPersonalizedDocumentsExclusionTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
             // Toca todos los campos escalares del formulario que admiten un valor distinto del
             // sembrado — la superficie máxima de diff que hoy existe para la configuración del tenant.

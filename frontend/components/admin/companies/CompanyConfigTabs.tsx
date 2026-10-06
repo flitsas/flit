@@ -1,12 +1,13 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { Blocks, Building2, FileClock, FileText, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
 import { TramitesTab } from "./tabs/TramitesTab";
 import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
+import { ProductosTab } from "./tabs/ProductosTab";
 
 // Contenedor multi-pestaña de configuración (HU #10194, AC2). Mantiene un único
 // estado de formulario para las pestañas de config y persiste todo con un solo PUT
@@ -17,6 +18,7 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // Matrícula Inicial y Traspaso viven juntos en la pestaña «Trámites» (por tipo de trámite).
 
 type TabId =
+  | "productos"
   | "tramites"
   | "config"
   | "documentos"
@@ -50,6 +52,8 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  // HU #12967 — productos de la suite encendidos para la compañía (estado real, al instante, sin «Guardar todo»).
+  { id: "productos", label: "Productos", icon: Blocks, isConfig: false },
   { id: "tramites", label: "Trámites", icon: Stamp, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
   // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
@@ -118,7 +122,7 @@ export function CompanyConfigTabs({
   company,
   restrictedToRepresentatives = false,
 }: CompanyConfigTabsProps) {
-  const [tab, setTab] = useState<TabId>(restrictedToRepresentatives ? "representantes" : "tramites");
+  const [tab, setTab] = useState<TabId>(restrictedToRepresentatives ? "representantes" : "productos");
   // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
   // HU #12710 — restringido: solo Representantes y Mandatarios (una pestaña fuera de la lista, aunque
   // se fije por estado, recae en la primera visible).
@@ -278,6 +282,7 @@ export function CompanyConfigTabs({
       )}
 
       <div role="tabpanel" className="flex-1">
+        {activeTabId === "productos" && <ProductosTab tenantId={settings.tenantId} />}
         {activeTabId === "tramites" && (
           <TramitesTab
             form={form}

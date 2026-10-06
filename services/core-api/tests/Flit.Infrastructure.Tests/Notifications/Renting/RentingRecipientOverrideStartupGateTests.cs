@@ -155,8 +155,8 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
     {
         // ADR-0044 — si alguien reintrodujera IHostEnvironment en la firma, este test lo detecta
         // sin depender de ningún valor de EnvironmentName: la prueba es que el PARÁMETRO no existe.
-        var method = typeof(InfrastructureExtensions).GetMethod(
-            "AddRentingChannel", BindingFlags.NonPublic | BindingFlags.Static);
+        var method = typeof(IdentityInfrastructureExtensions).GetMethod(
+            "AddRentingChannel", BindingFlags.Public | BindingFlags.Static);
 
         method.Should().NotBeNull();
         method!.GetParameters().Should().NotContain(
@@ -228,17 +228,7 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
     /// </summary>
     private static void InvokeAddRentingChannel(IServiceCollection services, IConfiguration configuration)
     {
-        var method = typeof(InfrastructureExtensions).GetMethod(
-            "AddRentingChannel", BindingFlags.NonPublic | BindingFlags.Static);
-        method.Should().NotBeNull("InfrastructureExtensions.AddRentingChannel debe existir (HU #11359)");
-
-        try
-        {
-            method!.Invoke(null, [services, configuration]);
-        }
-        catch (TargetInvocationException ex) when (ex.InnerException is not null)
-        {
-            throw ex.InnerException;
-        }
+        // HU #13232: método de extensión público en Flit.Identity.Infrastructure (compartido con core-identity).
+        services.AddRentingChannel(configuration);
     }
 }

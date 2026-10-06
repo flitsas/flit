@@ -1,8 +1,8 @@
 'use client';
 
 import { type ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { Shell, type ModuleId } from '@/components/atom/Shell';
+import { usePathname } from 'next/navigation';
+import { Shell } from '@/components/atom/Shell';
 import { ToastProvider } from '@/components/admin/Toast';
 import { useAccessibleModules } from '@/hooks/useAccessibleModules';
 import { useAuthGate } from '@/hooks/useAuthGate';
@@ -19,7 +19,6 @@ import { useAuthGate } from '@/hooks/useAuthGate';
  *   el contenido crece y el asistente de seguimiento es sticky flotante.
  */
 export default function TramitesLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const { authed, hydrated, logout } = useAuthGate();
 
@@ -38,11 +37,6 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
   const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
   const accessibleCodes = accessibleModules.map((m) => m.code);
 
-  const handleNav = (m: ModuleId) => {
-    if (m === 'tramites') router.push('/tramites');
-    else router.push(`/?m=${m}`);
-  };
-
   if (!hydrated || !authed) return null;
 
   return (
@@ -50,7 +44,7 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
     // desmonta al ir de /tramites/[id] → /tramites, así el toast de "enviado a
     // tránsito" sigue visible tras la redirección que dispara Finalizar.
     <ToastProvider>
-    <Shell active="tramites" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
+    <Shell onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
       <div
         className={
           immersive

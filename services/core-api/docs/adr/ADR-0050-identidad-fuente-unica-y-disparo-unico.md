@@ -54,7 +54,7 @@ En concreto:
    `X-Tenant-Id` al cliente), normaliza el par (tipo, número) con `Trim` + mayúsculas invariantes según
    el `ADR-0039`, y resuelve **exactamente cuatro estados**: `sin validación`, `en curso`,
    `aprobada y vigente`, `vencida`.
-3. **Disparo único.** El área admin **deja de disparar y de vincular** validaciones. Las once rutas de
+3. **Disparo único.** El área admin **deja de disparar y de vincular** validaciones. Las diez rutas de
    disparo, reenvío, vinculación y `mock` responden **`410 Gone`** con `code: endpoint_deprecado`. La
    única forma de originar una validación de identidad es el módulo Identidad.
 4. **Sin migración de datos.** Ni backfill ni lectura de compatibilidad hacia la tabla admin.
@@ -102,7 +102,7 @@ cada consumidor nuevo hereda la doble lectura. El PO evaluó explícitamente el 
 - **La UI de documentos personalizados se oculta sin cerrar su API** (HU #11686 bajo el Feature
   #11309): los documentos ya cargados **siguen aplicándose** en la generación documental. Consecuencia
   aceptada por el PO humano el 2026-08-20.
-- Las once rutas retiradas devuelven `410 Gone`, no `404`: el cliente distingue «esto existió y se
+- Las diez rutas retiradas devuelven `410 Gone`, no `404`: el cliente distingue «esto existió y se
   retiró» de «esto nunca existió». Decisión **DA-1**.
 
 ### A vigilar
@@ -136,3 +136,34 @@ cada consumidor nuevo hereda la doble lectura. El PO evaluó explícitamente el 
 - El `ADR-0036` restringe la prevalidación a **persona natural**. De ahí que el copy deba contemplar el
   caso **NIT**: un mandatario puede registrarse con tipo de documento NIT, y a esa persona jurídica no
   le aplica prevalidación. Enlazarla al módulo Identidad sería mandarla a un flujo imposible.
+
+---
+
+## Enmienda del 01-oct-2026 (Feature #13245, HU #13249): excepción acotada del disparo admin
+
+> Esta enmienda **no cambia el estado**: el ADR sigue en **Propuesto**. Su aceptación (con esta enmienda incluida) es exclusiva del Líder Técnico humano (regla FLIT 15).
+
+### Qué cambia
+
+El «Disparo único» (Decisión 3) deja de ser absoluto. **El área admin vuelve a originar UNA sola clase de validación: la propia del mandatario** (`party_role = 'mandatario'`, con referencia a la ficha del mandatario), y solo para el mandatario persona natural con forma de firma `biometria`. Todo lo demás de la Decisión sigue igual: fuente única de lectura en `tramites.procedure_instance_biometric_validations`, consulta admin de solo lectura, sin tabla admin de validaciones, sin backfill. La validación nueva **no resucita** `admin.admin_identity_validations`: se escribe en el almacén del módulo Identidad, con el mismo flujo que un trámite (Kyverum: enlace por correo, captura, webhook).
+
+Se origina cuando: se crea el mandatario con biometría (compañía y hub OT), se usa «Reenviar validación», se edita el tipo o número de documento (la anterior deja de contar) o se pasa de baúl a biometría. **No** se origina al reactivar. El tenant de la validación es el de la **compañía** del mandatario (#13121), también cuando la crea el OT.
+
+### Por qué
+
+La regla de firma del mandatario exige saber si **esa persona, como mandatario**, completó la biometría. Con la lectura por documento del ADR-0050 original, una validación de comprador, vendedor o prevalidación con la misma cédula contaba como identidad del mandatario, de modo que alguien podía figurar «validado» sin haber validado nunca su rol de mandatario (y sin que el correo del enlace fuera el del mandatario). La regla de firma no puede apoyarse en validaciones de otros roles. Por eso el mandatario cuenta **solo** con validaciones lanzadas para él (exclusividad por `party_role` y referencia a la ficha). La consecuencia es que esa validación necesita un origen en el área admin, porque el mandatario no es actor de ningún trámite.
+
+### Alternativas descartadas
+
+- **A. Mantener «admin solo consulta» y mandar al mandatario al módulo Identidad.** Descartada: el módulo Identidad parte de un trámite o una persona prevalidada; el mandatario no es ninguno de los dos, y habría que crear un trámite o una prevalidación ficticia para obtener el enlace.
+- **B. Seguir contando validaciones de cualquier rol por documento.** Descartada: es el defecto que motiva la enmienda (el mandatario aparecería validado por la identidad de otro rol; ver Contexto).
+- **C. Reabrir los disparos admin viejos (`identity/send`, `resend`, `link`, `mock`) o resucitar la tabla admin.** Descartada: reintroduce el segundo almacén y el sexto disparador de correo que este ADR eliminó (DA-5). Se prefiere una ruta nueva, acotada al mandatario, sobre el almacén único.
+
+### Relación con las 10 rutas viejas y con #13159
+
+Las **diez** rutas retiradas siguen respondiendo `410 Gone` con `code: endpoint_deprecado` y **no se reutilizan**: 3 de representante legal (`send`, `resend`, `link`), 3 de mandatario de compañía (`identity/send`, `identity/resend`, `identity/link`) y 4 de mandatario por organismo (`send`, `resend`, `link`, `mock`). El reenvío del mandatario usa una **ruta nueva**, no `identity/resend`. La HU #13159 (retirar físicamente esas rutas) sigue **en espera** de este ADR Aceptado; esta enmienda no la desbloquea ni la adelanta. Si el Líder Técnico rechaza la enmienda, el 410 de las diez rutas no se ve afectado.
+
+### Consecuencias
+
+- Los mandatarios existentes validados solo por documento o con otro rol **pierden la firma** hasta validarse por el flujo nuevo (sin backfill, decisión 6 del Líder Técnico) y se entrega un reporte de afectados.
+- El detalle del modelo del mandatario y sus disparos está en la enmienda del `ADR-0061`.

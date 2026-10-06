@@ -35,8 +35,19 @@ public static class AdminOtMandatosEndpoints
             .WithName("AdminOtMandatosDeleteCompanyRule");
         group.MapGet("/templates/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminOtMandatosTemplatePreview");
+        // HU #13174 — el hub muestra el nombre vigente del catálogo (el que edita el Super Admin), sin el cuerpo.
+        group.MapGet("/formatos", ListFormatsAsync)
+            .WithName("AdminOtMandatosFormats");
 
         return app;
+    }
+
+    private static async Task<IResult> ListFormatsAsync(
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var items = await formats.ListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { items = items.Select(MandatoFormatResponses.Describe).ToList() });
     }
 
     private static async Task<IResult> GetAsync(
@@ -69,9 +80,9 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var (status, view) = await service
-            .SetOtDefaultSignerAsync(officeId, request, ResolveUserId(user), ct)
+            .SetOtDefaultSignerAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> PreviewOtAsync(
@@ -138,7 +149,7 @@ public static class AdminOtMandatosEndpoints
 
         var (status, view) = await service
             .SetCompanyDefaultSignerAsync(
-                officeId, companyTenantId, request, ResolveUserId(user), OtCompanyVisibilityPolicy.For(user), ct)
+                officeId, companyTenantId, request, MandateEndpointHelpers.ResolveUserId(user), OtCompanyVisibilityPolicy.For(user), ct)
             .ConfigureAwait(false);
         return status switch
         {
@@ -147,6 +158,9 @@ public static class AdminOtMandatosEndpoints
                 Results.NotFound(),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            // HU #13148 — rowVersion opcional en el hub: solo choca si el cliente lo envía y ya cambió.
+            MandateConfigWriteStatus.Conflict =>
+                Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.BadRequest(),
         };
     }
@@ -154,6 +168,7 @@ public static class AdminOtMandatosEndpoints
     private static async Task<IResult> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
+        [FromQuery] long? rowVersion,
         ClaimsPrincipal user,
         IOtProfileRepository profiles,
         IMandateConfigAdminService service,
@@ -165,9 +180,14 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var status = await service
-            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), ct)
+            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), rowVersion, ct: ct)
             .ConfigureAwait(false);
-        return status == MandateConfigWriteStatus.Ok ? Results.NoContent() : Results.NotFound();
+        return status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.NoContent(),
+            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.NotFound(),
+        };
     }
 
     private static async Task<IResult> PreviewTemplateAsync(
@@ -184,12 +204,8 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var code = templateCode?.Trim() ?? string.Empty;
-        if (code is not (
-            MandatoTemplateResolver.Generico or MandatoTemplateResolver.Sabaneta
-            or MandatoTemplateResolver.Bello or MandatoTemplateResolver.Municipio))
-        {
-            return Results.BadRequest(new { error = "template_code_invalido" });
-        }
+        if (!MandatoFormatCatalog.IsRedaction(code))
+            return MandatoFormatResponses.InvalidPreviewCode();
 
         var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
         return Results.File(doc.Content, contentType: "application/pdf");
@@ -216,29 +232,5 @@ public static class AdminOtMandatosEndpoints
         return Results.Json(
             new { code = "TRANSIT_OFFICE_FORBIDDEN" },
             statusCode: StatusCodes.Status403Forbidden);
-    }
-
-    private static IResult MapWrite(MandateConfigWriteStatus status, MandateOtConfigView? view) =>
-        status switch
-        {
-            MandateConfigWriteStatus.Ok => Results.Ok(view),
-            MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
-            MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
-            MandateConfigWriteStatus.InvalidAssignmentMode =>
-                Results.BadRequest(new { error = "assignment_mode_invalido" }),
-            MandateConfigWriteStatus.InstitutionalRequired =>
-                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
-            MandateConfigWriteStatus.InvalidDefaultSigner =>
-                Results.BadRequest(new { error = "mandatario_default_invalido" }),
-            _ => Results.BadRequest(),
-        };
-
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
     }
 }

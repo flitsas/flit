@@ -77,6 +77,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "identity.hierarchy_switches",
         // Catálogo de productos de la FLIT Suite (HU #12958, DDL 119).
         "platform.products",
+        // Catálogo global de formatos de mandato (HU #13169, DDL 124): una fila por formato, sin tenant.
+        "admin.mandate_format_settings",
     };
 
     /// <summary>
@@ -96,6 +98,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "audit.audit_logs",
         // HU #12958: tramites encendido para las compañías mock (backfill y disparador del DDL 119).
         "platform.tenant_products",
+        // HU #12964: la migración de la B-04 crea el rol admin_tramites. Se trunca como el resto de roles
+        // que siembran las pruebas; la que lo necesite lo crea (PlatformRbacTests).
+        "security.roles",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

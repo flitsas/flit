@@ -1,3 +1,4 @@
+using Flit.Modules.Platform.Domain.Access;
 using Flit.Modules.Platform.Domain.Products;
 using Flit.Modules.Platform.Domain.TenantProducts;
 using Flit.Modules.Security.Application.Products;
@@ -9,9 +10,10 @@ namespace Flit.Modules.Platform.Application.TenantProducts;
 /// escribe ni audita. La auditoría la escribe el repositorio en el mismo guardado.
 /// </summary>
 /// <remarks>
-/// Fuera de B-03, a propósito: la regla de jerarquía (una hija solo tiene lo que su cabeza tiene
-/// encendido) la aplica el resolutor de acceso en B-05, y el evento
-/// <c>platform.tenant_product.changed</c> se publica cuando exista el outbox del frente C.
+/// Jerarquía (ADR-0057, contrato §4): no se enciende un producto a una empresa hija si alguno de sus
+/// ancestros lo tiene apagado (HU #12966). Apagar la cabeza no reescribe a las hijas: el resolutor de
+/// acceso (B-05) ya las deja sin el producto, y al volver a encender la cabeza recuperan su estado.
+/// El evento <c>platform.tenant_product.changed</c> se publica cuando exista el outbox (C-01).
 /// </remarks>
 public sealed class SetTenantProductEnabledHandler
 {
@@ -20,11 +22,13 @@ public sealed class SetTenantProductEnabledHandler
 
     private readonly IProductCatalog _catalog;
     private readonly ITenantProductRepository _repository;
+    private readonly IProductAccessStore _access;
 
-    public SetTenantProductEnabledHandler(IProductCatalog catalog, ITenantProductRepository repository)
+    public SetTenantProductEnabledHandler(IProductCatalog catalog, ITenantProductRepository repository, IProductAccessStore access)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _access = access ?? throw new ArgumentNullException(nameof(access));
     }
 
     public async Task<TenantProductChange> HandleAsync(
@@ -53,6 +57,21 @@ public sealed class SetTenantProductEnabledHandler
             throw new TenantProductException(
                 TenantProductException.ProductInactive,
                 $"El producto '{code}' está inactivo y no se puede encender.");
+        }
+
+        if (command.Enabled)
+        {
+            var ancestors = (await _access.GetTenantChainAsync(command.TenantId, cancellationToken).ConfigureAwait(false)).Skip(1).ToList();
+            if (ancestors.Count > 0)
+            {
+                var enabled = await _access.GetTenantsWithProductEnabledAsync(ancestors, code, cancellationToken).ConfigureAwait(false);
+                if (!ancestors.All(enabled.Contains))
+                {
+                    throw new TenantProductException(
+                        TenantProductException.ProductNotEnabledForHead,
+                        $"La cabeza de la empresa no tiene '{code}' encendido.");
+                }
+            }
         }
 
         var notes = string.IsNullOrWhiteSpace(command.Notes) ? null : command.Notes.Trim();

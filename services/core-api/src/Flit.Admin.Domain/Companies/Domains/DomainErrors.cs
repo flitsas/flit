@@ -21,7 +21,7 @@ public static class DomainErrors
     /// <summary>El host ya está registrado y vigente por OTRA red (<c>uq_tenant_domains_host</c>). AC1/AC2.</summary>
     public const string HostAlreadyRegistered = "DOMAIN_HOST_ALREADY_REGISTERED";
 
-    /// <summary>La red YA tiene un dominio vigente (<c>uq_tenant_domains_tenant_id</c>) — defensa de carrera; el flujo normal lo evita con retiro+alta atómicos. AC2.</summary>
+    /// <summary>La red YA tiene un dominio vigente (<c>uq_tenant_domains_tenant_purpose</c>, antes <c>uq_tenant_domains_tenant_id</c>) — defensa de carrera; el flujo normal lo evita con retiro+alta atómicos. AC2.</summary>
     public const string AlreadyRegisteredForTenant = "DOMAIN_ALREADY_REGISTERED_FOR_TENANT";
 
     public const string ConcurrencyConflict = "CONCURRENCY_CONFLICT";

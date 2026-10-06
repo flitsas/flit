@@ -17,7 +17,6 @@ vi.mock('@/lib/api/tramites-client', () => ({
     downloadBiometricCertificado: vi.fn(),
     downloadAttachment: vi.fn(),
     getBiometricState: vi.fn(),
-    getFirmaPosterior: vi.fn(() => Promise.resolve({ aplica: false, marcado: false })),
     getActors: vi.fn(),
     ensureIdentity: vi.fn(() => Promise.resolve({ outcome: 'requiere_validacion' })),
     getInstance: vi.fn(() => Promise.resolve({ fieldValues: [] })),

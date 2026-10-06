@@ -23,10 +23,7 @@ public static class ProductCodes
     /// <summary>Diagnóstico (<c>diagnostico.flitsas.online</c>).</summary>
     public const string Diagnostico = "diagnostico";
 
-    /// <summary>Producto de prueba de la plantilla (solo DEV).</summary>
-    public const string Demo = "demo";
-
     /// <summary>Todos los códigos de v1, en el orden del contrato §1.</summary>
     public static IReadOnlyList<string> All { get; } =
-        [Plataforma, Tramites, Comparendos, Diagnostico, Demo];
+        [Plataforma, Tramites, Comparendos, Diagnostico];
 }

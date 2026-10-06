@@ -253,8 +253,8 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       enabled: normalizeAvaluoEnabled(form.avaluoEnabled),
     },
     finesQuerySource: form.finesQuerySource,
-    tramitesModuleEnabled: form.tramitesModuleEnabled,
-    comparendosModuleEnabled: form.comparendosModuleEnabled,
+    // HU #12967 (B-07): Trámites y Comparendos ya no viajan en el PUT de configuración; son la
+    // habilitación de productos y el SuperAdmin los cambia al instante en la plataforma.
     resolucionesModuleEnabled: form.resolucionesModuleEnabled,
   };
 }
@@ -398,18 +398,6 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
       detail: `${FINES_QUERY_SOURCE_LABELS[i.finesQuerySource]} → ${FINES_QUERY_SOURCE_LABELS[c.finesQuerySource]}`,
       tone: "neutral",
     }),
-  },
-  {
-    key: "tramitesModuleEnabled",
-    module: "Configuración Empresa",
-    label: "Módulo de Trámites",
-    describe: (_i, c) => onOff(c.tramitesModuleEnabled),
-  },
-  {
-    key: "comparendosModuleEnabled",
-    module: "Configuración Empresa",
-    label: "Módulo de Comparendos",
-    describe: (_i, c) => onOff(c.comparendosModuleEnabled),
   },
   {
     key: "resolucionesModuleEnabled",

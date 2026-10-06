@@ -14,6 +14,12 @@
     <ProjectReference Include="..\Flit.Analytics.Application\Flit.Analytics.Application.csproj" />
     <ProjectReference Include="..\Flit.DrFlit.Application\Flit.DrFlit.Application.csproj" />
     <ProjectReference Include="..\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+    <!-- Epic #13217 (HU #13232): validación de tokens, dominio sellado y hosts de productos, compartidos con core-identity. -->
+    <ProjectReference Include="..\Flit.Suite.AspNetCore\Flit.Suite.AspNetCore.csproj" />
+    <!-- Epic #13217 — SOLO durante la transición: core-api sigue atendiendo el login como respaldo del gateway. Se
+         quita en el corte (HU #13235); desde entonces un cambio en core-identity no reconstruye core-api. -->
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identity.Application\Flit.Identity.Application.csproj" />
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identity.Web\Flit.Identity.Web.csproj" />
     <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
@@ -44,6 +50,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="OpenIddict.AspNetCore" />
     <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />

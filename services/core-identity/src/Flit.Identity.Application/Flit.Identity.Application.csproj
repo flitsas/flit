@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13217 (HU #13232) — casos de uso que solo atiende core-identity: login (el de siempre y la verificación de
+    credenciales del hub), recuperar y cambiar contraseña, restablecimiento por un administrador y activación de cuenta.
+    Espacios de nombres conservados (Flit.Modules.Security.Application.Auth.*). Un cambio aquí no reconstruye core-api
+    (tras el corte, HU #13235).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Modules.Security.Application</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Modules.Security.Application.Tests" />
+    <InternalsVisibleTo Include="Flit.Identity.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

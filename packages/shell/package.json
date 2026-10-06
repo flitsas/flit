@@ -1,0 +1,47 @@
+{
+  "name": "@flit/shell",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Barra común de la FLIT Suite (B-10, contrato §8): marca, producto, menú de productos, cuenta y dock desde un catálogo de navegación.",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    "./SuiteShell": "./src/SuiteShell.tsx",
+    "./nav": "./src/nav.ts",
+    "./account": "./src/account.ts",
+    "./theme": "./src/theme.tsx",
+    "./theme-script": "./src/theme-script.ts",
+    "./shell.css": "./src/styles/shell.css",
+    "./apps": "./src/apps.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flit/brand": "workspace:*"
+  },
+  "peerDependencies": {
+    "lucide-react": "^1.20.0",
+    "next": "16.3.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.2",
+    "jsdom": "^29.1.1",
+    "lucide-react": "^1.20.0",
+    "next": "16.3.8",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "^5",
+    "vitest": "^4.1.9",
+    "@types/node": "^20"
+  }
+}

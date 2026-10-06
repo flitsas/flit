@@ -239,14 +239,14 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         id: "cambiar-contrasena",
         title: "4. Cambiar tu contraseña",
         paragraphs: [
-          "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú ⋮ (arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma.",
+          "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú de tu cuenta (tu nombre, arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma.",
         ],
       },
       {
         id: "cerrar-sesion",
         title: "5. Cerrar sesión",
         paragraphs: [
-          "Desde el mismo menú ⋮ selecciona «Salir» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido.",
+          "Desde el mismo menú de tu cuenta selecciona «Cerrar sesión» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido.",
         ],
       },
       {
