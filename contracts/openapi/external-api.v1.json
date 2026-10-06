@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "FLIT — API externa de sincronización de trámites",
-    "version": "3.1.0",
-    "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épica #12737. Solo pull: el consumidor recorre el feed por cursor cada 5 minutos y a demanda. Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos) está en docs/integraciones/external-api-tramites-sync.md §5.",
+    "version": "3.2.0",
+    "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épicas #12737 y #12741. Lectura por pull: el consumidor recorre el feed por cursor cada 5 minutos y a demanda. Escritura: el consumidor adjunta al trámite el comprobante de pago del impuesto departamental (v3.2). Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos, envío de adjuntos) está en docs/integraciones/external-api-tramites-sync.md §5 y §7.",
     "contact": {
       "name": "Equipo FLIT"
     },
@@ -35,6 +35,10 @@
     {
       "name": "Sincronización",
       "description": "Feed de trámites por cursor y descarga de la factura."
+    },
+    {
+      "name": "Adjuntos",
+      "description": "Envío de documentos del consumidor al trámite (v3.2)."
     }
   ],
   "security": [
@@ -743,6 +747,282 @@
           }
         }
       }
+    },
+    "/api/v1/external/tramites/{id}/adjuntos": {
+      "post": {
+        "tags": [
+          "Adjuntos"
+        ],
+        "operationId": "enviarAdjunto",
+        "summary": "Adjuntar un documento al trámite",
+        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si en FLIT ya se cargó ese tipo (gestor o portal) responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si el estado marca y la marca falta, la pone); (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "id del trámite (el mismo id de los ítems del feed).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjuntoEnvio"
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/pdf, image/jpeg, image/png, image/webp"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Adjunto recibido y archivado. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjuntoRecibido"
+                },
+                "example": {
+                  "adjuntoId": "0192b7c4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+                  "tipo": "liquidacion_impuesto",
+                  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                  "reemplazoDe": null,
+                  "enMatriz": true,
+                  "pagadoMarcado": true
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Reenvío idempotente: el adjunto vigente del consumidor ya tiene ese mismo contenido. No se escribe el adjunto; si el trámite está en un estado que marca el pago y la marca faltaba, se pone (pagadoMarcado true). Mismo cuerpo que el 201 con reemplazoDe null.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjuntoRecibido"
+                },
+                "example": {
+                  "adjuntoId": "0192b7c4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+                  "tipo": "liquidacion_impuesto",
+                  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                  "reemplazoDe": null,
+                  "enMatriz": true,
+                  "pagadoMarcado": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El envío no es válido. No reintentar sin corregirlo.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "missing_file": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "missing_file",
+                      "status": 400,
+                      "detail": "Falta el archivo o está vacío.",
+                      "code": "missing_file"
+                    }
+                  },
+                  "invalid_tipo": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_tipo",
+                      "status": 400,
+                      "detail": "El tipo documental no es aceptado por este endpoint.",
+                      "code": "invalid_tipo"
+                    }
+                  },
+                  "invalid_mime": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_mime",
+                      "status": 400,
+                      "detail": "El archivo debe ser PDF, JPEG, PNG o WebP.",
+                      "code": "invalid_mime"
+                    }
+                  },
+                  "file_too_large": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "file_too_large",
+                      "status": 400,
+                      "detail": "El archivo supera el tamaño máximo de 20 MB.",
+                      "code": "file_too_large"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin pase, pase caducado o de otro emisor. Incluye WWW-Authenticate: Bearer.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_token": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "invalid_token",
+                      "status": 401,
+                      "detail": "Falta el pase o no es válido para este recurso.",
+                      "code": "invalid_token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El pase no tiene external.tramites.attachments.write.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "insufficient_scope": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "insufficient_scope",
+                      "status": 403,
+                      "detail": "El pase no tiene el permiso que exige este recurso.",
+                      "code": "insufficient_scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El trámite no existe o está fuera de alcance (nunca radicado, migrado desde FLIT 1 o eliminado). Definitivo.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "procedure_not_found": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "procedure_not_found",
+                      "status": 404,
+                      "detail": "El trámite no está disponible.",
+                      "code": "procedure_not_found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El trámite no admite el envío. not_allowed_in_state: decidir por terminal (true: definitivo; false: reintentar con espera). attachment_exists: ese tipo ya lo cargó alguien en FLIT (gestor o portal); definitivo, no reintentar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_allowed_in_state": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "not_allowed_in_state",
+                      "status": 409,
+                      "detail": "El trámite está en un estado que no admite este envío.",
+                      "code": "not_allowed_in_state",
+                      "estado": "aprobado",
+                      "terminal": true
+                    }
+                  },
+                  "not_allowed_in_state_transitorio": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "not_allowed_in_state",
+                      "status": 409,
+                      "detail": "El trámite está en un estado que no admite este envío.",
+                      "code": "not_allowed_in_state",
+                      "estado": "rechazado",
+                      "terminal": false
+                    }
+                  },
+                  "attachment_exists": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "attachment_exists",
+                      "status": 409,
+                      "detail": "El trámite ya tiene este documento cargado en FLIT (gestor o portal); su archivo se conserva.",
+                      "code": "attachment_exists"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Cuota superada (120 solicitudes por minuto por cliente, compartida con el feed y la URL de factura). Reintentar tras Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "rate_limited",
+                      "status": 429,
+                      "detail": "Demasiadas solicitudes. Reintente después de Retry-After.",
+                      "code": "rate_limited"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          },
+          "503": {
+            "description": "El almacenamiento no responde. Transitorio: reintentar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "storage_unavailable": {
+                    "value": {
+                      "type": "about:blank",
+                      "title": "storage_unavailable",
+                      "status": 503,
+                      "detail": "El almacenamiento de archivos no está disponible; reintentar más tarde.",
+                      "code": "storage_unavailable"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -751,7 +1031,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Pase de acceso externo: JWT RS256 con emisor flit-core-external y audiencia flit-external, obtenido en POST /api/v1/external/auth/token. No sirve el pase de un usuario de la plataforma. Permisos: external.tramites.read (feed y factura) y external.tramites.pii.read (datos personales en claro)."
+        "description": "Pase de acceso externo: JWT RS256 con emisor flit-core-external y audiencia flit-external, obtenido en POST /api/v1/external/auth/token. No sirve el pase de un usuario de la plataforma. Permisos: external.tramites.read (feed y factura), external.tramites.pii.read (datos personales en claro) y external.tramites.attachments.write (envío de adjuntos)."
       }
     },
     "headers": {
@@ -809,8 +1089,23 @@
               "cursor_and_since_exclusive",
               "attachment_not_found",
               "storage_unavailable",
-              "rate_limited"
+              "rate_limited",
+              "missing_file",
+              "invalid_tipo",
+              "invalid_mime",
+              "file_too_large",
+              "procedure_not_found",
+              "not_allowed_in_state",
+              "attachment_exists"
             ]
+          },
+          "estado": {
+            "type": "string",
+            "description": "Solo en 409 not_allowed_in_state: estado actual del trámite (§4 de la guía). Informativo; para decidir usar terminal."
+          },
+          "terminal": {
+            "type": "boolean",
+            "description": "Solo en 409 not_allowed_in_state. true: el trámite ya no volverá a un estado que acepte el envío (aprobado, anulado, revocado); no reintentar. false: puede volver (p. ej. rechazado sin subsanación); reintentar con espera."
           }
         }
       },
@@ -866,7 +1161,8 @@
               "type": "string",
               "enum": [
                 "external.tramites.read",
-                "external.tramites.pii.read"
+                "external.tramites.pii.read",
+                "external.tramites.attachments.write"
               ]
             }
           }
@@ -1334,6 +1630,72 @@
           },
           "contentType": {
             "type": "string"
+          }
+        }
+      },
+      "AdjuntoEnvio": {
+        "type": "object",
+        "description": "Cuerpo multipart/form-data del envío de un adjunto.",
+        "required": [
+          "tipo",
+          "file"
+        ],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "description": "Código del tipo documental (slug del catálogo). La v3.2 solo acepta liquidacion_impuesto (liquidación o pago del impuesto vehicular departamental: recibo de impuesto o recibo de caja). Ampliar la lista no cambia el endpoint.",
+            "enum": [
+              "liquidacion_impuesto"
+            ]
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "El archivo: application/pdf, image/jpeg, image/png o image/webp, de hasta 20 MB (20 971 520 bytes). El Content-Type de la parte decide el tipo."
+          }
+        }
+      },
+      "AdjuntoRecibido": {
+        "type": "object",
+        "description": "Resultado del envío. El cuerpo es el mismo en 201 (adjunto nuevo) y en 200 (reenvío idempotente).",
+        "required": [
+          "adjuntoId",
+          "tipo",
+          "sha256",
+          "reemplazoDe",
+          "enMatriz",
+          "pagadoMarcado"
+        ],
+        "properties": {
+          "adjuntoId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "id del adjunto en FLIT. Guardarlo: identifica el envío."
+          },
+          "tipo": {
+            "type": "string",
+            "description": "Tipo documental recibido.",
+            "enum": [
+              "liquidacion_impuesto"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "description": "SHA-256 en hexadecimal (64 caracteres, minúsculas) de los bytes recibidos."
+          },
+          "reemplazoDe": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "id del adjunto anterior del consumidor que este envío retiró. null si no había otro o si la respuesta es el 200 idempotente."
+          },
+          "enMatriz": {
+            "type": "boolean",
+            "description": "true si el tipo está en la matriz documental del gestor para ese trámite, es decir, si el adjunto completa una casilla de su checklist. false: queda archivado en el trámite sin casilla asociada."
+          },
+          "pagadoMarcado": {
+            "type": "boolean",
+            "description": "true si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en entregado no marca, pero si la marca ya existía devuelve true."
           }
         }
       }

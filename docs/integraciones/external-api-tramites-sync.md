@@ -1,8 +1,16 @@
-# API externa — Sincronización incremental de trámites (v3.1)
+# API externa — Sincronización incremental de trámites (v3.2)
 
 > Contrato para clientes de integración externos (primer consumidor: **Flito**).
 > Estado: **Acordado** (2026-09-29) · Épica ADO: [#12737](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/12737) · Sin implementar.
 > Todos los ejemplos usan datos ficticios. Este documento puede copiarse al repositorio del consumidor.
+>
+> **Cambios de v3.1 → v3.2** (2026-10-02, Épica [#12741](https://dev.azure.com/FlitDevOps/FLIT%20-%20FLITO/_workitems/edit/12741),
+> Feature [#13261](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13261)): primera operación de
+> **escritura**. El consumidor adjunta al trámite el comprobante de pago del impuesto departamental con
+> `POST /api/v1/external/tramites/{id}/adjuntos` y el permiso nuevo `external.tramites.attachments.write` (§7).
+> Estado: **implementada** (HU #13263). Lo demás, sin cambios.
+> **Aclaración** (2026-10-05, HU #13264): el `200` idempotente no escribe el adjunto, pero si el trámite está en un
+> estado que marca el pago y la marca falta, la pone (`pagadoMarcado: true`).
 >
 > **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
 > otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
@@ -36,8 +44,8 @@
 |---|---|
 | Base | `https://<host-ambiente>/api/v1/external` (un cliente y un host por ambiente: DEV, QA, PDN) |
 | Autenticación | `client_credentials` → JWT Bearer RS256, vigencia 30 min |
-| Scopes | `external.tramites.read` (obligatorio) · `external.tramites.pii.read` (datos personales sin enmascarar) |
-| Patrón | Pull incremental por cursor opaco (keyset), consultado periódicamente (previsto: cada 5 min) y a demanda. Semántica **al menos una vez** |
+| Scopes | `external.tramites.read` (obligatorio) · `external.tramites.pii.read` (datos personales sin enmascarar) · `external.tramites.attachments.write` (envío de adjuntos, §7) |
+| Patrón | Pull incremental por cursor opaco (keyset), consultado periódicamente (previsto: cada 5 min) y a demanda. Semántica **al menos una vez**. Escritura puntual: envío de adjuntos (§7) |
 | Formato | JSON camelCase · fechas ISO-8601 con offset `-05:00` · **todas las claves siempre presentes**, vacío = `null` |
 | Errores | RFC 7807 `application/problem+json` |
 | Límites | `pageSize` default 200, máx 1000 · 120 solicitudes/min por cliente · token: límite por IP · ventana de estabilidad 5 s |
@@ -313,3 +321,105 @@ todo el histórico desde el principio.
 Cada solicitud queda registrada en FLIT (cliente, rango de `syncVersion`, cantidad de ítems, compañías
 tocadas, IP, duración, resultado), con una **retención de 12 meses**. El consumidor es responsable del tratamiento posterior de los datos
 personales conforme a la Ley 1581 de 2012 y de no exponerlos en logs ni documentación.
+
+## 7. Envío de adjuntos (v3.2)
+
+### `POST /api/v1/external/tramites/{id}/adjuntos`
+
+> Estado: **implementada** (HU #13263). El contrato es el acordado con Flito, sin cambios.
+
+Adjunta al trámite el **comprobante de pago del impuesto vehicular departamental** (recibo de impuesto o
+recibo de caja). No es el paz y salvo: ese certificado no se envía por aquí.
+
+```http
+POST /api/v1/external/tramites/0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f/adjuntos
+Authorization: Bearer <jwt>
+Content-Type: multipart/form-data; boundary=---x
+
+-----x
+Content-Disposition: form-data; name="tipo"
+
+liquidacion_impuesto
+-----x
+Content-Disposition: form-data; name="file"; filename="recibo.pdf"
+Content-Type: application/pdf
+
+<bytes>
+-----x--
+```
+
+| Parte | Descripción |
+|---|---|
+| `{id}` | `id` del trámite, el mismo de los ítems del feed. Sin `X-Tenant-Id`: el tenant sale del trámite. |
+| `tipo` | Código del tipo documental. La v3.2 acepta **solo** `liquidacion_impuesto`. Ampliar la lista no cambia el endpoint. |
+| `file` | PDF, JPEG, PNG o WebP, hasta **20 MB**. El `Content-Type` de la parte decide el tipo. |
+
+Respuesta `201` (adjunto nuevo) o `200` (reenvío idempotente), **mismo cuerpo**:
+
+```json
+{
+  "adjuntoId": "0192b7c4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+  "tipo": "liquidacion_impuesto",
+  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "reemplazoDe": null,
+  "enMatriz": true,
+  "pagadoMarcado": true
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `adjuntoId` | id del adjunto en FLIT. Guardarlo. |
+| `sha256` | SHA-256 hexadecimal en minúsculas de los bytes recibidos. |
+| `reemplazoDe` | id del adjunto anterior **del consumidor** que este envío retiró; `null` si no había o si es el 200 idempotente. |
+| `enMatriz` | `true` si el tipo está en la matriz documental del gestor para ese trámite (completa una casilla de su checklist). `false`: queda archivado sin casilla. |
+| `pagadoMarcado` | `true` si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en `entregado` no marca, pero si la marca ya existía devuelve `true`. |
+
+Reglas:
+
+- **Estados que aceptan el envío:** `preasignacion`, `asignado`, `entregado` y `rechazado` con subsanación
+  activa. Los demás responden `409 not_allowed_in_state` sin archivar (ver la tabla de abajo).
+- **Gana quien carga primero.** Si en FLIT ya se cargó ese tipo (el gestor o el portal de participantes), responde `409 attachment_exists` y su archivo
+  se conserva: es definitivo, no reintentar. Si el consumidor cargó primero, el gestor **no** puede
+  reemplazarlo ni borrarlo; en FLIT lo ve como un comprobante cargado, sin indicar el origen.
+- **Corrección:** un nuevo envío del consumidor con otro archivo reemplaza el suyo anterior (`reemplazoDe`).
+  Es la única vía de corrección; FLIT no la ofrece al gestor.
+- **Idempotencia por contenido:** si el archivo es idéntico (mismo SHA-256) al adjunto vigente del
+  consumidor, responde `200` con el mismo cuerpo y no escribe el adjunto; si el trámite está en un estado que
+  marca (`preasignacion`, `asignado`, `rechazado` con subsanación) y la marca falta, la pone. Un reintento de red no duplica.
+- **Impuesto pagado:** al aceptar el archivo se marca el impuesto departamental como pagado en
+  `preasignacion`, `asignado` y `rechazado` con subsanación. En `entregado` **no** se marca (el trámite está
+  en el organismo); `pagadoMarcado` refleja la marca vigente del consumidor, así que vale `true` si ya existía y
+  `false` si no. El gestor no puede desmarcar lo que marcó el consumidor.
+- **Reversa en el consumidor:** si el consumidor reversa el pago, no avisa a FLIT; el adjunto y la marca
+  quedan. Un nuevo comprobante posterior se reenvía y reemplaza el anterior.
+- **Solo archiva:** no corre OCR ni regenera el consolidado del trámite.
+- Exige `external.tramites.attachments.write`. Cada llamada queda en la bitácora de acceso (§6) como
+  escritura con datos personales; el archivo no se registra.
+
+Errores (problem+json, decidir siempre por `code`):
+
+| HTTP | `code` | Qué hacer |
+|---|---|---|
+| 400 | `missing_file`, `invalid_tipo`, `invalid_mime`, `file_too_large` | Corregir el envío; no reintentar igual. |
+| 401 | `invalid_token` | Renovar el pase una vez y reintentar. |
+| 403 | `insufficient_scope` | Falta `external.tramites.attachments.write` en el cliente; avisar a FLIT. |
+| 404 | `procedure_not_found` | Trámite inexistente o fuera de alcance. Definitivo. |
+| 409 | `not_allowed_in_state` | Lleva `estado` (estado actual) y `terminal`. `terminal: true` (`aprobado`, `anulado`, `revocado`): definitivo. `terminal: false`: reintentar con espera creciente. |
+| 409 | `attachment_exists` | El comprobante ya se cargó en FLIT (gestor o portal). Definitivo. |
+| 429 | `rate_limited` | Esperar `Retry-After`. |
+| 503 | `storage_unavailable` | Transitorio: reintentar con la misma petición. |
+
+```json
+{ "type": "about:blank", "title": "not_allowed_in_state", "status": 409,
+  "detail": "El trámite está en un estado que no admite este envío.",
+  "code": "not_allowed_in_state", "estado": "aprobado", "terminal": true }
+```
+
+`terminal` aquí significa «el trámite ya no volverá a un estado que acepte el envío». No es lo mismo que
+la columna «¿Terminal?» de §4: `aprobado` no es terminal en el feed (puede revocarse), pero nunca vuelve a
+aceptar el comprobante.
+
+**Cuota:** los envíos comparten con el feed y la URL de factura las **120 solicitudes por minuto** del
+cliente. Enviar por cola con concurrencia baja (2–4, o ~60 por minuto) para no frenar la sincronización,
+y reutilizar el pase cacheado (el endpoint de token tiene su propio límite por IP).

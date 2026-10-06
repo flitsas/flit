@@ -51,7 +51,9 @@ public sealed class PortalHandlerTests
             Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public void Delete(string storagePath) { }
+        public List<string> Deleted { get; } = [];
+
+        public void Delete(string storagePath) => Deleted.Add(storagePath);
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(null);
@@ -305,6 +307,69 @@ public sealed class PortalHandlerTests
             token, new SubirDocumentoPortalInput("nope", "s.pdf", "application/pdf", 4, Doc()), ct);
 
         error.Should().Be("invalid_tipo");
+    }
+
+    // HU #13265 — «gana quien carga primero»: el portal tampoco puede duplicar el comprobante de FLITO.
+
+    private static AttachmentValidator ValidadorLiquidacion()
+    {
+        var catalog = Substitute.For<IDocumentTypeCatalog>();
+        catalog.GetRuleAsync("liquidacion_impuesto", Arg.Any<CancellationToken>())
+            .Returns(new DocumentTypeRule("liquidacion_impuesto", ["application/pdf"], 20L * 1024 * 1024));
+        return new AttachmentValidator(catalog);
+    }
+
+    [Fact]
+    public async Task HU13265_Upload_ConComprobanteVigenteDeFlito_409_AntesDeGuardarElBinario()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (participante, token) = Seed(consent: true);
+        var flito = new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(), Tipo = "liquidacion_impuesto", Provider = "flito", StoragePath = "fm-flito", UploadedAt = DateTimeOffset.UtcNow,
+        };
+        participante.ProcedureInstance!.Attachments.Add(flito);
+        var upload = new SubirDocumentoPortalHandler(_repo, _storage, ValidadorLiquidacion());
+
+        var (result, error) = await upload.HandleAsync(
+            token, new SubirDocumentoPortalInput("liquidacion_impuesto", "r.pdf", "application/pdf", 4, Doc()), ct);
+
+        result.Should().BeNull();
+        error.Should().Be("adjunto_bloqueado_flito");
+        participante.ProcedureInstance.Attachments.Should().ContainSingle().Which.Should().BeSameAs(flito);
+        _storage.Saved.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU13265_Upload_SinComprobanteDeFlito_SigueSubiendo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (participante, token) = Seed(consent: true);
+        var upload = new SubirDocumentoPortalHandler(_repo, _storage, ValidadorLiquidacion());
+
+        var (_, error) = await upload.HandleAsync(
+            token, new SubirDocumentoPortalInput("liquidacion_impuesto", "r.pdf", "application/pdf", 4, Doc()), ct);
+
+        error.Should().BeNull();
+        participante.ProcedureInstance!.Attachments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task HU13265_Upload_SiElMotorRechazaPorCarreraConFlito_409_YRetiraElBinarioNuevo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, token) = Seed(consent: true);
+        _repo.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.FromException(new InvalidOperationException("23505")));
+        _repo.IsFlitoFirstWinsConflict(Arg.Any<Exception>()).Returns(true);
+        var upload = new SubirDocumentoPortalHandler(_repo, _storage, ValidadorLiquidacion());
+
+        var (result, error) = await upload.HandleAsync(
+            token, new SubirDocumentoPortalInput("liquidacion_impuesto", "r.pdf", "application/pdf", 4, Doc()), ct);
+
+        result.Should().BeNull();
+        error.Should().Be("adjunto_bloqueado_flito");
+        _storage.Deleted.Should().ContainSingle().Which.Should().Be(_storage.Saved.Single());
     }
 
     /// <summary>Catálogo en memoria: los códigos indicados existen, con los límites globales.</summary>

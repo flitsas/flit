@@ -17,6 +17,9 @@ public static class ExternalClientAuthorization
     /// <summary>Datos personales sin enmascarar (<see cref="ExternalScopes.TramitesPiiRead"/>).</summary>
     public const string TramitesPiiReadPolicy = "ExternalTramitesPiiRead";
 
+    /// <summary>Envío de adjuntos (<see cref="ExternalScopes.AttachmentsWrite"/>, HU #13263).</summary>
+    public const string AttachmentsWritePolicy = "ExternalTramitesAttachmentsWrite";
+
     public const string ScopeClaim = "scope";
 
     /// <summary>Emisor por defecto del pase externo (<c>ExternalJwt:Issuer</c>).</summary>
