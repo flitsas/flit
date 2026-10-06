@@ -6190,7 +6190,8 @@ paths:
         Solo Super Admin (403 al resto, 401 anónimo). Lista las validaciones con proveedor `manual`
         (estados manual_activo, pendiente_revision_manual, aprobado con origen manual, rechazado, expirado)
         de todas las compañías. Orden: pendientes de revisión primero, los más antiguos arriba.
-        `waitingMinutes` es 0 en las cerradas. `origin`: tramite, prevalidacion, mandatario o
+        `waitingMinutes` mide SOLO la revisión (desde que el cliente envió la captura) y es null en cualquier
+        otro estado. `origin`: tramite, prevalidacion, mandatario o
         representante_legal (este último aún no lo produce ninguna fila).
       security:
         - bearerAuth: []
@@ -6228,7 +6229,7 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [id, fullName, documentNumber, tenantName, origin, status, waitingMinutes]
+                      required: [id, fullName, documentNumber, tenantName, origin, status]
                       properties:
                         id: { type: string, format: uuid }
                         fullName: { type: string }
@@ -6241,7 +6242,7 @@ paths:
                           type: string
                           enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
                         activatedAt: { type: string, format: date-time, nullable: true }
-                        waitingMinutes: { type: integer }
+                        waitingMinutes: { type: integer, nullable: true, description: Minutos en revisión; solo con estado pendiente_revision_manual (null en los demás). }
                   total: { type: integer }
                   page: { type: integer }
                   pageSize: { type: integer }
@@ -16638,7 +16639,7 @@ components:
         emailEnviado: { type: boolean, description: false si el correo con el motivo y el enlace no salió; el Super Admin puede regenerar el enlace. }
     ManualDetail:
       type: object
-      required: [id, fullName, documentNumber, tenantName, origin, status, waitingMinutes, images]
+      required: [id, fullName, documentNumber, tenantName, origin, status, images]
       description: >
         Detalle de una validación manual (HU #13297): `ManualListItem` + consentimiento del ciclo actual, estado de las 4
         imágenes, revisión y vencimiento del enlace. Sin rutas de storage ni IP.
@@ -16654,7 +16655,7 @@ components:
           type: string
           enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
         activatedAt: { type: string, format: date-time, nullable: true }
-        waitingMinutes: { type: integer }
+        waitingMinutes: { type: integer, nullable: true, description: Minutos en revisión; solo con estado pendiente_revision_manual (null en los demás). }
         consentAt: { type: string, format: date-time, nullable: true, description: Solo la constancia del ciclo actual. }
         consentTextVersion: { type: string, nullable: true }
         images:

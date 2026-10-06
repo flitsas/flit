@@ -58,7 +58,7 @@ public sealed class ManualIdentityReviewEndpointsTests : IClassFixture<ManualIde
         pendiente.GetProperty("waitingMinutes").GetInt32().Should().BeGreaterThanOrEqualTo(59);
         pendiente.GetProperty("origin").GetString().Should().Be("tramite");
         var cerrada = items.Single(i => i.GetProperty("status").GetString() == "rechazado");
-        cerrada.GetProperty("waitingMinutes").GetInt32().Should().Be(0);
+        cerrada.GetProperty("waitingMinutes").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact]
@@ -161,8 +161,8 @@ public sealed class ManualIdentityReviewEndpointsTests : IClassFixture<ManualIde
             var now = DateTimeOffset.UtcNow;
             IReadOnlyList<ManualIdentityReviewRow> rows =
             [
-                new(Guid.NewGuid(), "Ana Gómez", "1001", "Compañía A", "tramite", "pendiente_revision_manual", now.AddMinutes(-60)),
-                new(Guid.NewGuid(), "Beto Ruiz", "2002", "Compañía B", "prevalidacion", "rechazado", now.AddMinutes(-600)),
+                new(Guid.NewGuid(), "Ana Gómez", "1001", "Compañía A", "tramite", "pendiente_revision_manual", now.AddMinutes(-90), now.AddMinutes(-60)),
+                new(Guid.NewGuid(), "Beto Ruiz", "2002", "Compañía B", "prevalidacion", "rechazado", now.AddMinutes(-600), null),
             ];
             Repo.ListAsync(Arg.Any<ManualIdentityReviewFilter>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns(_ => (rows, rows.Count));

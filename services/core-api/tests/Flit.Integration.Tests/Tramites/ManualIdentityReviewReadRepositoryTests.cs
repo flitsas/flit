@@ -170,6 +170,37 @@ public sealed class ManualIdentityReviewReadRepositoryTests(PostgresDatabaseFixt
     }
 
     [PostgresFact]
+    public async Task HU13296_WaitingSince_usa_el_evento_de_captura_mas_reciente_o_UpdatedAt_y_solo_en_pendientes()
+    {
+        await SeedAsync();
+        await using (var cn = await Fixture.OpenConnectionAsync())
+        {
+            await ExecAsync(cn,
+                """
+                UPDATE tramites.procedure_instance_biometric_validations
+                   SET updated_at = now() - interval '45 minutes' WHERE id IN (@a, @b, @c);
+                INSERT INTO tramites.identity_validation_audit (occurred_at, stage, outcome, validation_id, created_at)
+                VALUES (now() - interval '3 hours', 'manual_captura_recibida', 'ok', @a, now()),
+                       (now() - interval '30 minutes', 'manual_captura_recibida', 'ok', @a, now());
+                """,
+                ("a", VTramitePendiente), ("b", VPrevalPendienteVieja), ("c", VPrevalEsperandoCaptura));
+        }
+
+        var (items, _) = await ListAsync(SinFiltros);
+
+        var conEvento = items.Single(i => i.Id == VTramitePendiente).WaitingSince!.Value;
+        (DateTimeOffset.UtcNow - conEvento).TotalMinutes.Should().BeInRange(29, 35, "gana el evento más reciente (hace 30 min)");
+        var sinEvento = items.Single(i => i.Id == VPrevalPendienteVieja).WaitingSince!.Value;
+        (DateTimeOffset.UtcNow - sinEvento).TotalMinutes.Should().BeInRange(44, 50, "sin evento cae a UpdatedAt");
+        items.Single(i => i.Id == VPrevalEsperandoCaptura).WaitingSince.Should().BeNull("manual_activo no mide revisión");
+        items.Single(i => i.Id == VAprobadaManual).WaitingSince.Should().BeNull();
+
+        await using var ctx = NewContext();
+        var detalle = await new ManualIdentityReviewReadRepository(ctx).GetDetailAsync(VTramitePendiente, Ct);
+        (DateTimeOffset.UtcNow - detalle!.WaitingSince!.Value).TotalMinutes.Should().BeInRange(29, 35);
+    }
+
+    [PostgresFact]
     public async Task AC4_SoloManuales_NoSalenKyverumNiLaAprobadaAutomatica()
     {
         await SeedAsync();

@@ -39,8 +39,12 @@ export function manualOriginLabel(origin: string): string {
   return MANUAL_ORIGIN_LABEL[origin as ManualOrigin] ?? origin;
 }
 
-/** Minutos de espera → texto corto: «45 min», «2 h 05 min», «3 d 4 h». */
-export function formatEspera(minutes: number): string {
+/**
+ * Minutos de revisión → texto corto: «45 min», «2 h 05 min», «3 d 4 h». `null` (la validación no está pendiente de
+ * revisión: el backend solo mide la espera de la revisión) → «—».
+ */
+export function formatEspera(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return '—';
   const m = Math.max(0, Math.floor(minutes));
   if (m < 1) return '< 1 min';
   if (m < 60) return `${m} min`;

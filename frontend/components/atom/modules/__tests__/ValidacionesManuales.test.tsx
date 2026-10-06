@@ -1,5 +1,5 @@
 /**
- * HU-C5 (#13300) — pestaña «Manuales»: tabla del modelo de trámites, filtros, paginación y estados.
+ * HU-C5 (#13300) — pestaña «Validaciones manuales»: tabla del modelo de trámites, filtros, paginación y estados.
  * Vitest + RTL contra el adaptador simulado (sin latencia, reloj fijo).
  */
 import { describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,7 @@ import { formatEspera } from '@/lib/identidad/manual-review-meta';
 const NOW = new Date('2026-10-05T15:00:00Z');
 const nuevoCliente = (count = 27) => createMockManualReviewClient({ count, delayMs: 0, now: NOW });
 
-describe('Pestaña Manuales — tabla', () => {
+describe('Pestaña Validaciones manuales — tabla', () => {
   it('muestra las columnas del modelo de trámites y la fecha en DD/MM/YYYY HH:mm', async () => {
     render(<ValidacionesManuales client={nuevoCliente()} />);
     const tabla = await screen.findByRole('table', { name: 'Validaciones manuales' });
@@ -31,7 +31,14 @@ describe('Pestaña Manuales — tabla', () => {
     ]);
     // Primera fila: activada hace 20 min → 05/10/2026 09:40 (hora de Bogotá), sin segundos.
     expect(within(tabla).getAllByText(/^05\/10\/2026 09:40$/).length).toBe(1);
+    // Solo las filas pendientes de revisión miden espera; la que espera captura y las cerradas, «—».
     expect(within(tabla).getByText('20 min')).toBeInTheDocument();
+    const filas = within(tabla).getAllByRole('row').slice(1);
+    const espera = filas.map((f) => within(f).getAllByRole('cell')[6].textContent);
+    expect(espera[0]).toBe('20 min'); // pendiente_revision_manual
+    expect(espera[1]).toBe('—'); // manual_activo (regresión: ya no muestra espera)
+    expect(espera[2]).toBe('1 h 54 min'); // pendiente_revision_manual
+    expect(espera.slice(3, 6)).toEqual(['—', '—', '—']); // aprobado, rechazado, expirado
   });
 
   it('pagina con «Filas por página» y navegación numerada', async () => {
@@ -120,5 +127,10 @@ describe('formatEspera', () => {
     expect(formatEspera(45)).toBe('45 min');
     expect(formatEspera(125)).toBe('2 h 05 min');
     expect(formatEspera(60 * 28)).toBe('1 d 4 h');
+  });
+
+  it('null o ausente (no está en revisión) se muestra «—»', () => {
+    expect(formatEspera(null)).toBe('—');
+    expect(formatEspera(undefined)).toBe('—');
   });
 });

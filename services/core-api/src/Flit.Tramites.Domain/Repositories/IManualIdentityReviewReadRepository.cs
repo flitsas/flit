@@ -71,7 +71,8 @@ public sealed record ManualIdentityReviewDetailRow(
     DateTimeOffset? ReviewedAt,
     string? ReviewedBy,
     string? RejectionReasonCode,
-    DateTimeOffset? LinkExpiresAt);
+    DateTimeOffset? LinkExpiresAt,
+    DateTimeOffset? WaitingSince = null);
 
 /// <summary>Referencia (interna, nunca sale por HTTP) a la imagen de una validación manual en el storage.</summary>
 public sealed record ManualIdentityImageRef(
@@ -80,7 +81,11 @@ public sealed record ManualIdentityImageRef(
 /// <summary>Filtros ya saneados del listado manual (todos opcionales).</summary>
 public sealed record ManualIdentityReviewFilter(string? Status, string? Origin, string? Text);
 
-/// <summary>Fila cruda del listado manual; el origen ya viene calculado.</summary>
+/// <summary>
+/// Fila cruda del listado manual; el origen ya viene calculado. <c>WaitingSince</c> (HU #13296): instante en que el cliente envió la
+/// captura (evento de auditoría <c>manual_captura_recibida</c> más reciente; si no existe, <c>UpdatedAt</c> de la fila). Solo viene
+/// con estado <c>pendiente_revision_manual</c>; en cualquier otro estado es <c>null</c> (no hay revisión en curso).
+/// </summary>
 public sealed record ManualIdentityReviewRow(
     Guid Id,
     string FullName,
@@ -88,7 +93,8 @@ public sealed record ManualIdentityReviewRow(
     string TenantName,
     string Origin,
     string Status,
-    DateTimeOffset? ActivatedAt);
+    DateTimeOffset? ActivatedAt,
+    DateTimeOffset? WaitingSince = null);
 
 /// <summary>
 /// Orígenes de una validación manual (contrato Épica #13202 §3). Hoy el modelo solo distingue

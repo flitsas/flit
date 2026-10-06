@@ -28,7 +28,7 @@ public sealed record ManualDetail(
     string Origin,
     string Status,
     DateTimeOffset? ActivatedAt,
-    int WaitingMinutes,
+    int? WaitingMinutes,
     DateTimeOffset? ConsentAt,
     string? ConsentTextVersion,
     IReadOnlyList<ManualImageInfo> Images,
@@ -77,7 +77,7 @@ public sealed class GetManualDetailHandler(
 
         return (new ManualDetail(
             r.Id, r.FullName, r.DocumentNumber, r.TenantName, r.Origin, r.Status, r.ActivatedAt,
-            ListManualIdentityValidationsHandler.WaitingMinutes(r.Status, r.ActivatedAt, now),
+            ListManualIdentityValidationsHandler.WaitingMinutes(r.Status, r.WaitingSince, now),
             r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt), null);
     }
 }

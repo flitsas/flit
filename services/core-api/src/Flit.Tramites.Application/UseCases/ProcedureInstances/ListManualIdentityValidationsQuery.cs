@@ -70,7 +70,7 @@ public sealed record ManualListItem(
     string Origin,
     string Status,
     DateTimeOffset? ActivatedAt,
-    int WaitingMinutes);
+    int? WaitingMinutes);
 
 /// <summary>Respuesta paginada del listado manual.</summary>
 public sealed record ManualListResponse(IReadOnlyList<ManualListItem> Items, int Total, int Page, int PageSize);
@@ -103,18 +103,20 @@ public sealed class ListManualIdentityValidationsHandler(
         [
             .. rows.Select(r => new ManualListItem(
                 r.Id, r.FullName, r.DocumentNumber, r.TenantName, r.Origin, r.Status, r.ActivatedAt,
-                WaitingMinutes(r.Status, r.ActivatedAt, now))),
+                WaitingMinutes(r.Status, r.WaitingSince, now))),
         ];
 
         return (new ManualListResponse(items, total, page, pageSize), null);
     }
 
-    /// <summary>Minutos en espera de una validación abierta (esperando captura o revisión); 0 en las cerradas.</summary>
-    internal static int WaitingMinutes(string status, DateTimeOffset? activatedAt, DateTimeOffset now)
+    /// <summary>
+    /// HU #13296: minutos que lleva una validación esperando REVISIÓN (desde que el cliente envió la captura); <c>null</c> en
+    /// cualquier otro estado, incluido <c>manual_activo</c> (esperar la captura del cliente no es tiempo de revisión).
+    /// </summary>
+    internal static int? WaitingMinutes(string status, DateTimeOffset? waitingSince, DateTimeOffset now)
     {
-        if (activatedAt is not { } since
-            || (status != BiometricEstados.PendienteRevisionManual && status != BiometricEstados.ManualActivo))
-            return 0;
+        if (waitingSince is not { } since || status != BiometricEstados.PendienteRevisionManual)
+            return null;
 
         var minutes = (now - since).TotalMinutes;
         return minutes < 0 ? 0 : (int)minutes;

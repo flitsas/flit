@@ -36,7 +36,7 @@ public sealed class ManualReviewDetailHandlerTests
     private static ManualIdentityReviewDetailRow Fila(
         string status = BiometricEstados.PendienteRevisionManual, bool imagenes = true) => new(
         Id, Tenant, null, null, "Ana Gómez", "1001", "Compañía A", "prevalidacion", status, Now.AddMinutes(-90),
-        Now.AddMinutes(-80), "v1", imagenes, imagenes, imagenes, imagenes, null, null, null, null);
+        Now.AddMinutes(-80), "v1", imagenes, imagenes, imagenes, imagenes, null, null, null, null, Now.AddMinutes(-90));
 
     [Fact]
     public async Task Detalle_mapea_el_contrato_y_calcula_la_espera()

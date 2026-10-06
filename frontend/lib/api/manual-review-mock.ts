@@ -75,7 +75,8 @@ function buildRows(count: number, now: Date): ManualDetail[] {
       origin: ORIGENES[i % ORIGENES.length],
       status,
       activatedAt,
-      waitingMinutes,
+      // Igual que el backend: solo la pendiente de revisión mide espera.
+      waitingMinutes: status === 'pendiente_revision_manual' ? waitingMinutes : null,
       consentAt: captured ? new Date(now.getTime() - (waitingMinutes - 8) * 60_000).toISOString() : null,
       consentTextVersion: captured ? 'consentimiento-manual-v1' : null,
       images: MANUAL_IMAGE_KINDS.map((kind) => ({ kind, available: captured })),

@@ -22,8 +22,12 @@ export interface ManualListItem {
   origin: ManualOrigin;
   status: ManualStatus;
   /** ISO 8601 (instante). */
-  activatedAt: string;
-  waitingMinutes: number;
+  activatedAt: string | null;
+  /**
+   * Minutos que lleva esperando REVISIÓN (desde que el cliente envió la captura). `null` salvo en
+   * `pendiente_revision_manual`: la UI muestra «—».
+   */
+  waitingMinutes: number | null;
 }
 
 export interface ManualListParams {

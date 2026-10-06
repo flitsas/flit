@@ -227,6 +227,7 @@ public sealed class ManualReviewHost : IDisposable
             ApprovalOrigin = approvalOrigin,
             RejectionReasonCode = rejectionReasonCode,
             ReviewedBy = reviewedBy,
+            UpdatedAt = now.AddHours(-3),
             ReviewedAt = reviewedBy is null ? null : now.AddHours(-1),
         };
 
@@ -254,6 +255,19 @@ public sealed class ManualReviewHost : IDisposable
     {
         await using var db = NewDb();
         return await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
+    }
+
+    /// <summary>Siembra el evento <c>manual_captura_recibida</c> de una validación hace <paramref name="minutosAtras"/> minutos.</summary>
+    public async Task SeedCapturaRecibidaAsync(Guid id, int minutosAtras)
+    {
+        await using var db = NewDb();
+        var at = DateTimeOffset.UtcNow.AddMinutes(-minutosAtras);
+        db.IdentityValidationAudits.Add(new IdentityValidationAuditEvent
+        {
+            Id = Guid.NewGuid(), OccurredAt = at, CreatedAt = at, Stage = IdentityValidationAuditStages.ManualCapturaRecibida,
+            Outcome = IdentityValidationAuditOutcomes.Ok, ValidationId = id, TenantId = Dueno,
+        });
+        await db.SaveChangesAsync(Ct);
     }
 
     public async Task<List<IdentityValidationAuditEvent>> AuditAsync(Guid id)

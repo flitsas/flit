@@ -18,18 +18,18 @@ public sealed class ListManualIdentityValidationsHandlerTests
     public ListManualIdentityValidationsHandlerTests() =>
         _handler = new ListManualIdentityValidationsHandler(_repo, new RelojFijo(Now));
 
-    private static ManualIdentityReviewRow Row(string status, DateTimeOffset? activatedAt) =>
-        new(Guid.NewGuid(), "Nombre", "123", "Compañía", "tramite", status, activatedAt);
+    private static ManualIdentityReviewRow Row(string status, DateTimeOffset? waitingSince) =>
+        new(Guid.NewGuid(), "Nombre", "123", "Compañía", "tramite", status, Now.AddDays(-3), waitingSince);
 
     [Fact]
-    public async Task Pendiente_y_esperando_captura_calculan_minutos_y_las_cerradas_devuelven_cero()
+    public async Task Solo_la_pendiente_de_revision_calcula_minutos_y_el_resto_devuelve_null()
     {
         _repo.ListAsync(Arg.Any<ManualIdentityReviewFilter>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((
                 (IReadOnlyList<ManualIdentityReviewRow>)
                 [
                     Row(BiometricEstados.PendienteRevisionManual, Now.AddMinutes(-125).AddSeconds(-30)),
-                    Row(BiometricEstados.ManualActivo, Now.AddMinutes(-10)),
+                    Row(BiometricEstados.ManualActivo, Now.AddMinutes(-10)), // regresión: esperar la captura NO es espera de revisión
                     Row(BiometricEstados.Aprobado, Now.AddDays(-2)),
                     Row(BiometricEstados.Rechazado, null),
                     Row(BiometricEstados.PendienteRevisionManual, Now.AddMinutes(5)), // reloj adelantado: nunca negativo
@@ -39,7 +39,7 @@ public sealed class ListManualIdentityValidationsHandlerTests
         var (result, error) = await _handler.HandleAsync(new ListManualIdentityValidationsQuery(), TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
-        result!.Items.Select(i => i.WaitingMinutes).Should().Equal(125, 10, 0, 0, 0);
+        result!.Items.Select(i => i.WaitingMinutes).Should().Equal(125, null, null, null, 0);
         result.Total.Should().Be(5);
     }
 

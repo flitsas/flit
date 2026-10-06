@@ -44,7 +44,7 @@ public sealed class ManualDetailEndpointTests : IClassFixture<ManualReviewFactor
         root.GetProperty("tenantName").GetString().Should().Be("Compania duena C");
         root.GetProperty("origin").GetString().Should().Be("prevalidacion");
         root.GetProperty("status").GetString().Should().Be("pendiente_revision_manual");
-        root.GetProperty("waitingMinutes").GetInt32().Should().BeGreaterThanOrEqualTo(179);
+        root.GetProperty("waitingMinutes").GetInt32().Should().BeGreaterThanOrEqualTo(179, "sin evento de captura cae a UpdatedAt (hace 3 h)");
         root.GetProperty("consentAt").ValueKind.Should().Be(JsonValueKind.String);
         root.GetProperty("consentTextVersion").GetString().Should().Be("v1");
         root.GetProperty("images").EnumerateArray()
@@ -232,6 +232,22 @@ public sealed class ManualDetailEndpointTests : IClassFixture<ManualReviewFactor
 
         using var json = JsonDocument.Parse(await detail.Content.ReadAsStringAsync(Ct));
         json.RootElement.GetProperty("images").EnumerateArray().Should().OnlyContain(i => i.GetProperty("available").GetBoolean());
-        json.RootElement.GetProperty("waitingMinutes").GetInt32().Should().Be(0);
+        json.RootElement.GetProperty("waitingMinutes").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task HU13296_La_espera_se_mide_desde_el_evento_de_captura_recibida_y_manual_activo_no_la_tiene()
+    {
+        var pendiente = await _host.SeedAsync();
+        await _host.SeedCapturaRecibidaAsync(pendiente.Id, minutosAtras: 20);
+        var activo = await _host.SeedAsync(BiometricEstados.ManualActivo, conImagenes: false, consentimientoVigente: false);
+        _host.AuthenticateSuperAdmin();
+
+        using var p = JsonDocument.Parse(await (await _host.GetAsync($"{Base}/{pendiente.Id}/manual-detail")).Content.ReadAsStringAsync(Ct));
+        using var a = JsonDocument.Parse(await (await _host.GetAsync($"{Base}/{activo.Id}/manual-detail")).Content.ReadAsStringAsync(Ct));
+
+        var minutos = p.RootElement.GetProperty("waitingMinutes").GetInt32();
+        minutos.Should().BeInRange(20, 25, "mide desde el evento (hace 20 min), no desde la activación (hace 3 h)");
+        a.RootElement.GetProperty("waitingMinutes").ValueKind.Should().Be(JsonValueKind.Null);
     }
 }

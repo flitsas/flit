@@ -74,6 +74,7 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                     v.ProcedureInstanceId,
                     v.Status,
                     v.ManualActivatedAt,
+                    v.UpdatedAt,
                     Rank = v.Status == BiometricEstados.PendienteRevisionManual ? 0
                         : v.Status == BiometricEstados.ManualActivo ? 1 : 2,
                 })
@@ -86,6 +87,11 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
+            var pendientes = rows
+                .Where(x => x.Status == BiometricEstados.PendienteRevisionManual)
+                .ToDictionary(x => x.Id, x => x.UpdatedAt);
+            var recibidas = await CapturasRecibidasAsync(pendientes.Keys.ToList(), ct).ConfigureAwait(false);
+
             IReadOnlyList<ManualIdentityReviewRow> items =
             [
                 .. rows.Select(x => new ManualIdentityReviewRow(
@@ -95,7 +101,8 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                     x.TenantName,
                     OriginOf(x.PartyRole, x.ProcedureInstanceId),
                     x.Status,
-                    x.ManualActivatedAt)),
+                    x.ManualActivatedAt,
+                    pendientes.ContainsKey(x.Id) ? (recibidas.TryGetValue(x.Id, out var at) ? at : x.UpdatedAt) : null)),
             ];
 
             return (items, total);
@@ -130,6 +137,13 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
             var reviewer = v.ReviewedBy is null ? null
                 : string.IsNullOrWhiteSpace(reviewerName) ? v.ReviewedBy.Value.ToString() : reviewerName;
 
+            DateTimeOffset? waitingSince = null;
+            if (v.Status == BiometricEstados.PendienteRevisionManual)
+            {
+                var recibidas = await CapturasRecibidasAsync([v.Id], ct).ConfigureAwait(false);
+                waitingSince = recibidas.TryGetValue(v.Id, out var at) ? at : v.UpdatedAt;
+            }
+
             return new ManualIdentityReviewDetailRow(
                 v.Id, v.TenantId, v.ProcedureInstanceId, v.PartyRole, v.Name, v.DocumentNumber, row.TenantName,
                 OriginOf(v.PartyRole, v.ProcedureInstanceId), v.Status, v.ManualActivatedAt,
@@ -140,8 +154,30 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 current && !string.IsNullOrWhiteSpace(v.SignatureImagePath),
                 v.ReviewedAt, reviewer, v.RejectionReasonCode,
                 (v.Status == BiometricEstados.ManualActivo
-                    || (v.Status == BiometricEstados.Rechazado && v.RejectionReasonCode != null)) ? v.ExpiresAt : null);
+                    || (v.Status == BiometricEstados.Rechazado && v.RejectionReasonCode != null)) ? v.ExpiresAt : null,
+                waitingSince);
         }, ct);
+
+    /// <summary>
+    /// HU #13296: instante de la captura recibida de cada validación = evento de auditoría <c>manual_captura_recibida</c> MÁS
+    /// RECIENTE (un rechazo y una nueva captura generan otro evento). No hay columna propia, así que no se agrega ninguna.
+    /// Sin evento, el llamador cae a <c>UpdatedAt</c> de la fila.
+    /// </summary>
+    private async Task<Dictionary<Guid, DateTimeOffset>> CapturasRecibidasAsync(List<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return [];
+
+        var rows = await db.IdentityValidationAudits
+            .AsNoTracking()
+            .Where(a => a.Stage == IdentityValidationAuditStages.ManualCapturaRecibida
+                && a.ValidationId != null && ids.Contains(a.ValidationId.Value))
+            .GroupBy(a => a.ValidationId!.Value)
+            .Select(g => new { Id = g.Key, At = g.Max(a => a.OccurredAt) })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return rows.ToDictionary(r => r.Id, r => r.At);
+    }
 
     public Task<ManualIdentityImageRef?> GetImageRefAsync(Guid id, string kind, CancellationToken ct = default) =>
         CrossTenantRead.ExecuteAsync(db, async () =>
