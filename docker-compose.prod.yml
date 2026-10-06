@@ -407,6 +407,9 @@ services:
       # cambia aquí; si difirieran, un proceso rechazaría los tokens del otro.
       <<: *core-api-env
       ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4025}
+      # Epic #13316 (HU #13334): gRPC de Identidad (flit.identidad.v1) para los demás servicios, solo en la red interna
+      # (sin mapeo en ports, como el 8082 de core-api). Sin la variable no escucha gRPC: todo queda como antes.
+      Identidad__GrpcPort: ${CORE_IDENTITY_GRPC_PORT:-}
     volumes:
       # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
       - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro

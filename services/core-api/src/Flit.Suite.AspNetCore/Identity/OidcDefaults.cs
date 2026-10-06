@@ -23,6 +23,9 @@ public static class OidcDefaults
         ["platform.tramites.ict"] = ServiceAudiences.Tramites,
     };
 
+    /// <summary>Prefijo de los clientes de servicio (contrato §3, <c>svc-&lt;código&gt;</c>): su <c>sub</c> en el token.</summary>
+    public const string ServiceClientPrefix = "svc-";
+
     /// <summary>Scopes de servicio (contrato §3).</summary>
     public static readonly string[] ServiceScopes = [.. ServiceScopeAudiences.Keys];
 

@@ -26,6 +26,7 @@ public sealed class IdentityHostTests : IClassFixture<IdentityHostTests.Host>
     [
         "/connect/", "/.well-known/", "/api/v1/auth/", "/api/v1/platform/", "/api/v1/public/branding", "/health",
         "/api/v1/health",
+        "/flit.identidad.v1.IdentidadService/", // HU #13334, solo con Identidad:GrpcPort
     ];
 
     private readonly WebApplicationFactory<IdentityApiEntryPoint> _identity;

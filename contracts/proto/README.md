@@ -54,6 +54,8 @@ npx -y @bufbuild/buf@1.73.0 breaking . --against "../../.git#ref=origin/develop,
 Los proyectos de un servicio que importan `flit.platform.v1` referencian `Flit.Platform.Grpc.Contracts` y no
 vuelven a generar esos tipos.
 
-**Docker.** Las imágenes .NET se construyen hoy con contexto `./services` (`./services/core-ict` en ICT), que no
-incluye esta carpeta. El primer servicio que meta uno de estos proyectos en su imagen amplía su contexto a la raíz
-del repo en `cd.yml` y en su `Dockerfile`.
+**Docker.** Las imágenes .NET se construyen con contexto `./services` (`./services/core-ict` en ICT), que no incluye
+esta carpeta. Un servicio que compila uno de estos proyectos la recibe como contexto con nombre, sin ampliar el
+principal: `COPY --from=contracts . /contracts/proto/` en su `Dockerfile` y `build-contexts: contracts=./contracts/proto`
+en su job de `cd.yml` (más `contracts/proto` en las rutas de `reuse-image`). Así lo hace `core-identity` (HU #13334).
+En local: `docker build -f services/<servicio>/Dockerfile --build-context contracts=contracts/proto services`.

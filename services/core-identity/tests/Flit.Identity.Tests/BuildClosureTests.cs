@@ -36,6 +36,7 @@ public sealed class BuildClosureTests
         Closure(HostProject()).Select(Path.GetFileNameWithoutExtension).Order(StringComparer.Ordinal).Should().Equal(
             "Flit.Admin.Application",
             "Flit.Admin.Domain",
+            "Flit.Identidad.Grpc.Contracts",
             "Flit.Identity.Application",
             "Flit.Identity.Infrastructure",
             "Flit.Identity.Web",
@@ -57,6 +58,19 @@ public sealed class BuildClosureTests
         {
             dockerfile.Should().Contain($"COPY core-api/src/{name}/", $"el Dockerfile de core-identity debe copiar {name}");
         }
+    }
+
+    [Fact]
+    public void LosContratosGrpcLleganALaImagenYAlFiltroDelCd()
+    {
+        // HU #13334: los Flit.*.Grpc.Contracts generan código desde contracts/proto, fuera del contexto services/.
+        Closure(HostProject()).Should().Contain(p => p.EndsWith(".Grpc.Contracts.csproj", StringComparison.Ordinal));
+
+        File.ReadAllText(Path.Combine(ServiceRoot(), "Dockerfile")).Should().Contain("COPY --from=contracts . /contracts/proto/");
+        var cd = File.ReadAllText(Path.Combine(ServiceRoot(), "..", "..", ".github", "workflows", "cd.yml"));
+        var job = cd[cd.IndexOf("build-core-identity:", StringComparison.Ordinal)..];
+        job = job[..job.IndexOf("\n  build-", 1, StringComparison.Ordinal)];
+        job.Should().Contain("contracts=./contracts/proto").And.Contain("            contracts/proto\n");
     }
 
     [Fact]

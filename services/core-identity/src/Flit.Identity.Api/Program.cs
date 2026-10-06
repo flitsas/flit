@@ -4,6 +4,7 @@ using Flit.Api.Middleware;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
 using Flit.Api.Telemetry;
+using Flit.Identity.Api.Grpc;
 using Flit.Identity.Web;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
@@ -43,6 +44,7 @@ public static class Program
             ?? throw new InvalidOperationException("ConnectionStrings:Core (PostgreSQL) es obligatoria.");
         AddIdentityServices(builder.Services, builder.Configuration, builder.Environment, connectionString);
         builder.AddFlitTelemetry("flit-core-identity"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
+        builder.AddIdentidadGrpc(); // Epic #13316 · HU #13334 (solo con Identidad:GrpcPort)
 
         var app = builder.Build();
         app.UseFlitCorrelationId(); // HU #13332: primero, para que todo el pipeline quede dentro de su alcance
@@ -133,6 +135,7 @@ public static class Program
                 : Results.Ok(new { status = "ready" })).AllowAnonymous();
 
         app.MapFlitIdentityEndpoints();
+        app.MapIdentidadGrpc(); // HU #13334: solo con Identidad:GrpcPort, y solo en ese puerto
     }
 }
 

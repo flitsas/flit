@@ -280,6 +280,7 @@ jobs:
             services/core-api/src/Flit.Modules.Security.Domain
             services/core-api/src/Flit.Queries.Domain
             services/core-api/src/Flit.Suite.AspNetCore
+            contracts/proto
 
       - name: Extract metadata — core-identity
         id: meta
@@ -299,6 +300,9 @@ jobs:
         with:
           # Context = services/: core-identity compila librerías compartidas de core-api (ver su Dockerfile).
           context: ./services
+          # HU #13334: los contratos gRPC entran como contexto con nombre (COPY --from=contracts en el Dockerfile).
+          build-contexts: |
+            contracts=./contracts/proto
           file: ./services/core-identity/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

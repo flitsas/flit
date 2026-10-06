@@ -143,6 +143,7 @@ quedan también en el `.env`.
 | `migracion-api` (no publicado) | `MIGRACION_API_PORT` | 4030 | 5030 | 6030 |
 | **Hub (`frontend-hub`)** | `HUB_PORT` | **4022** | **5022** | **6022** |
 | gRPC interno de core-api (no publicado) | `CORE_API_GRPC_PORT` | 8082 | 8082 | 8082 |
+| gRPC interno de core-identity (no publicado, Epic #13316) | `CORE_IDENTITY_GRPC_PORT` | vacío = apagado; propuesto 8083 | igual | igual |
 | Reservados, sin servicio todavía | — | Comparendos 4023; Diagnóstico 4024 | 5023; 5024 | 6023; 6024 |
 
 Notas:
