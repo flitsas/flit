@@ -27,4 +27,59 @@ describe("leerRespuestaRunt", () => {
     expect(vista.resultado).toBe("encontrado");
     expect(vista.proveedor).toBe("kyverum");
   });
+
+  // Bug #13203 — el RNGM (Kyverum y Verifik) entrega cada garantía con entidad / numeroDocumentoEntidad /
+  // tipoDocumentoEntidad / fechaRegistro: el panel de Confirmación RUNT pintaba «—».
+  const GARANTIA_RNGM = {
+    idPrenda: "1000001",
+    idVehiculoPrenda: "1000002",
+    fechaRegistro: "30/09/2026",
+    tipoDocumentoEntidad: "NIT",
+    numeroDocumentoEntidad: "900000001",
+    entidad: "BANCO DE PRUEBA S.A.",
+    estado: "Registro de la garantía en el RNGM por parte de RUNT",
+  };
+
+  it("Bug #13203 — Kyverum: una garantía con el shape del RNGM muestra acreedor, documento y fecha", () => {
+    const vista = leerRespuestaRunt({
+      ok: true,
+      data: { vehiculo: { placa: "AAA000" }, solicitudes: [], garantiasPrendas: [GARANTIA_RNGM] },
+    });
+    expect(vista.garantias).toEqual([
+      { acreedor: "BANCO DE PRUEBA S.A.", documento: "NIT 900000001", fechaInscripcion: "30/09/2026" },
+    ]);
+  });
+
+  it("Bug #13203 — Verifik: garantiasMobiliarias con el shape del RNGM muestra acreedor, documento y fecha", () => {
+    const vista = leerRespuestaRunt({
+      ok: true,
+      data: { informacionGeneral: { noPlaca: "AAA000" }, garantiasMobiliarias: [GARANTIA_RNGM] },
+    });
+    expect(vista.garantias).toEqual([
+      { acreedor: "BANCO DE PRUEBA S.A.", documento: "NIT 900000001", fechaInscripcion: "30/09/2026" },
+    ]);
+  });
+
+  it("Bug #13203 — nombreAcreedor es respaldo de acreedor, y las claves actuales siguen ganando al RNGM", () => {
+    const vista = leerRespuestaRunt({
+      ok: true,
+      data: {
+        vehiculo: { placa: "AAA000" },
+        garantias: [
+          { ...GARANTIA_RNGM, nombreAcreedor: "NORMALIZADO S.A." },
+          {
+            ...GARANTIA_RNGM,
+            acreedor: "ACTUAL S.A.",
+            tipoDocumentoAcreedor: "CC",
+            numeroDocumentoAcreedor: "800000002",
+            fechaInscripcion: "2026-01-15T00:00:00",
+          },
+        ],
+      },
+    });
+    expect(vista.garantias).toEqual([
+      { acreedor: "NORMALIZADO S.A.", documento: "NIT 900000001", fechaInscripcion: "30/09/2026" },
+      { acreedor: "ACTUAL S.A.", documento: "CC 800000002", fechaInscripcion: "15/01/2026" },
+    ]);
+  });
 });

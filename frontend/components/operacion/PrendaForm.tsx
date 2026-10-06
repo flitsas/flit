@@ -9,26 +9,29 @@ import { formatDateOnly } from '@/lib/format/date-only';
 import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PrendaDocumentUpload } from './PrendaDocumentUpload';
-import { prendaDocTipoFor } from './prenda-document-tipos';
+import { PRENDA_DOC_TIPOS, prendaDocTipoFor } from './prenda-document-tipos';
 import { blockerCopy } from './wizard-copy';
 import { WizardModal } from './WizardModal';
 import type { RuntAvisoGravamenVariant } from './wizardCapabilities';
 import type { WizardStepFormHandle } from './wizard-step-form';
-import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
+import type {
+  FieldValue,
+  PrendaDecision,
+  ProcedureAttachment,
+  WizardModalidad,
+} from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader, WizardFieldToggle, WizardSegmented } from './wizard-atoms';
+import { PRENDA_DECISION_LABELS, PRENDA_OMITIR_AYUDA } from './prenda-decision-labels';
+
+/**
+ * Reexportada desde la fuente única (`prenda-decision-labels.ts`, HU #13112): `FirmaFurStep` y
+ * `PrendaModificar` la importan de aquí y deben mostrar la misma etiqueta que el wizard.
+ */
+export { PRENDA_DECISION_LABELS };
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
-
-/** Etiquetas legibles de cada decisión de prenda (contrato con el backend). */
-export const PRENDA_DECISION_LABELS: Record<PrendaDecision, string> = {
-  solicitar: 'Solicitar constitución de prenda',
-  registrar: 'Registrar prenda',
-  levantar: 'Levantar gravamen',
-  omitir: 'Continuar sin gestionar (asumo el riesgo)',
-  sin_prenda: 'Sin prenda',
-};
 
 /** Decisiones que exigen el documento de soporte (se adjunta en esta sección). */
 const REQUIERE_DOCUMENTO: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
@@ -53,8 +56,38 @@ const MUESTRA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
   'levantar',
 ]);
 
+/** Tipos de adjunto que gestiona esta sección (los que el servidor retira al guardar, Bug #13240). */
+const PRENDA_ATTACHMENT_TIPOS: ReadonlySet<string> = new Set<string>(Object.values(PRENDA_DOC_TIPOS));
+
+/** Copy del aviso previo al guardado cuando la nueva decisión ya no exige el adjunto (Bug #13240). */
+export const PRENDA_DOC_RETIRO_AVISO =
+  'Al guardar, se retirará el documento de prenda adjuntado para la decisión anterior.';
+
+/** Solo los adjuntos `prenda_*` que gestiona esta sección. */
+function soloAdjuntosPrenda(list: ProcedureAttachment[]): ProcedureAttachment[] {
+  return list.filter((a) => PRENDA_ATTACHMENT_TIPOS.has(a.tipo.toLowerCase()));
+}
+
+/**
+ * Lee los adjuntos `prenda_*` del trámite. `Promise.resolve().then` convierte en rechazo un fallo
+ * síncrono del cliente: una lectura fallida devuelve `null` (se conserva la lista en pantalla) y nunca
+ * tumba el formulario.
+ */
+function fetchPrendaAttachments(instanceId: string): Promise<ProcedureAttachment[] | null> {
+  return Promise.resolve()
+    .then(() => tramitesClient.getAttachments(instanceId))
+    .then((list) => (Array.isArray(list) ? soloAdjuntosPrenda(list) : null))
+    .catch(() => null);
+}
+
 /** En matrícula la prenda es declarativa: registrar o sin prenda. */
 const MATRICULA_DECISIONS: PrendaDecision[] = ['registrar', 'sin_prenda'];
+
+/**
+ * Feature #13110 (HU #13112) — matrícula con gravamen RUNT: el servidor decide si se ofrece
+ * `omitir` (`prendaOmitAllowed`). Solo con `true` explícito; `undefined` conserva la lista de siempre.
+ */
+const MATRICULA_DECISIONS_CON_OMITIR: PrendaDecision[] = ['registrar', 'sin_prenda', 'omitir'];
 
 /**
  * Copy del aviso «RUNT sin gravamen registrado» (HU #12131). Se muestra cuando el trámite ES la
@@ -80,17 +113,19 @@ const RUNT_SIN_GRAVAMEN_AVISO: Record<RuntAvisoGravamenVariant, { titulo: string
 /**
  * Decisiones que ofrece el traspaso (R10, HU #10598).
  *
- * CF-06 (HU #10881): `omitir` —"asumo el riesgo"— desaparece cuando el organismo exige el
- * certificado de prenda, porque ahí el riesgo no es del gestor sino una regla del OT. Ofrecerla
- * llevaba a guardar una decisión que satisfacía los dos gates sin el certificado, dejando la regla
- * del organismo evadible; el PUT de prenda la rechaza con el mismo criterio, así que esta lista
- * evita que el gestor llegue a intentarlo. Vive aquí, junto a las etiquetas, para que la regla y la
- * UI que la aplica no se separen.
+ * CF-06 (HU #10881): «Omitir prenda» desaparece cuando el organismo exige el certificado de prenda,
+ * porque ahí no es una elección del gestor sino una regla del OT. Desde el Feature #13110 la regla
+ * la resuelve el servidor (`prendaOmitAllowed`): `omitAllowed` la trae y manda. Si el servidor aún
+ * no envía el campo (`undefined`), se aplica el criterio previo `!documentRequired` — solo
+ * compatibilidad, se retira cuando el campo sea estable.
  */
-export function traspasoDecisions(documentRequired: boolean): PrendaDecision[] {
-  return documentRequired
-    ? ['solicitar', 'registrar', 'levantar']
-    : ['solicitar', 'registrar', 'levantar', 'omitir'];
+export function traspasoDecisions(
+  documentRequired: boolean,
+  omitAllowed?: boolean,
+): PrendaDecision[] {
+  return (omitAllowed ?? !documentRequired)
+    ? ['solicitar', 'registrar', 'levantar', 'omitir']
+    : ['solicitar', 'registrar', 'levantar'];
 }
 
 /** Ítem de prenda/gravamen reportado por el RUNT (cuando el proveedor trae detalle). */
@@ -175,6 +210,11 @@ interface Props {
    * Con certificado opcional (o sin decisión que lo exija) reporta `true`.
    */
   onDocumentGateChange?: (ready: boolean) => void;
+  /**
+   * Feature #13110 — `prendaOmitAllowed` del GET /wizard. En matrícula (lista por defecto) ofrece
+   * «Omitir prenda» solo con `true`. En traspaso la lista ya llega resuelta por `traspasoDecisions`.
+   */
+  omitAllowed?: boolean;
 }
 
 const INPUT_BASE = WIZARD_INPUT;
@@ -207,18 +247,33 @@ export function parseRuntGravamenesJson(raw: string | null | undefined): RuntGra
       };
       return {
         idPrenda: str('idPrenda') ?? str('IdPrenda'),
-        // Intempo: nombreAcreedor · Kyverum crudo: acreedor
+        // Intempo / normalizado: nombreAcreedor · Kyverum crudo: acreedor · garantía mobiliaria
+        // RUNT cruda (Kyverum/Verifik, Bug #13203): entidad, numeroDocumentoEntidad,
+        // tipoDocumentoEntidad, fechaRegistro — último recurso, para trámites ya guardados sin
+        // normalizar.
         acreedor:
           str('nombreAcreedor') ??
           str('NombreAcreedor') ??
           str('acreedor') ??
-          str('Acreedor'),
+          str('Acreedor') ??
+          str('entidad') ??
+          str('Entidad'),
         documentoAcreedor:
           str('numeroDocumentoAcreedor') ??
           str('NumeroDocumentoAcreedor') ??
-          str('documentoAcreedor'),
-        tipoDocumentoAcreedor: str('tipoDocumentoAcreedor') ?? str('TipoDocumentoAcreedor'),
-        fechaInscripcion: str('fechaInscripcion') ?? str('FechaInscripcion'),
+          str('documentoAcreedor') ??
+          str('numeroDocumentoEntidad') ??
+          str('NumeroDocumentoEntidad'),
+        tipoDocumentoAcreedor:
+          str('tipoDocumentoAcreedor') ??
+          str('TipoDocumentoAcreedor') ??
+          str('tipoDocumentoEntidad') ??
+          str('TipoDocumentoEntidad'),
+        fechaInscripcion:
+          str('fechaInscripcion') ??
+          str('FechaInscripcion') ??
+          str('fechaRegistro') ??
+          str('FechaRegistro'),
         estado: str('estadoPrenda') ?? str('EstadoPrenda') ?? str('estado'),
       };
     });
@@ -294,7 +349,7 @@ function RuntField({ label, value }: { label: string; value: string | null | und
 export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaForm(
   {
     instanceId,
-    decisions = MATRICULA_DECISIONS,
+    decisions: decisionsProp,
     onSaved,
     hideHeader = false,
     embeddedInWizard = false,
@@ -307,11 +362,21 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     exigeEntidadLevantamiento = false,
     permiteAccionComplementaria = false,
     onDocumentGateChange,
+    omitAllowed,
   },
   ref,
 ) {
+  const decisions =
+    decisionsProp ?? (omitAllowed === true ? MATRICULA_DECISIONS_CON_OMITIR : MATRICULA_DECISIONS);
+  /**
+   * El selector nativo es el control de traspaso (4 gestiones). La matrícula conserva el segmentado
+   * aunque sume «Omitir prenda»: las tres opciones quedan al mismo nivel visual (AC1, HU #13112).
+   */
+  const usaSelector = (decisionsProp?.length ?? 0) > 2;
+  const ofreceOmitir = decisions.includes('omitir');
   const readOnly = useWizardReadOnly();
   const runtDetailId = useId();
+  const avisoRetiroId = useId();
   const [decision, setDecision] = useState<PrendaDecision | ''>('');
   const [acreedorNombre, setAcreedorNombre] = useState('');
   const [acreedorDocumento, setAcreedorDocumento] = useState('');
@@ -332,6 +397,14 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [runtSummary, setRuntSummary] = useState<RuntPrendaSummary | null>(null);
   const [runtOpen, setRuntOpen] = useState(false);
   const [docSatisfied, setDocSatisfied] = useState(false);
+  /**
+   * Bug #13240 — adjuntos `prenda_*` del trámite. Al guardar una decisión que ya no los exige, el
+   * SERVIDOR los retira (fuente de verdad: el frontend no borra nada); aquí solo se leen para avisar
+   * antes de guardar y se releen después. `attachmentsVersion` fuerza la relectura de las cargas
+   * montadas (`PrendaDocumentUpload.refreshKey`).
+   */
+  const [prendaAttachments, setPrendaAttachments] = useState<ProcedureAttachment[]>([]);
+  const [attachmentsVersion, setAttachmentsVersion] = useState(0);
   // HU #12131 — aviso «RUNT sin gravamen»: se abre solo, una vez, cuando el check YA corrió y
   // resolvió sin gravamen. El ref (no state) es lo que impide que un re-render posterior —p. ej. al
   // reabrir el acordeón— lo vuelva a abrir después de que el gestor lo cerró.
@@ -455,14 +528,20 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
         if (p) {
           setDecision(p.decision);
-          const filled = applyRuntAcreedorIfEmpty(
-            summary,
-            p.acreedorNombre ?? '',
-            digitsOnly(p.acreedorDocumento ?? ''),
-          );
+          // HU #13112 (AC5) — con «Omitir prenda» el acreedor se muestra vacío: no se precarga el
+          // RUNT ni se pinta un acreedor residual de filas históricas.
+          const filled =
+            p.decision === 'omitir'
+              ? { nombre: '', documento: '' }
+              : applyRuntAcreedorIfEmpty(
+                  summary,
+                  p.acreedorNombre ?? '',
+                  digitsOnly(p.acreedorDocumento ?? ''),
+                );
           setAcreedorNombre(filled.nombre);
           setAcreedorDocumento(filled.documento);
-          setLevantamientoEntidad(p.levantamientoEntidad ?? '');
+          // Omitir no levanta nada: tampoco se rehidrata una entidad residual de la fila.
+          setLevantamientoEntidad(p.decision === 'omitir' ? '' : (p.levantamientoEntidad ?? ''));
         } else if (hasRuntAcreedorDetail(summary) || runtHasGravamen) {
           // Consulta con prenda: sugerir "registrar" y precargar acreedor/NIT.
           if (offersRegistrar) {
@@ -509,9 +588,43 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     complementariaDecision,
   ]);
 
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    void fetchPrendaAttachments(instanceId).then((list) => {
+      if (active && list) setPrendaAttachments(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  const refreshPrendaAttachments = async () => {
+    if (!instanceId) return;
+    const list = await fetchPrendaAttachments(instanceId);
+    if (list) setPrendaAttachments(list);
+  };
+
+  /** Tras un PUT exitoso: relee la lista propia y la de cada carga montada (Bug #13240). */
+  const refreshAfterSave = () => {
+    void refreshPrendaAttachments();
+    setAttachmentsVersion((v) => v + 1);
+  };
+
+  /** Subida/borrado desde una carga: la lista propia también cambia, y la shell refresca. */
+  const handleDocChanged = () => {
+    void refreshPrendaAttachments();
+    onSaved?.();
+  };
+
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
-  const muestraAcreedor = decision !== '' && MUESTRA_ACREEDOR.has(decision);
+  /**
+   * HU #13112 (AC5) — con «Omitir prenda» los campos del acreedor siguen visibles (el gestor ve qué
+   * no se declara), pero vacíos, deshabilitados y sin enviarse.
+   */
+  const omitiendo = decision === 'omitir';
+  const muestraAcreedor = decision !== '' && (MUESTRA_ACREEDOR.has(decision) || omitiendo);
   // Corrección QA (HU #12131) — el bloqueo original era incondicional para 'levantar', asumiendo que
   // el RUNT SIEMPRE precarga el acreedor de un gravamen ya verificado (de ahí "no editable": no dejar
   // que el gestor sobreescriba un dato confirmado). Pero cuando el RUNT NO reporta gravamen, el campo
@@ -519,6 +632,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   // registrado" (captura manual). Solo se bloquea cuando el RUNT SÍ confirmó el gravamen que se va a
   // levantar; sin esa confirmación, el gestor puede escribir el acreedor a mano.
   const acreedorReadOnly = decision === 'levantar' && runtHasGravamen;
+  const acreedorDeshabilitado = acreedorReadOnly || omitiendo;
+  /** Gris de campo deshabilitado (patrón `text-[#59677D] dark:text-white/70`, 5,7:1 sobre blanco). */
+  const acreedorInputClass = omitiendo
+    ? `${INPUT_BASE} text-[#59677D] dark:text-white/70`
+    : `${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`;
+  const acreedorInputStyle = acreedorDeshabilitado ? { background: 'rgba(223,229,237,0.35)' } : undefined;
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
   const baseDocumentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
   // AC1/AC3 — mientras la complementaria esté activa, su certificado también gatea Continuar: dos
@@ -526,6 +645,31 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const complementariaDocumentGateReady =
     !complementariaActiva || !complementariaRequiereDocumento || !documentRequired || complementariaDocSatisfied;
   const documentGateReady = baseDocumentGateReady && complementariaDocumentGateReady;
+
+  /**
+   * Bug #13240 — hay adjuntos `prenda_*` que la decisión seleccionada NO exige y que el servidor
+   * retirará al guardar. Con `decisionFija` la decisión base no cambia y la complementaria guardada
+   * sigue vigente aunque se desmarque el check, así que ahí no se avisa: no se retira nada.
+   */
+  const tiposExigidos = new Set<string>(
+    [decision !== '' ? prendaDocTipoFor(decision) : null, complementariaDocTipo]
+      .filter((t): t is string => Boolean(t))
+      .map((t) => t.toLowerCase()),
+  );
+  const avisaRetiroDocumento =
+    !readOnly &&
+    !decisionFija &&
+    decision !== '' &&
+    prendaAttachments.some((a) => !tiposExigidos.has(a.tipo.toLowerCase()));
+  const avisoRetiro = avisaRetiroDocumento ? (
+    <InlineAlert id={avisoRetiroId} tone="info" compact className="mt-1.5">
+      {PRENDA_DOC_RETIRO_AVISO}
+    </InlineAlert>
+  ) : null;
+  const decisionDescribedBy =
+    [ofreceOmitir ? 'prenda-omitir-ayuda' : null, avisaRetiroDocumento ? avisoRetiroId : null]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   useEffect(() => {
     onDocumentGateChange?.(documentGateReady);
@@ -547,6 +691,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   }, [debeAvisarSinGravamen]);
 
   const selectDecision = (d: PrendaDecision) => {
+    const veniaDeOmitir = decision === 'omitir';
     pending.markDirty();
     setDecision(d);
     setError(null);
@@ -557,12 +702,30 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     // (se resetea aquí y no en un efecto: las otras dos rutas que fijan `decision` viven en la
     // carga inicial, donde `docSatisfied` todavía es el `false` de arranque).
     if (!REQUIERE_DOCUMENTO.has(d)) setDocSatisfied(false);
-    if (CAPTURA_ACREEDOR.has(d) && runtSummary) {
-      const filled = applyRuntAcreedorIfEmpty(runtSummary, acreedorNombre, acreedorDocumento);
+    if (d === 'omitir') {
+      // HU #13112 (AC5) — omitir no declara acreedor: los campos quedan vacíos (y deshabilitados).
+      setAcreedorNombre('');
+      setAcreedorDocumento('');
+      return;
+    }
+    if ((CAPTURA_ACREEDOR.has(d) || (veniaDeOmitir && MUESTRA_ACREEDOR.has(d))) && runtSummary) {
+      // AC6 — al salir de omitir los campos están vacíos, así que vuelve la precarga del RUNT.
+      const filled = applyRuntAcreedorIfEmpty(
+        runtSummary,
+        veniaDeOmitir ? '' : acreedorNombre,
+        veniaDeOmitir ? '' : acreedorDocumento,
+      );
       setAcreedorNombre(filled.nombre);
       setAcreedorDocumento(filled.documento);
     }
   };
+
+  /** Ayuda permanente bajo la opción «Omitir prenda» (AC4): informativa, no una alerta. */
+  const ayudaOmitir = ofreceOmitir ? (
+    <p id="prenda-omitir-ayuda" className="mt-1.5 text-xs leading-snug text-[#59677D] dark:text-white/70">
+      <span className="font-semibold">{PRENDA_DECISION_LABELS.omitir}:</span> {PRENDA_OMITIR_AYUDA}
+    </p>
+  ) : null;
 
   /**
    * `WizardSegmented`/`WizardSelectCards` trabajan con un tipo cerrado (nunca ''): el asistente
@@ -684,6 +847,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               'Corrige lo que haga falta y vuelve a guardar.',
           );
           settle();
+          refreshAfterSave();
           onSaved?.();
           return false;
         }
@@ -691,6 +855,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
       setSaved(true);
       settle();
+      refreshAfterSave();
       onSaved?.();
       return true;
     } catch (err) {
@@ -888,7 +1053,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         <div className="grid grid-cols-1 gap-4">
           {/* HU #12727 (D.1) — traspaso: decisión | acreedor+NIT | certificado en tres columnas
               para que quepa junto a Observaciones en media pantalla (lg:grid-cols-2). */}
-          {decisions.length > 2 ? (
+          {usaSelector ? (
             <div
               className={`grid grid-cols-1 gap-4 ${
                 muestraAcreedor || (requiereDocumento && decision) ? 'md:grid-cols-3' : ''
@@ -903,6 +1068,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   value={decision}
                   onChange={(e) => handleDecisionChange(e.target.value as PrendaDecision | '')}
                   disabled={readOnly}
+                  aria-describedby={decisionDescribedBy}
                   className={`${WIZARD_SELECT} disabled:opacity-60`}
                 >
                   <option value="">Seleccionar…</option>
@@ -910,6 +1076,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     <option key={d} value={d}>{PRENDA_DECISION_LABELS[d]}</option>
                   ))}
                 </select>
+                {ayudaOmitir}
+                {avisoRetiro}
               </div>
               {muestraAcreedor && (
                 <div className="min-w-0 space-y-4 md:self-end">
@@ -921,12 +1089,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       id="prenda-acreedor-nombre"
                       type="text"
                       value={acreedorNombre}
-                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorNombre(e.target.value); }}
-                      readOnly={acreedorReadOnly}
-                      disabled={acreedorReadOnly}
-                      placeholder="Ej. Banco XYZ"
-                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
-                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      onChange={(e) => { if (!acreedorDeshabilitado) setAcreedorNombre(e.target.value); }}
+                      readOnly={acreedorDeshabilitado}
+                      disabled={acreedorDeshabilitado}
+                      placeholder={omitiendo ? undefined : 'Ej. Banco XYZ'}
+                      className={acreedorInputClass}
+                      style={acreedorInputStyle}
                     />
                   </div>
                   <div>
@@ -940,11 +1108,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       pattern="[0-9]*"
                       autoComplete="off"
                       value={acreedorDocumento}
-                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorDocumento(digitsOnly(e.target.value)); }}
-                      readOnly={acreedorReadOnly}
-                      disabled={acreedorReadOnly}
-                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
-                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      onChange={(e) => { if (!acreedorDeshabilitado) setAcreedorDocumento(digitsOnly(e.target.value)); }}
+                      readOnly={acreedorDeshabilitado}
+                      disabled={acreedorDeshabilitado}
+                      className={acreedorInputClass}
+                      style={acreedorInputStyle}
                     />
                   </div>
                 </div>
@@ -962,7 +1130,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     docTipo={prendaDocTipoFor(decision)!}
                     documentRequired={documentRequired}
                     onSatisfiedChange={setDocSatisfied}
-                    onChanged={onSaved}
+                    onChanged={handleDocChanged}
+                    refreshKey={attachmentsVersion}
                   />
                 </div>
               )}
@@ -978,12 +1147,15 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               ) : (
                 <WizardSegmented<PrendaDecision | ''>
                   label="¿Al vehículo se le asociará una prenda?"
+                  describedBy={decisionDescribedBy}
                   value={decision}
                   onChange={handleDecisionChange}
                   disabled={readOnly}
                   options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
                 />
               )}
+              {!decisionFija && ayudaOmitir}
+              {avisoRetiro}
               {muestraAcreedor && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1004,16 +1176,16 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       required={capturaAcreedor}
                       value={acreedorNombre}
                       onChange={(e) => {
-                        if (acreedorReadOnly) return;
+                        if (acreedorDeshabilitado) return;
                         pending.markDirty();
                         setAcreedorNombre(e.target.value);
                         if (fieldErrors.nombre) setFieldErrors((f) => ({ ...f, nombre: undefined }));
                       }}
-                      readOnly={acreedorReadOnly}
-                      disabled={acreedorReadOnly}
-                      placeholder="Ej. Banco XYZ"
-                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
-                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      readOnly={acreedorDeshabilitado}
+                      disabled={acreedorDeshabilitado}
+                      placeholder={omitiendo ? undefined : 'Ej. Banco XYZ'}
+                      className={acreedorInputClass}
+                      style={acreedorInputStyle}
                       aria-invalid={!!fieldErrors.nombre}
                       aria-describedby={fieldErrors.nombre ? 'prenda-acreedor-nombre-err' : undefined}
                     />
@@ -1044,15 +1216,15 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       autoComplete="off"
                       value={acreedorDocumento}
                       onChange={(e) => {
-                        if (acreedorReadOnly) return;
+                        if (acreedorDeshabilitado) return;
                         pending.markDirty();
                         setAcreedorDocumento(digitsOnly(e.target.value));
                         if (fieldErrors.documento) setFieldErrors((f) => ({ ...f, documento: undefined }));
                       }}
-                      readOnly={acreedorReadOnly}
-                      disabled={acreedorReadOnly}
-                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
-                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      readOnly={acreedorDeshabilitado}
+                      disabled={acreedorDeshabilitado}
+                      className={acreedorInputClass}
+                      style={acreedorInputStyle}
                       aria-invalid={!!fieldErrors.documento}
                       aria-describedby={fieldErrors.documento ? 'prenda-acreedor-doc-err' : undefined}
                     />
@@ -1105,7 +1277,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   docTipo={prendaDocTipoFor(decision)!}
                   documentRequired={documentRequired}
                   onSatisfiedChange={setDocSatisfied}
-                  onChanged={onSaved}
+                  onChanged={handleDocChanged}
+                  refreshKey={attachmentsVersion}
                 />
               )}
 
@@ -1288,7 +1461,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                           docTipo={complementariaDocTipo}
                           documentRequired={documentRequired}
                           onSatisfiedChange={setComplementariaDocSatisfied}
-                          onChanged={onSaved}
+                          onChanged={handleDocChanged}
+                          refreshKey={attachmentsVersion}
                         />
                       )}
                     </div>

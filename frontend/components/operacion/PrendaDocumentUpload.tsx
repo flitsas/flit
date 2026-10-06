@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ocrResultForTipo, useProcedureDocuments } from '@/hooks/useProcedureDocuments';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
@@ -22,6 +22,12 @@ interface Props {
   /** Notifica si el adjunto de soporte está presente (para el gate de Continuar). */
   onSatisfiedChange?: (satisfied: boolean) => void;
   onChanged?: () => void;
+  /**
+   * Bug #13240 — cada cambio de valor relee checklist y adjuntos (en segundo plano). PrendaForm lo
+   * incrementa tras guardar la decisión: el servidor puede haber retirado un `prenda_*` y la lista
+   * cacheada aquí no debe seguir enseñándolo.
+   */
+  refreshKey?: number;
 }
 
 /**
@@ -35,8 +41,17 @@ export function PrendaDocumentUpload({
   documentRequired = true,
   onSatisfiedChange,
   onChanged,
+  refreshKey,
 }: Props) {
-  const { state, upload, remove } = useProcedureDocuments(instanceId);
+  const { state, upload, remove, refresh } = useProcedureDocuments(instanceId);
+
+  // El montaje ya carga por su cuenta (useProcedureDocuments): solo se relee cuando la clave CAMBIA.
+  const lastRefreshKeyRef = useRef(refreshKey);
+  useEffect(() => {
+    if (lastRefreshKeyRef.current === refreshKey) return;
+    lastRefreshKeyRef.current = refreshKey;
+    void refresh({ background: true });
+  }, [refreshKey, refresh]);
   const { attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults, error } = state;
 
   const attachment = attachments.find(

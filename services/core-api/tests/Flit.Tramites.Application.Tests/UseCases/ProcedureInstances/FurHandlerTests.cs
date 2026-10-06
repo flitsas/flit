@@ -622,6 +622,90 @@ public sealed class FurHandlerTests
         data.Observaciones.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
+    // ── Feature #13110 — «Omitir prenda»: el FUR y el mandato salen sin prenda (AC8, CF-10) ─────
+
+    /// <summary>
+    /// Genera el FUR de matrícula o traspaso con <c>omitir</c> vigente, una fila con acreedor
+    /// RESIDUAL (histórica, anterior a la limpieza del PUT) y el RUNT reportando gravamen: ni el
+    /// acreedor ni el dato RUNT pueden llegar al documento.
+    /// </summary>
+    private async Task<FurDocumentData> GenerarConOmitir(ProcedureType tipo, string tipologia, CancellationToken ct)
+    {
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, tipologia);
+        instance.ProcedureType = tipo;
+        WithOrganismo(instance);
+        WithField(instance, "runt_tiene_prendas", "SI");
+        WithField(instance, "runt_tiene_gravamenes", "SI");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        var omitida = new ProcedureInstancePrenda
+        {
+            Decision = PrendaDecision.Omitir,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = "BANCO RESIDUAL S.A.",
+            AcreedorDocumento = "890900608",
+            AccionFamilia = PrendaDecision.AccionFamiliaFor(PrendaDecision.Omitir),
+        };
+        _prendaRepo.GetVigenteAsync(id, tenant, ct).Returns(omitida);
+        _prendaRepo.GetVigentesAsync(id, tenant, ct).Returns((IReadOnlyList<ProcedureInstancePrenda>)[omitida]);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        return capturing.Captured!;
+    }
+
+    /// <summary>
+    /// AC8 — Matrícula Inicial con <c>omitir</c>: numeral 3 solo casilla 1 (ni 11 ni 12), sin
+    /// acreedor (numeral 20 vacío: <c>FurFieldMapper.MarkAlertas</c> con <c>Ninguna</c>, cubierto en
+    /// <c>FurPrendaMarkingTests.Ninguna_DejaAlertaEnBlanco</c>), párrafo 23 sin bloque de gravamen y
+    /// objeto del mandato sin complemento de prenda.
+    /// <para>Uso de ejemplo: <c>POST /tramites/instances/{id}/fur</c> con la prenda <c>omitir</c>
+    /// vigente → FUR con <c>PrendaMarking = Ninguna</c>.</para>
+    /// </summary>
+    [Fact]
+    public async Task Omitir_EnMatriculaInicial_FurSinPrendaNiAcreedor()
+    {
+        var data = await GenerarConOmitir(
+            ProcedureTypeFixture.Matricula, TramiteTipologiaCatalog.CodigoMatriculaInicial, TestContext.Current.CancellationToken);
+
+        data.PrendaMarking.Should().Be(FurPrendaMarking.Ninguna);
+        data.AcreedorPrenda.Should().BeNull();
+        var marks = FurNumeral3Marks.Resolve(data);
+        marks.Should().Contain(1);
+        marks.Should().NotContain([2, 11, 12]);
+        (data.Observaciones ?? string.Empty).Should().NotContainEquivalentOf("prenda");
+        (data.Observaciones ?? string.Empty).Should().NotContain("BANCO RESIDUAL");
+        Flit.Tramites.Domain.Documents.MandatoObjetoComposer
+            .Componer("MATRÍCULA INICIAL", null, data.PrendaMarking, data.TipologiaCodigo)
+            .Should().Be("MATRÍCULA INICIAL");
+    }
+
+    /// <summary>AC8 — Traspaso con <c>omitir</c>: solo casilla 2, sin acreedor, sin bloque ni complemento.</summary>
+    [Fact]
+    public async Task Omitir_EnTraspaso_FurSinPrendaNiAcreedor()
+    {
+        var data = await GenerarConOmitir(
+            ProcedureTypeFixture.Traspaso, TramiteTipologiaCatalog.CodigoTraspasoStandard, TestContext.Current.CancellationToken);
+
+        data.PrendaMarking.Should().Be(FurPrendaMarking.Ninguna);
+        data.AcreedorPrenda.Should().BeNull();
+        var marks = FurNumeral3Marks.Resolve(data);
+        marks.Should().Contain(2);
+        marks.Should().NotContain([1, 11, 12]);
+        (data.Observaciones ?? string.Empty).Should().NotContainEquivalentOf("prenda");
+        (data.Observaciones ?? string.Empty).Should().NotContain("BANCO RESIDUAL");
+        Flit.Tramites.Domain.Documents.MandatoObjetoComposer
+            .Componer("TRASPASO", null, data.PrendaMarking, data.TipologiaCodigo)
+            .Should().Be("TRASPASO");
+    }
+
     /// <summary>
     /// AC5/AC1 (ADR-0055, HU #12129) — con constitución Y levantamiento vigentes a la vez
     /// (PRENDA_INSCRIPCION admite la acción complementaria), el FUR marca <c>Ambos</c> (casillas
