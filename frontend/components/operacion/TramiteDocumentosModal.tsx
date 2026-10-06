@@ -24,6 +24,8 @@ import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneraci
 import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
 import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
+import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
+import { EtiquetaCargadoPorFlito } from './EtiquetaCargadoPorFlito';
 
 /**
  * HU #11054 / HU #11055 — consulta de los documentos de un trámite DESDE EL LISTADO, sin entrar al
@@ -480,6 +482,10 @@ export function TramiteDocumentosModal({
                     <p className="truncate text-xs opacity-60">
                       {d.filename} · {formatFechaHora(d.uploadedAt)}
                     </p>
+                    {/* HU #13266 (AC1) — el adjunto de FLITO se identifica también en la consulta. */}
+                    {esAdjuntoDeFlito(d) && (
+                      <EtiquetaCargadoPorFlito id={`flito-${d.id}`} className="mt-0.5" />
+                    )}
                   </div>
                   {/* Mismo par de botones de icono que el módulo de OT (`OtDocumentosTab`): ojo para
                       previsualizar en azul de marca, flecha para descargar en color de texto. */}
@@ -492,6 +498,7 @@ export function TramiteDocumentosModal({
                     }
                     className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10`}
                     aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
+                    aria-describedby={esAdjuntoDeFlito(d) ? `flito-${d.id}` : undefined}
                     title="Previsualizar"
                   >
                     <Eye className="h-4 w-4" aria-hidden="true" />

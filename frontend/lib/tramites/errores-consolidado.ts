@@ -1,4 +1,9 @@
 import { CAUSAS_FALLO_CONSOLIDADO } from '@/lib/tramites/fallo-regeneracion-consolidado';
+import {
+  COPY_ADJUNTO_BLOQUEADO_FLITO,
+  CODIGO_ADJUNTO_BLOQUEADO_FLITO,
+  mensajeErrorAdjuntoFlito,
+} from '@/lib/tramites/flito';
 
 /**
  * Épica #12760 (security B2) — traducción de los errores del backend al pedir, abrir o consultar un
@@ -21,7 +26,10 @@ export const ERRORES_CONSOLIDADO: Readonly<Record<string, string>> = {
   // Defecto del cliente (un GET nunca debe forzar): al usuario solo le sirve reintentar.
   force_no_permitido_en_get: 'No se pudo abrir el consolidado. Intenta de nuevo.',
   // Re-review #12760 (M-N1) — DELETE de un consolidado o de un adjunto radicado ante Quipux (409).
+  // Cuando el adjunto es de FLITO (HU #13266) el copy es otro: ver `opciones.adjunto` abajo.
   adjunto_protegido: 'Este documento lo genera el sistema y no se puede eliminar.',
+  // HU #13266 (AC3) — 409 al subir un tipo que FLITO ya cargó (HU #13265).
+  [CODIGO_ADJUNTO_BLOQUEADO_FLITO]: COPY_ADJUNTO_BLOQUEADO_FLITO,
   ...Object.fromEntries(
     Object.entries(CAUSAS_FALLO_CONSOLIDADO).map(([codigo, texto]) => [
       codigo,
@@ -82,7 +90,16 @@ function statusDelError(err: unknown): number | null {
 export function mensajeErrorConsolidadoAmigable(
   err: unknown,
   respaldo: string = ERROR_CONSOLIDADO_GENERICO,
+  opciones: {
+    /**
+     * HU #13266 (AC3) — adjunto sobre el que se operó. Si es de FLITO, el 409 `adjunto_protegido`
+     * no dice «lo genera el sistema» (es falso) sino que lo corrige FLITO.
+     */
+    adjunto?: { provider?: string | null } | null;
+  } = {},
 ): string {
+  const flito = mensajeErrorAdjuntoFlito(err, opciones.adjunto);
+  if (flito) return flito;
   const codigo = codigoErrorConsolidado(err);
   if (codigo) return ERRORES_CONSOLIDADO[codigo] ?? respaldo;
   const status = statusDelError(err);

@@ -38,6 +38,7 @@ import {
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { SoatSoporteAsignado } from './SoatSoporteAsignado';
+import { ImpuestoDepartamentalCheck, useImpuestoPagadoPorFlito } from './ImpuestoDepartamentalCheck';
 import { esErrorFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import {
@@ -655,6 +656,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const [processWarning, setProcessWarning] = useState<string | null>(null);
   /** Bug #13194 (P3) — carga del PDF del SOAT desplegada (se abre sola ante 409 soat_no_vigente). */
   const [soatSoporteAbierto, setSoatSoporteAbierto] = useState(false);
+  /** HU #13266 (AC2) — si FLITO ya marcó el impuesto, el check va fijo («Pagado (FLITO)»). */
+  const impuestoFlito = useImpuestoPagadoPorFlito(
+    processTarget?.id ?? null,
+    isAdmin ? processTarget?.tenantId : undefined,
+  );
 
   const openProcesar = (item: InstanceSummary) => {
     setProcessTarget(item);
@@ -673,7 +679,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     try {
       const res = await tramitesClient.enviarAlOt(
         processTarget.id,
-        { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
+        // Con la marca de FLITO se manda `true`: es lo que el gestor ve marcado (y el backend no la desmarca).
+        { soatPagado, impuestoDepartamentalPagado: impuestoFlito === 'flito' || impuestoPagado },
         isAdmin ? processTarget.tenantId : undefined,
       );
       // El trámite ya está en Entregado: la fila lo refleja al instante y acto seguido se recarga
@@ -1661,16 +1668,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 />
                 SOAT pagado
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[#557EFF]"
-                  checked={impuestoPagado}
-                  onChange={(e) => setImpuestoPagado(e.target.checked)}
-                  disabled={processActing || !!processWarning}
-                />
-                Impuesto departamental pagado
-              </label>
+              <ImpuestoDepartamentalCheck
+                estado={impuestoFlito}
+                checked={impuestoPagado}
+                onChange={setImpuestoPagado}
+                disabled={processActing || !!processWarning}
+              />
             </div>
             <SoatSoporteAsignado
               instanceId={processTarget.id}
