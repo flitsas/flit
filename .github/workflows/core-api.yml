@@ -11,7 +11,8 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # La suite completa (Integration ~17 min con Postgres real) ya roza los 20: se cancelaba tras pasar todo.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
