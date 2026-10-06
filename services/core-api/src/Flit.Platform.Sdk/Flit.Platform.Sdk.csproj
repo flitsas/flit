@@ -48,6 +48,9 @@
     <PackageReference Include="Grpc.AspNetCore.HealthChecks" />
     <PackageReference Include="Grpc.AspNetCore.Server.Reflection" />
     <PackageReference Include="Polly.Core" />
+    <!-- HU #13338: outbox en la base del servicio (EF Core relacional, sin proveedor fijo) y publicador RabbitMQ. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="RabbitMQ.Client" />
   </ItemGroup>
 
   <ItemGroup>

@@ -26,6 +26,21 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Epic #13316 (HU #13338): broker real para las pruebas de la outbox del SDK (Flit.Platform.Sdk.Tests), con la
+      # misma decisión que Postgres: servicio del job, sin Testcontainers. Usuario propio: guest solo entra desde
+      # loopback dentro del contenedor.
+      rabbitmq:
+        image: rabbitmq:4.1-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: flit
+          RABBITMQ_DEFAULT_PASS: flit-prueba
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +73,7 @@ jobs:
         run: dotnet test --no-build --configuration Release --logger "trx" --collect "XPlat Code Coverage"
         env:
           ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
+          FLIT_TEST_RABBITMQ: "amqp://flit:flit-prueba@localhost:5672/"
 
       - name: Upload test results
         if: always()

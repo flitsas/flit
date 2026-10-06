@@ -12,6 +12,7 @@ de Identidad ni Trámites.
 | `AddFlitGrpcServer` / `RequireServiceToken<T>` / `MapFlitGrpcPlatform` | Servidor gRPC: errores del §10 con `ErrorInfo`, token de servicio + scope + audiencia + empresa, `grpc.health.v1`, reflection solo en DEV | #13337 |
 | `AddFlitGrpcClient<T>` | Cliente gRPC: token de servicio por scope (pedido y renovado), empresa, correlación y `traceparent` en la metadata, deadline 3 s, reintentos solo ante `UNAVAILABLE` y circuito por destino | #13337 |
 | `PlatformException` / `PlatformRpcErrors.Reason` | Lanzar un error del §10 en un handler y leerlo del lado del cliente | #13337 |
+| `AddFlitOutbox<TContext>` / `IPlatformOutbox` / `AddFlitOutbox(schema)` | Evento guardado en la misma transacción que el cambio y publicado a RabbitMQ (`flit.<productor>`, sobre §7 en JSON) al confirmar; con el broker caído espera y sale en orden | #13338 |
 | `AddFlitTelemetry` / `UseFlitCorrelationId` | Trazas y logs OTLP (solo con `OTEL_EXPORTER_OTLP_ENDPOINT`) e id de correlación | #13332 |
 | `OidcDefaults`, `ServiceAudiences`, `AdminAuthorization` | Scopes de servicio, audiencias por servicio destino, claims y roles | #13333 |
 
@@ -56,6 +57,15 @@ app.MapFlitGrpcPlatform(app.Environment);
 
 En un handler, `PlatformServiceCaller.From(context)` da el cliente y la empresa ya validados. Desde un proceso sin
 petición en curso (un job), la empresa se pasa explícita en la metadata `x-flit-tenant-id`.
+
+Publicar un evento (se confirma con el `SaveChanges` del cambio; `modelBuilder.AddFlitOutbox("consultas")` en el
+`DbContext` y `builder.Services.AddFlitOutbox<ConsultasDb>(builder.Configuration)` con `Platform:Messaging`
+{`ConnectionString`, `Producer`}):
+
+```csharp
+outbox.Enqueue("consultas.consulta.realizada", 1, tenantId, new { proveedor, fuente, exito, latenciaMs });
+await db.SaveChangesAsync(ct);
+```
 
 Leer por empresa siempre con el filtro del SDK:
 
