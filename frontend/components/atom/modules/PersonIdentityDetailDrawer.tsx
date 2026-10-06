@@ -285,6 +285,7 @@ export function PersonIdentityDetailDrawer({
                     label={latestMeta.label}
                     tone={latestMeta.tone}
                     ariaLabel={`Estado de la última validación: ${latestMeta.label}`}
+                    wrap
                   />
                 </div>
                 <p className="mt-1 text-[12px]" style={{ color: FLIT.text.secondary }}>

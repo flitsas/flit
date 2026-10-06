@@ -127,7 +127,7 @@ import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
  * gestor pulse "Actualizar" (que sigue disponible). Pausa cuando la pestaña no está visible.
  */
 
-const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> = {
+const ESTADO_META: Record<BiometricEstado, { label: string; shortLabel?: string; tone: StatusTone }> = {
   enviado: { label: 'Enviado', tone: 'info' },
   en_proceso: { label: 'En proceso', tone: 'warning' },
   aprobado: { label: 'Aprobado', tone: 'success' },
@@ -225,14 +225,14 @@ const SEARCH_DEBOUNCE_MS = 300;
  */
 const IDENTIDAD_COLUMNS = [
   { key: 'tramite', label: 'Trámite', width: 'minmax(0,1.5fr)' },
-  { key: 'persona', label: 'Persona', width: 'minmax(0,1.4fr)' },
+  { key: 'persona', label: 'Persona', width: 'minmax(0,1.25fr)' },
   { key: 'documento', label: 'Documento', width: 'minmax(0,1.1fr)' },
-  { key: 'correo', label: 'Correo', width: 'minmax(0,1.3fr)' },
-  { key: 'estado', label: 'Estado', width: 'minmax(0,1.2fr)' },
-  { key: 'score', label: 'Score', width: 'minmax(0,0.5fr)' },
+  { key: 'correo', label: 'Correo', width: 'minmax(0,1.2fr)' },
+  { key: 'estado', label: 'Estado', width: 'minmax(0,1.6fr)' },
+  { key: 'score', label: 'Score', width: 'minmax(0,0.6fr)' },
   { key: 'registro', label: 'Registro', width: 'minmax(0,1.1fr)' },
   { key: 'aprobacion', label: 'Aprobación', width: 'minmax(0,1fr)' },
-  { key: 'vigencia', label: 'Vigencia', width: 'minmax(0,1.4fr)' },
+  { key: 'vigencia', label: 'Vigencia', width: 'minmax(0,1.2fr)' },
   { key: 'enlace', label: 'Enlace vigente', width: 'minmax(0,1.2fr)' },
 ] as const;
 type IdentidadColumnKey = (typeof IDENTIDAD_COLUMNS)[number]['key'] | 'compania';
@@ -2165,13 +2165,18 @@ function ValidacionRow({
   const intentosAgotados = intentosInfo != null && intentosInfo.intentos >= intentosInfo.maxIntentos;
   const esRechazoPrematuro = estado === 'rechazado' && intentosInfo != null && !intentosAgotados;
   let badgeLabel: string = meta.label;
+  // Etiqueta de la CELDA: corta para los estados largos (el texto completo queda en title/aria-label y en
+  // el detalle «Ver proceso»). El badge además se parte en líneas si aun así no cupiera en la columna.
+  let badgeCelda: string = meta.shortLabel ?? meta.label;
   let badgeTone: StatusTone = meta.tone;
   if (estado === 'rechazado' && intentosInfo != null) {
     if (intentosAgotados) {
       badgeLabel = 'Rechazado (intentos agotados)';
+      badgeCelda = badgeLabel;
       badgeTone = 'danger';
     } else {
       badgeLabel = 'Rechazado (intentos disponibles)';
+      badgeCelda = badgeLabel;
       badgeTone = 'warning';
     }
   }
@@ -2345,7 +2350,7 @@ function ValidacionRow({
           </span>
         ) : (
           <span
-            className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            className="inline-block max-w-full rounded-full px-2 py-0.5 text-center text-[10px] font-semibold leading-tight"
             style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
           >
             Prevalidación
@@ -2379,7 +2384,7 @@ function ValidacionRow({
     ),
     estado: (
       <div className="min-w-0">
-        <StatusBadge label={badgeLabel} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} />
+        <StatusBadge label={badgeCelda} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} title={badgeLabel} wrap />
         {/* HU #11505 (AC1) — contador de intentos, mismo criterio que el drawer. AC4: si falta
             `intentos` o `maxIntentos`, no se pinta nada (nunca NaN/undefined/"0 / 0"). */}
         {intentosInfo && (

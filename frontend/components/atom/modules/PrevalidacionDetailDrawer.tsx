@@ -198,7 +198,7 @@ export function PrevalidacionDetailDrawer({
                 ) : (
                   <p className="text-sm font-semibold text-[#162744] dark:text-white">{detail.name}</p>
                 )}
-                <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
+                <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} wrap />
               </div>
 
               {/* Campos con iconos — lectura rápida, sin tabla densa */}

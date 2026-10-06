@@ -9,10 +9,10 @@ import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/proce
 
 export const MANUAL_ESTADO_META: Record<
   'manual_activo' | 'pendiente_revision_manual',
-  { label: string; tone: StatusTone }
+  { label: string; /** Etiqueta corta para las celdas angostas de las tablas; el detalle usa `label`. */ shortLabel: string; tone: StatusTone }
 > = {
-  manual_activo: { label: 'Esperando captura del cliente', tone: 'info' },
-  pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info' },
+  manual_activo: { label: 'Esperando captura del cliente', shortLabel: 'Esperando captura', tone: 'info' },
+  pendiente_revision_manual: { label: 'Pendiente de revisión', shortLabel: 'Pendiente de revisión', tone: 'info' },
 };
 
 /** Vigencia de una identidad aprobada (espejo de `BiometricRules.VigenciaDias`). */
