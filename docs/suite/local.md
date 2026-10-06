@@ -21,10 +21,10 @@ En local se usan los mismos puertos que en DEV (así un número sirve en los dos
 | App | Local | DEV | QA | PDN | Qué hace |
 |---|---|---|---|---|---|
 | Trámites (`frontend`) | `3000` | 4001 | 5001 | 6001 | El producto |
-| Hub (`frontend-hub`) | `4040` | 4040 | 5040 | 6040 | Portada, login, inicio con productos |
+| Hub (`frontend-hub`) | `4022` | 4022 | 5022 | 6022 | Portada, login, inicio con productos |
 | Gateway (`Flit.Gateway`) | `4002` | 4002 | 5002 | 6002 | Reparte `/api`, `/connect`, `/.well-known` (opcional en local) |
 | API (`core-api`) | `4003` | 4003 | 5003 | 6003 | La API de negocio (y, durante la transición, también el login) |
-| Identidad (`core-identity`) | `4004` | 4004 | 5004 | 6004 | Login (OIDC), usuarios, roles, productos |
+| Identidad (`core-identity`) | `4025` | 4025 | 5025 | 6025 | Login (OIDC), usuarios, roles, productos |
 
 En los servidores los puertos los pone el CD (`.github/workflows/cd.yml`, paso `env`); en local, cada
 `launchSettings.json` y los comandos de abajo. Todo por `http://127.0.0.1:<puerto>`.
@@ -40,7 +40,7 @@ ConnectionStrings__Core="Host=localhost;Port=5432;Database=<tu_base>;Username=<t
 ASPNETCORE_URLS=http://127.0.0.1:4003 \
 ASPNETCORE_ENVIRONMENT=Development \
 Suite__Oidc__Enabled=true \
-Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4040 \
+Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4022 \
 Suite__Hosts__Overrides__tramites=http://127.0.0.1:3000 \
 dotnet bin/Debug/net10.0/Flit.Api.dll
 ```
@@ -54,9 +54,9 @@ dotnet bin/Debug/net10.0/Flit.Api.dll
 
 ```bash
 cd frontend-hub
-PORT=4040 CORE_API_ORIGIN=http://127.0.0.1:4003 BRANDING_INTERNAL_API_URL=http://127.0.0.1:4003 \
-FLIT_HUB_URL=http://127.0.0.1:4040 TRAMITES_URL=http://127.0.0.1:3000 \
-npx next dev -H 127.0.0.1 -p 4040
+PORT=4022 CORE_API_ORIGIN=http://127.0.0.1:4003 BRANDING_INTERNAL_API_URL=http://127.0.0.1:4003 \
+FLIT_HUB_URL=http://127.0.0.1:4022 TRAMITES_URL=http://127.0.0.1:3000 \
+npx next dev -H 127.0.0.1 -p 4022
 ```
 
 ## 3. Trámites con la sesión de la suite
@@ -64,7 +64,7 @@ npx next dev -H 127.0.0.1 -p 4040
 ```bash
 cd frontend
 NEXT_PUBLIC_API_BASE_URL= CORE_API_ORIGIN=http://127.0.0.1:4003 BRANDING_INTERNAL_API_URL=http://127.0.0.1:4003 \
-FLIT_SESSION_MODE=oidc FLIT_HUB_URL=http://127.0.0.1:4040 \
+FLIT_SESSION_MODE=oidc FLIT_HUB_URL=http://127.0.0.1:4022 \
 npx next dev -H 127.0.0.1 -p 3000
 ```
 
@@ -84,24 +84,24 @@ arranca **después** de la API, que es la que migra la base. Usa la misma config
 cd services/core-identity/src/Flit.Identity.Api
 dotnet build
 ConnectionStrings__Core="<la misma de la API>" \
-ASPNETCORE_URLS=http://127.0.0.1:4004 ASPNETCORE_ENVIRONMENT=Development \
+ASPNETCORE_URLS=http://127.0.0.1:4025 ASPNETCORE_ENVIRONMENT=Development \
 Suite__Oidc__Enabled=true \
-Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4040 \
+Suite__Hosts__Overrides__plataforma=http://127.0.0.1:4022 \
 Suite__Hosts__Overrides__tramites=http://127.0.0.1:3000 \
 dotnet bin/Debug/net10.0/Flit.Identity.Api.dll
 ```
 
-- El **hub** habla solo con identidad: `CORE_API_ORIGIN` y `BRANDING_INTERNAL_API_URL` a `http://127.0.0.1:4004`.
+- El **hub** habla solo con identidad: `CORE_API_ORIGIN` y `BRANDING_INTERNAL_API_URL` a `http://127.0.0.1:4025`.
 - **Trámites** sigue con `CORE_API_ORIGIN=http://127.0.0.1:4003`: su login pasa por el hub, que ya va a identidad.
-- `curl http://127.0.0.1:4004/health/ready` responde `ready`; una ruta de negocio (por ejemplo
-  `/api/v1/public/banners/active`) responde 404 en 4004 y 200 en 4003.
+- `curl http://127.0.0.1:4025/health/ready` responde `ready`; una ruta de negocio (por ejemplo
+  `/api/v1/public/banners/active`) responde 404 en 4025 y 200 en 4003.
 - **La prueba que importa:** apaga la API (4003) y entra por `127.0.0.1:3000`. El login funciona y Trámites abre con la
   sesión; solo fallan sus datos. Al volver a levantar la API, recarga: los datos aparecen sin volver a iniciar sesión.
 
 ## 5. (Opcional) Con el gateway, como en los servidores
 
 Para probar el reparto real (rutas de identidad a `core-identity`, con `core-api` de respaldo), los fronts hablan con
-el gateway en vez de con cada servicio. Con la API (4003) e identidad (4004) arriba:
+el gateway en vez de con cada servicio. Con la API (4003) e identidad (4025) arriba:
 
 ```bash
 cd services/core-api/src/Flit.Gateway
@@ -111,7 +111,7 @@ Gateway__IdentityCluster__Enabled=true \
 dotnet bin/Debug/net10.0/Flit.Gateway.dll
 ```
 
-`appsettings.Development.json.example` del gateway ya trae `core-identity-cluster` con `localhost:4004` y `localhost:4003` (cópialo a `appsettings.Development.json` si tu copia local no lo tiene). En el hub y en Trámites,
+`appsettings.Development.json.example` del gateway ya trae `core-identity-cluster` con `localhost:4025` y `localhost:4003` (cópialo a `appsettings.Development.json` si tu copia local no lo tiene). En el hub y en Trámites,
 `CORE_API_ORIGIN`, `BRANDING_INTERNAL_API_URL` y `FLIT_OIDC_INTERNAL_URL` van a `http://127.0.0.1:4002`. Apagar
 identidad con el gateway arriba prueba el respaldo: en unos 3 s todo sigue por `core-api`.
 
@@ -125,9 +125,9 @@ Usuarios de las semillas (`DevelopmentAuthSeeder.cs`): `demo@flit.local` (SuperA
 
 | # | Caso | Qué debe pasar |
 |---|---|---|
-| 1 | Abrir `127.0.0.1:4040` sin sesión | Portada breve con «Iniciar sesión» |
+| 1 | Abrir `127.0.0.1:4022` sin sesión | Portada breve con «Iniciar sesión» |
 | 2 | Iniciar sesión en el hub con un usuario de un solo producto | Entra directo a Trámites |
-| 3 | Menú ▦ → Inicio (o `127.0.0.1:4040/?inicio=1`) | Inicio del hub con sus productos y accesos de administración, sin volver a hacer clic en «Iniciar sesión» (entra en silencio con la sesión del hub) |
+| 3 | Menú ▦ → Inicio (o `127.0.0.1:4022/?inicio=1`) | Inicio del hub con sus productos y accesos de administración, sin volver a hacer clic en «Iniciar sesión» (entra en silencio con la sesión del hub) |
 | 4 | Abrir `127.0.0.1:3000` en otra pestaña, sin haber iniciado sesión en ningún lado | Va al login del hub y, al entrar, vuelve a Trámites |
 | 5 | Con sesión en el hub, abrir `127.0.0.1:3000` | Entra sin pedir contraseña (inicio de sesión único) |
 | 6 | Apagar Trámites para la empresa (SuperAdmin, configuración de la compañía) y abrir `127.0.0.1:3000` | «Tu empresa no tiene Trámites» con «Ir a mis productos» |

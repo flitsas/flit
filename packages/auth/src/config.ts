@@ -21,7 +21,7 @@ export interface AuthConfig {
 const DEV_SESSION_SECRET = "flit-dev-session-secret-solo-para-next-dev";
 
 export function authConfig(productCode: string, env: NodeJS.ProcessEnv = process.env): AuthConfig {
-  const hubUrl = trimSlash(env.FLIT_HUB_URL || "http://127.0.0.1:4040");
+  const hubUrl = trimSlash(env.FLIT_HUB_URL || "http://127.0.0.1:4022");
   // En `next dev` sin la variable se usa una clave fija de desarrollo; en un build de producción es obligatoria.
   const sessionSecret = env.FLIT_SESSION_SECRET || (env.NODE_ENV === "development" ? DEV_SESSION_SECRET : "");
   if (sessionSecret.length < 32) {

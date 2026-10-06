@@ -10,6 +10,7 @@ describe("legacyTramitesRedirect", () => {
     "/", "/?m=dashboard", "/login?returnUrl=%2F", "/auth/login", "/auth/reset-password?token=abc", "/reset-password?token=abc",
     "/invite/activate?token=abc", "/403?code=X", "/connect/authorize?client_id=tramites", "/.well-known/jwks.json",
     "/api/v1/platform/me/apps", "/healthz", "/email-assets/flit-logo.png", "/icon.svg",
+    "/proximamente/comparendos", "/proximamente/diagnostico",
   ])("%s se queda en el hub", (path) => {
     expect(redirect(path)).toBeNull();
   });

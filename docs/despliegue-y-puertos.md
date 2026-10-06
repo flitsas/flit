@@ -143,16 +143,18 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
 
 Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
 Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
-(`x001` frontend, `x002` gateway, `x003` core-api, `x004` core-identity, `x012` python-ml, `x020` core-ict, `x030` migración)
+(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager (repo aparte), `x030` migración)
 no se reutilizan.
 
 | Servicio | Local y DEV | QA | PDN |
 |----------|-------------|----|-----|
-| `frontend-hub` | `4040` | `5040` | `6040` |
-| `core-identity` | `4004` | `5004` | `6004` |
-| `core-comparendos` / `frontend-comparendos` | `4060` / `4061` | `5060` / `5061` | `6060` / `6061` |
-| `core-diagnostico` / `frontend-diagnostico` | `4070` / `4071` | `5070` / `5071` | `6070` / `6071` |
+| `frontend-hub` | `4022` | `5022` | `6022` |
+| Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
+| Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
+| `core-identity` | `4025` | `5025` | `6025` |
 
+- Bloque `x022`–`x025` (2026-10-06): un puerto por producto, el de su app web, que es a donde apunta nginx. Si un
+  producto tiene API propia, va por la red interna detrás del gateway, sin puerto publicado.
 - En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
 - `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
   `CORE_IDENTITY_PORT`); los de Comparendos y Diagnóstico se agregan cuando cada uno se

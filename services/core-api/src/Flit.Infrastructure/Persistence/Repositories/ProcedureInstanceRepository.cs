@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Linq.Expressions;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
@@ -1923,6 +1924,9 @@ internal sealed partial class ProcedureInstanceRepository(
 
     /// <summary>HU #12797 — ver <see cref="IProcedureInstanceRepository.IsConcurrencyConflict"/>.</summary>
     public bool IsConcurrencyConflict(Exception ex) => ex is DbUpdateConcurrencyException;
+
+    /// <summary>HU #13265 — ver <see cref="IProcedureInstanceRepository.IsFlitoFirstWinsConflict"/>.</summary>
+    public bool IsFlitoFirstWinsConflict(Exception ex) => ExternalAttachmentFirstWins.Is(ex);
 
     /// <summary>HU #12797 (F2) — ver <see cref="IProcedureInstanceRepository.TryDeferUntilTransactionEnds"/>.</summary>
     public bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null)

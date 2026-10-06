@@ -6,6 +6,12 @@ namespace Flit.Tramites.Application.Identity;
 /// </summary>
 public static class IdentitySignatureImageFormat
 {
+    /// <summary>
+    /// Bug #13304 — tope de bytes de un artefacto de rúbrica (PNG/JPEG) que se decodifica o se estampa.
+    /// Es el mismo límite que aplica el extractor a cada imagen candidata del certificado Kyverum.
+    /// </summary>
+    public const int MaxArtifactBytes = 400_000;
+
     public static bool IsSupported(byte[]? bytes)
     {
         if (bytes is not { Length: >= 8 })

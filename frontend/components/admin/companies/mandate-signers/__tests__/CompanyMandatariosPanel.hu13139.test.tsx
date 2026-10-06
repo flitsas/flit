@@ -104,16 +104,22 @@ describe("HU #13139 — lista con estados, candado y acciones por rol", () => {
       signer({ id: "2", fullName: "Propio" }),
     ]);
     renderPanel();
+    // HU #13174 — el formato por organismo vive en un modal abierto desde «Formatos de contrato».
+    expect(screen.queryByTestId("formatos-contrato-compania")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /formatos de contrato/i }));
     expect(await screen.findByTestId("formatos-contrato-compania")).toHaveTextContent(
       "Medellín renombrado",
     );
+    const modal = screen.getByTestId("formatos-contrato-compania");
+    await user.click(within(modal).getByRole("button", { name: "Cerrar" }));
+    expect(screen.queryByTestId("formatos-contrato-compania")).not.toBeInTheDocument();
     await screen.findByRole("table", TABLA);
     const f = fila("Del Organismo");
     expect(f).toHaveAttribute("data-candado", "true");
     expect(within(f).getByTestId("mandatario-candado")).toHaveTextContent(
       "Configurado por el organismo de tránsito",
     );
-    expect(within(f).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(f).queryByRole("button", { name: /acciones/i })).not.toBeInTheDocument();
     // El propio conserva sus acciones y no lleva candado.
     expect(within(fila("Propio")).queryByTestId("mandatario-candado")).not.toBeInTheDocument();
     expect(await hayAccion(user, /editar mandatario propio/i, fila("Propio"))).toBe(true);
@@ -167,7 +173,7 @@ describe("HU #13139 — lista con estados, candado y acciones por rol", () => {
     renderPanel();
     await screen.findByRole("table", TABLA);
     expect(screen.queryByRole("button", { name: /nuevo mandatario/i })).not.toBeInTheDocument();
-    expect(within(fila("Ana Restrepo")).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(fila("Ana Restrepo")).queryByRole("button", { name: /acciones/i })).not.toBeInTheDocument();
   });
 
   it("AC6: con más de 10 mandatarios pagina y muestra el loader mientras carga", async () => {

@@ -96,6 +96,10 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
     /// <summary>
     /// Crear o actualizar. Varias instancias arrancan a la vez (réplicas, despliegue): si otra ya escribió el mismo
     /// cliente, se relee y se reintenta; al tercer choque se deja, porque la otra instancia escribió lo mismo.
+    /// Captura también excepciones de base de datos no cubiertas por
+    /// <see cref="Microsoft.EntityFrameworkCore.DbUpdateException"/> (p. ej. <c>Npgsql.PostgresException</c> en
+    /// entornos donde el schema aún no existe) para evitar que la startup falle y enmascare errores de tests.
+    /// <see cref="OperationCanceledException"/> se propaga sin reintentar.
     /// </summary>
     private async Task UpsertAsync(OpenIddictApplicationDescriptor descriptor, CancellationToken ct)
     {
@@ -113,7 +117,14 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
                     await manager.UpdateAsync(existing, descriptor, ct).ConfigureAwait(false);
                 return;
             }
-            catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException or Microsoft.EntityFrameworkCore.DbUpdateException)
+            catch (OperationCanceledException)
+            {
+                // Cancelación limpia (host parando): propagar sin reintentar.
+                throw;
+            }
+            catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException
+                                           or Microsoft.EntityFrameworkCore.DbUpdateException
+                                           or System.Data.Common.DbException)
             {
                 if (attempt >= 3)
                 {

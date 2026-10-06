@@ -2,7 +2,7 @@
 #
 # FLIT Suite (A-11, HU #13002) — el hub ocupa la raíz de cada ambiente y Trámites pasa a su propio host
 # (plan maestro §4.3). Plantilla para el nginx EXTERNO del VPS; el nginx real no se toca desde este repo.
-# Ejemplo para DEV; en QA y PDN cambian los hosts y los puertos (HUB_PORT 4040/5040/6040, FRONTEND_PORT 4001/5001/6001).
+# Ejemplo para DEV; en QA y PDN cambian los hosts y los puertos (HUB_PORT 4022/5022/6022, FRONTEND_PORT 4001/5001/6001).
 #
 # ORDEN PARA ENCENDERLO EN UN AMBIENTE (y cómo volver atrás):
 #   1. DNS y certificado de dev.tramites.flitsas.online (mismo VPS).
@@ -61,6 +61,6 @@ server {
     client_max_body_size 50m;
 
     location / {
-        proxy_pass http://127.0.0.1:4040;
+        proxy_pass http://127.0.0.1:4022;
     }
 }

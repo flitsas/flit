@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -122,6 +123,17 @@ public static class AttachmentRules
     public static bool ReemplazaAlSubir(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
 
+    /// <summary>
+    /// HU #13265 — «gana quien carga primero»: ¿el gestor que sube/registra/pide presign de <paramref name="tipo"/> chocaría con un
+    /// adjunto VIGENTE de ese tipo cargado por el cliente externo (<c>provider = flito</c>)? Solo aplica a los tipos que
+    /// reemplazan al subir: en los múltiples (<see cref="TiposMultiples"/>) la carga añade, no reemplaza.
+    /// </summary>
+    public static bool BloqueadoPorFlito(IEnumerable<ProcedureInstanceAttachment> adjuntos, string tipo) =>
+        ReemplazaAlSubir(tipo)
+        && adjuntos.Any(a => !a.IsHistorico
+                             && ExternalAttachmentRules.IsFromProvider(a.Provider)
+                             && string.Equals(a.Tipo, tipo.Trim(), StringComparison.OrdinalIgnoreCase));
+
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
 
@@ -214,6 +226,10 @@ public sealed class UploadAttachmentHandler(
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
 
+        // HU #13265 — antes de guardar el binario: si FLITO cargó primero, el gestor no lo reemplaza.
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         // HU #12046 — «Reemplazar archivo» tiene que reemplazar. Antes esto solo añadía: el expediente se
         // quedaba con el documento corregido Y con el que se quiso corregir, el consolidado los metía los
         // dos (ordena por tipo y luego por fecha, sin deduplicar) y la pantalla enseñaba el PRIMERO, o sea
@@ -235,11 +251,14 @@ public sealed class UploadAttachmentHandler(
 
         // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
         // Soft-delete auditoría + conservar blob firmado (snapshot signed_storage_path).
+        // HU #13265 — los binarios retirados se borran DESPUÉS de confirmar: si el motor rechaza la carga («gana quien carga
+        // primero», carrera con FLITO) las filas del gestor siguen ahí y no pueden quedarse sin archivo.
         var preservePaths = SoftDeleteImprintAudits(previos, imprintAudit);
+        var borrarTrasGuardar = new List<string>();
         foreach (var prev in previos)
         {
             if (!preservePaths.Contains(prev.StoragePath))
-                storage.Delete(prev.StoragePath);
+                borrarTrasGuardar.Add(prev.StoragePath);
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
         }
@@ -271,7 +290,15 @@ public sealed class UploadAttachmentHandler(
         // Instancia trackeada (GetByIdWithAttachmentsAsync sin AsNoTracking): el change tracker
         // detecta el attachment nuevo (INSERT) y el cambio de checklist_estado. NO se llama
         // Update(): marcaría el hijo nuevo como Modified → UPDATE de 0 filas en vez de INSERT.
-        await repo.SaveChangesAsync(ct);
+        if (!await SaveGanaElPrimeroAsync(repo, ct))
+        {
+            // HU #13265 — FLITO cargó ese tipo entre la lectura y el guardado: el binario recién subido no lo referencia nadie.
+            storage.Delete(stored.StoragePath);
+            return (null, ExternalAttachmentRules.BlockedCode);
+        }
+
+        foreach (var path in borrarTrasGuardar)
+            storage.Delete(path);
 
         return (ToDto(attachment), null);
     }
@@ -283,6 +310,23 @@ public sealed class UploadAttachmentHandler(
     private static bool EsDeOtroDueno(ProcedureInstanceAttachment a) =>
         string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
         || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// HU #13265 — guarda; <c>false</c> si el motor rechazó la carga por «gana quien carga primero» (DDL 131), que es la
+    /// carrera con FLITO que las lecturas previas no pueden ver. Cualquier otro error se propaga.
+    /// </summary>
+    internal static async Task<bool> SaveGanaElPrimeroAsync(IProcedureInstanceRepository repo, CancellationToken ct)
+    {
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (Exception ex) when (repo.IsFlitoFirstWinsConflict(ex))
+        {
+            return false;
+        }
+    }
 
     internal static IReadOnlySet<string> SoftDeleteImprintAudits(
         IReadOnlyList<ProcedureInstanceAttachment> previos,
@@ -330,6 +374,11 @@ public sealed class PresignAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // HU #13265 — ANTES de emitir la URL: no tiene sentido dejar subir el binario si el registro se va a rechazar.
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         var filename = string.IsNullOrWhiteSpace(input.Filename) ? "file" : input.Filename.Trim();
         var presigned = await storage.CreatePresignedUploadAsync(id, tipo, filename, ct);
 
@@ -378,6 +427,10 @@ public sealed class RegisterAttachmentHandler(
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
 
+        // HU #13265 — mismo bloqueo que la subida multipart (el binario ya está en S3, pero la fila de FLITO no se toca).
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         // Paridad HU #12046 con UploadAttachmentHandler: el front usa presign→register.
         var previos = AttachmentRules.ReemplazaAlSubir(tipo)
             ? instance.Attachments
@@ -387,11 +440,13 @@ public sealed class RegisterAttachmentHandler(
                 .ToList()
             : [];
 
+        // HU #13265 — binarios retirados: después de confirmar (ver UploadAttachmentHandler).
         var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(previos, imprintAudit);
+        var borrarTrasGuardar = new List<string>();
         foreach (var prev in previos)
         {
-            if (storage is not null && !preservePaths.Contains(prev.StoragePath))
-                storage.Delete(prev.StoragePath);
+            if (!preservePaths.Contains(prev.StoragePath))
+                borrarTrasGuardar.Add(prev.StoragePath);
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
         }
@@ -416,7 +471,18 @@ public sealed class RegisterAttachmentHandler(
         repo.Add(attachment);
 
         ChecklistEstadoJson.AutoMark(instance, tipo);
-        await repo.SaveChangesAsync(ct);
+
+        // HU #13265 — carrera con FLITO. El binario ya está en S3 (lo subió el cliente con la URL firmada) y su
+        // `storagePath` lo da el cliente: NO se borra (podría apuntar a un archivo ajeno); queda huérfano como cualquier
+        // presign sin register.
+        if (!await UploadAttachmentHandler.SaveGanaElPrimeroAsync(repo, ct))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
+        if (storage is not null)
+        {
+            foreach (var path in borrarTrasGuardar)
+                storage.Delete(path);
+        }
 
         return (UploadAttachmentHandler.ToDto(attachment), null);
     }
@@ -632,6 +698,9 @@ public sealed class DeleteAttachmentHandler(
 
         if (AttachmentRetiro.EsDelSistema(attachment.Tipo))
             return AdjuntoProtegido;
+        // HU #13265 — lo cargado por FLITO solo lo corrige FLITO reenviando.
+        if (ExternalAttachmentRules.IsFromProvider(attachment.Provider))
+            return AdjuntoProtegido;
         var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
         if (protegidos.Contains(attachment.Id))
             return AdjuntoProtegido;
@@ -684,7 +753,9 @@ internal static class AttachmentRetiro
         Guid instanceId,
         CancellationToken ct)
     {
-        var sinSistema = candidatos.Where(a => !EsDelSistema(a.Tipo)).ToList();
+        var sinSistema = candidatos
+            .Where(a => !EsDelSistema(a.Tipo) && !ExternalAttachmentRules.IsFromProvider(a.Provider))
+            .ToList();
         if (sinSistema.Count == 0)
             return sinSistema;
         var protegidos = await maestroRadicado.AttachmentsProtegidosAsync(tenantId, instanceId, ct).ConfigureAwait(false);

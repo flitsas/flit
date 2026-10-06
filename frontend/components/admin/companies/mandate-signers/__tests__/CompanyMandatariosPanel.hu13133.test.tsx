@@ -2,6 +2,7 @@
 // y con modelo y estado de vigencia. Un bloque por criterio de aceptación.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 
@@ -73,7 +74,8 @@ describe("HU #13133 — lista de mandatarios de la compañía", () => {
     await screen.findByRole("table", TABLA);
     expect(screen.queryByText(/firma f[ií]sica|a mano|forma f[ií]sica/i)).not.toBeInTheDocument();
     // Sin medio de firma se avisa que no puede firmar: ya no hay organismo exento.
-    // Con un solo organismo y sin medio de firma, el aviso es una frase corta y el organismo sale en su propia línea.
+    // La celda es una píldora ámbar; el motivo y el organismo se leen al abrir su modal.
+    await userEvent.click(screen.getByRole("button", { name: /ver organismos de ana restrepo/i }));
     expect(screen.getByText(/no puede firmar todavía/i)).toBeInTheDocument();
     expect(screen.getByText(/tránsito de medellín/i)).toBeInTheDocument();
   });
@@ -176,28 +178,49 @@ describe("HU #13133 — lista de mandatarios de la compañía", () => {
   });
 });
 
-describe("HU #13248c — organismos del mandatario: legible con muchos", () => {
+describe("HU #13248c — organismos del mandatario: una píldora y un modal con el detalle", () => {
   const sinMedio = { identityStatus: "none", signatureVaultId: null } as const;
 
-  it("lista cada organismo en su línea y con más de 3 pliega el resto en «+N más»", async () => {
+  it("la fila no crece con los organismos: una sola píldora con el conteo y el aviso", async () => {
     fetchCompanyMandateSigners.mockResolvedValue([
       signer({ ...sinMedio, transitOfficeIds: ["o1", "o2", "o3", "o4", "o5"] }),
     ]);
     renderPanel();
     await screen.findByRole("table", TABLA);
     const celda = screen.getByTestId("mandatario-organismos");
-    expect(celda.querySelectorAll("ul > li").length).toBeGreaterThanOrEqual(5);
-    expect(within(celda).getByText("+2 más")).toBeInTheDocument();
+    expect(celda.querySelectorAll("li")).toHaveLength(0);
+    expect(within(celda).getByRole("button")).toHaveTextContent("5 organismos · sin firma");
+    expect(screen.queryByText(/no puede firmar todavía/i)).not.toBeInTheDocument();
   });
 
-  it("el aviso es UNA frase corta y no repite los nombres de los organismos", async () => {
+  it("con medio de firma la píldora no avisa; el modal lista cada organismo como «Puede firmar»", async () => {
+    const user = userEvent.setup();
+    fetchCompanyMandateSigners.mockResolvedValue([signer({ transitOfficeIds: ["o1", "o2"] })]);
+    renderPanel();
+    await screen.findByRole("table", TABLA);
+    const boton = within(screen.getByTestId("mandatario-organismos")).getByRole("button");
+    expect(boton).toHaveTextContent(/^2 organismos$/);
+    expect(boton).not.toHaveAttribute("data-aviso");
+    await user.click(boton);
+    const detalle = screen.getByTestId("mandatario-organismos-detalle");
+    expect(within(detalle).getAllByText("Puede firmar")).toHaveLength(2);
+    expect(within(detalle).queryByRole("note")).not.toBeInTheDocument();
+  });
+
+  it("el modal dice el motivo UNA vez y no repite los nombres en el aviso", async () => {
+    const user = userEvent.setup();
     fetchCompanyMandateSigners.mockResolvedValue([
       signer({ ...sinMedio, transitOfficeIds: ["o1", "o2", "o3"] }),
     ]);
     renderPanel();
     await screen.findByRole("table", TABLA);
-    const avisos = screen.getAllByText(/no puede firmar/i);
+    await user.click(within(screen.getByTestId("mandatario-organismos")).getByRole("button"));
+    const detalle = screen.getByTestId("mandatario-organismos-detalle");
+    expect(within(detalle).getAllByText("No puede firmar")).toHaveLength(3);
+    const avisos = within(detalle).getAllByText(/no puede firmar todavía/i);
     expect(avisos).toHaveLength(1);
     expect(avisos[0].textContent).toMatch(/^No puede firmar todavía:/);
+    await user.click(within(detalle).getByRole("button", { name: "Cerrar" }));
+    expect(screen.queryByTestId("mandatario-organismos-detalle")).not.toBeInTheDocument();
   });
 });

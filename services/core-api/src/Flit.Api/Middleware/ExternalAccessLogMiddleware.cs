@@ -51,7 +51,7 @@ public sealed partial class ExternalAccessLogMiddleware(RequestDelegate next, IL
                 details.SyncVersionTo,
                 details.ItemsCount,
                 details.TenantIds,
-                details.PiiUnmasked,
+                details.PiiUnmasked || EndpointName(context) == AttachmentUploadLogName,
                 status,
                 (int)Math.Min(int.MaxValue, watch.ElapsedMilliseconds),
                 occurredAt);
@@ -69,6 +69,12 @@ public sealed partial class ExternalAccessLogMiddleware(RequestDelegate next, IL
         }
     }
 
+    /// <summary>
+    /// HU #13263 — nombre en la bitácora del envío de adjuntos. Es una ESCRITURA y el comprobante lleva datos
+    /// personales: toda llamada a esta ruta (también las rechazadas) queda con <c>pii_unmasked = true</c>.
+    /// </summary>
+    public const string AttachmentUploadLogName = "tramites.adjunto-envio";
+
     /// <summary>Nombre estable del endpoint para la bitácora (no la ruta: esa lleva ids).</summary>
     private static string EndpointName(HttpContext context) =>
         context.GetEndpoint()?.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName switch
@@ -76,6 +82,7 @@ public sealed partial class ExternalAccessLogMiddleware(RequestDelegate next, IL
             "ExternalAuthToken" => "token",
             "ExternalTramitesSync" => "tramites.sync",
             "ExternalTramiteAdjuntoUrl" => "tramites.adjunto-url",
+            Endpoints.ExternalAttachmentEndpoints.EndpointName => AttachmentUploadLogName,
             _ => "otro",
         };
 
@@ -115,6 +122,17 @@ public sealed partial class ExternalAccessDetails
         SyncVersionTo = syncVersions.Count > 0 ? syncVersions[^1] : null;
         TenantIds = tenantIds.Distinct().ToList();
         PiiUnmasked = piiUnmasked;
+    }
+
+    /// <summary>
+    /// HU #13263 — escritura de un adjunto sobre un trámite de <paramref name="tenantId"/>: una compañía tocada y
+    /// un ítem si se escribió (0 si fue idempotente o rechazada). Nunca el archivo ni sus datos.
+    /// </summary>
+    public void SetWrite(Guid tenantId, bool written)
+    {
+        ItemsCount = written ? 1 : 0;
+        TenantIds = [tenantId];
+        PiiUnmasked = true;
     }
 
     public void SetRequestedClientId(string? clientId) =>

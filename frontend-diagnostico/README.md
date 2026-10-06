@@ -5,8 +5,8 @@ App web de **Diagnóstico** (diagnóstico de flotas y vehículos) en la FLIT Sui
 
 | | DEV y local | QA | PDN |
 |---|---|---|---|
-| Puerto | 4071 | 5071 | 6071 |
-| Su API | `services/core-diagnostico` (4070) | 5070 | 6070 |
+| Puerto | 4024 | 5024 | 6024 |
+| Su API | `services/core-diagnostico`, por la red interna detrás del gateway (sin puerto publicado) | | |
 
 Hasta que esté desplegado, el hub lo presenta como «Próximamente»: el código `diagnostico` está en
 `Suite:Hosts:ComingSoon` (`services/core-api/src/Flit.Api/appsettings.json`) y su tarjeta lleva a

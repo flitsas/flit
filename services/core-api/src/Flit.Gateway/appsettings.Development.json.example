@@ -15,7 +15,7 @@
       },
       "core-identity-cluster": {
         "Destinations": {
-          "a-core-identity": { "Address": "http://localhost:4004/" },
+          "a-core-identity": { "Address": "http://localhost:4025/" },
           "b-core-api": { "Address": "http://localhost:4003/" }
         }
       },
