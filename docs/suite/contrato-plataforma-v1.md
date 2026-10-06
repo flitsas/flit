@@ -178,7 +178,7 @@ Los métodos se definen en los `.proto`; este contrato fija el servicio, quién 
 | `platform.tenant.suspended` | B | `{ tenantId }` | Revocar sesiones de la empresa |
 | `platform.roles.changed` | B | `{ userId, tenantId, productCode }` | Forzar renovación del token |
 
-- Todos los eventos se documentan en `contracts/asyncapi/<productor>-events.v1.yaml` (`platform-events.v1.yaml` para los de esta tabla) antes de publicarse.
+- Todos los eventos se documentan en `contracts/asyncapi/<productor>-events.v1.yaml` (`plataforma-events.v1.yaml` para los de esta tabla) antes de publicarse.
 - Los consumidores son idempotentes por `eventId`.
 
 ## 8. Paquetes frontend
