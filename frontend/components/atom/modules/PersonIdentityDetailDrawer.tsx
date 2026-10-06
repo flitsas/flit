@@ -402,7 +402,7 @@ function ValidationAccordionItem({
             <SessionStat label="Fecha aprobación" value={formatFecha(v.validatedAt)} />
             {v.approvalOrigin ? (
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">Origen de la aprobación</p>
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Origen de la aprobación</p>
                 <div className="mt-1">
                   <ApprovalOriginChip origin={v.approvalOrigin} />
                 </div>
@@ -485,7 +485,7 @@ function SessionStat({
 }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p>
       {badgeTone ? (
         <div className="mt-1">
           <StatusBadge label={value} tone={badgeTone} ariaLabel={`${label}: ${value}`} />
