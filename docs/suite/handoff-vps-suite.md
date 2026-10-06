@@ -252,7 +252,7 @@ No cambian con la suite (hoy todo corre como `Development`), pero ahora tienen v
 
 | Nombre | Tipo | Qué hace | Cuándo |
 |---|---|---|---|
-| `FLIT_DEPLOY_ROLLING` | Variable del Environment | `true`: el CD despliega servicio por servicio, sin `down` de todo el stack | Fase 5 |
+| `FLIT_DEPLOY_ROLLING` | Variable del Environment | `true`: el CD despliega servicio por servicio, sin `down` de todo el stack. Desde la HU #13329 solo recrea los contenedores cuya imagen cambió (despliega `tag@digest`) y, si falla el build de un servicio, despliega los demás y ese conserva su versión (el CD termina en rojo para que se vea) | Fase 5 |
 | `HOSTINGER_SSH_*`, `HOSTINGER_DEPLOY_PATH`, `GHCR_PAT`, `GHCR_USERNAME` | Secretos | Sin cambios | — |
 
 Las imágenes nuevas (`core-identity`, `frontend-hub`) las construye y publica el mismo CD. Se construyen por primera

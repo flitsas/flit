@@ -140,6 +140,10 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -171,17 +175,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Epic #13217 (HU #13234): si nada de lo que compila core-api cambió desde la imagen vigente del ambiente, se
-      # reetiqueta esa imagen con este commit en vez de reconstruirla. La comparación es contra el commit con que se
-      # construyó (etiqueta org.opencontainers.image.revision), no contra otra rama: si un build anterior falló, sus
-      # cambios siguen pendientes y se construye. Sin etiqueta, sin historial o en un despliegue manual, se construye.
-      - name: Reuse previous core-api image when unchanged
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
         id: reuse
-        run: |
-          set -euo pipefail
-          src="${{ env.CORE_API_IMAGE }}:${{ needs.setup.outputs.image_tag }}"
-          # Lo que compila la imagen de core-api (ver su Dockerfile).
-          paths=(
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_API_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
             services/core-api
             services/core-ict/Directory.Build.props
             services/core-ict/Directory.Packages.props
@@ -191,20 +193,6 @@ jobs:
             services/core-identity/Directory.Packages.props
             services/core-identity/src/Flit.Identity.Application
             services/core-identity/src/Flit.Identity.Web
-          )
-          rev=$(docker buildx imagetools inspect "$src" --format '{{ json .Image }}' 2>/dev/null \
-            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] // empty else ([to_entries[] | select(.key != "unknown/unknown")][0].value.config.Labels["org.opencontainers.image.revision"] // empty) end' || true)
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "$rev" ] && git cat-file -e "$rev^{commit}" 2>/dev/null \
-             && git diff --quiet "$rev" "$GITHUB_SHA" -- "${paths[@]}"; then
-            tags=(-t "${{ env.CORE_API_IMAGE }}:sha-${GITHUB_SHA}")
-            if [ "${{ github.ref_name }}" = "release" ]; then tags+=(-t "${{ env.CORE_API_IMAGE }}:latest"); fi
-            docker buildx imagetools create "${tags[@]}" "$src"
-            echo "reused=true" >> "$GITHUB_OUTPUT"
-            echo "core-api sin cambios desde $rev: se reutiliza $src"
-          else
-            echo "reused=false" >> "$GITHUB_OUTPUT"
-            echo "core-api: se construye (cambios desde '${rev:-sin etiqueta}' o despliegue manual)"
-          fi
 
       - name: Extract metadata — core-api
         id: meta
@@ -218,6 +206,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-api
+        id: build
         if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
@@ -235,6 +224,10 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -263,17 +256,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Epic #13217 (HU #13234): si nada de lo que compila core-identity cambió desde la imagen vigente del ambiente, se
-      # reetiqueta esa imagen con este commit en vez de reconstruirla. La comparación es contra el commit con que se
-      # construyó (etiqueta org.opencontainers.image.revision), no contra otra rama: si un build anterior falló, sus
-      # cambios siguen pendientes y se construye. Sin etiqueta, sin historial o en un despliegue manual, se construye.
-      - name: Reuse previous core-identity image when unchanged
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
         id: reuse
-        run: |
-          set -euo pipefail
-          src="${{ env.CORE_IDENTITY_IMAGE }}:${{ needs.setup.outputs.image_tag }}"
-          # El árbol de core-identity (BuildClosureTests exige que esta lista lo cubra).
-          paths=(
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_IDENTITY_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
             services/core-identity
             services/core-api/global.json
             services/core-api/Directory.Build.props
@@ -289,20 +280,6 @@ jobs:
             services/core-api/src/Flit.Modules.Security.Domain
             services/core-api/src/Flit.Queries.Domain
             services/core-api/src/Flit.Suite.AspNetCore
-          )
-          rev=$(docker buildx imagetools inspect "$src" --format '{{ json .Image }}' 2>/dev/null \
-            | jq -r 'if has("config") then .config.Labels["org.opencontainers.image.revision"] // empty else ([to_entries[] | select(.key != "unknown/unknown")][0].value.config.Labels["org.opencontainers.image.revision"] // empty) end' || true)
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "$rev" ] && git cat-file -e "$rev^{commit}" 2>/dev/null \
-             && git diff --quiet "$rev" "$GITHUB_SHA" -- "${paths[@]}"; then
-            tags=(-t "${{ env.CORE_IDENTITY_IMAGE }}:sha-${GITHUB_SHA}")
-            if [ "${{ github.ref_name }}" = "release" ]; then tags+=(-t "${{ env.CORE_IDENTITY_IMAGE }}:latest"); fi
-            docker buildx imagetools create "${tags[@]}" "$src"
-            echo "reused=true" >> "$GITHUB_OUTPUT"
-            echo "core-identity sin cambios desde $rev: se reutiliza $src"
-          else
-            echo "reused=false" >> "$GITHUB_OUTPUT"
-            echo "core-identity: se construye (cambios desde '${rev:-sin etiqueta}' o despliegue manual)"
-          fi
 
       - name: Extract metadata — core-identity
         id: meta
@@ -316,6 +293,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-identity
+        id: build
         if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
@@ -334,10 +312,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -363,8 +347,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend
+            packages
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+            # Los build-args del frontend (dominios del API, hosts FLIT) viven en este workflow.
+            .github/workflows/cd.yml
+
       - name: Extract metadata — frontend
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.FRONTEND_IMAGE }}
@@ -374,6 +378,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push frontend
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -408,10 +414,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
         run: |
@@ -434,8 +446,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_HUB_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-hub
+            packages/ui
+            packages/brand
+            packages/auth
+            packages/shell
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
       - name: Extract metadata — frontend-hub
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.FRONTEND_HUB_IMAGE }}
@@ -445,6 +478,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push frontend-hub
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -460,10 +495,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -489,8 +530,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.PYTHON_ML_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/python-ml
+
       - name: Extract metadata — python-ml
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.PYTHON_ML_IMAGE }}
@@ -500,6 +553,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push python-ml
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./services/python-ml
@@ -515,10 +570,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
         run: |
@@ -541,8 +602,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_ICT_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-ict
+
       - name: Extract metadata — core-ict
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.CORE_ICT_IMAGE }}
@@ -552,6 +625,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-ict
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./services/core-ict
@@ -565,6 +640,9 @@ jobs:
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
     needs: [setup, build-core-api, build-core-identity, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
+    # HU #13329: corre aunque falle el build de algún servicio. En despliegue por servicio (FLIT_DEPLOY_ROLLING) se
+    # despliegan los demás y el que falló conserva su versión; sin él, se detiene sin tocar nada, como antes.
+    if: ${{ !cancelled() && needs.setup.result == 'success' }}
     runs-on: ubuntu-latest
     # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
     timeout-minutes: 15
@@ -682,6 +760,70 @@ jobs:
             # Con "true": sin down global; core-api primero (migra), luego el resto y core-identity al final, así el
             # login nunca se cae junto con core-api (ver docs/suite/identidad-frontera.md §9).
             ROLLING="${{ vars.FLIT_DEPLOY_ROLLING }}"
+
+            # HU #13329 (Epic #13316): resultado y digest del build de cada imagen (sin arreglos asociativos, para
+            # que el script corra igual en cualquier bash).
+            IMAGE_TAG="${{ needs.setup.outputs.image_tag }}"
+            SERVICES="core-api core-identity core-ict frontend frontend-hub python-ml"
+            build_result() {
+              case "$1" in
+                core-api) echo "${{ needs.build-core-api.result }}" ;;
+                core-identity) echo "${{ needs.build-core-identity.result }}" ;;
+                core-ict) echo "${{ needs.build-core-ict.result }}" ;;
+                frontend) echo "${{ needs.build-frontend.result }}" ;;
+                frontend-hub) echo "${{ needs.build-frontend-hub.result }}" ;;
+                python-ml) echo "${{ needs.build-python-ml.result }}" ;;
+              esac
+            }
+            build_digest() {
+              case "$1" in
+                core-api) echo "${{ needs.build-core-api.outputs.digest }}" ;;
+                core-identity) echo "${{ needs.build-core-identity.outputs.digest }}" ;;
+                core-ict) echo "${{ needs.build-core-ict.outputs.digest }}" ;;
+                frontend) echo "${{ needs.build-frontend.outputs.digest }}" ;;
+                frontend-hub) echo "${{ needs.build-frontend-hub.outputs.digest }}" ;;
+                python-ml) echo "${{ needs.build-python-ml.outputs.digest }}" ;;
+              esac
+            }
+            tag_var() {
+              case "$1" in
+                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-ict) echo CORE_ICT_TAG ;;
+                frontend) echo FRONTEND_TAG ;; frontend-hub) echo FRONTEND_HUB_TAG ;; python-ml) echo PYTHON_ML_TAG ;;
+              esac
+            }
+            FAILED_BUILDS=""
+            for svc in $SERVICES; do
+              [ "$(build_result "$svc")" = "success" ] || FAILED_BUILDS="$FAILED_BUILDS $svc"
+            done
+            if [ -n "$FAILED_BUILDS" ] && [ "$ROLLING" != "true" ]; then
+              echo "::error::Fallaron builds:$FAILED_BUILDS. Sin despliegue por servicio no se despliega nada."
+              exit 1
+            fi
+            if [ "$ROLLING" = "true" ]; then
+              # Cada imagen se despliega como <tag>@<digest>. Si la imagen no cambió, el digest es el mismo que corre y
+              # compose no recrea el contenedor (antes, en PDN, la etiqueta sha-<commit> lo recreaba siempre). Si su
+              # build falló, se despliega la referencia que ya corre: el contenedor queda como estaba.
+              current_ref() {
+                c=$(docker compose -f docker-compose.prod.yml ps -q "$1" 2>/dev/null | head -n1)
+                [ -n "$c" ] || return 1
+                img=$(docker inspect -f '{{.Config.Image}}' "$c") || return 1
+                echo "${img#*:}"
+              }
+              for svc in $SERVICES; do
+                var=$(tag_var "$svc")
+                digest=$(build_digest "$svc")
+                if [ "$(build_result "$svc")" = "success" ] && [ -n "$digest" ]; then
+                  export "$var=${IMAGE_TAG}@${digest}"
+                elif ref=$(current_ref "$svc"); then
+                  export "$var=$ref"
+                  echo "::warning::$svc: su build falló o no dio digest; se deja la versión que corre ($ref)"
+                else
+                  echo "::warning::$svc: su build falló y no está corriendo; se usa ${!var}"
+                fi
+                echo "$svc -> ${!var}"
+              done
+            fi
+
             if [ "$ROLLING" != "true" ]; then
               # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
               # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
@@ -759,6 +901,10 @@ jobs:
                 exit 1
               fi
               echo "core-identity listo."
+            fi
+            if [ -n "$FAILED_BUILDS" ]; then
+              echo "::error::Despliegue parcial: fallaron los builds de$FAILED_BUILDS; esos servicios conservan su versión anterior."
+              exit 1
             fi
             echo "Deploy OK."
 
