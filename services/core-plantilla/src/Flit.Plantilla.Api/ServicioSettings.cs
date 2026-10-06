@@ -13,7 +13,7 @@ internal static class ServicioSettings
 
     private static readonly (string Key, string EnvFile)[] Required =
     [
-        ("ConnectionStrings:Servicio", "CORE_PLANTILLA_DB_PASSWORD (cadena armada en el compose)"),
+        ("ConnectionStrings:Servicio", "CONNECTION_STRING_PLANTILLA"),
         ("Platform:ServiceClient:ClientSecret", "SVC_PLANTILLA_CLIENT_SECRET"),
         ("Platform:ServiceClient:TokenEndpoint", "valor del compose"),
         ("Platform:Auth:JwksUri", "valor del compose"),

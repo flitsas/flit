@@ -1,0 +1,89 @@
+name: Servicios de plataforma (.NET 10)
+
+# Epic #13316 (HU #13341): CI de todos los servicios que nacieron de la plantilla (services/core-plantilla). Se
+# descubren solos (.github/scripts/servicios-plataforma.sh): un servicio nuevo no edita este archivo. Por cada uno:
+# exige su contrato en contracts/proto, compila y corre sus pruebas contra Postgres.
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'services/core-*/**'
+      - '!services/core-api/**'
+      - '!services/core-ict/**'
+      - '!services/core-identity/**'
+      - 'services/core-api/Directory.*'
+      - 'services/core-api/src/Flit.Platform.Sdk/**'
+      - 'services/core-identity/src/Flit.Platform.Grpc.Contracts/**'
+      - 'contracts/proto/**'
+      - '.github/workflows/servicios-plataforma.yml'
+      - '.github/scripts/servicios-plataforma.sh'
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'services/core-*/**'
+      - '!services/core-api/**'
+      - '!services/core-ict/**'
+      - '!services/core-identity/**'
+      - 'services/core-api/Directory.*'
+      - 'services/core-api/src/Flit.Platform.Sdk/**'
+      - 'services/core-identity/src/Flit.Platform.Grpc.Contracts/**'
+      - 'contracts/proto/**'
+      - '.github/workflows/servicios-plataforma.yml'
+      - '.github/scripts/servicios-plataforma.sh'
+
+jobs:
+  descubrir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      servicios: ${{ steps.listar.outputs.servicios }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Servicios de plataforma
+        id: listar
+        run: .github/scripts/servicios-plataforma.sh listar | tee -a "$GITHUB_OUTPUT"
+
+  servicio:
+    needs: descubrir
+    if: ${{ needs.descubrir.outputs.servicios != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio: ${{ fromJSON(needs.descubrir.outputs.servicios) }}
+    name: ${{ matrix.servicio }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flit_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d flit_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Contrato gRPC
+        run: .github/scripts/servicios-plataforma.sh contrato "${{ matrix.servicio }}"
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: services/${{ matrix.servicio }}/global.json
+
+      - name: Build y pruebas
+        env:
+          ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
+        run: |
+          solucion=$(.github/scripts/servicios-plataforma.sh solucion "${{ matrix.servicio }}")
+          dotnet restore "$solucion"
+          dotnet build "$solucion" --no-restore --configuration Release
+          dotnet test "$solucion" --no-build --configuration Release --logger "trx"

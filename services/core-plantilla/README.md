@@ -16,4 +16,4 @@ Qué trae: SDK de plataforma (tokens por JWKS, gRPC con token de servicio, outbo
 primera migración, `/health`, `/health/ready` (base alcanzable y sin migraciones pendientes), `grpc.health.v1` en su
 puerto gRPC interno, Dockerfile y pruebas. Si falta configuración no arranca y nombra las variables.
 
-Cómo se conecta un servicio nuevo (contrato, CI, CD, compose, base y puertos): `docs/suite/servicio-nuevo.md`.
+Cómo se conecta un servicio nuevo (contrato, CI, CD, compose, base y puertos): [`docs/suite/servicio-nuevo.md`](../../docs/suite/servicio-nuevo.md).
