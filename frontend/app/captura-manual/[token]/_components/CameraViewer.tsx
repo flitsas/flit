@@ -29,6 +29,7 @@ const btnBase =
  */
 export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint, onContinue, initialBlob }: CameraViewerProps) {
   const [facing, setFacing] = useState<CameraFacing>(initialFacing);
+  const [notice, setNotice] = useState<string | null>(null);
   const urlRef = useRef<string | null>(null);
   const [captured, setCaptured] = useState<{ blob: Blob; url: string } | null>(() => {
     if (!initialBlob) return null;
@@ -49,13 +50,18 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
 
   async function take() {
     const blob = await capture();
-    if (!blob) return;
+    if (!blob) {
+      setNotice("La cámara aún no está lista, inténtalo de nuevo");
+      return;
+    }
+    setNotice(null);
     setCaptured({ blob, url: URL.createObjectURL(blob) });
   }
 
   function repeat() {
     if (captured) URL.revokeObjectURL(captured.url);
     setCaptured(null);
+    setNotice(null);
     restart();
   }
 
@@ -114,6 +120,11 @@ export function CameraViewer({ shape, facing: initialFacing, captureLabel, hint,
           </>
         )}
       </div>
+      {notice ? (
+        <p role="alert" className="text-center text-base font-medium text-flit-alert">
+          {notice}
+        </p>
+      ) : null}
       <button type="button" disabled={!ready} onClick={() => void take()} className={`${btnBase} ${BRAND_BTN}`}>
         <Camera aria-hidden="true" className="mr-2 inline size-5" />
         {captureLabel}

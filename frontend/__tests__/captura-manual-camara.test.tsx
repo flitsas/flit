@@ -121,6 +121,39 @@ describe("CameraViewer", () => {
     vi.restoreAllMocks();
   });
 
+  it("mantiene «Abriendo cámara» y el botón deshabilitado hasta que el video tenga dimensiones (loadedmetadata tardío)", async () => {
+    let width = 0;
+    Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", { configurable: true, get: () => width });
+    mockMedia(() => Promise.resolve(makeStream().stream));
+    view();
+    await act(async () => undefined);
+    expect(screen.getByText(/Abriendo cámara/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeDisabled();
+    // Un evento sin dimensiones aún no habilita.
+    act(() => {
+      document.querySelector("video")?.dispatchEvent(new Event("loadedmetadata"));
+    });
+    expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeDisabled();
+    width = 2000;
+    act(() => {
+      document.querySelector("video")?.dispatchEvent(new Event("loadedmetadata"));
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
+    expect(screen.queryByText(/Abriendo cámara/)).not.toBeInTheDocument();
+  });
+
+  it("si capture no puede tomar el fotograma (sin dimensiones) muestra un mensaje claro en vez de fallar en silencio", async () => {
+    let width = 2000;
+    Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", { configurable: true, get: () => width });
+    mockMedia(() => Promise.resolve(makeStream().stream));
+    view();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
+    width = 0;
+    fireEvent.click(screen.getByRole("button", { name: /Capturar rostro/ }));
+    expect(await screen.findByText("La cámara aún no está lista, inténtalo de nuevo")).toBeInTheDocument();
+    expect(screen.queryByAltText("Vista previa de la foto capturada")).not.toBeInTheDocument();
+  });
+
   it("detiene todos los tracks al desmontar", async () => {
     const { stream, track } = makeStream();
     mockMedia(() => Promise.resolve(stream));

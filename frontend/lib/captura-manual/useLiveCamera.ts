@@ -36,6 +36,7 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
     if (!enabled) return;
     let cancelled = false;
     let stream: MediaStream | null = null;
+    let detach: () => void = () => undefined;
     const video = videoRef.current;
     const supported =
       typeof window !== "undefined" &&
@@ -56,12 +57,26 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
           return;
         }
         stream = s;
-        if (video) {
-          video.srcObject = s;
-          // jsdom no implementa play(); un rechazo por autoplay no impide mostrar el video.
-          void Promise.resolve(video.play?.()).catch(() => undefined);
+        if (!video) {
+          setResult({ key, status: "ready" });
+          return;
         }
-        setResult({ key, status: "ready" });
+        // «ready» solo cuando el <video> ya tiene dimensiones reales: antes, «Capturar» no podría tomar nada.
+        const markReady = () => {
+          if (cancelled || !video.videoWidth) return;
+          detach();
+          setResult({ key, status: "ready" });
+        };
+        detach = () => {
+          video.removeEventListener("loadedmetadata", markReady);
+          video.removeEventListener("loadeddata", markReady);
+        };
+        video.addEventListener("loadedmetadata", markReady);
+        video.addEventListener("loadeddata", markReady);
+        video.srcObject = s;
+        // jsdom no implementa play(); un rechazo por autoplay no impide mostrar el video.
+        void Promise.resolve(video.play?.()).catch(() => undefined);
+        markReady();
       })
       .catch((e: unknown) => {
         if (!cancelled) setResult({ key, status: classify(e) });
@@ -69,6 +84,7 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
 
     return () => {
       cancelled = true;
+      detach();
       stream?.getTracks().forEach((t) => t.stop());
       if (video) video.srcObject = null;
     };
