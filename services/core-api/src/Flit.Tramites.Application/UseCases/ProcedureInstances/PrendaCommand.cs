@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -38,9 +40,12 @@ public sealed record RegistrarPrendaInput(
 public sealed class RegistrarPrendaHandler(
     IProcedureInstanceRepository instances,
     IProcedureInstancePrendaRepository prendas,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
+    IAttachmentStorage? storage = null,
+    IVehicleSignatureImprintRepository? imprintAudit = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
-    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible.</summary>
+    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible (salvo la familia Matrículas, Feature #13110).</summary>
     public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
 
     /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
@@ -58,6 +63,10 @@ public sealed class RegistrarPrendaHandler(
 
     private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
         prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
+
+    private readonly IAttachmentStorage? _storage = storage;
+    private readonly IVehicleSignatureImprintRepository? _imprintAudit = imprintAudit;
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
 
     public async Task<(PrendaDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -91,19 +100,25 @@ public sealed class RegistrarPrendaHandler(
 
         var decision = input.Decision.Trim().ToLowerInvariant();
 
-        // CF-06 (HU #10881) — "omitir" es la vía "asumo el riesgo", y con un OT que exige el
-        // certificado de prenda no hay riesgo que el gestor pueda asumir por su cuenta: la regla es
-        // del organismo. Se rechaza AL ELEGIR, que es donde el gate de radicación decía que había que
-        // decidirlo (ver PrendaGate.EvaluateOtOverride). Bloquear después dejaría guardada una
-        // decisión que ningún adjunto puede satisfacer —el paso de prenda no ofrece cargar documento
-        // para "omitir"—, que es exactamente el atasco que corrigió esta tanda. Las decisiones ya
-        // guardadas no se revisan: la regla mira la elección nueva, no reabre trámites en curso.
-        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase)
-            && await _documentPolicy
-                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
-                .ConfigureAwait(false))
+        // CF-06 (HU #10881) — con un OT que exige el certificado de prenda, "omitir" no es elegible en
+        // Traspaso ni en el resto de familias: la regla es del organismo. Se rechaza AL ELEGIR, que es
+        // donde el gate de radicación decía que había que decidirlo (ver PrendaGate.EvaluateOtOverride):
+        // bloquear después dejaría guardada una decisión que ningún adjunto puede satisfacer. Las
+        // decisiones ya guardadas no se revisan: la regla mira la elección nueva.
+        //
+        // Feature #13110 — excepción de la familia Matrículas: ahí "Omitir prenda" siempre se admite (la
+        // prenda es un trámite propio, art. 5.3.13.1). La regla vive en PrendaDecision.OmitirAdmitido,
+        // la misma que publica el estado del wizard (PrendaOmitAllowed). La familia se lee null-safe
+        // (instance.Family lanza sin la navegación cargada); sin tipo cargado se trata como "no es
+        // matrícula" y se conserva el rechazo (postura conservadora).
+        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase))
         {
-            return (null, OmitirNoAdmitidoError);
+            var family = ProcedureFamilyCodes.FromCodeOrOtros(instance.ProcedureType?.Family);
+            var otExigeDocumento = await _documentPolicy
+                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+                .ConfigureAwait(false);
+            if (!PrendaDecision.OmitirAdmitido(family, otExigeDocumento))
+                return (null, OmitirNoAdmitidoError);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -161,15 +176,18 @@ public sealed class RegistrarPrendaHandler(
             }, ct);
         }
 
+        // Feature #13110 (CF-6) — con "omitir" no se solicita trámite de prenda: el acreedor y la entidad
+        // de levantamiento no alimentan ningún documento y no se guardan aunque el cliente los envíe.
+        var conservaAcreedor = PrendaDecision.ConservaDatosDeAcreedor(decision);
         var nueva = new ProcedureInstancePrenda
         {
             TenantId = tenantId,
             ProcedureInstanceId = instanceId,
             Decision = decision,
             Estado = PrendaEstado.Vigente,
-            AcreedorNombre = Trimmed(input.AcreedorNombre),
-            AcreedorDocumento = Trimmed(input.AcreedorDocumento),
-            LevantamientoEntidad = Trimmed(input.LevantamientoEntidad),
+            AcreedorNombre = conservaAcreedor ? Trimmed(input.AcreedorNombre) : null,
+            AcreedorDocumento = conservaAcreedor ? Trimmed(input.AcreedorDocumento) : null,
+            LevantamientoEntidad = conservaAcreedor ? Trimmed(input.LevantamientoEntidad) : null,
             AccionFamilia = accionFamilia,
             Metadata = string.IsNullOrWhiteSpace(input.MetadataJson) ? "{}" : input.MetadataJson,
             CreatedAt = now,
@@ -178,11 +196,90 @@ public sealed class RegistrarPrendaHandler(
         await prendas.AddAsync(nueva, ct);
         await prendas.SaveChangesAsync(ct);
 
+        // Bug #13240 — el soporte de la decisión anterior no sobrevive al cambio de decisión.
+        var vigentesResultantes = vigentes.Except(aReemplazar).Append(nueva).ToList();
+        await RetirarSoportesHuerfanosAsync(
+            instanceId, tenantId, vigentesResultantes, aReemplazar, permiteComplementaria, ct).ConfigureAwait(false);
+
         return (ToDto(nueva), null);
     }
 
-    internal static PrendaDto ToDto(ProcedureInstancePrenda p) =>
-        new(p.Id, p.Decision, p.Estado, p.AcreedorNombre, p.AcreedorDocumento, p.LevantamientoEntidad, p.CreatedAt);
+    /// <summary>
+    /// Bug #13240 — retira los adjuntos de prenda (<see cref="PrendaDocTipos.All"/>) que ya no exige ninguna
+    /// decisión vigente: tras cambiar de «registrar» a <c>omitir</c>/<c>sin_prenda</c>/<c>levantar</c> el PDF
+    /// seguía en el expediente y en el consolidado, mientras el FUR (que lee las vigentes) ya no lo declaraba.
+    /// <para>Sin acción complementaria (a lo sumo UNA vigente) es candidato todo <c>prenda_*</c> no exigido,
+    /// incluido el PDF subido sin haber guardado la decisión. CON complementaria solo lo son los DocTipos de
+    /// las decisiones reemplazadas en este guardado: el front guarda la base antes que la complementaria y su
+    /// documento recién subido aún no pertenece a ninguna decisión (review PR #508, B1).</para>
+    /// <para>Mismas reglas que <see cref="DeleteAttachmentHandler"/> (vía <see cref="AttachmentRetiro"/>) y
+    /// solo en estado editable: fuera de él la decisión se guarda (R17) pero el expediente ya salió con esos
+    /// documentos. El consolidado lo invalida <c>ConsolidadoVigenciaTracker</c>. <c>inscripcion_prenda</c> no
+    /// entra: es requisito del catálogo del tipo y de la política del OT, no soporte de una decisión. Sin
+    /// almacenamiento cableado no se hace nada (la fila sin el blob dejaría el archivo huérfano).</para>
+    /// </summary>
+    private async Task RetirarSoportesHuerfanosAsync(
+        Guid instanceId,
+        Guid tenantId,
+        IReadOnlyList<ProcedureInstancePrenda> vigentes,
+        IReadOnlyList<ProcedureInstancePrenda> reemplazadas,
+        bool permiteComplementaria,
+        CancellationToken ct)
+    {
+        if (_storage is null)
+            return;
+
+        var instance = await instances.GetByIdWithAttachmentsAsync(instanceId, tenantId, ct).ConfigureAwait(false);
+        if (instance is null || !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
+            return;
+
+        var exigidos = vigentes
+            .Select(v => PrendaDecision.DocTipoFor(v.Decision))
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlySet<string> candidatos = permiteComplementaria
+            ? reemplazadas
+                .Select(r => PrendaDecision.DocTipoFor(r.Decision))
+                .OfType<string>()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : PrendaDocTipos.All;
+
+        var huerfanos = instance.Attachments
+            .Where(a => candidatos.Contains(a.Tipo) && !exigidos.Contains(a.Tipo))
+            .ToList();
+        if (huerfanos.Count == 0)
+            return;
+
+        var retirables = await AttachmentRetiro
+            .FiltrarRetirablesAsync(huerfanos, _maestroRadicado, tenantId, instanceId, ct)
+            .ConfigureAwait(false);
+        if (retirables.Count == 0)
+            return;
+
+        // O3 (review PR #508): este save solo borra adjuntos porque AutoUnmark es no-op para prenda_*. Si un
+        // ítem del catálogo llegara a usarlos, recargar la entrada antes de Retirar (row_version obsoleto).
+        AttachmentRetiro.Retirar(instance, retirables, instances, _storage, _imprintAudit);
+        await instances.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Contrato de salida del PUT y del GET de prenda. Feature #13110 (Habeas Data, Ley 1581) — con
+    /// <c>omitir</c> el acreedor y la entidad de levantamiento se devuelven <c>null</c> aunque la fila
+    /// los tenga: cubre las filas <c>omitir</c> guardadas antes de la limpieza en escritura.
+    /// </summary>
+    internal static PrendaDto ToDto(ProcedureInstancePrenda p)
+    {
+        var conserva = PrendaDecision.ConservaDatosDeAcreedor(p.Decision);
+        return new(
+            p.Id,
+            p.Decision,
+            p.Estado,
+            conserva ? p.AcreedorNombre : null,
+            conserva ? p.AcreedorDocumento : null,
+            conserva ? p.LevantamientoEntidad : null,
+            p.CreatedAt);
+    }
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

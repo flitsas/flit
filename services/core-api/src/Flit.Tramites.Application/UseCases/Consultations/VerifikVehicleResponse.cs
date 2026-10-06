@@ -27,11 +27,13 @@ public sealed class VerifikVehicleData
     [JsonPropertyName("tecnoMecanica")]
     public List<VerifikTecnomecanica>? TecnoMecanica { get; set; }
 
-    // RUNT real: "garantiasMobiliarias" es un ARRAY (normalmente []). La señal de gravámenes
-    // vive en informacionGeneral.tieneGravamenes/prendas, NO aquí. Se mapea como lista solo
-    // para no romper la deserialización (array-vs-objeto era la causa de la JsonException).
+    // RUNT real: "garantiasMobiliarias" es un ARRAY (normalmente []); array-vs-objeto era la causa de
+    // la JsonException original. Bug #13203: se tipa con el ítem común de Kyverum para normalizar el
+    // acreedor (entidad, numeroDocumentoEntidad…) y como segunda señal de gravamen: el RUNT puede
+    // traer una garantía del RNGM con las banderas de informacionGeneral en «NO».
     [JsonPropertyName("garantiasMobiliarias")]
-    public List<object>? GarantiasMobiliarias { get; set; }
+    [JsonConverter(typeof(RuntGarantiaListConverter))]
+    public List<RuntGarantiaMobiliaria>? GarantiasMobiliarias { get; set; }
 
     /// <summary>
     /// Historial de solicitudes del vehículo (Feature #12276): mismas claves en español que Kyverum,

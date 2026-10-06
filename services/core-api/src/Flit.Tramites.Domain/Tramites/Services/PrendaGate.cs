@@ -8,7 +8,7 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// R10 (HU #10597) — gate PURO de la decisión de prenda: exige una decisión de prenda vigente y, si la
 /// decisión requiere documento (solicitar/registrar/levantar), su adjunto (y el acreedor cuando la
 /// decisión constituye gravamen, HU #11591). <c>omitir</c>/<c>sin_prenda</c> satisfacen el gate sin
-/// documento (<c>omitir</c> = la vía "asumo el riesgo"). Devuelve el código de error o <c>null</c> si
+/// documento (<c>omitir</c> = «Omitir prenda»). Devuelve el código de error o <c>null</c> si
 /// puede avanzar.
 ///
 /// <para><b>Dos disparadores comparten este núcleo, sin duplicar la regla:</b> <see cref="Evaluate"/>
@@ -49,7 +49,8 @@ public static class PrendaGate
     /// <summary>
     /// El núcleo de R10 sin disparador: exige decisión vigente y, si la decisión lo requiere, su
     /// documento y acreedor. Lo consume la sección <c>prenda_decision</c> del motor dinámico
-    /// (ADR-0050), donde el disparador ya no es la modalidad sino <c>gate_profile.hasPrendaGate</c>.
+    /// (ADR-0050), donde el disparador ya no es la modalidad sino
+    /// <see cref="ProcedureTypeLayers.ExigeDecisionDePrenda"/> (tipo prendario o gravamen reportado por el RUNT).
     /// Mismo cuerpo que <see cref="EvaluateMatriculaInicial"/>, con un nombre que no presupone familia.
     /// </summary>
     public static string? EvaluateDecision(

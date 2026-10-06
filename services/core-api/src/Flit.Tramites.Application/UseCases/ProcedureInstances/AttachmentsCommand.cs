@@ -612,12 +612,6 @@ public sealed class DeleteAttachmentHandler(
     /// <summary>Código de error: el adjunto lo genera el sistema (o lo referencia Quipux) y no se borra.</summary>
     public const string AdjuntoProtegido = "adjunto_protegido";
 
-    private static readonly HashSet<string> TiposDelSistema = new(StringComparer.OrdinalIgnoreCase)
-    {
-        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoWizard,
-        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro,
-    };
-
     private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
 
     public async Task<string?> HandleAsync(
@@ -636,23 +630,14 @@ public sealed class DeleteAttachmentHandler(
         if (attachment is null)
             return "attachment_not_found";
 
-        if (TiposDelSistema.Contains(attachment.Tipo))
+        if (AttachmentRetiro.EsDelSistema(attachment.Tipo))
             return AdjuntoProtegido;
         var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
         if (protegidos.Contains(attachment.Id))
             return AdjuntoProtegido;
 
         var tipo = attachment.Tipo;
-        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);
-        if (!preservePaths.Contains(attachment.StoragePath))
-            storage.Delete(attachment.StoragePath);
-        instance.Attachments.Remove(attachment);
-        repo.RemoveAttachment(attachment);
-
-        // Simétrico al AutoMark de la subida: si ya no queda ningún adjunto de ese tipo, se
-        // des-marca el ítem de checklist que se había auto-marcado. Sin esto, borrar un documento
-        // dejaba el ítem "satisfecho" y el gate seguía pasando sin el documento.
-        ChecklistEstadoJson.AutoUnmark(instance, tipo);
+        AttachmentRetiro.Retirar(instance, [attachment], repo, storage, imprintAudit);
 
         // HU #12776 — la fecha de expedición que el OCR leyó del certificado de Cámara de Comercio se
         // va con el certificado. Si se quedara, el siguiente certificado cuyo OCR no lea la fecha
@@ -667,6 +652,71 @@ public sealed class DeleteAttachmentHandler(
         await repo.SaveChangesAsync(ct);
 
         return null;
+    }
+}
+
+/// <summary>
+/// Retiro de adjuntos del gestor con las reglas de <see cref="DeleteAttachmentHandler"/>, compartido con
+/// quien retira de rebote un documento que dejó de exigirse (Bug #13240: <see cref="RegistrarPrendaHandler"/>
+/// al cambiar la decisión de prenda). No valida el estado del trámite ni llama a <c>SaveChanges</c>: eso
+/// es de cada caso de uso. La invalidación del consolidado no se hace aquí: el
+/// <c>ConsolidadoVigenciaTracker</c> la deriva del adjunto borrado al guardar.
+/// </summary>
+internal static class AttachmentRetiro
+{
+    /// <summary>Tipos que genera el sistema (consolidados) y nunca se retiran por estas vías.</summary>
+    private static readonly HashSet<string> TiposDelSistema = new(StringComparer.OrdinalIgnoreCase)
+    {
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoWizard,
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro,
+    };
+
+    public static bool EsDelSistema(string? tipo) => tipo is not null && TiposDelSistema.Contains(tipo);
+
+    /// <summary>
+    /// De <paramref name="candidatos"/>, los que se pueden retirar: ni del sistema ni referenciados por
+    /// una radicación (<see cref="IMaestroRadicadoLookup.AttachmentsProtegidosAsync"/>).
+    /// </summary>
+    public static async Task<IReadOnlyList<ProcedureInstanceAttachment>> FiltrarRetirablesAsync(
+        IReadOnlyList<ProcedureInstanceAttachment> candidatos,
+        IMaestroRadicadoLookup maestroRadicado,
+        Guid tenantId,
+        Guid instanceId,
+        CancellationToken ct)
+    {
+        var sinSistema = candidatos.Where(a => !EsDelSistema(a.Tipo)).ToList();
+        if (sinSistema.Count == 0)
+            return sinSistema;
+        var protegidos = await maestroRadicado.AttachmentsProtegidosAsync(tenantId, instanceId, ct).ConfigureAwait(false);
+        return sinSistema.Where(a => !protegidos.Contains(a.Id)).ToList();
+    }
+
+    /// <summary>
+    /// Retira los adjuntos: soft-delete de la auditoría de impronta (conserva el blob firmado), borra el
+    /// blob, quita la fila y des-marca el checklist (simétrico al AutoMark de la subida: sin esto el ítem
+    /// seguía "satisfecho" y el gate pasaba sin el documento).
+    /// </summary>
+    public static void Retirar(
+        ProcedureInstance instance,
+        IReadOnlyList<ProcedureInstanceAttachment> adjuntos,
+        IProcedureInstanceRepository repo,
+        IAttachmentStorage storage,
+        IVehicleSignatureImprintRepository? imprintAudit)
+    {
+        if (adjuntos.Count == 0)
+            return;
+
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(adjuntos, imprintAudit);
+        foreach (var attachment in adjuntos)
+        {
+            if (!preservePaths.Contains(attachment.StoragePath))
+                storage.Delete(attachment.StoragePath);
+            instance.Attachments.Remove(attachment);
+            repo.RemoveAttachment(attachment);
+        }
+
+        foreach (var tipo in adjuntos.Select(a => a.Tipo).Distinct(StringComparer.OrdinalIgnoreCase))
+            ChecklistEstadoJson.AutoUnmark(instance, tipo);
     }
 }
 

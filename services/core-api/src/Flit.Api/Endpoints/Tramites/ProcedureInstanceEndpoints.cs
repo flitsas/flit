@@ -540,8 +540,8 @@ internal static class ProcedureInstanceEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "prenda_decision_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "La decisión de prenda no es válida (solicitar|registrar|levantar|omitir|sin_prenda)."),
-                // CF-06 (HU #10881) — el organismo exige el certificado: "asumo el riesgo" no es una
-                // elección disponible en ese trámite. 409 y no 400: la decisión es válida en general,
+                // CF-06 (HU #10881) — el organismo exige el certificado: «Omitir prenda» no es una
+                // elección disponible en ese trámite (salvo la familia Matrículas, Feature #13110). 409 y no 400: la decisión es válida en general,
                 // lo que choca es la regla del OT.
                 RegistrarPrendaHandler.OmitirNoAdmitidoError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.OmitirNoAdmitidoError, detail: "El organismo de tránsito exige el certificado de prenda: registra o levanta la prenda, o declara que el vehículo no tiene."),
                 // ADR-0050 — el tipo no tiene dimensión de gravamen (familia OTROS que no es de prenda).

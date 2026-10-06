@@ -1992,6 +1992,7 @@ export function TramiteWizard(props: Props) {
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
                 esMigrado={wizard?.esMigrado ?? false}
                 prendaDocumentRequired={wizard?.prendaDocumentRequired ?? true}
+                prendaOmitAllowed={wizard?.prendaOmitAllowed}
                 onPrendaDocumentGateChange={setPrendaDocGateOk}
                 deferredFamily={deferredCreation ? entryFamily : undefined}
                 onSimultaneosGateChange={setSimultaneosGateOk}
@@ -4647,6 +4648,7 @@ function StepBody({
   rnmcEnabled = false,
   esMigrado = false,
   prendaDocumentRequired = true,
+  prendaOmitAllowed,
   onPrendaDocumentGateChange,
   deferredFamily,
   onSimultaneosGateChange,
@@ -4716,6 +4718,11 @@ function StepBody({
   esMigrado?: boolean;
   /** Compañía+OT: certificado de prenda obligatorio (default) u opcional. */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda» (`prendaOmitAllowed`).
+   * `undefined` ⇒ compatibilidad: traspaso con `!prendaDocumentRequired`, matrícula sin omitir.
+   */
+  prendaOmitAllowed?: boolean;
   /** Gate Continuar: certificado de prenda listo (o no exigible). */
   onPrendaDocumentGateChange?: (ready: boolean) => void;
   /** Gate Continuar: trámites simultáneos con valor + adjunto (o ninguno activo). */
@@ -4850,8 +4857,11 @@ function StepBody({
                           onSaved={onRefresh}
                           embeddedInWizard
                           modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                          decisions={esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined}
+                          decisions={
+                            esPuerta ? traspasoDecisions(prendaDocumentRequired, prendaOmitAllowed) : undefined
+                          }
                           documentRequired={prendaDocumentRequired}
+                          omitAllowed={prendaOmitAllowed}
                           onDocumentGateChange={onPrendaDocumentGateChange}
                           runtHasGravamen={runtHasPrendaInfo}
                           runtGravamenMessage={gravamen?.message}
@@ -4933,9 +4943,12 @@ function StepBody({
                             modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
                             decisions={
                               decisionesDelTipo ??
-                              (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
+                              (esPuerta
+                                ? traspasoDecisions(prendaDocumentRequired, prendaOmitAllowed)
+                                : undefined)
                             }
                             documentRequired={documentoObligatorio}
+                            omitAllowed={prendaOmitAllowed}
                             exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
                             // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
                             // admiten declarar la acción complementaria en la misma radicación.
