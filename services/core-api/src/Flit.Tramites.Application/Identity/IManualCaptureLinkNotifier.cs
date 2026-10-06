@@ -5,6 +5,11 @@ namespace Flit.Tramites.Application.Identity;
 /// solo en memoria, entre el caso de uso que lo genera y el notificador; en la base se guarda únicamente su hash SHA-256
 /// (<c>TokenHash</c>) y nunca viaja en la respuesta HTTP ni en logs ni en la auditoría. <see cref="RecipientEmail"/> y
 /// <see cref="RecipientName"/> son los del titular (PII): solo para componer el correo, jamás para registrarlos.
+/// <para>
+/// <see cref="RejectionReasonLabel"/> (HU #13299): solo cuando el enlace nuevo sale de un RECHAZO de la revisión manual; es la
+/// etiqueta en español del motivo (lista cerrada, <c>ManualRejectionReasons</c>), nunca texto libre. El correo la muestra junto al
+/// enlace; en una activación o regeneración es <c>null</c> y el correo es el de siempre.
+/// </para>
 /// </summary>
 public sealed record ManualCaptureLink(
     Guid ValidationId,
@@ -12,7 +17,8 @@ public sealed record ManualCaptureLink(
     string Token,
     DateTimeOffset ExpiresAt,
     string? RecipientEmail,
-    string? RecipientName);
+    string? RecipientName,
+    string? RejectionReasonLabel = null);
 
 /// <summary>
 /// Puerto de salida del enlace de captura manual. El caso de uso de activación (y el de regeneración) lo invoca UNA vez, con el

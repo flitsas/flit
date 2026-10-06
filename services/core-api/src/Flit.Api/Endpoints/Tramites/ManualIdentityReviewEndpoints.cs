@@ -1,5 +1,6 @@
 using Flit.Api.Authorization;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Identity;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -138,8 +139,60 @@ internal static class ManualIdentityReviewEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // HU #13299 (Feature #13282 C4) — catálogo cerrado de motivos de rechazo (AC6). Ruta literal: no choca con /{id:guid}/...
+        group.MapGet("/biometric-validations/manual-rejection-reasons", () =>
+            Results.Ok(ManualRejectionReasons.Todos))
+            .AddEndpointFilter(new SuperAdminOnlyFilter())
+            .WithName("ListManualRejectionReasons")
+            .WithSummary("Catálogo cerrado de motivos de rechazo de una validación manual: { code, label } (solo Super Admin)")
+            .Produces<IReadOnlyList<ManualRejectionReason>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // HU #13299 — rechaza con motivo homologado (la fila queda en 'rechazado'), emite un enlace nuevo de 24 h y envía el correo
+        // con el motivo y el enlace para repetir la captura.
+        group.MapPost("/biometric-validations/{id:guid}/manual-reject", async (
+            Guid id,
+            [FromBody] ManualRejectRequest? body,
+            HttpContext http,
+            RechazarValidacionManualHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(http, out var userId))
+                return Results.Unauthorized();
+
+            var (result, error) = await handler.HandleAsync(new RechazarValidacionManualCommand(id, userId, body?.ReasonCode), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                RechazarValidacionManualHandler.MotivoInvalido => Results.Json(
+                    new { code = error, message = "El motivo de rechazo es obligatorio y debe ser uno de la lista." },
+                    statusCode: StatusCodes.Status400BadRequest),
+                RechazarValidacionManualHandler.NoEncontrada => Results.Json(
+                    new { code = error, message = "Validación manual no encontrada." }, statusCode: StatusCodes.Status404NotFound),
+                RechazarValidacionManualHandler.TramiteInactivo => Results.Json(
+                    new { code = error, message = "El trámite está anulado o revocado: la validación se conserva sin cambios." },
+                    statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Json(
+                    new { code = RechazarValidacionManualHandler.EstadoInvalido, message = "La validación no está pendiente de revisión manual." },
+                    statusCode: StatusCodes.Status409Conflict),
+            };
+        })
+            .AddEndpointFilter(new SuperAdminOnlyFilter())
+            .WithName("RejectManualIdentityValidation")
+            .WithSummary("Rechaza una validación manual con motivo homologado y envía al cliente un enlace nuevo para repetir la captura (solo Super Admin)")
+            .Produces<RechazarValidacionManualResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         return app;
     }
+
+    /// <summary>Cuerpo del rechazo manual: <c>reasonCode</c> de la lista cerrada (<see cref="ManualRejectionReasons"/>).</summary>
+    internal sealed record ManualRejectRequest(string? ReasonCode);
 
     /// <summary>Id del usuario autenticado (claim <c>sub</c> o nameidentifier).</summary>
     private static bool TryGetUserId(HttpContext http, out Guid userId)

@@ -152,6 +152,12 @@ public static class IdentityValidationAuditStages
     /// rutas: solo el usuario que revisó y la vigencia.
     /// </summary>
     public const string ManualAprobado = "manual_aprobado";
+
+    /// <summary>
+    /// HU #13299 — el Super Admin rechazó la validación manual con un motivo de la lista cerrada y se reactivó la captura. Sin PII ni
+    /// texto libre: el usuario, el código del motivo y el vencimiento del enlace nuevo.
+    /// </summary>
+    public const string ManualRechazado = "manual_rechazado";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

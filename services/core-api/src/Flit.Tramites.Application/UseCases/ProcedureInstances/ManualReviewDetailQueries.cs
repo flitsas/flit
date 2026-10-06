@@ -14,10 +14,10 @@ public sealed record ManualImageInfo(string Kind, bool Available);
 /// HU #13297 (Feature #13282 C) — contrato <c>ManualDetail</c>: <c>ManualListItem</c> + constancia de consentimiento, las 4
 /// imágenes (solo si existen en el ciclo ACTUAL), la revisión y el vencimiento del enlace de captura.
 /// <para>
-/// Tras un rechazo la validación vuelve a <c>manual_activo</c> (la captura se repite): el detalle muestra entonces
-/// <c>rejectionReasonCode</c>/<c>reviewedAt</c>/<c>reviewedBy</c> del último rechazo, sin imágenes (las del ciclo anterior se
-/// conservan en storage pero no se muestran) y con <c>linkExpiresAt</c>. Sin captura aún (<c>manual_activo</c>) todas las imágenes
-/// traen <c>available = false</c>.
+/// Tras un rechazo (HU #13299) la validación queda en <c>rechazado</c> con <c>rejectionReasonCode</c>/<c>reviewedAt</c>/
+/// <c>reviewedBy</c>, las imágenes rechazadas (siguen hasta que llegue la captura nueva) y <c>linkExpiresAt</c> del enlace nuevo
+/// con el que el cliente repite la captura. Sin captura aún (<c>manual_activo</c>) todas las imágenes traen
+/// <c>available = false</c>.
 /// </para>
 /// </summary>
 public sealed record ManualDetail(

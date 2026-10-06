@@ -6441,8 +6441,8 @@ paths:
       tags: [Tramites, Identidad]
       summary: Regenerar el enlace de captura manual (solo Super Admin) — HU #13287, Épica #13202
       description: >
-        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación en
-        `manual_activo`; el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
+        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación que espera
+        captura: `manual_activo`, o `rechazado` tras una revisión manual (HU #13299; sigue `rechazado`); el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
         público recibe 404; no se distingue «reemplazado» de «inválido» y el front lo cubre con «enlace inválido o
         reemplazado»). Envía el correo al titular y audita `manual_enlace_regenerado`. Si el correo no sale la
         regeneración NO se revierte: `emailEnviado` es false y se audita `manual_correo_fallido`. Solo Super Admin;
@@ -6468,7 +6468,7 @@ paths:
         "404":
           description: Validación de identidad no encontrada.
         "409":
-          description: flujo_manual_no_activo (la validación no está en manual_activo).
+          description: flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo).
   /api/v1/tramites/biometric-validations/{id}/manual-detail:
     get:
       operationId: getManualIdentityValidationDetail
@@ -6479,9 +6479,10 @@ paths:
         (403 al resto, 401 anónimo). Trae el `ManualListItem` más la constancia de consentimiento (solo la del ciclo actual),
         el estado de las 4 imágenes (`images[].available`, solo con captura del ciclo ACTUAL: pendiente de revisión o
         aprobada manualmente), la revisión (`reviewedAt`, `reviewedBy` con el nombre visible del revisor,
-        `rejectionReasonCode`) y `linkExpiresAt` (solo en `manual_activo`). Tras un rechazo (HU #13299) el estado visible es
-        `manual_activo` con `rejectionReasonCode` no nulo: las imágenes del ciclo anterior se conservan en storage pero
-        no se muestran (todas `available: false`). Sin captura aún tampoco hay imágenes. Nunca expone rutas de storage ni la
+        `rejectionReasonCode`) y `linkExpiresAt` (solo cuando se espera captura: `manual_activo` o `rechazado` con motivo). Tras un rechazo (HU #13299)
+        el estado es `rechazado` con `rejectionReasonCode`, las imágenes rechazadas siguen disponibles hasta que llegue la
+        captura nueva y `linkExpiresAt` es el vencimiento del enlace nuevo; con `manual_activo` (activación del Super Admin)
+        las imágenes de un ciclo anterior no se muestran (todas `available: false`). Sin captura aún tampoco hay imágenes. Nunca expone rutas de storage ni la
         IP del consentimiento. Cada consulta queda auditada (`manual_imagenes_consultadas`, `recurso=detalle`).
       security:
         - bearerAuth: []
@@ -6514,7 +6515,7 @@ paths:
         el contenido) y `Cache-Control: no-store`. Es el único acceso: no hay URL pública ni firmada ni ruta de storage.
         Solo Super Admin (403 al resto, 401 anónimo); el JWT viaja en la cabecera Authorization. `kind` ∈ `rostro`,
         `anverso`, `reverso`, `firma`; 404 si el kind es otro, la validación no existe o no es manual, o esa imagen no
-        existe en el ciclo actual (p. ej. `manual_activo` tras un rechazo). Cada entrega queda auditada
+        existe en el ciclo actual (p. ej. `manual_activo` tras una reactivación del Super Admin). Cada entrega queda auditada
         (`manual_imagenes_consultadas`, `recurso=imagen:<kind>`, sin rutas ni PII).
       security:
         - bearerAuth: []
@@ -6583,6 +6584,75 @@ paths:
           description: Validación inexistente (code not_found).
         "409":
           description: "`estado_invalido` (no está en pendiente_revision_manual) o `tramite_inactivo` (trámite anulado o revocado)."
+  /api/v1/tramites/biometric-validations/manual-rejection-reasons:
+    get:
+      operationId: listManualRejectionReasons
+      tags: [Tramites, Identidad]
+      summary: Catálogo de motivos de rechazo manual (solo Super Admin) — HU #13299, Épica #13202
+      description: >
+        Lista cerrada de motivos homologados con su etiqueta en español (la misma que lleva el correo al cliente). Una sola
+        constante en código; el front la usa para el selector del rechazo. Solo Super Admin (401 anónimo, 403 al resto).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Motivos de rechazo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ManualRejectionReason"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+  /api/v1/tramites/biometric-validations/{id}/manual-reject:
+    post:
+      operationId: rejectManualIdentityValidation
+      tags: [Tramites, Identidad]
+      summary: Rechazar una validación manual con motivo homologado (solo Super Admin) — HU #13299, Épica #13202
+      description: >
+        Rechaza una validación en `pendiente_revision_manual` con un `reasonCode` de la lista cerrada: registra
+        `rejection_reason_code`, `reviewed_by` y `reviewed_at`, y en la misma operación emite un enlace nuevo de 24 h (solo su hash
+        SHA-256 se guarda) y envía al cliente un correo con el motivo en texto legible y el enlace nuevo (sin datos sensibles).
+        **Tras rechazar la fila queda en `rechazado`** (visible como Rechazada; NO vuelve a `manual_activo`) con
+        `rejectionReasonCode` no nulo; con el enlace nuevo el cliente repite la captura estando `rechazado` y la captura nueva pasa
+        a `pendiente_revision_manual` limpiando el motivo y la revisión (que se conservan hasta entonces). Sin tope de intentos. Audita `manual_rechazado` (usuario y código, sin texto libre). Si
+        el correo no sale el rechazo NO se revierte: `emailEnviado` es false y se audita `manual_correo_fallido`. Un motivo ausente o
+        fuera de la lista responde 400 `motivo_invalido` y no cambia nada (el contrato de la Épica fija 400; la HU decía 422).
+        Solo Super Admin (401 anónimo, 403 al resto).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RechazarValidacionManualRequest"
+      responses:
+        "200":
+          description: Rechazo registrado; la captura queda reactivada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechazarValidacionManualResult"
+        "400":
+          description: "`motivo_invalido` — motivo ausente o fuera de la lista."
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Validación inexistente (code not_found).
+        "409":
+          description: "`estado_invalido` (no está en pendiente_revision_manual) o `tramite_inactivo` (trámite anulado o revocado)."
+
   /api/v1/public/manual-capture/{token}:
     get:
       operationId: getPublicManualCapture
@@ -6591,7 +6661,7 @@ paths:
       description: >
         Datos para la pantalla de captura del cliente. Público: el token (256 bits; en BD solo su hash SHA-256) es
         la credencial; sin Authorization ni X-Tenant-Id. Solo si la validación es del proveedor `manual` y está en
-        `manual_activo`. Un token vacío, desconocido, regenerado o de otro proveedor responde 404 sin revelar si
+        `manual_activo` o `rechazado` con motivo (repetición tras un rechazo, HU #13299). Un token vacío, desconocido, regenerado o de otro proveedor responde 404 sin revelar si
         existió. Solo lectura. Límite de tasa por IP (policy manual-capture, 429 sin cuerpo). Errores `{ code, message }`.
       security: []
       parameters:
@@ -6611,7 +6681,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
         "409":
-          description: "`estado_invalido` — ya enviada, aprobada, rechazada o expirada (o trámite anulado/revocado)."
+          description: "`estado_invalido` — ya enviada, aprobada o fuera de espera de captura; una rechazada con enlace vigente SÍ admite captura (o trámite anulado/revocado)."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
@@ -6723,7 +6793,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
         "409":
-          description: "`estado_invalido` (ya enviada, aprobada, rechazada o expirada) o `consentimiento_requerido`."
+          description: "`estado_invalido` (ya enviada, aprobada o fuera de espera de captura; una rechazada con enlace vigente SÍ admite captura) o `consentimiento_requerido`."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
@@ -16520,7 +16590,7 @@ components:
         tenantId: { type: string, format: uuid }
         procedureInstanceId: { type: string, format: uuid, nullable: true }
         provider: { type: string, enum: [manual] }
-        status: { type: string, enum: [manual_activo] }
+        status: { type: string, enum: [manual_activo, rechazado] }
         expiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
         activatedAt: { type: string, format: date-time, nullable: true, description: Cuándo se activó el flujo manual. }
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió; se puede volver a regenerar. }
@@ -16536,6 +16606,36 @@ components:
         validatedAt: { type: string, format: date-time }
         validUntil: { type: string, format: date-time, description: Fin de vigencia (30 días desde la aprobación). }
         reviewedAt: { type: string, format: date-time }
+    ManualRejectionReason:
+      type: object
+      required: [code, label]
+      description: Motivo homologado de rechazo de una validación manual (HU #13299).
+      properties:
+        code:
+          type: string
+          enum: [imagen_borrosa, rostro_no_coincide, documento_ilegible_o_incompleto, documento_no_corresponde, firma_ilegible_o_no_corresponde, captura_fuera_de_encuadre]
+        label: { type: string, description: Etiqueta en español legible (la del correo al cliente). }
+    RechazarValidacionManualRequest:
+      type: object
+      required: [reasonCode]
+      properties:
+        reasonCode:
+          type: string
+          description: Código de la lista cerrada (`GET .../manual-rejection-reasons`).
+    RechazarValidacionManualResult:
+      type: object
+      description: >
+        Estado resultante de rechazar una validación manual (HU #13299). Tras rechazar la fila queda en `rechazado` con
+        `rejectionReasonCode` no nulo y un enlace nuevo vigente hasta `linkExpiresAt`. No incluye el token del enlace.
+      properties:
+        validationId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [rechazado] }
+        rejectionReasonCode: { type: string }
+        reviewedAt: { type: string, format: date-time }
+        linkExpiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
+        emailEnviado: { type: boolean, description: false si el correo con el motivo y el enlace no salió; el Super Admin puede regenerar el enlace. }
     ManualDetail:
       type: object
       required: [id, fullName, documentNumber, tenantName, origin, status, waitingMinutes, images]
@@ -16572,9 +16672,9 @@ components:
           type: string
           nullable: true
           description: >
-            Código del último rechazo. Tras rechazar (HU #13299) el estado visible es `manual_activo` con este campo no nulo
-            hasta que el cliente envíe la nueva captura.
-        linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo en manual_activo. }
+            Código del último rechazo. Tras rechazar (HU #13299) el estado es `rechazado` con este campo no nulo hasta que el
+            cliente envíe la captura nueva (que lo limpia).
+        linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo cuando se espera captura (manual_activo o rechazado con motivo). }
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]

@@ -139,7 +139,8 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 current && !string.IsNullOrWhiteSpace(v.IdBackPhotoPath),
                 current && !string.IsNullOrWhiteSpace(v.SignatureImagePath),
                 v.ReviewedAt, reviewer, v.RejectionReasonCode,
-                v.Status == BiometricEstados.ManualActivo ? v.ExpiresAt : null);
+                (v.Status == BiometricEstados.ManualActivo
+                    || (v.Status == BiometricEstados.Rechazado && v.RejectionReasonCode != null)) ? v.ExpiresAt : null);
         }, ct);
 
     public Task<ManualIdentityImageRef?> GetImageRefAsync(Guid id, string kind, CancellationToken ct = default) =>
@@ -185,12 +186,13 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                         && v.ApprovalOrigin == BiometricApprovalOrigins.Manual)));
 
     /// <summary>
-    /// ¿Las rutas de imagen de la fila son las del ciclo ACTUAL? Solo con la captura recibida y sin descartar: pendiente de
-    /// revisión o aprobada. En <c>manual_activo</c> (p. ej. tras un rechazo que reactivó la captura) las rutas son las del ciclo
-    /// anterior: se conservan en storage y en la fila, pero no se muestran.
+    /// ¿Las rutas de imagen de la fila son las de la captura que se revisó? Pendiente de revisión, aprobada o rechazada (HU #13299:
+    /// el rechazo conserva la captura rechazada hasta que el cliente envíe la nueva). En <c>manual_activo</c> (activación o
+    /// reactivación del Super Admin) las rutas son las de un ciclo anterior: se conservan en storage y en la fila, pero no se
+    /// muestran.
     /// </summary>
     private static bool TieneCapturaVigente(string status) =>
-        status is BiometricEstados.PendienteRevisionManual or BiometricEstados.Aprobado;
+        status is BiometricEstados.PendienteRevisionManual or BiometricEstados.Aprobado or BiometricEstados.Rechazado;
 
     /// <summary>
     /// Origen según el modelo actual: la ficha de mandatario manda; luego el trámite; el resto es prevalidación

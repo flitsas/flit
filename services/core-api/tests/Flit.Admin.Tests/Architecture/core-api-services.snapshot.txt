@@ -730,6 +730,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.PresignAttachmentHandler =
 Flit.Tramites.Application.UseCases.ProcedureInstances.PreviewFurHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.PreviewFurHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.PutActorsHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.PutActorsHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.PutCommercialHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.PutCommercialHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.RechazarValidacionManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.RechazarValidacionManualHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ReconciliarIdentidadHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.ReconciliarIdentidadHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.RegenerarConsolidadoAnticipadoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.RegenerarConsolidadoAnticipadoHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.RegenerarDocumentosTrazadoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.RegenerarDocumentosTrazadoHandler (Scoped)

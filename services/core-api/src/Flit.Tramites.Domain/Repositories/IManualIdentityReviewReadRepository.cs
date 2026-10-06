@@ -48,8 +48,8 @@ public static class ManualImageKinds
 /// <summary>
 /// Detalle crudo de una validación manual (contrato <c>ManualDetail</c>). <c>HasRostro…HasFirma</c> son verdaderos solo con
 /// captura del ciclo ACTUAL (estado pendiente de revisión o aprobada manualmente): tras un rechazo la fila vuelve a
-/// <c>manual_activo</c> conservando las rutas anteriores, que no se muestran. <c>ConsentAt</c> solo viene si es del ciclo actual
-/// (<c>consent_at &gt;= manual_activated_at</c>); <c>LinkExpiresAt</c> solo en <c>manual_activo</c>.
+/// <c>manual_activo</c> (reactivación del Super Admin) conservando las rutas anteriores, que no se muestran; una rechazada (HU #13299) sí las muestra hasta la captura nueva. <c>ConsentAt</c> solo viene si es del ciclo actual
+/// (<c>consent_at &gt;= manual_activated_at</c>); <c>LinkExpiresAt</c> solo cuando se espera captura: <c>manual_activo</c> o <c>rechazado</c> con motivo.
 /// </summary>
 public sealed record ManualIdentityReviewDetailRow(
     Guid Id,

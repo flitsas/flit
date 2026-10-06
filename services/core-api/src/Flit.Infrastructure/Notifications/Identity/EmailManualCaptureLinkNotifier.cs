@@ -30,11 +30,15 @@ public sealed partial class EmailManualCaptureLinkNotifier(
         {
             var theme = await themeResolver.ResolveAsync(link.TenantId, ct).ConfigureAwait(false);
             var url = ManualCaptureEmailComposer.BuildLink(options.PublicBaseUrl, link.Token);
-            var (subject, html) = ManualCaptureEmailComposer.Compose(link.RecipientName, url, theme, assetsOptions.Value.BaseUrl);
+            // HU #13299 — con motivo de rechazo sale la variante «rechazo» (motivo legible + enlace nuevo); si no, la de siempre.
+            var rechazo = !string.IsNullOrWhiteSpace(link.RejectionReasonLabel);
+            var (subject, html) = rechazo
+                ? ManualCaptureEmailComposer.ComposeRejected(link.RecipientName, link.RejectionReasonLabel!, url, theme, assetsOptions.Value.BaseUrl)
+                : ManualCaptureEmailComposer.Compose(link.RecipientName, url, theme, assetsOptions.Value.BaseUrl);
 
             var message = new EmailMessage(
                 link.TenantId,
-                ManualCaptureEmailComposer.TemplateId,
+                rechazo ? ManualCaptureEmailComposer.RejectionTemplateId : ManualCaptureEmailComposer.TemplateId,
                 link.RecipientEmail.Trim(),
                 link.RecipientName ?? string.Empty,
                 subject,

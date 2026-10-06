@@ -84,7 +84,7 @@ internal static class ManualCaptureSessionResolver
 
 /// <summary>
 /// HU #13289 (Feature #13281 B, Épica #13202) — <c>GET /public/manual-capture/{token}</c>: datos para la pantalla.
-/// Solo si la validación es del proveedor manual y está en <c>manual_activo</c>. Errores: <c>not_found</c> (404),
+/// Solo si la validación es del proveedor manual y espera captura (<c>manual_activo</c>, o <c>rechazado</c> con motivo tras una revisión, HU #13299). Errores: <c>not_found</c> (404),
 /// <c>expirada</c> (410), <c>estado_invalido</c> (409). Solo lectura: no persiste nada (a diferencia del magic-link mock).
 /// </summary>
 public sealed class GetManualCaptureHandler(IProcedureInstanceRepository repo, TimeProvider? clock = null)

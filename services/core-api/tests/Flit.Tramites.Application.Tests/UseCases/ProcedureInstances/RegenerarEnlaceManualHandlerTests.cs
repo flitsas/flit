@@ -136,6 +136,23 @@ public sealed class RegenerarEnlaceManualHandlerTests
     }
 
     [Fact]
+    public async Task Rechazada_con_motivo_tambien_regenera_el_enlace_y_sigue_rechazada()
+    {
+        var v = Fila(BiometricEstados.Rechazado);
+        v.RejectionReasonCode = "imagen_borrosa";
+        var hashViejo = v.TokenHash;
+
+        var (result, error) = await Handler().HandleAsync(new RegenerarEnlaceManualCommand(v.Id, User), Ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be("rechazado");
+        result.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.TokenHash.Should().NotBe(hashViejo);
+        v.RejectionReasonCode.Should().Be("imagen_borrosa");
+        await _notifier.Received(1).NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ValidacionInexistente_DevuelveNotFound()
     {
         var (result, error) = await Handler().HandleAsync(new RegenerarEnlaceManualCommand(Guid.NewGuid(), User), Ct);
