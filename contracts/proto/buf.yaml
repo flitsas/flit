@@ -1,0 +1,11 @@
+# Contratos gRPC entre servicios de FLIT (ADR-0070, contrato de plataforma v1.3 §6.1).
+# Un módulo: la raíz de este directorio. Los paquetes siguen flit.<servicio>.v<n> y viven en
+# flit/<servicio>/v<n>/. CI corre `buf lint` y `buf breaking` contra develop (contracts.yml).
+# El código C# NO se genera con buf: cada servicio lo genera con Grpc.Tools en su build.
+version: v2
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
