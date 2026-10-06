@@ -392,15 +392,15 @@ services:
       # Mismo bloque de variables que core-api (ancla): llave de firma, clientes OIDC, correo, base. Lo que cambie allá
       # cambia aquí; si difirieran, un proceso rechazaría los tokens del otro.
       <<: *core-api-env
-      ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4004}
+      ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4025}
     volumes:
       # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
       - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
     ports:
-      - "127.0.0.1:${CORE_IDENTITY_PORT:-4004}:${CORE_IDENTITY_PORT:-4004}"
+      - "127.0.0.1:${CORE_IDENTITY_PORT:-4025}:${CORE_IDENTITY_PORT:-4025}"
     healthcheck:
       # Listo = base alcanzable y sin migraciones que falten (no solo «vivo»). El gateway también lo consulta.
-      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_IDENTITY_PORT:-4004}/health/ready"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_IDENTITY_PORT:-4025}/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -573,7 +573,7 @@ services:
       # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
       Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}
       # Primero core-identity y de respaldo core-api (el gateway elige el primero sano por /health/ready).
-      ReverseProxy__Clusters__core-identity-cluster__Destinations__a-core-identity__Address: http://core-identity:${CORE_IDENTITY_PORT:-4004}/
+      ReverseProxy__Clusters__core-identity-cluster__Destinations__a-core-identity__Address: http://core-identity:${CORE_IDENTITY_PORT:-4025}/
       ReverseProxy__Clusters__core-identity-cluster__Destinations__b-core-api__Address: http://core-api:${CORE_API_PORT:-4003}/
       # MISMA variable que el ASPNETCORE_URLS de migracion-api. appsettings.json trae
       # el 4030 de DEV/local; sin este override, en QA/PDN el gateway apunta a un
@@ -707,7 +707,7 @@ services:
     profiles: ["suite"]
     image: ghcr.io/flitsas/flitdev/frontend-hub:${FRONTEND_HUB_TAG:-latest}
     environment:
-      PORT: "${HUB_PORT:-4040}"
+      PORT: "${HUB_PORT:-4022}"
       HOSTNAME: "0.0.0.0"
       # /api/v1/* del navegador y la marca del host van al gateway por la red interna, con el
       # sello X-Flit-Domain y la clave interna (mismo criterio que el servicio frontend).
@@ -727,9 +727,9 @@ services:
       # Hosts FLIT (sin marca de red). Mismo valor que NEXT_PUBLIC_FLIT_HOSTS de Trámites en cd.yml.
       FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online}
     ports:
-      - "127.0.0.1:${HUB_PORT:-4040}:${HUB_PORT:-4040}"
+      - "127.0.0.1:${HUB_PORT:-4022}:${HUB_PORT:-4022}"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HUB_PORT:-4040}/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HUB_PORT:-4022}/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -247,13 +247,14 @@ Los navegadores resuelven `*.localhost` a la máquina local, y `ict.localhost` y
 | Producto nuevo | `<código>.localhost:<puerto de su app>` |
 | API | `localhost:4002` (gateway), `localhost:4003` (core-api) |
 
-Puertos nuevos, siguiendo el esquema actual (DEV y local `40xx`, QA `50xx`, PDN `60xx`). Ya están ocupados `x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` y `x030` migración.
+Puertos nuevos, siguiendo el esquema actual (DEV y local `40xx`, QA `50xx`, PDN `60xx`). Ya están ocupados `x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager y `x030` migración. Bloque `x022`–`x025` (2026-10-06): un puerto por producto, el de su app web; su API, si la tiene, va por la red interna detrás del gateway.
 
 | Servicio | DEV y local | QA | PDN |
 |---|---|---|---|
-| `frontend-hub` | 4040 | 5040 | 6040 |
-| `core-comparendos` / `frontend-comparendos` | 4060 / 4061 | 5060 / 5061 | 6060 / 6061 |
-| `core-diagnostico` / `frontend-diagnostico` | 4070 / 4071 | 5070 / 5071 | 6070 / 6071 |
+| `frontend-hub` | 4022 | 5022 | 6022 |
+| Comparendos (`frontend-comparendos`) | 4023 | 5023 | 6023 |
+| Diagnóstico (`frontend-diagnostico`) | 4024 | 5024 | 6024 |
+| `core-identity` | 4025 | 5025 | 6025 |
 
 El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 

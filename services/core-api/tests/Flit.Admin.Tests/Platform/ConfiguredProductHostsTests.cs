@@ -53,11 +53,11 @@ public sealed class ConfiguredProductHostsTests
     {
         var hosts = Hosts(o =>
         {
-            o.Overrides["plataforma"] = "http://127.0.0.1:4040/";
+            o.Overrides["plataforma"] = "http://127.0.0.1:4022/";
             o.ComingSoon = ["comparendos"];
         });
 
-        hosts.LinkFor("comparendos").Should().Be("http://127.0.0.1:4040/proximamente/comparendos");
+        hosts.LinkFor("comparendos").Should().Be("http://127.0.0.1:4022/proximamente/comparendos");
     }
 
     [Fact]
@@ -65,11 +65,11 @@ public sealed class ConfiguredProductHostsTests
     {
         var hosts = Hosts(o =>
         {
-            o.Overrides["comparendos"] = "http://127.0.0.1:4061";
+            o.Overrides["comparendos"] = "http://127.0.0.1:4023";
             o.ComingSoon = ["comparendos"];
         });
 
-        hosts.LinkFor("comparendos").Should().Be("http://127.0.0.1:4061");
+        hosts.LinkFor("comparendos").Should().Be("http://127.0.0.1:4023");
         hosts.IsComingSoon("comparendos").Should().BeFalse();
     }
 

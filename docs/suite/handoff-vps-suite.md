@@ -137,13 +137,13 @@ quedan también en el `.env`.
 | Trámites (`frontend`) | `FRONTEND_PORT` | 4001 | 5001 | 6001 |
 | `gateway` | `GATEWAY_PORT` | 4002 | 5002 | 6002 |
 | `core-api` | `CORE_API_PORT` | 4003 | 5003 | 6003 |
-| **`core-identity`** | `CORE_IDENTITY_PORT` | **4004** | **5004** | **6004** |
+| **`core-identity`** | `CORE_IDENTITY_PORT` | **4025** | **5025** | **6025** |
 | `python-ml` | `PYTHON_ML_PORT` | 4012 | 5012 | 6012 |
 | `core-ict` | `CORE_ICT_PORT` | 4020 | el que ya tenga el `.env` | el que ya tenga el `.env` |
 | `migracion-api` (no publicado) | `MIGRACION_API_PORT` | 4030 | 5030 | 6030 |
-| **Hub (`frontend-hub`)** | `HUB_PORT` | **4040** | **5040** | **6040** |
+| **Hub (`frontend-hub`)** | `HUB_PORT` | **4022** | **5022** | **6022** |
 | gRPC interno de core-api (no publicado) | `CORE_API_GRPC_PORT` | 8082 | 8082 | 8082 |
-| Reservados, sin servicio todavía | — | Comparendos 4060 (API) / 4061 (front); Diagnóstico 4070 / 4071 | 50xx | 60xx |
+| Reservados, sin servicio todavía | — | Comparendos 4023; Diagnóstico 4024 | 5023; 5024 | 6023; 6024 |
 
 Notas:
 - `CORE_ICT_PORT` no lo exporta el CD (ya era así antes de la suite). En QA y PDN, **no lo cambies**: deja el valor que
@@ -170,8 +170,8 @@ Ningún valor secreto va en este documento. Plantilla completa y comentada: [`.e
 | `FLIT_SUITE_ENV` | CD + `.env` | Prefijo de ambiente de los hosts de la suite: `[env.]<producto>.flitsas.online`. Con él la API arma el menú de productos, el emisor OIDC y **las direcciones de retorno del login de cada producto**. **Obligatoria**: el compose no arranca sin ella | `dev` | `qa` | vacía (`FLIT_SUITE_ENV=`) | no |
 | `FLIT_HUB_URL` | CD + `.env` | URL pública del hub (emisor OIDC). Trámites y el hub mandan ahí a iniciar sesión | `https://dev.flitsas.online` | `https://qa.flitsas.online` | `https://flitsas.online` | no |
 | `FLIT_TRAMITES_URL` | CD + `.env` | URL pública de Trámites en su host; el hub redirige ahí (308) cuando `FLIT_TRAMITES_HOST_ENABLED=true` | `https://dev.tramites.flitsas.online` | `https://qa.tramites.flitsas.online` | `https://tramites.flitsas.online` | no |
-| `HUB_PORT` | CD + `.env` | Puerto del hub | 4040 | 5040 | 6040 | no |
-| `CORE_IDENTITY_PORT` | CD + `.env` | Puerto de core-identity (también lo usa el gateway para alcanzarlo) | 4004 | 5004 | 6004 | no |
+| `HUB_PORT` | CD + `.env` | Puerto del hub | 4022 | 5022 | 6022 | no |
+| `CORE_IDENTITY_PORT` | CD + `.env` | Puerto de core-identity (también lo usa el gateway para alcanzarlo) | 4025 | 5025 | 6025 | no |
 | `FRONTEND_HUB_TAG`, `CORE_IDENTITY_TAG` | CD + `.env` | Tag de imagen. Sin valor caen en `latest`, que **solo publica PDN** | `dev` | `qa` | `sha-<commit>` desplegado | no |
 | `FLIT_SESSION_SECRET` | `.env` | Cifra la cookie de sesión del hub y de cada producto. Mínimo 32 caracteres; si es más corta o falta, el hub (y Trámites en modo `oidc`) responden error 500 en todo lo que use la sesión. Distinta por ambiente. Cambiarla cierra todas las sesiones | `openssl rand -base64 48` | otra | otra | **sí** |
 | `FLIT_INTERNAL_API_KEY` | `.env` (ya existía) | Llave que el gateway exige para creer el dominio que le mandan el hub y Trámites desde la red interna. **Vacía, la suite no sabe en qué dominio está** (Marca Blanca y el producto se deducen mal) | ya definida | ya definida | ya definida | **sí** |
@@ -199,10 +199,10 @@ FLIT_INTERNAL_SUBNET=10.114.40.0/24
 FRONTEND_PORT=4001
 GATEWAY_PORT=4002
 CORE_API_PORT=4003
-CORE_IDENTITY_PORT=4004
+CORE_IDENTITY_PORT=4025
 PYTHON_ML_PORT=4012
 MIGRACION_API_PORT=4030
-HUB_PORT=4040
+HUB_PORT=4022
 CORE_API_TAG=dev
 CORE_IDENTITY_TAG=dev
 CORE_ICT_TAG=dev
@@ -354,14 +354,14 @@ server {
     client_max_body_size 50m;
     large_client_header_buffers 4 32k;
 
-    location / { proxy_pass http://127.0.0.1:4040; }   # antes: 4001 (FRONTEND_PORT)
+    location / { proxy_pass http://127.0.0.1:4022; }   # antes: 4001 (FRONTEND_PORT)
 }
 ```
 
 | | DEV | QA | PDN |
 |---|---|---|---|
 | Host de Trámites → | `127.0.0.1:4001` | `127.0.0.1:5001` | `127.0.0.1:6001` |
-| Raíz (hub) → | `127.0.0.1:4040` | `127.0.0.1:5040` | `127.0.0.1:6040` |
+| Raíz (hub) → | `127.0.0.1:4022` | `127.0.0.1:5022` | `127.0.0.1:6022` |
 
 ### 6.2 Reglas que no están a la vista (y por qué)
 
@@ -543,8 +543,9 @@ Hoy **no** hay que hacer nada en la VPS: no tienen servicio en el compose y el h
 (lista `Suite:Hosts:ComingSoon` en la configuración de la API). Su cliente de login ya se registra con su host futuro.
 
 Cuando uno se despliegue (por PR, no a mano):
-- Su servicio y su front entran al compose con los puertos reservados (Comparendos 4060/4061, Diagnóstico 4070/4071;
-  QA 50xx, PDN 60xx).
+- Su servicio y su front entran al compose con los puertos reservados (Comparendos 4023, Diagnóstico 4024;
+  QA 50xx, PDN 60xx). Su host ya tiene DNS, certificado y server{} en DEV: hoy redirige a `/proximamente/<producto>`
+  del hub; al desplegar, ese server{} pasa a `proxy_pass` al puerto del producto.
 - DNS + certificado de `<ambiente>.comparendos.flitsas.online` (mismas reglas de §5) y un server{} igual al de
   Trámites (§6.1), con las mismas reglas de §6.2.
 - Se quita de la lista «Próximamente» para ese ambiente (cambio de configuración por PR).

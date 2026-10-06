@@ -5,8 +5,8 @@ v1 (§1). Por ahora la carpeta solo reserva el lugar; todavía no tiene código.
 
 | | DEV y local | QA | PDN |
 |---|---|---|---|
-| Puerto | 4070 | 5070 | 6070 |
-| Su app web | `frontend-diagnostico` (4071) | 5071 | 6071 |
+| Puerto | interno, detrás del gateway (sin puerto publicado) | | |
+| Su app web | `frontend-diagnostico` (4024) | 5024 | 6024 |
 
 Valida los tokens de la suite sin llamar a otro servicio (como `core-api`, ver
 [identidad-frontera.md](../../docs/suite/identidad-frontera.md) §7) y guarda sus datos en su propio schema `diagnostico`.
