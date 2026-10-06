@@ -165,6 +165,13 @@ function DetalleCuerpo({
               )}
             </dl>
 
+            {detail.status === 'rechazado' && detail.linkExpiresAt && (
+              <p role="status" className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm dark:border-white/10 dark:bg-[#162744]">
+                <Clock className="h-4 w-4 shrink-0 text-[#557EFF]" aria-hidden />
+                <span>Se envió un enlace nuevo al cliente. Vence el {formatFechaHora(detail.linkExpiresAt)}</span>
+              </p>
+            )}
+
             <section aria-labelledby={`${id}-consent`} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
               <h3 id={`${id}-consent`} className="flex items-center gap-2 text-sm font-bold text-[#162744] dark:text-white">
                 <ShieldCheck className="h-4 w-4 text-[#557EFF]" aria-hidden /> Consentimiento de tratamiento de datos

@@ -5,10 +5,12 @@ import { ApiError } from './types';
 import type { ManualReviewClient } from './manual-review-client';
 import {
   MANUAL_IMAGE_KINDS,
+  type ManualApproveResult,
   type ManualDetail,
   type ManualImageKind,
   type ManualListItem,
   type ManualOrigin,
+  type ManualRejectResult,
   type ManualStatus,
 } from './types/manual-review';
 import { MOTIVOS_RECHAZO_MANUAL } from '@/lib/identidad/motivos-rechazo-manual';
@@ -83,8 +85,11 @@ function buildRows(count: number, now: Date): ManualDetail[] {
       reviewedAt: status === 'aprobado' || status === 'rechazado' ? now.toISOString() : null,
       reviewedBy: null,
       rejectionReasonCode: status === 'rechazado' ? MOTIVOS_RECHAZO_MANUAL[i % 6].code : null,
+      // Como el backend: el enlace vigente solo existe esperando captura o tras un rechazo (enlace nuevo de 24 h).
       linkExpiresAt:
-        status === 'manual_activo' ? new Date(now.getTime() + 20 * 3_600_000).toISOString() : null,
+        status === 'manual_activo' || status === 'rechazado'
+          ? new Date(now.getTime() + 20 * 3_600_000).toISOString()
+          : null,
     };
   });
 }
@@ -152,7 +157,18 @@ export function createMockManualReviewClient(options: MockOptions = {}): ManualR
       const row = find(id);
       exigirPendiente(row);
       row.status = 'aprobado';
+      row.waitingMinutes = null;
       row.reviewedAt = new Date().toISOString();
+      return {
+        validationId: row.id,
+        tenantId: 'mock-tenant',
+        procedureInstanceId: null,
+        status: 'aprobado',
+        approvalOrigin: 'manual',
+        validatedAt: row.reviewedAt,
+        validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        reviewedAt: row.reviewedAt,
+      } satisfies ManualApproveResult;
     },
     async rejectManual(id, reasonCode) {
       await pause();
@@ -162,8 +178,20 @@ export function createMockManualReviewClient(options: MockOptions = {}): ManualR
       const row = find(id);
       exigirPendiente(row);
       row.status = 'rechazado';
+      row.waitingMinutes = null;
       row.rejectionReasonCode = reasonCode;
       row.reviewedAt = new Date().toISOString();
+      row.linkExpiresAt = new Date(Date.now() + 24 * 3_600_000).toISOString();
+      return {
+        validationId: row.id,
+        tenantId: 'mock-tenant',
+        procedureInstanceId: null,
+        status: 'rechazado',
+        rejectionReasonCode: reasonCode,
+        reviewedAt: row.reviewedAt,
+        linkExpiresAt: row.linkExpiresAt,
+        emailEnviado: true,
+      } satisfies ManualRejectResult;
     },
   };
 }

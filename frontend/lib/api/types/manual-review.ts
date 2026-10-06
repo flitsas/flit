@@ -53,8 +53,35 @@ export interface ManualDetail extends ManualListItem {
   reviewedBy: string | null;
   rejectionReasonCode: string | null;
   /**
-   * NO está en el contrato §3: caducidad del enlace de captura (24 h), para el estado «el cliente aún no
-   * ha capturado» (HU-C6 AC4). Opcional: si el backend no lo manda, la UI omite la línea.
+   * Vencimiento del enlace de captura vigente (24 h): solo con `manual_activo` (el cliente aún no capturó) o `rechazado`
+   * (enlace NUEVO para repetir la captura, HU #13299); `null` en los demás. Espejo de `ManualDetail.linkExpiresAt`.
    */
   linkExpiresAt?: string | null;
+}
+
+/** Respuesta de `POST .../manual-approve` (espejo de `AprobarValidacionManualResult`). */
+export interface ManualApproveResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  status: 'aprobado';
+  approvalOrigin: 'manual';
+  validatedAt: string;
+  /** Fin de vigencia (30 días desde la aprobación). */
+  validUntil: string;
+  reviewedAt: string;
+}
+
+/** Respuesta de `POST .../manual-reject` (espejo de `RechazarValidacionManualResult`). */
+export interface ManualRejectResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  status: 'rechazado';
+  rejectionReasonCode: string;
+  reviewedAt: string;
+  /** Vencimiento del enlace NUEVO (24 h). */
+  linkExpiresAt: string;
+  /** `false`: el correo con el motivo y el enlace no salió (el rechazo sí quedó). */
+  emailEnviado: boolean;
 }

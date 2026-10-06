@@ -8,8 +8,10 @@ import { createMockManualReviewClient } from './manual-review-mock';
 import type {
   ManualDetail,
   ManualImageKind,
+  ManualApproveResult,
   ManualListParams,
   ManualListResponse,
+  ManualRejectResult,
 } from './types/manual-review';
 
 export interface ManualReviewClient {
@@ -17,8 +19,8 @@ export interface ManualReviewClient {
   getManualDetail(id: string, signal?: AbortSignal): Promise<ManualDetail>;
   /** Imagen protegida como Blob: el JWT viaja en la cabecera, nunca en la URL. */
   getManualImage(id: string, kind: ManualImageKind, signal?: AbortSignal): Promise<Blob>;
-  approveManual(id: string): Promise<void>;
-  rejectManual(id: string, reasonCode: string): Promise<void>;
+  approveManual(id: string): Promise<ManualApproveResult>;
+  rejectManual(id: string, reasonCode: string): Promise<ManualRejectResult>;
 }
 
 const BASE = '/api/v1/tramites/biometric-validations';
@@ -59,16 +61,14 @@ export const manualReviewHttpClient: ManualReviewClient = {
     return response.blob();
   },
 
-  async approveManual(id) {
-    await apiFetch<void>(`${BASE}/${encodeURIComponent(id)}/manual-approve`, { method: 'POST' });
-  },
+  approveManual: (id) =>
+    apiFetch<ManualApproveResult>(`${BASE}/${encodeURIComponent(id)}/manual-approve`, { method: 'POST' }),
 
-  async rejectManual(id, reasonCode) {
-    await apiFetch<void>(`${BASE}/${encodeURIComponent(id)}/manual-reject`, {
+  rejectManual: (id, reasonCode) =>
+    apiFetch<ManualRejectResult>(`${BASE}/${encodeURIComponent(id)}/manual-reject`, {
       method: 'POST',
       body: { reasonCode },
-    });
-  },
+    }),
 };
 
 /** `true` salvo que `NEXT_PUBLIC_MANUAL_REVIEW_MOCK` sea exactamente «false». */

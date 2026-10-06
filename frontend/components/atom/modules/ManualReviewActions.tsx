@@ -47,9 +47,26 @@ export function DangerButton({
 const BTN_SECUNDARIO =
   'rounded-xl border border-[#DFE5ED] px-4 py-2.5 text-sm font-medium text-[#162744] transition hover:bg-[#162744]/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-60 dark:text-white';
 
+/** `code` del cuerpo de error del backend (`{ code, message }`), si lo hay. */
+function codigoDeError(err: unknown): string | undefined {
+  const body = err instanceof ApiError ? (err.body as { code?: unknown } | null | undefined) : undefined;
+  return typeof body?.code === 'string' ? body.code : undefined;
+}
+
+/**
+ * 409 `estado_invalido`: la validación ya no está pendiente (alguien más decidió o el cliente cambió algo) y el detalle se
+ * refresca. 409 `tramite_inactivo` NO es eso: el trámite está anulado o revocado y la validación queda como estaba.
+ */
+function esEstadoCambiado(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409 && codigoDeError(err) !== 'tramite_inactivo';
+}
+
 /** Mensaje claro para el Super Admin según el error del backend (409, 400 u otro). */
 export function mensajeErrorAccion(err: unknown): string {
   if (err instanceof ApiError) {
+    if (err.status === 409 && codigoDeError(err) === 'tramite_inactivo') {
+      return 'El trámite está anulado o revocado: la validación se conserva sin cambios.';
+    }
     if (err.status === 409) return 'Esta validación ya no está pendiente de revisión. Actualizamos el detalle.';
     if (err.status === 400) return 'El motivo elegido no es válido. Elige otro de la lista.';
   }
@@ -151,7 +168,7 @@ function AprobarDialog({ detail, client, onClose, onDone, onStale }: DialogoProp
       onDone('Aprobada por 30 días.');
     } catch (err) {
       setBusy(false);
-      if (err instanceof ApiError && err.status === 409) {
+      if (esEstadoCambiado(err)) {
         onStale();
         return;
       }
@@ -193,11 +210,15 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
     setBusy(true);
     setError(null);
     try {
-      await client.rejectManual(detail.id, motivo);
-      onDone('Rechazada. El cliente recibirá el motivo por correo con un enlace nuevo.');
+      const res = await client.rejectManual(detail.id, motivo);
+      onDone(
+        res.emailEnviado === false
+          ? 'Rechazada, pero el correo al cliente no pudo enviarse.'
+          : 'Rechazada. El cliente recibirá el motivo por correo con un enlace nuevo.',
+      );
     } catch (err) {
       setBusy(false);
-      if (err instanceof ApiError && err.status === 409) {
+      if (esEstadoCambiado(err)) {
         onStale();
         return;
       }
