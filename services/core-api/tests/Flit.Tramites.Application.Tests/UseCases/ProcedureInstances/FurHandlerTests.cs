@@ -1419,8 +1419,23 @@ public sealed class FurHandlerTests
             .Which.Should().Equal(sig);
     }
 
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaPorEncimaDelTope_ElFurNoUsaLaImagen()
+    {
+        var enorme = new byte[IdentitySignatureImageFormat.MaxArtifactBytes + 1];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.CopyTo(enorme, 0);
+        var (handler, capturing, id, tenant, _) = FurConRubricaPersistida(usable: true, sigOverride: enorme, conExtractor: false);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        (capturing.Captured!.FirmaIdentidadImagenes ?? new Dictionary<string, byte[]>())
+            .Should().BeEmpty("un artefacto por encima del tope no se estampa, haya o no extractor");
+        capturing.Captured.SellosIdentidad.Should().ContainKey("comprador");
+    }
+
     private (GenerarFurHandler Handler, CapturingFurGenerator Capturing, Guid Id, Guid Tenant, byte[] Sig)
-        FurConRubricaPersistida(bool usable)
+        FurConRubricaPersistida(bool usable, byte[]? sigOverride = null, bool conExtractor = true)
     {
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -1432,7 +1447,7 @@ public sealed class FurHandlerTests
         instance.BiometricValidations.Add(bio);
         _repo.GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);
 
-        byte[] sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4];
+        var sig = sigOverride ?? [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4];
         _storage.Blobs["bio/rubrica.png"] = sig;
         var extractor = Substitute.For<IIdentitySignatureExtractor>();
         extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(usable);
@@ -1441,7 +1456,7 @@ public sealed class FurHandlerTests
         var handler = new GenerarFurHandler(
             _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
             NullLogger<GenerarFurHandler>.Instance,
-            identitySignatureExtractor: extractor);
+            identitySignatureExtractor: conExtractor ? extractor : null);
         return (handler, capturing, id, tenant, sig);
     }
 

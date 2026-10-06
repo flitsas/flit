@@ -292,6 +292,39 @@ public sealed class IdentitySignatureExtractorTests
         decoded.Height.Should().Be(270);
     }
 
+    // Bug #13304 (review de seguridad) — un PNG embebido de pocos bytes con cabecera de 5 Mpx no se
+    // decodifica completo dentro de TryDecode/TryExtract, y la extracción sigue eligiendo la rúbrica.
+    [Fact]
+    public void Bug13304_PngEmbebidoDeCabeceraEnorme_NoSeDecodificaYSigueLaRubrica()
+    {
+        var huge = HugeWhitePng(5000, 1000);
+        huge.Length.Should().BeLessThan(IdentitySignatureImageFormat.MaxArtifactBytes);
+
+        using var doc = new PdfDocument();
+        var dict = ImageXObject(doc, 5000, 1000, "/DeviceRGB", string.Empty, huge);
+        PdfXObjectPngDecoder.TryDecode(dict).Should().BeNull(
+            "5 Mpx supera el tope de decodificación: no se reservan sus píxeles");
+
+        var crop = new IdentitySignatureExtractor().TryExtract(BuildPdf(
+        [
+            .. LayoutNuevo(),
+            new PdfImageSpec("/ImEnorme", 5000, 1000, huge, "/DeviceRGB", string.Empty),
+        ]));
+
+        crop.Should().NotBeNull();
+        using var decoded = Image.Load<Rgba32>(crop!.PngBytes);
+        decoded.Width.Should().Be(672);
+        decoded.Height.Should().Be(270);
+    }
+
+    private static byte[] HugeWhitePng(int width, int height)
+    {
+        using var image = new Image<Rgba32>(width, height, new Rgba32(255, 255, 255));
+        using var ms = new MemoryStream();
+        image.Save(ms, new PngEncoder());
+        return ms.ToArray();
+    }
+
     private static (IdentitySignatureCapture Sut, IIdentitySignatureArtifactStorage Store) CaptureWithRealExtractor()
     {
         var store = Substitute.For<IIdentitySignatureArtifactStorage>();
@@ -492,7 +525,8 @@ public sealed class IdentitySignatureExtractorTests
         image.Elements.SetInteger("/Height", height);
         image.Elements.SetName("/ColorSpace", colorSpace);
         image.Elements.SetInteger("/BitsPerComponent", 8);
-        image.Elements.SetName("/Filter", filter);
+        if (!string.IsNullOrEmpty(filter))
+            image.Elements.SetName("/Filter", filter);
         image.CreateStream(filter == "/FlateDecode" ? new FlateDecode().Encode(data) : data);
         doc.Internals.AddObject(image);
         return image;
