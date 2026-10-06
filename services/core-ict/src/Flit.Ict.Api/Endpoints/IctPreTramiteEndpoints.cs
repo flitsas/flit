@@ -42,8 +42,11 @@ public static class IctPreTramiteEndpoints
                 return error switch
                 {
                     "not_found" => Results.Json(new { error }, statusCode: StatusCodes.Status404NotFound),
-                    "already_materialized" or "not_editable" or "stale" =>
+                    // Bug #13304: not_draft = materializado y ya fuera de borrador; mismo 409 que already_materialized.
+                    "already_materialized" or "not_editable" or "stale" or EditPreTramiteHandler.NotDraft =>
                         Results.Json(new { error }, statusCode: StatusCodes.Status409Conflict),
+                    EditPreTramiteHandler.CoreApiUnavailable =>
+                        Results.Json(new { error }, statusCode: StatusCodes.Status503ServiceUnavailable),
                     "unauthenticated" => Results.Json(new { error }, statusCode: StatusCodes.Status401Unauthorized),
                     _ => Results.Json(new { error }, statusCode: StatusCodes.Status400BadRequest),
                 };
