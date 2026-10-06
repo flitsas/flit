@@ -101,8 +101,10 @@ public static class ImprontaManualStampContextBuilder
                         // pintar (PdfSharp/ImageSharp) — no dejar la zona vacía.
                         // Bug #13304 — paridad con FurCommand: con extractor disponible, una rúbrica
                         // que no pasa IsUsableInk (p. ej. el logo «Verify» persistido) no se pinta y
-                        // queda el sello de texto.
+                        // queda el sello de texto. Un artefacto por encima del tope del extractor
+                        // tampoco se decodifica ni se pinta (review de seguridad).
                         if (bytes is { Length: > 0 }
+                            && bytes.Length <= IdentitySignatureImageFormat.MaxArtifactBytes
                             && (signatureExtractor is null || signatureExtractor.IsUsableInk(bytes)))
                         {
                             imagen = bytes;

@@ -212,6 +212,27 @@ public sealed class ImprontaManualStampContextBuilderTests
         ctx.Signers[0].SealText.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaPorEncimaDelTope_NoSeEstampaYQuedaElSelloDeTexto()
+    {
+        var (instance, _) = JuridicaConRubricaDeIdentidad();
+        var enorme = new byte[IdentitySignatureImageFormat.MaxArtifactBytes + 1];
+        MinimalPng().CopyTo(enorme, 0);
+        _storage.OpenReadAsync("bio/logo.png", Arg.Any<CancellationToken>())
+            .Returns(_ => new MemoryStream(enorme));
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(true);
+
+        var ctx = await ImprontaManualStampContextBuilder.BuildAsync(
+            instance, Impronta(instance.TenantId, instance.Id), _storage, _vault,
+            ct: TestContext.Current.CancellationToken, signatureExtractor: extractor);
+
+        ctx.Signers[0].SignatureImage.Should().BeNull("un artefacto por encima del tope no se decodifica ni se pinta");
+        ctx.Signers[0].ImageSidecarText.Should().BeNull();
+        ctx.Signers[0].SealText.Should().Contain("Validación biométrica");
+        extractor.DidNotReceive().IsUsableInk(Arg.Any<byte[]>());
+    }
+
     private (ProcedureInstance Instance, byte[] SigBytes) JuridicaConRubricaDeIdentidad()
     {
         var instance = BaseInstance();
