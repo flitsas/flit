@@ -80,6 +80,11 @@ describe("visor de documento y vista previa (HU #13293, #13294)", () => {
     expect(screen.getByTestId("aviso-encuadre")).toHaveTextContent(
       "Encuadra el documento completo, sin reflejos ni dedos sobre los datos, y toca Capturar",
     );
+    // La píldora vive anclada abajo del visor, fuera del marco guía (no tapa la silueta ni «tu foto»).
+    const aviso = screen.getByTestId("aviso-encuadre");
+    expect(aviso).toHaveClass("absolute", "bottom-2", "bg-slate-900/80", "text-white", "rounded-[28px]");
+    expect(aviso.parentElement).toBe(guia.parentElement?.parentElement);
+    expect(guia.parentElement?.contains(aviso)).toBe(false);
   });
 
   it("la vista previa muestra dos botones lado a lado, Repetir y Confirmar, del mismo alto", async () => {

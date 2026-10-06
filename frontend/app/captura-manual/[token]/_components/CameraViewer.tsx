@@ -111,7 +111,7 @@ export function CameraViewer({
   const isDoc = shape === "rect";
   return (
     <div className="flex flex-col gap-4">
-      <div className={`relative overflow-hidden rounded-2xl bg-slate-900 ${isDoc ? "aspect-[4/3]" : "aspect-square"}`}>
+      <div className={`relative overflow-hidden rounded-2xl bg-slate-900 ${isDoc ? "aspect-[10/9]" : "aspect-square"}`}>
         <video ref={videoRef} playsInline muted aria-label="Vista en vivo de la cámara" className="size-full object-cover" />
         {!ready ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 p-6 text-center text-white">
@@ -127,7 +127,7 @@ export function CameraViewer({
                 data-testid="aviso-encuadre"
                 className={
                   isDoc
-                    ? "absolute inset-x-8 bottom-3 rounded-[28px] bg-slate-900/80 px-5 py-3 text-center text-base font-medium text-white"
+                    ? "absolute inset-x-[10%] bottom-2 rounded-[28px] bg-slate-900/80 px-4 py-1.5 text-center text-[13px] font-medium leading-snug text-white"
                     : "absolute inset-x-4 bottom-3 rounded-full bg-amber-400/90 px-3 py-1 text-center text-sm font-medium text-slate-900"
                 }
               >
@@ -188,7 +188,7 @@ function Guide({ shape, side }: { shape: "oval" | "rect"; side: "anverso" | "rev
   // Marco rectangular redondeado, borde blanco semitransparente, en la parte alta del visor (la
   // píldora de aviso queda debajo, como en Kyverum). La silueta guía vive dentro del marco.
   return (
-    <div className="pointer-events-none absolute inset-x-[5%] top-[7%] aspect-[2/1] rounded-2xl border-[3px] border-white/80">
+    <div className="pointer-events-none absolute inset-x-[8%] top-[3%] aspect-[2/1] rounded-2xl border-[3px] border-white/80">
       <DocumentSilhouette side={side} />
     </div>
   );
