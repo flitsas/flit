@@ -15,4 +15,11 @@ public enum NotificationModule
 
     /// <summary>Trámites — notificaciones de ciclo de vida (banco de pruebas; disparador productivo diferido).</summary>
     Tramites,
+
+    /// <summary>
+    /// Identidad — validación de identidad del titular (correo del enlace de captura manual, HU #13287). No es un correo de
+    /// cuenta: sigue el canal de notificación del tenant (<c>TenantChannelEmailRouter.IsAccountEmail</c> solo reconoce
+    /// <see cref="Security"/>).
+    /// </summary>
+    Identidad,
 }

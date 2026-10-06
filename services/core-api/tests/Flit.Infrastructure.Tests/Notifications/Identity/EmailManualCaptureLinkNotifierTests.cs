@@ -1,10 +1,13 @@
+using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Identity;
 using Flit.Infrastructure.Notifications.Theme;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application.Identity;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using System.Net;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Notifications.Identity;
@@ -34,6 +37,7 @@ public sealed class EmailManualCaptureLinkNotifierTests
 
     private EmailManualCaptureLinkNotifier Notifier(string baseUrl = "https://app.flit.example/") =>
         new(_sender, _themes, new EmailThemePublicBrandingOptions { PublicBaseUrl = baseUrl },
+            Options.Create(new NotificationEmailAssetsOptions { BaseUrl = "https://app.flit.example/email-assets" }),
             NullLogger<EmailManualCaptureLinkNotifier>.Instance);
 
     private static ManualCaptureLink Link(string? email = "titular@example.test", string? name = "Ana Perez") =>
@@ -54,22 +58,32 @@ public sealed class EmailManualCaptureLinkNotifierTests
         enviado.TenantId.Should().Be(Tenant);
         enviado.TemplateKey.Should().Be("identidad.captura-manual");
         enviado.HtmlBody.Should().Contain("https://app.flit.example/captura-manual/tok_ABC-123_xyz");
-        enviado.Subject.Should().Contain("Verifica tu identidad");
+        enviado.Subject.Should().Be("[FLIT 2.0] Verifica tu identidad");
     }
 
     [Fact]
-    public async Task ElCorreo_DiceQueSePide_LaVigencia_YAQuienEscribir_SinDatosSensibles()
+    public async Task ElCorreo_TieneElDisenoDeVerificacion_ConPasos_Vigencia_YSinDatosSensibles()
     {
         EmailMessage? enviado = null;
         _sender.SendAsync(Arg.Do<EmailMessage>(m => enviado = m), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Sent);
 
         await Notifier().NotifyAsync(Link(), Ct);
 
-        var html = enviado!.HtmlBody;
-        html.Should().Contain("Hola Ana Perez,")
-            .And.Contain("rostro").And.Contain("anverso y reverso").And.Contain("firma")
-            .And.Contain("24 horas").And.Contain("07/10/2026 09:30")
-            .And.Contain(ManualCaptureEmailComposer.FlitSupportEmail);
+        var html = WebUtility.HtmlDecode(enviado!.HtmlBody);
+        html.Should().Contain("Hola Ana Perez.")
+            .And.Contain("Verifica tu identidad")
+            .And.Contain("Verificación de identidad")
+            .And.Contain("FLIT 2.0</strong> necesita confirmar tu identidad para continuar y es quien guarda tus datos.")
+            .And.Contain("Solicitado por")
+            .And.Contain("PASOS DE LA VERIFICACIÓN")
+            .And.Contain("Valida tus datos").And.Contain("Realiza la validación biométrica")
+            .And.Contain("Captura los datos del documento").And.Contain("Firma")
+            .And.Contain("Verificar mi identidad").And.Contain("#557EFF")
+            .And.Contain("Si el botón no funciona, copia este enlace:")
+            .And.Contain("El enlace es personal, de un solo uso y vale 24 horas. Ábrelo en tu celular.")
+            .And.Contain("https://app.flit.example/email-assets/flit-logo.png");
+        html.Should().NotContainEquivalentOf("kyverum");
+        enviado.Subject.Should().NotContainEquivalentOf("kyverum");
     }
 
     [Fact]

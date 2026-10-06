@@ -2,6 +2,7 @@ using Flit.Infrastructure.Notifications.Theme;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application.Identity;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Notifications.Identity;
 
@@ -16,6 +17,7 @@ public sealed partial class EmailManualCaptureLinkNotifier(
     IEmailSender emailSender,
     IEmailThemeResolver themeResolver,
     EmailThemePublicBrandingOptions options,
+    IOptions<NotificationEmailAssetsOptions> assetsOptions,
     ILogger<EmailManualCaptureLinkNotifier> logger) : IManualCaptureLinkNotifier
 {
     public async Task<bool> NotifyAsync(ManualCaptureLink link, CancellationToken ct = default)
@@ -28,7 +30,7 @@ public sealed partial class EmailManualCaptureLinkNotifier(
         {
             var theme = await themeResolver.ResolveAsync(link.TenantId, ct).ConfigureAwait(false);
             var url = ManualCaptureEmailComposer.BuildLink(options.PublicBaseUrl, link.Token);
-            var (subject, html) = ManualCaptureEmailComposer.Compose(link.RecipientName, url, link.ExpiresAt, theme);
+            var (subject, html) = ManualCaptureEmailComposer.Compose(link.RecipientName, url, theme, assetsOptions.Value.BaseUrl);
 
             var message = new EmailMessage(
                 link.TenantId,
