@@ -63,7 +63,7 @@ export function SectionTabs<Id extends string>({
               onClick={() => onChange(tab.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={`relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF] ${
-                selected ? "text-[#557EFF]" : "text-[#162744] opacity-65 dark:text-white/[0.78] dark:opacity-100"
+                selected ? "text-[#557EFF]" : "text-[#162744] opacity-70 dark:text-white/[0.78] dark:opacity-100"
               }`}
             >
               {tab.label}

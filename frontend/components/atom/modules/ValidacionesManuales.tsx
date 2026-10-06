@@ -132,7 +132,7 @@ export function ValidacionesManuales({
             Nombre o número de documento
           </label>
           <div className="relative mt-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" aria-hidden />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-70" aria-hidden />
             <input
               id={`${idBase}-q`}
               type="search"
