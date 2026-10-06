@@ -29,7 +29,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
     IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null,
     Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoMaestroHandler>? logger = null,
     IMaestroRadicadoLookup? maestroRadicado = null,
-    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null)
+    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
+    Identity.IIdentitySignatureExtractor? identitySignatureExtractor = null)
 {
     // HU #12787 (AC2) — sin Quipux cableado nada está radicado: comportamiento previo.
     private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
@@ -185,7 +186,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
                 pdf = await ImprontaManualStampApplier
                     .MaybeStampAsync(
                         pdf, attachment, instance, storage, improntaManualStamper, ct,
-                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository, logger)
+                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository, logger,
+                        identitySignatureExtractor)
                     .ConfigureAwait(false);
                 pdfParts.Add(pdf);
             }

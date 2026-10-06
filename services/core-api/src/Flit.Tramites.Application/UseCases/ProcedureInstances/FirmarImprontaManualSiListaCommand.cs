@@ -71,7 +71,8 @@ public sealed class FirmarImprontaManualSiListaHandler(
     ISignatureVaultPolicy? vaultPolicy = null,
     IVehicleSignatureImprintRepository? auditRepo = null,
     IRegeneracionDocumentalTrazaWriter? trazaWriter = null,
-    ILogger<FirmarImprontaManualSiListaHandler>? logger = null)
+    ILogger<FirmarImprontaManualSiListaHandler>? logger = null,
+    Identity.IIdentitySignatureExtractor? identitySignatureExtractor = null)
 {
     /// <summary>Tipo del evento persistido en <c>tramites.procedure_instance_events</c> ante un fallo.</summary>
     public const string EventoFallo = "impronta_firma_automatica_fallida";
@@ -118,7 +119,7 @@ public sealed class FirmarImprontaManualSiListaHandler(
             var outcome = await ImprontaManualStampApplier
                 .StampAndPersistAsync(
                     pdf, attachment, instance, storage, stamper, ct,
-                    _vaultPolicy, repo, auditRepo, _logger)
+                    _vaultPolicy, repo, auditRepo, _logger, identitySignatureExtractor)
                 .ConfigureAwait(false);
 
             switch (outcome.Outcome)
