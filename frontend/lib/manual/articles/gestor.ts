@@ -248,6 +248,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "1. Listado de trámites",
         paragraphs: [
           "En /tramites ves las instancias de tu compañía. Puedes filtrar por estado, fecha o criterios disponibles en tu versión.",
+          "Las pestañas Todos, Matrículas, Traspaso y Otros trámites acotan la tabla y las tarjetas de estado; en Traspaso y Otros no hay Preasignación ni Asignado.",
+          "«Búsqueda rápida», debajo de las tarjetas, trae consultas frecuentes con un clic: en subsanación, rechazados desde preasignación, más de 5 o 10 días en gestión, sin firmas, mis trámites, faltantes por aprobar, sin documento y pausados. Los números de las tarjetas se actualizan solos; si cambió la tarjeta que estás viendo, aparece «Hay cambios — Actualizar».",
           "Al abrir una fila entras al detalle: wizard (si sigue en borrador), timeline de estados, adjuntos y observaciones del OT si las hay.",
         ],
       },

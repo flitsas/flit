@@ -14,7 +14,7 @@ vi.mock("@/lib/api/admin-ot", () => ({
   searchOtClientProcedures: vi.fn(),
   fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
-  fetchOtBandejaCounters: vi.fn(),
+  searchOtBandejaCounters: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
 
 import { assignPlateToProcedure, releaseProcedurePlate } from "@/lib/api/admin-plate-ranges";
 import {
-  fetchOtBandejaCounters,
+  searchOtBandejaCounters,
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
   searchOtClientProcedures,
@@ -127,7 +127,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
       deliveredWithoutGrant: 0,
       hasDeliveredWithoutGrant: false,
     });
-    vi.mocked(fetchOtBandejaCounters).mockResolvedValue({
+    vi.mocked(searchOtBandejaCounters).mockResolvedValue({
       transitOfficeResolved: true,
       preasignacion: 0,
       asignados: 0,

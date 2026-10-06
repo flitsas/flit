@@ -18,6 +18,9 @@ public sealed class ListOtClientProceduresQuery
     public bool? HasActiveRevocationRequest { get; init; }
     public Guid? ProcedureTypeId { get; init; }
 
+    /// <summary>Epic #12686 — pestaña de familia (<c>MATRICULAS</c>/<c>TRASPASO</c>/<c>OTROS</c>).</summary>
+    public string? Familia { get; init; }
+
     public string? Vin { get; init; }
 
     public string? Placa { get; init; }
