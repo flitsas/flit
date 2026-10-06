@@ -1566,7 +1566,7 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
     expect(await within(fila!).findByText('Entregado')).toBeInTheDocument();
   });
 
-  it('HU #13266 AC2 — impuesto marcado por FLITO: check marcado, deshabilitado, «Pagado (FLITO)» y se envía en true', async () => {
+  it('HU #13266 AC2 — impuesto marcado por FLITO: check marcado, deshabilitado, «Pagado (comprobante cargado)» y se envía en true', async () => {
     mocks.getInstance.mockResolvedValue({
       fieldValues: [
         {
@@ -1585,10 +1585,10 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Enviar al OT' }));
 
     const dialogo = screen.getByRole('dialog', { name: 'Enviar al organismo de tránsito' });
-    const check = await within(dialogo).findByRole('checkbox', { name: /Pagado \(FLITO\)/ });
+    const check = await within(dialogo).findByRole('checkbox', { name: /Pagado \(comprobante cargado\)/ });
     expect(check).toBeChecked();
     expect(check).toBeDisabled();
-    expect(check).toHaveAccessibleDescription(/FLITO registró el pago/);
+    expect(check).toHaveAccessibleDescription(/El pago quedó registrado/);
     expect(mocks.getInstance).toHaveBeenCalledWith('proc1', undefined);
 
     await userEvent.click(within(dialogo).getByRole('button', { name: 'Enviar al OT' }));

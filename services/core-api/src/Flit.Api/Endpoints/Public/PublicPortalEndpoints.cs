@@ -75,7 +75,7 @@ internal static class PublicPortalEndpoints
                 ExternalAttachmentRules.BlockedCode => Results.Problem(
                     statusCode: 409,
                     title: "Conflict",
-                    detail: "Este documento ya lo cargó FLITO y no se puede reemplazar.",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
                     extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Ok(result),
             };

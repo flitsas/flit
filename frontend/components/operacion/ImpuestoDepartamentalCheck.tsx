@@ -18,9 +18,9 @@ import {
  */
 export type EstadoImpuestoFlito = 'cargando' | 'flito' | 'gestor' | 'error';
 
-export const COPY_IMPUESTO_FLITO_CARGANDO = 'Verificando si FLITO ya registró el pago del impuesto…';
+export const COPY_IMPUESTO_FLITO_CARGANDO = 'Verificando si el pago del impuesto ya quedó registrado…';
 export const COPY_IMPUESTO_FLITO_ERROR =
-  'No se pudo verificar si FLITO ya registró el pago del impuesto. Si lo registró, se conserva al enviar.';
+  'No se pudo verificar si el pago del impuesto ya quedó registrado. Si lo está, se conserva al enviar.';
 
 /**
  * Lee el detalle del trámite (`GET /instances/{id}`, cuyos `fieldValues` traen `source`) y dice si el
@@ -62,7 +62,7 @@ export function useImpuestoPagadoPorFlito(
 /**
  * Check «Impuesto departamental pagado» del modal «Enviar al OT».
  *
- * Con la marca de FLITO el check sale marcado y deshabilitado, con la etiqueta «Pagado (FLITO)» (badge
+ * Con la marca de FLITO el check sale marcado y deshabilitado, con la etiqueta «Pagado (comprobante cargado)» (badge
  * `success`, mismo componente que los estados) y el motivo enlazado por `aria-describedby` (AC4): el
  * lector de pantalla anuncia por qué no se puede desmarcar y el estado no depende solo del color.
  */
