@@ -1,5 +1,5 @@
 /**
- * HU-C5 (#13300) — la pestaña «Manuales» solo existe para el Super Admin y la lista actual no cambia.
+ * HU-C5 (#13300) — la pestaña «Validaciones manuales» solo existe para el Super Admin y la lista actual no cambia.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -79,22 +79,24 @@ beforeEach(() => {
   });
 });
 
-describe('Pestaña «Manuales» por rol', () => {
-  it('Super Admin: ve «Validaciones» y «Manuales»; la lista actual sigue siendo la de siempre', async () => {
+describe('Pestaña «Validaciones manuales» por rol', () => {
+  it('Super Admin: ve «Validaciones» y «Validaciones manuales» con el contador de pendientes; la lista actual sigue siendo la de siempre', async () => {
     mocks.isSuperAdmin = true;
     renderValidaciones();
     expect(await screen.findByRole('tablist', { name: 'Secciones de validaciones' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Validaciones', selected: true })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Manuales' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Manuales' })).not.toBeInTheDocument();
+    // Contador: cantidad de registros en pendiente_revision_manual (10 de las 27 filas simuladas).
+    expect(await screen.findByRole('tab', { name: /^Validaciones manuales\s*· 10$/ })).toBeInTheDocument();
     await screen.findByText(/Aún no hay validaciones de identidad/);
     expect(mocks.listTenantBiometricPersons).toHaveBeenCalled();
   });
 
-  it('Super Admin: «Manuales» muestra la tabla simulada', async () => {
+  it('Super Admin: «Validaciones manuales» muestra la tabla simulada', async () => {
     mocks.isSuperAdmin = true;
     const user = userEvent.setup();
     renderValidaciones();
-    await user.click(await screen.findByRole('tab', { name: 'Manuales' }));
+    await user.click(await screen.findByRole('tab', { name: /^Validaciones manuales/ }));
     expect(await screen.findByRole('table', { name: 'Validaciones manuales' })).toBeVisible();
   });
 
@@ -102,7 +104,7 @@ describe('Pestaña «Manuales» por rol', () => {
     renderValidaciones();
     await screen.findByText(/Aún no hay validaciones de identidad/);
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Manuales' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /manuales/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('table', { name: 'Validaciones manuales' })).not.toBeInTheDocument();
   });
 });

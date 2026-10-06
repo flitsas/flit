@@ -24,7 +24,7 @@ import { ManualStatusBadge } from './ManualStatusBadge';
 import { ManualReviewDetailModal } from './ManualReviewDetailModal';
 
 /**
- * Pestaña «Manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
+ * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
  * (`Validaciones`) ya comprobó el rol. Tabla del modelo único de trámites: `DataTable` (cabecera
  * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `RowActions`, paginación numerada con
  * «Filas por página» y `CarLoaderModal` mientras carga.
@@ -34,7 +34,14 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 type Carga = 'loading' | 'ready' | 'error';
 
-export function ValidacionesManuales({ client }: { client?: ManualReviewClient }) {
+export function ValidacionesManuales({
+  client,
+  onChanged,
+}: {
+  client?: ManualReviewClient;
+  /** Se aprobó o rechazó un registro desde el detalle: quien monta la pestaña refresca su contador. */
+  onChanged?: () => void;
+}) {
   const api = client ?? getManualReviewClient();
   const pg = usePaginacion();
   const { page, pageSize, setPage } = pg;
@@ -217,7 +224,10 @@ export function ValidacionesManuales({ client }: { client?: ManualReviewClient }
         id={detalleId}
         client={api}
         onClose={() => setDetalleId(null)}
-        onChanged={recargar}
+        onChanged={() => {
+          recargar();
+          onChanged?.();
+        }}
       />
     </div>
   );

@@ -31,6 +31,7 @@ import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu
 import { ModuleTitle } from './ModuleTitle';
 import { SectionTabs } from '@/components/atom/SectionTabs';
 import { ValidacionesManuales } from './ValidacionesManuales';
+import { getManualReviewClient } from '@/lib/api/manual-review-client';
 import { COPY } from '@/lib/copy/copy-catalog';
 
 /** H1 canónico del módulo Identidad (HU #12699 / A17). El id SPA permanece `validaciones`. */
@@ -316,13 +317,40 @@ interface ResendResultState {
 }
 
 /**
- * Módulo Validaciones. Para el Super Admin añade la pestaña «Manuales» (Épica #13202, HU-C5) junto a la lista
- * actual, que no cambia; el resto de roles ve exactamente la lista de siempre, sin pestañas.
+ * Módulo Validaciones. Para el Super Admin añade la pestaña «Validaciones manuales» (Épica #13202, HU-C5) con el
+ * contador de pendientes de revisión, junto a la lista actual, que no cambia; el resto de roles ve exactamente la
+ * lista de siempre, sin pestañas y sin ninguna llamada al listado manual.
  */
 export function Validaciones() {
   const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
-  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>('validaciones');
   if (!esSuperAdmin) return <ValidacionesLista />;
+  return <ValidacionesSuperAdmin />;
+}
+
+/** Tamaño mínimo que acepta el backend (10): basta para leer `total` sin traer filas de más. */
+const PENDIENTES_PAGE_SIZE = 10;
+
+function ValidacionesSuperAdmin() {
+  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>('validaciones');
+  const [pendientes, setPendientes] = useState<number | undefined>(undefined);
+
+  const cargarPendientes = useCallback((signal?: AbortSignal) => {
+    getManualReviewClient()
+      .listManual({ page: 1, pageSize: PENDIENTES_PAGE_SIZE, status: 'pendiente_revision_manual' }, signal)
+      .then((res) => {
+        if (!signal?.aborted) setPendientes(res.total);
+      })
+      .catch(() => {
+        if (!signal?.aborted) setPendientes(undefined); // sin cifra antes que una cifra falsa
+      });
+  }, []);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    cargarPendientes(ctrl.signal);
+    return () => ctrl.abort();
+  }, [cargarPendientes]);
+
   return (
     <ValidacionesLista
       renderTabs={(lista) => (
@@ -332,7 +360,12 @@ export function Validaciones() {
           onChange={setPestana}
           tabs={[
             { id: 'validaciones', label: 'Validaciones', content: <div className="flex flex-col gap-4">{lista}</div> },
-            { id: 'manuales', label: 'Manuales', content: <ValidacionesManuales /> },
+            {
+              id: 'manuales',
+              label: 'Validaciones manuales',
+              count: pendientes,
+              content: <ValidacionesManuales onChanged={() => cargarPendientes()} />,
+            },
           ]}
         />
       )}
