@@ -54,7 +54,7 @@ async function capture(label: RegExp) {
   const btn = screen.getByRole("button", { name: label });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
-  fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
 }
 
 describe("pasos Rostro, Anverso y Reverso (HU #13294)", () => {
@@ -66,16 +66,16 @@ describe("pasos Rostro, Anverso y Reverso (HU #13294)", () => {
     expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeInTheDocument();
 
     await capture(/Capturar rostro/);
-    await screen.findByRole("heading", { name: "Anverso del documento" });
-    expect(screen.getByText(/sin reflejos, completo y nítido/)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Documento — anverso" });
+    expect(screen.getByText(/Encuádralo dentro del marco, siguiendo la guía/)).toBeInTheDocument();
     await waitFor(() => expect(gum).toHaveBeenCalledTimes(2));
     expect(gum.mock.calls[1][0]).toMatchObject({ video: { facingMode: { ideal: "environment" } } });
-    await capture(/Capturar anverso/);
+    await capture(/Capturar documento/);
 
-    await screen.findByRole("heading", { name: "Reverso del documento" });
+    await screen.findByRole("heading", { name: "Documento — reverso" });
     await waitFor(() => expect(gum).toHaveBeenCalledTimes(3));
     expect(gum.mock.calls[2][0]).toMatchObject({ video: { facingMode: { ideal: "environment" } } });
-    expect(screen.getByRole("button", { name: /Capturar reverso/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Capturar documento/ })).toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).toBeNull();
   });
 
@@ -84,10 +84,10 @@ describe("pasos Rostro, Anverso y Reverso (HU #13294)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
     expect(document.querySelector("[class*='50%']")).not.toBeNull();
     await capture(/Capturar rostro/);
-    await screen.findByRole("heading", { name: "Anverso del documento" });
-    await waitFor(() => expect(screen.getByRole("button", { name: /Capturar anverso/ })).toBeEnabled());
+    await screen.findByRole("heading", { name: "Documento — anverso" });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Capturar documento/ })).toBeEnabled());
     expect(document.querySelector("[class*='50%']")).toBeNull();
-    expect(document.querySelector("[class*='1.586']")).not.toBeNull();
+    expect(screen.getByTestId("guia-documento")).toBeInTheDocument();
   });
 
   it("repetir vuelve al visor y la captura se conserva al ir Atrás", async () => {
@@ -98,12 +98,12 @@ describe("pasos Rostro, Anverso y Reverso (HU #13294)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
     await capture(/Capturar rostro/);
 
-    await screen.findByRole("heading", { name: "Anverso del documento" });
+    await screen.findByRole("heading", { name: "Documento — anverso" });
     fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
     await screen.findByRole("heading", { name: "Verificación facial" });
     // Vuelve directo a la vista previa de lo ya capturado, sin reabrir la cámara.
     expect(screen.getByAltText("Vista previa de la foto capturada")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continuar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar" })).toBeInTheDocument();
   });
 
   it("volver a Datos no re-envía el consentimiento ni desmarca la casilla", async () => {

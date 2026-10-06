@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { CapturaManualFlow } from "@/app/captura-manual/[token]/_components/CapturaManualFlow";
 import { StepBar } from "@/app/captura-manual/[token]/_components/StepBar";
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
-import { initialStepsState } from "@/lib/captura-manual/steps";
 import type { ManualCaptureClient } from "@/lib/captura-manual/types";
 
 const client: ManualCaptureClient = {
@@ -36,10 +35,18 @@ describe("botones azules de la captura manual (texto blanco, como Kyverum)", () 
     fireEvent.click(screen.getByRole("checkbox"));
   });
 
-  it("el círculo del paso activo usa texto blanco", () => {
-    render(<StepBar state={initialStepsState} />);
-    const active = screen.getAllByRole("listitem")[0].firstElementChild;
-    expect(active).toHaveClass("bg-flit-brand", "text-white");
-    expect(active).not.toHaveClass("text-flit-primary");
+  it("la barra de pasos replica a Kyverum: completado azul con texto blanco, activo blanco con borde azul, pendiente gris", () => {
+    render(<StepBar state={{ current: 2, completed: [0, 1], finished: false }} />);
+    const circles = screen.getAllByRole("listitem").map((li) => li.querySelector("span.rounded-full"));
+    expect(circles[0]).toHaveClass("bg-flit-brand", "text-white");
+    expect(circles[1]).toHaveClass("bg-flit-brand", "text-white");
+    expect(circles[2]).toHaveClass("bg-white", "border-flit-brand", "text-flit-brand");
+    expect(circles[3]).toHaveClass("bg-flit-gray");
+    expect(circles[4]).toHaveClass("bg-flit-gray");
+    // Línea hacia el siguiente paso: azul solo tras un paso completado.
+    const lines = screen.getAllByTestId("step-line");
+    expect(lines).toHaveLength(4);
+    expect(lines.map((l) => l.className.includes("bg-flit-brand"))).toEqual([true, true, false, false]);
+    expect(screen.getByText("Anverso")).toHaveClass("font-bold", "text-flit-brand");
   });
 });

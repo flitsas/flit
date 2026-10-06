@@ -98,7 +98,7 @@ describe("CameraViewer", () => {
     await waitFor(() => expect(gum).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByRole("button", { name: /Capturar rostro/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Capturar rostro/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     expect(onContinue).toHaveBeenCalledTimes(1);
     expect(onContinue.mock.calls[0][0]).toBeInstanceOf(Blob);
     expect(onContinue.mock.calls[0][0].type).toBe("image/jpeg");

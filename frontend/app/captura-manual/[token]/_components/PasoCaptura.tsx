@@ -12,8 +12,11 @@ export interface CapturaConfig {
   hint: string;
 }
 
-// Rostro: confirmado en vivo en Kyverum. Anverso/Reverso: textos y guía rectangular son SUPUESTO
-// (no se vieron en Kyverum); pendientes de ajuste cuando el PO envíe capturas.
+// Rostro, Anverso y Reverso replican el flujo real de Kyverum (capturas del PO, 2026-10-06): títulos,
+// textos y aviso de encuadre. En el flujo manual no hay verificación automática, por eso «Confirmar»
+// siempre está habilitado tras capturar.
+const DOC_HINT = "Encuadra el documento completo, sin reflejos ni dedos sobre los datos, y toca Capturar";
+
 export const CAPTURA_CONFIG = {
   rostro: {
     title: "Verificación facial",
@@ -24,26 +27,26 @@ export const CAPTURA_CONFIG = {
     hint: "Ubica tu rostro dentro del óvalo",
   },
   anverso: {
-    title: "Anverso del documento",
-    instruction: "Colócalo dentro del marco, sin reflejos, completo y nítido.",
+    title: "Documento — anverso",
+    instruction: "Muestra el lado de tu documento con tu FOTO. Encuádralo dentro del marco, siguiendo la guía.",
     shape: "rect",
     facing: "environment",
-    captureLabel: "Capturar anverso",
-    hint: "Ubica el documento dentro del marco",
+    captureLabel: "Capturar documento",
+    hint: DOC_HINT,
   },
   reverso: {
-    title: "Reverso del documento",
-    instruction: "Voltéalo y colócalo dentro del marco, sin reflejos, completo y nítido.",
+    title: "Documento — reverso",
+    instruction: "Ahora el reverso: el lado del código de barras (o QR). Encuádralo dentro del marco.",
     shape: "rect",
     facing: "environment",
-    captureLabel: "Capturar reverso",
-    hint: "Ubica el documento dentro del marco",
+    captureLabel: "Capturar documento",
+    hint: DOC_HINT,
   },
 } as const satisfies Record<string, CapturaConfig>;
 
 export type CapturaKind = keyof typeof CAPTURA_CONFIG;
 
-/** Pasos 2–4 (HU #13294): visor en vivo + vista previa con «Repetir»/«Continuar» y «Atrás». */
+/** Pasos 2–4 (HU #13294): visor en vivo + vista previa con «Repetir»/«Confirmar» y «Atrás». */
 export function PasoCaptura({
   kind,
   blob,
@@ -57,15 +60,16 @@ export function PasoCaptura({
 }) {
   const cfg: CapturaConfig = CAPTURA_CONFIG[kind];
   return (
-    <section aria-labelledby={`paso-${kind}-titulo`} className="mt-6 flex flex-col gap-4">
+    <section aria-labelledby={`paso-${kind}-titulo`} className="mt-6 flex flex-col gap-5">
       <div>
-        <h1 id={`paso-${kind}-titulo`} className="text-xl font-bold text-flit-primary">
+        <h1 id={`paso-${kind}-titulo`} className="text-2xl font-bold text-flit-primary">
           {cfg.title}
         </h1>
-        <p className="mt-1 text-base text-muted-foreground">{cfg.instruction}</p>
+        <p className="mt-2 text-base text-muted-foreground">{cfg.instruction}</p>
       </div>
       <CameraViewer
         shape={cfg.shape}
+        side={kind === "reverso" ? "reverso" : "anverso"}
         facing={cfg.facing}
         captureLabel={cfg.captureLabel}
         hint={cfg.hint}
@@ -75,7 +79,7 @@ export function PasoCaptura({
       <button
         type="button"
         onClick={onBack}
-        className="min-h-11 w-full rounded-xl border border-flit-brand-ink px-4 text-base font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+        className="min-h-11 w-full rounded-xl px-4 text-base font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
       >
         Atrás
       </button>
