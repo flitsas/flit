@@ -11,6 +11,7 @@ using Flit.Ict.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Ict.Infrastructure;
@@ -117,21 +118,20 @@ public static class IctInfrastructureExtensions
             configuration.GetSection(Security.IctServiceTokenOptions.SectionName));
         services.AddSingleton<Security.IctServiceTokenProvider>();
         services.AddSingleton<Security.IctServiceTokenClientInterceptor>();
+        var useIdentityToken = AddIdentityServiceToken(services, configuration);
 
         // Cliente gRPC hacia core-api (orquestación + consultas). Cada llamada adjunta el service-token.
         var grpcAddress = configuration["CoreApiGrpc:Address"];
         if (!string.IsNullOrWhiteSpace(grpcAddress))
         {
             var grpcUri = new Uri(grpcAddress);
-            services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
-                    options.Address = grpcUri)
-                .AddInterceptor<Security.IctServiceTokenClientInterceptor>();
+            WithServiceToken(services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
+                    options.Address = grpcUri), useIdentityToken);
             services.AddScoped<IProcedureDraftClient, IctGrpcProcedureDraftClient>();
 
             // Consulta real de fuentes externas: se delega en core-api (reusa RUNT/SOAT/RTM/RNMC).
-            services.AddGrpcClient<IctConsultation.IctConsultationClient>(options =>
-                    options.Address = grpcUri)
-                .AddInterceptor<Security.IctServiceTokenClientInterceptor>();
+            WithServiceToken(services.AddGrpcClient<IctConsultation.IctConsultationClient>(options =>
+                    options.Address = grpcUri), useIdentityToken);
             services.AddScoped<IConsultationClient, IctGrpcConsultationClient>();
         }
         else
@@ -142,5 +142,48 @@ public static class IctInfrastructureExtensions
         }
 
         return services;
+    }
+    /// <summary>
+    /// Epic #13316 (HU #13335): con <c>Ict:ServiceToken:UseIdentity</c> el token sale de Identidad. Sin endpoint o sin
+    /// secreto no arranca: es preferible un error claro al desplegar que llamadas que fallan en silencio en cada ciclo.
+    /// </summary>
+    internal static bool AddIdentityServiceToken(IServiceCollection services, IConfiguration configuration)
+    {
+        var options = configuration.GetSection(Security.IctServiceTokenOptions.SectionName).Get<Security.IctServiceTokenOptions>()
+            ?? new Security.IctServiceTokenOptions();
+        if (!options.UseIdentity)
+            return false;
+
+        if (!Uri.TryCreate(options.TokenEndpoint, UriKind.Absolute, out _) || string.IsNullOrWhiteSpace(options.ClientSecret))
+        {
+            throw new InvalidOperationException(
+                "Ict:ServiceToken:UseIdentity está encendida pero faltan Ict:ServiceToken:TokenEndpoint o Ict:ServiceToken:ClientSecret.");
+        }
+
+        services.AddHttpClient(Security.IdentityServiceTokenProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<Security.IdentityServiceTokenProvider>();
+        return true;
+    }
+
+    /// <summary>
+    /// El token de Identidad se pide de forma asíncrona, así que va como credencial de llamada (no como interceptor). El
+    /// canal interno es h2c sin TLS: gRPC solo manda credenciales por un canal así si se le permite explícitamente.
+    /// </summary>
+    private static void WithServiceToken(IHttpClientBuilder client, bool useIdentityToken)
+    {
+        if (!useIdentityToken)
+        {
+            client.AddInterceptor<Security.IctServiceTokenClientInterceptor>();
+            return;
+        }
+
+        client.AddCallCredentials(async (context, metadata, serviceProvider) =>
+            {
+                var token = await serviceProvider.GetRequiredService<Security.IdentityServiceTokenProvider>()
+                    .GetTokenAsync(context.CancellationToken).ConfigureAwait(false);
+                metadata.Add("Authorization", "Bearer " + token);
+            })
+            .ConfigureChannel(channel => channel.UnsafeUseInsecureChannelCallCredentials = true);
     }
 }

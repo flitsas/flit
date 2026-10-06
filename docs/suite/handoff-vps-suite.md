@@ -265,6 +265,23 @@ Las demás variables (Verifik, Kyverum, Fasecolda, SMTP, Renting, ICT, migrador,
 cambian** con la suite. core-identity las recibe todas por el mismo bloque del compose que core-api: no hay que
 duplicar nada.
 
+### 4.8 ICT: del secreto HMAC al token de Identidad (Epic #13316, HU #13335)
+
+Hoy core-ict firma un JWT con `ICT_SERVICE_TOKEN_SECRET`, el mismo secreto que tiene core-api. Pasa a pedir su token a
+Identidad (cliente `svc-ict`, scope `platform.tramites.ict`). Sin tocar nada, todo sigue como hoy. El paso, por ambiente
+y en este orden:
+
+1. `SVC_ICT_CLIENT_SECRET` en el `.env` (ver §4 de clientes de servicio) y recrear core-api y core-identity.
+2. `ICT_SERVICE_TOKEN_ACCEPT_IDENTITY=true` y recrear core-api: acepta los dos tokens.
+3. `ICT_SERVICE_TOKEN_USE_IDENTITY=true` y recrear core-ict. Pide el token en `ICT_IDENTITY_TOKEN_ENDPOINT` (por
+   defecto el gateway, `http://gateway:<GATEWAY_PORT>/connect/token`). Si falta el secreto, core-ict no arranca y lo
+   dice en el log.
+4. Comprobar que los trámites de ICT siguen entrando (log de core-ict sin `Unauthenticated`).
+5. El corte: `ICT_SERVICE_TOKEN_ACCEPT_LEGACY=false` y recrear core-api. Desde ahí el token HMAC se rechaza.
+
+Volver atrás: en orden inverso. El esquema HMAC se retira del código cuando el corte esté verificado en PDN. El
+reflejo de estado core-api → core-ict (`Ict:StateCallback`) sigue con el secreto HMAC: no es parte de esta HU.
+
 ---
 
 ## 5. Hosts, DNS y certificados

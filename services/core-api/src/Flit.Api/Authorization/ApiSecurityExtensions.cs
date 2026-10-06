@@ -130,11 +130,9 @@ public static class ApiSecurityExtensions
             .AddPolicy(AdminAuthorization.OtAdminOrSuperAdminPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .AddRequirements(new OtAdminOrSuperAdminRequirement()))
-            // gRPC ICT: exige el service-token (esquema IctService) + scope ict.orchestration.
-            .AddPolicy(IctServicePolicy, policy => policy
-                .AddAuthenticationSchemes(IctServiceScheme)
-                .RequireAuthenticatedUser()
-                .RequireClaim("scope", "ict.orchestration"))
+            // gRPC ICT: el service-token HMAC de siempre (esquema IctService, scope ict.orchestration) y, con
+            // Ict:ServiceToken:AcceptIdentity, el token de servicio de Identidad de svc-ict (HU #13335).
+            .AddPolicy(IctServicePolicy, policy => IctServiceAuthorization.Configure(policy, configuration, svcIssuer))
             // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.
             .AddPolicy(ExternalClientAuthorization.TramitesReadPolicy, policy => policy
                 .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)
