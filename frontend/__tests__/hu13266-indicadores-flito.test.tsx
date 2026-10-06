@@ -22,7 +22,6 @@ vi.mock('@/lib/api/tramites-client', () => ({ tramitesClient: mocks }));
 import {
   COPY_ADJUNTO_BLOQUEADO_FLITO,
   COPY_ADJUNTO_PROTEGIDO_FLITO,
-  ETIQUETA_CARGADO_POR_FLITO,
   ETIQUETA_IMPUESTO_PAGADO_FLITO,
   MOTIVO_IMPUESTO_PAGADO_FLITO,
   esAdjuntoDeFlito,
@@ -138,12 +137,10 @@ describe('HU #13266 — detección centralizada «es de FLITO»', () => {
   });
 });
 
-describe('HU #13266 AC1 — adjunto de FLITO identificado', () => {
-  it('muestra la etiqueta y NO ofrece reemplazar ni borrar', () => {
+describe('HU #13266 AC1 — adjunto de FLITO sin reemplazar ni borrar', () => {
+  it('NO ofrece reemplazar ni borrar el adjunto de FLITO', () => {
     renderSlot(adjunto());
 
-    expect(screen.getByText(ETIQUETA_CARGADO_POR_FLITO)).toBeInTheDocument();
-    expect(ETIQUETA_CARGADO_POR_FLITO).toBe('Comprobante cargado — no se puede reemplazar ni eliminar');
     expect(screen.queryByRole('button', { name: /reemplazar archivo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /borrar/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/subir/i)).not.toBeInTheDocument();
@@ -157,10 +154,9 @@ describe('HU #13266 AC1 — adjunto de FLITO identificado', () => {
     expect(onPreview).toHaveBeenCalledTimes(1);
   });
 
-  it('un adjunto del gestor sigue con reemplazar y borrar, sin etiqueta de FLITO', () => {
+  it('un adjunto del gestor sigue con reemplazar y borrar', () => {
     renderSlot(adjunto({ provider: null }));
 
-    expect(screen.queryByText(ETIQUETA_CARGADO_POR_FLITO)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reemplazar archivo/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /borrar/i })).toBeInTheDocument();
   });
@@ -319,16 +315,6 @@ describe('HU #13266 AC4 — accesibilidad', () => {
     expect(check).toHaveAccessibleDescription(MOTIVO_IMPUESTO_PAGADO_FLITO);
     // La región del motivo es viva: el paso de «Verificando…» a «pagado» se anuncia.
     expect(document.getElementById(describedBy!)).toHaveAttribute('aria-live', 'polite');
-  });
-
-  it('la etiqueta de FLITO es texto (no solo color) y describe la acción que queda', () => {
-    renderSlot(adjunto());
-
-    const ver = screen.getByRole('button', { name: /previsualizar/i });
-    expect(ver).toHaveAccessibleDescription(ETIQUETA_CARGADO_POR_FLITO);
-    // El icono es decorativo: el lector de pantalla solo lee el texto.
-    const etiqueta = screen.getByTestId('etiqueta-cargado-por-flito');
-    expect(etiqueta.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('el foco por teclado salta el check deshabilitado y sigue al siguiente control', async () => {

@@ -24,9 +24,6 @@ export const CODIGO_ADJUNTO_BLOQUEADO_FLITO = 'adjunto_bloqueado_flito';
 /** Código del 409 de borrado de un adjunto protegido (sistema o FLITO). */
 export const CODIGO_ADJUNTO_PROTEGIDO = 'adjunto_protegido';
 
-/** AC1 — etiqueta del adjunto cargado por FLITO. */
-export const ETIQUETA_CARGADO_POR_FLITO = 'Comprobante cargado — no se puede reemplazar ni eliminar';
-
 /** AC2 — etiqueta del check de impuesto marcado por FLITO. */
 export const ETIQUETA_IMPUESTO_PAGADO_FLITO = 'Pagado (comprobante cargado)';
 
