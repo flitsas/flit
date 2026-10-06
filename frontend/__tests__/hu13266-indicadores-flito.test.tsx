@@ -1,4 +1,4 @@
-// HU #13266 — Trámites: indicadores «Cargado por FLITO» (Feature #13261, Épica #12741).
+// HU #13266 — Trámites: indicadores del comprobante cargado (Feature #13261, Épica #12741).
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -143,7 +143,7 @@ describe('HU #13266 AC1 — adjunto de FLITO identificado', () => {
     renderSlot(adjunto());
 
     expect(screen.getByText(ETIQUETA_CARGADO_POR_FLITO)).toBeInTheDocument();
-    expect(ETIQUETA_CARGADO_POR_FLITO).toBe('Cargado por FLITO — para corregirlo, solicítalo en FLITO');
+    expect(ETIQUETA_CARGADO_POR_FLITO).toBe('Comprobante cargado — no se puede reemplazar ni eliminar');
     expect(screen.queryByRole('button', { name: /reemplazar archivo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /borrar/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/subir/i)).not.toBeInTheDocument();
@@ -167,7 +167,7 @@ describe('HU #13266 AC1 — adjunto de FLITO identificado', () => {
 });
 
 describe('HU #13266 AC2 — check de impuesto bloqueado por FLITO', () => {
-  it('marcado, deshabilitado y con la etiqueta «Pagado (FLITO)»', () => {
+  it('marcado, deshabilitado y con la etiqueta «Pagado (comprobante cargado)»', () => {
     const onChange = vi.fn();
     render(<ImpuestoDepartamentalCheck estado="flito" checked={false} onChange={onChange} />);
 
@@ -175,7 +175,7 @@ describe('HU #13266 AC2 — check de impuesto bloqueado por FLITO', () => {
     expect(check).toBeChecked();
     expect(check).toBeDisabled();
     expect(screen.getByText(ETIQUETA_IMPUESTO_PAGADO_FLITO)).toBeInTheDocument();
-    expect(ETIQUETA_IMPUESTO_PAGADO_FLITO).toBe('Pagado (FLITO)');
+    expect(ETIQUETA_IMPUESTO_PAGADO_FLITO).toBe('Pagado (comprobante cargado)');
   });
 
   it('sin marca de FLITO el gestor decide', async () => {
@@ -277,7 +277,7 @@ describe('HU #13266 AC3 — errores de bloqueo comprensibles', () => {
     it('subida bloqueada por FLITO: mensaje claro y relee los adjuntos', async () => {
       mocks.getAttachments.mockResolvedValue([]);
       mocks.uploadAttachment.mockRejectedValue(
-        error409('adjunto_bloqueado_flito', 'Este documento ya lo cargó FLITO…'),
+        error409('adjunto_bloqueado_flito', 'Este documento ya fue cargado…'),
       );
       const { result } = renderHook(() => useProcedureDocuments(INSTANCIA));
       await waitFor(() => expect(result.current.state.loading).toBe(false));
@@ -312,12 +312,12 @@ describe('HU #13266 AC4 — accesibilidad', () => {
   it('el check deshabilitado anuncia su motivo con aria-describedby', () => {
     render(<ImpuestoDepartamentalCheck estado="flito" checked={false} onChange={vi.fn()} />);
 
-    const check = screen.getByRole('checkbox', { name: /impuesto departamental pagado.*pagado \(flito\)/i });
+    const check = screen.getByRole('checkbox', { name: /impuesto departamental pagado.*pagado \(comprobante cargado\)/i });
     const describedBy = check.getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
     expect(document.getElementById(describedBy!)).toHaveTextContent(MOTIVO_IMPUESTO_PAGADO_FLITO);
     expect(check).toHaveAccessibleDescription(MOTIVO_IMPUESTO_PAGADO_FLITO);
-    // La región del motivo es viva: el paso de «Verificando…» a «marcado por FLITO» se anuncia.
+    // La región del motivo es viva: el paso de «Verificando…» a «pagado» se anuncia.
     expect(document.getElementById(describedBy!)).toHaveAttribute('aria-live', 'polite');
   });
 

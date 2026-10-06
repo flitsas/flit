@@ -12906,7 +12906,7 @@ components:
       properties:
         title: { type: string, example: Conflict }
         status: { type: integer, example: 409 }
-        detail: { type: string, example: "Este documento ya lo cargó FLITO y no se puede reemplazar. Si hay un error, FLITO debe reenviarlo." }
+        detail: { type: string, example: "Este documento ya fue cargado y no se puede reemplazar." }
         error:
           type: string
           enum: [adjunto_bloqueado_flito]

@@ -656,7 +656,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const [processWarning, setProcessWarning] = useState<string | null>(null);
   /** Bug #13194 (P3) — carga del PDF del SOAT desplegada (se abre sola ante 409 soat_no_vigente). */
   const [soatSoporteAbierto, setSoatSoporteAbierto] = useState(false);
-  /** HU #13266 (AC2) — si FLITO ya marcó el impuesto, el check va fijo («Pagado (FLITO)»). */
+  /** HU #13266 (AC2) — si FLITO ya marcó el impuesto, el check va fijo («Pagado (comprobante cargado)»). */
   const impuestoFlito = useImpuestoPagadoPorFlito(
     processTarget?.id ?? null,
     isAdmin ? processTarget?.tenantId : undefined,

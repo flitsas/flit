@@ -25,22 +25,22 @@ export const CODIGO_ADJUNTO_BLOQUEADO_FLITO = 'adjunto_bloqueado_flito';
 export const CODIGO_ADJUNTO_PROTEGIDO = 'adjunto_protegido';
 
 /** AC1 — etiqueta del adjunto cargado por FLITO. */
-export const ETIQUETA_CARGADO_POR_FLITO = 'Cargado por FLITO — para corregirlo, solicítalo en FLITO';
+export const ETIQUETA_CARGADO_POR_FLITO = 'Comprobante cargado — no se puede reemplazar ni eliminar';
 
 /** AC2 — etiqueta del check de impuesto marcado por FLITO. */
-export const ETIQUETA_IMPUESTO_PAGADO_FLITO = 'Pagado (FLITO)';
+export const ETIQUETA_IMPUESTO_PAGADO_FLITO = 'Pagado (comprobante cargado)';
 
 /** AC4 — motivo del check deshabilitado (se anuncia con `aria-describedby`). */
 export const MOTIVO_IMPUESTO_PAGADO_FLITO =
-  'FLITO registró el pago al cargar el comprobante de liquidación del impuesto. No se puede desmarcar aquí: para corregirlo, solicítalo en FLITO.';
+  'El pago quedó registrado al cargarse el comprobante de liquidación del impuesto. No se puede desmarcar aquí.';
 
 /** AC3 — 409 `adjunto_bloqueado_flito` (subir o reemplazar). */
 export const COPY_ADJUNTO_BLOQUEADO_FLITO =
-  'Este documento ya lo cargó FLITO y no se puede reemplazar. Si tiene un error, solicita la corrección en FLITO.';
+  'Este documento ya fue cargado y no se puede reemplazar.';
 
 /** AC3 — 409 `adjunto_protegido` sobre un adjunto de FLITO (borrar). */
 export const COPY_ADJUNTO_PROTEGIDO_FLITO =
-  'Este documento lo cargó FLITO y no se puede eliminar. Si tiene un error, solicita la corrección en FLITO.';
+  'Este documento ya fue cargado y no se puede eliminar.';
 
 /** ¿El `provider`/`source` es FLITO? Sin distinguir mayúsculas ni espacios de borde. */
 export function esOrigenFlito(valor: string | null | undefined): boolean {

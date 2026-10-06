@@ -381,7 +381,7 @@ Reglas:
   activa. Los demás responden `409 not_allowed_in_state` sin archivar (ver la tabla de abajo).
 - **Gana quien carga primero.** Si en FLIT ya se cargó ese tipo (el gestor o el portal de participantes), responde `409 attachment_exists` y su archivo
   se conserva: es definitivo, no reintentar. Si el consumidor cargó primero, el gestor **no** puede
-  reemplazarlo ni borrarlo; en FLIT lo ve como «Cargado por FLITO».
+  reemplazarlo ni borrarlo; en FLIT lo ve como un comprobante cargado, sin indicar el origen.
 - **Corrección:** un nuevo envío del consumidor con otro archivo reemplaza el suyo anterior (`reemplazoDe`).
   Es la única vía de corrección; FLIT no la ofrece al gestor.
 - **Idempotencia por contenido:** si el archivo es idéntico (mismo SHA-256) al adjunto vigente del

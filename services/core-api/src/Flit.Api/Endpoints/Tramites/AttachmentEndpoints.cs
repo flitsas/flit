@@ -48,7 +48,7 @@ internal static class AttachmentEndpoints
                 ExternalAttachmentRules.BlockedCode => Results.Problem(
                     statusCode: 409,
                     title: "Conflict",
-                    detail: "Este documento ya lo cargó FLITO y no se puede reemplazar. Si hay un error, FLITO debe reenviarlo.",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
                     extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
@@ -88,7 +88,7 @@ internal static class AttachmentEndpoints
                 ExternalAttachmentRules.BlockedCode => Results.Problem(
                     statusCode: 409,
                     title: "Conflict",
-                    detail: "Este documento ya lo cargó FLITO y no se puede reemplazar. Si hay un error, FLITO debe reenviarlo.",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
                     extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Ok(result),
             };
@@ -129,7 +129,7 @@ internal static class AttachmentEndpoints
                 ExternalAttachmentRules.BlockedCode => Results.Problem(
                     statusCode: 409,
                     title: "Conflict",
-                    detail: "Este documento ya lo cargó FLITO y no se puede reemplazar. Si hay un error, FLITO debe reenviarlo.",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
                     extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
