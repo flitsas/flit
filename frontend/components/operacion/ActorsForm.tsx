@@ -284,6 +284,21 @@ export interface ActorsValidation {
 }
 
 /**
+ * Bug #13304 — topes del actor del trámite, alineados con las columnas de core-api
+ * (nombre completo 320, teléfono 50). Sin tope en el cliente, un valor más largo pasaba
+ * "Continuar" y el backend lo rechazaba al guardar.
+ */
+export const ACTOR_NOMBRE_MAX_LENGTH = 320;
+export const ACTOR_TELEFONO_MAX_LENGTH = 50;
+
+/** Nombre que viaja al backend: en persona jurídica, la razón social corta del RUES. */
+function persistedNombre(a: ProcedureActor): string {
+  return isJuridical(a)
+    ? shortRuesRazonSocial(a.nombreCompleto) || a.nombreCompleto
+    : a.nombreCompleto;
+}
+
+/**
  * Valida requeridos + formato de email + (traspaso) vendedor≠comprador por DOCUMENTO.
  * El correo compartido entre las partes no bloquea desde la HU #11019.
  * HU #11595 — ciudad, dirección y teléfono son obligatorios (antes opcionales): el organismo
@@ -305,6 +320,9 @@ export function validateActors(
     else {
       const nameErr = validateReadableName(a.nombreCompleto.trim(), 'El nombre');
       if (nameErr) e.nombreCompleto = nameErr;
+      // Se mide lo que se persiste: en persona jurídica sale la razón social corta (ver toPayload).
+      else if (persistedNombre(a).trim().length > ACTOR_NOMBRE_MAX_LENGTH)
+        e.nombreCompleto = `El nombre admite máximo ${ACTOR_NOMBRE_MAX_LENGTH} caracteres.`;
     }
     if (!a.email.trim()) e.email = 'Correo requerido';
     else if (!EMAIL_RE.test(a.email.trim())) e.email = 'Correo no válido';
@@ -313,6 +331,8 @@ export function validateActors(
     if (!a.ciudad?.trim()) e.ciudad = 'Ciudad requerida';
     if (!a.direccion?.trim()) e.direccion = 'Dirección requerida';
     if (!a.telefono?.trim()) e.telefono = 'Teléfono requerido';
+    else if (a.telefono.trim().length > ACTOR_TELEFONO_MAX_LENGTH)
+      e.telefono = `El teléfono admite máximo ${ACTOR_TELEFONO_MAX_LENGTH} caracteres.`;
     // HU #10688 (Fase 1): en persona jurídica el correo del representante legal es obligatorio
     // (es quien valida la identidad de la PJ). Nombre/documento del RL siguen opcionales.
     if (isJuridical(a)) {
@@ -394,9 +414,7 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
       telefono: blankToUndef(a.telefono),
       ciudad: blankToUndef(a.ciudad),
       direccion: blankToUndef(a.direccion),
-      nombreCompleto: isJuridical(a)
-        ? shortRuesRazonSocial(a.nombreCompleto) || a.nombreCompleto
-        : a.nombreCompleto,
+      nombreCompleto: persistedNombre(a),
     };
   });
 }
@@ -3557,6 +3575,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     : actor.nombreCompleto
                 }
                 onChange={(e) => updateActor(activeIndex, { nombreCompleto: e.target.value })}
+                maxLength={ACTOR_NOMBRE_MAX_LENGTH}
                 readOnly={nombreBloqueado}
                 aria-invalid={!!errors.nombreCompleto}
                 aria-describedby={
@@ -3630,6 +3649,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 inputMode="numeric"
                 pattern="[0-9]*"
                 autoComplete="tel"
+                maxLength={ACTOR_TELEFONO_MAX_LENGTH}
                 required
                 aria-required="true"
                 value={actor.telefono ?? ''}
@@ -4157,6 +4177,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         : actor.nombreCompleto
                     }
                     onChange={(e) => updateActor(index, { nombreCompleto: e.target.value })}
+                    maxLength={ACTOR_NOMBRE_MAX_LENGTH}
                     readOnly={razonLocked || isNameLockedByRunt(index, actor)}
                     aria-invalid={!!errors.nombreCompleto}
                     aria-describedby={
@@ -4228,6 +4249,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         inputMode="numeric"
                         pattern="[0-9]*"
                         autoComplete="tel"
+                        maxLength={ACTOR_TELEFONO_MAX_LENGTH}
                         required
                         aria-required="true"
                         value={actor.telefono ?? ''}

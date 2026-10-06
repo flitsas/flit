@@ -111,11 +111,12 @@ public sealed class RegisterRowValidator : AbstractValidator<RegisterRowInput>
         RuleFor(r => r.SellingPrice).NotNull()
             .When(r => r.TransactionType == 3)
             .WithMessage("selling_price es obligatorio en traspaso bilateral");
+        // core-api guarda el precio en numeric(18,2): 16 dígitos enteros + 2 decimales. Mismo criterio que la
+        // edición del precio (EditPreTramiteHandler.IsValidSellingPrice).
         RuleFor(r => r.SellingPrice!.Value)
-            .InclusiveBetween(0.01m, 99999999999999999m)
-            .Must(v => decimal.Round(v, 2) == v)
+            .Must(Flit.Ict.Application.Edit.EditPreTramiteHandler.IsValidSellingPrice)
             .When(r => r.TransactionType == 3 && r.SellingPrice is not null)
-            .WithMessage("selling_price debe ser mayor que cero, con máximo 2 decimales y 17 dígitos");
+            .WithMessage("selling_price debe ser mayor que cero, con máximo 2 decimales y 16 dígitos enteros");
 
         // ===== Otros trámites =====
         RuleFor(r => r.ArmorLevelNumberId).NotNull().Must(v => v is 1 or 2 or 3 or 4)
@@ -200,14 +201,22 @@ public sealed class RegisterActorInputValidator : AbstractValidator<RegisterActo
     private const string DatePattern =
         @"^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-(19\d{2}|2\d{3}|[3-9]\d{3})$";
 
+    /// <summary>Tope del valor crudo de document_type y phone antes de normalizarlos.</summary>
+    internal const int MaxRawLength = 64;
+
     public RegisterActorInputValidator(bool requireLegalRepForNit)
     {
         RuleFor(a => a.DocumentType).NotEmpty().WithMessage("document_type del actor es obligatorio");
+        // Tope del valor CRUDO antes de normalizar: la normalización recorre el texto entero y un valor
+        // desmedido no debe llegar a ella (ni a su mensaje).
+        RuleFor(a => a.DocumentType).MaximumLength(MaxRawLength)
+            .When(a => !string.IsNullOrEmpty(a.DocumentType))
+            .WithMessage("document_type del actor debe tener máximo 64 caracteres");
         // Bug #13304: core-api solo guarda CC, CE, NIT, PAS o TI. Un tipo fuera del catálogo pasaba aquí y el
         // trámite llegaba a FLIT sin actores. Los alias habituales se aceptan y el normalizer los traduce.
         RuleFor(a => a.DocumentType)
             .Must(dt => IctPayloadNormalizer.NormalizeDocumentType(dt) is not null)
-            .When(a => !string.IsNullOrWhiteSpace(a.DocumentType))
+            .When(a => !string.IsNullOrWhiteSpace(a.DocumentType) && a.DocumentType.Length <= MaxRawLength)
             .WithMessage("document_type del actor no es válido (use CC, CE, NIT, PAS o TI)");
 
         RuleFor(a => a.DocumentNumber).NotEmpty().WithMessage("document_number del actor es obligatorio");
@@ -231,19 +240,24 @@ public sealed class RegisterActorInputValidator : AbstractValidator<RegisterActo
         RuleFor(a => a.SecondLastName).MaximumLength(100)
             .When(a => !string.IsNullOrEmpty(a.SecondLastName));
 
-        // Bug #13304: nombre completo tal como viaja a core-api (full_name varchar(200)).
+        // Bug #13304: nombre completo tal como viaja a core-api (full_name varchar(320)).
         RuleFor(a => a)
             .Must(a => IctPayloadNormalizer.ActorFullName(a.Name, a.FirstLastName, a.SecondLastName).Length
                 <= IctPayloadNormalizer.MaxActorFullNameLength)
             .WithName("name")
-            .WithMessage("name, first_last_name y second_last_name del actor juntos deben tener máximo 200 caracteres");
+            .WithMessage("name, first_last_name y second_last_name del actor juntos deben tener máximo 320 caracteres");
 
-        // Bug #13304: teléfono ≤ 20 tras quitar espacios y símbolos (core-api phone varchar(20)); el valor
-        // que se guarda y viaja es ese mismo, ya normalizado.
+        // Tope del valor CRUDO del teléfono antes de normalizar (mismo motivo que document_type).
+        RuleFor(a => a.Phone).MaximumLength(MaxRawLength)
+            .When(a => !string.IsNullOrEmpty(a.Phone))
+            .WithMessage("phone debe tener máximo 64 caracteres");
+
+        // Bug #13304: teléfono ≤ 50 tras quitar espacios y símbolos (core-api phone varchar(50), igual que la
+        // columna de ICT); el valor que se guarda y viaja es ese mismo, ya normalizado.
         RuleFor(a => a.Phone)
             .Must(p => IctPayloadNormalizer.NormalizePhone(p).Length <= IctPayloadNormalizer.MaxActorPhoneLength)
-            .When(a => !string.IsNullOrEmpty(a.Phone))
-            .WithMessage("phone debe tener máximo 20 dígitos (sin contar espacios ni símbolos)");
+            .When(a => !string.IsNullOrEmpty(a.Phone) && a.Phone.Length <= MaxRawLength)
+            .WithMessage("phone debe tener máximo 50 dígitos (sin contar espacios ni símbolos)");
 
         // Topes de las columnas de ict.external_integration_actors: sin ellos un valor largo daba 500 en
         // /register en vez de rechazar la fila.
