@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "FLIT",
+  "classifications": [
+    "FLIT",
+    "Web",
+    "gRPC"
+  ],
+  "identity": "Flit.Plataforma.Servicio",
+  "name": "Servicio de plataforma FLIT (core-<servicio>)",
+  "shortName": "flit-servicio",
+  "description": "Servicio con el SDK de plataforma: tokens por JWKS, gRPC con token de servicio, outbox e inbox en su esquema, salud REST y grpc.health.v1. Guía: docs/suite/servicio-nuevo.md.",
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "sourceName": "Plantilla",
+  "preferNameDirectory": false,
+  "sources": [
+    {
+      "exclude": [
+        ".template.config/**",
+        "**/bin/**",
+        "**/obj/**",
+        "**/*.user",
+        "README.md"
+      ]
+    }
+  ],
+  "symbols": {
+    "codigoMayusculas": {
+      "type": "generated",
+      "generator": "casing",
+      "parameters": {
+        "source": "name",
+        "toLower": false
+      },
+      "replaces": "PLANTILLA",
+      "description": "Nombre en mayúsculas para las variables del .env (SVC_<CODIGO>_CLIENT_SECRET, CORE_<CODIGO>_GRPC_PORT)."
+    }
+  }
+}
