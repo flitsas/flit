@@ -22,20 +22,32 @@ public interface IMandateSignerRepository
     Task<bool> UpdateAsync(UpdateMandateSignerData data, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Baja lógica del mandatario (soft-delete): marca inactivo y libera sus compañías para
-    /// reasignación. <c>false</c> si no existe o ya estaba inactivo (idempotente).
+    /// Inactivación (reversible): marca inactivo, libera sus compañías, retira los defaults que apunten a él y
+    /// reasigna los trámites radicados sin aprobar (HU #13135/#13137), todo en una transacción con su bitácora
+    /// (HU #13138). Deja traza de los vínculos y defaults retirados para restaurarlos al reactivar (HU #13136).
+    /// <see cref="MandateSignerLifecycleResult.Applied"/> es <c>false</c> si no existe o ya estaba inactivo.
     /// </summary>
-    Task<bool> InactivateAsync(
+    Task<MandateSignerLifecycleResult> InactivateAsync(
         InactivateMandateSignerData data,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reactiva un mandatario inactivado: vuelve a marcarlo activo <b>sin</b> restaurar
-    /// compañías (se liberaron al inactivar y deben reasignarse). <c>false</c> si no existe o
-    /// ya estaba activo (idempotente).
+    /// Reactiva un mandatario inactivado restaurando sus vínculos con compañías y organismos (los que retiró la
+    /// baja) sin desplazar al default vigente; un vínculo que chocaría con otro mandatario activo del mismo origen
+    /// se restaura inactivo y se informa (HU #13136). <c>Applied = false</c> si no existe, está eliminado o ya
+    /// estaba activo, o si TODOS los vínculos chocan (<see cref="MandateSignerLifecycleResult.AllLinksConflict"/>).
     /// </summary>
-    Task<bool> ReactivateAsync(
+    Task<MandateSignerLifecycleResult> ReactivateAsync(
         ReactivateMandateSignerData data,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Eliminación (baja lógica <c>deleted_at</c>/<c>deleted_by</c>, HU #13135): oculta al mandatario de listas y
+    /// candidatos sin borrar historial. Mismos efectos colaterales que la inactivación.
+    /// <c>Applied = false</c> si no existe o ya estaba eliminado.
+    /// </summary>
+    Task<MandateSignerLifecycleResult> DeleteAsync(
+        DeleteMandateSignerData data,
         CancellationToken cancellationToken = default);
 }
 
@@ -48,7 +60,7 @@ public sealed record CreateMandateSignerData(
     Guid TransitOfficeId,
     Guid OtTenantId,
     string FullName,
-    string DocumentNumber,
+    string? DocumentNumber,
     string IntegrityHash,
     DateTimeOffset RegisteredAt,
     IReadOnlyList<Guid> CompanyTenantIds,
@@ -65,10 +77,8 @@ public sealed record CreateMandateSignerData(
     /// </summary>
     IReadOnlyList<Guid>? TransitOfficeIds = null,
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO por el repositorio: la firma física ya no se persiste
+    /// como exención. Las filas históricas con <c>signs_physically</c> se conservan sin cambios.
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
@@ -77,17 +87,25 @@ public sealed record CreateMandateSignerData(
     /// </summary>
     Guid? SignatureVaultId = null,
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
-    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// HU #13179 — compañías asociadas (por tenant) POR ORGANISMO. Vacío o ausente ⇒ solo aplica a su propia
+    /// compañía. En la edición, <c>null</c> no toca nada y cada organismo de la lista reemplaza su conjunto.
     /// </summary>
-    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>HU #13129 — modelo, forma de firma y vigencia propia, ya normalizados y validados.</summary>
+    string SignerModel = MandateSignerModels.Natural,
+    string? SignatureMethod = null,
+    string ValidityKind = MandateValidityKinds.Fixed,
+    DateOnly? ValidFrom = null,
+    DateOnly? ValidTo = null,
+    /// <summary>HU #13195 — origen de los vínculos mandatario-compañía nuevos o reactivados: organismo | compania | super_admin.</summary>
+    string ConfiguredByScope = "organismo");
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     string FullName,
-    string DocumentNumber,
+    string? DocumentNumber,
     string IntegrityHash,
     IReadOnlyList<Guid> CompanyTenantIds,
     Guid? UpdatedBy,
@@ -102,10 +120,8 @@ public sealed record UpdateMandateSignerData(
     /// </summary>
     IReadOnlyList<Guid>? TransitOfficeIds = null,
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO por el repositorio: la firma física ya no se persiste
+    /// como exención. Las filas históricas con <c>signs_physically</c> se conservan sin cambios.
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
@@ -114,8 +130,8 @@ public sealed record UpdateMandateSignerData(
     /// </summary>
     Guid? SignatureVaultId = null,
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
-    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// HU #13179 — compañías asociadas (por tenant) POR ORGANISMO. Vacío o ausente ⇒ solo aplica a su propia
+    /// compañía. En la edición, <c>null</c> no toca nada y cada organismo de la lista reemplaza su conjunto.
     /// </summary>
     IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
     /// <summary>
@@ -133,26 +149,50 @@ public sealed record UpdateMandateSignerData(
     /// apuntando a un organismo donde el mandatario ya no aplica, y la reactivación —que restaura el
     /// primario— lo resucitaría. <c>null</c> ⇒ se conserva el que ya tiene.
     /// </summary>
-    Guid? NuevoOrganismoPrimario = null);
+    Guid? NuevoOrganismoPrimario = null,
+    /// <summary>HU #13129 — modelo, forma de firma y vigencia propia, ya normalizados y validados.</summary>
+    string SignerModel = MandateSignerModels.Natural,
+    string? SignatureMethod = null,
+    string ValidityKind = MandateValidityKinds.Fixed,
+    DateOnly? ValidFrom = null,
+    DateOnly? ValidTo = null,
+    /// <summary>HU #13195 — origen de los vínculos mandatario-compañía nuevos o reactivados: organismo | compania | super_admin.</summary>
+    string ConfiguredByScope = "organismo");
 
 /// <summary>
-/// Empresas representadas que un mandatario atiende en un organismo. La lista vacía significa "todas":
-/// no hay forma de decir "ninguna", porque un mandatario sin empresas no podría firmar nada.
+/// HU #13179 (Feature #13119 F7) — compañías de FLIT (por tenant) a las que el mandatario se asocia en un
+/// organismo (nivel 3 de la prelación). Reemplaza a las empresas representadas por Representante Legal. La lista
+/// vacía significa «sin asociaciones»: el mandatario aplica solo a su propia compañía.
 /// </summary>
 public sealed record MandateSignerOfficeCompanies(
     Guid TransitOfficeId,
-    IReadOnlyList<Guid> RepresentedCompanyIds);
+    IReadOnlyList<Guid> AssociatedCompanyTenantIds,
+    /// <summary>
+    /// Solo LECTURA: id, nombre y NIT de cada compañía asociada (nada más, Ley 1581), para que el formulario las
+    /// muestre al editar sin pedir cada una por separado. Lo completa la capa de aplicación; se ignora al guardar.
+    /// </summary>
+    IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.AssociableCompany>? AssociatedCompanies = null);
 
-/// <summary>Datos de inactivación.</summary>
+/// <summary>Datos de inactivación. <c>ActorKind</c> alimenta la bitácora (rol y módulo, HU #13138).</summary>
 public sealed record InactivateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     Guid? ChangedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    MandateSignerActorKind ActorKind = MandateSignerActorKind.None);
 
 /// <summary>Datos de reactivación.</summary>
 public sealed record ReactivateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     Guid? ChangedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    MandateSignerActorKind ActorKind = MandateSignerActorKind.None);
+
+/// <summary>Datos de eliminación (baja lógica).</summary>
+public sealed record DeleteMandateSignerData(
+    Guid MandateSignerId,
+    Guid OtTenantId,
+    Guid? ChangedBy,
+    Guid? CorrelationId,
+    MandateSignerActorKind ActorKind = MandateSignerActorKind.None);

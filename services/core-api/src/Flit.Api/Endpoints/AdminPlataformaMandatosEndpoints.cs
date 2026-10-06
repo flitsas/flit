@@ -1,9 +1,13 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Plataforma.Mandatos;
+using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Application.Auditing;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -13,19 +17,6 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 public static class AdminPlataformaMandatosEndpoints
 {
-    /// <summary>
-    /// Redacciones previsualizables por código. <c>auto</c> NO entra: no es una redacción sino una
-    /// delegación en la plantilla de sistema del organismo, y sin organismo no hay nada que resolver
-    /// (para eso está la vista previa por OT).
-    /// </summary>
-    private static readonly HashSet<string> AllowedTemplates = new(StringComparer.OrdinalIgnoreCase)
-    {
-        MandatoTemplateResolver.Generico,
-        MandatoTemplateResolver.Sabaneta,
-        MandatoTemplateResolver.Bello,
-        MandatoTemplateResolver.Municipio,
-    };
-
     public static IEndpointRouteBuilder MapAdminPlataformaMandatosEndpoints(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
@@ -82,6 +73,36 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13168 — catálogo único de formatos (solo lectura: sin POST ni DELETE, el equipo FLIT gestiona la lista).
+        group.MapGet("/formatos", ListFormatsAsync)
+            .WithName("AdminPlataformaMandatosFormats")
+            .Produces(StatusCodes.Status200OK);
+
+        // HU #13171 — el Super Admin edita nombre, tipo y plantilla de un formato EXISTENTE (sin POST ni DELETE: 405;
+        // un código nuevo: 404). RowVersion obligatorio; bitácora en admin.tenant_config_audit_logs.
+        group.MapGet("/formatos/{code}", GetFormatAsync)
+            .WithName("AdminPlataformaMandatosFormatGet")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/formatos/{code}/versions/{versionNumber:int}", GetFormatVersionAsync)
+            .WithName("AdminPlataformaMandatosFormatVersion")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/formatos/{code}", UpdateFormatAsync)
+            .WithName("AdminPlataformaMandatosFormatUpdate")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // HU #13173 — vista previa de la plantilla EN BORRADOR de un formato: valida y genera el PDF de muestra sin guardar nada.
+        group.MapPost("/formatos/{code}/preview", PreviewDraftAsync)
+            .WithName("AdminPlataformaMandatosFormatDraftPreview")
+            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+            .Produces(StatusCodes.Status400BadRequest);
+
         group.MapGet("/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminPlataformaMandatosPreview")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
@@ -111,12 +132,6 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status502BadGateway);
 
-        group.MapPost("/extract", ExtractAsync)
-            .WithName("AdminPlataformaMandatosExtract")
-            .DisableAntiforgery()
-            .Produces<MandateConfigExtractResult>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status400BadRequest);
-
         group.MapGet("/ot/{officeId:guid}/company-rules", ListCompanyRulesAsync)
             .WithName("AdminPlataformaMandatosListCompanyRules")
             .Produces(StatusCodes.Status200OK)
@@ -126,18 +141,21 @@ public static class AdminPlataformaMandatosEndpoints
             .WithName("AdminPlataformaMandatosUpsertCompanyRule")
             .Produces<CompanyOtMandateRuleView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapPatch("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}/default-signer", SetCompanyDefaultSignerAsync)
             .WithName("AdminPlataformaMandatosSetCompanyDefaultSigner")
             .Produces<CompanyOtMandateRuleView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapDelete("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}", DeleteCompanyRuleAsync)
             .WithName("AdminPlataformaMandatosDeleteCompanyRule")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -148,6 +166,87 @@ public static class AdminPlataformaMandatosEndpoints
     {
         var items = await service.ListAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { items });
+    }
+
+    private static async Task<IResult> ListFormatsAsync(
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var items = await formats.ListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { items = items.Select(MandatoFormatResponses.Describe).ToList() });
+    }
+
+    private static async Task<IResult> GetFormatAsync(
+        [FromRoute] string code,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var detail = await formats.GetAsync(code, ct).ConfigureAwait(false);
+        if (detail is null)
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            format = MandatoFormatResponses.Describe(detail.Format),
+            body = detail.CurrentBody,
+            versions = detail.Versions.Select(v => new
+            {
+                versionNumber = v.VersionNumber,
+                sha256 = v.BodySha256,
+                createdAt = v.CreatedAt,
+                createdBy = v.CreatedBy,
+            }),
+        });
+    }
+
+    private static async Task<IResult> GetFormatVersionAsync(
+        [FromRoute] string code,
+        [FromRoute] int versionNumber,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var found = await formats.GetVersionAsync(code, versionNumber, ct).ConfigureAwait(false);
+        if (found is not { } v)
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            versionNumber = v.Info.VersionNumber,
+            sha256 = v.Info.BodySha256,
+            createdAt = v.Info.CreatedAt,
+            createdBy = v.Info.CreatedBy,
+            body = v.Body,
+        });
+    }
+
+    private static async Task<IResult> UpdateFormatAsync(
+        [FromRoute] string code,
+        [FromBody] UpdateMandateFormatRequest request,
+        HttpContext http,
+        ClaimsPrincipal user,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var result = await formats.UpdateAsync(code, request, MandateEndpointHelpers.ResolveUserId(user), ct).ConfigureAwait(false);
+
+        // HU #13171 — bitácora de éxito, sin cambio real y fallo (con su código); sin cuerpo de plantilla.
+        await MandateFormatAudit.WriteAsync(http, code?.Trim().ToLowerInvariant() ?? string.Empty, request, result)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            MandateFormatUpdateStatus.Ok => Results.Ok(new
+            {
+                format = MandatoFormatResponses.Describe(result.Current!),
+                changed = result.Changed,
+                publishedVersion = result.PublishedVersion,
+            }),
+            MandateFormatUpdateStatus.NotFound => Results.NotFound(),
+            MandateFormatUpdateStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.Json(
+                new { error = result.ErrorCode, unknownVariables = result.UnknownVariables },
+                statusCode: StatusCodes.Status400BadRequest),
+        };
     }
 
     private static async Task<IResult> GetAsync(
@@ -167,10 +266,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .UpsertAsync(officeId, request, ResolveUserId(user), ct)
+            .UpsertAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> SetDefaultSignerAsync(
@@ -181,10 +280,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .SetOtDefaultSignerAsync(officeId, request, ResolveUserId(user), ct)
+            .SetOtDefaultSignerAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> DeleteAsync(
@@ -215,10 +314,10 @@ public static class AdminPlataformaMandatosEndpoints
 
         await using var stream = file.OpenReadStream();
         var (status, view) = await service
-            .UploadPdfTemplateAsync(officeId, stream, file.FileName, ResolveUserId(user), ct)
+            .UploadPdfTemplateAsync(officeId, stream, file.FileName, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> SaveEditorAsync(
@@ -229,10 +328,10 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .SaveEditorBodyAsync(officeId, request, ResolveUserId(user), ct)
+            .SaveEditorBodyAsync(officeId, request, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
     private static async Task<IResult> DeleteTemplateAsync(
@@ -242,25 +341,78 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .DeleteCustomTemplateAsync(officeId, ResolveUserId(user), ct)
+            .DeleteCustomTemplateAsync(officeId, MandateEndpointHelpers.ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return MapWrite(status, view);
+        return MandateEndpointHelpers.MapWrite(status, view);
     }
 
-    private static IResult PreviewTemplateAsync(
+    private static async Task<IResult> PreviewTemplateAsync(
         [FromRoute] string templateCode,
-        [FromServices] IMandatoGenerator generator)
+        [FromQuery] Guid? officeId,
+        [FromServices] IMandatoGenerator generator,
+        [FromServices] IMandateConfigAdminService service,
+        [FromServices] IMandateFormatTemplateProvider formatTemplates,
+        CancellationToken ct)
     {
         var code = templateCode?.Trim() ?? string.Empty;
-        if (!AllowedTemplates.Contains(code))
+
+        // HU #13173 — auto no es una redacción, pero con un organismo SÍ tiene vista previa: la redacción efectiva
+        // de ese organismo (la misma de su vista previa propia). Sin organismo no hay nada que resolver.
+        if (string.Equals(code, MandatoTemplateResolver.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            if (officeId is null)
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = "organismo_requerido",
+                        message = "La redacción automática depende del organismo: envía officeId o usa la vista previa del organismo (GET /mandatos/ot/{officeId}/preview).",
+                    },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return await PreviewOtAsync(officeId.Value, service, generator, formatTemplates, ct).ConfigureAwait(false);
+        }
+
+        if (!MandatoFormatCatalog.IsRedaction(code))
+            return MandatoFormatResponses.InvalidPreviewCode();
+
+        var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
+        return Results.File(doc.Content, contentType: "application/pdf");
+    }
+
+    /// <summary>Cuerpo de <c>POST /formatos/{code}/preview</c>: la plantilla en borrador.</summary>
+    public sealed record FormatDraftPreviewRequest(string? Body);
+
+    private static IResult PreviewDraftAsync(
+        [FromRoute] string code,
+        [FromBody] FormatDraftPreviewRequest request,
+        [FromServices] IMandatoGenerator generator)
+    {
+        var formatCode = code?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!MandatoFormatCatalog.IsRedaction(formatCode))
+            return MandatoFormatResponses.InvalidPreviewCode();
+
+        var body = request?.Body?.Trim() ?? string.Empty;
+        if (body.Length > MandatoFormatResponses.MaxTemplateBodyLength)
         {
             return Results.Json(
-                new { error = "template_code_invalido", allowed = AllowedTemplates.OrderBy(x => x) },
+                new { error = "plantilla_demasiado_larga", maxLength = MandatoFormatResponses.MaxTemplateBodyLength },
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var doc = generator.GenerateMandato(MandatoPreviewSample.Build(code));
+        var validation = MandatoTemplateValidator.Validate(body);
+        if (!validation.IsValid)
+            return MandatoFormatResponses.InvalidTemplateBody(validation);
+
+        // Muestra ficticia (MandatoPreviewSample): ninguna persona real, y nada se persiste.
+        var sample = MandatoPreviewSample.Build(formatCode, datosDeMuestra: true) with
+        {
+            CustomTemplateKind = MandatoCustomTemplateKindCodes.Editor,
+            CustomTemplateBody = body,
+        };
+        var doc = generator.GenerateMandato(sample);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
 
@@ -268,6 +420,7 @@ public static class AdminPlataformaMandatosEndpoints
         Guid officeId,
         [FromServices] IMandateConfigAdminService service,
         [FromServices] IMandatoGenerator generator,
+        [FromServices] IMandateFormatTemplateProvider formatTemplates,
         CancellationToken ct)
     {
         var view = await service.GetAsync(officeId, ct).ConfigureAwait(false);
@@ -277,7 +430,11 @@ public static class AdminPlataformaMandatosEndpoints
         if (view.CustomTemplateKind == MandatoCustomTemplateKindCodes.Pdf)
             customPdf = await service.OpenCustomPdfAsync(officeId, ct).ConfigureAwait(false);
 
-        var doc = generator.GenerateMandato(BuildOtPreviewData(view, customPdf));
+        // HU #13172 — la vista previa del organismo muestra lo que recibirá un trámite nuevo: la plantilla vigente del formato.
+        var applied = await MandatoFormatTemplateApplier
+            .ApplyAsync(BuildOtPreviewData(view, customPdf), formatTemplates, null, ct)
+            .ConfigureAwait(false);
+        var doc = generator.GenerateMandato(applied.Data);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
 
@@ -374,40 +531,6 @@ public static class AdminPlataformaMandatosEndpoints
         _ => Results.BadRequest(new { error = "simulacion_invalida", message = result.Message }),
     };
 
-    private static async Task<IResult> ExtractAsync(
-        HttpRequest http,
-        [FromServices] IMandateConfigAdminService service,
-        CancellationToken ct)
-    {
-        if (!http.HasFormContentType)
-            return Results.BadRequest(new { error = "multipart_requerido" });
-
-        var form = await http.ReadFormAsync(ct).ConfigureAwait(false);
-        var file = form.Files.GetFile("file");
-        if (file is null && form.Files.Count > 0)
-            file = form.Files[0];
-        if (file is null || file.Length == 0)
-            return Results.BadRequest(new { error = "archivo_requerido" });
-
-        if (file.Length > 10 * 1024 * 1024)
-            return Results.BadRequest(new { error = "archivo_demasiado_grande" });
-
-        await using var stream = file.OpenReadStream();
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
-
-        var mediaType = file.ContentType?.Trim() ?? "application/octet-stream";
-        if (string.IsNullOrWhiteSpace(mediaType) || mediaType == "application/octet-stream")
-        {
-            mediaType = file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
-                ? "application/pdf"
-                : "image/png";
-        }
-
-        var result = await service.ExtractAsync(ms.ToArray(), mediaType, ct).ConfigureAwait(false);
-        return Results.Ok(result);
-    }
-
     private static async Task<IResult> ListCompanyRulesAsync(
         Guid officeId,
         [FromServices] IMandateConfigAdminService service,
@@ -416,7 +539,10 @@ public static class AdminPlataformaMandatosEndpoints
         if (await service.GetAsync(officeId, ct).ConfigureAwait(false) is null)
             return Results.NotFound();
 
-        var items = await service.ListCompanyRulesAsync(officeId, ct).ConfigureAwait(false);
+        // Bug #12912 — Plataforma › Mandatos es solo SuperAdmin: configura toda la red.
+        var items = await service
+            .ListCompanyRulesAsync(officeId, OtCompanyVisibility.WholeNetwork, ct)
+            .ConfigureAwait(false);
         return Results.Ok(new { items });
     }
 
@@ -424,13 +550,31 @@ public static class AdminPlataformaMandatosEndpoints
         Guid officeId,
         Guid companyTenantId,
         [FromBody] UpsertCompanyOtMandateRuleRequest request,
+        HttpContext http,
         ClaimsPrincipal user,
         [FromServices] IMandateConfigAdminService service,
         CancellationToken ct)
     {
+        var change = new MandateRuleTypeChange();
         var (status, view) = await service
-            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, MandateEndpointHelpers.ResolveUserId(user), change, ct)
             .ConfigureAwait(false);
+
+        // HU #13149 — bitácora del cambio de tipo (éxito con cambio real) o del intento fallido (con su código).
+        if (status == MandateConfigWriteStatus.Ok)
+        {
+            await MandateRuleTypeAudit
+                .WriteSuccessAsync(http, AuditVocabulary.Operations.Update, officeId, companyTenantId, change)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await MandateRuleTypeAudit
+                .WriteFailureAsync(
+                    http, AuditVocabulary.Operations.Update, officeId, companyTenantId,
+                    CompanyRuleErrorCode(status), request.AssignmentMode)
+                .ConfigureAwait(false);
+        }
 
         return status switch
         {
@@ -445,9 +589,24 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            // HU #13148 — otra persona cambió la regla (o falta la versión de una regla existente).
+            MandateConfigWriteStatus.Conflict =>
+                Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.BadRequest(),
         };
     }
+
+    /// <summary>Código de error estable de la bitácora (el mismo que el cuerpo de la respuesta, sin datos sensibles).</summary>
+    private static string CompanyRuleErrorCode(MandateConfigWriteStatus status) => status switch
+    {
+        MandateConfigWriteStatus.OfficeNotFound or MandateConfigWriteStatus.CompanyNotFound => "not_found",
+        MandateConfigWriteStatus.InvalidAssignmentMode => "assignment_mode_invalido",
+        MandateConfigWriteStatus.InvalidFamily => "mandatary_family_invalida",
+        MandateConfigWriteStatus.InstitutionalRequired => "mandatario_institucional_requerido",
+        MandateConfigWriteStatus.InvalidDefaultSigner => "mandatario_default_invalido",
+        MandateConfigWriteStatus.Conflict => "row_version_conflict",
+        _ => "bad_request",
+    };
 
     private static async Task<IResult> SetCompanyDefaultSignerAsync(
         Guid officeId,
@@ -458,7 +617,8 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .SetCompanyDefaultSignerAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .SetCompanyDefaultSignerAsync(
+                officeId, companyTenantId, request, MandateEndpointHelpers.ResolveUserId(user), OtCompanyVisibility.WholeNetwork, ct)
             .ConfigureAwait(false);
 
         return status switch
@@ -468,6 +628,8 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.NotFound(),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            MandateConfigWriteStatus.Conflict =>
+                Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.BadRequest(),
         };
     }
@@ -475,39 +637,36 @@ public static class AdminPlataformaMandatosEndpoints
     private static async Task<IResult> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
+        [FromQuery] long? rowVersion,
+        HttpContext http,
         [FromServices] IMandateConfigAdminService service,
         CancellationToken ct)
     {
-        var status = await service.DeleteCompanyRuleAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
-        return status == MandateConfigWriteStatus.Ok
-            ? Results.NoContent()
-            : Results.NotFound();
-    }
+        var change = new MandateRuleTypeChange();
+        var status = await service.DeleteCompanyRuleAsync(
+            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, rowVersion, change, ct).ConfigureAwait(false);
 
-    private static IResult MapWrite(MandateConfigWriteStatus status, MandateOtConfigView? view) =>
-        status switch
+        // HU #13149 — restablecer al default queda en la bitácora con el tipo anterior.
+        if (status == MandateConfigWriteStatus.Ok)
         {
-            MandateConfigWriteStatus.Ok => Results.Ok(view),
-            MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
-            MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
-            MandateConfigWriteStatus.InvalidAssignmentMode =>
-                Results.BadRequest(new { error = "assignment_mode_invalido" }),
-            MandateConfigWriteStatus.InstitutionalRequired =>
-                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
-            MandateConfigWriteStatus.InvalidTemplateFile =>
-                Results.BadRequest(new { error = "plantilla_pdf_invalida" }),
-            MandateConfigWriteStatus.InvalidEditorBody =>
-                Results.BadRequest(new { error = "editor_cuerpo_invalido" }),
-            _ => Results.BadRequest(),
-        };
+            await MandateRuleTypeAudit
+                .WriteSuccessAsync(http, AuditVocabulary.Operations.Delete, officeId, companyTenantId, change)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await MandateRuleTypeAudit
+                .WriteFailureAsync(
+                    http, AuditVocabulary.Operations.Delete, officeId, companyTenantId,
+                    CompanyRuleErrorCode(status), attemptedMode: null)
+                .ConfigureAwait(false);
+        }
 
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirst("sub")?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
+        return status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.NoContent(),
+            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.NotFound(),
+        };
     }
 }

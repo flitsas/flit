@@ -189,6 +189,33 @@ describe('Auditoria — AC2 filtros funcionales', () => {
     );
   });
 
+  it('HU #13138b: el filtro de módulo ofrece "Mandatarios" y consulta con module=mandatarios', async () => {
+    const user = userEvent.setup();
+
+    render(<Auditoria />);
+    await screen.findByText('190.10.20.30');
+
+    mocks.fetchAdminAuditLog.mockClear();
+    await user.selectOptions(screen.getByLabelText('Módulo'), 'mandatarios');
+
+    await waitFor(() =>
+      expect(mocks.fetchAdminAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ module: 'mandatarios', page: 1 }),
+      ),
+    );
+  });
+
+  it('HU #13138b: una fila del módulo mandatarios muestra la etiqueta "Mandatarios"', async () => {
+    mocks.fetchAdminAuditLog.mockResolvedValue({
+      ...FULL,
+      data: [{ ...ROW_1, id: 'log-m', module: 'mandatarios', operation: 'remove_default' }],
+      totalCount: 1,
+    });
+    render(<Auditoria />);
+    await screen.findByText('190.10.20.30');
+    expect(screen.getAllByText('Mandatarios').length).toBeGreaterThan(0);
+  });
+
   it('filtra por rango de fechas: "Desde/Hasta" viajan como dateFrom/dateTo en ISO de inicio/fin de día', async () => {
     const user = userEvent.setup();
 

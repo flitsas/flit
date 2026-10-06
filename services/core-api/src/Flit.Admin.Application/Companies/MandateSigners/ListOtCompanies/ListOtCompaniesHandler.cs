@@ -24,7 +24,7 @@ public sealed class ListOtCompaniesHandler
         ArgumentNullException.ThrowIfNull(query);
 
         var companies = await _reader
-            .ListOtCompaniesAsync(query.TransitOfficeId, cancellationToken).ConfigureAwait(false);
+            .ListOtCompaniesAsync(query.TransitOfficeId, query.Visibility, cancellationToken).ConfigureAwait(false);
         var resolutions = await _reader
             .ListActiveCompanyResolutionsAsync(query.TransitOfficeId, cancellationToken)
             .ConfigureAwait(false);

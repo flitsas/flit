@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
 import {
   CARDLIST_CELL,
@@ -56,15 +57,6 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
   const [errorMessage, setErrorMessage] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Cierra con Escape (accesibilidad de diálogo).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -93,19 +85,16 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
   const title = status ? `${categoryLabel} · ${statusLabel(status)}` : categoryLabel;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="detalle-panel-title">
-      {/* Backdrop */}
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/30"
-        aria-label="Cerrar el panel"
-        onClick={onClose}
-      />
-
-      <aside className="relative z-10 h-full w-full max-w-xl bg-white dark:bg-[#0B0F14] shadow-2xl flex flex-col">
-        <header className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+    <Modal
+      open
+      title="Detalle de trámites"
+      onClose={onClose}
+      size="xl"
+      zClassName="z-40"
+      header={({ titleId }) => (
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 id="detalle-panel-title" className="text-sm font-bold">
+            <h2 id={titleId} className="text-sm font-bold">
               Detalle de trámites
             </h2>
             <p className="text-xs opacity-70 mt-0.5">
@@ -121,9 +110,23 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
           >
             <X className="h-4 w-4" />
           </button>
-        </header>
-
-        <div className="flex-1 min-h-0 overflow-y-auto p-5">
+        </div>
+      )}
+      footer={
+        uiStatus === "ready" && data ? (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={data.totalCount}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            ariaLabel="Paginación del detalle de trámites"
+            noun="trámites"
+          />
+        ) : undefined
+      }
+    >
+        <div>
           <UiStateBoundary
             status={uiStatus}
             errorMessage={errorMessage}
@@ -159,20 +162,6 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
           </UiStateBoundary>
         </div>
 
-        {uiStatus === "ready" && data && (
-          <footer className="px-5 py-3 border-t shrink-0">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              totalCount={data.totalCount}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              ariaLabel="Paginación del detalle de trámites"
-              noun="trámites"
-            />
-          </footer>
-        )}
-      </aside>
-    </div>
+    </Modal>
   );
 }

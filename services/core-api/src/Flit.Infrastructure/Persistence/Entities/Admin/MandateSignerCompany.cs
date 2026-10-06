@@ -18,5 +18,10 @@ public sealed class MandateSignerCompany
     public Guid TransitOfficeId { get; set; }
     public Guid CompanyTenantId { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>
+    /// HU #13128 (ADR-0061) — origen de la configuración: <c>organismo</c> | <c>compania</c> | <c>super_admin</c>.
+    /// </summary>
+    public string ConfiguredByScope { get; set; } = "organismo";
+
     public DateTimeOffset CreatedAt { get; set; }
 }

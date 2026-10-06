@@ -67,6 +67,8 @@ export interface RequestOptions {
   /** Los arrays se serializan repitiendo el parámetro (`userIds=a&userIds=b`), que es lo que espera el binding de Minimal API. */
   query?: Record<string, string | number | boolean | string[] | undefined | null>;
   signal?: AbortSignal;
+  /** Recibe la respuesta cruda antes de interpretarla (p. ej. para leer cabeceras de un 204). */
+  onResponse?: (response: Response) => void;
 }
 
 /**
@@ -75,7 +77,7 @@ export interface RequestOptions {
  * en 204.
  */
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, query, signal } = options;
+  const { method = "GET", body, query, signal, onResponse } = options;
   const configuredBase = resolveApiBase(API_BASE_URL);
   const base =
     configuredBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -110,6 +112,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
+  onResponse?.(response);
 
   if (response.status === 204) {
     return undefined as T;

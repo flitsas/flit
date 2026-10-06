@@ -15,7 +15,8 @@ public sealed class MandateSignerItem
     /// <summary>Tipo de documento (ADR-0036). Insumo del descriptor de validación de identidad.</summary>
     public string DocumentType { get; init; } = "CC";
 
-    public string DocumentNumber { get; init; } = string.Empty;
+    /// <summary>Nulo solo para el Formato en blanco (HU #13129).</summary>
+    public string? DocumentNumber { get; init; } = string.Empty;
     public string IntegrityHash { get; init; } = string.Empty;
 
     /// <summary>Correo del mandatario para la validación de identidad (ADR-0036, HU #10911). PII.</summary>
@@ -23,9 +24,6 @@ public sealed class MandateSignerItem
 
     /// <summary>Firma del baúl vinculada (ADR-0025), si está resuelta.</summary>
     public Guid? SignatureVaultId { get; init; }
-
-    /// <summary>Validación de identidad admin vigente vinculada (ADR-0034), si está resuelta.</summary>
-    public Guid? IdentityValidationRef { get; init; }
 
     /// <summary>
     /// Estado de la validación de identidad del mandatario (HU #10994) para la UI de gestión:
@@ -48,6 +46,37 @@ public sealed class MandateSignerItem
     public DateTimeOffset RegisteredAt { get; init; }
     public bool IsActive { get; init; }
 
+    /// <summary>
+    /// HU #13134 — origen de la configuración: <c>organismo</c> (organismo de tránsito o Super Admin) o
+    /// <c>compania</c>. En el listado del organismo se calcula con sus vínculos en ese organismo; en el de la
+    /// compañía, con sus vínculos con ella.
+    /// </summary>
+    public string Origin { get; init; } = MandateSignerOriginRules.Organismo;
+
+    /// <summary>HU #13129 (ADR-0061) — modelo: natural, juridica o formato_blanco.</summary>
+    public string SignerModel { get; init; } = MandateSignerModels.Natural;
+
+    /// <summary>Forma de firma (baul o biometria); nula en juridica, formato_blanco y legados sin migrar.</summary>
+    public string? SignatureMethod { get; init; }
+
+    /// <summary>Vigencia propia: fixed o range.</summary>
+    public string ValidityKind { get; init; } = MandateValidityKinds.Fixed;
+
+    public DateOnly? ValidFrom { get; init; }
+    public DateOnly? ValidTo { get; init; }
+
+    /// <summary>Estado de vigencia calculado para <paramref name="today"/> (día calendario de Colombia).</summary>
+    public string ValidityStatusOn(DateOnly today) =>
+        MandateValidityStatus.Compute(IsActive, ValidityKind, ValidFrom, ValidTo, today);
+
+    /// <summary>
+    /// HU #13130 — firma válida para <paramref name="today"/>: vigencia propia activa Y (con biometría)
+    /// validación biométrica vigente. <c>null</c> si el modelo no es Persona natural.
+    /// </summary>
+    public MandateSignerFirmaValidez.Resultado? FirmaValidezOn(DateOnly today) =>
+        MandateSignerFirmaValidez.Evaluar(
+            SignerModel, SignatureMethod, ValidityStatusOn(today), IdentityStatus, SignatureVaultId is not null);
+
     /// <summary>Compañías (tenants gestores) actualmente asignadas al mandatario.</summary>
     public IReadOnlyList<Guid> CompanyTenantIds { get; init; } = [];
 
@@ -64,8 +93,8 @@ public sealed class MandateSignerItem
     public IReadOnlyList<Guid> PhysicalSignatureOfficeIds { get; init; } = [];
 
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Lista vacía para un organismo ⇒ aplica
-    /// a todas las empresas allí. Lo necesita el formulario para precargar la selección al editar.
+    /// HU #13179 — compañías asociadas (por tenant) POR ORGANISMO. Lista vacía ⇒ solo su propia compañía.
+    /// Lo necesita el formulario para precargar la selección al editar.
     /// </summary>
     public IReadOnlyList<MandateSignerOfficeCompanies> OfficeCompanies { get; init; } = [];
 }
@@ -102,6 +131,11 @@ public sealed class CompanyTransitOfficeOption
     public Guid TransitOfficeId { get; init; }
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Nombre vigente del formato de contrato de ese organismo (HU #13174). Vacío si no se pudo resolver.
+    /// </summary>
+    public string FormatName { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -114,4 +148,9 @@ public sealed class MandateSignerCompanyResolution
     public Guid MandateSignerId { get; init; }
     public string FullName { get; init; } = string.Empty;
     public string IntegrityHash { get; init; } = string.Empty;
+
+    /// <summary>
+    /// HU #13195 — grupo de origen del vínculo: <c>organismo</c> (incluye super_admin) o <c>compania</c>.
+    /// </summary>
+    public string OriginGroup { get; init; } = "organismo";
 }
