@@ -122,7 +122,7 @@ describe("paso Firma y envío (HU #13295)", () => {
     expect(files.firma.type).toBe("image/png");
     resolve({ status: "pendiente_revision_manual" });
     expect(await screen.findByText("Recibimos tu información")).toBeInTheDocument();
-    expect(screen.getByText(/Será revisada/)).toBeInTheDocument();
+    expect(screen.queryByText(/Será revisada/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
