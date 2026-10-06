@@ -110,4 +110,27 @@ public sealed class IdentityApprovalOriginTests
         error.Should().BeNull();
         dto!.ApprovalOrigin.Should().Be(esperado);
     }
+
+    [Theory]
+    [InlineData(BiometricProviders.Manual, BiometricEstados.Rechazado, "imagen_borrosa", "imagen_borrosa")]
+    [InlineData(BiometricProviders.Manual, BiometricEstados.Aprobado, "imagen_borrosa", null)] // solo si está rechazada
+    [InlineData(BiometricProviders.Manual, BiometricEstados.Rechazado, null, null)] // rechazada sin código
+    [InlineData(BiometricProviders.Kyverum, BiometricEstados.Rechazado, "imagen_borrosa", null)] // solo proveedor manual
+    [InlineData(BiometricProviders.Mock, BiometricEstados.Rechazado, "imagen_borrosa", null)]
+    public async Task El_detalle_de_identidad_expone_rejectionReasonCode_solo_en_rechazada_manual(
+        string provider, string status, string? codigo, string? esperado)
+    {
+        var v = Fila(provider, status);
+        v.RejectionReasonCode = codigo;
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        repo.GetBiometricByIdAsync(v.Id, Arg.Any<CancellationToken>()).Returns(v);
+        repo.ListLinkedProceduresByIdentityDocumentsAsync(
+                Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<(string, string)>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>());
+
+        var (dto, error) = await new GetPrevalidacionDetailHandler(repo).HandleAsync(v.TenantId, v.Id, Ct);
+
+        error.Should().BeNull();
+        dto!.RejectionReasonCode.Should().Be(esperado);
+    }
 }

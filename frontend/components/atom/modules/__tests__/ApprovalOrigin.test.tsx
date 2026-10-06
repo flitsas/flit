@@ -1,6 +1,6 @@
 /**
  * HU-C8 (#13303) — «Origen de la aprobación» en el detalle de una validación de Identidad:
- * chip «Automática (Kyverum)» o «Manual»; sin origen no se muestra la fila.
+ * chip «Automática» o «Manual»; sin origen no se muestra la fila.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -65,11 +65,11 @@ beforeEach(() => {
 });
 
 describe('Detalle de Identidad por persona', () => {
-  it('aprobación automática: fila «Origen de la aprobación» con «Automática (Kyverum)»', async () => {
+  it('aprobación automática: fila «Origen de la aprobación» con «Automática»', async () => {
     personaCon(validacion({ approvalOrigin: 'automatica' }));
     render(<PersonIdentityDetailDrawer documentType="CC" documentNumber="1000000001" onClose={() => {}} />);
     expect(await screen.findByText('Origen de la aprobación')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Origen de la aprobación: Automática (Kyverum)' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Origen de la aprobación: Automática' })).toBeInTheDocument();
   });
 
   it('aprobación manual: chip «Manual» junto a la fecha de aprobación, sin nombre de revisor', async () => {
@@ -104,9 +104,41 @@ describe('Detalle de prevalidación', () => {
   });
 });
 
+describe('Motivo de rechazo en el detalle de Identidad', () => {
+  const GENERICO = 'No se pudo verificar la identidad con las imágenes recibidas.';
+
+  it('manual rechazada con código: muestra la etiqueta elegida por el Super Admin, no el texto genérico', async () => {
+    personaCon(validacion({
+      status: 'rechazado', provider: 'manual', approvalOrigin: null,
+      rejectionReason: GENERICO, rejectionReasonCode: 'imagen_borrosa',
+    }));
+    render(<PersonIdentityDetailDrawer documentType="CC" documentNumber="1000000001" onClose={() => {}} />);
+    expect(await screen.findByText('Motivo del rechazo: Imagen borrosa')).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(GENERICO))).not.toBeInTheDocument();
+  });
+
+  it('manual rechazada sin código (o con uno desconocido): conserva el texto de siempre', async () => {
+    personaCon(validacion({
+      status: 'rechazado', provider: 'manual', approvalOrigin: null,
+      rejectionReason: GENERICO, rejectionReasonCode: 'codigo_que_no_existe',
+    }));
+    render(<PersonIdentityDetailDrawer documentType="CC" documentNumber="1000000001" onClose={() => {}} />);
+    expect(await screen.findByText(`Motivo del rechazo: ${GENERICO}`)).toBeInTheDocument();
+  });
+
+  it.each(['kyverum', 'mock'])('%s rechazada: no cambia su texto aunque llegara un código', async (provider) => {
+    personaCon(validacion({
+      status: 'rechazado', provider, approvalOrigin: null,
+      rejectionReason: 'Rostro no coincide', rejectionReasonCode: 'imagen_borrosa',
+    }));
+    render(<PersonIdentityDetailDrawer documentType="CC" documentNumber="1000000001" onClose={() => {}} />);
+    expect(await screen.findByText('Motivo del rechazo: Rostro no coincide')).toBeInTheDocument();
+  });
+});
+
 describe('ApprovalOriginChip', () => {
   it.each([
-    ['automatica', 'Automática (Kyverum)'],
+    ['automatica', 'Automática'],
     ['manual', 'Manual'],
   ] as const)('%s → «%s»', (origin, texto) => {
     render(<ApprovalOriginChip origin={origin} />);

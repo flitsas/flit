@@ -4,14 +4,14 @@ import { Bot, UserCheck } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 
 /**
- * Chip de «Origen de la aprobación» de una validación de identidad (Épica #13202, HU-C8): aprobada por
- * Kyverum o revisada a mano por el Super Admin. Icono + texto, nunca solo color. Solo se pinta cuando el
+ * Chip de «Origen de la aprobación» de una validación de identidad (Épica #13202, HU-C8): aprobada de forma automática o
+ * por el proveedor, o revisada a mano por el Super Admin. Icono + texto, nunca solo color. Solo se pinta cuando el
  * origen existe; el nombre del revisor no se muestra en ningún caso.
  */
 export type ApprovalOrigin = 'automatica' | 'manual';
 
 const META: Record<ApprovalOrigin, { label: string; tone: StatusTone; Icon: typeof Bot }> = {
-  automatica: { label: 'Automática (Kyverum)', tone: 'neutral', Icon: Bot },
+  automatica: { label: 'Automática', tone: 'neutral', Icon: Bot },
   manual: { label: 'Manual', tone: 'info', Icon: UserCheck },
 };
 

@@ -22,6 +22,7 @@ import {
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityManualFlowActions';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import type {
@@ -338,6 +339,10 @@ function ValidationAccordionItem({
   const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
   const showCaptura = !soloConsulta && hasKyverumCaptureQr(v.captureUrl);
+  // Rechazada del flujo manual: el motivo que eligió el Super Admin (etiqueta homologada); Kyverum/mock, el texto de siempre.
+  const motivoManual =
+    v.status === 'rechazado' && v.provider === 'manual' ? etiquetaMotivoRechazoManual(v.rejectionReasonCode) : null;
+  const motivoRechazo = motivoManual ?? v.rejectionReason;
   const title = index === 0 ? 'Sesión más reciente' : 'Sesión anterior / Histórica';
   const enlaceTone: StatusTone = v.expired ? 'warning' : 'success';
   const enlaceEstado = v.expired ? 'Vencido' : 'Vigente';
@@ -407,12 +412,12 @@ function ValidationAccordionItem({
             <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
           )}
 
-          {v.status === 'rechazado' && v.rejectionReason && (
+          {v.status === 'rechazado' && motivoRechazo && (
             <p
               className="rounded-xl px-3 py-2 text-[11px]"
               style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
             >
-              Motivo del rechazo: {v.rejectionReason}
+              Motivo del rechazo: {motivoRechazo}
             </p>
           )}
 

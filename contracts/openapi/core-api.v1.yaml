@@ -16109,6 +16109,14 @@ components:
             HU #13303 (Épica #13202) — cómo se aprobó la validación: `automatica` (Kyverum/mock) o `manual` (revisión del
             Super Admin). Solo con status=aprobado; `null` en cualquier otro estado y en aprobaciones anteriores al campo.
             Nunca trae el nombre del revisor.
+        rejectionReasonCode:
+          type: string
+          nullable: true
+          enum: [imagen_borrosa, rostro_no_coincide, documento_ilegible_o_incompleto, documento_no_corresponde, firma_ilegible_o_no_corresponde, captura_fuera_de_encuadre]
+          description: >
+            Épica #13202 — código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL. Solo con
+            status=rechazado y provider=manual; `null` en cualquier otro caso (las rechazadas de Kyverum/mock siguen con
+            `rejectionReason`). Sin texto libre ni PII.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]

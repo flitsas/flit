@@ -64,7 +64,13 @@ public sealed record BiometricValidationDto(
     /// Solo con estado <c>aprobado</c>; <c>null</c> en cualquier otro estado y en aprobaciones anteriores al campo. Nunca trae
     /// el nombre del revisor.
     /// </summary>
-    string? ApprovalOrigin = null);
+    string? ApprovalOrigin = null,
+    /// <summary>
+    /// Épica #13202 — código homologado (lista cerrada, sin texto libre ni PII) del motivo que eligió el Super Admin al rechazar
+    /// una validación MANUAL. Solo con status=rechazado y provider=manual; <c>null</c> en cualquier otro caso (Kyverum/mock
+    /// rechazados siguen con <see cref="RejectionReason"/>).
+    /// </summary>
+    string? RejectionReasonCode = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -301,7 +307,11 @@ public sealed class IniciarBiometriaHandler(
             CreatedAt: v.CreatedAt,
             Ordinal: ordinal,
             RegisteredEmail: string.IsNullOrWhiteSpace(v.RegisteredEmail) ? null : v.RegisteredEmail,
-            ApprovalOrigin: v.Status == BiometricEstados.Aprobado ? v.ApprovalOrigin : null);
+            ApprovalOrigin: v.Status == BiometricEstados.Aprobado ? v.ApprovalOrigin : null,
+            RejectionReasonCode: v.Status == BiometricEstados.Rechazado
+                && string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+                    ? v.RejectionReasonCode
+                    : null);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado

@@ -54,4 +54,27 @@ public sealed class ApprovalOriginEndpointTests : IClassFixture<ManualReviewFact
 
         json!.Value.GetProperty("approvalOrigin").ValueKind.Should().Be(JsonValueKind.Null);
     }
+
+    [Fact]
+    public async Task El_detalle_de_una_rechazada_manual_trae_el_codigo_del_motivo()
+    {
+        var seeded = await _host.SeedAsync(
+            BiometricEstados.Rechazado, BiometricProviders.Manual, conImagenes: false, rejectionReasonCode: "imagen_borrosa");
+
+        var json = await DetalleAsync(seeded.Id);
+
+        json!.Value.GetProperty("rejectionReasonCode").GetString().Should().Be("imagen_borrosa");
+    }
+
+    [Theory]
+    [InlineData(BiometricProviders.Mock)]
+    [InlineData(BiometricProviders.Kyverum)]
+    public async Task El_detalle_de_una_rechazada_no_manual_trae_codigo_null(string provider)
+    {
+        var seeded = await _host.SeedAsync(BiometricEstados.Rechazado, provider, conImagenes: false);
+
+        var json = await DetalleAsync(seeded.Id);
+
+        json!.Value.GetProperty("rejectionReasonCode").ValueKind.Should().Be(JsonValueKind.Null);
+    }
 }
