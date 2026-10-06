@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Clock, ScanFace, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ScanFace, ShieldCheck } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
@@ -10,6 +10,7 @@ import type { ManualDetail } from '@/lib/api/types/manual-review';
 import { formatEspera, manualOriginLabel } from '@/lib/identidad/manual-review-meta';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { formatFechaHora } from '@/lib/format/date';
+import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO } from './manual-field-styles';
 import { ManualImageGallery } from './ManualImageGallery';
 import { ManualReviewActions } from './ManualReviewActions';
 import { ManualStatusBadge } from './ManualStatusBadge';
@@ -134,6 +135,8 @@ function DetalleCuerpo({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useWizardFocusTrap(panelRef, { active: true });
+  // La acción se aplicó pero con una salvedad (p. ej. el correo no salió): tono de advertencia, no de éxito.
+  const avisoConProblema = Boolean(mensaje && /no pudo enviarse/i.test(mensaje));
   const sinCapturas = detail ? !detail.images.some((i) => i.available) : false;
 
   return (
@@ -166,13 +169,13 @@ function DetalleCuerpo({
             </dl>
 
             {detail.status === 'rechazado' && detail.linkExpiresAt && (
-              <p role="status" className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm dark:border-white/10 dark:bg-[#162744]">
-                <Clock className="h-4 w-4 shrink-0 text-[#557EFF]" aria-hidden />
+              <p role="status" className={`${MANUAL_AVISO_BASE} items-center ${MANUAL_AVISO.info}`}>
+                <Clock className="h-4 w-4 shrink-0" aria-hidden />
                 <span>Se envió un enlace nuevo al cliente. Vence el {formatFechaHora(detail.linkExpiresAt)}</span>
               </p>
             )}
 
-            <section aria-labelledby={`${id}-consent`} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+            <section aria-labelledby={`${id}-consent`} className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
               <h3 id={`${id}-consent`} className="flex items-center gap-2 text-sm font-bold text-[#162744] dark:text-white">
                 <ShieldCheck className="h-4 w-4 text-[#557EFF]" aria-hidden /> Consentimiento de tratamiento de datos
               </h3>
@@ -188,12 +191,12 @@ function DetalleCuerpo({
                 Capturas del cliente
               </h3>
               {sinCapturas ? (
-                <div role="status" className="flex items-start gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm dark:border-white/10 dark:bg-[#162744]">
-                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#557EFF]" aria-hidden />
+                <div role="status" className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.info}`}>
+                  <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                   <div>
                     <p className="font-semibold">El cliente aún no ha capturado.</p>
                     {detail.linkExpiresAt && (
-                      <p className="mt-0.5 text-xs text-[#59677D] dark:text-white/70">
+                      <p className="mt-0.5 text-xs">
                         El enlace caduca el {formatFechaHora(detail.linkExpiresAt)}.
                       </p>
                     )}
@@ -207,8 +210,16 @@ function DetalleCuerpo({
         )}
       </UiStateBoundary>
       {mensaje && (
-        <p role="status" className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm font-semibold dark:border-white/10 dark:bg-[#162744] dark:text-white">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#557EFF]" aria-hidden /> {mensaje}
+        <p
+          role="status"
+          className={`${MANUAL_AVISO_BASE} items-center font-semibold ${avisoConProblema ? MANUAL_AVISO.warning : MANUAL_AVISO.success}`}
+        >
+          {avisoConProblema ? (
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+          )}{' '}
+          {mensaje}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-3">
@@ -227,11 +238,7 @@ function DetalleCuerpo({
             }}
           />
         )}
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-[#162744]/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] dark:text-white"
-        >
+        <button type="button" onClick={onClose} className={MANUAL_BTN_SECUNDARIO}>
           Cerrar
         </button>
       </div>
