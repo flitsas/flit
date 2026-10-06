@@ -1,4 +1,6 @@
 using Flit.Api.Middleware;
+using Flit.Platform.Sdk.Messaging;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -34,6 +36,10 @@ public static class FlitTelemetryExtensions
             .WithTracing(t => t
                 .AddAspNetCoreInstrumentation(o => o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health"))
                 .AddHttpClientInstrumentation()
+                .AddOtlpExporter())
+            // HU #13339: solo las métricas del bus (mensajes muertos para alertar); no se suman las de ASP.NET.
+            .WithMetrics(m => m
+                .AddMeter(PlatformMessagingMetrics.MeterName)
                 .AddOtlpExporter());
 
         builder.Logging.AddOpenTelemetry(o =>

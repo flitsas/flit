@@ -13,6 +13,7 @@ de Identidad ni Trámites.
 | `AddFlitGrpcClient<T>` | Cliente gRPC: token de servicio por scope (pedido y renovado), empresa, correlación y `traceparent` en la metadata, deadline 3 s, reintentos solo ante `UNAVAILABLE` y circuito por destino | #13337 |
 | `PlatformException` / `PlatformRpcErrors.Reason` | Lanzar un error del §10 en un handler y leerlo del lado del cliente | #13337 |
 | `AddFlitOutbox<TContext>` / `IPlatformOutbox` / `AddFlitOutbox(schema)` | Evento guardado en la misma transacción que el cambio y publicado a RabbitMQ (`flit.<productor>`, sobre §7 en JSON) al confirmar; con el broker caído espera y sale en orden | #13338 |
+| `AddFlitConsumer<TContext, THandler, TData>` / `IEventConsumer<T>` / `AddFlitInbox(schema)` | Consumidor: bandeja `(event_id, consumer)` (un evento repetido no repite el efecto), reintentos a 10 s, 1 min y 10 min, luego `<cola>.dlq` y la métrica `flit.messaging.dead_lettered` | #13339 |
 | `AddFlitTelemetry` / `UseFlitCorrelationId` | Trazas y logs OTLP (solo con `OTEL_EXPORTER_OTLP_ENDPOINT`) e id de correlación | #13332 |
 | `OidcDefaults`, `ServiceAudiences`, `AdminAuthorization` | Scopes de servicio, audiencias por servicio destino, claims y roles | #13333 |
 
@@ -65,6 +66,18 @@ Publicar un evento (se confirma con el `SaveChanges` del cambio; `modelBuilder.A
 ```csharp
 outbox.Enqueue("consultas.consulta.realizada", 1, tenantId, new { proveedor, fuente, exito, latenciaMs });
 await db.SaveChangesAsync(ct);
+```
+
+Consumir (solo se escribe el efecto; corre en la misma transacción que la bandeja):
+
+```csharp
+builder.Services.AddFlitConsumer<NotificacionesDb, CorreoPorCambioDeEstado, CambioDeEstado>(
+    builder.Configuration, queue: "notificaciones.correo", producer: "tramites", ["tramites.procedure.state_changed"]);
+
+public sealed class CorreoPorCambioDeEstado(NotificacionesDb db) : IEventConsumer<CambioDeEstado>
+{
+    public Task HandleAsync(EventEnvelope envelope, CambioDeEstado data, CancellationToken ct) { /* el efecto */ }
+}
 ```
 
 Leer por empresa siempre con el filtro del SDK:

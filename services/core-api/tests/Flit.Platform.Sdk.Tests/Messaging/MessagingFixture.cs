@@ -79,8 +79,27 @@ public sealed class PruebaDb(DbContextOptions<PruebaDb> options) : DbContext(opt
             e.Property(p => p.TenantId).HasColumnName("tenant_id");
             e.Property(p => p.Nombre).HasColumnName("nombre");
         });
+        modelBuilder.Entity<Efecto>(e =>
+        {
+            e.ToTable("efectos");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.EventId).HasColumnName("event_id");
+            e.Property(x => x.Cola).HasColumnName("cola");
+        });
         modelBuilder.AddFlitOutbox("prueba");
+        modelBuilder.AddFlitInbox("prueba");
     }
+}
+
+/// <summary>El efecto que deja un consumidor de prueba (HU #13339): una fila por evento procesado.</summary>
+public sealed class Efecto
+{
+    public Guid Id { get; set; }
+
+    public Guid EventId { get; set; }
+
+    public string Cola { get; set; } = string.Empty;
 }
 
 public sealed class Pedido
