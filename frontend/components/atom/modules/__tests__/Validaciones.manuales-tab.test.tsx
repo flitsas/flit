@@ -90,7 +90,7 @@ describe('Pestaña «Validaciones manuales» por rol', () => {
     expect(screen.getByRole('tab', { name: 'Validaciones', selected: true })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Manuales' })).not.toBeInTheDocument();
     // Contador: cantidad de registros en pendiente_revision_manual (10 de las 27 filas simuladas).
-    expect(await screen.findByRole('tab', { name: /^Validaciones manuales\s*· 10$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: /^Validaciones manuales\s*· 10 por revisar$/ })).toBeInTheDocument();
     await screen.findByText(/Aún no hay validaciones de identidad/);
     expect(mocks.listTenantBiometricPersons).toHaveBeenCalled();
   });

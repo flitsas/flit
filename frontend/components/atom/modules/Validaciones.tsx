@@ -409,6 +409,8 @@ function ValidacionesSuperAdmin() {
               id: 'manuales',
               label: 'Validaciones manuales',
               count: pendientes,
+              countLabel: 'por revisar',
+              title: 'Por revisar: capturas del cliente que esperan aprobación o rechazo',
               content: (
                 <ValidacionesManuales
                   onChanged={refrescarTodo}
