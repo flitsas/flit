@@ -383,7 +383,13 @@ function ValidationAccordionItem({
               accent={Boolean(v.referenceNumber)}
             />
             <SessionStat label="Fecha de registro" value={formatFecha(v.createdAt)} />
-            <SessionStat label="Intentos Kyverum" value={`${v.intentos} / ${v.maxIntentos}`} />
+            {/* El flujo manual no tiene contador de intentos del proveedor (los reenvíos están en la bitácora). */}
+            {v.provider !== 'manual' && (
+              <SessionStat
+                label={v.provider === 'mock' ? 'Intentos' : 'Intentos Kyverum'}
+                value={`${v.intentos} / ${v.maxIntentos}`}
+              />
+            )}
             <SessionStat
               label="Estado del enlace"
               value={enlaceEstado}
@@ -442,7 +448,7 @@ function ValidationAccordionItem({
             </div>
           )}
 
-          {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} />}
+          {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
           <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
             <p className="mb-1 text-[13px] font-semibold text-[#162744] dark:text-white">

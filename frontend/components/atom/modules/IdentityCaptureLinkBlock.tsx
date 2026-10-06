@@ -25,7 +25,15 @@ function qrHref(captureUrl: string): string {
  * de validación de identidad / prevalidación. Se muestra siempre que exista URL,
  * tanto en validación por identidad como por trámite.
  */
-export function IdentityCaptureLinkBlock({ captureUrl }: { captureUrl: string }) {
+export function IdentityCaptureLinkBlock({
+  captureUrl,
+  provider,
+}: {
+  captureUrl: string;
+  /** Proveedor de la validación: solo `manual`/`mock` quitan el nombre «Kyverum» del CTA. */
+  provider?: string | null;
+}) {
+  const ctaLabel = provider === 'manual' || provider === 'mock' ? 'Abrir enlace de captura' : 'Abrir captura Kyverum';
   const href = qrHref(captureUrl);
   return (
     <div
@@ -55,7 +63,7 @@ export function IdentityCaptureLinkBlock({ captureUrl }: { captureUrl: string })
             }}
           >
             <ExternalLink className="h-3 w-3" aria-hidden />
-            Abrir captura Kyverum
+            {ctaLabel}
           </a>
           <CopyLinkButton captureUrl={href} />
         </div>
