@@ -11,7 +11,13 @@ import {
   LEGAL_FOOTER_PREFIX,
   LEGAL_FOOTER_SUFFIX,
 } from "@/lib/captura-manual/consent";
-import type { ManualCaptureClient, ManualCaptureView } from "@/lib/captura-manual/types";
+import {
+  ManualCaptureError,
+  terminalKindOf,
+  type LinkTerminalKind,
+  type ManualCaptureClient,
+  type ManualCaptureView,
+} from "@/lib/captura-manual/types";
 
 /** Paso 1 — Datos (HU #13292): datos de solo lectura, consejos y consentimiento biométrico. */
 export function PasoDatos({
@@ -21,6 +27,7 @@ export function PasoDatos({
   consentRegistered = false,
   onConsentRegistered,
   onDone,
+  onTerminal,
 }: {
   token: string;
   view: ManualCaptureView;
@@ -29,13 +36,16 @@ export function PasoDatos({
   consentRegistered?: boolean;
   onConsentRegistered?: () => void;
   onDone: () => void;
+  /** El enlace dejó de servir (404/410/409 estado_invalido) al registrar el consentimiento. */
+  onTerminal?: (kind: LinkTerminalKind) => void;
 }) {
   const checkId = useId();
   const [accepted, setAccepted] = useState(consentRegistered);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
   // El backend vigente usa otra versión del texto que la que este front muestra: no se avanza en silencio.
-  const versionMismatch = view.consentTextVersion !== RENDERED_CONSENT_TEXT_VERSION;
+  const [staleText, setStaleText] = useState(false);
+  const versionMismatch = staleText || view.consentTextVersion !== RENDERED_CONSENT_TEXT_VERSION;
 
   async function start() {
     if (versionMismatch) return;
@@ -48,8 +58,14 @@ export function PasoDatos({
         onConsentRegistered?.();
       }
       onDone();
-    } catch {
+    } catch (e) {
+      const terminal = terminalKindOf(e);
+      if (terminal && onTerminal) {
+        onTerminal(terminal);
+        return;
+      }
       // La casilla se conserva: el cliente reintenta sin volver a marcarla.
+      setStaleText(e instanceof ManualCaptureError && e.code === "version_texto_invalida");
       setError(true);
     } finally {
       setSending(false);
@@ -124,7 +140,7 @@ export function PasoDatos({
         </p>
       ) : null}
 
-      {error ? (
+      {error && !staleText ? (
         <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
           No pudimos registrar tu autorización. Inténtalo de nuevo.
         </p>

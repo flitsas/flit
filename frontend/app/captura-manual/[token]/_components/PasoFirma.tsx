@@ -51,6 +51,15 @@ export function PasoFirma({
         if (e.status === 409 && e.code === "consentimiento_requerido") return onOutcome({ kind: "consent" });
         const terminal = terminalKindOf(e);
         if (terminal) return onOutcome({ kind: "terminal", terminal });
+        if (e.status === 422) {
+          // archivo_requerido / firma_requerida: el servidor no recibió alguna de las 4 piezas.
+          setError(
+            e.code === "firma_requerida"
+              ? "Falta tu firma. Trázala de nuevo y envía otra vez."
+              : "Falta alguna de las imágenes. Vuelve con «Atrás» para repetir las fotos y envía otra vez.",
+          );
+          return;
+        }
         if (e.status === 413 || e.status === 415) {
           const capture = offendingCapture(e);
           if (capture && capture !== "firma") return onOutcome({ kind: "repeat", capture });

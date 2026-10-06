@@ -129,6 +129,7 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           client={api}
           consentRegistered={consented}
           onConsentRegistered={() => setConsented(true)}
+          onTerminal={(terminal) => setLoad({ kind: "terminal", terminal })}
           onDone={() => {
             setNotice(null);
             dispatch({ type: "next" });

@@ -1,5 +1,6 @@
 // Cliente tipado de la captura manual pública (contrato Épica #13202 §2).
-// Adaptador simulado por defecto; el real se activa con NEXT_PUBLIC_MANUAL_CAPTURE_MOCK=false.
+// Cliente HTTP real por defecto; el adaptador simulado solo con NEXT_PUBLIC_MANUAL_CAPTURE_MOCK=true.
+// Endpoints públicos: sin Authorization ni X-Tenant-Id (el token del enlace es la credencial).
 import { resolveApiUrl } from "@/lib/api/client";
 import { RENDERED_CONSENT_TEXT_VERSION } from "./consent";
 import {
@@ -36,7 +37,7 @@ export function createHttpClient(fetchImpl: typeof fetch = (...a) => fetch(...a)
     async postConsent(token, body: ConsentBody) {
       const res = await fetchImpl(url(token, "/consent"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(body),
       });
       if (!res.ok) return failFrom(res);
@@ -47,7 +48,11 @@ export function createHttpClient(fetchImpl: typeof fetch = (...a) => fetch(...a)
       form.append("anverso", files.anverso, "anverso.jpg");
       form.append("reverso", files.reverso, "reverso.jpg");
       form.append("firma", files.firma, "firma.png");
-      const res = await fetchImpl(url(token, "/submit"), { method: "POST", body: form });
+      const res = await fetchImpl(url(token, "/submit"), {
+        method: "POST",
+        headers: { Accept: "application/json" }, // sin Content-Type: el navegador fija el boundary
+        body: form,
+      });
       if (!res.ok) return failFrom(res);
       return (await res.json()) as { status: string };
     },
@@ -89,7 +94,7 @@ export function createMockClient(delayMs = 250): ManualCaptureClient {
   };
 }
 
-/** Elige el adaptador: simulado salvo que NEXT_PUBLIC_MANUAL_CAPTURE_MOCK sea «false». */
+/** Elige el adaptador: el real, salvo que NEXT_PUBLIC_MANUAL_CAPTURE_MOCK sea «true». */
 export function getManualCaptureClient(): ManualCaptureClient {
-  return process.env.NEXT_PUBLIC_MANUAL_CAPTURE_MOCK === "false" ? createHttpClient() : createMockClient();
+  return process.env.NEXT_PUBLIC_MANUAL_CAPTURE_MOCK === "true" ? createMockClient() : createHttpClient();
 }

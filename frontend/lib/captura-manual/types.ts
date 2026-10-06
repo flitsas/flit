@@ -50,6 +50,8 @@ export function terminalKindOf(error: unknown): LinkTerminalKind | null {
   if (!(error instanceof ManualCaptureError)) return null;
   if (error.status === 404) return "not_found";
   if (error.status === 410) return error.code === "reemplazado" ? "reemplazado" : "expirada";
-  if (error.status === 409) return "estado_invalido";
+  // 409 se discrimina por el code del cuerpo: «estado_invalido» es terminal; «consentimiento_requerido» es
+  // recuperable (el submit vuelve al paso Datos) y cualquier otro 409 desconocido no cierra el enlace.
+  if (error.status === 409) return error.code === "estado_invalido" ? "estado_invalido" : null;
   return null;
 }

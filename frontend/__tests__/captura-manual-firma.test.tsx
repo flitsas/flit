@@ -196,3 +196,15 @@ describe("cliente HTTP: submit multipart", () => {
     expect((body.get("firma") as File).name).toBe("firma.png");
   });
 });
+
+describe("422 del envío", () => {
+  it.each([
+    ["firma_requerida", /Falta tu firma/],
+    ["archivo_requerido", /Falta alguna de las imágenes/],
+  ])("%s muestra un mensaje específico y conserva las capturas", async (code, msg) => {
+    const submit = vi.fn().mockRejectedValue(new ManualCaptureError(422, code, "x"));
+    await toFirma(fakeClient(submit));
+    await signAndSend();
+    expect(await screen.findByRole("alert")).toHaveTextContent(msg);
+  });
+});
