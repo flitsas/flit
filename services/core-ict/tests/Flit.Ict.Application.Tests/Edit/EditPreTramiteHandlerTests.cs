@@ -172,8 +172,13 @@ public sealed class EditPreTramiteHandlerTests
     [Theory]
     [InlineData("grpc_unavailable", "core_api_unavailable")]
     [InlineData(null, "core_api_unavailable")]
-    [InlineData("invalid_valor_venta", "invalid_valor_venta")]
-    public async Task Materializado_otros_errores_de_core_api_se_propagan(string? coreApiError, string esperado)
+    [InlineData("", "core_api_unavailable")]
+    [InlineData("not_draft", "not_draft")]
+    [InlineData("invalid_valor_venta", "invalid_selling_price")]
+    [InlineData("not_found", "core_api_not_found")]
+    [InlineData("persist_failed", "core_api_error")]
+    [InlineData("tenant_mismatch", "core_api_error")]
+    public async Task Materializado_errores_de_core_api_pasan_por_lista_blanca(string? coreApiError, string esperado)
     {
         var id = Guid.NewGuid();
         var instanceId = Guid.NewGuid();
@@ -243,6 +248,91 @@ public sealed class EditPreTramiteHandlerTests
         error.Should().BeNull();
         result!.ValidationReset.Should().BeTrue();
         master.BusinessValidation.Should().Be(0);
+        await _draftClient.DidNotReceiveWithAnyArgs().UpdateCommercialAsync(default, default, default, default, Ct);
+    }
+
+    // ===== Review PR #536: precio aceptado por core-api y conflicto al guardar en ICT =====
+
+    [Fact]
+    public async Task Materializado_conflicto_al_guardar_recarga_y_reintenta_una_vez()
+    {
+        var id = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        var master = Materialized(id, instanceId);
+        var recargado = Materialized(id, instanceId, rowVersion: 4);
+        _repository.GetAsync(id, _tenantId, Arg.Any<CancellationToken>()).Returns(master, recargado);
+        _draftClient.UpdateCommercialAsync(_tenantId, instanceId, id, 18500000m, Arg.Any<CancellationToken>())
+            .Returns((true, (string?)null));
+        var intentos = 0;
+        _repository.SaveAsync(_tenantId, Arg.Any<CancellationToken>()).Returns(_ =>
+            ++intentos == 1 ? throw new IctConcurrencyException() : Task.CompletedTask);
+
+        var (result, error) = await CreateHandler().HandleAsync(
+            new EditPreTramiteCommand(id, RowVersion: 3, SellingPrice: 18500000m), Ct);
+
+        error.Should().BeNull();
+        result!.ValidationReset.Should().BeFalse();
+        recargado.SellingPrice.Should().Be(18500000m);
+        recargado.UpdatedBy.Should().Be(_tenant.IntegrationClientId);
+        await _repository.Received(2).SaveAsync(_tenantId, Arg.Any<CancellationToken>());
+        await _repository.Received(2).GetAsync(id, _tenantId, Arg.Any<CancellationToken>());
+        await _draftClient.Received(1).UpdateCommercialAsync(_tenantId, instanceId, id, 18500000m, Arg.Any<CancellationToken>());
+        await _repository.Received(1).RecordTimelineEventAsync(
+            id, _tenantId, "editado", "ok", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Materializado_conflicto_dos_veces_devuelve_stale_y_registra_desincronizado_sin_valores()
+    {
+        var id = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        _repository.GetAsync(id, _tenantId, Arg.Any<CancellationToken>())
+            .Returns(Materialized(id, instanceId), Materialized(id, instanceId, rowVersion: 4));
+        _draftClient.UpdateCommercialAsync(_tenantId, instanceId, id, 18500000m, Arg.Any<CancellationToken>())
+            .Returns((true, (string?)null));
+        _repository.SaveAsync(_tenantId, Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new IctConcurrencyException());
+
+        var (result, error) = await CreateHandler().HandleAsync(
+            new EditPreTramiteCommand(id, RowVersion: 3, SellingPrice: 18500000m), Ct);
+
+        result.Should().BeNull();
+        error.Should().Be("stale");
+        await _repository.Received(2).SaveAsync(_tenantId, Arg.Any<CancellationToken>());
+        await _repository.Received(1).RecordTimelineEventAsync(
+            id, _tenantId, "editado", "desincronizado",
+            Arg.Is<string>(d => d.Contains("\"changed_fields\":[\"selling_price\"]") && !d.Contains("18500000")),
+            Arg.Any<CancellationToken>());
+        await _repository.DidNotReceive().RecordTimelineEventAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), "ok", Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Materializado_precio_de_16_enteros_se_acepta()
+    {
+        var id = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        const decimal max = 9999999999999999.99m;
+        _repository.GetAsync(id, _tenantId, Arg.Any<CancellationToken>()).Returns(Materialized(id, instanceId));
+        _draftClient.UpdateCommercialAsync(_tenantId, instanceId, id, max, Arg.Any<CancellationToken>())
+            .Returns((true, (string?)null));
+
+        var (_, error) = await CreateHandler().HandleAsync(
+            new EditPreTramiteCommand(id, RowVersion: 3, SellingPrice: max), Ct);
+
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Materializado_precio_de_17_enteros_se_rechaza_sin_llamar_a_core_api()
+    {
+        var id = Guid.NewGuid();
+        _repository.GetAsync(id, _tenantId, Arg.Any<CancellationToken>()).Returns(Materialized(id, Guid.NewGuid()));
+
+        var (_, error) = await CreateHandler().HandleAsync(
+            new EditPreTramiteCommand(id, RowVersion: 3, SellingPrice: 10000000000000000m), Ct);
+
+        error.Should().Be(EditPreTramiteHandler.InvalidSellingPrice);
         await _draftClient.DidNotReceiveWithAnyArgs().UpdateCommercialAsync(default, default, default, default, Ct);
     }
 }

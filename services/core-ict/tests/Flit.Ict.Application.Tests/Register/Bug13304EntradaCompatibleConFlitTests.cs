@@ -5,8 +5,8 @@ using Xunit;
 namespace Flit.Ict.Application.Tests.Register;
 
 /// <summary>
-/// Bug #13304 (capa 1): core-ict rechaza en la ENTRADA lo que core-api no puede guardar (teléfono &gt; 20,
-/// nombre completo &gt; 200, tipo de documento fuera de CC/CE/NIT/PAS/TI) y los textos que excedían la
+/// Bug #13304 (capa 1): core-ict rechaza en la ENTRADA lo que core-api no puede guardar (teléfono &gt; 50,
+/// nombre completo &gt; 320, tipo de documento fuera de CC/CE/NIT/PAS/TI) y los textos que excedían la
 /// columna y daban 500 en /register.
 /// <para>Uso de ejemplo:</para>
 /// <code>
@@ -39,45 +39,71 @@ public sealed class Bug13304EntradaCompatibleConFlitTests
     private static List<string> Errores(RegisterActorInput seller) =>
         Validator.Validate(Bilateral(seller)).Errors.Select(e => e.ErrorMessage).ToList();
 
-    // ===== Teléfono =====
+    // ===== Teléfono (core-api phone varchar(50), igual que la columna de ICT) =====
+    private static string Digitos(int n) => string.Concat(Enumerable.Range(0, n).Select(i => (char)('0' + (i % 10))));
+
     [Fact]
-    public void Telefono_de_21_digitos_tras_normalizar_se_rechaza()
+    public void Telefono_de_51_digitos_tras_normalizar_se_rechaza()
     {
-        // 21 dígitos repartidos con espacios y símbolos: lo que cuenta es lo que viaja (solo dígitos).
-        Errores(Actor(phone: "+57 (300) 123-4567 8901 23456"))
-            .Should().Contain(m => m.Contains("phone debe tener máximo 20 dígitos"));
+        // 51 dígitos con prefijo y separadores (58 caracteres crudos, bajo el tope crudo de 64): cuenta lo que viaja.
+        Errores(Actor(phone: "+57 (" + Digitos(49) + ")"))
+            .Should().Contain(m => m.Contains("phone debe tener máximo 50 dígitos"));
     }
 
     [Fact]
-    public void Telefono_de_20_digitos_con_simbolos_pasa_y_viaja_normalizado()
+    public void Telefono_de_50_digitos_con_simbolos_pasa_y_viaja_normalizado()
     {
-        var phone = "+57 (300) 123-4567 8901 2345"; // 20 dígitos, 28 caracteres
+        var phone = "+57 (" + Digitos(48) + ")"; // 50 dígitos, 55 caracteres
         Errores(Actor(phone: phone)).Should().BeEmpty();
 
         var master = IctPayloadNormalizer.ToMaster(Bilateral(Actor(phone: phone)), Tenant);
-        master.Actors.First(a => a.ActorType == "seller").Phone.Should().Be("57300123456789012345");
+        var guardado = master.Actors.First(a => a.ActorType == "seller").Phone;
+        guardado.Should().Be("57" + Digitos(48));
+        guardado.Should().HaveLength(50);
     }
+
+    [Fact]
+    public void Tope_de_telefono_es_50() => IctPayloadNormalizer.MaxActorPhoneLength.Should().Be(50);
 
     [Fact]
     public void NormalizePhone_deja_solo_digitos() =>
         IctPayloadNormalizer.NormalizePhone(" +57 (604) 444-55.66 ").Should().Be("576044445566");
 
-    // ===== Nombre completo =====
+    // ===== Nombre completo (core-api full_name varchar(320)) =====
+    // Con cada parte en su tope de 100, el armado llega a 302: el tope combinado de 320 solo se alcanza si una
+    // parte ya excede su propio tope. Por eso los casos de 320/321 miran el mensaje combinado, no la lista vacía.
+    private const string MensajeCombinado = "juntos deben tener máximo 320 caracteres";
+
     [Fact]
-    public void Nombre_completo_de_201_se_rechaza()
+    public void Nombre_completo_de_321_se_rechaza()
     {
-        // 100 + " " + 100 = 201: cada parte cabe en su columna, pero junto excede full_name varchar(200).
-        Errores(Actor(name: new string('A', 100), firstLastName: new string('B', 100)))
-            .Should().Contain(m => m.Contains("juntos deben tener máximo 200 caracteres"));
+        // 121 + " " + 100 + " " + 98 = 321.
+        IctPayloadNormalizer.ActorFullName(new string('A', 121), new string('B', 100), new string('C', 98))
+            .Length.Should().Be(321);
+        Errores(Actor(name: new string('A', 121), firstLastName: new string('B', 100), secondLastName: new string('C', 98)))
+            .Should().Contain(m => m.Contains(MensajeCombinado));
     }
 
     [Fact]
-    public void Nombre_completo_de_200_pasa()
+    public void Nombre_completo_de_320_no_dispara_el_tope_combinado()
     {
-        // 99 + " " + 100 = 200.
-        Errores(Actor(name: new string('A', 99), firstLastName: new string('B', 100))).Should().BeEmpty();
-        IctPayloadNormalizer.ActorFullName(new string('A', 99), new string('B', 100), null).Length.Should().Be(200);
+        // 120 + " " + 100 + " " + 98 = 320 (name > 100 lo rechaza su propio tope, no el combinado).
+        IctPayloadNormalizer.ActorFullName(new string('A', 120), new string('B', 100), new string('C', 98))
+            .Length.Should().Be(320);
+        Errores(Actor(name: new string('A', 120), firstLastName: new string('B', 100), secondLastName: new string('C', 98)))
+            .Should().NotContain(m => m.Contains(MensajeCombinado));
     }
+
+    [Fact]
+    public void Nombre_completo_con_cada_parte_en_su_tope_pasa()
+    {
+        // 100 + " " + 100 + " " + 100 = 302 (antes, con full_name varchar(200), se rechazaba).
+        Errores(Actor(name: new string('A', 100), firstLastName: new string('B', 100), secondLastName: new string('C', 100)))
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Tope_de_nombre_completo_es_320() => IctPayloadNormalizer.MaxActorFullNameLength.Should().Be(320);
 
     [Fact]
     public void ActorFullName_replica_el_armado_del_cliente_grpc() =>
@@ -160,5 +186,29 @@ public sealed class Bug13304EntradaCompatibleConFlitTests
         var mensajes = Errores(Actor(phone: phone, email: email, docType: "RARO"));
         mensajes.Should().NotBeEmpty();
         mensajes.Should().NotContain(m => m.Contains("pii.co") || m.Contains("999") || m.Contains("RARO"));
+    }
+
+    // ===== Review PR #536: topes de precio y de valor crudo =====
+    private static List<string> ErroresPrecio(decimal price) =>
+        Validator.Validate(Bilateral(Actor()) with { SellingPrice = price }).Errors.Select(e => e.ErrorMessage).ToList();
+
+    [Fact]
+    public void Precio_de_16_enteros_pasa() =>
+        ErroresPrecio(9999999999999999.99m).Should().BeEmpty();
+
+    [Fact]
+    public void Precio_de_17_enteros_se_rechaza() =>
+        ErroresPrecio(10000000000000000m)
+            .Should().Contain(m => m.Contains("16 dígitos enteros"));
+
+    [Fact]
+    public void DocumentType_y_phone_crudos_de_mas_de_64_se_rechazan_sin_normalizar()
+    {
+        var mensajes = Errores(Actor(docType: new string('C', 65), phone: new string('5', 65)));
+        mensajes.Should().Contain(m => m.Contains("document_type del actor debe tener máximo 64 caracteres"));
+        mensajes.Should().Contain(m => m.Contains("phone debe tener máximo 64 caracteres"));
+        // Las reglas de normalización no corren sobre el valor crudo excedido.
+        mensajes.Should().NotContain(m => m.Contains("document_type del actor no es válido"));
+        mensajes.Should().NotContain(m => m.Contains("máximo 50 dígitos"));
     }
 }
