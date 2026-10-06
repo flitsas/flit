@@ -105,6 +105,39 @@ internal static class ManualIdentityReviewEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13298 (Feature #13282 C3) — aprueba (vigencia 30 días, origen manual) por el mismo camino que una aprobación de Kyverum.
+        group.MapPost("/biometric-validations/{id:guid}/manual-approve", async (
+            Guid id,
+            HttpContext http,
+            AprobarValidacionManualHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(http, out var userId))
+                return Results.Unauthorized();
+
+            var (result, error) = await handler.HandleAsync(new AprobarValidacionManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                AprobarValidacionManualHandler.NoEncontrada => Results.Json(
+                    new { code = error, message = "Validación manual no encontrada." }, statusCode: StatusCodes.Status404NotFound),
+                AprobarValidacionManualHandler.TramiteInactivo => Results.Json(
+                    new { code = error, message = "El trámite está anulado o revocado: la validación se conserva sin cambios." },
+                    statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Json(
+                    new { code = AprobarValidacionManualHandler.EstadoInvalido, message = "La validación no está pendiente de revisión manual." },
+                    statusCode: StatusCodes.Status409Conflict),
+            };
+        })
+            .AddEndpointFilter(new SuperAdminOnlyFilter())
+            .WithName("ApproveManualIdentityValidation")
+            .WithSummary("Aprueba una validación manual pendiente de revisión (solo Super Admin; vigencia 30 días)")
+            .Produces<AprobarValidacionManualResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         return app;
     }
 

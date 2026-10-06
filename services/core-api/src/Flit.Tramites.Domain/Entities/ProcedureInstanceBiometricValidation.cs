@@ -354,6 +354,36 @@ public sealed class ProcedureInstanceBiometricValidation
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// HU #13298 (Feature #13282 C) — ¿espera revisión humana? Solo el flujo manual con la captura ya recibida
+    /// (<see cref="BiometricProviders.Manual"/> + <see cref="BiometricEstados.PendienteRevisionManual"/>).
+    /// </summary>
+    public bool PuedeRevisarManual =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && string.Equals(Status, BiometricEstados.PendienteRevisionManual, StringComparison.Ordinal);
+
+    /// <summary>
+    /// HU #13298 — sella la aprobación MANUAL de una validación que YA pasó por <see cref="Approve"/> (el caso de uso la aprueba por
+    /// el mismo camino que una aprobación de Kyverum, <c>IdentityValidationResultApplier</c>, para que ValidatedAt/ValidUntil y el
+    /// evento de completado salgan de un solo punto): origen <c>manual</c> y quién/cuándo revisó. No toca la vigencia.
+    /// </summary>
+    /// <exception cref="ArgumentException">Revisor vacío.</exception>
+    /// <exception cref="InvalidOperationException">No es una validación manual aprobada.</exception>
+    public void SellarAprobacionManual(Guid reviewerId, DateTimeOffset now)
+    {
+        if (reviewerId == Guid.Empty)
+            throw new ArgumentException("El usuario que revisa es obligatorio.", nameof(reviewerId));
+        if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+            || !string.Equals(Status, BiometricEstados.Aprobado, StringComparison.Ordinal))
+            throw new InvalidOperationException("Solo una validación manual ya aprobada se sella como aprobada manualmente.");
+
+        ApprovalOrigin = BiometricApprovalOrigins.Manual;
+        ReviewedBy = reviewerId;
+        ReviewedAt = now;
+        RejectionReasonCode = null;
+        UpdatedAt = now;
+    }
+
     private void AsegurarSesionManualVigente(DateTimeOffset now)
     {
         switch (EstadoSesionManual(now))

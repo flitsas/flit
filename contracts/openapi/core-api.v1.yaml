@@ -6549,6 +6549,40 @@ paths:
         "404":
           description: Kind inválido, validación inexistente o sin esa imagen en el ciclo actual (code not_found).
 
+  /api/v1/tramites/biometric-validations/{id}/manual-approve:
+    post:
+      operationId: approveManualIdentityValidation
+      tags: [Tramites, Identidad]
+      summary: Aprobar una validación manual (solo Super Admin) — HU #13298, Épica #13202
+      description: >
+        Aprueba una validación en `pendiente_revision_manual` por el MISMO camino que una aprobación de Kyverum: llama a
+        `Approve` (validatedAt = ahora, validUntil = +30 días, siempre) y encola el evento de completado de identidad, que
+        encadena firma/FUR/sello de los trámites pendientes de esa persona. El gate de radicación y el reuso por
+        tenant+documento no cambian: leen la validación aprobada y vigente. Deja `approval_origin = manual`, `reviewed_by` y
+        `reviewed_at`, y audita `manual_aprobado` (sin PII ni rutas). Solo Super Admin (401 anónimo, 403 al resto); el tenant sale
+        de la fila (NO se usa X-Tenant-Id).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Validación aprobada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AprobarValidacionManualResult"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Validación inexistente (code not_found).
+        "409":
+          description: "`estado_invalido` (no está en pendiente_revision_manual) o `tramite_inactivo` (trámite anulado o revocado)."
   /api/v1/public/manual-capture/{token}:
     get:
       operationId: getPublicManualCapture
@@ -16490,6 +16524,18 @@ components:
         expiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
         activatedAt: { type: string, format: date-time, nullable: true, description: Cuándo se activó el flujo manual. }
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió; se puede volver a regenerar. }
+    AprobarValidacionManualResult:
+      type: object
+      description: Estado resultante de aprobar una validación manual (HU #13298).
+      properties:
+        validationId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [aprobado] }
+        approvalOrigin: { type: string, enum: [manual] }
+        validatedAt: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time, description: Fin de vigencia (30 días desde la aprobación). }
+        reviewedAt: { type: string, format: date-time }
     ManualDetail:
       type: object
       required: [id, fullName, documentNumber, tenantName, origin, status, waitingMinutes, images]

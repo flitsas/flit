@@ -146,6 +146,12 @@ public static class IdentityValidationAuditStages
     /// <c>recurso=imagen:&lt;kind&gt;</c>).
     /// </summary>
     public const string ManualImagenesConsultadas = "manual_imagenes_consultadas";
+
+    /// <summary>
+    /// HU #13298 (Feature #13282 C) — el Super Admin aprobó la validación manual (vigencia 30 días, origen <c>manual</c>). Sin PII ni
+    /// rutas: solo el usuario que revisó y la vigencia.
+    /// </summary>
+    public const string ManualAprobado = "manual_aprobado";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

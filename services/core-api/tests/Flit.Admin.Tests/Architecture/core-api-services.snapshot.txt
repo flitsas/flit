@@ -626,6 +626,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.AdminAnularHandler => Flit
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminCambiarEstadoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminCambiarEstadoHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReasignarGestorHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReasignarGestorHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionIdentidadHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionIdentidadHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.AprobarValidacionManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AprobarValidacionManualHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AttachmentValidator => Flit.Tramites.Application.UseCases.ProcedureInstances.AttachmentValidator (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.BackfillFirmaImprontaManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.BackfillFirmaImprontaManualHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.BusquedaRapidaResolver => Flit.Tramites.Application.UseCases.ProcedureInstances.BusquedaRapidaResolver (Scoped)
