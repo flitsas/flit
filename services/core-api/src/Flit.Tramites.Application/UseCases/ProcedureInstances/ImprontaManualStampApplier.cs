@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
@@ -27,11 +28,12 @@ public static class ImprontaManualStampApplier
         ISignatureVaultPolicy? vaultPolicy = null,
         IProcedureInstanceRepository? repo = null,
         IVehicleSignatureImprintRepository? auditRepo = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IIdentitySignatureExtractor? signatureExtractor = null)
     {
         var outcome = await StampAndPersistAsync(
                 pdf, attachment, instance, storage, stamper, ct,
-                vaultPolicy, repo, auditRepo, logger)
+                vaultPolicy, repo, auditRepo, logger, signatureExtractor)
             .ConfigureAwait(false);
         return outcome.Pdf;
     }
@@ -51,7 +53,8 @@ public static class ImprontaManualStampApplier
         ISignatureVaultPolicy? vaultPolicy = null,
         IProcedureInstanceRepository? repo = null,
         IVehicleSignatureImprintRepository? auditRepo = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IIdentitySignatureExtractor? signatureExtractor = null)
     {
         if (stamper is null)
             return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.Skipped, pdf);
@@ -69,7 +72,7 @@ public static class ImprontaManualStampApplier
             return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.NotReady, pdf, reason);
 
         var context = await ImprontaManualStampContextBuilder
-            .BuildAsync(instance, attachment, storage, vaultPolicy, repo, ct)
+            .BuildAsync(instance, attachment, storage, vaultPolicy, repo, signatureExtractor, ct)
             .ConfigureAwait(false);
         var result = stamper.Stamp(pdf, context);
         if (!result.Applied)

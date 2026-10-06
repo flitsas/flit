@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -21,6 +22,7 @@ public static class ImprontaManualStampContextBuilder
         IAttachmentStorage storage,
         ISignatureVaultPolicy? vaultPolicy = null,
         IProcedureInstanceRepository? repo = null,
+        IIdentitySignatureExtractor? signatureExtractor = null,
         CancellationToken ct = default)
     {
         vaultPolicy ??= NullSignatureVaultPolicy.Instance;
@@ -97,7 +99,11 @@ public static class ImprontaManualStampContextBuilder
                         var bytes = await TryReadBytesAsync(storage, path, ct).ConfigureAwait(false);
                         // Preferir PNG/JPEG válidos; si el artefacto no pasa el sniff, igual se intenta
                         // pintar (PdfSharp/ImageSharp) — no dejar la zona vacía.
-                        if (bytes is { Length: > 0 })
+                        // Bug #13304 — paridad con FurCommand: con extractor disponible, una rúbrica
+                        // que no pasa IsUsableInk (p. ej. el logo «Verify» persistido) no se pinta y
+                        // queda el sello de texto.
+                        if (bytes is { Length: > 0 }
+                            && (signatureExtractor is null || signatureExtractor.IsUsableInk(bytes)))
                         {
                             imagen = bytes;
                             sidecar = sealText;

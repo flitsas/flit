@@ -347,7 +347,7 @@ internal static class PdfXObjectPngDecoder
 
             var mean = sum / (double)(total * 3);
             if (mean >= 140)
-                return png;
+                return KnockOutLightBackground(image) ?? png;
 
             const int backgroundMaxLuma = 8;
             const int contrastGain = 14;
@@ -377,6 +377,118 @@ internal static class PdfXObjectPngDecoder
         catch (Exception)
         {
             return png;
+        }
+    }
+
+    /// <summary>
+    /// Bug #13304 — tinta oscura sobre fondo claro: el fondo casi blanco pasa a transparente para que
+    /// todo recorte de rúbrica lleve canal alfa (criterio de <see cref="LooksLikeSignatureArtifact"/>).
+    /// Devuelve null si no había fondo claro que quitar.
+    /// </summary>
+    private static byte[]? KnockOutLightBackground(Image<Rgba32> image)
+    {
+        var cleared = false;
+        for (var y = 0; y < image.Height; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                var p = image[x, y];
+                if (p.A > 0 && (p.R + p.G + p.B) / 3 >= LightBackgroundMinLuma)
+                {
+                    image[x, y] = new Rgba32(255, 255, 255, 0);
+                    cleared = true;
+                }
+            }
+        }
+
+        if (!cleared)
+            return null;
+
+        using var ms = new MemoryStream();
+        image.Save(ms, Png);
+        var outPng = ms.ToArray();
+        return IdentitySignatureImageFormat.IsPng(outPng) ? outPng : null;
+    }
+
+    private const int LightBackgroundMinLuma = 235;
+
+    /// <summary>Máximo de colores distintos de la tinta visible de una rúbrica (trazo + antialias).</summary>
+    internal const int SignaturePaletteMax = 1024;
+
+    /// <summary>
+    /// Bug #13304 — el XObject declara canal alfa (/SMask o /Mask). La rúbrica de Kyverum lo trae en
+    /// los dos layouts conocidos; el logo de cabecera del layout nuevo no.
+    /// </summary>
+    internal static bool HasTransparencyMask(PdfDictionary dict) =>
+        dict.Elements.ContainsKey("/SMask") || dict.Elements.ContainsKey("/Mask");
+
+    /// <summary>
+    /// Colores RGB distintos entre los píxeles visibles (alfa &gt;= 96), cortando al pasar de
+    /// <paramref name="cap"/>. Devuelve <see cref="int.MaxValue"/> si la imagen no se puede leer.
+    /// </summary>
+    internal static int CountVisibleColors(byte[] imageBytes, int cap)
+    {
+        try
+        {
+            using var image = Image.Load<Rgba32>(imageBytes);
+            return CountVisibleColors(image, cap);
+        }
+        catch (Exception)
+        {
+            return int.MaxValue;
+        }
+    }
+
+    private static int CountVisibleColors(Image<Rgba32> image, int cap)
+    {
+        var colors = new HashSet<int>();
+        for (var y = 0; y < image.Height; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                var p = image[x, y];
+                if (p.A < 96)
+                    continue;
+                colors.Add((p.R << 16) | (p.G << 8) | p.B);
+                if (colors.Count > cap)
+                    return colors.Count;
+            }
+        }
+
+        return colors.Count;
+    }
+
+    /// <summary>
+    /// Bug #13304 — recorte de rúbrica utilizable: tinta visible, fondo transparente (al menos 5 % de
+    /// píxeles con alfa &lt; 128) y paleta baja. Distingue el recorte bueno del logo «Verify»
+    /// persistido (opaco y de color continuo) y es el mismo criterio con el que se valida lo que
+    /// entrega <see cref="IdentitySignatureExtractor.TryExtract"/>, para que no haya recapturas en bucle.
+    /// </summary>
+    internal static bool LooksLikeSignatureArtifact(byte[]? bytes)
+    {
+        if (!HasVisibleInk(bytes))
+            return false;
+
+        try
+        {
+            using var image = Image.Load<Rgba32>(bytes);
+            var total = image.Width * image.Height;
+            var transparent = 0;
+            for (var y = 0; y < image.Height; y++)
+            {
+                for (var x = 0; x < image.Width; x++)
+                {
+                    if (image[x, y].A < 128)
+                        transparent++;
+                }
+            }
+
+            return transparent >= total / 20
+                   && CountVisibleColors(image, SignaturePaletteMax) <= SignaturePaletteMax;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

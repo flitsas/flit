@@ -72,7 +72,8 @@ public sealed class GenerarConsolidadoHandler(
     IImprontaManualStamper? improntaManualStamper = null,
     Flit.Tramites.Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
     IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null,
-    Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoHandler>? logger = null)
+    Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoHandler>? logger = null,
+    Identity.IIdentitySignatureExtractor? identitySignatureExtractor = null)
 {
     // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
     // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
@@ -300,7 +301,8 @@ public sealed class GenerarConsolidadoHandler(
                 pdf = await ImprontaManualStampApplier
                     .MaybeStampAsync(
                         pdf, attachment, instance, storage, improntaManualStamper, ct,
-                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository, logger)
+                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository, logger,
+                        identitySignatureExtractor)
                     .ConfigureAwait(false);
                 pdfParts.Add(pdf);
             }
