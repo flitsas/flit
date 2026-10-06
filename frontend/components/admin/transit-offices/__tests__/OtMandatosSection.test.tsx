@@ -202,6 +202,22 @@ describe("OtMandatosSection", () => {
     await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
   }
 
+  it("con onFormatoChange la sección no pinta la tarjeta del formato: se la entrega a quien la pase", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
+    const onFormatoChange = vi.fn();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" onFormatoChange={onFormatoChange} />
+      </ToastProvider>,
+    );
+    await screen.findByTestId("ot-mandatos-section");
+    expect(screen.queryByTestId("ot-formato-contrato")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(onFormatoChange).toHaveBeenLastCalledWith({ nombre: "Genérico del catálogo", fallo: false }),
+    );
+  });
+
   it("AC1/AC2/AC3/AC6 ot_admin registra solo contra el endpoint del OT, sin baúl ni empresas representadas", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
     listCompanyOtMandateRules.mockResolvedValue([companyRow()]);

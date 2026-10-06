@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -57,10 +57,17 @@ import {
   requiereValidacionPropia,
 } from "@/lib/plataforma/mandatario-validacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
+import {
+  rlOutlinedActionClass,
+  rlOutlinedActionStyle,
+  rlPrimaryCtaClass,
+  rlPrimaryCtaStyle,
+} from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
+import { FormatosContratoModal } from "./FormatosContratoModal";
 import { MandatarioBajaDialog } from "./MandatarioBajaDialog";
 import { MandatarioCandado } from "./MandatarioCandado";
+import { MandatarioOrganismos } from "./MandatarioOrganismos";
 import type { FuenteAsociadas } from "./MandatarioCompaniasAsociadas";
 import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
@@ -85,6 +92,7 @@ export function CompanyMandatariosPanel({
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [formatosOpen, setFormatosOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // HU #13140 — diálogo de confirmación previa para desactivar o eliminar.
@@ -196,6 +204,7 @@ export function CompanyMandatariosPanel({
       : [];
 
   const sinOrganismos = offices.length === 0;
+  const conFormato = offices.some((o) => o.formatName);
 
   // HU #13181 — lista de compañías asociables según el perfil: el Super Admin busca entre todas (por
   // la ruta del organismo); el Admin de Compañía ve solo sus hijas.
@@ -207,17 +216,6 @@ export function CompanyMandatariosPanel({
 
   return (
     <div className="space-y-4">
-      {offices.some((o) => o.formatName) ? (
-        <ul className="space-y-1 text-sm text-[#59677D] dark:text-white/70" data-testid="formatos-contrato-compania">
-          {offices.filter((o) => o.formatName).map((o) => (
-            <li key={o.transitOfficeId}>
-              Formato de contrato en {o.name}:{" "}
-              <span className="font-medium text-[#162244] dark:text-white">{o.formatName}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
       {sinOrganismos && (
         <p
           className="rounded-xl border px-3 py-2 text-xs"
@@ -229,19 +227,36 @@ export function CompanyMandatariosPanel({
         </p>
       )}
 
-      {canCreate && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className={rlPrimaryCtaClass}
-            style={rlPrimaryCtaStyle}
-            onClick={openCreate}
-            disabled={sinOrganismos}
-          >
-            Nuevo mandatario
-          </button>
+      {(conFormato || canCreate) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {conFormato ? (
+            <button
+              type="button"
+              className={rlOutlinedActionClass}
+              style={rlOutlinedActionStyle}
+              onClick={() => setFormatosOpen(true)}
+            >
+              <FileText className="h-4 w-4" aria-hidden />
+              Formatos de contrato
+            </button>
+          ) : (
+            <span />
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              className={rlPrimaryCtaClass}
+              style={rlPrimaryCtaStyle}
+              onClick={openCreate}
+              disabled={sinOrganismos}
+            >
+              Nuevo mandatario
+            </button>
+          )}
         </div>
       )}
+
+      {formatosOpen && <FormatosContratoModal offices={offices} onClose={() => setFormatosOpen(false)} />}
 
       {/* Bug #13055 — tabla homologada con la de Trámites: loader del carrito, cabecera y filas de
           table-styles y acciones con RowActions (antes: gris genérico y botones de texto). */}
@@ -350,7 +365,8 @@ export function CompanyMandatariosPanel({
                     )}
                   </td>
                   <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
-                    <OrganismosDelMandatario
+                    <MandatarioOrganismos
+                      signerName={signer.fullName}
                       ids={signer.transitOfficeIds ?? []}
                       nombrePorId={officeNameById}
                       sinFirmaIds={sinFirmaPorSigner(signer)}
@@ -456,55 +472,6 @@ export function CompanyMandatariosPanel({
           onSubmit={handleSubmit}
           onResend={reenviarValidacion}
         />
-      )}
-    </div>
-  );
-}
-
-const MAX_ORGANISMOS_VISIBLES = 3;
-
-/**
- * Organismos de un mandatario: uno por línea (los que no puede firmar, en rojo), una sola frase con el motivo y
- * «+N más» plegable cuando son muchos. Antes se pegaban con comas y el aviso repetía los mismos nombres.
- * HU #11717 — se SEÑALA, no se inhabilita: los trámites en curso siguen emitiendo su mandato como hoy.
- */
-function OrganismosDelMandatario({
-  ids,
-  nombrePorId,
-  sinFirmaIds,
-  motivo,
-}: {
-  ids: readonly string[];
-  nombrePorId: ReadonlyMap<string, string>;
-  sinFirmaIds: readonly string[];
-  motivo: string;
-}) {
-  if (ids.length === 0) return <>—</>;
-  const sinFirma = new Set(sinFirmaIds);
-  const items = ids.map((id) => ({ id, nombre: nombrePorId.get(id) ?? id, bloqueado: sinFirma.has(id) }));
-  const visibles = items.slice(0, MAX_ORGANISMOS_VISIBLES);
-  const resto = items.slice(MAX_ORGANISMOS_VISIBLES);
-  const fila = (o: (typeof items)[number]) => (
-    <li key={o.id} className="leading-snug" style={o.bloqueado ? { color: "#E5484D" } : undefined}>
-      {o.nombre}
-    </li>
-  );
-  const todosBloqueados = sinFirmaIds.length > 0 && sinFirmaIds.length === ids.length;
-  return (
-    <div data-testid="mandatario-organismos">
-      <ul className="space-y-0.5">{visibles.map(fila)}</ul>
-      {resto.length > 0 && (
-        <details className="mt-0.5 text-[11px]">
-          <summary className="cursor-pointer font-semibold text-[#557EFF]">+{resto.length} más</summary>
-          <ul className="mt-0.5 space-y-0.5 text-xs">{resto.map(fila)}</ul>
-        </details>
-      )}
-      {sinFirmaIds.length > 0 && (
-        <div className="mt-1 text-[11px] leading-tight" style={{ color: "#E5484D" }} title={motivo}>
-          {todosBloqueados
-            ? `No puede firmar todavía: ${motivo.toLowerCase()}`
-            : `No puede firmar en los organismos marcados en rojo: ${motivo.toLowerCase()}`}
-        </div>
       )}
     </div>
   );
