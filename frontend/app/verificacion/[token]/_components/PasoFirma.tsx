@@ -99,7 +99,7 @@ export function PasoFirma({
         aria-label="Texto de autorización"
         tabIndex={0}
         data-testid="autorizacion-firma"
-        className="max-h-40 overflow-y-auto rounded-2xl border border-flit-gray bg-slate-50 p-4 text-base leading-relaxed text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+        className="max-h-40 overflow-y-auto rounded-2xl border border-flit-gray bg-slate-50 p-3 text-xs leading-snug text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
       >
         {AUTORIZACION_FIRMA_TEXT}
       </div>

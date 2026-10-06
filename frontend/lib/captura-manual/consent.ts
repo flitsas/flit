@@ -31,6 +31,6 @@ export const LEGAL_FOOTER_PREFIX =
 // del PO); el resto sigue la captura del paso Firma del flujo real (2026-10-06).
 export const AUTORIZACION_FIRMA_TITLE = "Autorización de trámite digital";
 export const AUTORIZACION_FIRMA_TEXT =
-  "Autorizo a Flit el tratamiento de mis datos biométricos y mi firma, únicamente para verificar mi identidad.";
+  "Declaro que adelanto esta verificación de forma libre y voluntaria. Autorizo a Flit (responsable del tratamiento) el tratamiento de mis datos personales, incluidos mis datos biométricos y mi firma, que son datos sensibles, únicamente para verificar mi identidad. Flit es quien guarda esos datos.";
 export const AUTORIZACION_FIRMA_INSTRUCTION =
   "Firma dentro del recuadro con el dedo o el mouse para autorizar y continuar con tu trámite.";
