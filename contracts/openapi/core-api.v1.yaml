@@ -6518,10 +6518,10 @@ paths:
               type: object
               required: [rostro, anverso, reverso, firma]
               properties:
-                rostro: { type: string, format: binary, description: Selfie (JPEG, PNG o WebP; máx. 5 MiB). }
-                anverso: { type: string, format: binary, description: Anverso del documento (JPEG, PNG o WebP; máx. 5 MiB). }
-                reverso: { type: string, format: binary, description: Reverso del documento (JPEG, PNG o WebP; máx. 5 MiB). }
-                firma: { type: string, format: binary, description: Firma trazada (PNG; máx. 2 MiB). }
+                rostro: { type: string, format: binary, description: "Selfie (JPEG, PNG o WebP; máx. 5 MiB)." }
+                anverso: { type: string, format: binary, description: "Anverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
+                reverso: { type: string, format: binary, description: "Reverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
+                firma: { type: string, format: binary, description: "Firma trazada (PNG; máx. 2 MiB)." }
       responses:
         "200":
           description: Captura recibida; la validación queda pendiente de revisión.
