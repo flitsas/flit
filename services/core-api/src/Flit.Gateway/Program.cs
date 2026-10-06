@@ -112,12 +112,17 @@ builder.Services.AddRateLimiter(o =>
             }));
 });
 
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(r => r.AddService("flit-gateway"))
-    .WithTracing(t => t
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddOtlpExporter());
+// HU #13332 (Epic #13316): solo con un colector configurado. Antes exportaba siempre a localhost:4317, donde en los
+// servidores no escucha nadie; ahora, sin OTEL_EXPORTER_OTLP_ENDPOINT, no se registra (igual que core-api e identidad).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService("flit-gateway"))
+        .WithTracing(t => t
+            .AddAspNetCoreInstrumentation(o => o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health"))
+            .AddHttpClientInstrumentation()
+            .AddOtlpExporter());
+}
 
 var reverseProxyBuilder = builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))

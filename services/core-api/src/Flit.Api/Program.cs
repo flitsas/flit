@@ -6,6 +6,7 @@ using Flit.Api.Hosting;
 using Flit.Api.OpenApi;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
+using Flit.Api.Telemetry;
 using Flit.Api.Identity;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
@@ -176,8 +177,13 @@ if (ictGrpcPort is { } grpcPort)
 builder.Services.AddPlatformApi(builder.Configuration); // Frente B · HU #12966
 builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (Suite:Oidc:Enabled)
 // === FLIT Suite: fin servicios ===
+builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 
 var app = builder.Build();
+
+// Epic #13316 · HU #13332: X-Correlation-Id en la respuesta, en la traza y en cada log de la petición. Va primero para
+// que todo el pipeline, también el manejo de errores, quede dentro de su alcance.
+app.UseFlitCorrelationId();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
 // (comparando contra __EFMigrationsHistory) y aplica solo las que faltan. Si no

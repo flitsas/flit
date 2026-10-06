@@ -131,6 +131,8 @@ services:
     # HU #13226: ancla — core-identity reusa TODO este bloque (misma llave de firma, clientes OIDC, correo, base), así
     # los dos procesos no pueden quedar con valores distintos. Lo que cambie aquí cambia en los dos.
     environment: &core-api-env
+      # HU #13332 (Epic #13316): trazas y logs hacia el colector OTLP. Vacía = apagado (como hasta ahora).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # HU #12895 (FLIT Suite A-02) — nombre del ambiente .NET, igual en core-api, core-ict y gateway. Sin la variable
       # sigue en Development, como hoy. Tiene nombre propio (no ASPNETCORE_ENVIRONMENT) para que otra variable del .env
       # no lo cambie sin querer. Qué depende del nombre: docs/suite/frentes/a-inventario-ambientes.md.
@@ -575,6 +577,8 @@ services:
     # content root = working_dir, para que YARP cargue sus rutas de appsettings.json
     working_dir: /app/gateway
     environment:
+      # HU #13332 (Epic #13316): trazas y logs hacia el colector OTLP. Vacía = apagado (como hasta ahora).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
@@ -773,6 +777,22 @@ services:
     cpus: ${FRONTEND_HUB_CPUS:-0}
     logging: *default-logging
 
+  # HU #13332 (Epic #13316) — colector OpenTelemetry + Tempo (trazas) + Loki (logs) + Grafana en un contenedor. Solo
+  # con el perfil `observabilidad`. Para usarlo: COMPOSE_PROFILES=...,observabilidad y
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://observabilidad:4317 en el .env. Grafana queda solo en 127.0.0.1 (túnel SSH o
+  # nginx con acceso restringido); el colector no se publica: lo alcanzan los servicios por la red interna.
+  observabilidad:
+    profiles: ["observabilidad"]
+    image: grafana/otel-lgtm:0.30.0
+    ports:
+      - "127.0.0.1:${OBSERVABILIDAD_GRAFANA_PORT:-4090}:3000"
+    volumes:
+      - observabilidad-datos:/data
+    restart: *restart
+    mem_limit: ${OBSERVABILIDAD_MEM_LIMIT:-0}
+    cpus: ${OBSERVABILIDAD_CPUS:-0}
+    logging: *default-logging
+
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
 # Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
 # de forma implicita, al no declarar `networks:` propio — este bloque no
@@ -799,3 +819,7 @@ networks:
     ipam:
       config:
         - subnet: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
+
+# HU #13332: datos de trazas y logs del perfil `observabilidad`.
+volumes:
+  observabilidad-datos:

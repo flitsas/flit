@@ -3,6 +3,7 @@ using Flit.Api.Identity;
 using Flit.Api.Middleware;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
+using Flit.Api.Telemetry;
 using Flit.Identity.Web;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
@@ -41,8 +42,10 @@ public static class Program
         var connectionString = builder.Configuration.GetConnectionString("Core")
             ?? throw new InvalidOperationException("ConnectionStrings:Core (PostgreSQL) es obligatoria.");
         AddIdentityServices(builder.Services, builder.Configuration, builder.Environment, connectionString);
+        builder.AddFlitTelemetry("flit-core-identity"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 
         var app = builder.Build();
+        app.UseFlitCorrelationId(); // HU #13332: primero, para que todo el pipeline quede dentro de su alcance
         UseIdentityPipeline(app);
         return app;
     }
