@@ -4,6 +4,8 @@ import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CameraOff, Loader2, RefreshCw } from "lucide-react";
 import { useLiveCamera, type CameraFacing } from "@/lib/captura-manual/useLiveCamera";
+import { CROP_PADDING, DOC_FRAME, GUIDANCE_HINT, frameRectInVideo } from "@/lib/captura-manual/documentDetection";
+import { useDocumentAutoCapture } from "@/lib/captura-manual/useDocumentAutoCapture";
 
 export interface CameraViewerProps {
   /** «oval» para rostro, «rect» para documento. */
@@ -58,8 +60,11 @@ export function CameraViewer({
     };
   }, [captured]);
 
+  const isDocShape = shape === "rect";
+
   async function take() {
-    const blob = await capture();
+    // Documento: se guarda solo lo que está dentro del marco guía (más una holgura mínima), no toda la escena.
+    const blob = await capture(isDocShape ? (w, h) => frameRectInVideo(w, h, CROP_PADDING) : undefined);
     if (!blob) {
       setNotice("La cámara aún no está lista, inténtalo de nuevo");
       return;
@@ -67,6 +72,13 @@ export function CameraViewer({
     setNotice(null);
     setCaptured(blob);
   }
+
+  // Documento: detección automática; al estar bien encuadrado, enfocado y quieto ~1 s, se captura solo.
+  const auto = useDocumentAutoCapture({
+    videoRef,
+    enabled: isDocShape && status === "ready" && !captured,
+    onStable: () => void take(),
+  });
 
   function repeat() {
     setCaptured(null);
@@ -120,7 +132,7 @@ export function CameraViewer({
           </div>
         ) : (
           <>
-            <Guide shape={shape} side={side} />
+            <Guide shape={shape} side={side} listo={auto.state === "ready"} />
             {hint ? (
               <p
                 aria-live="polite"
@@ -131,7 +143,7 @@ export function CameraViewer({
                     : "absolute inset-x-4 bottom-3 rounded-full bg-amber-400/90 px-3 py-1 text-center text-sm font-medium text-slate-900"
                 }
               >
-                {hint}
+                {isDoc && auto.state ? GUIDANCE_HINT[auto.state] : hint}
               </p>
             ) : null}
           </>
@@ -175,7 +187,7 @@ const BODIES = {
   error: "Cierra otras aplicaciones que usen la cámara e inténtalo de nuevo.",
 } as const;
 
-function Guide({ shape, side }: { shape: "oval" | "rect"; side: "anverso" | "reverso" }) {
+function Guide({ shape, side, listo }: { shape: "oval" | "rect"; side: "anverso" | "reverso"; listo: boolean }) {
   if (shape === "oval") {
     return (
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -185,10 +197,22 @@ function Guide({ shape, side }: { shape: "oval" | "rect"; side: "anverso" | "rev
       </div>
     );
   }
-  // Marco rectangular redondeado, borde blanco semitransparente, en la parte alta del visor (la
-  // píldora de aviso queda debajo, como en Kyverum). La silueta guía vive dentro del marco.
+  // Marco del documento: lo de afuera se oscurece (solo se guarda lo de adentro) y el borde pasa a verde
+  // cuando el documento está bien encuadrado y quieto, justo antes de la captura automática.
   return (
-    <div className="pointer-events-none absolute inset-x-[6%] top-[5%] aspect-[1.586/1] rounded-2xl border-[3px] border-white/80">
+    <div
+      data-testid="marco-documento"
+      data-listo={listo ? "true" : "false"}
+      className={`pointer-events-none absolute rounded-2xl border-[3px] shadow-[0_0_0_9999px_rgba(15,23,42,0.55)] transition-colors ${
+        listo ? "border-emerald-400" : "border-white/85"
+      }`}
+      style={{
+        left: `${DOC_FRAME.x * 100}%`,
+        top: `${DOC_FRAME.y * 100}%`,
+        width: `${DOC_FRAME.w * 100}%`,
+        height: `${DOC_FRAME.h * 100}%`,
+      }}
+    >
       <DocumentSilhouette side={side} />
     </div>
   );
