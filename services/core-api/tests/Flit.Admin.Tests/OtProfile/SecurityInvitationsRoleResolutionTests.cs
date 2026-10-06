@@ -810,6 +810,9 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
             Code = code,
             Name = name,
             TargetEntityType = targetEntityType,
+            // Mismo producto que le da la migración (DDL 120): sin esto queda en «tramites» por defecto y el espejo
+            // AdminCompany ⇒ admin_<producto> (DDL 126) da por hecho que el usuario ya tiene rol en Trámites.
+            ProductCode = code is "SuperAdmin" or "AdminCompany" ? "plataforma" : "tramites",
             IsSystem = true,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
