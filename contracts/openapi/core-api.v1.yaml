@@ -6469,7 +6469,7 @@ paths:
         "404":
           description: Validación de identidad no encontrada.
         "409":
-          description: flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo).
+          description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
   /api/v1/tramites/biometric-validations/{id}/manual-detail:
     get:
       operationId: getManualIdentityValidationDetail
