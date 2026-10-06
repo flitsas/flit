@@ -264,6 +264,43 @@ describe('flujo manual activo: chip y regenerar', () => {
   });
 });
 
+describe('validación manual rechazada: esperando nueva captura', () => {
+  const futuro = () => new Date(Date.now() + 20 * 3_600_000).toISOString();
+  const pasado = () => new Date(Date.now() - 3_600_000).toISOString();
+  const rechazada = (expiresAt: string) =>
+    validation({ status: 'rechazado', provider: 'manual', expired: false, expiresAt });
+
+  it('con enlace vigente muestra el chip «Rechazada · esperando nueva captura», el vencimiento y «Regenerar enlace», sin «Activar»', () => {
+    render(<IdentityManualFlowActions validation={rechazada(futuro())} onChanged={vi.fn()} />);
+    expect(screen.getByRole('status', { name: 'Rechazada · esperando nueva captura' })).toBeInTheDocument();
+    expect(screen.queryByText('Flujo manual activo')).not.toBeInTheDocument();
+    expect(screen.getByText(/El enlace vence:/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerar enlace' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Activar flujo manual' })).not.toBeInTheDocument();
+  });
+
+  it('con enlace vencido ofrece «Regenerar enlace» y también «Activar flujo manual»', async () => {
+    const user = userEvent.setup();
+    render(<IdentityManualFlowActions validation={rechazada(pasado())} onChanged={vi.fn()} />);
+    expect(screen.getByRole('status', { name: 'Rechazada · esperando nueva captura' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Acciones del flujo manual de identidad' }));
+    expect(screen.getByRole('menuitem', { name: 'Regenerar enlace' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Activar flujo manual' })).toBeInTheDocument();
+  });
+
+  it('rechazada con Kyverum (no manual) sigue sin chip ni «Regenerar enlace»', () => {
+    render(
+      <IdentityManualFlowActions
+        validation={validation({ status: 'rechazado', provider: 'kyverum', expired: false })}
+        onChanged={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Regenerar enlace' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Activar flujo manual' })).toBeInTheDocument();
+  });
+});
+
 describe('accesibilidad del modal', () => {
   it('foco inicial dentro, trampa de Tab, Escape cierra y el foco vuelve al disparador', async () => {
     const user = userEvent.setup();

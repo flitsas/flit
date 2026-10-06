@@ -43,7 +43,44 @@ export function esFlujoManualActivo(v: Pick<BiometricValidation, 'provider' | 's
   return v.provider === 'manual' && v.status === 'manual_activo';
 }
 
-export type AccionManual = 'activar' | 'regenerar';
+/** Validación manual RECHAZADA por el Super Admin: el cliente recibió un enlace nuevo de 24 h para repetir la captura. */
+export function esRechazadoManual(v: Pick<BiometricValidation, 'provider' | 'status'>): boolean {
+  return v.provider === 'manual' && v.status === 'rechazado';
+}
+
+/**
+ * ¿La validación manual espera una (nueva) captura del cliente? Es `manual_activo` o `rechazado` manual
+ * (espejo front de `EsperaCapturaManual` del dominio, que llega con las Features B/C). En la rama A en aislamiento
+ * nunca se produce un `rechazado` manual, así que esta ampliación es inocua allí.
+ */
+export function esperaCapturaManual(v: Pick<BiometricValidation, 'provider' | 'status'>): boolean {
+  return esFlujoManualActivo(v) || esRechazadoManual(v);
+}
+
+/** ¿El enlace de captura ya venció (`expiresAt` < ahora)? Sin fecha válida se asume vigente (lado seguro). */
+export function enlaceVencido(v: Pick<BiometricValidation, 'expiresAt'>, now = Date.now()): boolean {
+  if (!v.expiresAt) return false;
+  const t = Date.parse(v.expiresAt);
+  return !Number.isNaN(t) && t < now;
+}
+
+/**
+ * Regla de «Activar flujo manual»: nunca sobre aprobada vigente ni sobre un estado manual en curso (reactivaría el
+ * ciclo y descartaría la captura). Única excepción: `rechazado` manual con el enlace YA vencido (no se descarta un
+ * enlace vigente; con enlace vigente se ofrece «Regenerar enlace»).
+ */
+export function puedeActivarFlujoManual(
+  v: Pick<BiometricValidation, 'provider' | 'status' | 'validatedAt' | 'expiresAt'>,
+  now = Date.now(),
+): boolean {
+  if (esAprobadaVigente(v, now)) return false;
+  const enFlujoManual =
+    v.provider === 'manual' || v.status === 'manual_activo' || v.status === 'pendiente_revision_manual';
+  if (!enFlujoManual) return true;
+  return esRechazadoManual(v) && enlaceVencido(v, now);
+}
+
+export type AccionManual ='activar' | 'regenerar';
 
 /** Mensaje claro para el Super Admin según el status HTTP y el código (`title` del ProblemDetails). */
 export function mensajeErrorFlujoManual(err: unknown, accion: AccionManual): string {

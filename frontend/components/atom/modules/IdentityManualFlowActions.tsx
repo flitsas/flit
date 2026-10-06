@@ -8,8 +8,9 @@ import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { formatFechaHora } from '@/lib/format/date';
 import {
-  esAprobadaVigente,
-  esFlujoManualActivo,
+  esRechazadoManual,
+  esperaCapturaManual,
+  puedeActivarFlujoManual,
   hayKyverumEnCurso,
   mensajeErrorFlujoManual,
   type AccionManual,
@@ -24,6 +25,8 @@ import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
  * validación no está aprobada y vigente) y, con el flujo manual activo, chip «Flujo manual activo» con la
  * fecha de vencimiento del enlace y «Regenerar enlace». Un solo paso de confirmación en modal normal.
  */
+
+const CHIP_RECHAZADA = 'Rechazada · esperando nueva captura';
 
 const AVISO_CORREO =
   'No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido.';
@@ -47,11 +50,10 @@ export function IdentityManualFlowActions({ validation: v, onChanged }: Identity
   const [correoFallo, setCorreoFallo] = useState(false);
   const regionRef = useRef<HTMLDivElement>(null);
 
-  const manualActivo = esFlujoManualActivo(v);
-  // En los estados manuales no se ofrece «Activar» de nuevo: reactivaría el ciclo y descartaría la captura.
-  const enFlujoManual =
-    v.provider === 'manual' || v.status === 'manual_activo' || v.status === 'pendiente_revision_manual';
-  const puedeActivar = !esAprobadaVigente(v) && !enFlujoManual;
+  const esperaCaptura = esperaCapturaManual(v);
+  const rechazada = esRechazadoManual(v);
+  // Regla en lib/identity/manual-flow.ts: sin «Activar» sobre estados manuales (salvo rechazada con enlace vencido).
+  const puedeActivar = puedeActivarFlujoManual(v);
 
   function openDialog(accion: AccionManual) {
     setError(null);
@@ -88,7 +90,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged }: Identity
   if (puedeActivar) {
     items.push({ key: 'activar', label: 'Activar flujo manual', icon: Send, onSelect: () => openDialog('activar') });
   }
-  if (manualActivo) {
+  if (esperaCaptura) {
     items.push({ key: 'regenerar', label: 'Regenerar enlace', icon: RefreshCw, onSelect: () => openDialog('regenerar') });
   }
   if (items.length === 0 && !correoFallo) return null;
@@ -96,21 +98,27 @@ export function IdentityManualFlowActions({ validation: v, onChanged }: Identity
   return (
     <div ref={regionRef} tabIndex={-1} className="space-y-2 outline-none" data-testid="identity-manual-flow">
       <div className="flex flex-wrap items-center gap-2">
-        {manualActivo && (
+        {esperaCaptura && (
           <>
             <StatusBadge
               label={
                 <span className="inline-flex items-center gap-1.5">
-                  <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  Flujo manual activo
+                  {rechazada ? (
+                    <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  {rechazada ? CHIP_RECHAZADA : 'Flujo manual activo'}
                 </span>
               }
-              tone="info"
-              ariaLabel="Flujo manual activo"
+              tone={rechazada ? 'danger' : 'info'}
+              ariaLabel={rechazada ? CHIP_RECHAZADA : 'Flujo manual activo'}
             />
-            <span className="text-xs">
-              El enlace vence: <span className="font-semibold">{formatFechaHora(v.expiresAt)}</span>
-            </span>
+            {v.expiresAt && (
+              <span className="text-xs">
+                El enlace vence: <span className="font-semibold">{formatFechaHora(v.expiresAt)}</span>
+              </span>
+            )}
           </>
         )}
         <div className="ml-auto">
