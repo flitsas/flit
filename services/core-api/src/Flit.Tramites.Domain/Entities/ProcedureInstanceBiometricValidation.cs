@@ -466,6 +466,11 @@ public sealed class ProcedureInstanceBiometricValidation
         Status = BiometricEstados.Aprobado;
         ValidatedAt = now;
         ValidUntil = BiometricRules.FechaFinVigencia(now);
+        // HU #13303: toda aprobación que pasa por aquí (Kyverum, mock, reconciliación) es AUTOMÁTICA. La del flujo manual también
+        // pasa por aquí (la aprueba el mismo IdentityValidationResultApplier) pero NO se estampa: la sella SellarAprobacionManual
+        // justo después, y 'manual' gana siempre.
+        if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            ApprovalOrigin = BiometricApprovalOrigins.Automatica;
         UpdatedAt = now;
     }
 }

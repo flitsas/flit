@@ -16101,6 +16101,14 @@ components:
             pestaña del actor sin comparar documentos. `null` cuando no se pudo atribuir a un actor
             concreto (validación histórica/huérfana). Con 1 solo actor por lado (caso mayoritario)
             siempre trae `1`.
+        approvalOrigin:
+          type: string
+          nullable: true
+          enum: [automatica, manual]
+          description: >
+            HU #13303 (Épica #13202) — cómo se aprobó la validación: `automatica` (Kyverum/mock) o `manual` (revisión del
+            Super Admin). Solo con status=aprobado; `null` en cualquier otro estado y en aprobaciones anteriores al campo.
+            Nunca trae el nombre del revisor.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]
