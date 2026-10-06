@@ -2,7 +2,8 @@
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useRef, useState } from "react";
-import { SignaturePad } from "./SignaturePad";
+import { SignaturePad, type SignaturePadHandle } from "./SignaturePad";
+import { AUTORIZACION_FIRMA_INSTRUCTION, AUTORIZACION_FIRMA_TEXT, AUTORIZACION_FIRMA_TITLE } from "@/lib/captura-manual/consent";
 import { isComplete, offendingCapture, type CaptureKey, type Captures } from "@/lib/captura-manual/captures";
 import {
   ManualCaptureError,
@@ -25,6 +26,7 @@ export function PasoFirma({
   onSignature,
   onOutcome,
   onBack,
+  onSendingChange,
 }: {
   token: string;
   client: ManualCaptureClient;
@@ -32,15 +34,19 @@ export function PasoFirma({
   onSignature: (png: Blob | null) => void;
   onOutcome: (o: SubmitOutcome) => void;
   onBack: () => void;
+  /** El Flow oculta este paso y muestra la pantalla «Enviando…» mientras dura el POST final. */
+  onSendingChange?: (sending: boolean) => void;
 }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const padRef = useRef<SignaturePadHandle>(null);
   const inFlight = useRef(false); // evita el doble envío aunque el segundo clic llegue antes del re-render
 
   async function send() {
     if (inFlight.current || !isComplete(captures)) return;
     inFlight.current = true;
     setSending(true);
+    onSendingChange?.(true);
     setError(null);
     try {
       await client.submit(token, captures);
@@ -75,24 +81,31 @@ export function PasoFirma({
     } finally {
       inFlight.current = false;
       setSending(false);
+      onSendingChange?.(false);
     }
   }
 
   const btn =
-    "min-h-11 rounded-xl px-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50";
+    "min-h-12 min-w-0 rounded-xl px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <section aria-labelledby="paso-firma-titulo" className="mt-6 flex flex-col gap-4">
-      <div>
-        <h1 id="paso-firma-titulo" className="text-xl font-bold text-flit-primary">
-          Tu firma
-        </h1>
-        {/* Aspecto del paso: SUPUESTO, no se vio en Kyverum. */}
-        <p className="mt-1 text-base text-muted-foreground">
-          Traza tu firma con el dedo o el mouse dentro del recuadro, como la haces en tu documento.
-        </p>
+    <section aria-labelledby="paso-firma-titulo" hidden={sending} className="mt-6 flex flex-col gap-4">
+      <h1 id="paso-firma-titulo" className="text-2xl font-bold text-flit-primary">
+        {AUTORIZACION_FIRMA_TITLE}
+      </h1>
+      {/* Cuadro con altura limitada y scroll interno; enfocable para poder leerlo con el teclado. */}
+      <div
+        role="region"
+        aria-label="Texto de autorización"
+        tabIndex={0}
+        data-testid="autorizacion-firma"
+        className="max-h-40 overflow-y-auto rounded-2xl border border-flit-gray bg-slate-50 p-4 text-base leading-relaxed text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+      >
+        {AUTORIZACION_FIRMA_TEXT}
       </div>
-      <SignaturePad initialBlob={captures.firma} onChange={onSignature} disabled={sending} />
+      <p className="text-base text-muted-foreground">{AUTORIZACION_FIRMA_INSTRUCTION}</p>
+      <SignaturePad ref={padRef} initialBlob={captures.firma} onChange={onSignature} disabled={sending} />
+      {/* Alternativa de firma (quien no puede dibujar) pendiente de definición del PO: no se muestra enlace. */}
       <p className="text-sm text-muted-foreground">
         La firma se traza en pantalla y no tiene alternativa de teclado. Si no puedes trazarla, pídele ayuda a FLIT 2.0.
       </p>
@@ -102,18 +115,26 @@ export function PasoFirma({
         </p>
       ) : null}
       <div className="flex gap-3">
-        <button type="button" onClick={onBack} disabled={sending} className={`${btn} border border-flit-brand-ink text-base font-semibold text-flit-brand-ink`}>
-          Atrás
-        </button>
         <button
           type="button"
-          onClick={() => void send()}
-          disabled={!captures.firma || sending}
-          className={`${btn} flex-1 ${BRAND_BTN}`}
+          onClick={() => padRef.current?.clear()}
+          disabled={sending}
+          className={`${btn} flex-[2] border-2 border-flit-brand text-base font-semibold text-flit-brand`}
         >
-          {sending ? "Enviando…" : "Finalizar"}
+          Borrar
+        </button>
+        <button type="button" onClick={() => void send()} disabled={!captures.firma || sending} className={`${btn} flex-[3] whitespace-nowrap ${BRAND_BTN}`}>
+          Firmar y autorizar
         </button>
       </div>
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={sending}
+        className="min-h-11 w-full rounded-xl px-4 text-base font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Atrás
+      </button>
     </section>
   );
 }

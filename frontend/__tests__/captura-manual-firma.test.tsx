@@ -52,7 +52,7 @@ async function capture(label: RegExp) {
   const btn = screen.getByRole("button", { name: label });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
-  fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
 }
 
 async function toFirma(client: ManualCaptureClient) {
@@ -61,11 +61,11 @@ async function toFirma(client: ManualCaptureClient) {
   fireEvent.click(screen.getByRole("button", { name: "Iniciar verificación" }));
   await screen.findByRole("heading", { name: "Verificación facial" });
   await capture(/Capturar rostro/);
-  await screen.findByRole("heading", { name: "Anverso del documento" });
-  await capture(/Capturar anverso/);
-  await screen.findByRole("heading", { name: "Reverso del documento" });
-  await capture(/Capturar reverso/);
-  await screen.findByRole("heading", { name: "Tu firma" });
+  await screen.findByRole("heading", { name: "Documento — anverso" });
+  await capture(/Capturar documento/);
+  await screen.findByRole("heading", { name: "Documento — reverso" });
+  await capture(/Capturar documento/);
+  await screen.findByRole("heading", { name: "Autorización de trámite digital" });
 }
 
 function sign() {
@@ -75,22 +75,22 @@ function sign() {
   fireEvent.pointerUp(canvas, { pointerId: 1 });
 }
 
-const finalizar = () => screen.getByRole("button", { name: /Finalizar|Enviando/ });
+const firmar = () => screen.getByRole("button", { name: /Firmar y autorizar/ });
 
 async function signAndSend() {
   sign();
-  await waitFor(() => expect(finalizar()).toBeEnabled());
-  fireEvent.click(finalizar());
+  await waitFor(() => expect(firmar()).toBeEnabled());
+  fireEvent.click(firmar());
 }
 
 describe("paso Firma y envío (HU #13295)", () => {
-  it("Finalizar está deshabilitado sin trazo, se habilita al firmar y Borrar lo deshabilita", async () => {
+  it("«Firmar y autorizar» está deshabilitado sin trazo, se habilita al firmar y Borrar lo deshabilita", async () => {
     await toFirma(fakeClient());
-    expect(finalizar()).toBeDisabled();
+    expect(firmar()).toBeDisabled();
     sign();
-    await waitFor(() => expect(finalizar()).toBeEnabled());
+    await waitFor(() => expect(firmar()).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Borrar" }));
-    await waitFor(() => expect(finalizar()).toBeDisabled());
+    await waitFor(() => expect(firmar()).toBeDisabled());
   });
 
   it("el lienzo no hace scroll al trazar, tiene etiqueta y la nota de que no hay alternativa de teclado", async () => {
@@ -109,10 +109,14 @@ describe("paso Firma y envío (HU #13295)", () => {
     let resolve!: (v: { status: string }) => void;
     const submit = vi.fn(() => new Promise<{ status: string }>((r) => (resolve = r)));
     await toFirma(fakeClient(submit));
-    await signAndSend();
-    fireEvent.click(finalizar());
+    sign();
+    await waitFor(() => expect(firmar()).toBeEnabled());
+    const boton = firmar();
+    fireEvent.click(boton);
+    fireEvent.click(boton);
     expect(submit).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Enviando…" })).toBeDisabled();
+    expect(screen.getByText("Enviando tu información… suele tomar unos segundos.")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
     const files = (submit.mock.calls[0] as unknown as [string, Record<string, Blob>])[1];
     expect(Object.keys(files).sort()).toEqual(["anverso", "firma", "reverso", "rostro"]);
     expect(files.firma.type).toBe("image/png");
@@ -127,8 +131,8 @@ describe("paso Firma y envío (HU #13295)", () => {
     await toFirma(fakeClient(submit));
     await signAndSend();
     expect(await screen.findByRole("alert")).toHaveTextContent(/no tienes que repetir nada/);
-    await waitFor(() => expect(finalizar()).toBeEnabled());
-    fireEvent.click(finalizar());
+    await waitFor(() => expect(firmar()).toBeEnabled());
+    fireEvent.click(firmar());
     await screen.findByText("Recibimos tu información");
     expect(submit).toHaveBeenCalledTimes(2);
     expect(submit.mock.calls[1][1]).toBe(submit.mock.calls[0][1]);
@@ -142,14 +146,14 @@ describe("paso Firma y envío (HU #13295)", () => {
     await toFirma(fakeClient(submit));
     await signAndSend();
     expect(await screen.findByRole("alert")).toHaveTextContent(new RegExp(`${text}.*Repite esa captura`, "s"));
-    expect(screen.getByRole("heading", { name: "Tu firma" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Autorización de trámite digital" })).toBeInTheDocument();
   });
 
   it("413 que nombra el anverso vuelve a ese paso conservando lo capturado", async () => {
     const submit = vi.fn().mockRejectedValue(new ManualCaptureError(413, "anverso_demasiado_grande", "x"));
     await toFirma(fakeClient(submit));
     await signAndSend();
-    await screen.findByRole("heading", { name: "Anverso del documento" });
+    await screen.findByRole("heading", { name: "Documento — anverso" });
     expect(screen.getByRole("alert")).toHaveTextContent(/Repite esa captura/);
     expect(screen.getByAltText("Vista previa de la foto capturada")).toBeInTheDocument();
   });

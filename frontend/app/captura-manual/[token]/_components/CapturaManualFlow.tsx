@@ -17,6 +17,7 @@ import { PasoDatos } from "./PasoDatos";
 import { PasoCaptura } from "./PasoCaptura";
 import { PasoFirma, type SubmitOutcome } from "./PasoFirma";
 import { EnvioExitoso } from "./EnvioExitoso";
+import { EnviandoInfo } from "./EnviandoInfo";
 import { CAPTURE_STEP_INDEX, STEP_INDEX_DATOS, type Captures } from "@/lib/captura-manual/captures";
 
 type Load =
@@ -41,6 +42,8 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
   const [consented, setConsented] = useState(false);
   // Aviso al volver a un paso por un error del envío (413/415 o consentimiento requerido).
   const [notice, setNotice] = useState<string | null>(null);
+  // Mientras se envía el POST final: barra con los 5 pasos completados + spinner (sin botones).
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,8 +117,9 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
   const step = STEPS[steps.current];
   return (
     <CaptureCard productName={load.view.productName}>
-      <StepBar state={steps} />
-      {notice && !steps.finished ? (
+      <StepBar state={sending ? { current: STEPS.length - 1, completed: STEPS.map((_, i) => i), finished: false } : steps} />
+      {sending ? <EnviandoInfo /> : null}
+      {notice && !steps.finished && !sending ? (
         <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-900">
           {notice}
         </p>
@@ -143,6 +147,7 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           onSignature={(png) => setCaptures((c) => ({ ...c, firma: png ?? undefined }))}
           onOutcome={onOutcome}
           onBack={() => dispatch({ type: "back" })}
+          onSendingChange={setSending}
         />
       ) : (
         <PasoCaptura

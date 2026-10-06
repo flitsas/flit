@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { Eraser } from "lucide-react";
+import { useEffect, useImperativeHandle, useRef, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 
-const INK = "#162744"; // navy FLIT (mismo trazo que SignatureCapture)
+const INK = "#000000"; // trazo negro grueso, como en el flujo real de Kyverum
 const W = 760;
-const H = 240;
+const H = 340;
+
+/** Permite que los botones «Borrar» / «Firmar y autorizar» vivan fuera del lienzo (fila de dos botones). */
+export interface SignaturePadHandle {
+  clear: () => void;
+}
 
 /**
  * Lienzo de firma SOLO de trazo (HU #13295): pointer events para dedo y mouse, `touch-action: none`
@@ -18,7 +22,9 @@ export function SignaturePad({
   initialBlob,
   onChange,
   disabled = false,
+  ref,
 }: {
+  ref?: Ref<SignaturePadHandle>;
   /** Firma ya trazada (al volver al paso): se repinta en el lienzo. */
   initialBlob?: Blob;
   onChange: (png: Blob | null) => void;
@@ -58,7 +64,7 @@ export function SignaturePad({
     const ctx = canvas.getContext("2d");
     if (ctx) {
       ctx.strokeStyle = INK;
-      ctx.lineWidth = 2.6;
+      ctx.lineWidth = 7;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
     }
@@ -110,32 +116,23 @@ export function SignaturePad({
     onChange(null);
   };
 
+  useImperativeHandle(ref, () => ({ clear }));
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="overflow-hidden rounded-xl border-2 border-dashed border-flit-gray">
-        <canvas
-          ref={canvasRef}
-          width={W}
-          height={H}
-          role="img"
-          aria-label="Lienzo para trazar tu firma con el dedo o el mouse"
-          className={`h-[160px] w-full touch-none bg-white sm:h-[200px] ${disabled ? "cursor-not-allowed" : "cursor-crosshair"}`}
-          onPointerDown={start}
-          onPointerMove={move}
-          onPointerUp={end}
-          onPointerLeave={end}
-          onPointerCancel={end}
-        />
-      </div>
-      <button
-        type="button"
-        onClick={clear}
-        disabled={disabled}
-        className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-flit-brand-ink px-4 text-base font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Eraser aria-hidden="true" className="size-4" />
-        Borrar
-      </button>
+    <div className="overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-white">
+      <canvas
+        ref={canvasRef}
+        width={W}
+        height={H}
+        role="img"
+        aria-label="Lienzo para trazar tu firma con el dedo o el mouse"
+        className={`aspect-[760/340] h-auto w-full touch-none bg-white ${disabled ? "cursor-not-allowed" : "cursor-crosshair"}`}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+        onPointerCancel={end}
+      />
     </div>
   );
 }
