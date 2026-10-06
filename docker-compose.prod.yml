@@ -374,6 +374,11 @@ services:
       retries: 3
       start_period: 40s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${CORE_API_MEM_LIMIT:-0}
+    cpus: ${CORE_API_CPUS:-0}
+    oom_score_adj: ${CORE_API_OOM_SCORE_ADJ:-0}
     logging: *default-logging
 
   # ── core-identity (Epic #13217, HU #13233) — CORE_IDENTITY_PORT ──────────────
@@ -406,6 +411,11 @@ services:
       retries: 3
       start_period: 40s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${CORE_IDENTITY_MEM_LIMIT:-0}
+    cpus: ${CORE_IDENTITY_CPUS:-0}
+    oom_score_adj: ${CORE_IDENTITY_OOM_SCORE_ADJ:-0}
     logging: *default-logging
 
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
@@ -459,6 +469,10 @@ services:
       retries: 3
       start_period: 40s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${CORE_ICT_MEM_LIMIT:-0}
+    cpus: ${CORE_ICT_CPUS:-0}
     logging: *default-logging
 
   # ── Migrador V1 -> V2 (herramienta de operacion, NO un servicio) ──────────
@@ -548,6 +562,10 @@ services:
       retries: 3
       start_period: 20s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${MIGRACION_API_MEM_LIMIT:-0}
+    cpus: ${MIGRACION_API_CPUS:-0}
     logging: *default-logging
 
   # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────
@@ -609,6 +627,10 @@ services:
       retries: 3
       start_period: 20s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${GATEWAY_MEM_LIMIT:-0}
+    cpus: ${GATEWAY_CPUS:-0}
     logging: *default-logging
 
   # ── python-ml (FastAPI OCR/ML, detras de YARP /ml) — PYTHON_ML_PORT ────────
@@ -624,6 +646,10 @@ services:
       retries: 3
       start_period: 20s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${PYTHON_ML_MEM_LIMIT:-0}
+    cpus: ${PYTHON_ML_CPUS:-0}
     logging: *default-logging
 
   # ── Frontend (Next.js) — FRONTEND_PORT ────────────────────────────────────
@@ -696,6 +722,10 @@ services:
     depends_on:
       - gateway
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${FRONTEND_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_CPUS:-0}
     logging: *default-logging
 
   # ── FLIT Suite: hub en flitsas.online (B-09) — HUB_PORT ────────────────────
@@ -737,6 +767,10 @@ services:
     depends_on:
       - gateway
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${FRONTEND_HUB_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_HUB_CPUS:-0}
     logging: *default-logging
 
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
