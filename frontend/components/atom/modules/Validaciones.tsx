@@ -353,6 +353,7 @@ function ValidacionesSuperAdmin() {
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }, []);
   const [pendientes, setPendientes] = useState<number | undefined>(undefined);
+  const [refreshSignal, setRefreshSignal] = useState(0);
 
   const cargarPendientes = useCallback((signal?: AbortSignal) => {
     getManualReviewClient()
@@ -371,13 +372,37 @@ function ValidacionesSuperAdmin() {
     return () => ctrl.abort();
   }, [cargarPendientes]);
 
+  // El contador de pendientes se mantiene al día solo (llegan capturas de clientes sin que nadie toque nada).
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === 'visible') cargarPendientes();
+    };
+    const id = window.setInterval(tick, AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [cargarPendientes]);
+
+  /** Algo cambió (aprobar, rechazar, activar, regenerar): contador y grilla de «Validaciones» se refrescan ya. */
+  const refrescarTodo = useCallback(() => {
+    cargarPendientes();
+    setRefreshSignal((n) => n + 1);
+  }, [cargarPendientes]);
+
   return (
     <ValidacionesLista
+      refreshSignal={refreshSignal}
+      onListChanged={cargarPendientes}
       renderTabs={(lista) => (
         <SectionTabs
           ariaLabel="Secciones de validaciones"
           active={pestana}
-          onChange={setPestana}
+          onChange={(id) => {
+            setPestana(id);
+            refrescarTodo(); // al cambiar de pestaña se ve siempre el dato actual
+          }}
           tabs={[
             { id: 'validaciones', label: 'Validaciones', content: <div className="flex flex-col gap-4">{lista}</div> },
             {
@@ -386,7 +411,7 @@ function ValidacionesSuperAdmin() {
               count: pendientes,
               content: (
                 <ValidacionesManuales
-                  onChanged={() => cargarPendientes()}
+                  onChanged={refrescarTodo}
                   openId={manualParam}
                   onDetailClose={limpiarManual}
                 />
@@ -399,7 +424,17 @@ function ValidacionesSuperAdmin() {
   );
 }
 
-function ValidacionesLista({ renderTabs }: { renderTabs?: (lista: ReactNode) => ReactNode } = {}) {
+function ValidacionesLista({
+  renderTabs,
+  refreshSignal = 0,
+  onListChanged,
+}: {
+  renderTabs?: (lista: ReactNode) => ReactNode;
+  /** Sube cuando algo cambió fuera de la lista (p. ej. se aprobó una validación manual): la lista se refresca ya. */
+  refreshSignal?: number;
+  /** La lista cambió por una acción del detalle (activar/regenerar el flujo manual): quien monta refresca el contador. */
+  onListChanged?: () => void;
+} = {}) {
   // HU #12706/#12707 — el admin FLIT ve por defecto TODAS las compañías («Todas») y puede acotar a una.
   // El alcance del listado y de las incidencias viaja EXPLÍCITO en cada llamada (`listTenant`): ya no se
   // fija global con `setActiveTramitesTenant`, porque en «Todas» cada fila es de una compañía distinta.
@@ -693,6 +728,15 @@ function ValidacionesLista({ renderTabs }: { renderTabs?: (lista: ReactNode) => 
   useEffect(() => {
     void refreshStuck();
   }, [applied, refreshStuck]);
+
+  // Cambio externo (aprobación/rechazo en la pestaña manual, cambio de pestaña): refresca la grilla en segundo plano.
+  const refreshSignalVisto = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignalVisto.current === refreshSignal) return;
+    refreshSignalVisto.current = refreshSignal;
+    void load(appliedRef.current, { background: true });
+    void refreshStuck({ background: true });
+  }, [refreshSignal, load, refreshStuck]);
 
   // Auto-refresco en vivo (fase 2 — "suscripción"): tras la primera carga, refresca la grilla cada
   // AUTO_REFRESH_MS con los filtros vigentes para reflejar los cambios que el backend persiste vía
@@ -1325,7 +1369,10 @@ function ValidacionesLista({ renderTabs }: { renderTabs?: (lista: ReactNode) => 
             setPersonDetail(null);
             closeTenantScope();
           }}
-          onStatusChanged={() => void load(appliedRef.current, { background: true })}
+          onStatusChanged={() => {
+            void load(appliedRef.current, { background: true });
+            onListChanged?.();
+          }}
           onVerEnManuales={
             isFlitAdmin
               ? (id) => {

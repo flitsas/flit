@@ -309,7 +309,11 @@ export function PersonIdentityDetailDrawer({
                     defaultOpen={idx === 0}
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
-                    onManualChanged={() => void load()}
+                    onManualChanged={() => {
+                      void load();
+                      // La lista de abajo y el contador de «Validaciones manuales» se actualizan al instante.
+                      onStatusChanged?.();
+                    }}
                     onVerEnManuales={onVerEnManuales}
                   />
                 ))}

@@ -35,6 +35,9 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 type Carga = 'loading' | 'ready' | 'error';
 
+/** Mismo ritmo que la grilla de «Validaciones» (15 s). */
+const MANUAL_AUTO_REFRESH_MS = 15_000;
+
 export function ValidacionesManuales({
   client,
   onChanged,
@@ -109,6 +112,34 @@ export function ValidacionesManuales({
       });
     return () => ctrl.abort();
   }, [api, page, pageSize, status, origin, q, reloadKey]);
+
+  // Auto-refresco: llegan capturas de clientes y otros revisores resuelven registros sin que nadie toque la
+  // pantalla. En segundo plano (sin «cargando») y solo con la pestaña visible; un fallo transitorio no borra lo mostrado.
+  useEffect(() => {
+    if (carga !== 'ready') return;
+    let ctrl: AbortController | null = null;
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      ctrl?.abort();
+      ctrl = new AbortController();
+      const signal = ctrl.signal;
+      api
+        .listManual({ page, pageSize, status, origin, q }, signal)
+        .then((res) => {
+          if (signal.aborted) return;
+          setRows(res.items);
+          setTotal(res.total);
+        })
+        .catch(() => undefined);
+    };
+    const id = window.setInterval(tick, MANUAL_AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+      ctrl?.abort();
+    };
+  }, [carga, api, page, pageSize, status, origin, q]);
 
   const recargar = useCallback(() => setReloadKey((k) => k + 1), []);
   const hayFiltros = Boolean(status || origin || q);

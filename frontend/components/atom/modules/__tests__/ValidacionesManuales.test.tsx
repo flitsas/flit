@@ -2,7 +2,7 @@
  * HU-C5 (#13300) — pestaña «Validaciones manuales»: tabla del modelo de trámites, filtros, paginación y estados.
  * Vitest + RTL contra el adaptador simulado (sin latencia, reloj fijo).
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ValidacionesManuales } from '@/components/atom/modules/ValidacionesManuales';
@@ -148,5 +148,46 @@ describe('formatEspera', () => {
   it('null o ausente (no está en revisión) se muestra «—»', () => {
     expect(formatEspera(null)).toBe('—');
     expect(formatEspera(undefined)).toBe('—');
+  });
+});
+
+describe('Pestaña Validaciones manuales — se actualiza sola', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+
+  it('vuelve a consultar la lista cada 15 s en segundo plano, sin mostrar «cargando»', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const client = nuevoCliente(3);
+    const spy = vi.spyOn(client, 'listManual');
+    render(<ValidacionesManuales client={client} />);
+    await screen.findByText('Persona de prueba 01');
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(15_100);
+    await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2));
+    // La tabla sigue visible: el refresco no la reemplaza por el estado de carga.
+    expect(screen.getByText('Persona de prueba 01')).toBeInTheDocument();
+  });
+
+  it('refleja un registro nuevo que llega mientras la pantalla está abierta', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const client = nuevoCliente(3);
+    const base = client.listManual.bind(client);
+    let extra = false;
+    client.listManual = async (p, s) => {
+      const res = await base(p, s);
+      return extra
+        ? { ...res, total: res.total + 1, items: [{ ...res.items[0], id: 'nuevo-1', fullName: 'Llegó recién' }, ...res.items] }
+        : res;
+    };
+    render(<ValidacionesManuales client={client} />);
+    await screen.findByText('Persona de prueba 01');
+    expect(screen.queryByText('Llegó recién')).not.toBeInTheDocument();
+
+    extra = true;
+    await vi.advanceTimersByTimeAsync(15_100);
+    expect(await screen.findByText('Llegó recién')).toBeInTheDocument();
   });
 });
