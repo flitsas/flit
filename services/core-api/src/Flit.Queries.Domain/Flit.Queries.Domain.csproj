@@ -11,6 +11,8 @@
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
     <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
     <InternalsVisibleTo Include="Flit.Integration.Tests" />
+    <!-- HU #12706: los handlers de identidad reciben TenantScope.All (SuperAdmin sin acotar). -->
+    <InternalsVisibleTo Include="Flit.Tramites.Application.Tests" />
   </ItemGroup>
 
 </Project>

@@ -20,6 +20,7 @@ import {
   IdentityCaptureLinkBlock,
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { FLIT } from '@/lib/flit-design-tokens';
+import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import type {
   BiometricEstado,
   BiometricValidation,
@@ -62,6 +63,12 @@ export interface PersonIdentityDetailDrawerProps {
   documentNumber: string;
   onClose: () => void;
   onStatusChanged?: () => void;
+  /**
+   * HU #12709 — persona de una compañía HIJA vista por la cabeza de red: el historial se lee por la ruta
+   * `network/**` de esa compañía y el detalle es SOLO CONSULTA (sin enlace de captura, sin abrir los
+   * trámites de la hija, bitácora por la ruta de red). Ausente = la vista propia de siempre.
+   */
+  networkTenantId?: string;
 }
 
 export function PersonIdentityDetailDrawer({
@@ -69,7 +76,9 @@ export function PersonIdentityDetailDrawer({
   documentNumber,
   onClose,
   onStatusChanged,
+  networkTenantId,
 }: PersonIdentityDetailDrawerProps) {
+  const soloConsulta = Boolean(networkTenantId);
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,11 +90,15 @@ export function PersonIdentityDetailDrawer({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await tramitesClient.listPersonBiometricValidations(
-        documentType,
-        documentNumber,
-        { page: 1, pageSize: 50 },
-      );
+      const res = networkTenantId
+        ? await tramitesClient.listNetworkPersonIdentityValidations(networkTenantId, documentType, documentNumber, {
+            page: 1,
+            pageSize: 50,
+          })
+        : await tramitesClient.listPersonBiometricValidations(documentType, documentNumber, {
+            page: 1,
+            pageSize: 50,
+          });
       failedRef.current = false;
       setError(null);
       setData(res);
@@ -103,7 +116,7 @@ export function PersonIdentityDetailDrawer({
     } finally {
       setLoading(false);
     }
-  }, [documentType, documentNumber, onStatusChanged]);
+  }, [documentType, documentNumber, onStatusChanged, networkTenantId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al cambiar documento + fetch async
@@ -184,6 +197,9 @@ export function PersonIdentityDetailDrawer({
           >
             Historial y tracking de identidad
           </h2>
+          {soloConsulta ? (
+            <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+          ) : null}
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
@@ -283,6 +299,7 @@ export function PersonIdentityDetailDrawer({
                     total={validationsDesc.length}
                     defaultOpen={idx === 0}
                     trackingTick={trackingTick}
+                    soloConsulta={soloConsulta}
                   />
                 ))}
               </div>
@@ -299,8 +316,11 @@ function ValidationAccordionItem({
   index,
   defaultOpen,
   trackingTick,
+  soloConsulta = false,
 }: {
   validation: BiometricValidation;
+  /** HU #12709 — persona de una compañía hija vista por la cabeza: sin captura ni enlaces a trámites. */
+  soloConsulta?: boolean;
   index: number;
   total: number;
   defaultOpen: boolean;
@@ -308,7 +328,7 @@ function ValidationAccordionItem({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
-  const showCaptura = hasKyverumCaptureQr(v.captureUrl);
+  const showCaptura = !soloConsulta && hasKyverumCaptureQr(v.captureUrl);
   const title = index === 0 ? 'Sesión más reciente' : 'Sesión anterior / Histórica';
   const enlaceTone: StatusTone = v.expired ? 'warning' : 'success';
   const enlaceEstado = v.expired ? 'Vencido' : 'Vigente';
@@ -363,7 +383,7 @@ function ValidationAccordionItem({
           </div>
 
           {associated.length > 0 && (
-            <AssociatedProceduresList procedures={associated} collapsible />
+            <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
           )}
 
           {v.status === 'rechazado' && v.rejectionReason && (
@@ -411,6 +431,7 @@ function ValidationAccordionItem({
               defaultOpen
               embebido
               detailLayout
+              network={soloConsulta}
             />
           </div>
         </div>

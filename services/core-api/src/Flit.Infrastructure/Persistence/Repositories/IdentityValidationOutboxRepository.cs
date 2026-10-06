@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -16,16 +17,19 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
     /// <summary>EventType sintético para las filas de la cola de envío (la outbox usa el suyo real).</summary>
     private const string EnvioEventType = "identity_validation.send_failed";
 
+    public Task<IReadOnlyList<StuckIdentityValidationRow>> ListStuckAsync(
+        Guid tenantId, int limit, CancellationToken ct = default) =>
+        ListStuckAsync(TenantScope.Single(tenantId), limit, ct);
+
     public async Task<IReadOnlyList<StuckIdentityValidationRow>> ListStuckAsync(
-        Guid tenantId, int limit, CancellationToken ct = default)
+        TenantScope scope, int limit, CancellationToken ct = default)
     {
         // (1) Outbox de COMPLETADO atascada. Join (LEFT) con la validación biométrica por validation_id para
         // resolver el NOMBRE y el DOCUMENTO de la persona; el gestor necesita saber de quién es la validación
         // atascada. DefaultIfEmpty: si la validación ya no existe, los datos van null.
         var outboxQuery =
-            from o in db.IdentityValidationOutbox.AsNoTracking()
-            where o.TenantId == tenantId
-                && o.PublishedAt == null
+            from o in db.IdentityValidationOutbox.AsNoTracking().WhereTenantInScope(scope, o => o.TenantId)
+            where o.PublishedAt == null
                 && o.Attempts >= IdentityValidationOutbox.MaxDeliveryAttempts
             join v in db.ProcedureInstanceBiometricValidations.AsNoTracking()
                 on o.ValidationId equals v.Id into vj
@@ -40,13 +44,14 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
                 v != null ? v.Name : null,
                 v != null ? v.DocumentType : null,
                 v != null ? v.DocumentNumber : null,
-                StuckIdentityValidationKinds.Encadenamiento);
+                StuckIdentityValidationKinds.Encadenamiento,
+                o.TenantId);
 
         // (2) Cola de ENVÍO al proveedor atascada (validaciones en error_envio). La persona sale directa de
         // la propia validación. El "id" de la fila es el de la validación (lo usa el requeue por id).
         var envioQuery =
-            from v in db.ProcedureInstanceBiometricValidations.AsNoTracking()
-            where v.TenantId == tenantId && v.Status == BiometricEstados.ErrorEnvio
+            from v in db.ProcedureInstanceBiometricValidations.AsNoTracking().WhereTenantInScope(scope, v => v.TenantId)
+            where v.Status == BiometricEstados.ErrorEnvio
             select new StuckIdentityValidationRow(
                 v.Id,
                 v.Id,
@@ -57,7 +62,8 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
                 v.Name,
                 v.DocumentType,
                 v.DocumentNumber,
-                StuckIdentityValidationKinds.Envio);
+                StuckIdentityValidationKinds.Envio,
+                v.TenantId);
 
         // Dos consultas (no hay UNION tipado limpio con el LEFT JOIN); se materializan acotadas y se mezclan
         // por antigüedad. Vista de monitoreo acotada a `limit`, así que el merge en memoria es trivial.

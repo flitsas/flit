@@ -21,7 +21,17 @@ public static class UiPreferenceScopes
     /// </summary>
     public const string TramitesScope = "tramites.scope";
 
-    public static readonly IReadOnlyCollection<string> All = [TramitesColumns, OtProceduresColumns, TramitesScope];
+    /// <summary>HU #12707 (Feature #12705) — columnas visibles en la grilla de Validación de Identidad.</summary>
+    public const string IdentidadColumns = "identidad.columns";
+
+    /// <summary>
+    /// HU #12709 — alcance elegido en Validación de Identidad por una cabeza de red, independiente del de
+    /// Trámites. Solo la preferencia visual: el alcance efectivo lo decide el servidor (TenantScope).
+    /// </summary>
+    public const string IdentidadScope = "identidad.scope";
+
+    public static readonly IReadOnlyCollection<string> All =
+        [TramitesColumns, OtProceduresColumns, TramitesScope, IdentidadColumns, IdentidadScope];
 
     public static bool IsValid(string? scope) =>
         !string.IsNullOrWhiteSpace(scope) && All.Contains(scope);

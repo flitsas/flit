@@ -8,8 +8,11 @@ import { useDrFlitChat } from "./useDrFlitChat";
 export function DrFlitAssistant({
   displayName,
   routeScope,
+  canSearchValidaciones,
 }: {
   displayName?: string | null;
+  /** HU #12711 — `true` si el usuario ve el módulo de Validación de Identidad en el menú. */
+  canSearchValidaciones?: boolean;
   /** Identificador de módulo/ruta; al cambiar se cierra el panel (sin limpiar chat). */
   routeScope?: string;
 }) {
@@ -40,6 +43,7 @@ export function DrFlitAssistant({
         onBackToSearch={chat.backToSearch}
         onSend={chat.sendText}
         onNavigate={chat.navigate}
+        canSearchValidaciones={canSearchValidaciones}
         panelRef={chat.panelRef}
         closeButtonRef={chat.closeButtonRef}
         inputRef={chat.inputRef}

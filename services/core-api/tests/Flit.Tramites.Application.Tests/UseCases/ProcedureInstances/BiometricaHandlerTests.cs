@@ -2,6 +2,7 @@ using System.Text;
 using Flit.Tramites.Application.Biometrics;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ReadModels;
@@ -24,6 +25,11 @@ public sealed class BiometricaHandlerTests
     private readonly CompletarBiometriaHandler _completar;
     private readonly ListBiometriaHandler _list;
     private readonly SimularBiometriaHandler _simular;
+
+
+    /// <summary>HU #12706 — alcance de UNA compañía, tal como lo arma el handler desde el Guid.</summary>
+    private static TenantScope OnlyTenant(Guid tenant) =>
+        Arg.Is<TenantScope>(s => !s.IsAll && s.ReadTenantIds.Count == 1 && s.ReadTenantIds.Contains(tenant));
 
     public BiometricaHandlerTests()
     {
@@ -734,10 +740,10 @@ public sealed class BiometricaHandlerTests
             TenantVal(tenant, BiometricEstados.Rechazado, provider: BiometricProviders.Kyverum,
                 providerPayload: """{"coincidencias":{"documento":false,"nombre":true}}"""),
         };
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(rows);
         // KPIs exactos vienen del conteo agrupado, no de las filas (que están acotadas).
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>
             {
                 [BiometricEstados.Aprobado] = 3,
@@ -792,9 +798,9 @@ public sealed class BiometricaHandlerTests
                 ],
             });
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation> { row });
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 1 });
 
         var (result, error) = await handler.HandleAsync(tenant, ct: ct);
@@ -823,9 +829,9 @@ public sealed class BiometricaHandlerTests
         row.ResendCount = 1;
         row.LastResentAt = lastResentAt;
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation> { row });
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
         var (result, error) = await handler.HandleAsync(tenant, ct: ct);
@@ -852,9 +858,9 @@ public sealed class BiometricaHandlerTests
             TenantVal(tenant, BiometricEstados.Enviado, expiresAt: past),   // no aprobada + vencida → expired
             TenantVal(tenant, BiometricEstados.Aprobado, expiresAt: past),  // aprobada → nunca expired
         };
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(rows);
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
         var (result, error) = await handler.HandleAsync(tenant, ct: ct);
@@ -870,9 +876,9 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
         var (result, error) = await handler.HandleAsync(tenant, ct: ct);
@@ -889,9 +895,9 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
         var (result, error) = await handler.HandleAsync(tenant, new TenantBiometricValidationListQuery(), ct);
@@ -900,8 +906,8 @@ public sealed class BiometricaHandlerTests
         result.Should().NotBeNull();
         // Página por defecto: skip 0, take 20 (DefaultPageSize), filtro null.
         await _repo.Received(1).ListBiometricValidationsByTenantAsync(
-            tenant, 0, TenantBiometricValidationListQuery.DefaultPageSize, null, Arg.Any<DateTimeOffset>(), ct);
-        await _repo.Received(1).CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct);
+            OnlyTenant(tenant), 0, TenantBiometricValidationListQuery.DefaultPageSize, null, Arg.Any<DateTimeOffset>(), ct);
+        await _repo.Received(1).CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), null, Arg.Any<DateTimeOffset>(), ct);
     }
 
     [Fact]
@@ -913,9 +919,9 @@ public sealed class BiometricaHandlerTests
         var query = new TenantBiometricValidationListQuery(Status: BiometricEstados.Aprobado);
         var expectedFilter = query.ToFilter();
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 2 });
 
         var (result, error) = await handler.HandleAsync(tenant, query, ct);
@@ -923,7 +929,7 @@ public sealed class BiometricaHandlerTests
         error.Should().BeNull();
         result!.Stats.Aprobadas.Should().Be(2);
         await _repo.Received(1).ListBiometricValidationsByTenantAsync(
-            tenant,
+            OnlyTenant(tenant),
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Is<BiometricValidationListFilter>(f => f.Status == expectedFilter.Status),
@@ -939,12 +945,12 @@ public sealed class BiometricaHandlerTests
         var handler = new ListTenantBiometricValidationsHandler(_repo);
         var query = new TenantBiometricValidationListQuery(ReferenceNumber: "TRM-2026", Name: "Ana");
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>
             {
                 TenantVal(tenant, BiometricEstados.Aprobado, reference: "TRM-2026-000001"),
             });
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 1 });
 
         var (result, error) = await handler.HandleAsync(tenant, query, ct);
@@ -952,7 +958,7 @@ public sealed class BiometricaHandlerTests
         error.Should().BeNull();
         result!.Validations.Should().ContainSingle();
         await _repo.Received(1).ListBiometricValidationsByTenantAsync(
-            tenant,
+            OnlyTenant(tenant),
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Is<BiometricValidationListFilter>(f =>
@@ -969,9 +975,9 @@ public sealed class BiometricaHandlerTests
         var handler = new ListTenantBiometricValidationsHandler(_repo);
         var query = new TenantBiometricValidationListQuery(Modalidad: "traspaso");
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>
             {
                 [BiometricEstados.Aprobado] = 2,
@@ -985,7 +991,7 @@ public sealed class BiometricaHandlerTests
         result.Stats.Aprobadas.Should().Be(2);
         result.Stats.Rechazadas.Should().Be(1);
         await _repo.Received(1).CountBiometricValidationsByEstadoAsync(
-            tenant,
+            OnlyTenant(tenant),
             Arg.Is<BiometricValidationListFilter>(f => f.Modalidad == "traspaso"),
             Arg.Any<DateTimeOffset>(),
             ct);
@@ -1003,7 +1009,7 @@ public sealed class BiometricaHandlerTests
         result.Should().BeNull();
         error.Should().Contain("estado inválido");
         await _repo.DidNotReceive().ListBiometricValidationsByTenantAsync(
-            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            Arg.Any<TenantScope>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1018,7 +1024,7 @@ public sealed class BiometricaHandlerTests
         result.Should().BeNull();
         error.Should().Contain("scoreMin");
         await _repo.DidNotReceive().ListBiometricValidationsByTenantAsync(
-            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            Arg.Any<TenantScope>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1029,9 +1035,9 @@ public sealed class BiometricaHandlerTests
         var handler = new ListTenantBiometricValidationsHandler(_repo);
         var query = new TenantBiometricValidationListQuery(Page: 3, PageSize: 10);
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 42 });
 
         var (result, error) = await handler.HandleAsync(tenant, query, ct);
@@ -1042,7 +1048,7 @@ public sealed class BiometricaHandlerTests
         result.Total.Should().Be(42); // total del conjunto completo (conteo agrupado), no solo la página
         // Página 3 con tamaño 10 → skip 20, take 10.
         await _repo.Received(1).ListBiometricValidationsByTenantAsync(
-            tenant, 20, 10, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct);
+            OnlyTenant(tenant), 20, 10, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct);
     }
 
     [Fact]
@@ -1053,9 +1059,9 @@ public sealed class BiometricaHandlerTests
         var handler = new ListTenantBiometricValidationsHandler(_repo);
         // 999 fuera de rango → se acota a 50; página 0 → se normaliza a 1 (skip 0).
         var query = new TenantBiometricValidationListQuery(Page: 0, PageSize: 999);
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
         var (result, _) = await handler.HandleAsync(tenant, query, ct);
@@ -1063,7 +1069,7 @@ public sealed class BiometricaHandlerTests
         result!.PageSize.Should().Be(50);
         result.Page.Should().Be(1);
         await _repo.Received(1).ListBiometricValidationsByTenantAsync(
-            tenant, 0, 50, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct);
+            OnlyTenant(tenant), 0, 50, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct);
     }
 
     [Fact]
@@ -1077,7 +1083,7 @@ public sealed class BiometricaHandlerTests
         var handler = new ListTenantBiometricValidationsHandler(_repo);
         var query = new TenantBiometricValidationListQuery(MotivoRechazo: "ilegible");
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>
             {
                 TenantVal(tenant, BiometricEstados.Rechazado, detalle: "{\"motivo\":\"Documento ilegible\"}"),
@@ -1094,7 +1100,7 @@ public sealed class BiometricaHandlerTests
         result.Stats.Rechazadas.Should().Be(1);
         result.Stats.Aprobadas.Should().Be(0);
         await _repo.DidNotReceive().CountBiometricValidationsByEstadoAsync(
-            Arg.Any<Guid>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            Arg.Any<TenantScope>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1107,7 +1113,7 @@ public sealed class BiometricaHandlerTests
         var handler = new ListTenantBiometricValidationsHandler(_repo);
         var query = new TenantBiometricValidationListQuery(MotivoRechazo: "documento no fue exitosa");
 
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>
             {
                 TenantVal(tenant, BiometricEstados.Rechazado, provider: BiometricProviders.Kyverum,

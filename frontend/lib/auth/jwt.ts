@@ -129,6 +129,20 @@ export function hasPermission(payload: JwtPayload | null, slug: string): boolean
 }
 
 /**
+ * HU #12711 — puede leer el listado de validaciones de identidad del Dashboard: misma regla que la API
+ * (`RequireIdentityModuleOrDashboard`): SuperAdmin, o `validaciones.read` / `validaciones.manage` /
+ * `dashboard.read` en un usuario que NO sea de un organismo de tránsito (la API los rechaza aunque
+ * tengan el permiso). Solo decide qué se muestra; la autorización real la hace la API.
+ */
+export function canReadIdentityDashboard(payload: JwtPayload | null): boolean {
+  if (isSuperAdmin(payload)) return true;
+  if (!payload || payload.entity_type === "TRANSIT_OFFICE") return false;
+  return ["validaciones.read", "validaciones.manage", "dashboard.read"].some((slug) =>
+    hasPermission(payload, slug),
+  );
+}
+
+/**
  * Puede leer el LOG QX (HU #10795): tiene el permiso `logqx.read` o es SuperAdmin
  * (bypass total, igual que el gate del backend en `PermissionAuthorizationHandler`).
  */
