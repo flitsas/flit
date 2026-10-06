@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CapturaManualFlow } from "@/app/captura-manual/[token]/_components/CapturaManualFlow";
 import { StepBar } from "@/app/captura-manual/[token]/_components/StepBar";
@@ -96,6 +96,11 @@ describe("CapturaManualFlow", () => {
     expect(screen.getByAltText("FLIT")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: "FLIT" })).toHaveLength(1);
     expect(screen.queryByText("Verify")).not.toBeInTheDocument();
+    // Cabecera: solo el logo, sin el texto «FLIT 2.0» al lado.
+    const header = screen.getByRole("banner");
+    expect(header).toHaveTextContent("");
+    expect(within(header).getAllByRole("img")).toHaveLength(1);
+    expect(screen.getByAltText("FLIT")).toHaveClass("h-10");
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Iniciar verificación" }));
     await screen.findByRole("heading", { name: "Verificación facial" });
