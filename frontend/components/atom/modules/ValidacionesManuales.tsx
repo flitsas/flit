@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Eye, Search } from 'lucide-react';
+import { Eye, Info, Search } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
 import { RowActions } from '@/components/atom/RowActions';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -38,10 +38,19 @@ type Carga = 'loading' | 'ready' | 'error';
 export function ValidacionesManuales({
   client,
   onChanged,
+  openId,
+  onDetailClose,
 }: {
   client?: ManualReviewClient;
   /** Se aprobó o rechazó un registro desde el detalle: quien monta la pestaña refresca su contador. */
   onChanged?: () => void;
+  /**
+   * Enlace profundo (`manual=<id>`): al cambiar a un id, se abre directamente su detalle (se pide por id, sin
+   * depender de que la fila esté en la página actual). Si no existe, se avisa aquí en vez de abrir un modal vacío.
+   */
+  openId?: string | null;
+  /** Se cerró (o no se encontró) el detalle abierto por enlace profundo: quien monta limpia `manual` de la URL. */
+  onDetailClose?: () => void;
 }) {
   const api = client ?? getManualReviewClient();
   const pg = usePaginacion();
@@ -57,7 +66,18 @@ export function ValidacionesManuales({
   const [carga, setCarga] = useState<Carga>('loading');
   const [reloadKey, setReloadKey] = useState(0);
   const [detalleId, setDetalleId] = useState<string | null>(null);
+  const [noEncontrado, setNoEncontrado] = useState(false);
+  const [openIdVisto, setOpenIdVisto] = useState<string | null>(null);
   const idBase = useId();
+
+  // Ajuste durante el render (no en un efecto): un `openId` nuevo abre su detalle y limpia el aviso anterior.
+  if ((openId ?? null) !== openIdVisto) {
+    setOpenIdVisto(openId ?? null);
+    if (openId) {
+      setDetalleId(openId);
+      setNoEncontrado(false);
+    }
+  }
 
   // Búsqueda con retardo: filtra al dejar de escribir, sin botón extra (menos pasos).
   useEffect(() => {
@@ -187,6 +207,28 @@ export function ValidacionesManuales({
         </div>
       </div>
 
+      {noEncontrado && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-[10px] border p-3 text-xs"
+          style={{
+            borderColor: 'var(--badge-info-border)',
+            background: 'var(--badge-info-bg)',
+            color: 'var(--badge-info-fg)',
+          }}
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p className="flex-1">No encontramos esa validación manual.</p>
+          <button
+            type="button"
+            onClick={() => setNoEncontrado(false)}
+            className="rounded-full px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          >
+            Cerrar aviso
+          </button>
+        </div>
+      )}
+
       <p className="sr-only" role="status" aria-live="polite">
         {carga === 'loading' ? 'Cargando validaciones manuales…' : `${total} validaciones manuales`}
       </p>
@@ -221,7 +263,15 @@ export function ValidacionesManuales({
       <ManualReviewDetailModal
         id={detalleId}
         client={api}
-        onClose={() => setDetalleId(null)}
+        onClose={() => {
+          setDetalleId(null);
+          onDetailClose?.();
+        }}
+        onNotFound={() => {
+          setDetalleId(null);
+          setNoEncontrado(true);
+          onDetailClose?.();
+        }}
         onChanged={() => {
           recargar();
           onChanged?.();

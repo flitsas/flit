@@ -68,7 +68,8 @@ import {
   isScopeRejection,
 } from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
-import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import { MANUAL_ESTADO_META, enlaceDetalleManual } from '@/lib/identity/manual-flow';
+import { useSearchParams } from 'next/navigation';
 import {
   PrevalidacionForm,
   PrevalidacionSuccessPanel,
@@ -331,7 +332,26 @@ export function Validaciones() {
 const PENDIENTES_PAGE_SIZE = 10;
 
 function ValidacionesSuperAdmin() {
-  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>('validaciones');
+  // Enlace profundo (`?m=validaciones&tab=manuales&manual=<id>`): `useSearchParams` también refleja los
+  // `history.pushState/replaceState` de la propia app, así que el acceso desde el detalle de Identidad no recarga.
+  const params = useSearchParams();
+  const manualParam = params?.get('manual') || null;
+  const tabParam = params?.get('tab') || null;
+  const quiereManuales = tabParam === 'manuales' || manualParam !== null;
+  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>(quiereManuales ? 'manuales' : 'validaciones');
+  const enlaceKey = `${tabParam ?? ''}|${manualParam ?? ''}`;
+  const [enlaceVisto, setEnlaceVisto] = useState(enlaceKey);
+  // Ajuste durante el render: un enlace profundo nuevo activa la pestaña manual (no se vuelve a forzar sin cambio).
+  if (enlaceKey !== enlaceVisto) {
+    setEnlaceVisto(enlaceKey);
+    if (quiereManuales) setPestana('manuales');
+  }
+  const limpiarManual = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('manual')) return;
+    url.searchParams.delete('manual');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
   const [pendientes, setPendientes] = useState<number | undefined>(undefined);
 
   const cargarPendientes = useCallback((signal?: AbortSignal) => {
@@ -364,7 +384,13 @@ function ValidacionesSuperAdmin() {
               id: 'manuales',
               label: 'Validaciones manuales',
               count: pendientes,
-              content: <ValidacionesManuales onChanged={() => cargarPendientes()} />,
+              content: (
+                <ValidacionesManuales
+                  onChanged={() => cargarPendientes()}
+                  openId={manualParam}
+                  onDetailClose={limpiarManual}
+                />
+              ),
             },
           ]}
         />
@@ -1300,6 +1326,16 @@ function ValidacionesLista({ renderTabs }: { renderTabs?: (lista: ReactNode) => 
             closeTenantScope();
           }}
           onStatusChanged={() => void load(appliedRef.current, { background: true })}
+          onVerEnManuales={
+            isFlitAdmin
+              ? (id) => {
+                  // Cierra el detalle y navega por enlace profundo: Validaciones activa la pestaña y abre el detalle.
+                  setPersonDetail(null);
+                  closeTenantScope();
+                  window.history.pushState(null, '', enlaceDetalleManual(id));
+                }
+              : undefined
+          }
         />
       )}
 

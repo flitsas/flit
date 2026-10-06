@@ -74,6 +74,8 @@ export interface PersonIdentityDetailDrawerProps {
    * trámites de la hija, bitácora por la ruta de red). Ausente = la vista propia de siempre.
    */
   networkTenantId?: string;
+  /** Super Admin: abre el detalle de una validación manual en su pestaña (el detalle actual se cierra aparte). */
+  onVerEnManuales?: (validationId: string) => void;
 }
 
 export function PersonIdentityDetailDrawer({
@@ -82,6 +84,7 @@ export function PersonIdentityDetailDrawer({
   onClose,
   onStatusChanged,
   networkTenantId,
+  onVerEnManuales,
 }: PersonIdentityDetailDrawerProps) {
   const soloConsulta = Boolean(networkTenantId);
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
@@ -307,6 +310,7 @@ export function PersonIdentityDetailDrawer({
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
                     onManualChanged={() => void load()}
+                    onVerEnManuales={onVerEnManuales}
                   />
                 ))}
               </div>
@@ -325,10 +329,12 @@ function ValidationAccordionItem({
   trackingTick,
   soloConsulta = false,
   onManualChanged,
+  onVerEnManuales,
 }: {
   validation: BiometricValidation;
   /** HU #13288 — recarga el detalle tras activar el flujo manual o regenerar el enlace. */
   onManualChanged?: () => void;
+  onVerEnManuales?: (validationId: string) => void;
   /** HU #12709 — persona de una compañía hija vista por la cabeza: sin captura ni enlaces a trámites. */
   soloConsulta?: boolean;
   index: number;
@@ -411,7 +417,7 @@ function ValidationAccordionItem({
           </div>
 
           {!soloConsulta && onManualChanged && (
-            <IdentityManualFlowActions validation={v} onChanged={onManualChanged} />
+            <IdentityManualFlowActions validation={v} onChanged={onManualChanged} onVerEnManuales={onVerEnManuales} />
           )}
 
           {associated.length > 0 && (

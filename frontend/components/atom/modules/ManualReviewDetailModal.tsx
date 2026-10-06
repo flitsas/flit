@@ -6,6 +6,7 @@ import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
+import { ApiError } from '@/lib/api/types';
 import type { ManualDetail } from '@/lib/api/types/manual-review';
 import { formatEspera, manualOriginLabel } from '@/lib/identidad/manual-review-meta';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
@@ -37,12 +38,18 @@ export function ManualReviewDetailModal({
   client,
   onClose,
   onChanged,
+  onNotFound,
 }: {
   id: string | null;
   client: ManualReviewClient;
   onClose: () => void;
   /** El registro cambió (aprobado o rechazado): la tabla refresca su fila. */
   onChanged?: () => void;
+  /**
+   * El id no existe, no es una validación manual o no se puede ver (404/403/400): el modal se retira y quien lo
+   * abrió por enlace profundo avisa en su pantalla en vez de dejar un modal vacío.
+   */
+  onNotFound?: () => void;
 }) {
   const [detail, setDetail] = useState<ManualDetail | null>(null);
   const [carga, setCarga] = useState<Carga>('loading');
@@ -50,6 +57,11 @@ export function ManualReviewDetailModal({
   const [visorAbierto, setVisorAbierto] = useState(false);
   const [accionAbierta, setAccionAbierta] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
+
+  const onNotFoundRef = useRef(onNotFound);
+  useEffect(() => {
+    onNotFoundRef.current = onNotFound;
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -63,8 +75,13 @@ export function ManualReviewDetailModal({
         setDetail(d);
         setCarga('ready');
       })
-      .catch(() => {
-        if (!ctrl.signal.aborted) setCarga('error');
+      .catch((err: unknown) => {
+        if (ctrl.signal.aborted) return;
+        if (onNotFoundRef.current && err instanceof ApiError && [400, 403, 404].includes(err.status)) {
+          onNotFoundRef.current();
+          return;
+        }
+        setCarga('error');
       });
     return () => ctrl.abort();
   }, [id, client, intento]);
