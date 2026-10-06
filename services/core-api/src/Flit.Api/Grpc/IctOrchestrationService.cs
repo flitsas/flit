@@ -366,7 +366,7 @@ public sealed class IctOrchestrationService(
         {
             RefrescarRastreo();
             var code = CodigoDeFallo(ex);
-            IctOrchestrationLog.StepFailed(logger, "actors", code, ex.GetType().Name, instanceId);
+            IctOrchestrationLog.StepFailed(logger, "actors", code, ex.GetType().Name, SqlStateDe(ex), instanceId);
             AppendWarning(reply, "actors_warning:" + code);
             return false;
         }
@@ -410,7 +410,7 @@ public sealed class IctOrchestrationService(
         {
             RefrescarRastreo();
             var code = CodigoDeFallo(ex);
-            IctOrchestrationLog.StepFailed(logger, "commercial", code, ex.GetType().Name, instanceId);
+            IctOrchestrationLog.StepFailed(logger, "commercial", code, ex.GetType().Name, SqlStateDe(ex), instanceId);
             AppendWarning(reply, "commercial_warning:" + code);
         }
     }
@@ -430,6 +430,13 @@ public sealed class IctOrchestrationService(
     /// </summary>
     internal static string CodigoDeFallo(Exception ex) =>
         ex is DbUpdateException ? "persist_failed" : "exception";
+
+    /// <summary>
+    /// SqlState de Postgres (p.ej. 22001 = valor demasiado largo) cuando la excepción es un DbUpdateException
+    /// con PostgresException interna; "-" si no aplica. Diagnóstico sin PII: nunca ex.Message.
+    /// </summary>
+    internal static string SqlStateDe(Exception ex) =>
+        ex is DbUpdateException { InnerException: Npgsql.PostgresException pg } ? pg.SqlState : "-";
 
     /// <summary>
     /// Registra los adjuntos ICT por REFERENCIA en UNA unidad de trabajo (un solo SaveChanges): uno por
@@ -957,7 +964,7 @@ public sealed class IctOrchestrationService(
         catch (Exception ex) when (EsFalloRecuperable(ex, ct))
         {
             error = CodigoDeFallo(ex);
-            IctOrchestrationLog.StepFailed(logger, "update_commercial", error, ex.GetType().Name, instanceId);
+            IctOrchestrationLog.StepFailed(logger, "update_commercial", error, ex.GetType().Name, SqlStateDe(ex), instanceId);
         }
 
         return new DraftReply
@@ -1074,6 +1081,6 @@ internal static partial class IctOrchestrationLog
 
     // Bug #13304 — un paso NO fatal de la materialización lanzó: solo el paso, el código estable, el TIPO
     // de la excepción y el id (nunca ex.Message, que puede traer el valor que reventó la columna).
-    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: el paso {Step} falló ({Code}, {ExceptionType}). Instancia {InstanceId}.")]
-    public static partial void StepFailed(ILogger logger, string step, string code, string exceptionType, Guid instanceId);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: el paso {Step} falló ({Code}, {ExceptionType}, SqlState {SqlState}). Instancia {InstanceId}.")]
+    public static partial void StepFailed(ILogger logger, string step, string code, string exceptionType, string sqlState, Guid instanceId);
 }

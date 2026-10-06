@@ -211,12 +211,16 @@ public static class IctPayloadNormalizer
     }
 
     /// <summary>
-    /// Tope del nombre completo del actor en core-api (<c>procedure_instance_actors.full_name varchar(200)</c>).
+    /// Tope del nombre completo del actor en core-api (<c>procedure_instance_actors.full_name varchar(320)</c>).
+    /// Con los topes por parte (name/first_last_name/second_last_name ≤ 100) el armado llega como mucho a 302.
     /// </summary>
-    public const int MaxActorFullNameLength = 200;
+    public const int MaxActorFullNameLength = 320;
 
-    /// <summary>Tope del teléfono del actor en core-api (<c>procedure_instance_actors.phone varchar(20)</c>).</summary>
-    public const int MaxActorPhoneLength = 20;
+    /// <summary>
+    /// Tope del teléfono del actor en core-api (<c>procedure_instance_actors.phone varchar(50)</c>); coincide con
+    /// la columna de ICT (<c>external_integration_actors.phone varchar(50)</c>).
+    /// </summary>
+    public const int MaxActorPhoneLength = 50;
 
     /// <summary>Códigos de documento que core-api acepta para un actor (ActorsCommand.ValidDocumentTypes).</summary>
     public static readonly IReadOnlyList<string> DocumentTypeCodes = ["CC", "CE", "NIT", "PAS", "TI"];

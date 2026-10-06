@@ -25,8 +25,23 @@ public sealed class EditPreTramiteHandler(
     /// <summary>core-api no respondió (canal gRPC caído); el cliente puede reintentar.</summary>
     public const string CoreApiUnavailable = "core_api_unavailable";
 
-    /// <summary>Precio fuera de rango (mismo criterio que el registro: &gt; 0, 2 decimales, 17 dígitos).</summary>
+    /// <summary>Precio fuera de rango (mismo criterio que el registro: &gt; 0, 2 decimales, 16 dígitos enteros).</summary>
     public const string InvalidSellingPrice = "invalid_selling_price";
+
+    /// <summary>El pre-trámite existe en ICT pero core-api no encuentra el trámite materializado.</summary>
+    public const string CoreApiNotFound = "core_api_not_found";
+
+    /// <summary>core-api devolvió un error no previsto; su código interno NO se propaga al cliente.</summary>
+    public const string CoreApiError = "core_api_error";
+
+    /// <summary>
+    /// Tope del precio de venta: core-api lo guarda en <c>numeric(18,2)</c> = 16 dígitos enteros + 2 decimales.
+    /// </summary>
+    public const decimal MaxSellingPrice = 9999999999999999.99m;
+
+    /// <summary>Precio válido para ICT y para core-api: &gt; 0, máximo 2 decimales y 16 dígitos enteros.</summary>
+    public static bool IsValidSellingPrice(decimal price) =>
+        price is > 0m and <= MaxSellingPrice && decimal.Round(price, 2) == price;
 
     public async Task<(EditPreTramiteResult? Result, string? Error)> HandleAsync(
         EditPreTramiteCommand command,
@@ -88,6 +103,11 @@ public sealed class EditPreTramiteHandler(
             master.SellingDate = command.SellingDate.Trim();
             validationAffectingChanged = true;
             changedFields.Add("selling_date");
+        }
+
+        if (command.SellingPrice is { } requestedPrice && !IsValidSellingPrice(requestedPrice))
+        {
+            return (null, InvalidSellingPrice);
         }
 
         if (command.SellingPrice is { } price && price != master.SellingPrice)
@@ -164,7 +184,7 @@ public sealed class EditPreTramiteHandler(
         CancellationToken ct)
     {
         var price = command.SellingPrice!.Value;
-        if (price is <= 0m or > 99999999999999999m || decimal.Round(price, 2) != price)
+        if (!IsValidSellingPrice(price))
         {
             return (null, InvalidSellingPrice);
         }
@@ -177,24 +197,7 @@ public sealed class EditPreTramiteHandler(
         var (ok, error) = await draftClient.UpdateCommercialAsync(tenantId, procedureInstanceId, master.Id, price, ct);
         if (!ok)
         {
-            return (null, error switch
-            {
-                NotDraft => NotDraft,
-                null or "" or "grpc_unavailable" => CoreApiUnavailable,
-                _ => error,
-            });
-        }
-
-        master.SellingPrice = price;
-        master.UpdatedBy = currentTenant.IntegrationClientId;
-
-        try
-        {
-            await repository.SaveAsync(tenantId, ct);
-        }
-        catch (IctConcurrencyException)
-        {
-            return (null, "stale");
+            return (null, MapCoreApiError(error));
         }
 
         var detail = JsonSerializer.Serialize(new
@@ -202,8 +205,52 @@ public sealed class EditPreTramiteHandler(
             changed_fields = new[] { "selling_price" },
             validation_affecting = false,
         });
+
+        // core-api ya aceptó el precio. Si el master cambió entre la lectura y el guardado (row_version), se
+        // recarga, se reaplica y se reintenta UNA vez: el precio ya vive en FLIT y no debe quedar distinto aquí.
+        if (!await TrySaveSellingPriceAsync(master, price, tenantId, ct))
+        {
+            var reloaded = await repository.GetAsync(master.Id, tenantId, ct);
+            if (reloaded is null || !await TrySaveSellingPriceAsync(reloaded, price, tenantId, ct))
+            {
+                // Sin valores (el precio no va al timeline): solo deja constancia de que FLIT y ICT difieren.
+                await repository.RecordTimelineEventAsync(master.Id, tenantId, "editado", "desincronizado", detail, ct);
+                return (null, "stale");
+            }
+        }
+
         await repository.RecordTimelineEventAsync(master.Id, tenantId, "editado", "ok", detail, ct);
 
         return (new EditPreTramiteResult(master.Id, ValidationReset: false), null);
     }
+
+    /// <summary>Aplica el precio al master y guarda; false si el guardado choca por row_version.</summary>
+    private async Task<bool> TrySaveSellingPriceAsync(
+        ExternalIntegrationMaster master, decimal price, Guid tenantId, CancellationToken ct)
+    {
+        master.SellingPrice = price;
+        master.UpdatedBy = currentTenant.IntegrationClientId;
+        try
+        {
+            await repository.SaveAsync(tenantId, ct);
+            return true;
+        }
+        catch (IctConcurrencyException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Lista blanca de errores de core-api al editar el precio. Lo no previsto sale como
+    /// <see cref="CoreApiError"/>: el código interno de FLIT no se expone al cliente ICT.
+    /// </summary>
+    internal static string MapCoreApiError(string? error) => error switch
+    {
+        NotDraft => NotDraft,
+        "invalid_valor_venta" => InvalidSellingPrice,
+        "not_found" => CoreApiNotFound,
+        null or "" or "grpc_unavailable" => CoreApiUnavailable,
+        _ => CoreApiError,
+    };
 }
