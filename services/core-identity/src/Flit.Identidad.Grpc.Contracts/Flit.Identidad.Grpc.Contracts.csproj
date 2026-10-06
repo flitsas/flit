@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13316 (ADR-0070, contrato de plataforma v1.3 §6.1) — contrato gRPC de Identidad (flit.identidad.v1),
+    generado desde contracts/proto. Cliente y servidor (Both): core-identity atiende, los demás servicios llaman.
+    Ver la nota sobre el contexto de Docker en Flit.Platform.Grpc.Contracts.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Identidad.Grpc.V1</RootNamespace>
+    <ProtoRoot>..\..\..\..\contracts\proto</ProtoRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="$(ProtoRoot)\flit\identidad\v1\*.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="Both" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Tools">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

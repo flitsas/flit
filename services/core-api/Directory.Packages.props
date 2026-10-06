@@ -100,6 +100,12 @@
 
     <!-- gRPC server para la orquestación de creación de borrador desde core-ict (ICT). -->
     <PackageVersion Include="Grpc.AspNetCore" Version="2.71.0" />
+    <!-- Epic #13316 (ADR-0070) — contratos gRPC entre servicios generados desde contracts/proto. Mismas versiones que
+         services/core-ict/Directory.Packages.props, de donde ya llegaban a core-api a través de Flit.Ict.Grpc.Contracts:
+         no entra ningún paquete nuevo a la solución, solo se declara aquí la versión. -->
+    <PackageVersion Include="Google.Protobuf" Version="3.30.2" />
+    <PackageVersion Include="Grpc.Net.ClientFactory" Version="2.71.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.71.0" />
 
     <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
          AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->

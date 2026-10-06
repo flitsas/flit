@@ -3,10 +3,10 @@ name: Core API (.NET 10)
 on:
   push:
     branches: [develop, main]
-    paths: ['services/core-api/**', 'services/core-identity/**', 'contracts/openapi/core-api.v1.yaml', 'contracts/openapi/external-api.v1.json']
+    paths: ['services/core-api/**', 'services/core-identity/**', 'services/core-consultas/**', 'contracts/proto/**', 'contracts/openapi/core-api.v1.yaml', 'contracts/openapi/external-api.v1.json']
   pull_request:
     branches: [develop]
-    paths: ['services/core-api/**', 'services/core-identity/**', 'contracts/openapi/core-api.v1.yaml', 'contracts/openapi/external-api.v1.json']
+    paths: ['services/core-api/**', 'services/core-identity/**', 'services/core-consultas/**', 'contracts/proto/**', 'contracts/openapi/core-api.v1.yaml', 'contracts/openapi/external-api.v1.json']
 
 jobs:
   build-test:

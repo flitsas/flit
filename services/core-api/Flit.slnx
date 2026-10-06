@@ -13,6 +13,9 @@
     <Project Path="../core-identity/src/Flit.Identity.Application/Flit.Identity.Application.csproj" />
     <Project Path="../core-identity/src/Flit.Identity.Web/Flit.Identity.Web.csproj" />
     <Project Path="../core-identity/src/Flit.Identity.Api/Flit.Identity.Api.csproj" />
+    <Project Path="../core-identity/src/Flit.Platform.Grpc.Contracts/Flit.Platform.Grpc.Contracts.csproj" />
+    <Project Path="../core-identity/src/Flit.Identidad.Grpc.Contracts/Flit.Identidad.Grpc.Contracts.csproj" />
+    <Project Path="../core-consultas/src/Flit.Consultas.Grpc.Contracts/Flit.Consultas.Grpc.Contracts.csproj" />
     <Project Path="src/Flit.Tramites.Domain/Flit.Tramites.Domain.csproj" />
     <Project Path="src/Flit.Tramites.Application/Flit.Tramites.Application.csproj" />
     <Project Path="src/Flit.Modules.Security.Application/Flit.Modules.Security.Application.csproj" />

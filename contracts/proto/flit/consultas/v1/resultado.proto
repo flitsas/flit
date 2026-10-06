@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+import "flit/consultas/v1/certificaciones.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Resultado normalizado de una consulta. Refleja ConsultationResult de core-api sin perder información:
+// semáforo, chequeos con su detalle, campos que el proveedor devolvió, certificaciones y respuesta cruda.
+message ResultadoConsulta {
+  // Proveedor que respondió (clave del adaptador). Con caché, el que respondió originalmente.
+  string proveedor = 1;
+  Semaforo semaforo = 2;
+  repeated Chequeo chequeos = 3;
+  // Datos devueltos por el proveedor con las claves de campo de la plataforma (por ejemplo "vehicle_brand",
+  // "soat_vencimiento", "person_full_name", "rues_razon_social").
+  repeated Campo campos = 4;
+  bool desde_cache = 5;
+  google.protobuf.Timestamp consultado_en = 6;
+  // Certificaciones en vocabulario canónico, cuando el proveedor las entrega.
+  Certificaciones certificaciones = 7;
+  // Solo si se pidió incluir_respuesta_cruda y el proveedor la entrega.
+  RespuestaCruda respuesta_cruda = 8;
+}
+
+enum Semaforo {
+  SEMAFORO_UNSPECIFIED = 0;
+  SEMAFORO_VERDE = 1;
+  SEMAFORO_AMARILLO = 2;
+  SEMAFORO_ROJO = 3;
+}
+
+message Chequeo {
+  // Clave estable del chequeo (por ejemplo "soat", "tecnomecanica", "multas", "medidas_correctivas", "provider").
+  string clave = 1;
+  string etiqueta = 2;
+  EstadoChequeo estado = 3;
+  // Fuente que respalda el chequeo (por ejemplo "RUNT", "SIMIT").
+  string fuente = 4;
+  string mensaje = 5;
+  // Comparendos detallados, en los chequeos de multas.
+  repeated Comparendo comparendos = 6;
+  // Datos del proveedor que respaldan el chequeo, como pares etiqueta y valor.
+  repeated Dato datos = 7;
+}
+
+enum EstadoChequeo {
+  ESTADO_CHEQUEO_UNSPECIFIED = 0;
+  ESTADO_CHEQUEO_OK = 1;
+  ESTADO_CHEQUEO_WARN = 2;
+  // Dato no encontrado o condición que no se cumple. No dispara la cadena de respaldo.
+  ESTADO_CHEQUEO_FAIL = 3;
+  // Dato ausente pero no crítico. No bloquea.
+  ESTADO_CHEQUEO_UNKNOWN = 4;
+  // El proveedor no respondió: no se pudo verificar. Bloqueo duro y dispara la cadena de respaldo.
+  ESTADO_CHEQUEO_ERROR = 5;
+}
+
+// Un comparendo pendiente. Nunca incluye datos del infractor.
+message Comparendo {
+  string numero = 1;
+  // AAAA-MM-DD cuando el proveedor la entrega.
+  string fecha = 2;
+  // Valor en pesos, como texto decimal ("1234567.89"); vacío si no viene.
+  string valor = 3;
+  string organismo = 4;
+  string estado = 5;
+  string infraccion = 6;
+}
+
+message Dato {
+  string etiqueta = 1;
+  string valor = 2;
+}
+
+message Campo {
+  string clave = 1;
+  string valor_texto = 2;
+  // JSON, para campos estructurados (por ejemplo "runt_gravamenes").
+  string valor_json = 3;
+}
+
+message RespuestaCruda {
+  string proveedor = 1;
+  // "vehicle" | "company" | "person".
+  string tipo_sujeto = 2;
+  string clave_sujeto = 3;
+  // JSON sanitizado.
+  string json = 4;
+}
+
+message Avaluo {
+  // Fuente (por ejemplo "fasecolda", "base_gravable", "mercado_libre").
+  string fuente = 1;
+  EstadoAvaluo estado = 2;
+  // Pesos colombianos; 0 si no hay valor.
+  int64 valor = 3;
+  string mensaje = 4;
+  // Número de muestras, en las fuentes que lo informan; 0 si no aplica.
+  int32 muestras = 5;
+}
+
+enum EstadoAvaluo {
+  ESTADO_AVALUO_UNSPECIFIED = 0;
+  ESTADO_AVALUO_OK = 1;
+  ESTADO_AVALUO_SIN_DATOS = 2;
+  ESTADO_AVALUO_ERROR = 3;
+}
