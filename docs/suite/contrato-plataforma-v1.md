@@ -155,8 +155,8 @@ Las llamadas síncronas de un servicio a otro usan gRPC en la red interna (ADR-0
 
 | Servicio gRPC | Lo atiende | Scope | Reemplaza |
 |---|---|---|---|
-| `flit.consultas.v1.Consultas` | `core-consultas` | `platform.consultas` | `POST /consultas/{fuente}` de v1 (nunca se implementó) y, tras el corte, `IctConsultationService` de `core-api` |
-| `flit.identidad.v1.Identidad` | `core-identity` | `platform.identidad.read` | — (nuevo: usuarios de una empresa y productos habilitados, para que ningún servicio lea las tablas de Identidad) |
+| `flit.consultas.v1.ConsultasService` | `core-consultas` | `platform.consultas` | `POST /consultas/{fuente}` de v1 (nunca se implementó) y, tras el corte, `IctConsultationService` de `core-api` |
+| `flit.identidad.v1.IdentidadService` | `core-identity` | `platform.identidad.read` | — (nuevo: usuarios de una empresa y productos habilitados, para que ningún servicio lea las tablas de Identidad) |
 
 Los métodos se definen en los `.proto`; este contrato fija el servicio, quién lo atiende y su scope.
 
