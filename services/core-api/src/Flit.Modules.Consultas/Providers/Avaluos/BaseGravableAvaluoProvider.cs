@@ -7,7 +7,7 @@ namespace Flit.Infrastructure.Consultations.Avaluos;
 /// lee <c>avaluo_mock_values</c> por VIN/placa. Sirve como referencia en el desglose; se puede
 /// sustituir por la integración real activándolo por configuración sin tocar el handler (ADR-0029).
 /// </summary>
-internal sealed class BaseGravableAvaluoProvider(AvaluoMockValueReader mockReader) : IAvaluoProvider
+internal sealed class BaseGravableAvaluoProvider(IAvaluoMockValueSource mockReader) : IAvaluoProvider
 {
     private const string SourceKey = "base_gravable";
 

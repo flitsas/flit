@@ -19,7 +19,7 @@ internal sealed class FasecoldaAvaluoProvider(
     IOptions<FasecoldaOptions> options,
     IOptions<ConsultationProviderModeOptions> modeOptions,
     FasecoldaTokenCache tokenCache,
-    AvaluoMockValueReader mockReader) : IAvaluoProvider
+    IAvaluoMockValueSource mockReader) : IAvaluoProvider
 {
     private const string SourceKey = "fasecolda";
     private const long ThousandsToPesos = 1000;

@@ -1,6 +1,7 @@
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
+using Flit.Modules.Consultas.Runt;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -207,12 +208,12 @@ public static class IntempoVehicleResultMapper
         // Señal RUNT de prenda/gravamen (+ detalle de acreedores cuando Intempo lo trae). Bug #13203
         // (revisión PR #504): las claves de la señal se escriben SIEMPRE, vacías si no hay dato, para
         // que una re-consulta pise lo que dejó la anterior (el upsert no borra). El check no cambia.
-        fields.Add(new HydratedField(RuntGravamenSignal.GravamenesKey, RuntGarantiasMobiliarias.Blank(r.TieneGravamenes), null));
-        fields.Add(new HydratedField(RuntGravamenSignal.PrendasKey, RuntGarantiasMobiliarias.Blank(r.Prendas), null));
+        fields.Add(new HydratedField(RuntGravamenDatos.GravamenesKey, RuntGarantiasMobiliarias.Blank(r.TieneGravamenes), null));
+        fields.Add(new HydratedField(RuntGravamenDatos.PrendasKey, RuntGarantiasMobiliarias.Blank(r.Prendas), null));
         Add(fields, "runt_prendario", r.Prendario);
         fields.Add(new HydratedField(RuntGarantiasMobiliarias.NombreAcreedorKey, RuntGarantiasMobiliarias.Blank(r.NombreAcreedor), null));
         fields.Add(new HydratedField(
-            RuntGravamenSignal.DetalleKey,
+            RuntGravamenDatos.DetalleKey,
             null,
             r.Gravamenes is { Count: > 0 } detalle
                 ? System.Text.Json.JsonSerializer.Serialize(detalle)

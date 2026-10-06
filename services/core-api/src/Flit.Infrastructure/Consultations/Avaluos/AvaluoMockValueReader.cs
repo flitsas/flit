@@ -8,7 +8,7 @@ namespace Flit.Infrastructure.Consultations.Avaluos;
 /// Habilita el modo mock de los proveedores en DEV/QA (tabla sembrada por la migración del Feature #10707).
 /// En producción la tabla arranca vacía → devuelve null.
 /// </summary>
-internal sealed class AvaluoMockValueReader(FlitDbContext db)
+internal sealed class AvaluoMockValueReader(FlitDbContext db) : IAvaluoMockValueSource
 {
     public async Task<long?> GetValueAsync(string matchKey, string source, CancellationToken ct)
     {

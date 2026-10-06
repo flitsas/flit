@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Flit.Modules.Consultas.Runt;
 using Flit.Tramites.Domain.Entities;
 
 namespace Flit.Tramites.Domain.Tramites.Services;
@@ -16,61 +16,20 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// </summary>
 public static class RuntGravamenSignal
 {
-    public const string PrendasKey = "runt_tiene_prendas";
-    public const string GravamenesKey = "runt_tiene_gravamenes";
-    public const string DetalleKey = "runt_gravamenes";
+    // HU #13342 (Epic #13316): la lectura pura vive en el módulo de consultas (RuntGravamenDatos), que la usa para
+    // hidratar; aquí queda la API de siempre y la evaluación sobre los field_values de la instancia.
+    public const string PrendasKey = RuntGravamenDatos.PrendasKey;
+    public const string GravamenesKey = RuntGravamenDatos.GravamenesKey;
+    public const string DetalleKey = RuntGravamenDatos.DetalleKey;
 
     /// <summary>El RUNT contesta «SI»/«NO» en texto; se acepta cualquier variante afirmativa razonable.</summary>
-    public static bool EsAfirmativo(string? valor) =>
-        valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
+    public static bool EsAfirmativo(string? valor) => RuntGravamenDatos.EsAfirmativo(valor);
 
-    // Mismos campos con los que el normalizador de consultas decide que un ítem tiene datos
-    // (RuntGarantiasMobiliarias.Normalize): nombre, documento, idPrenda o fecha, en cualquiera de sus alias.
-    private static readonly string[] CamposConDato =
-    [
-        "acreedor", "nombreAcreedor", "entidad",
-        "numeroDocumentoAcreedor", "numeroDocumentoEntidad",
-        "idPrenda",
-        "fechaInscripcion", "fechaRegistro",
-    ];
-
-    /// <summary>
-    /// Garantías con datos en el array JSON: cuenta los objetos que traen nombre, documento, idPrenda o
-    /// fecha con valor (revisión PR #504, O3), igual que el normalizador. null, escalares, <c>{}</c> y
-    /// objetos sin esos valores no cuentan. 0 si el JSON es null, vacío, no es array o no parsea.
-    /// </summary>
-    public static int ContarGarantias(string? detalleJson)
-    {
-        if (string.IsNullOrWhiteSpace(detalleJson))
-            return 0;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(detalleJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-                return 0;
-
-            return doc.RootElement.EnumerateArray().Count(TieneDato);
-        }
-        catch (JsonException)
-        {
-            return 0;
-        }
-    }
-
-    private static bool TieneDato(JsonElement item) =>
-        item.ValueKind == JsonValueKind.Object
-        && item.EnumerateObject().Any(p =>
-            CamposConDato.Contains(p.Name, StringComparer.OrdinalIgnoreCase)
-            && p.Value.ValueKind switch
-            {
-                JsonValueKind.String => !string.IsNullOrWhiteSpace(p.Value.GetString()),
-                JsonValueKind.Number => true,
-                _ => false,
-            });
+    /// <summary>Garantías con datos en el array JSON (ver <see cref="RuntGravamenDatos.ContarGarantias"/>).</summary>
+    public static int ContarGarantias(string? detalleJson) => RuntGravamenDatos.ContarGarantias(detalleJson);
 
     public static bool Reporta(string? prendas, string? gravamenes, string? detalleJson) =>
-        EsAfirmativo(prendas) || EsAfirmativo(gravamenes) || ContarGarantias(detalleJson) > 0;
+        RuntGravamenDatos.Reporta(prendas, gravamenes, detalleJson);
 
     /// <summary>
     /// Evalúa sobre los <c>field_values</c> de la instancia. El detalle se lee de <c>ValueJson</c> (así

@@ -391,6 +391,7 @@ Flit.Infrastructure.Analytics.Scheduling.OtReportDocumentBuilder => Flit.Infrast
 Flit.Infrastructure.Analytics.Scheduling.UsageReportDocumentBuilder => Flit.Infrastructure.Analytics.Scheduling.UsageReportDocumentBuilder (Scoped)
 Flit.Infrastructure.Consultations.Avaluos.AvaluoMockValueReader => Flit.Infrastructure.Consultations.Avaluos.AvaluoMockValueReader (Scoped)
 Flit.Infrastructure.Consultations.Avaluos.FasecoldaTokenCache => Flit.Infrastructure.Consultations.Avaluos.FasecoldaTokenCache (Singleton)
+Flit.Infrastructure.Consultations.Avaluos.IAvaluoMockValueSource => factory (Scoped)
 Flit.Infrastructure.Consultations.FlitFinesConsultationProvider => factory (Transient)
 Flit.Infrastructure.Consultations.IntempoConsultationProvider => factory (Transient)
 Flit.Infrastructure.Consultations.KyverumFinesConsultationProvider => factory (Transient)

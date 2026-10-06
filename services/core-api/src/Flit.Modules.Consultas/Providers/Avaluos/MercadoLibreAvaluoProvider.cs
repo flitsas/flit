@@ -8,7 +8,7 @@ namespace Flit.Infrastructure.Consultations.Avaluos;
 /// determinista. La integración real (sites/MCO/search + mediana con outliers p10-p90) se
 /// habilita por configuración sin tocar el handler (ADR-0029).
 /// </summary>
-internal sealed class MercadoLibreAvaluoProvider(AvaluoMockValueReader mockReader) : IAvaluoProvider
+internal sealed class MercadoLibreAvaluoProvider(IAvaluoMockValueSource mockReader) : IAvaluoProvider
 {
     private const string SourceKey = "mercado_libre";
 

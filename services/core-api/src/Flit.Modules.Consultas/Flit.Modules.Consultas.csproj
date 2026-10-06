@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13316 (HU #13342, ADR-0065) — consultas a proveedores como módulo de plataforma: contratos
+    (IConsultationProvider, cadena de respaldo, overrides por empresa), adaptadores (Verifik, Kyverum, Intempo,
+    comparendos), avalúos (Fasecolda y mocks) y los hechos certificados que devuelven. Lo aloja core-api hoy y
+    core-consultas después (HU #13343).
+
+    Regla: NO referencia ningún proyecto Flit.Tramites.* (lo vigila ConsultasModuleArchitectureTests). Lo que lee
+    tablas de core-api (override por empresa, política de avalúos, valores mock) queda en Flit.Infrastructure como
+    puente sobre los puertos de este módulo. Los tipos que salieron de Trámites e Infrastructure conservan su espacio
+    de nombres para que ningún consumidor ni prueba cambie; renombrarlos es un paso aparte.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Modules.Consultas</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Tramites.Domain" />
+    <InternalsVisibleTo Include="Flit.Tramites.Application" />
+    <InternalsVisibleTo Include="Flit.Infrastructure" />
+    <InternalsVisibleTo Include="Flit.Api" />
+    <InternalsVisibleTo Include="Flit.Consultas.Api" />
+    <InternalsVisibleTo Include="Flit.Tramites.Domain.Tests" />
+    <InternalsVisibleTo Include="Flit.Tramites.Application.Tests" />
+    <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
+    <InternalsVisibleTo Include="Flit.Consultas.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

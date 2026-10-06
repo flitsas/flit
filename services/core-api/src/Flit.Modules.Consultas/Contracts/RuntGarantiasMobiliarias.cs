@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Flit.Modules.Consultas.Runt;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -234,14 +235,14 @@ public static class RuntGarantiasMobiliarias
         ArgumentNullException.ThrowIfNull(fields);
         ArgumentNullException.ThrowIfNull(garantias);
 
-        fields.Add(new HydratedField(RuntGravamenSignal.GravamenesKey, Blank(gravamenes), null));
-        fields.Add(new HydratedField(RuntGravamenSignal.PrendasKey, Blank(prendas), null));
+        fields.Add(new HydratedField(RuntGravamenDatos.GravamenesKey, Blank(gravamenes), null));
+        fields.Add(new HydratedField(RuntGravamenDatos.PrendasKey, Blank(prendas), null));
 
         var primerAcreedor = garantias.Select(g => g.NombreAcreedor).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
         fields.Add(new HydratedField(NombreAcreedorKey, primerAcreedor, null));
 
         fields.Add(new HydratedField(
-            RuntGravamenSignal.DetalleKey,
+            RuntGravamenDatos.DetalleKey,
             null,
             garantias.Count == 0 ? SinGarantiasJson : JsonSerializer.Serialize(garantias, GravamenJsonOptions)));
     }
@@ -252,7 +253,7 @@ public static class RuntGarantiasMobiliarias
     /// </summary>
     public static ConsultationCheck BuildCheck(string provider, string? gravamenes, string? prendas, int garantias)
     {
-        if (RuntGravamenSignal.EsAfirmativo(gravamenes) || RuntGravamenSignal.EsAfirmativo(prendas))
+        if (RuntGravamenDatos.EsAfirmativo(gravamenes) || RuntGravamenDatos.EsAfirmativo(prendas))
         {
             return new ConsultationCheck(
                 CheckKey, CheckLabel, Warn, provider,

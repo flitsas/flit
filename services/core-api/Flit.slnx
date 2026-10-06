@@ -11,6 +11,7 @@
     <Project Path="src/Flit.Identity.Infrastructure/Flit.Identity.Infrastructure.csproj" />
     <Project Path="src/Flit.Suite.AspNetCore/Flit.Suite.AspNetCore.csproj" />
     <Project Path="src/Flit.Platform.Sdk/Flit.Platform.Sdk.csproj" />
+    <Project Path="src/Flit.Modules.Consultas/Flit.Modules.Consultas.csproj" />
     <Project Path="../core-identity/src/Flit.Identity.Application/Flit.Identity.Application.csproj" />
     <Project Path="../core-identity/src/Flit.Identity.Web/Flit.Identity.Web.csproj" />
     <Project Path="../core-identity/src/Flit.Identity.Api/Flit.Identity.Api.csproj" />

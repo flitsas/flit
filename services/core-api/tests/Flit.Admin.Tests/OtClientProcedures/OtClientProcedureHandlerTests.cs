@@ -688,7 +688,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
             SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
             // VerifikResultMapper.MapHydratedFields persiste el año bajo "vehicle_year"
-            // (services/core-api/src/Flit.Tramites.Application/UseCases/Consultations/VerifikResultMapper.cs:182).
+            // (services/core-api/src/Flit.Modules.Consultas/Contracts/VerifikResultMapper.cs).
             // "vehicle_model" nunca se escribe en runtime.
             seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
             {
