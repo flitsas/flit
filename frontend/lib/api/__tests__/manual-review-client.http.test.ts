@@ -249,3 +249,26 @@ describe('el adaptador simulado respeta la misma forma que el real', () => {
     );
   });
 });
+
+describe('autenticación del cliente real', () => {
+  it('el JWT viaja en la cabecera Authorization (nunca en la URL) y no se envía X-Tenant-Id', async () => {
+    localStorage.setItem('flit:jwt', 'jwt-de-prueba');
+    const visto: { url: string; headers: Record<string, string> }[] = [];
+    global.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      visto.push({ url: url.toString(), headers: { ...(init?.headers as Record<string, string>) } });
+      return new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 10 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as never;
+    await manualReviewHttpClient.listManual({ page: 1, pageSize: 10 });
+    await manualReviewHttpClient.getManualImage(ID, 'rostro').catch(() => undefined);
+    for (const v of visto) {
+      expect(v.headers.Authorization).toBe('Bearer jwt-de-prueba');
+      expect(Object.keys(v.headers).map((k) => k.toLowerCase())).not.toContain('x-tenant-id');
+      expect(v.url).not.toContain('jwt-de-prueba');
+    }
+    expect(visto).toHaveLength(2);
+    localStorage.removeItem('flit:jwt');
+  });
+});

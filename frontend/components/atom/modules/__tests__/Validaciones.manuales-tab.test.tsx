@@ -1,7 +1,7 @@
 /**
  * HU-C5 (#13300) — la pestaña «Validaciones manuales» solo existe para el Super Admin y la lista actual no cambia.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -65,7 +65,10 @@ function renderValidaciones() {
   );
 }
 
+afterEach(() => vi.unstubAllEnvs());
+
 beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_MANUAL_REVIEW_MOCK', 'true');
   vi.clearAllMocks();
   mocks.isSuperAdmin = false;
   mocks.listStuckIdentityValidations.mockResolvedValue({ stuck: [], total: 0, maxDeliveryAttempts: 5 });

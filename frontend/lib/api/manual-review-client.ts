@@ -1,7 +1,7 @@
 // Cliente de la revisión manual de identidad (Épica #13202, Feature C). Solo Super Admin.
-// Contrato: docs/design/EPICA-13202-contrato-api.md §3. Por defecto usa el adaptador SIMULADO
-// (datos sintéticos); `NEXT_PUBLIC_MANUAL_REVIEW_MOCK=false` conmuta al cliente HTTP real sin tocar
-// los componentes.
+// Contrato: docs/design/EPICA-13202-contrato-api.md §3. Por defecto usa el cliente HTTP REAL
+// (mismo origen/rewrite y token en cabecera que `apiFetch`; sin X-Tenant-Id: el backend resuelve el tenant desde la fila).
+// El adaptador SIMULADO (datos sintéticos) solo se activa con `NEXT_PUBLIC_MANUAL_REVIEW_MOCK=true`.
 import { apiFetch, friendlyErrorMessage, getToken, resolveApiUrl } from './client';
 import { ApiError } from './types';
 import { createMockManualReviewClient } from './manual-review-mock';
@@ -71,14 +71,14 @@ export const manualReviewHttpClient: ManualReviewClient = {
     }),
 };
 
-/** `true` salvo que `NEXT_PUBLIC_MANUAL_REVIEW_MOCK` sea exactamente «false». */
+/** `true` solo si `NEXT_PUBLIC_MANUAL_REVIEW_MOCK` es exactamente «true»; sin variable se usa el backend real. */
 export function manualReviewMockActivo(): boolean {
-  return process.env.NEXT_PUBLIC_MANUAL_REVIEW_MOCK !== 'false';
+  return process.env.NEXT_PUBLIC_MANUAL_REVIEW_MOCK === 'true';
 }
 
 let mockSingleton: ManualReviewClient | null = null;
 
-/** Cliente que usa la UI: simulado por defecto, HTTP real con la variable en «false». */
+/** Cliente que usa la UI: HTTP real por defecto, simulado solo con la variable en «true». */
 export function getManualReviewClient(): ManualReviewClient {
   if (!manualReviewMockActivo()) return manualReviewHttpClient;
   mockSingleton ??= createMockManualReviewClient();
