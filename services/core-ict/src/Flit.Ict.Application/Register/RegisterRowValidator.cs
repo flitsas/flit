@@ -189,8 +189,9 @@ public sealed class RegisterRowValidator : AbstractValidator<RegisterRowInput>
     /// <summary>Traspaso bilateral (3) o unilateral (4): el vehículo ya existe y tiene placa.</summary>
     internal static bool IsTraspaso(int transactionType) => transactionType is 3 or 4;
 
+    /// <summary>NIT tras normalizar el alias (<c>"N.I.T"</c>, <c>"nit"</c>, <c>"N"</c> → NIT).</summary>
     internal static bool IsNit(string? documentType) =>
-        string.Equals(documentType?.Trim(), Nit, StringComparison.OrdinalIgnoreCase);
+        string.Equals(IctPayloadNormalizer.NormalizeDocumentType(documentType), Nit, StringComparison.Ordinal);
 }
 
 /// <summary>Valida un actor del payload (vendedor/comprador/locatario). Paridad con <c>ActorRequestDto</c> de v1.</summary>
@@ -202,9 +203,12 @@ public sealed class RegisterActorInputValidator : AbstractValidator<RegisterActo
     public RegisterActorInputValidator(bool requireLegalRepForNit)
     {
         RuleFor(a => a.DocumentType).NotEmpty().WithMessage("document_type del actor es obligatorio");
-        RuleFor(a => a.DocumentType).MaximumLength(5)
-            .When(a => !string.IsNullOrEmpty(a.DocumentType))
-            .WithMessage("document_type debe tener máximo 5 caracteres");
+        // Bug #13304: core-api solo guarda CC, CE, NIT, PAS o TI. Un tipo fuera del catálogo pasaba aquí y el
+        // trámite llegaba a FLIT sin actores. Los alias habituales se aceptan y el normalizer los traduce.
+        RuleFor(a => a.DocumentType)
+            .Must(dt => IctPayloadNormalizer.NormalizeDocumentType(dt) is not null)
+            .When(a => !string.IsNullOrWhiteSpace(a.DocumentType))
+            .WithMessage("document_type del actor no es válido (use CC, CE, NIT, PAS o TI)");
 
         RuleFor(a => a.DocumentNumber).NotEmpty().WithMessage("document_number del actor es obligatorio");
         RuleFor(a => a.DocumentNumber).MaximumLength(12)
@@ -226,9 +230,35 @@ public sealed class RegisterActorInputValidator : AbstractValidator<RegisterActo
 
         RuleFor(a => a.SecondLastName).MaximumLength(100)
             .When(a => !string.IsNullOrEmpty(a.SecondLastName));
-        RuleFor(a => a.Phone).MaximumLength(50)
+
+        // Bug #13304: nombre completo tal como viaja a core-api (full_name varchar(200)).
+        RuleFor(a => a)
+            .Must(a => IctPayloadNormalizer.ActorFullName(a.Name, a.FirstLastName, a.SecondLastName).Length
+                <= IctPayloadNormalizer.MaxActorFullNameLength)
+            .WithName("name")
+            .WithMessage("name, first_last_name y second_last_name del actor juntos deben tener máximo 200 caracteres");
+
+        // Bug #13304: teléfono ≤ 20 tras quitar espacios y símbolos (core-api phone varchar(20)); el valor
+        // que se guarda y viaja es ese mismo, ya normalizado.
+        RuleFor(a => a.Phone)
+            .Must(p => IctPayloadNormalizer.NormalizePhone(p).Length <= IctPayloadNormalizer.MaxActorPhoneLength)
             .When(a => !string.IsNullOrEmpty(a.Phone))
-            .WithMessage("phone debe tener máximo 50 caracteres");
+            .WithMessage("phone debe tener máximo 20 dígitos (sin contar espacios ni símbolos)");
+
+        // Topes de las columnas de ict.external_integration_actors: sin ellos un valor largo daba 500 en
+        // /register en vez de rechazar la fila.
+        RuleFor(a => a.Email).MaximumLength(255)
+            .When(a => !string.IsNullOrEmpty(a.Email))
+            .WithMessage("email del actor debe tener máximo 255 caracteres");
+        RuleFor(a => a.Address).MaximumLength(150)
+            .When(a => !string.IsNullOrEmpty(a.Address))
+            .WithMessage("address del actor debe tener máximo 150 caracteres");
+        RuleFor(a => a.City).MaximumLength(30)
+            .When(a => !string.IsNullOrEmpty(a.City))
+            .WithMessage("city del actor debe tener máximo 30 caracteres");
+        RuleFor(a => a.State).MaximumLength(22)
+            .When(a => !string.IsNullOrEmpty(a.State))
+            .WithMessage("state del actor debe tener máximo 22 caracteres");
         RuleFor(a => a.ExpeditionDate).Matches(DatePattern)
             .When(a => !string.IsNullOrEmpty(a.ExpeditionDate))
             .WithMessage("expedition_date debe tener el formato dd-mm-yyyy");
@@ -277,6 +307,23 @@ public sealed class RegisterLegalRepresentativeInputValidator : AbstractValidato
 
         RuleFor(r => r.SecondLastName).MaximumLength(100)
             .When(r => !string.IsNullOrEmpty(r.SecondLastName));
+
+        // Bug #13304: topes de columna (legal_representative_*) para rechazar la fila en vez de dar 500.
+        RuleFor(r => r.Phone).MaximumLength(50)
+            .When(r => !string.IsNullOrEmpty(r.Phone))
+            .WithMessage("legal_representative_phone debe tener máximo 50 caracteres");
+        RuleFor(r => r.Email).MaximumLength(255)
+            .When(r => !string.IsNullOrEmpty(r.Email))
+            .WithMessage("legal_representative_email debe tener máximo 255 caracteres");
+        RuleFor(r => r.City).MaximumLength(30)
+            .When(r => !string.IsNullOrEmpty(r.City))
+            .WithMessage("legal_representative_city debe tener máximo 30 caracteres");
+        RuleFor(r => r.State).MaximumLength(22)
+            .When(r => !string.IsNullOrEmpty(r.State))
+            .WithMessage("legal_representative_state debe tener máximo 22 caracteres");
+        RuleFor(r => r.Address).MaximumLength(150)
+            .When(r => !string.IsNullOrEmpty(r.Address))
+            .WithMessage("legal_representative_address debe tener máximo 150 caracteres");
     }
 }
 
@@ -293,6 +340,26 @@ public sealed class RegisterPrincipalMandanteInputValidator : AbstractValidator<
         RuleFor(m => m.Email).EmailAddress()
             .When(m => !string.IsNullOrEmpty(m.Email))
             .WithMessage("principal_mandante_email con formato inválido");
+
+        // Bug #13304: topes de columna (principal_mandante_*) para rechazar la fila en vez de dar 500.
+        RuleFor(m => m.DocumentType).MaximumLength(5)
+            .When(m => !string.IsNullOrEmpty(m.DocumentType))
+            .WithMessage("principal_mandante_document_type debe tener máximo 5 caracteres");
+        RuleFor(m => m.DocumentNumber).MaximumLength(12)
+            .When(m => !string.IsNullOrEmpty(m.DocumentNumber))
+            .WithMessage("principal_mandante_document_number debe tener máximo 12 caracteres");
+        RuleFor(m => m.Name).MaximumLength(100)
+            .When(m => !string.IsNullOrEmpty(m.Name))
+            .WithMessage("principal_mandante_name debe tener máximo 100 caracteres");
+        RuleFor(m => m.FirstLastName).MaximumLength(100)
+            .When(m => !string.IsNullOrEmpty(m.FirstLastName))
+            .WithMessage("principal_mandante_first_last_name debe tener máximo 100 caracteres");
+        RuleFor(m => m.SecondLastName).MaximumLength(100)
+            .When(m => !string.IsNullOrEmpty(m.SecondLastName))
+            .WithMessage("principal_mandante_second_last_name debe tener máximo 100 caracteres");
+        RuleFor(m => m.Email).MaximumLength(255)
+            .When(m => !string.IsNullOrEmpty(m.Email))
+            .WithMessage("principal_mandante_email debe tener máximo 255 caracteres");
     }
 }
 
