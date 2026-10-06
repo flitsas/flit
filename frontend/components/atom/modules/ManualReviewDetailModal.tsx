@@ -207,7 +207,7 @@ function DetalleCuerpo({
         )}
       </UiStateBoundary>
       {mensaje && (
-        <p role="status" className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm font-semibold">
+        <p role="status" className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm font-semibold dark:border-white/10 dark:bg-[#162744] dark:text-white">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-[#557EFF]" aria-hidden /> {mensaje}
         </p>
       )}

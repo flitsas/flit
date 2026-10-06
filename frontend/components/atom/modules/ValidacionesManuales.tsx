@@ -20,6 +20,7 @@ import {
   manualOriginLabel,
 } from '@/lib/identidad/manual-review-meta';
 import { formatFechaHora } from '@/lib/format/date';
+import { MANUAL_INPUT_CLASS, MANUAL_SELECT_CLASS } from './manual-field-styles';
 import { ManualStatusBadge } from './ManualStatusBadge';
 import { ManualReviewDetailModal } from './ManualReviewDetailModal';
 
@@ -138,8 +139,7 @@ export function ValidacionesManuales({
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               placeholder="Buscar"
-              className={`${WIZARD_INPUT} pl-9`}
-              style={{ borderColor: '#DFE5ED' }}
+              className={`${WIZARD_INPUT} ${MANUAL_INPUT_CLASS} pl-9`}
             />
           </div>
         </div>
@@ -154,8 +154,7 @@ export function ValidacionesManuales({
               setStatus(e.target.value as ManualStatus | '');
               setPage(1);
             }}
-            className={`${WIZARD_SELECT} mt-1`}
-            style={{ borderColor: '#DFE5ED' }}
+            className={`${WIZARD_SELECT} ${MANUAL_SELECT_CLASS} mt-1`}
           >
             <option value="">Todos</option>
             {(Object.keys(MANUAL_STATUS_META) as ManualStatus[]).map((s) => (
@@ -176,8 +175,7 @@ export function ValidacionesManuales({
               setOrigin(e.target.value as ManualOrigin | '');
               setPage(1);
             }}
-            className={`${WIZARD_SELECT} mt-1`}
-            style={{ borderColor: '#DFE5ED' }}
+            className={`${WIZARD_SELECT} ${MANUAL_SELECT_CLASS} mt-1`}
           >
             <option value="">Todos</option>
             {(Object.keys(MANUAL_ORIGIN_LABEL) as ManualOrigin[]).map((o) => (

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
+import { MANUAL_SELECT_CLASS } from './manual-field-styles';
 import { WIZARD_CTA_GRADIENT, WIZARD_LABEL, WIZARD_SELECT } from '@/components/operacion/wizard-field-styles';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { ApiError } from '@/lib/api/types';
@@ -239,8 +240,7 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
             onChange={(e) => setMotivo(e.target.value)}
             disabled={busy}
             required
-            className={`${WIZARD_SELECT} mt-1`}
-            style={{ borderColor: '#DFE5ED' }}
+            className={`${WIZARD_SELECT} ${MANUAL_SELECT_CLASS} mt-1`}
           >
             <option value="">Elige un motivo</option>
             {MOTIVOS_RECHAZO_MANUAL.map((m) => (

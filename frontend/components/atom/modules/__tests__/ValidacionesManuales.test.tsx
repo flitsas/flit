@@ -121,6 +121,22 @@ describe('Chips de estado', () => {
   });
 });
 
+describe('Pestaña Validaciones manuales — tema oscuro', () => {
+  it('los selects y la búsqueda traen la capa dark (fondo #162744, texto blanco) y no fijan el borde inline', async () => {
+    render(<ValidacionesManuales client={nuevoCliente()} />);
+    await screen.findByRole('table', { name: 'Validaciones manuales' });
+    for (const campo of [screen.getByLabelText('Estado'), screen.getByLabelText('Origen')]) {
+      expect(campo.className).toContain('dark:bg-[#162744]');
+      expect(campo.className).toContain('dark:text-white');
+      expect(campo.className).toContain('dark:[color-scheme:dark]');
+      expect(campo.getAttribute('style') ?? '').not.toMatch(/border/i);
+    }
+    const busqueda = screen.getByLabelText('Nombre o número de documento');
+    expect(busqueda.className).toContain('dark:bg-[#162744]');
+    expect(busqueda.className).toContain('dark:text-white');
+  });
+});
+
 describe('formatEspera', () => {
   it('formatea minutos, horas y días', () => {
     expect(formatEspera(0)).toBe('< 1 min');
