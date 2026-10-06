@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { Eye, Info } from 'lucide-react';
 import {
@@ -22,6 +22,8 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
+import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
+import { EtiquetaCargadoPorFlito } from './EtiquetaCargadoPorFlito';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -746,9 +748,13 @@ export function DocumentSlot({
   const [localError, setLocalError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const readOnly = useWizardReadOnly();
+  const etiquetaFlitoId = useId();
 
   const tipo = item.docTipo ?? item.key;
   const caption = catalogDocumentTitle(tipo, item.label);
+  // HU #13266 (AC1) — gana quien carga primero (HU #13265): el adjunto de FLITO no se reemplaza ni se
+  // borra desde aquí (el backend respondería 409); la casilla lo dice y solo deja previsualizarlo.
+  const deFlito = esAdjuntoDeFlito(attachment);
   const done = item.satisfied || !!attachment;
   const busy = uploading || analyzing || deleting || generating;
   const isAuto = AUTO_DOC_TIPOS.has(tipo);
@@ -877,6 +883,7 @@ export function DocumentSlot({
           {attachment.filename} · {formatSize(attachment.sizeBytes)}
         </p>
       )}
+      {deFlito && !isAuto && <EtiquetaCargadoPorFlito id={etiquetaFlitoId} className="mt-1" />}
       {isImpronta && attachment?.digitallySigned && !readOnly && (
         <div className="mt-2">
           <InlineAlert tone="warning" title="Impronta ya firmada digitalmente">
@@ -915,6 +922,7 @@ export function DocumentSlot({
               className="text-xs font-semibold"
               style={{ color: '#557EFF' }}
               aria-label={`Previsualizar ${caption}`}
+              aria-describedby={deFlito ? etiquetaFlitoId : undefined}
             >
               Ver
             </button>
@@ -928,55 +936,60 @@ export function DocumentSlot({
                 className="rounded-lg border p-1 disabled:opacity-60"
                 style={{ color: '#557EFF' }}
                 aria-label={`Previsualizar ${caption}`}
+                aria-describedby={deFlito ? etiquetaFlitoId : undefined}
               >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
-            <input
-              ref={inputRef}
-              type="file"
-              accept={(item.mimeTypesAllowed?.length ? item.mimeTypesAllowed : ALLOWED_MIME).join(',')}
-              onChange={handlePick}
-              className="hidden"
-              aria-label={`Subir ${caption}`}
-            />
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy}
-              className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
-              style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            >
-              {analyzing
-                ? 'Analizando documento...'
-                : uploading
-                  ? 'Subiendo…'
-                  : attachment
-                    ? 'Reemplazar archivo'
-                    : 'Adjuntar archivo'}
-            </button>
-            {canGenerate && (
-              <button
-                type="button"
-                onClick={() => void handleGenerate()}
-                disabled={busy}
-                className="h-9 rounded-lg px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ background: '#557EFF' }}
-              >
-                {generating ? 'Generando impronta…' : 'Generar impronta'}
-              </button>
-            )}
-            {attachment && (
-              <button
-                type="button"
-                onClick={() => onRemove(attachment.id)}
-                disabled={busy}
-                className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ color: '#FF4E00' }}
-                aria-label={`Borrar ${caption}`}
-              >
-                {deleting ? 'Borrando…' : 'Borrar'}
-              </button>
+            {!deFlito && (
+              <>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept={(item.mimeTypesAllowed?.length ? item.mimeTypesAllowed : ALLOWED_MIME).join(',')}
+                  onChange={handlePick}
+                  className="hidden"
+                  aria-label={`Subir ${caption}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  disabled={busy}
+                  className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+                  style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                >
+                  {analyzing
+                    ? 'Analizando documento...'
+                    : uploading
+                      ? 'Subiendo…'
+                      : attachment
+                        ? 'Reemplazar archivo'
+                        : 'Adjuntar archivo'}
+                </button>
+                {canGenerate && (
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    disabled={busy}
+                    className="h-9 rounded-lg px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: '#557EFF' }}
+                  >
+                    {generating ? 'Generando impronta…' : 'Generar impronta'}
+                  </button>
+                )}
+                {attachment && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(attachment.id)}
+                    disabled={busy}
+                    className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ color: '#FF4E00' }}
+                    aria-label={`Borrar ${caption}`}
+                  >
+                    {deleting ? 'Borrando…' : 'Borrar'}
+                  </button>
+                )}
+              </>
             )}
           </>
         )}
