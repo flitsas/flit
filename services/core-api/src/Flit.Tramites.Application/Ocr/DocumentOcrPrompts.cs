@@ -55,6 +55,10 @@ public static class DocumentOcrPrompts
             // HU #12030 — certificado de camara de comercio. Cubre a la PERSONA JURIDICA, que hoy no
             // valida nadie: la cedula de la persona natural ya la captura Kyverum.
             "camara_comercio",
+            // HU #12776 — los tres codigos por rol del certificado (HU #12774). Comparten el prompt de
+            // 'camara_comercio' porque el documento es el mismo: lo que cambia es a que parte acredita,
+            // y eso ya lo dice el codigo. Mismo patron que 'inscripcion_prenda' / 'prenda_registro'.
+            "camara_comercio_vendedor", "camara_comercio_comprador", "camara_comercio_locatario",
             // HU #12037 — Certificado CEPD. No es un documento propio: es la seccion EMISIONES de la
             // ficha de homologacion. Depende del enderezado (HU #12036) para poder leerse.
             "certificado_ambiental",
@@ -107,7 +111,10 @@ JSON valido sin markdown:
         "inscripcion_prenda" or "prenda_registro" => InscripcionPrenda,
         "comprobante_derechos" => ComprobanteDerechos,
         "contrato_leasing" => ContratoLeasing,
-        "camara_comercio" => CamaraComercio,
+        "camara_comercio"
+            or "camara_comercio_vendedor"
+            or "camara_comercio_comprador"
+            or "camara_comercio_locatario" => CamaraComercio,
         "certificado_ambiental" => CertificadoAmbiental,
         "mandato_config" => MandatoConfig,
         _ => null,
@@ -212,6 +219,42 @@ JSON valido sin markdown:
                   razon social, matricula mercantil, objeto social y representante legal.
                   OJO: lo define el emisor. Un documento del MINISTERIO DE TRANSPORTE no es este certificado por mucho
                   que tenga numeros largos y muchos campos. Suele ocupar VARIAS paginas seguidas.
+                """,
+            // HU #12776 — un codigo por rol (HU #12774). La descripcion se repite a proposito en vez de
+            // reutilizar la de arriba: lo unico que el clasificador tiene para repartir los certificados
+            // entre las partes es a quien acredita cada uno, y eso hay que decirselo en su entrada.
+            ["camara_comercio_vendedor"] =
+                """
+                CERTIFICADO DE EXISTENCIA Y REPRESENTACION LEGAL de la CAMARA DE COMERCIO **DEL VENDEDOR**. Mismo
+                  documento que el anterior: NIT, razon social, matricula mercantil, objeto social y representante
+                  legal, expedido por una camara de comercio.
+                  COMO SABER DE QUIEN ES: por la RAZON SOCIAL y el NIT que certifica, que son los de la sociedad que VENDE el vehiculo.
+                  Si en el archivo vienen los certificados de varias sociedades, cada uno va a la parte que le
+                  corresponde; no los agrupes en una sola entrada.
+                  OJO: lo define el emisor. Un documento del MINISTERIO DE TRANSPORTE o un RUT de la DIAN no es este
+                  certificado. Suele ocupar VARIAS paginas seguidas.
+                """,
+            ["camara_comercio_comprador"] =
+                """
+                CERTIFICADO DE EXISTENCIA Y REPRESENTACION LEGAL de la CAMARA DE COMERCIO **DEL COMPRADOR**. Mismo
+                  documento que el anterior: NIT, razon social, matricula mercantil, objeto social y representante
+                  legal, expedido por una camara de comercio.
+                  COMO SABER DE QUIEN ES: por la RAZON SOCIAL y el NIT que certifica, que son los de la sociedad que COMPRA el vehiculo.
+                  Si en el archivo vienen los certificados de varias sociedades, cada uno va a la parte que le
+                  corresponde; no los agrupes en una sola entrada.
+                  OJO: lo define el emisor. Un documento del MINISTERIO DE TRANSPORTE o un RUT de la DIAN no es este
+                  certificado. Suele ocupar VARIAS paginas seguidas.
+                """,
+            ["camara_comercio_locatario"] =
+                """
+                CERTIFICADO DE EXISTENCIA Y REPRESENTACION LEGAL de la CAMARA DE COMERCIO **DEL LOCATARIO**. Mismo
+                  documento que el anterior: NIT, razon social, matricula mercantil, objeto social y representante
+                  legal, expedido por una camara de comercio.
+                  COMO SABER DE QUIEN ES: por la RAZON SOCIAL y el NIT que certifica, que son los de la sociedad que toma el vehiculo en leasing.
+                  Si en el archivo vienen los certificados de varias sociedades, cada uno va a la parte que le
+                  corresponde; no los agrupes en una sola entrada.
+                  OJO: lo define el emisor. Un documento del MINISTERIO DE TRANSPORTE o un RUT de la DIAN no es este
+                  certificado. Suele ocupar VARIAS paginas seguidas.
                 """,
             ["certificado_ambiental"] =
                 """

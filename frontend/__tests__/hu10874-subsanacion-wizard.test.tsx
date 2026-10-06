@@ -14,6 +14,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * AC2 — con las observaciones "resueltas" (checklist marcado), Re-radicar dispara el submit.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),

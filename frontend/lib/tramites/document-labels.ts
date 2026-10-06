@@ -19,6 +19,10 @@ const DOCUMENT_LABELS: Record<string, string> = {
   escritura_representante: 'Escritura del representante legal',
   escritura_representante_vendedor: 'Escritura del representante legal (vendedor)',
   escritura_representante_locatario: 'Escritura del representante legal (locatario)',
+  // HU #12774 — certificado de Cámara de Comercio por rol, cargado en el paso del actor.
+  camara_comercio_vendedor: 'Cámara de Comercio (vendedor)',
+  camara_comercio_comprador: 'Cámara de Comercio (comprador)',
+  camara_comercio_locatario: 'Cámara de Comercio (locatario)',
   licencia_transito: 'Licencia de tránsito',
   factura: 'Factura',
   aduana: 'Declaración de importación',

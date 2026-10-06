@@ -34,6 +34,7 @@ import type {
   ActorDocumentType,
   ActorPersonType,
   ActorRol,
+  CamaraComercioRequirement,
   LegalRepresentativeLookupCompany,
   LegalRepresentativeLookupResult,
   LegalRepresentativeOption,
@@ -58,6 +59,7 @@ import {
   escrituraRepresentanteRlDocFieldKey,
   representanteDocIdentity,
 } from './EscrituraRepresentanteUpload';
+import { CamaraComercioUpload, camaraComercioTipo } from './CamaraComercioUpload';
 import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
@@ -145,7 +147,7 @@ interface Props {
    * Gate de avance del wizard: `true` cuando TODOS los actores del formulario tienen consulta de
    * identidad exitosa (RUNT / RUES / directorio). Sin consulta OK, Continuar permanece deshabilitado.
    */
-  onConsultationGateChange?: (ready: boolean) => void;
+  onConsultationGateChange?: (ready: boolean, partesPendientes: string[]) => void;
   /**
    * Gate de avance del paso: `false` mientras alguna parte jurídica tenga un representante legal que
    * NO está en el módulo de representantes de la compañía y todavía no haya cargado la escritura que
@@ -157,6 +159,10 @@ interface Props {
    * camino normal para capturarlo— y aun así seguir sin escritura que lo faculte.</p>
    */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  /** HU #12777 — ninguna parte jurídica se quedó sin su certificado de Cámara de Comercio
+   *  OBLIGATORIO. Gate propio y separado del de la escritura: son dos documentos distintos y el
+   *  gestor tiene que poder ver cuál le falta. */
+  onCamaraComercioGateChange?: (ready: boolean) => void;
   /**
    * Gate del paso: ¿están completos los campos OBLIGATORIOS de todas las partes que captura este
    * paso? Lo consume la shell para deshabilitar "Continuar y guardar". Antes el botón estaba
@@ -364,6 +370,17 @@ export function validateActors(
  * `lib/tramites/ownership-share.ts`): con un solo actor por lado el resultado es byte a byte el
  * mismo contrato de siempre (`ordinal:1`, `porcentaje:null`).
  */
+/**
+ * Representante con el tipo de documento que el selector muestra por defecto («CC»). Cubre también
+ * los actores guardados antes de que `updateRepLegal` lo escribiera: sin tipo, el backend no puede
+ * buscar la firma del baúl ni la escritura del representante.
+ */
+function conTipoDocumentoRl(a: ProcedureActor): ProcedureActor {
+  const rl = a.representanteLegal;
+  if (!rl || rl.tipoDocumento || !rl.numeroDocumento?.trim()) return a;
+  return { ...a, representanteLegal: { ...rl, tipoDocumento: 'CC' } };
+}
+
 function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
   const blankToUndef = (v?: string) => (v?.trim() ? v.trim() : undefined);
   const withOwnership = withOwnershipFields(actors);
@@ -373,7 +390,7 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
     const rest = { ...a };
     delete rest.autorizaReutilizacionDatos;
     return {
-      ...rest,
+      ...conTipoDocumentoRl(rest),
       telefono: blankToUndef(a.telefono),
       ciudad: blankToUndef(a.ciudad),
       direccion: blankToUndef(a.direccion),
@@ -751,6 +768,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     rnmcEnabled = false,
     onConsultationGateChange,
     onEscrituraRepresentanteGateChange,
+    onCamaraComercioGateChange,
     onCamposRequeridosGateChange,
     rotuloPorRol,
   },
@@ -1047,6 +1065,175 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   useEffect(() => {
     onEscrituraRepresentanteGateChange?.(escrituraRlGateOk);
   }, [escrituraRlGateOk, onEscrituraRepresentanteGateChange]);
+
+  // ── HU #12777 · Cámara de Comercio de las partes jurídicas ─────────────────
+  /**
+   * Requisitos resueltos por el backend, por rol. La obligatoriedad NO se calcula aquí: depende de
+   * la firma del baúl y de las escrituras vigentes del tenant, que el cliente no conoce. Lo único
+   * que decide el formulario es a quién se le pregunta (las partes jurídicas).
+   *
+   * <p>Se resuelve sobre los actores EN PANTALLA, no sobre los guardados: los actores solo se
+   * persisten con «Continuar y guardar», así que preguntar por lo guardado dejaba el buzón un paso
+   * atrás — no aparecía al marcar NIT y no se iba al volver a persona natural.</p>
+   */
+  const [camaraRequirements, setCamaraRequirements] = useState<CamaraComercioRequirement[]>([]);
+  /** La última consulta falló: sin respuesta del backend el paso se comporta como antes de la HU. */
+  const [camaraFallo, setCamaraFallo] = useState(false);
+  /** Firma de los actores a la que corresponde la última respuesta del backend. */
+  const [camaraResuelta, setCamaraResuelta] = useState<string | null>(null);
+  /** Adjunto presente por rol, reportado por cada buzón. */
+  const [camaraSatisfecha, setCamaraSatisfecha] = useState<Record<string, boolean>>({});
+  /**
+   * HU #12779 — versión del buzón por rol. Sube cuando el formulario descarta el certificado, para
+   * que el buzón se vuelva a montar vacío en vez de mostrar la lista de adjuntos que cargó antes.
+   */
+  const [camaraVersion, setCamaraVersion] = useState<Record<string, number>>({});
+
+  const marcarCamara = useCallback((rol: string, satisfied: boolean) => {
+    setCamaraSatisfecha((prev) => (prev[rol] === satisfied ? prev : { ...prev, [rol]: satisfied }));
+  }, []);
+
+  /** Roles que hoy son persona jurídica en el formulario. Gobierna el descarte (HU #12779). */
+  const camaraRoles = actors.map((a) => (isJuridical(a) ? a.rol : '-')).join('|');
+
+  /**
+   * Firma de lo que cambia la respuesta: quién es jurídico, su documento y el de su representante
+   * legal (sujeto del baúl de firmas). Sin ella el efecto se dispararía en cada render — `actors` es
+   * un arreglo nuevo siempre — y con él la consulta.
+   */
+  const camaraFirma = actors
+    .map((a) =>
+      isJuridical(a)
+        ? [
+            a.rol,
+            a.numeroDocumento.trim(),
+            a.representanteLegal?.tipoDocumento ?? '',
+            a.representanteLegal?.numeroDocumento?.trim() ?? '',
+          ].join(':')
+        : '-',
+    )
+    .join('|');
+
+  const camaraActorsRef = useRef(actors);
+  const camaraFirmaRef = useRef(camaraFirma);
+  useEffect(() => {
+    camaraActorsRef.current = actors;
+    camaraFirmaRef.current = camaraFirma;
+  }, [actors, camaraFirma]);
+  /** Descarta respuestas viejas: solo la última consulta en vuelo puede escribir el estado. */
+  const camaraConsulta = useRef(0);
+
+  const recargarCamara = useCallback(() => {
+    if (!instanceId) return;
+    const consulta = ++camaraConsulta.current;
+    const firma = camaraFirmaRef.current;
+    void tramitesClient
+      .getCamaraComercioRequirements(instanceId, undefined, camaraActorsRef.current.map(conTipoDocumentoRl))
+      .then((rs) => {
+        if (consulta !== camaraConsulta.current) return;
+        setCamaraFallo(rs === null);
+        setCamaraRequirements(rs ?? []);
+        setCamaraResuelta(firma);
+      });
+  }, [instanceId]);
+
+  useEffect(() => {
+    // Espera corta: el NIT y el documento del representante se escriben tecla a tecla, y cada una
+    // cambia la firma. Sin ella se pagaría una consulta por dígito.
+    const t = setTimeout(recargarCamara, 300);
+    return () => clearTimeout(t);
+  }, [recargarCamara, camaraFirma]);
+
+  /**
+   * Requisito de esta parte. Solo existe mientras la parte sea persona jurídica EN PANTALLA. Mientras
+   * el backend no haya contestado por lo que hay en pantalla —o el NIT aún no tenga número, que el
+   * backend no puede evaluar— se muestra el buzón como obligatorio: es lo que resulta sin firma ni
+   * escritura, y el número pendiente ya bloquea el paso de todos modos.
+   */
+  const camaraRequirementDe = (actor: ProcedureActor): CamaraComercioRequirement | undefined => {
+    if (!isJuridical(actor)) return undefined;
+    const delBackend = camaraRequirements.find((r) => r.rol === actor.rol);
+    if (delBackend) return delBackend;
+    if (camaraFallo) return undefined;
+    if (camaraResuelta === camaraFirma && actor.numeroDocumento.trim()) return undefined;
+    return {
+      rol: actor.rol,
+      tipo: camaraComercioTipo(actor.rol),
+      esObligatorio: true,
+      exencion: 'ninguna',
+      vigencia: 'indeterminada',
+      diasDesdeExpedicion: null,
+    };
+  };
+
+  /** Gate del paso: ninguna parte jurídica con certificado OBLIGATORIO se quedó sin cargarlo. */
+  const camaraGateOk = actors.every((a) => {
+    const req = camaraRequirementDe(a);
+    return !req || !req.esObligatorio || camaraSatisfecha[a.rol] === true;
+  });
+
+  /**
+   * HU #12779 — roles que eran persona jurídica en el render anterior. Es lo único que permite
+   * detectar el CAMBIO a persona natural: el buzón se desmonta en ese mismo render, así que el
+   * componente hijo ya no está para descartar su propio documento.
+   *
+   * <p>Arranca vacío a propósito: en el primer render nadie «dejó de ser» jurídico, así que un
+   * trámite que se abre con el actor ya jurídico no dispara ningún borrado.</p>
+   */
+  const rolesJuridicosPrevios = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const ahora = new Set<string>(actors.filter((a) => isJuridical(a)).map((a) => a.rol));
+    const dejaronDeSerJuridicos = [...rolesJuridicosPrevios.current].filter((r) => !ahora.has(r));
+    rolesJuridicosPrevios.current = ahora;
+
+    if (!instanceId || dejaronDeSerJuridicos.length === 0) return;
+
+    // El certificado acredita a una sociedad: si la parte dejó de serlo, el documento ya no
+    // corresponde al trámite y arrastrarlo dejaría en el expediente un papel de otra persona.
+    // Solo se descarta el de los roles que cambiaron — si las dos partes eran jurídicas y solo una
+    // cambió, la otra conserva el suyo.
+    // El descarte es asíncrono y el gestor puede volver a marcar la parte como jurídica (y cargar un
+    // certificado nuevo) antes de que termine. Por eso cada paso vuelve a mirar el formulario VIGENTE
+    // (`rolesJuridicosPrevios.current`, que el efecto actualiza en cada cambio) y solo descarta los
+    // roles que SIGUEN siendo persona natural. Sin esta guarda, la promesa en vuelo borraba el
+    // certificado recién cargado.
+    const sigueNatural = (rol: string) => !rolesJuridicosPrevios.current.has(rol);
+    void tramitesClient
+      .getAttachments(instanceId)
+      .then((adjuntos) => {
+        const tipos = new Set(
+          dejaronDeSerJuridicos.filter(sigueNatural).map((rol) => camaraComercioTipo(rol)),
+        );
+        return Promise.all(
+          adjuntos
+            .filter((a) => tipos.has(a.tipo.toLowerCase()))
+            .map((a) => tramitesClient.deleteAttachment(instanceId, a.id).catch(() => undefined)),
+        );
+      })
+      .then(() => {
+        const descartados = dejaronDeSerJuridicos.filter(sigueNatural);
+        if (descartados.length === 0) return;
+        setCamaraSatisfecha((prev) => {
+          const next = { ...prev };
+          for (const rol of descartados) delete next[rol];
+          return next;
+        });
+        // Si la parte vuelve a ser jurídica, su buzón se monta de nuevo y relee el expediente ya
+        // sin el certificado descartado (AC2: reaparece vacío).
+        setCamaraVersion((prev) => {
+          const next = { ...prev };
+          for (const rol of descartados) next[rol] = (next[rol] ?? 0) + 1;
+          return next;
+        });
+        recargarCamara();
+      })
+      .catch(() => {
+        // Un fallo al descartar no puede bloquear al gestor: el requisito ya no aplica a esta parte
+        // (el buzón está desmontado) y el adjunto huérfano lo retira la limpieza del expediente.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camaraRoles, instanceId]);
   const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
     null,
   );
@@ -1382,6 +1569,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     onCamposRequeridosGateChange?.(validation.valid);
   }, [validation.valid, onCamposRequeridosGateChange]);
 
+  useEffect(() => {
+    onCamaraComercioGateChange?.(camaraGateOk);
+  }, [camaraGateOk, onCamaraComercioGateChange]);
+
   // NO se revelan los errores en vivo. Se intentó (para justificar el botón deshabilitado) y el
   // resultado fue peor que el problema: `showErrors` es una bandera del FORMULARIO, no de cada
   // parte, así que se encendía mientras se tecleaba el documento del primer actor y, al añadir un
@@ -1440,10 +1631,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // automática se disparó sola al abrir el paso. Marcar esta vía obligaría a guardar un paso que
     // el gestor solo abrió para mirar — y con un actor persistido incompleto lo dejaría atrapado.
     if (!opts?.preserveConsultation) markDirty();
+    // Otro NIT es otra sociedad: su representante legal ya no es el que estaba capturado. Si RUES no
+    // trae uno del directorio para el NIT nuevo, el anterior se quedaba y podía eximir de la Cámara
+    // de Comercio a una empresa que no representa. Solo cambios del gestor: el autopoblado de una
+    // consulta (preserveConsultation) escribe el NIT que acaba de validar.
+    const cambiaSociedad =
+      !opts?.preserveConsultation &&
+      patch.numeroDocumento !== undefined &&
+      !!prevActor &&
+      isJuridical(prevActor) &&
+      !!prevActor.representanteLegal &&
+      normalizeNitKey(patch.numeroDocumento) !== normalizeNitKey(prevActor.numeroDocumento);
     setActors((prev) =>
       prev.map((a, i) => {
         if (i !== index) return a;
         const next = { ...a, ...patch };
+        if (cambiaSociedad) delete next.representanteLegal;
         // Saneo de caracteres por tipo de campo (Ajuste 3): número de documento según
         // el tipo (pasaporte alfanumérico, resto solo dígitos) y nombre sin caracteres
         // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
@@ -1463,6 +1666,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
     // Cambio MANUAL de identidad invalida la consulta. El autopoblado post-RUNT/RUES
     // usa preserveConsultation para no disparar un segundo lookup ni perder el `found`.
+    if (cambiaSociedad) {
+      const sinIndice = <T,>(m: Record<number, T>): Record<number, T> => {
+        if (!(index in m)) return m;
+        const next = { ...m };
+        delete next[index];
+        return next;
+      };
+      setRlRunt(sinIndice);
+      setSelectedRepIdx(sinIndice);
+      setDirectoryAbandoned(sinIndice);
+    }
     if (identityChanged && !opts?.preserveConsultation) {
       if (prevActor?.numeroDocumento) unlockRuesRazonSocial(prevActor.numeroDocumento);
       if (prevActor) forgetActorConsultation(instanceId, prevActor.rol);
@@ -1575,6 +1789,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       prev.map((a, i) => {
         if (i !== index) return a;
         const rl = { ...a.representanteLegal, ...patch };
+        // El selector pinta «CC» cuando no hay tipo, así que ese es el tipo que el gestor ve. Sin
+        // escribirlo en el estado, el representante viajaba sin tipo y el backend no podía buscar su
+        // firma en el baúl ni su escritura: la exención de Cámara de Comercio nunca aplicaba.
+        rl.tipoDocumento = rl.tipoDocumento ?? 'CC';
         if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined) {
           rl.numeroDocumento = sanitizeDocNumber(
             rl.numeroDocumento ?? '',
@@ -1611,22 +1829,34 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors((prev) => {
       const nextActors = prev.map((a, i) => {
         if (i !== actorIndex) return a;
+        const numero = sanitizeDocNumber(match.rep.documento ?? '', tipo);
+        // Si el representante precargado es la MISMA persona que ya estaba capturada, lo que el
+        // gestor escribió se conserva donde el directorio no trae dato: una ficha del directorio sin
+        // correo no puede vaciar el correo que ya se guardó (el paso quedaba bloqueado por un campo
+        // obligatorio que el gestor ya había llenado).
+        const capturado = a.representanteLegal;
+        const mismaPersona =
+          !!capturado?.numeroDocumento &&
+          samePersonDocument(capturado.tipoDocumento || 'CC', capturado.numeroDocumento, tipo, numero);
+        const oCapturado = (delDirectorio: string, previo?: string) =>
+          delDirectorio || (mismaPersona ? (previo ?? '').trim() : '');
         const next: ProcedureActor = {
           ...a,
           representanteLegal: {
             tipoDocumento: tipo,
-            numeroDocumento: sanitizeDocNumber(match.rep.documento ?? '', tipo),
+            numeroDocumento: numero,
             nombreCompleto: sanitizeName(repFullName(match.rep)),
-            email: (match.rep.email ?? '').trim(),
-            telefono: digitsOnly(match.rep.telefono ?? ''),
+            email: oCapturado((match.rep.email ?? '').trim(), capturado?.email),
+            telefono: oCapturado(digitsOnly(match.rep.telefono ?? ''), capturado?.telefono),
             mecanismoFirma: opts?.mecanismoFirma,
           },
         };
         if (opts?.applyCompanyContact && company) {
-          next.email = (match.rep.companyEmail ?? company.email ?? '').trim();
-          next.direccion = (match.rep.companyAddress ?? company.address ?? '').trim();
-          next.ciudad = (match.rep.companyCity ?? company.city ?? '').trim();
-          next.telefono = digitsOnly(match.rep.companyPhone ?? company.phone ?? '');
+          // Mismo criterio para el contacto de la compañía: el directorio completa, no borra.
+          next.email = (match.rep.companyEmail ?? company.email ?? '').trim() || a.email;
+          next.direccion = (match.rep.companyAddress ?? company.address ?? '').trim() || a.direccion;
+          next.ciudad = (match.rep.companyCity ?? company.city ?? '').trim() || a.ciudad;
+          next.telefono = digitsOnly(match.rep.companyPhone ?? company.phone ?? '') || a.telefono;
         }
         return next;
       });
@@ -1698,13 +1928,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             },
             { preserveConsultation: true },
           );
-          if (directory && reps[0]) {
-            commitDirectoryRep(
-              index,
-              { rep: reps[0], index: 0 },
-              directory.company,
-              { preserveConsultation: true, applyCompanyContact: true },
-            );
+          // Un borrador que ya tiene representante conserva EL SUYO: la consulta automática al abrir
+          // el paso solo lo enlaza con su ficha del directorio si está ahí. Antes se precargaba
+          // siempre el primero del directorio, que podía ser otra persona o venir sin correo, y el
+          // gestor encontraba el paso bloqueado sin haber tocado nada.
+          const rlCapturado = actor.representanteLegal;
+          const elegido = rlCapturado?.numeroDocumento?.trim()
+            ? directory
+              ? findDirectoryRep(directory, rlCapturado.tipoDocumento || 'CC', rlCapturado.numeroDocumento)
+              : null
+            : reps[0]
+              ? { rep: reps[0], index: 0 }
+              : null;
+          if (directory && elegido) {
+            commitDirectoryRep(index, elegido, directory.company, {
+              preserveConsultation: true,
+              applyCompanyContact: true,
+            });
           }
           const foundRues = {
             status: 'found' as const,
@@ -1895,6 +2135,30 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     });
   }, [instanceId, actors]);
 
+  /**
+   * ¿Es una parte YA GUARDADA cuyo tipo y número de documento no cambiaron? Lo guardado salió de una
+   * consulta RUNT/RUES, así que no hay que volver a consultarla: ni para habilitar «Continuar» ni en
+   * la consulta automática al abrir el paso. Exigirla costaba una consulta paga cada vez que el gestor
+   * volvía al paso o reabría el borrador en otra pestaña (donde la consulta de la sesión no existe).
+   * Cambiar el tipo o el número del documento sí vuelve a exigirla.
+   */
+  const parteGuardadaSinCambios = (index: number): boolean => {
+    const actual = actors[index];
+    if (!actual?.numeroDocumento?.trim()) return false;
+    const guardado = (state.actors ?? []).find(
+      (p) => p.rol === actual.rol && (p.ordinal ?? 1) === (actual.ordinal ?? 1),
+    );
+    return (
+      !!guardado?.numeroDocumento?.trim() &&
+      samePersonDocument(
+        guardado.tipoDocumento || 'CC',
+        guardado.numeroDocumento,
+        actual.tipoDocumento || 'CC',
+        actual.numeroDocumento,
+      )
+    );
+  };
+
   // ── Paso del propietario: dispara la consulta en cuanto el documento está disponible (sembrado desde
   // el paso 1 o rehidratado del backend), sin clic manual. La razón social jurídica sale de RUES;
   // el directorio de RL aporta datos básicos de empresa y representante.
@@ -1926,6 +2190,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
     const lookupKey = `${propietarioTipo}:${documentNumber}`;
     if (autoLookupTriggeredRef.current === lookupKey) return;
+    // Propietario ya guardado con el mismo documento: no se vuelve a consultar al abrir el paso.
+    if (parteGuardadaSinCambios(propietarioIndex)) {
+      autoLookupTriggeredRef.current = lookupKey;
+      return;
+    }
     autoLookupTriggeredRef.current = lookupKey;
     void handleIdentityLookup(propietarioIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleIdentityLookup lee actors actuales
@@ -2021,6 +2290,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
   };
 
+  /** ¿La parte ya está consultada? Consulta exitosa en esta sesión, o parte guardada sin cambios. */
+  const consultaLista = (index: number): boolean =>
+    isIdentityConsultationReady(runt[index]?.status) || parteGuardadaSinCambios(index);
+
   // Valida + guarda. Núcleo compartido por el submit propio y el save() del ref.
   const submitActors = async (): Promise<boolean> => {
     setShowErrors(true);
@@ -2038,7 +2311,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (
       actors.some(
         (_, i) =>
-          !isIdentityConsultationReady(runt[i]?.status) ||
+          !consultaLista(i) ||
           needsRlDirectoryApply(i) ||
           (needsRlRunt(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
       )
@@ -2076,13 +2349,35 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // línea base exige su consulta RUNT exitosa.
   const consultationReady = actors.every(
     (_, i) =>
-      isIdentityConsultationReady(runt[i]?.status) &&
+      consultaLista(i) &&
       !needsRlDirectoryApply(i) &&
       (!needsRlRunt(i) || isIdentityConsultationReady(rlRunt[i]?.status)),
   );
+  /**
+   * Partes cuya consulta de identidad falta, por su nombre en pantalla. Al reabrir un borrador en
+   * otra pestaña solo el propietario se consulta solo; las demás partes quedan sin consulta y el
+   * botón se apagaba sin decir por qué. Se publica como clave de texto por la misma razón que el
+   * gate del certificado: no disparar el efecto con un arreglo nuevo en cada render.
+   */
+  const consultaPendientesClave = [
+    ...new Set(
+      actors
+        .map((a, i) => ({ a, i }))
+        .filter(
+          ({ i }) =>
+            !consultaLista(i) ||
+            needsRlDirectoryApply(i) ||
+            (needsRlRunt(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
+        )
+        .map(({ a }) => rotuloDelActor(a.rol)),
+    ),
+  ].join('|');
   useEffect(() => {
-    onConsultationGateChange?.(consultationReady);
-  }, [consultationReady, onConsultationGateChange]);
+    onConsultationGateChange?.(
+      consultationReady,
+      consultaPendientesClave ? consultaPendientesClave.split('|') : [],
+    );
+  }, [consultationReady, consultaPendientesClave, onConsultationGateChange]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2890,6 +3185,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               />
             </div>
           )}
+          {/* HU #12777 — certificado de Cámara de Comercio de la sociedad. Va junto a la escritura
+              porque son de la misma familia: los dos acreditan quién representa a la sociedad. El
+              buzón NO se oculta cuando es opcional; solo deja de bloquear, y dice por qué. */}
+          {(() => {
+            const req = camaraRequirementDe(actor);
+            return req ? (
+              <div className="lg:col-span-4">
+                <CamaraComercioUpload
+                  key={`${actor.rol}-${camaraVersion[actor.rol] ?? 0}`}
+                  instanceId={instanceId}
+                  requirement={req}
+                  onSatisfiedChange={(satisfied) => marcarCamara(actor.rol, satisfied)}
+                  onChanged={recargarCamara}
+                />
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
     );

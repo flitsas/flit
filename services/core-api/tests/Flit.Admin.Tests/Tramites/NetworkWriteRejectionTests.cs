@@ -79,6 +79,9 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("POST", "/api/v1/tramites/instances/{id}/transition"),
         // Otros archivos (F14)
         ("PUT", "/api/v1/tramites/instances/{id}/actors"),
+        // HU #12775 — preview de Cámara de Comercio: no persiste, pero es POST y el guard lo trata como
+        // escritura; la cabeza de grupo tampoco edita los actores de un trámite del hijo.
+        ("POST", "/api/v1/tramites/instances/{id}/camara-comercio-requirements/preview"),
         ("POST", "/api/v1/tramites/instances/{id}/attachments"),
         ("POST", "/api/v1/tramites/instances/{id}/attachments/presign"),
         ("POST", "/api/v1/tramites/instances/{id}/attachments/register"),

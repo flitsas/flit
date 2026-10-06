@@ -36,10 +36,22 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
-    public async Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+    /// <summary>
+    /// Escritura emparejada con un actor, con la ruta en storage que solo necesita quien va a leer el
+    /// PDF. La ruta NO sale de Infrastructure: <see cref="ActorDeedPresence"/>, que es el contrato de
+    /// Application, no la expone.
+    /// </summary>
+    private sealed record DeedMatch(ActorDeedPresence Presence, string StoragePath);
+
+    /// <summary>
+    /// HU #12775 — el emparejamiento actor ↔ escritura vigente del REPRESENTANTE capturado, sin leer
+    /// storage. Decide qué PDF entra al expediente; la presencia para Cámara de Comercio usa una regla
+    /// más amplia (cualquier escritura vigente de la compañía, ver ResolvePresenceForActorsAsync).
+    /// </summary>
+    private async Task<IReadOnlyList<DeedMatch>> MatchForActorsAsync(
         Guid tenantId,
         IEnumerable<ProcedureInstanceActor> actors,
-        CancellationToken ct = default)
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(actors);
 
@@ -60,7 +72,7 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
             return [];
         }
 
-        var result = new List<ResolvedDeedDocument>(nitActors.Count);
+        var result = new List<DeedMatch>(nitActors.Count);
         var seenTipos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var actor in nitActors)
@@ -131,7 +143,94 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 continue;
             }
 
-            var stream = await _storage.OpenReadAsync(deed.StoragePath, ct).ConfigureAwait(false);
+            result.Add(new DeedMatch(
+                new ActorDeedPresence(
+                    tipo,
+                    company.DocumentNumber,
+                    actor.ActorType ?? string.Empty,
+                    deed.Id),
+                deed.StoragePath));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
+        Guid tenantId,
+        IEnumerable<ProcedureInstanceActor> actors,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(actors);
+
+        var nitActors = actors
+            .Where(a => string.Equals(a.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(a.DocumentNumber))
+            .ToList();
+        if (nitActors.Count == 0)
+        {
+            return [];
+        }
+
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
+        var deeds = await _deedReader.ListActiveVigentesAsync(tenantId, today, ct).ConfigureAwait(false);
+        if (deeds.Count == 0)
+        {
+            return [];
+        }
+
+        // Decisión de negocio (Épica #12754, 2026-09-23): para eximir del certificado de Cámara de
+        // Comercio basta con que la COMPAÑÍA tenga una escritura vigente, sea del representante que
+        // sea. Por eso aquí NO se exige que la escritura sea del representante legal capturado, a
+        // diferencia de MatchForActorsAsync, que sí lo exige porque decide qué PDF entra al
+        // expediente. Divergen a propósito: una responde «¿la sociedad tiene escritura?», la otra
+        // «¿qué escritura autoriza a ESTE representante?».
+        var result = new List<ActorDeedPresence>(nitActors.Count);
+        foreach (var actor in nitActors)
+        {
+            var company = await _representativeReader
+                .FindRepresentedCompanyByNitAsync(tenantId, actor.DocumentNumber.Trim(), ct)
+                .ConfigureAwait(false);
+            if (company is null || !company.IsActive)
+            {
+                continue;
+            }
+
+            var deed = deeds
+                .Where(d => d.RepresentedCompanyIds.Contains(company.Id))
+                .OrderByDescending(d => d.UpdatedAt ?? d.CreatedAt)
+                .ThenByDescending(d => d.Id)
+                .FirstOrDefault();
+            if (deed is null)
+            {
+                continue;
+            }
+
+            var tipo = string.Equals(actor.ActorType, "comprador", StringComparison.OrdinalIgnoreCase)
+                ? "escritura_comprador"
+                : "escritura";
+            result.Add(new ActorDeedPresence(tipo, company.DocumentNumber, actor.ActorType ?? string.Empty, deed.Id));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+        Guid tenantId,
+        IEnumerable<ProcedureInstanceActor> actors,
+        CancellationToken ct = default)
+    {
+        var matches = await MatchForActorsAsync(tenantId, actors, ct).ConfigureAwait(false);
+        if (matches.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<ResolvedDeedDocument>(matches.Count);
+        foreach (var (presencia, storagePath) in matches)
+        {
+            var stream = await _storage.OpenReadAsync(storagePath, ct).ConfigureAwait(false);
             if (stream is null)
             {
                 continue;
@@ -145,18 +244,20 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 content = ms.ToArray();
             }
 
+            // Un PDF de cero bytes no es una escritura: se omite en vez de adjuntar un archivo vacío
+            // al expediente (comportamiento previo a la HU #12775, conservado).
             if (content.Length == 0)
             {
                 continue;
             }
 
             result.Add(new ResolvedDeedDocument(
-                tipo,
-                $"{tipo}.pdf",
+                presencia.Tipo,
+                $"{presencia.Tipo}.pdf",
                 content,
-                company.DocumentNumber,
-                actor.ActorType ?? string.Empty,
-                deed.Id));
+                presencia.Nit,
+                presencia.Rol,
+                presencia.DeedId));
         }
 
         return result;

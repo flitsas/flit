@@ -13,6 +13,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * (`previewToken`) y se navega a la ruta del trámite recién creado.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   createInstanceFromConsulta: vi.fn(),
   runPreflightPreview: vi.fn(),

@@ -10,6 +10,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * descubría al final, con el trámite entero preparado.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   createInstanceFromConsulta: vi.fn(),
   runPreflightPreview: vi.fn(),

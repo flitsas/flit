@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   getActors: vi.fn(),
   saveActors: vi.fn(),
   runtPersonLookup: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
+    getCamaraComercioRequirements: mocks.getCamaraComercioRequirements,
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
     runtPersonLookup: mocks.runtPersonLookup,

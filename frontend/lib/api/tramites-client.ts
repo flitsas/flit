@@ -6,6 +6,7 @@ import type {
   ActorContactLookupInput,
   ActorContactLookupResult,
   ActorsResponse,
+  CamaraComercioRequirement,
   AttachmentsResponse,
   BiometriaPublicView,
   BiometricParte,
@@ -1189,6 +1190,42 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     );
     return res?.actors ?? [];
+  },
+
+  /**
+   * HU #12775/#12776 — obligatoriedad del certificado de Cámara de Comercio por actor jurídico.
+   *
+   * <p>Endpoint propio y no parte de `getActors` a propósito: lo que devuelve depende de la firma
+   * del baúl y de las escrituras vigentes del tenant, que pueden cambiar sin que cambie ningún dato
+   * del actor. Colgarlo de la respuesta de actores obligaría a recargarlos para refrescarlo.</p>
+   *
+   * <p>Con `actors` resuelve sobre ese borrador (lo que el gestor tiene en pantalla) en vez de sobre
+   * los actores guardados, que solo se persisten con «Continuar y guardar» (HU #12777 AC1 / #12779).
+   * No guarda nada.</p>
+   *
+   * <p>Ante un fallo devuelve `null`, no lanza: sin respuesta el paso se comporta como antes de esta
+   * HU —sin buzón— en vez de dejar al gestor con el asistente roto.</p>
+   */
+  getCamaraComercioRequirements: async (
+    instanceId: string,
+    tenantId?: string,
+    actors?: ProcedureActor[],
+  ): Promise<CamaraComercioRequirement[] | null> => {
+    const base = `/api/v1/tramites/instances/${instanceId}/camara-comercio-requirements`;
+    try {
+      const res = actors
+        ? await request<{ requirements: CamaraComercioRequirement[] }>(`${base}/preview`, {
+            method: 'POST',
+            headers: tenantHeader(tenantId),
+            body: JSON.stringify({ actors }),
+          })
+        : await request<{ requirements: CamaraComercioRequirement[] }>(base, {
+            headers: tenantHeader(tenantId),
+          });
+      return res?.requirements ?? [];
+    } catch {
+      return null;
+    }
   },
 
   // PUT set completo de actores (reemplaza el conjunto guardado).
@@ -2744,6 +2781,8 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   firma_pendiente:
     'Falta la validación de identidad o firma de una de las partes: no se puede enviar al organismo de tránsito un trámite sin firmar.',
   documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
+  // HU #12775 AC3 — parte jurídica sin firma precargada ni escritura vigente y sin certificado.
+  camara_comercio_pendiente: 'Falta el certificado de Cámara de Comercio de una parte persona jurídica.',
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
   estado_desconocido: 'El estado destino no es válido.',

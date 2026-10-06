@@ -27,6 +27,45 @@ internal static class ActorEndpoints
                 : Results.Ok(result);
         }).WithName("GetProcedureInstanceActors");
 
+        // HU #12775 — obligatoriedad del certificado de Cámara de Comercio por actor jurídico. Va en
+        // su propio GET y no dentro de la respuesta de actores porque se recalcula por su cuenta: la
+        // firma del baúl y la escritura vigente pueden cambiar sin que cambie ningún dato del actor.
+        group.MapGet("/instances/{id:guid}/camara-comercio-requirements", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetCamaraComercioRequirementsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("GetCamaraComercioRequirements");
+
+        // HU #12777 AC1 / HU #12779 — misma escalera sobre los actores que el gestor tiene en pantalla
+        // sin guardar. POST y no GET porque viaja el borrador completo del paso; no persiste nada.
+        group.MapPost("/instances/{id:guid}/camara-comercio-requirements/preview", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PutActorsRequest request,
+            GetCamaraComercioRequirementsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandlePreviewAsync(id, tenantId.Value, request?.Actors ?? [], ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "demasiados_actores" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El borrador excede el número máximo de actores de un trámite."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("PreviewCamaraComercioRequirements");
+
         group.MapPut("/instances/{id:guid}/actors", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

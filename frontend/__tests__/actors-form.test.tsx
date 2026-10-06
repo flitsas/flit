@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   getActors: vi.fn(),
   saveActors: vi.fn(),
   runtPersonLookup: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
+    getCamaraComercioRequirements: mocks.getCamaraComercioRequirements,
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
     runtPersonLookup: mocks.runtPersonLookup,
@@ -776,7 +778,7 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     expect(screen.queryByRole('button', { name: 'Consultar RUNT' })).not.toBeInTheDocument();
   });
 
-  it('no pisa el documento del vendedor ya persistido y auto-consulta RUNT', async () => {
+  it('no pisa el documento del vendedor ya persistido y no lo vuelve a consultar', async () => {
     mocks.getActors.mockResolvedValue([
       {
         rol: 'vendedor',
@@ -799,10 +801,11 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     await screen.findByDisplayValue('Ana Vendedora');
     // El documento persistido manda: el seed no lo sobreescribe.
     expect(numero).toHaveValue('555');
-    await waitFor(() => expect(mocks.runtPersonLookup).toHaveBeenCalledWith(
-      INSTANCE,
-      { documentType: 'CC', documentNumber: '555' },
-    ));
+    // Guardado y sin cambios en su documento: ya salió de una consulta, no se paga otra al abrir el
+    // paso (decisión de negocio 2026-09-23). Cambiar el documento sí la vuelve a exigir.
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
   });
 
   it('sin owner_document_number no siembra nada y deja el documento editable', async () => {
