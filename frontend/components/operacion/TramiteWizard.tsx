@@ -2048,8 +2048,8 @@ export function TramiteWizard(props: Props) {
               </InlineAlert>
             )}
 
-          {/* HU #13146 — «Firmará: {nombre} / {forma}» de solo lectura, o la alerta de falta de
-              mandatario (error en block, aviso en warn). */}
+          {/* HU #13146 — frase de solo lectura de quién firmará el contrato de mandato, o la alerta
+              de falta de mandatario (error en block, aviso en warn). */}
           {isDecisionStep && (
             <MandatarioFirmaIndicator
               data={mandatarioPrevisto}
