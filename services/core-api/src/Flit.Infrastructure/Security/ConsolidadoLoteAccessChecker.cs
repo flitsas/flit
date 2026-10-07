@@ -19,10 +19,16 @@ namespace Flit.Infrastructure.Security;
 ///   <item><b>Origen <c>superadmin</c></b>: usuario activo con rol <c>SuperAdmin</c> activo; la compañía congelada es
 ///   SIEMPRE la del trámite en el ítem (<c>items.tenant_id</c>), nunca la del lote ni el <c>scope_tenant_id</c>
 ///   (HU #13384 AC1).</item>
-///   <item>En ambos: el trámite existe, sin borrado lógico, y es de la compañía congelada.</item>
+///   <item><b>Origen <c>ot_bandeja</c></b> (HU #13392, Q-ADR1): lote creado por el Super Admin desde la bandeja
+///   (<c>requested_role_code = SuperAdmin</c>) ⇒ solo su rol <c>SuperAdmin</c> activo; si no, la misma regla de
+///   <c>tramites</c> sobre el tenant OT del lote (<c>batch.tenant_id</c>): membresía activa con un rol que otorgue el
+///   permiso. Aquí NO se mira el trámite: es de la compañía cliente y lo revalida el procesador OT con la regla de la
+///   bandeja (<c>OtConsolidadoLoteEntregador</c>).</item>
+///   <item>En <c>tramites</c> y <c>superadmin</c>: el trámite existe, sin borrado lógico, y es de la compañía congelada.</item>
 ///   <item><b>AC7</b>: el solicitante no tiene una suspensión vigente (<see cref="UserTempSuspension.VigenteEn"/>, la
-///   misma regla con la que el login lo bloquea) en la compañía congelada del lote (<c>tramites</c>) o en las compañías
-///   donde tiene asignado el rol <c>SuperAdmin</c> activo (<c>superadmin</c>). Si la tiene, el ítem se omite como
+///   misma regla con la que el login lo bloquea) en la compañía congelada del lote (<c>tramites</c> y el tenant OT en
+///   <c>ot_bandeja</c>) o en las compañías donde tiene asignado el rol <c>SuperAdmin</c> activo (<c>superadmin</c> y el
+///   lote OT del Super Admin). Si la tiene, el ítem se omite como
 ///   <c>acceso_revocado</c>; vencida o levantada, se procesa con normalidad.</item>
 /// </list>
 /// La decisión sobre el solicitante (usuario + rol + suspensión) se cachea 60 s por lote y compañía; la del trámite se
@@ -31,7 +37,7 @@ namespace Flit.Infrastructure.Security;
 /// </summary>
 /// <remarks>
 /// Uso de ejemplo: <c>var ok = await checker.TieneAccesoAsync(LoteItemContexto.Desde(lote, item), ct);</c>.
-/// El origen <c>ot_bandeja</c> (grant vigente al OT) lo resuelve la HU #13392 con su propio procesador.
+/// En <c>ot_bandeja</c> el trámite lo revalida la HU #13392 con la regla de la bandeja (el grant no cuenta, D-FB1).
 /// </remarks>
 public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache cache) : IConsolidadoLoteAccessChecker
 {
@@ -67,9 +73,22 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
                     ct).ConfigureAwait(false);
                 break;
 
+            case ConsolidadoExportOrigin.OtBandeja:
+                // HU #13392 — solo el solicitante: si el trámite sigue en la bandeja lo decide el procesador OT
+                // (OtConsolidadoLoteEntregador, con la regla de la bandeja), porque el trámite es de la compañía cliente
+                // y no del tenant OT del lote.
+                if (contexto.CompaniaLoteId is not { } tenantOt)
+                    return false;
+                var esSuperAdmin = string.Equals(contexto.RolSolicitante, AdminRoleCodes.SuperAdmin, StringComparison.Ordinal);
+                return await CacheadoAsync(
+                    $"consolidado-lote-acceso:{contexto.BatchId:N}:ot_bandeja",
+                    c => esSuperAdmin
+                        ? EsSuperAdminActivoAsync(contexto.SolicitanteId, c)
+                        : TienePermisoEnCompaniaAsync(contexto.SolicitanteId, tenantOt, c),
+                    ct).ConfigureAwait(false);
+
             default:
-                throw new NotSupportedException(
-                    $"El origen '{contexto.Origen}' revalida el acceso con su propio procesador de ítem.");
+                throw new NotSupportedException($"El origen '{contexto.Origen}' no tiene revalidación de acceso.");
         }
 
         if (!solicitanteConAcceso)

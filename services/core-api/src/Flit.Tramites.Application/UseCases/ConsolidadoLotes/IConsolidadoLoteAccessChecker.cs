@@ -8,7 +8,9 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 /// borrado lógico o no es de la compañía congelada. La parte (a)+(b) se cachea 60 s por lote.
 /// </summary>
 /// <remarks>
-/// Atiende los orígenes <c>tramites</c> y <c>superadmin</c>; la bandeja del OT tiene su variante (#13392).
+/// Atiende <c>tramites</c>, <c>superadmin</c> y, para el solicitante, <c>ot_bandeja</c> (#13392: membresía y rol en el
+/// tenant OT del lote, o Super Admin activo); en <c>ot_bandeja</c> el trámite lo revalida el procesador OT con la regla
+/// de la bandeja.
 /// Uso de ejemplo: <c>var ok = await checker.TieneAccesoAsync(LoteItemContexto.Desde(lote, item), ct);</c>.
 /// </remarks>
 public interface IConsolidadoLoteAccessChecker
