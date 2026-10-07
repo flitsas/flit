@@ -398,6 +398,9 @@ public static class DependencyInjection
             UseCases.ConsolidadoLotes.TramitesSeleccionResolver>();
         services.AddScoped<UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen>();
 
+        // Épica #13216 — HU13373: crear el lote (selección congelada + auditoría lote_creado en una transacción).
+        services.AddScoped<UseCases.ConsolidadoLotes.CrearLoteConsolidadosHandler>();
+
         return services;
     }
 }

@@ -321,6 +321,10 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
             ConsolidadoLotes.Ot.OtBandejaSeleccionResolver>();
 
+        // Épica #13216 — HU13373: persistencia de la creación del lote (lote + ítems + auditoría en una transacción)
+        // y de su purga (borrado criptográfico), reutilizada por #13379.
+        services.AddScoped<IConsolidadoLoteRepository, ConsolidadoLoteRepository>();
+
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
         // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).
