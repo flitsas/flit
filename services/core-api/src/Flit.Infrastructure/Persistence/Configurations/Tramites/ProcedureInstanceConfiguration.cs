@@ -233,6 +233,18 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("parent_tenant_id_at_creation")
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
+        // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite
+        // (boolean NOT NULL DEFAULT true; las filas previas quedan true). Va en el INSERT y nunca en
+        // un UPDATE: la política de la compañía cambia, el trámite en curso no.
+        builder.Property(x => x.ImprontaGeneracionHabilitada)
+            .HasColumnName("impronta_generacion_habilitada")
+            .IsRequired()
+            .HasDefaultValue(true)
+            // Sentinel true: sin él EF toma el default CLR (false) como «no establecido» y podría omitir un
+            // false explícito en el INSERT, dejando el trámite en true en silencio (mismo criterio que HU #13400).
+            .HasSentinel(true)
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+
         // ICT — pausa del trámite (servicio v1 pauseDraftProcess + bandera starts_procedure_in_paused).
         // Columnas agregadas por 39-ICT-procedure-pause.sql (tabla ExcludeFromMigrations); aquí solo se
         // mapean al modelo EF. is_paused NOT NULL default false; paused_observation nullable varchar(250).

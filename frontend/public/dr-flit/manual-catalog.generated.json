@@ -652,7 +652,8 @@
           "title": "3. Cómo cargar adjuntos",
           "paragraphs": [
             "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
-            "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña."
+            "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
+            "Impronta: si tu compañía tiene deshabilitada la generación de improntas, el sistema no la genera ni ofrece «Generar impronta». En la casilla de la impronta verás «Cargue la impronta; no se genera automáticamente» y debes adjuntarla tú. Si es obligatoria, no podrás radicar hasta cargarla."
           ],
           "bullets": [],
           "callouts": [

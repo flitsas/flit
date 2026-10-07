@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Tramites.Domain.Entities;
@@ -23,9 +24,16 @@ internal sealed class AdminProcedureInstanceRepository : IProcedureInstanceRepos
 {
     private readonly FlitDbContext _context;
 
-    public AdminProcedureInstanceRepository(FlitDbContext context)
+    // HU #13402 — opcional para no romper quien construye el repositorio sin Admin/Identity: sin
+    // lector de settings el trámite nace con el default histórico (generación habilitada).
+    private readonly ITenantSettingsRepository? _tenantSettings;
+
+    public AdminProcedureInstanceRepository(
+        FlitDbContext context,
+        ITenantSettingsRepository? tenantSettings = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _tenantSettings = tenantSettings;
     }
 
     public Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default) =>
@@ -83,6 +91,10 @@ internal sealed class AdminProcedureInstanceRepository : IProcedureInstanceRepos
             ParentTenantIdAtCreation = await ProcedureInstanceRepository
                 .ParentTenantIdOfAsync(_context, instance.TenantId, cancellationToken)
                 .ConfigureAwait(false),
+            // HU #13402 — mismo congelamiento del parámetro «generar improntas» que el alta del wizard.
+            ImprontaGeneracionHabilitada = _tenantSettings is null
+                || (await _tenantSettings.GetAsync(instance.TenantId, cancellationToken).ConfigureAwait(false))
+                    ?.GenerateImprontas != false,
         };
 
         var snapshot = new ProcedureDocumentSnapshot

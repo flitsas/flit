@@ -35,6 +35,12 @@ public sealed class SetImprontaDiferidaHandler(IProcedureInstanceRepository repo
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
+        // HU #13402 — «se generará automáticamente» solo tiene sentido si el trámite nació con la
+        // generación habilitada. Con false se rechaza la marca; quitarla (diferida = false) sigue
+        // permitido para limpiar una marca previa.
+        if (diferida && !instance.ImprontaGeneracionHabilitada)
+            return (null, GenerarImprontaAttachmentHandler.ImprontaGeneracionDeshabilitada);
+
         // Se resuelve el Id real del ítem (no se asume el literal "impronta"): en la ruta de matriz los
         // ítems conservan el id del catálogo, así que este mismo Id es la clave válida en ambos caminos.
         var codigo = instance.TypeCode;

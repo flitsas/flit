@@ -11,6 +11,14 @@ public interface IProcedureFamilyCreationGate
     /// Familia desconocida → no bloquea.
     /// </summary>
     Task<bool> IsFamilyBlockedAsync(Guid tenantId, string? procedureFamily, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13402 — valor vigente del parámetro de la compañía «generar improntas automáticamente»
+    /// (HU #13400). Se consulta UNA vez, al crear el trámite, para congelarlo en
+    /// <c>ProcedureInstance.ImprontaGeneracionHabilitada</c>. Sin configuración de la compañía → true
+    /// (comportamiento histórico).
+    /// </summary>
+    Task<bool> IsImprontaGenerationEnabledAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <summary>Null-object: no bloquea ninguna familia (tests / entornos sin Admin).</summary>
@@ -18,4 +26,7 @@ public sealed class NullProcedureFamilyCreationGate : IProcedureFamilyCreationGa
 {
     public Task<bool> IsFamilyBlockedAsync(Guid tenantId, string? procedureFamily, CancellationToken ct = default)
         => Task.FromResult(false);
+
+    public Task<bool> IsImprontaGenerationEnabledAsync(Guid tenantId, CancellationToken ct = default)
+        => Task.FromResult(true);
 }

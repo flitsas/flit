@@ -8413,6 +8413,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("external_ref");
 
+                    b.Property<bool>("ImprontaGeneracionHabilitada")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("impronta_generacion_habilitada");
+
                     b.Property<bool>("IsMigrated")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
