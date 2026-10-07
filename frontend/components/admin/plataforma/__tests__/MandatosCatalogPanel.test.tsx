@@ -155,8 +155,8 @@ describe("MandatosCatalogPanel configurador", () => {
     await esperarFilas();
     expect(screen.getAllByText("Sabaneta").length).toBeGreaterThan(0);
     expect(screen.getByText("Medellín")).toBeInTheDocument();
-    expect(screen.getByText("Persona natural · Persona jurídica (2) · Mandato abierto (1)")).toBeInTheDocument();
-    expect(screen.getAllByText("Persona natural").length).toBeGreaterThan(0);
+    expect(screen.getByText("Mandatario de la compañía · Institucional (organismo) (2) · Abierto (sin mandatario) (1)")).toBeInTheDocument();
+    expect(screen.getAllByText("Mandatario de la compañía").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }),
     ).toBeInTheDocument();
@@ -260,10 +260,10 @@ describe("MandatosCatalogPanel configurador", () => {
     expect(screen.queryByRole("menuitem", { name: /restablecer default/i })).not.toBeInTheDocument();
   });
 
-  it("HU #13152: la ayuda dice que el tipo por defecto es Persona natural y nadie afirma que Mandato abierto lo es", async () => {
+  it("HU #13152: la ayuda dice que el tipo por defecto es Mandatario de la compañía y nadie afirma que Abierto (sin mandatario) lo es", async () => {
     renderPanel("formatos");
     expect(
-      await screen.findByText(/tipo por defecto de un organismo nuevo es persona natural/i),
+      await screen.findByText(/tipo por defecto de un organismo nuevo es mandatario de la compañía/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/abierto[^.]*es el (default|tipo por defecto)/i)).not.toBeInTheDocument();
   });
@@ -405,7 +405,7 @@ describe("MandatosCatalogPanel configurador", () => {
       }));
       const tabla = await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
       await waitFor(() => expect(within(tabla).getByText("Envigado jurídico")).toBeInTheDocument());
-      expect(within(tabla).getByText("Persona jurídica")).toBeInTheDocument();
+      expect(within(tabla).getByText("Institucional (organismo)")).toBeInTheDocument();
       expect(screen.queryByTestId("mandato-formato-editor")).not.toBeInTheDocument();
     });
   });

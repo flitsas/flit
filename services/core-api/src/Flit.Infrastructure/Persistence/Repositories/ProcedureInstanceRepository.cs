@@ -965,13 +965,33 @@ internal sealed partial class ProcedureInstanceRepository(
             string documentNumber,
             int skip,
             int take,
+            CancellationToken ct) =>
+        await ListByPersonAsync(BaseTenantBiometricQuery(tenantId), documentType, documentNumber, skip, take, ct);
+
+    public async Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListMandatarioValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct) =>
+        await ListByPersonAsync(MandatarioTenantBiometricQuery(tenantId), documentType, documentNumber, skip, take, ct);
+
+    private static async Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListByPersonAsync(
+            IQueryable<ProcedureInstanceBiometricValidation> source,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
             CancellationToken ct)
     {
         var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
         if (tipo.Length == 0 || numero.Length == 0)
             return ([], 0, false);
 
-        var query = BaseTenantBiometricQuery(tenantId)
+        var query = source
             .Where(v => v.DocumentType.Trim().ToUpper() == tipo
                 && v.DocumentNumber.Trim().ToUpper() == numero);
 
@@ -1027,7 +1047,10 @@ internal sealed partial class ProcedureInstanceRepository(
                     v.score,
                     v.capture_url,
                     v.attempts,
-                    v.max_attempts
+                    v.max_attempts,
+                    -- La validación PROPIA del mandatario se lista, pero como persona aparte: nunca se mezcla con
+                    -- las del trámite o la prevalidación del mismo documento (no se apalancan entre sí).
+                    (v.mandate_signer_id IS NOT NULL) AS es_mandatario
                 FROM tramites.procedure_instance_biometric_validations v
                 LEFT JOIN tramites.procedure_instances pi
                     ON pi.id = v.procedure_instance_id
@@ -1040,8 +1063,6 @@ internal sealed partial class ProcedureInstanceRepository(
                 -- devuelve filas: cerrado por defecto, nunca «sin filtro».
                 WHERE ({0}::uuid[] IS NULL OR v.tenant_id = ANY({0}::uuid[]))
                   AND v.deleted_at IS NULL
-                  -- HU #13246 — la validación del mandatario no se lista en el módulo Identidad.
-                  AND v.mandate_signer_id IS NULL
                   AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
                   AND ({1}::text IS NULL OR upper(btrim(v.document_type)) = {1})
                   -- Documento por COINCIDENCIA PARCIAL, igual que el listado plano: el gestor teclea
@@ -1057,12 +1078,13 @@ internal sealed partial class ProcedureInstanceRepository(
             counted AS (
                 -- La persona es compañía + documento: la misma cédula en dos compañías son dos personas
                 -- (HU #12706, AC3). Con una sola compañía el tenant_id no cambia la agrupación.
-                SELECT tenant_id, document_type_norm, document_number_norm, COUNT(*)::int AS validation_count
+                SELECT tenant_id, document_type_norm, document_number_norm, es_mandatario,
+                       COUNT(*)::int AS validation_count
                 FROM base
-                GROUP BY tenant_id, document_type_norm, document_number_norm
+                GROUP BY tenant_id, document_type_norm, document_number_norm, es_mandatario
             ),
             latest AS (
-                SELECT DISTINCT ON (b.tenant_id, b.document_type_norm, b.document_number_norm)
+                SELECT DISTINCT ON (b.tenant_id, b.document_type_norm, b.document_number_norm, b.es_mandatario)
                     b.*,
                     c.validation_count
                 FROM base b
@@ -1070,11 +1092,13 @@ internal sealed partial class ProcedureInstanceRepository(
                   ON c.tenant_id = b.tenant_id
                  AND c.document_type_norm = b.document_type_norm
                  AND c.document_number_norm = b.document_number_norm
+                 AND c.es_mandatario = b.es_mandatario
                 -- Desempate por id: sin él, dos validaciones de la misma persona con idéntico
                 -- created_at hacen que DISTINCT ON elija una u otra en cada ejecución, y la página de
                 -- filas y el conteo de KPIs (dos sentencias distintas) pueden quedarse con estados
                 -- diferentes para la misma persona.
-                ORDER BY b.tenant_id, b.document_type_norm, b.document_number_norm, b.created_at DESC, b.id DESC
+                ORDER BY b.tenant_id, b.document_type_norm, b.document_number_norm, b.es_mandatario,
+                         b.created_at DESC, b.id DESC
             ),
             filtered AS (
                 SELECT *
@@ -1134,6 +1158,7 @@ internal sealed partial class ProcedureInstanceRepository(
                 capture_url,
                 attempts,
                 max_attempts,
+                es_mandatario,
                 validation_count,
                 COUNT(*) OVER() AS total_persons
             FROM filtered
@@ -1275,7 +1300,7 @@ internal sealed partial class ProcedureInstanceRepository(
             DateTimeOffset now,
             CancellationToken ct)
     {
-        var all = await BaseTenantBiometricQuery(scope).ToListAsync(ct);
+        var all = await BaseTenantBiometricQuery(scope, incluirMandatario: true).ToListAsync(ct);
 
         if (filter is not null)
         {
@@ -1309,11 +1334,13 @@ internal sealed partial class ProcedureInstanceRepository(
         }
 
         var groups = all
-            // Misma clave que el SQL: compañía + documento normalizado (HU #12706, AC3).
+            // Misma clave que el SQL: compañía + documento normalizado (HU #12706, AC3) + si es la validación propia de un
+            // mandatario (persona aparte: no se mezcla con el trámite ni la prevalidación del mismo documento).
             .GroupBy(v => (
                 v.TenantId,
                 DocumentCanonicalNormalization.NormalizePart(v.DocumentType),
-                DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)))
+                DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber),
+                EsMandatario: v.MandateSignerId != null))
             .Select(g =>
             {
                 // Mismo desempate que el DISTINCT ON de Postgres (created_at, luego id).
@@ -1343,6 +1370,7 @@ internal sealed partial class ProcedureInstanceRepository(
                     ValidationCount = g.Count(),
                     Attempts = latest.Attempts,
                     MaxAttempts = latest.MaxAttempts,
+                    EsMandatario = g.Key.EsMandatario,
                 };
             })
             .ToList();
@@ -1444,6 +1472,7 @@ internal sealed partial class ProcedureInstanceRepository(
         public string? CaptureUrl { get; init; }
         public int Attempts { get; init; }
         public int MaxAttempts { get; init; }
+        public bool EsMandatario { get; init; }
         public int ValidationCount { get; init; }
         public int TotalPersons { get; init; }
 
@@ -1472,6 +1501,7 @@ internal sealed partial class ProcedureInstanceRepository(
             ValidationCount = ValidationCount,
             Attempts = Attempts,
             MaxAttempts = MaxAttempts,
+            EsMandatario = EsMandatario,
         };
     }
 
@@ -1479,13 +1509,17 @@ internal sealed partial class ProcedureInstanceRepository(
     /// HU #12706 — base de las lecturas transversales de identidad acotada por <see cref="TenantScope"/>
     /// (<c>WhereTenantInScope</c>: sin filtro solo en <c>All</c>, conjunto vacío ⇒ cero filas).
     /// </summary>
-    private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(TenantScope scope) =>
+    /// <param name="incluirMandatario">
+    /// La vista agrupada por persona del módulo Validaciones SÍ lista la validación propia del mandatario (como persona
+    /// aparte). El resto de lecturas la siguen excluyendo (HU #13246): no alimenta la identidad de nadie más.
+    /// </param>
+    private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(
+        TenantScope scope, bool incluirMandatario = false) =>
         db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Include(v => v.ProcedureInstance)
             .WhereTenantInScope(scope, v => v.TenantId)
-            // HU #13246 — las validaciones del mandatario no se listan en el módulo Identidad ni alimentan sus consultas.
-            .Where(v => v.MandateSignerId == null)
+            .Where(v => incluirMandatario || v.MandateSignerId == null)
             .Where(v => v.ProcedureInstanceId == null
                 || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null));
 
@@ -1498,6 +1532,13 @@ internal sealed partial class ProcedureInstanceRepository(
                 && v.MandateSignerId == null
                 && (v.ProcedureInstanceId == null
                     || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)));
+
+    /// <summary>Validaciones PROPIAS de mandatario del tenant (detalle de la fila «Mandatario» del módulo Validaciones).</summary>
+    private IQueryable<ProcedureInstanceBiometricValidation> MandatarioTenantBiometricQuery(Guid tenantId) =>
+        db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Include(v => v.ProcedureInstance)
+            .Where(v => v.TenantId == tenantId && v.MandateSignerId != null);
 
     /// <summary>Carácter de escape para los patrones LIKE/ILIKE (saneo de búsqueda).</summary>
     private const string LikeEscapeChar = "\\";

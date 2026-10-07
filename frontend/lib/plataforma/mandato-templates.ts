@@ -15,12 +15,12 @@ export const MANDATO_TEMPLATE_AUTO_CODE = "auto";
 
 /**
  * Tipos de mandato que el Super Admin ve en la fila del organismo (HU #13150).
- * Persona natural es el tipo de un organismo nuevo y de toda compañía sin regla propia.
+ * «Mandatario de la compañía» es el tipo de un organismo nuevo y de toda compañía sin regla propia.
  */
 export function resumenTiposPorCompania(explicitJuridica: number, explicitAbierto: number): string {
-  const partes = ["Persona natural"];
-  if (explicitJuridica > 0) partes.push(`Persona jurídica (${explicitJuridica})`);
-  if (explicitAbierto > 0) partes.push(`Mandato abierto (${explicitAbierto})`);
+  const partes = [tipoNegocioLabel("persona_rl")];
+  if (explicitJuridica > 0) partes.push(`${tipoNegocioLabel("institucional")} (${explicitJuridica})`);
+  if (explicitAbierto > 0) partes.push(`${tipoNegocioLabel("abierto")} (${explicitAbierto})`);
   return partes.join(" · ");
 }
 
@@ -51,6 +51,12 @@ export type MandateAssignmentMode = "signer" | "institutional" | "open";
 /** Tipo de negocio mostrado en Plataforma (capa UX sobre assignment_mode). */
 export type MandatoTipoNegocio = "persona_rl" | "institucional" | "abierto";
 
+/**
+ * Nombres de los tipos de mandato. No se llaman «Persona natural» / «Persona jurídica»: esos son los modelos del
+ * MANDATARIO (quién es la persona que se registra) y el tipo de mandato dice otra cosa, QUIÉN ocupa el bloque del
+ * mandatario en el contrato. Con los mismos nombres se leía que «Persona natural» excluía a un mandatario persona
+ * jurídica y que «Persona jurídica» era cualquier empresa, cuando es el propio organismo.
+ */
 export const MANDATO_TIPOS: readonly {
   value: MandatoTipoNegocio;
   label: string;
@@ -58,21 +64,21 @@ export const MANDATO_TIPOS: readonly {
 }[] = [
   {
     value: "persona_rl",
-    label: "Persona natural",
+    label: "Mandatario de la compañía",
     summary:
-      "Una persona natural (mandatario de la empresa que radica) firma como mandatario. Mandato cliente: plantilla genérica. Si el OT configura firmante persona sin regla de cliente, se conserva la plantilla del organismo.",
+      "Firma el mandatario que la compañía tiene registrado, sea persona natural o persona jurídica. Es el tipo por defecto de todo organismo y compañía.",
   },
   {
     value: "institucional",
-    label: "Persona jurídica",
+    label: "Institucional (organismo)",
     summary:
-      "El organismo o unión temporal actúa como mandatario. Suele firmar solo el mandante (p. ej. Sabaneta UT-SETSA).",
+      "El propio organismo de tránsito o su unión temporal actúa como mandatario; no firma una persona de la compañía. Suele firmar solo el mandante (p. ej. Sabaneta UT-SETSA).",
   },
   {
     value: "abierto",
-    label: "Mandato abierto",
+    label: "Abierto (sin mandatario)",
     summary:
-      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Conserva la plantilla del organismo. No es el tipo por defecto: un organismo nuevo nace como Persona natural.",
+      "El contrato sale sin mandatario asignado: nombre, documento, firma y huella quedan en líneas en blanco (___) para llenarse a mano.",
   },
 ] as const;
 
