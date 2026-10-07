@@ -382,6 +382,7 @@ app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — s
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();
+app.MapManualIdentityReviewEndpoints(); // HU #13296 — listado de validaciones manuales (solo Super Admin)
 app.MapTramitesFirmaEndpoints();
 app.MapTramitesFurEndpoints();
 app.MapTramitesConsolidadoEndpoints();

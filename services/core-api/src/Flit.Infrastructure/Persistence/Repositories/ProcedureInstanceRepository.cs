@@ -1704,7 +1704,10 @@ internal sealed partial class ProcedureInstanceRepository(
         var affected = await db.ProcedureInstanceBiometricValidations
             .Where(x => x.Id == validation.Id
                         && x.Provider == BiometricProviders.Manual
-                        && x.Status == BiometricEstados.ManualActivo)
+                        // manual_activo, o rechazado con motivo (repetición tras un rechazo, HU #13299): la misma
+                        // condición que ProcedureInstanceBiometricValidation.EsperaCapturaManual.
+                        && (x.Status == BiometricEstados.ManualActivo
+                            || (x.Status == BiometricEstados.Rechazado && x.RejectionReasonCode != null)))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.FacePhotoPath, face)
                 .SetProperty(x => x.IdFrontPhotoPath, front)
@@ -1712,6 +1715,10 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.SignatureImagePath, signature)
                 .SetProperty(x => x.SignatureImageSha256, signatureSha)
                 .SetProperty(x => x.Status, status)
+                // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
+                .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
+                .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
+                .SetProperty(x => x.ReviewedAt, validation.ReviewedAt)
                 .SetProperty(x => x.UpdatedAt, updatedAt), ct);
 
         if (affected > 0)

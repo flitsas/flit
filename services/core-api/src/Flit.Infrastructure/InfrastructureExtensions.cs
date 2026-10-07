@@ -104,6 +104,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // HU #13296 — lectura cross-tenant de validaciones manuales (solo Super Admin; el endpoint lo exige).
+        services.AddScoped<IManualIdentityReviewReadRepository, ManualIdentityReviewReadRepository>();
         // Bug #13194 (review PR #510, MAYOR-2) — savepoint por trámite en el lote del outbox de identidad.
         services.AddScoped<ISavepointScope, Persistence.EfSavepointScope>();
         // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).

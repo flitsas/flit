@@ -46,17 +46,15 @@ export const CAPTURA_CONFIG = {
 
 export type CapturaKind = keyof typeof CAPTURA_CONFIG;
 
-/** Pasos 2–4 (HU #13294): visor en vivo + vista previa con «Repetir»/«Confirmar» y «Atrás». */
+/** Pasos 2–4 (HU #13294): visor en vivo + vista previa con «Repetir»/«Confirmar». */
 export function PasoCaptura({
   kind,
   blob,
   onCaptured,
-  onBack,
 }: {
   kind: CapturaKind;
   blob?: Blob;
   onCaptured: (blob: Blob) => void;
-  onBack: () => void;
 }) {
   const cfg: CapturaConfig = CAPTURA_CONFIG[kind];
   return (
@@ -76,13 +74,6 @@ export function PasoCaptura({
         initialBlob={blob}
         onContinue={onCaptured}
       />
-      <button
-        type="button"
-        onClick={onBack}
-        className="min-h-11 w-full rounded-xl px-4 text-base font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-      >
-        Atrás
-      </button>
     </section>
   );
 }
