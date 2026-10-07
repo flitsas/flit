@@ -25,7 +25,9 @@ import {
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { COPY } from '@/lib/copy/copy-catalog';
-import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { useSeleccionLote } from '@/hooks/useSeleccionLote';
+import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   ETIQUETA_CLIENTE_HIJO,
@@ -430,9 +432,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   });
   // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
   // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
+  // HU #13380 — con el permiso de descarga masiva la pista existe siempre: cada fila lleva casilla.
+  const [puedeLote, setPuedeLote] = useState(false);
   const includeSelectColumn = useMemo(
-    () => items.some((it) => it.origin === 'ict' && it.estado === 'borrador'),
-    [items],
+    () => puedeLote || items.some((it) => it.origin === 'ict' && it.estado === 'borrador'),
+    [items, puedeLote],
   );
   /**
    * Columnas realmente pintadas = preferencia del usuario menos las que no aplican al tipo de
@@ -481,8 +485,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // JWT en cliente tras montar (getToken lee la cookie), por eso vive en estado, no en el render SSR.
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
+    const payload = decodeJwtPayload(getToken());
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+    setIsAdmin(isSuperAdmin(payload));
+    setPuedeLote(canDescargarConsolidadosMasivo(payload));
   }, []);
   /**
    * HU #12362 — tenant del usuario, con el que `isNetworkReadOnly` decide si una fila es de un
@@ -779,6 +785,20 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         : tramitesClient.searchInstances(query),
     [networkActive, childTenantId],
   );
+  /**
+   * HU #13380 — selección para la descarga masiva. El filtro es el de `buildListQuery` sin el orden
+   * (reordenar no cambia el universo) más el alcance de red; la página no entra, así que cambiar de
+   * página conserva la selección (AC3) y cambiar un criterio la reinicia (AC4). `total` sale de
+   * `searchInstances`, que siempre va por la ruta filtrada con `take`: es el total real (V-d).
+   */
+  const filtroLote = useMemo(() => {
+    const criterios = buildListQuery();
+    delete criterios.sortBy;
+    delete criterios.sortDir;
+    return { ...criterios, alcanceRed: networkActive ? (childTenantId ?? 'red') : null };
+  }, [buildListQuery, networkActive, childTenantId]);
+  const lote = useSeleccionLote({ filtro: filtroLote, total });
+  const estadoTablaLote = loading ? 'cargando' : error ? 'error' : total === 0 ? 'vacio' : 'lleno';
   const contarEstados = useCallback(
     (query: ListInstancesParams) =>
       networkActive
@@ -1531,6 +1551,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           </div>
         ) : null}
 
+        {/* HU #13380 — sin el permiso no hay barra ni casillas (AC6). */}
+        {puedeLote ? (
+          <BarraSeleccionLote
+            estadoTabla={estadoTablaLote}
+            estadoCabecera={lote.estadoCabecera}
+            contador={lote.contador}
+            todosDelFiltro={lote.modo === 'filtro'}
+            onAlternarTodos={lote.alternarTodos}
+            onLimpiar={lote.limpiar}
+            mensajeTope={lote.mensajeTope}
+          />
+        ) : null}
+
         <TableBody
           loading={loading}
           error={error}
@@ -1556,6 +1589,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onTogglePause={handleTogglePause}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          seleccionLote={puedeLote ? lote : null}
           onProcesar={openProcesar}
           onOpen={abrirAsistente}
           onVerDocumentos={setDocsTramite}
@@ -1893,6 +1927,12 @@ function SortableHeaderCell({
   );
 }
 
+/** HU #13380 — lo que las filas necesitan de la selección de descarga masiva. */
+interface SeleccionLoteFilas {
+  estaSeleccionado: (id: string) => boolean;
+  alternar: (id: string) => boolean;
+}
+
 /** Cuerpo de la tabla: maneja los 4 estados (cargando/error/vacío/datos). */
 function TableBody({
   loading,
@@ -1919,6 +1959,7 @@ function TableBody({
   onTogglePause,
   selectedIds,
   onToggleSelect,
+  seleccionLote,
   onProcesar,
   onOpen,
   onVerDocumentos,
@@ -1960,6 +2001,8 @@ function TableBody({
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  /** HU #13380 — selección de descarga masiva; `null` sin el permiso (sin casillas, AC6). */
+  seleccionLote: SeleccionLoteFilas | null;
   onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
@@ -2154,6 +2197,8 @@ function TableBody({
                 onTogglePause={onTogglePause}
                 selected={selectedIds.has(item.id)}
                 onToggleSelect={onToggleSelect}
+                seleccionadoLote={seleccionLote?.estaSeleccionado(item.id) ?? false}
+                onAlternarLote={seleccionLote ? seleccionLote.alternar : null}
                 onProcesar={onProcesar}
                 onOpen={onOpen}
                 onVerDocumentos={onVerDocumentos}
@@ -2296,6 +2341,8 @@ function TramiteRow({
   onTogglePause,
   selected,
   onToggleSelect,
+  seleccionadoLote,
+  onAlternarLote,
   onProcesar,
   onOpen,
   onVerDocumentos,
@@ -2321,6 +2368,10 @@ function TramiteRow({
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
   selected: boolean;
   onToggleSelect: (id: string) => void;
+  /** HU #13380 — la fila va en la selección de descarga masiva. */
+  seleccionadoLote: boolean;
+  /** HU #13380 — alterna la fila en la selección; `null` sin el permiso (sin casilla). */
+  onAlternarLote: ((id: string) => boolean) | null;
   onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
@@ -3028,6 +3079,15 @@ function TramiteRow({
           className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle dark:border-white/10"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* HU #13380 — casilla de descarga masiva; si la fila es además un borrador ICT, la de
+              pausa va debajo (son selecciones distintas, cada una con su etiqueta). */}
+          {onAlternarLote ? (
+            <CasillaFilaLote
+              radicado={item.referenceNumber}
+              seleccionado={seleccionadoLote}
+              onAlternar={() => onAlternarLote(item.id)}
+            />
+          ) : null}
           {isIctDraft ? (
             <input
               type="checkbox"
