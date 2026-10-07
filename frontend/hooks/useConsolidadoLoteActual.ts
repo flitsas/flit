@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ConsolidadoLotesApiError,
+  MENSAJE_NO_SE_PUDO_CANCELAR,
   MENSAJE_REINTENTAR_DESCARGA,
   consolidadoLotesClient,
 } from '@/lib/api/consolidado-lotes-client';
@@ -24,6 +25,12 @@ import type {
  *
  * <p>`mostrarLote` fija un lote concreto (el recién creado, el del 409 `lote_activo` o el que elija
  * la bandeja del OT): a partir de ahí se consulta por id.</p>
+ *
+ * <p>HU #13388 — `cancelar()` manda `POST …/{id}/cancelacion` con un clic. `cancelado` es terminal
+ * (detiene el polling, nunca autodescarga) y no cuenta como expirado aunque el servidor fije
+ * `expiraEn` = instante de cancelación. El aviso del lote cancelado se oculta solo a los
+ * {@link OCULTAR_CANCELADO_MS} contados desde `terminadoEn` del servidor: una recarga o una segunda
+ * pestaña no lo vuelven a mostrar, sin estado nuevo en el backend (AC3/AC4).</p>
  */
 
 export const INTERVALO_POLLING_LOTE_MS = 4_000;
@@ -32,6 +39,8 @@ export const RETENCION_LOTE_MS = 24 * 60 * 60 * 1000;
 /** Espera entre escribir el candado y releerlo: decide quién gana si dos pestañas lo piden a la vez. */
 export const VENTANA_CANDADO_MS = 150;
 export const CANAL_LOTES_CONSOLIDADOS = 'flit:consolidado-lotes';
+/** HU #13388 AC3/AC4 — el aviso «Descarga cancelada» se ve este tiempo desde `terminadoEn`. */
+export const OCULTAR_CANCELADO_MS = 8_000;
 
 const PREFIJO_CANDADO = 'flit:consolidado-lotes:autodescarga:';
 const CLAVE_OCULTO = 'flit:consolidado-lotes:oculto';
@@ -54,13 +63,25 @@ export function esEstadoTerminal(estado: EstadoLoteConsolidados): boolean {
   return TERMINALES.has(estado);
 }
 
-/** Instante (ms) en que expiran las partes, o `null` si el lote no ha terminado. */
+/**
+ * Instante (ms) en que expiran las partes, o `null` si el lote no ha terminado. Un lote cancelado no
+ * tiene partes que expiren (HU #13388): su aviso se rige por {@link OCULTAR_CANCELADO_MS}.
+ */
 function instanteExpiracion(lote: LoteConsolidados): number | null {
-  if (!esEstadoTerminal(lote.estado)) return null;
+  if (!esEstadoTerminal(lote.estado) || lote.estado === 'cancelado') return null;
   const expira = lote.expiraEn ? Date.parse(lote.expiraEn) : NaN;
   if (!Number.isNaN(expira)) return expira;
   const fin = lote.terminadoEn ? Date.parse(lote.terminadoEn) : NaN;
   return Number.isNaN(fin) ? null : fin + RETENCION_LOTE_MS;
+}
+
+/** HU #13388 — instante (ms) en que se oculta el aviso del lote cancelado; `null` si no aplica. */
+function instanteOcultarCancelado(lote: LoteConsolidados, vistoEnMs: number | null): number | null {
+  if (lote.estado !== 'cancelado') return null;
+  const fin = lote.terminadoEn ? Date.parse(lote.terminadoEn) : NaN;
+  // Sin `terminadoEn` (no debería: el contrato lo fija al cancelar) se cuenta desde que se vio aquí.
+  const desde = Number.isNaN(fin) ? vistoEnMs : fin;
+  return desde === null ? null : desde + OCULTAR_CANCELADO_MS;
 }
 
 /** AC4 — expirado por estado o porque ya pasaron 24 h desde el fin. */
@@ -141,6 +162,12 @@ export interface UseConsolidadoLoteActual {
   /** Número de la parte que se está descargando, o `null`. */
   descargandoParte: number | null;
   errorDescarga: string | null;
+  /** HU #13388 — cancela el lote en curso (un clic, sin confirmación). */
+  cancelar: () => Promise<void>;
+  /** HU #13388 AC2 — la cancelación está en curso: el botón va deshabilitado. */
+  cancelando: boolean;
+  /** HU #13388 AC6 — 404/403 al cancelar: «No se pudo cancelar la descarga». */
+  errorCancelacion: string | null;
 }
 
 export function useConsolidadoLoteActual({
@@ -156,6 +183,10 @@ export function useConsolidadoLoteActual({
   const [descargandoParte, setDescargandoParte] = useState<number | null>(null);
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null);
   const [expiradoPorServidor, setExpiradoPorServidor] = useState<string | null>(null);
+  const [cancelando, setCancelando] = useState(false);
+  const [errorCancelacion, setErrorCancelacion] = useState<string | null>(null);
+  /** Lote cancelado que llegó sin `terminadoEn`: instante local en que se vio. */
+  const [canceladoVisto, setCanceladoVisto] = useState<{ id: string; en: number } | null>(null);
 
   const loteRef = useRef<LoteConsolidados | null>(null);
   const vistosActivos = useRef(new Set<string>());
@@ -163,6 +194,9 @@ export function useConsolidadoLoteActual({
   /** Tokens de candado que anunciaron otras pestañas, por lote. */
   const tokensAjenos = useRef(new Map<string, string[]>());
   const vivoRef = useRef(true);
+  const cancelandoRef = useRef(false);
+  /** Detiene el ciclo de polling en curso (lo publica el efecto del polling). */
+  const pararPollingRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     vivoRef.current = true;
@@ -255,10 +289,14 @@ export function useConsolidadoLoteActual({
     (leido: LoteConsolidados | null) => {
       if (leido && loteRef.current?.id !== leido.id) {
         setErrorDescarga(null);
+        setErrorCancelacion(null);
       }
       loteRef.current = leido;
       setLote(leido);
       if (!leido) return;
+      if (leido.estado === 'cancelado' && !leido.terminadoEn) {
+        setCanceladoVisto((v) => (v?.id === leido.id ? v : { id: leido.id, en: Date.now() }));
+      }
       if (!esEstadoTerminal(leido.estado)) {
         vistosActivos.current.add(leido.id);
         vistosActivosEnPestana.add(leido.id);
@@ -310,11 +348,13 @@ export function useConsolidadoLoteActual({
         programar();
       }
     };
-    void ciclo();
-    return () => {
+    const parar = () => {
       vivo = false;
       if (timer) clearTimeout(timer);
     };
+    pararPollingRef.current = parar;
+    void ciclo();
+    return parar;
   }, [habilitado, fijado, aplicar]);
 
   // AC4 — con la app abierta, al cumplirse las 24 h el aviso pasa a «Descarga expirada».
@@ -326,6 +366,17 @@ export function useConsolidadoLoteActual({
     const t = setTimeout(() => setAhora(Date.now()), Math.min(falta + 1, MAX_TIMEOUT_MS));
     return () => clearTimeout(t);
   }, [expiracion]);
+
+  // HU #13388 AC3 — a los 8 s de `terminadoEn` el aviso del lote cancelado se oculta solo.
+  const ocultarCanceladoEn = lote
+    ? instanteOcultarCancelado(lote, canceladoVisto?.id === lote.id ? canceladoVisto.en : null)
+    : null;
+  useEffect(() => {
+    if (ocultarCanceladoEn === null) return;
+    const falta = Math.max(0, ocultarCanceladoEn - Date.now());
+    const t = setTimeout(() => setAhora(Date.now()), Math.min(falta, MAX_TIMEOUT_MS));
+    return () => clearTimeout(t);
+  }, [ocultarCanceladoEn]);
 
   const mostrarLote = useCallback(
     (objetivo: LoteConsolidados | string) => {
@@ -344,6 +395,40 @@ export function useConsolidadoLoteActual({
     escribir(CLAVE_OCULTO, id);
   }, []);
 
+  /** Vuelve a leer el lote por id (AC5/AC6: estado real tras un 409/404/403). */
+  const refrescar = useCallback((id: string) => {
+    setFijado((f) => ({ id, version: f.version + 1 }));
+  }, []);
+
+  const cancelar = useCallback(async () => {
+    const objetivo = loteRef.current;
+    if (!objetivo || esEstadoTerminal(objetivo.estado) || cancelandoRef.current) return;
+    cancelandoRef.current = true;
+    setCancelando(true);
+    setErrorCancelacion(null);
+    try {
+      const leido = await consolidadoLotesClient.cancelar(objetivo.id);
+      if (!vivoRef.current) return;
+      // AC3 — 202 `cancelado`: terminal, se corta el polling (una lectura en vuelo ya no se aplica).
+      if (esEstadoTerminal(leido.estado)) pararPollingRef.current();
+      aplicar(leido);
+    } catch (err) {
+      if (!vivoRef.current) return;
+      const status = err instanceof ConsolidadoLotesApiError ? err.status : 0;
+      if (status === 409) {
+        // AC5 — `lote_terminado`: se muestra el estado real (con sus partes si completó).
+        refrescar(objetivo.id);
+      } else if (status === 403 || status === 404) {
+        setErrorCancelacion(MENSAJE_NO_SE_PUDO_CANCELAR);
+        refrescar(objetivo.id);
+      }
+      // AC6 — red (o 5xx): el botón se rehabilita y el lote sigue como estaba; el polling continúa.
+    } finally {
+      cancelandoRef.current = false;
+      if (vivoRef.current) setCancelando(false);
+    }
+  }, [aplicar, refrescar]);
+
   const descargarParte = useCallback(
     async (numero: number) => {
       const actual = loteRef.current;
@@ -356,15 +441,20 @@ export function useConsolidadoLoteActual({
     ? expiradoPorServidor === lote.id || loteExpirado(lote, ahora)
     : false;
 
+  const canceladoVencido = ocultarCanceladoEn !== null && ahora >= ocultarCanceladoEn;
+
   return {
     lote,
     errorConsulta,
     expirado,
-    oculto: lote !== null && ocultoId === lote.id,
+    oculto: lote !== null && (ocultoId === lote.id || canceladoVencido),
     mostrarLote,
     ocultar,
     descargarParte,
     descargandoParte,
     errorDescarga,
+    cancelar,
+    cancelando,
+    errorCancelacion,
   };
 }

@@ -79,6 +79,9 @@ export function LoteDescargaTracker() {
         errorDescarga={s.errorDescarga}
         onDescargarParte={(n) => void s.descargarParte(n)}
         onCerrar={s.ocultar}
+        onCancelar={() => void s.cancelar()}
+        cancelando={s.cancelando}
+        errorCancelacion={s.errorCancelacion}
       />
     </div>
   );

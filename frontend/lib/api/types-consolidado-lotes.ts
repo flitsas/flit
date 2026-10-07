@@ -26,6 +26,7 @@ export type CodigoErrorLote =
   | 'tipo_no_permitido'
   | 'lote_no_creado'
   | 'lote_no_terminado'
+  | 'lote_terminado'
   | 'descarga_expirada'
   | 'auditoria_no_registrada'
   | 'motor_inactivo';
@@ -75,6 +76,16 @@ export interface CrearLoteConsolidadosRequest<TFiltro = unknown> {
 export interface LoteActivoConflict {
   error: 'lote_activo';
   loteActivoId: string;
+  detail?: string;
+}
+
+/**
+ * HU #13388 — cuerpo del 409 de `POST /api/v1/consolidados/lotes/{loteId}/cancelacion`: el lote ya
+ * terminó antes de cancelarlo (contrato §4 del diseño #13307).
+ */
+export interface LoteTerminadoConflict {
+  error: 'lote_terminado';
+  estado: Extract<EstadoLoteConsolidados, 'completado' | 'completado_con_omitidos' | 'fallido' | 'expirado'>;
   detail?: string;
 }
 

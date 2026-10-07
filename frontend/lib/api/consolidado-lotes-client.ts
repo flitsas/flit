@@ -37,6 +37,9 @@ export const MENSAJE_TOPE_DESCARGA = `La selección supera el tope de ${formatoM
 export const MENSAJE_LOTE_ACTIVO =
   'Ya hay una descarga en curso. Espera a que termine para crear otra; tu selección se conserva.';
 
+/** HU #13388 AC6 — 404/403 al cancelar el lote. Texto aprobado. */
+export const MENSAJE_NO_SE_PUDO_CANCELAR = 'No se pudo cancelar la descarga';
+
 const MENSAJE_SIN_PERMISO = 'No tienes permiso para la descarga masiva de consolidados.';
 
 /**
@@ -195,6 +198,18 @@ export const consolidadoLotesClient = {
   obtenerLoteActual: async (): Promise<LoteConsolidados | null> => {
     const res = await llamar(`${RUTA_LOTES}/actual`);
     if (res.status === 204) return null;
+    return (await res.json()) as LoteConsolidados;
+  },
+
+  /**
+   * HU #13388 — cancela el lote en curso del usuario (`POST …/{loteId}/cancelacion`, un solo clic,
+   * sin cuerpo). 202 devuelve el lote `cancelado` (también si ya lo estaba: idempotente). Mismas
+   * cabeceras que {@link consolidadoLotesClient.obtenerLote}: la ruta neutra identifica al dueño por
+   * el `sub` del JWT. Lanza {@link ConsolidadoLotesApiError}: 409 `lote_terminado`
+   * (cuerpo `LoteTerminadoConflict`), 404, 403, 503 `auditoria_no_registrada` o 0 (red).
+   */
+  cancelar: async (loteId: string): Promise<LoteConsolidados> => {
+    const res = await llamar(`${RUTA_LOTES}/${encodeURIComponent(loteId)}/cancelacion`, { method: 'POST' });
     return (await res.json()) as LoteConsolidados;
   },
 
