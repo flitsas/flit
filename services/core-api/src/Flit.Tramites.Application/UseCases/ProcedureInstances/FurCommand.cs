@@ -1125,6 +1125,10 @@ public sealed class GenerarFurHandler(
                     if (ms.Length == 0)
                         continue;
                     var bytes = ms.ToArray();
+                    // Bug #13304 — paridad con la impronta: por encima del tope del extractor no se
+                    // decodifica ni se estampa, haya o no extractor; queda el sello de texto.
+                    if (bytes.Length > IdentitySignatureImageFormat.MaxArtifactBytes)
+                        continue;
                     if (!IdentitySignatureImageFormat.IsSupported(bytes))
                         continue;
                     if (identitySignatureExtractor is not null && !identitySignatureExtractor.IsUsableInk(bytes))

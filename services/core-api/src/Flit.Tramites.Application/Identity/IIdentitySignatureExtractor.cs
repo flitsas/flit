@@ -13,7 +13,8 @@ public interface IIdentitySignatureExtractor
 
     /// <summary>
     /// True si el PNG/JPEG guardado tiene tinta visible (no es el recorte negro opaco de Kyverum
-    /// ni un recorte vacío tras quitar el fondo).
+    /// ni un recorte vacío tras quitar el fondo), fondo transparente y paleta baja. Bug #13304: el logo
+    /// «Verify» opaco y de color continuo no cuenta como rúbrica y la captura lo re-extrae.
     /// </summary>
     bool IsUsableInk(byte[] imageBytes);
 }

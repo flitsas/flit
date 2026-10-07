@@ -290,7 +290,7 @@ internal static class PdfXObjectPngDecoder
             var png = ms.ToArray();
             return IdentitySignatureImageFormat.IsPng(png) ? png : null;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return null;
         }
@@ -307,18 +307,23 @@ internal static class PdfXObjectPngDecoder
             (byte)(255 * (1f - y / 255f) * kk));
     }
 
+    /// <summary>
+    /// Bug #13304 (review de seguridad) — JPEG/PNG embebido: se decodifica con <see cref="LoadBounded"/>
+    /// para que una cabecera enorme en pocos bytes no reserve todos sus píxeles dentro de TryExtract.
+    /// </summary>
     private static byte[]? ReencodeRasterFile(byte[] bytes)
     {
         try
         {
-            using var input = new MemoryStream(bytes, writable: false);
-            using var image = Image.Load<Rgba32>(input);
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return null;
             using var ms = new MemoryStream();
             image.Save(ms, Png);
             var png = ms.ToArray();
             return IdentitySignatureImageFormat.IsPng(png) ? png : null;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return null;
         }
@@ -333,7 +338,9 @@ internal static class PdfXObjectPngDecoder
     {
         try
         {
-            using var image = Image.Load<Rgba32>(png);
+            using var image = LoadBounded(png);
+            if (image is null)
+                return png;
             long sum = 0;
             var total = Math.Max(1, image.Width * image.Height);
             for (var y = 0; y < image.Height; y++)
@@ -347,7 +354,7 @@ internal static class PdfXObjectPngDecoder
 
             var mean = sum / (double)(total * 3);
             if (mean >= 140)
-                return png;
+                return KnockOutLightBackground(image) ?? png;
 
             const int backgroundMaxLuma = 8;
             const int contrastGain = 14;
@@ -374,9 +381,148 @@ internal static class PdfXObjectPngDecoder
             var outPng = ms.ToArray();
             return IdentitySignatureImageFormat.IsPng(outPng) ? outPng : png;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return png;
+        }
+    }
+
+    /// <summary>
+    /// Bug #13304 (review de seguridad) — tope de píxeles para decodificar un artefacto de rúbrica.
+    /// <see cref="RasterToPng"/> ya limita a 2000x2000, así que nada legítimo lo supera.
+    /// </summary>
+    internal const int MaxDecodePixels = 4_000_000;
+
+    /// <summary>
+    /// Bug #13304 (review de seguridad) — decodificación acotada. ImageSharp 2.1.11 (pin de PdfSharpCore)
+    /// no tiene <c>DecoderOptions.MaxFrames</c> ni límite de asignación del allocator; el equivalente
+    /// explícito es: solo PNG/JPEG (formatos de un frame) y dimensiones leídas de la cabecera con
+    /// <c>Image.Identify</c> ANTES de reservar píxeles. Devuelve null si no cumple.
+    /// </summary>
+    private static Image<Rgba32>? LoadBounded(byte[]? bytes)
+    {
+        if (!IdentitySignatureImageFormat.IsSupported(bytes))
+            return null;
+
+        var info = Image.Identify(bytes);
+        if (info is null || info.Width <= 0 || info.Height <= 0
+            || (long)info.Width * info.Height > MaxDecodePixels)
+            return null;
+
+        return Image.Load<Rgba32>(bytes);
+    }
+
+    /// <summary>
+    /// Bug #13304 — tinta oscura sobre fondo claro: el fondo casi blanco pasa a transparente para que
+    /// todo recorte de rúbrica lleve canal alfa (criterio de <see cref="LooksLikeSignatureArtifact"/>).
+    /// Devuelve null si no había fondo claro que quitar.
+    /// </summary>
+    private static byte[]? KnockOutLightBackground(Image<Rgba32> image)
+    {
+        var cleared = false;
+        for (var y = 0; y < image.Height; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                var p = image[x, y];
+                if (p.A > 0 && (p.R + p.G + p.B) / 3 >= LightBackgroundMinLuma)
+                {
+                    image[x, y] = new Rgba32(255, 255, 255, 0);
+                    cleared = true;
+                }
+            }
+        }
+
+        if (!cleared)
+            return null;
+
+        using var ms = new MemoryStream();
+        image.Save(ms, Png);
+        var outPng = ms.ToArray();
+        return IdentitySignatureImageFormat.IsPng(outPng) ? outPng : null;
+    }
+
+    private const int LightBackgroundMinLuma = 235;
+
+    /// <summary>Máximo de colores distintos de la tinta visible de una rúbrica (trazo + antialias).</summary>
+    internal const int SignaturePaletteMax = 1024;
+
+    /// <summary>
+    /// Bug #13304 — el XObject declara canal alfa (/SMask o /Mask). La rúbrica de Kyverum lo trae en
+    /// los dos layouts conocidos; el logo de cabecera del layout nuevo no.
+    /// </summary>
+    internal static bool HasTransparencyMask(PdfDictionary dict) =>
+        dict.Elements.ContainsKey("/SMask") || dict.Elements.ContainsKey("/Mask");
+
+    /// <summary>
+    /// Colores RGB distintos entre los píxeles visibles (alfa &gt;= 96), cortando al pasar de
+    /// <paramref name="cap"/>. Devuelve <see cref="int.MaxValue"/> si la imagen no se puede leer.
+    /// </summary>
+    internal static int CountVisibleColors(byte[] imageBytes, int cap)
+    {
+        try
+        {
+            using var image = LoadBounded(imageBytes);
+            return image is null ? int.MaxValue : CountVisibleColors(image, cap);
+        }
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
+        {
+            return int.MaxValue;
+        }
+    }
+
+    private static int CountVisibleColors(Image<Rgba32> image, int cap)
+    {
+        var colors = new HashSet<int>();
+        for (var y = 0; y < image.Height; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                var p = image[x, y];
+                if (p.A < 96)
+                    continue;
+                colors.Add((p.R << 16) | (p.G << 8) | p.B);
+                if (colors.Count > cap)
+                    return colors.Count;
+            }
+        }
+
+        return colors.Count;
+    }
+
+    /// <summary>
+    /// Bug #13304 — recorte de rúbrica utilizable: tinta visible, fondo transparente (al menos 5 % de
+    /// píxeles con alfa &lt; 128) y paleta baja. Distingue el recorte bueno del logo «Verify»
+    /// persistido (opaco y de color continuo) y es el mismo criterio con el que se valida lo que
+    /// entrega <see cref="IdentitySignatureExtractor.TryExtract"/>, para que no haya recapturas en bucle.
+    /// </summary>
+    internal static bool LooksLikeSignatureArtifact(byte[]? bytes)
+    {
+        if (!HasVisibleInk(bytes))
+            return false;
+
+        try
+        {
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return false;
+            var total = image.Width * image.Height;
+            var transparent = 0;
+            for (var y = 0; y < image.Height; y++)
+            {
+                for (var x = 0; x < image.Width; x++)
+                {
+                    if (image[x, y].A < 128)
+                        transparent++;
+                }
+            }
+
+            return transparent >= total / 20
+                   && CountVisibleColors(image, SignaturePaletteMax) <= SignaturePaletteMax;
+        }
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
+        {
+            return false;
         }
     }
 
@@ -390,7 +536,9 @@ internal static class PdfXObjectPngDecoder
 
         try
         {
-            using var image = Image.Load<Rgba32>(bytes);
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return false;
             var total = image.Width * image.Height;
             if (total < 16)
                 return false;
@@ -418,7 +566,7 @@ internal static class PdfXObjectPngDecoder
 
             return visibleInk >= Math.Max(20, total / 250);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
         {
             return false;
         }

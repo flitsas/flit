@@ -118,6 +118,82 @@ public sealed class IdentitySignatureCaptureTests
         v.SignatureImageSha256.Should().Be("deadbeef");
     }
 
+    // Bug #13304 — autocorrección: un artefacto persistido que el extractor ya no reconoce como
+    // rúbrica (el logo «Verify» opaco) se re-extrae y se sobrescribe; uno bueno no se toca.
+
+    [Fact]
+    public async Task Bug13304_ArtefactoPersistidoSinAlfa_RecapturaYSobrescribe()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Kyverum("s3://logo");
+        var logo = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 7, 7 };
+        var rubrica = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 3, 3 };
+        _store.OpenReadAsync("s3://logo", ct).Returns(new MemoryStream(logo));
+        _extractor.IsUsableInk(Arg.Is<byte[]>(b => b.SequenceEqual(logo))).Returns(false);
+        _extractor.IsUsableInk(Arg.Is<byte[]>(b => b.SequenceEqual(rubrica))).Returns(true);
+        _extractor.TryExtract(Arg.Any<byte[]>()).Returns(new IdentitySignatureCrop(rubrica));
+        _store.SaveAsync(v.TenantId, rubrica, ct).Returns(new StoredIdentitySignature("s3://rubrica", "f00d"));
+
+        var outcome = await _sut.EnsureFromPdfAsync(v, [0x25, 0x50, 0x44, 0x46], ct);
+
+        outcome.Should().Be(IdentitySignatureCaptureOutcome.Captured);
+        v.SignatureImagePath.Should().Be("s3://rubrica");
+        v.SignatureImageSha256.Should().Be("f00d");
+        await _store.Received(1).SaveAsync(v.TenantId, rubrica, ct);
+    }
+
+    [Fact]
+    public async Task Bug13304_ArtefactoBueno_NoRecaptura()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Kyverum("s3://bueno");
+        var bueno = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 5, 5 };
+        _store.OpenReadAsync("s3://bueno", ct).Returns(new MemoryStream(bueno));
+
+        var outcome = await _sut.EnsureFromPdfAsync(v, [0x25, 0x50, 0x44, 0x46], ct);
+
+        outcome.Should().Be(IdentitySignatureCaptureOutcome.AlreadyPresent);
+        v.SignatureImagePath.Should().Be("s3://bueno");
+        _extractor.DidNotReceiveWithAnyArgs().TryExtract(default!);
+        await _store.DidNotReceive().SaveAsync(Arg.Any<Guid>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Bug13304_ArtefactoSinAlfa_CertificadoNoDisponible_EsRetryableYConservaElPath()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Kyverum("s3://logo");
+        var logo = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 7, 7 };
+        _store.OpenReadAsync("s3://logo", ct).Returns(new MemoryStream(logo));
+        _extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(false);
+        _certs.DownloadCertificateAsync("kv-1", ct).Returns((KyverumCertificate?)null);
+
+        var outcome = await _sut.EnsureAsync(v, ct);
+
+        outcome.Should().Be(IdentitySignatureCaptureOutcome.Retryable);
+        v.SignatureImagePath.Should().Be("s3://logo");
+        await _certs.Received(1).DownloadCertificateAsync("kv-1", ct);
+        _extractor.DidNotReceiveWithAnyArgs().TryExtract(default!);
+        await _store.DidNotReceive().SaveAsync(Arg.Any<Guid>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Bug13304_ArtefactoSinAlfa_PdfSinRubricaReconocible_SeOmiteSinGuardar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Kyverum("s3://logo");
+        var logo = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 7, 7 };
+        _store.OpenReadAsync("s3://logo", ct).Returns(new MemoryStream(logo));
+        _extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(false);
+        _extractor.TryExtract(Arg.Any<byte[]>()).Returns((IdentitySignatureCrop?)null);
+
+        var outcome = await _sut.EnsureFromPdfAsync(v, [0x25, 0x50, 0x44, 0x46], ct);
+
+        outcome.Should().Be(IdentitySignatureCaptureOutcome.Skipped);
+        v.SignatureImagePath.Should().Be("s3://logo");
+        await _store.DidNotReceive().SaveAsync(Arg.Any<Guid>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task SinImagenEnPdf_Skipped_NoTira()
     {
