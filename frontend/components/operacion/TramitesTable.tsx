@@ -28,6 +28,7 @@ import { COPY } from '@/lib/copy/copy-catalog';
 import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { useSeleccionLote } from '@/hooks/useSeleccionLote';
 import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
+import { BotonDescargaMasivaZip } from './DescargaMasivaConfirmModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   ETIQUETA_CLIENTE_HIJO,
@@ -1561,7 +1562,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             onAlternarTodos={lote.alternarTodos}
             onLimpiar={lote.limpiar}
             mensajeTope={lote.mensajeTope}
-          />
+          >
+            {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). El 409
+                `lote_activo` expone `onLoteActivo(loteId)`: ahí se engancha el seguimiento (#13382). */}
+            <BotonDescargaMasivaZip
+              seleccion={lote.modelo}
+              contador={lote.contador}
+              onCreado={lote.limpiar}
+            />
+          </BarraSeleccionLote>
         ) : null}
 
         <TableBody
