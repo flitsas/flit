@@ -6,7 +6,7 @@
 **Tags**: arquitectura, backend, frontend, seguridad, habeas-data, tramites, consolidado, background-jobs
 **Épica / Feature**: #13216 / #13306 (FA1, motor + Gestor). Lo reutilizan #13307 (FA2, Super Admin + cancelación) y #13308 (FB, bandeja OT).
 **Diseño completo**: `.claude/state/epica-13216/05-diseno-13306.md` (se publica en la Wiki con el Feature).
-**Revisión**: v2 2026-10-07 · v3 2026-10-07 (adenda de schema, ver «Adenda v3») · v4 2026-10-07 (#13307 Super Admin y cancelación, ver «Adenda v4») · v5 2026-10-07 (#13308 bandeja del OT, ver «Adenda v5») — sigue en Propuesto.
+**Revisión**: v2 2026-10-07 · v3 2026-10-07 (adenda de schema, ver «Adenda v3») · v4 2026-10-07 (#13307 Super Admin y cancelación, ver «Adenda v4») · v5 2026-10-07 (#13308 bandeja del OT, ver «Adenda v5») · v6 2026-10-07 (subclave por parte, ver «Adenda v6») — sigue en Propuesto.
 
 > **Nota v2 (2026-10-07).** Una regla del usuario cambia cómo se entrega cada ítem: **el lote nunca regenera**. Si el trámite ya tiene consolidado del tipo pedido (`consolidado` o `consolidado_maestro`), se descarga ese tal cual, en cualquier estado y aunque esté desactualizado; el maestro radicado ante Quipux se entrega como hasta ahora. Solo se genera, por el generador oficial, el consolidado de los trámites que no tienen ninguno, incluidos los aprobados o rechazados. Consecuencias en este ADR:
 > - el lote deja de usar `EntregarConsolidadoHandler` (reconstruye lo no vigente y en final no genera) y usa un entregador propio «existente o primera generación», apoyado en una guarda aditiva `soloSiNoExiste` (default `false`) en `GenerarConsolidadoHandler` y `GenerarConsolidadoMaestroHandler`;
@@ -463,6 +463,21 @@ Aditivos; entran como AC de las HUs del motor antes de implementarlas:
   - primer `RequirePermission` en `AdminOtEndpoints` (AND con `OtModulePolicy`);
   - minimización de `busqueda`;
   - lote OT del Super Admin imputado al tenant OT.
+
+## Adenda v6 (2026-10-07) — subclave por parte en FLZ1
+
+**Decisión del usuario (HU #13372).** Cada parte del lote cifra con su propia clave, derivada con HKDF-SHA256 (RFC 5869, `System.Security.Cryptography.HKDF`):
+`clave_parte = HKDF(ikm = DEK, salt = sal, info = "FLZ1" ‖ lote_id (16 B, RFC 4122 big-endian) ‖ part_number (int32 BE), L = 32)`.
+
+- La sal tiene 32 B aleatorios, es nueva en cada intento (un reintento de la misma parte usa otra clave) y viaja en la cabecera: `"FLZ1" ‖ sal` (36 B).
+- El nonce pasa a ser `0x00000000 ‖ contador (uint64)`: el prefijo aleatorio de 4 B se elimina porque ya no aporta nada.
+- El AAD de cada bloque no cambia.
+- La subclave vive en un búfer que se pone a cero en un `finally`, igual que la DEK, que sigue sin salir de `ConsolidadoLoteCipher`.
+- Una cabecera truncada (sal incompleta) es `ParteCorrupta`.
+
+**Motivo.** La unicidad del par (clave, nonce) queda garantizada por construcción entre partes y entre reintentos. Antes dependía de un prefijo aleatorio de 32 bits bajo una DEK compartida (colisión ≈ p²/2³³).
+
+**Formato.** Se conserva el nombre FLZ1: no se había publicado ni cifrado nada. Los vectores fijos se regeneraron con una implementación independiente en Python.
 
 ## Referencias externas
 
