@@ -5244,19 +5244,24 @@ paths:
       tags: [Tramites, Consolidados]
       summary: Crea un lote de descarga masiva de consolidados (Gestor/Radicador; Super Admin en FA2)
       description: >
-        Feature #13306 / ADR-0070 (HU #13374). Resuelve la selección EN SERVIDOR con la misma visibilidad y
-        filtros del listado (sin el tope de 200) y congela el total. Exige `confirmaEfectos=true` (CF-08).
-        El origen y la compañía los decide el servidor por el JWT (TenantEnforcementMiddleware), NUNCA el
-        cuerpo: usuario de compañía → origen `tramites` con el tenant del token; SuperAdmin → origen
-        `superadmin`, lote sin compañía (la lógica de ese origen la completa #13383). La auditoría se escribe
-        en la misma transacción: si no se puede registrar, el lote no se crea (503). Un solo lote activo por
-        usuario. Los errores son ProblemDetails con el código estable en `error` (raíz del cuerpo).
+        Feature #13306 / #13307, ADR-0070 (HU #13374, #13383). Resuelve la selección EN SERVIDOR con la misma
+        visibilidad y filtros del listado (sin el tope de 200) y congela el total. Exige `confirmaEfectos=true`
+        (CF-08). El origen lo decide el servidor por el rol del JWT (TenantEnforcementMiddleware), NUNCA el
+        cuerpo: usuario de compañía → origen `tramites`, tenant del JWT; SuperAdmin → origen `superadmin`,
+        lote SIN compañía (Q8). El Super Admin puede acotar con X-Tenant-Id (queda en `scope_tenant_id`) o,
+        como hace /tramites, con la condición `compania` del filtro; un trámite fuera del scope no entra ni
+        cuenta en el total. Cada trámite conserva su compañía y se procesa en ella (CF-05).
+        `consolidado_maestro` solo se admite en origen `superadmin` (los demás → 400 `tipo_no_permitido`).
+        La auditoría `lote_creado` se escribe en la misma transacción y registra las compañías alcanzadas
+        (`reached_tenant_ids`, DISTINCT de los trámites congelados; `actor_tenant_id` nulo para el Super
+        Admin); la condición `compania` queda en `filter_summary` solo como conteo. Si la auditoría no se
+        puede registrar, el lote no se crea (503). Un solo lote activo por usuario. Los errores son ProblemDetails con el código estable en `error` (raíz del cuerpo).
         Códigos estables: 400 `confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`,
         `seleccion_invalida`, `filtro_invalido` (campo, operador o atajo fuera de catálogo: 400, igual que
         `POST /api/v1/tramites/instances/search`); 403 `sin_compania`; 409 `lote_activo`; 422
         `seleccion_excede_tope` (más de 10.000 ids o excluidos) y `busqueda_demasiado_amplia` (el atajo de
         búsqueda rápida abarca demasiados borradores, igual que el listado); 503 `motor_inactivo` (motor
-        apagado o, mientras llega #13383, origen sin resolver) y `lote_no_creado` (la transacción o la
+        apagado u origen sin resolver) y `lote_no_creado` (la transacción o la
         auditoría falló).
       x-required-permission: consolidado-masivo.download
       security:
@@ -5266,9 +5271,8 @@ paths:
           name: X-Tenant-Id
           required: false
           description: >
-            Opcional. Usuario de compañía: se acepta si coincide con el tenant del JWT; en cualquier caso el
-            middleware lo reemplaza por el del token. SuperAdmin: acota la selección a una compañía
-            (`scope_tenant_id`); sin él, todas.
+            Solo SuperAdmin; acota la selección a una compañía (`scope_tenant_id`); sin él, todas. Para el resto
+            lo impone el JWT: el middleware reemplaza el valor del cliente por el tenant del token.
           schema: { type: string, format: uuid }
       requestBody:
         required: true
@@ -5285,14 +5289,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LoteConsolidados" }
         "400":
-          description: "`confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida` o `filtro_invalido`."
+          description: "Selección inválida (`seleccion_requerida`, `seleccion_invalida`), condición fuera de catálogo (`filtro_invalido`), `confirmacion_requerida` o `tipo_no_permitido` (consolidado_maestro fuera de origen superadmin)."
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
         "401":
           description: Sin token válido.
         "403":
-          description: "Sin permiso consolidado-masivo.download, o `sin_compania` (usuario no SuperAdmin sin compañía)."
+          description: "Sin permiso consolidado-masivo.download (el SuperAdmin pasa por bypass aunque su token no traiga el claim), o `sin_compania` (usuario sin compañía que no es SuperAdmin)."
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
