@@ -396,6 +396,9 @@ public static class DependencyInjection
         // Épica #13216 — HU13370: resolución de la selección del lote por origen (la bandeja OT añade el suyo).
         services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
             UseCases.ConsolidadoLotes.TramitesSeleccionResolver>();
+        // Épica #13216 — HU13383: selección del Super Admin (origen superadmin) sobre el mismo listado, sin compañía.
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            UseCases.ConsolidadoLotes.SuperAdminSeleccionResolver>();
         services.AddScoped<UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen>();
 
         // Épica #13216 — HU13373: crear el lote (selección congelada + auditoría lote_creado en una transacción).

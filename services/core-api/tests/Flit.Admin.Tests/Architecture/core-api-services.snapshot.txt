@@ -595,6 +595,7 @@ Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen => Flit.Tram
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen => Flit.Tramites.Application.UseCases.ConsolidadoLotes.SuperAdminLoteItemOrigen (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver => Flit.Infrastructure.ConsolidadoLotes.Ot.OtBandejaSeleccionResolver (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver => Flit.Tramites.Application.UseCases.ConsolidadoLotes.TramitesSeleccionResolver (Scoped)
+Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver => Flit.Tramites.Application.UseCases.ConsolidadoLotes.SuperAdminSeleccionResolver (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.LoteItemOrigenPorOrigen => Flit.Tramites.Application.UseCases.ConsolidadoLotes.LoteItemOrigenPorOrigen (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen => Flit.Tramites.Application.UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ProcesarItemLoteHandler => Flit.Tramites.Application.UseCases.ConsolidadoLotes.ProcesarItemLoteHandler (Scoped)

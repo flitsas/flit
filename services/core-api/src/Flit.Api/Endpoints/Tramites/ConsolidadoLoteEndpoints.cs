@@ -85,8 +85,8 @@ internal static partial class ConsolidadoLoteEndpoints
         var (tenantId, isSuperAdmin) = RequestTenantResolver.FromItems(http);
         var origen = isSuperAdmin ? ConsolidadoExportOrigin.Superadmin : ConsolidadoExportOrigin.Tramites;
 
-        // Punto de extensión (#13383): el origen superadmin ya se decide aquí, pero su resolver de selección
-        // llega con esa HU. Sin él no se crea nada (503, el frontend ofrece reintentar).
+        // Falla cerrado: los dos orígenes tienen resolver (#13370 tramites, #13383 superadmin); si una composición
+        // lo omitiera, no se crea nada (503, el frontend ofrece reintentar) en vez de lanzar.
         if (!resolvers.Atiende(origen))
         {
             LogOrigenSinResolver(logger, origen, usuarioId);
