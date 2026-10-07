@@ -30,6 +30,7 @@ import {
   fetchMandateSigners,
   inactivateMandateSigner,
   reactivateMandateSigner,
+  reconcileMandateSignerIdentity,
   resendMandateSignerIdentity,
   updateMandateSigner,
   type CompanyMandateSignerInput,
@@ -60,7 +61,9 @@ import {
   presentarValidacion,
   puedeReenviarValidacion,
   requiereValidacionPropia,
+  sincronizarValidacionesEnCurso,
 } from "@/lib/plataforma/mandatario-validacion";
+import { useSincronizarValidacionesEnCurso } from "@/lib/plataforma/useSincronizarValidacionesEnCurso";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "@/components/admin/companies/legal-representatives/rl-flit-styles";
@@ -165,6 +168,14 @@ export function OtMandatosSection({
       setFormatos(catalogo.items);
       setFormatosError(catalogo.error);
       setStatus("ready");
+      // Como la pantalla de espera del trámite: si alguna validación en curso ya se resolvió y el aviso
+      // del proveedor no llegó, la consulta la actualiza y se recarga la lista.
+      if (canRegisterSigner) {
+        const cambio = await sincronizarValidacionesEnCurso(signerList, (sg) =>
+          reconcileMandateSignerIdentity(transitOfficeId, sg.id),
+        );
+        if (cambio) setSigners(await fetchMandateSigners(transitOfficeId));
+      }
     } catch (err) {
       setOffice(null);
       setCompanies([]);
@@ -172,13 +183,21 @@ export function OtMandatosSection({
       setStatus("error");
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de mandatos.");
     }
-  }, [transitOfficeId]);
+  }, [transitOfficeId, canRegisterSigner]);
 
   useEffect(() => {
     // Carga inicial: status loading/ready vive en este módulo.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch al montar / cambiar id
     void load();
   }, [load]);
+
+  // Mientras la lista está abierta, las validaciones en curso se siguen consultando solas.
+  useSincronizarValidacionesEnCurso(
+    signers,
+    (sg) => reconcileMandateSignerIdentity(transitOfficeId, sg.id),
+    () => void load({ silent: true }),
+    canRegisterSigner,
+  );
 
   const formatoVista = useMemo<OtFormatoVista | null>(
     () =>

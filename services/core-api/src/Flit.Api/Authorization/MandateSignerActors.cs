@@ -46,7 +46,11 @@ public static class MandateSignerActors
             .CheckCompanyWriteAsync(ForCompany(user), companyTenantId, mandateSignerId, cancellationToken)
             .ConfigureAwait(false);
 
-        return access switch
+        return ToResult(access, mandateSignerId);
+    }
+
+    private static IResult? ToResult(MandateSignerAccess access, Guid mandateSignerId) =>
+        access switch
         {
             MandateSignerAccess.Allowed => null,
             MandateSignerAccess.NotFound =>
@@ -58,5 +62,26 @@ public static class MandateSignerActors
                 new { code = MandateSignerOriginRules.ForbiddenErrorCode, error = MandateSignerOriginRules.ForbiddenMessage },
                 statusCode: StatusCodes.Status403Forbidden),
         };
+
+    /// <summary>
+    /// Comprobación previa a «Consultar estado» de la validación desde una ruta de compañía. Igual que
+    /// <see cref="CheckCompanyWriteAsync"/> salvo el candado por origen: consultar no cambia la ficha, solo
+    /// sincroniza lo que el proveedor ya resolvió, así que la compañía también puede hacerlo con un mandatario
+    /// que configuró el organismo.
+    /// </summary>
+    public static async Task<IResult?> CheckCompanyConsultAsync(
+        MandateSignerAccessGuard guard,
+        ClaimsPrincipal user,
+        Guid companyTenantId,
+        Guid mandateSignerId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+
+        var access = await guard
+            .CheckCompanyWriteAsync(ForCompany(user), companyTenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return access is MandateSignerAccess.LockedByOtOrigin ? null : ToResult(access, mandateSignerId);
     }
 }

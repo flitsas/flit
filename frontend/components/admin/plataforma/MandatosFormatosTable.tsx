@@ -7,6 +7,7 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import { formatFechaHora } from "@/lib/format/date";
 import { resolveTipoNegocio, tipoNegocioLabel } from "@/lib/plataforma/mandato-templates";
+import { TipoMandatoAyuda } from "./TipoMandatoAyuda";
 
 export interface MandatosFormatosTableProps {
   formatos: readonly MandatoFormatView[];
@@ -45,7 +46,7 @@ export function MandatosFormatosTable({
     },
     {
       key: "tipo",
-      header: "Tipo de mandato",
+      header: <TipoMandatoAyuda />,
       render: (row) => tipoNegocioLabel(resolveTipoNegocio(row.assignmentMode)),
     },
     {

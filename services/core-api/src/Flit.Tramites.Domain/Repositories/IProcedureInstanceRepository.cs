@@ -300,6 +300,20 @@ public interface IProcedureInstanceRepository
             CancellationToken ct = default);
 
     /// <summary>
+    /// Igual que <see cref="ListBiometricValidationsByPersonAsync"/> pero SOLO con las validaciones propias de mandatario
+    /// de ese documento: el historial de la fila «Mandatario» del módulo Validaciones. Nunca se mezclan con las del
+    /// trámite o la prevalidación (no se apalancan entre sí).
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListMandatarioValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11765 (ADR-0050) — la validación MÁS RECIENTE de CADA persona (documento normalizado,
     /// ver <see cref="Identity.DocumentCanonicalNormalization"/>) del tenant, en UNA sola consulta
     /// (sin N+1). Reemplaza a <c>admin.admin_identity_validations</c> como fuente de la vigencia de

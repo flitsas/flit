@@ -383,6 +383,8 @@ export function Validaciones() {
     tenantId?: string;
     /** HU #12709 — persona de una hija vista por la cabeza: detalle por la ruta de red, en lectura. */
     soloConsulta?: boolean;
+    /** Fila «Mandatario»: historial de la validación propia del mandatario, aparte y en lectura. */
+    mandatario?: boolean;
   } | null>(null);
 
   // Gestión de prevalidaciones, absorbida de la pantalla retirada /tramites/prevalidaciones.
@@ -1182,13 +1184,14 @@ export function Validaciones() {
             companyLabel={companyLabel}
             now={nowTick}
             resendMeta={resendMeta}
-            onOpenPerson={(docType, docNumber, tenantId) => {
+            onOpenPerson={(docType, docNumber, tenantId, mandatario) => {
               openForTenant(tenantId);
               setPersonDetail({
                 documentType: docType,
                 documentNumber: docNumber,
                 tenantId,
                 soloConsulta: esSoloConsulta(tenantId),
+                mandatario,
               });
             }}
             onEdit={(row) => {
@@ -1231,6 +1234,7 @@ export function Validaciones() {
           documentType={personDetail.documentType}
           documentNumber={personDetail.documentNumber}
           networkTenantId={personDetail.soloConsulta ? personDetail.tenantId : undefined}
+          mandatario={personDetail.mandatario}
           onClose={() => {
             setPersonDetail(null);
             closeTenantScope();
@@ -1950,7 +1954,12 @@ function PersonasTable({
   now: number;
   resendMeta: Record<string, ResendMeta>;
   /** HU #12707 (AC6) — con la compañía de la fila: la misma cédula puede estar en dos compañías. */
-  onOpenPerson: (documentType: string, documentNumber: string, tenantId: string | undefined) => void;
+  onOpenPerson: (
+    documentType: string,
+    documentNumber: string,
+    tenantId: string | undefined,
+    mandatario: boolean,
+  ) => void;
   onEdit: (row: TenantBiometricValidation) => void;
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
@@ -1986,6 +1995,7 @@ function PersonasTable({
     // HU #11505 — opcionales: el backend de esta vista aún no los envía (AC4, ver tipo en procedure-runtime.ts).
     intentos: p.intentos,
     maxIntentos: p.maxIntentos,
+    esMandatario: p.esMandatario,
   }));
 
   const counts = new Map(rows.map((r) => [r.latestValidationId, r.validationCount]));
@@ -2001,7 +2011,9 @@ function PersonasTable({
       validationCounts={counts}
       onViewProcess={(latestValidationId) => {
         const person = byLatestId.get(latestValidationId);
-        if (person) onOpenPerson(person.documentType, person.documentNumber, person.tenantId);
+        if (person) {
+          onOpenPerson(person.documentType, person.documentNumber, person.tenantId, person.esMandatario === true);
+        }
       }}
       onEdit={onEdit}
       onResendClick={onResendClick}
@@ -2172,9 +2184,13 @@ function ValidacionRow({
       badgeTone = 'warning';
     }
   }
-  const modalidad = r.modalidad
-    ? (familiaLabel(r.modalidad))
-    : 'Prevalidación';
+  // Validación PROPIA del mandatario: se lista aparte y solo se consulta (se gestiona desde su ficha).
+  const esMandatario = r.esMandatario === true;
+  const modalidad = esMandatario
+    ? 'Mandatario'
+    : r.modalidad
+      ? (familiaLabel(r.modalidad))
+      : 'Prevalidación';
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.partyRole ? ` (${r.partyRole})` : '';
   const vigencia = vigenciaBadge(r.daysRemaining);
@@ -2202,7 +2218,7 @@ function ValidacionRow({
               : `vigencia: ${vigencia.label}`
         }`
       : '') +
-    (r.instanceId ? '.' : '. Prevalidación standalone.') +
+    (r.instanceId ? '.' : esMandatario ? '. Validación propia del mandatario.' : '. Prevalidación standalone.') +
     (validationCount > 1 ? ` ${validationCount} validaciones en el historial de la persona.` : '');
 
   const copiarEnlace = async () => {
@@ -2345,7 +2361,7 @@ function ValidacionRow({
             className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
             style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
           >
-            Prevalidación
+            {esMandatario ? 'Mandatario' : 'Prevalidación'}
           </span>
         )}
       </div>
@@ -2425,7 +2441,8 @@ function ValidacionRow({
   };
 
   // AC3 — fila de una hija: ni reenviar, ni editar, ni simular, ni iniciar, ni reintentar. Solo verla.
-  const menuItems = soloConsulta ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
+  // La fila del mandatario tampoco: reenviar o editar su validación se hace desde la ficha del mandatario.
+  const menuItems = soloConsulta || esMandatario ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
 
   const celdaCls = 'border-y px-4 py-3 align-middle';
   const celdaStyle = { borderColor: '#DFE5ED' };
@@ -2452,7 +2469,7 @@ function ValidacionRow({
             items={menuItems}
             className="bg-white dark:bg-[#0B0F14]"
           />
-          {!isTramite && admiteReenvio && resendDisabledReason && (
+          {!isTramite && !esMandatario && admiteReenvio && resendDisabledReason && (
             <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
           )}
           {copied && (

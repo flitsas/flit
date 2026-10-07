@@ -22,6 +22,7 @@ import {
   fetchCompanyTransitOffices,
   inactivateCompanyMandateSigner,
   reactivateCompanyMandateSigner,
+  reconcileCompanyMandateSignerIdentity,
   resendCompanyMandateSignerIdentity,
   updateCompanyMandateSigner,
   type CompanyMandateSignerInput,
@@ -55,7 +56,9 @@ import {
   presentarValidacion,
   puedeReenviarValidacion,
   requiereValidacionPropia,
+  sincronizarValidacionesEnCurso,
 } from "@/lib/plataforma/mandatario-validacion";
+import { useSincronizarValidacionesEnCurso } from "@/lib/plataforma/useSincronizarValidacionesEnCurso";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   rlOutlinedActionClass,
@@ -114,6 +117,14 @@ export function CompanyMandatariosPanel({
         setSigners(signerList);
         setOffices(officeList);
         setStatus(signerList.length === 0 ? "empty" : "ready");
+        // Como la pantalla de espera del trámite: si alguna validación en curso ya se resolvió y el aviso
+        // del proveedor no llegó, la consulta la actualiza y se recarga la lista.
+        const cambio = await sincronizarValidacionesEnCurso(signerList, (s) =>
+          reconcileCompanyMandateSignerIdentity(tenantId, s.id, networkHeadId),
+        );
+        if (cambio && !signal?.aborted) {
+          setSigners(await fetchCompanyMandateSigners(tenantId, signal, networkHeadId));
+        }
       } catch {
         if (!signal?.aborted) {
           setStatus("error");
@@ -129,6 +140,14 @@ export function CompanyMandatariosPanel({
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  // Mientras la lista está abierta, las validaciones en curso se siguen consultando solas.
+  useSincronizarValidacionesEnCurso(
+    signers,
+    (s) => reconcileCompanyMandateSignerIdentity(tenantId, s.id, networkHeadId),
+    // Solo la lista, sin el cargador: el cambio llega mientras el gestor está mirando.
+    () => void fetchCompanyMandateSigners(tenantId, undefined, networkHeadId).then(setSigners, () => undefined),
+  );
 
   const officeNameById = useMemo(
     () => new Map(offices.map((o) => [o.transitOfficeId, o.name])),
