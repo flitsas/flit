@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Blocks, Building2, FileClock, FileText, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { AlertCircle, Blocks, Building2, FileClock, FileText, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -150,6 +151,9 @@ export function CompanyConfigTabs({
   const [confirmPhase, setConfirmPhase] = useState<SaveConfigPhase>("confirm");
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
+  const baseId = useId();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
   const patch = (p: Partial<SettingsForm>) => setForm((f) => ({ ...f, ...p }));
 
   const changes = useMemo(() => diffSettings(initialForm, form), [initialForm, form]);
@@ -203,19 +207,35 @@ export function CompanyConfigTabs({
   const currentTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0];
   const activeTabId = currentTab.id;
 
+  // Navegación por teclado del tablist (patrón APG): ←/→ recorren con vuelta, Inicio/Fin saltan a los extremos.
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = visibleTabs.length - 1;
+    const next =
+      e.key === "ArrowRight" ? (index === last ? 0 : index + 1)
+      : e.key === "ArrowLeft" ? (index === 0 ? last : index - 1)
+      : e.key === "Home" ? 0
+      : e.key === "End" ? last
+      : null;
+    if (next === null) return;
+    e.preventDefault();
+    setTab(visibleTabs[next].id);
+    tabRefs.current[next]?.focus();
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-4">
       {/* Identidad de compañía + «Guardar todo» a la derecha (PUT atómico de settings). */}
       {(company || currentTab?.isConfig) && (
         <header
-          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
-          style={{ background: "rgba(85,126,255,0.04)" }}
+          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] border border-[#DFE5ED] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14] ${
+            currentTab?.isConfig ? "sticky top-0 z-20" : ""
+          }`}
           aria-label="Compañía en configuración"
         >
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
             {company ? (
               <>
-                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
                   Configurando
                 </span>
                 <span className="text-sm font-bold text-[#162744] dark:text-white">
@@ -229,47 +249,78 @@ export function CompanyConfigTabs({
           </div>
 
           {currentTab?.isConfig && (
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 flex-wrap items-center gap-3">
               {pendingChangeCount > 0 && (
-                <span className="hidden text-[11px] font-medium opacity-60 sm:inline" aria-live="polite">
-                  {pendingChangeCount} cambio{pendingChangeCount === 1 ? "" : "s"} pendiente
-                  {pendingChangeCount === 1 ? "" : "s"}
-                </span>
+                <>
+                  <StatusBadge
+                    tone="warning"
+                    ariaLabel={`Cambios sin guardar: ${pendingChangeCount}`}
+                    label={
+                      <span className="inline-flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5" aria-hidden />
+                        Cambios sin guardar
+                      </span>
+                    }
+                  />
+                  <span className="hidden text-xs font-medium opacity-70 sm:inline">
+                    {pendingChangeCount} cambio{pendingChangeCount === 1 ? "" : "s"} pendiente
+                    {pendingChangeCount === 1 ? "" : "s"}
+                  </span>
+                </>
               )}
               <button
                 type="button"
                 onClick={openConfirm}
                 disabled={confirmOpen}
-                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                aria-describedby={pendingChangeCount === 0 ? `${baseId}-sin-cambios` : undefined}
+                title={pendingChangeCount === 0 ? "No hay cambios por guardar" : undefined}
+                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-60 ${
+                  pendingChangeCount === 0 ? "opacity-60" : ""
+                }`}
                 style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
               >
                 <Save className="h-4 w-4" aria-hidden /> Guardar todo
               </button>
+              {pendingChangeCount === 0 && (
+                <span id={`${baseId}-sin-cambios`} className="sr-only">
+                  No hay cambios por guardar
+                </span>
+              )}
             </div>
           )}
         </header>
       )}
 
-      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
-        {visibleTabs.map((t) => {
+      <div
+        className="flex items-center gap-1 overflow-x-auto border-b"
+        role="tablist"
+        aria-label="Secciones de la compañía"
+      >
+        {visibleTabs.map((t, i) => {
           const Icon = t.icon;
           const active = activeTabId === t.id;
           return (
             <button
               key={t.id}
+              ref={(el) => {
+                tabRefs.current[i] = el;
+              }}
+              id={`${baseId}-tab-${t.id}`}
+              type="button"
               role="tab"
               aria-selected={active}
+              aria-controls={`${baseId}-panel`}
+              tabIndex={active ? 0 : -1}
               onClick={() => setTab(t.id)}
-              className="relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition"
-              style={{ color: active ? "#557EFF" : undefined, opacity: active ? 1 : 0.65 }}
+              onKeyDown={(e) => onTabKeyDown(e, i)}
+              className={`relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF] ${
+                active ? "text-[#557EFF]" : "text-[#162744] opacity-70 dark:text-white/[0.78] dark:opacity-100"
+              }`}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className="h-3.5 w-3.5" aria-hidden />
               {t.label}
               {active && (
-                <span
-                  className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full"
-                  style={{ background: "#557EFF" }}
-                />
+                <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#557EFF]" aria-hidden />
               )}
             </button>
           );
@@ -287,7 +338,12 @@ export function CompanyConfigTabs({
         </div>
       )}
 
-      <div role="tabpanel" className="flex-1">
+      <div
+        role="tabpanel"
+        id={`${baseId}-panel`}
+        aria-labelledby={`${baseId}-tab-${activeTabId}`}
+        className="flex-1"
+      >
         {activeTabId === "productos" && <ProductosTab tenantId={settings.tenantId} />}
         {activeTabId === "tramites" && (
           <TramitesTab
