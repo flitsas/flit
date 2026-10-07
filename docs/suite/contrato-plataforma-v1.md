@@ -89,6 +89,7 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 | Scope | Destino (`aud`) | Para qué |
 |---|---|---|
 | `platform.identidad.read` | `plataforma` | Consultar usuarios de una empresa y productos habilitados (§6.1) |
+| `platform.consultas.admin` | `consultas` | Guardar la configuración de consultas de una empresa (cadena de proveedores, failover, comparendos, avalúos); lo usa core-api con lo que guarda el SuperAdmin |
 | `platform.notificaciones.send` | `notificaciones` | Encolar correos y otras notificaciones |
 | `platform.tramites.ict` | `tramites` | Las llamadas de ICT a la orquestación de Trámites, que hoy usan un secreto compartido |
 
@@ -156,6 +157,7 @@ Las llamadas síncronas de un servicio a otro usan gRPC en la red interna (ADR-0
 | Servicio gRPC | Lo atiende | Scope | Reemplaza |
 |---|---|---|---|
 | `flit.consultas.v1.ConsultasService` | `core-consultas` | `platform.consultas` | `POST /consultas/{fuente}` de v1 (nunca se implementó) y, tras el corte, `IctConsultationService` de `core-api` |
+| `flit.consultas.v1.ConsultasAdminService` | `core-consultas` | `platform.consultas.admin` | — (nuevo: la configuración por empresa vive en el esquema de Consultas) |
 | `flit.identidad.v1.IdentidadService` | `core-identity` | `platform.identidad.read` | — (nuevo: usuarios de una empresa y productos habilitados, para que ningún servicio lea las tablas de Identidad) |
 
 Los métodos se definen en los `.proto`; este contrato fija el servicio, quién lo atiende y su scope.
