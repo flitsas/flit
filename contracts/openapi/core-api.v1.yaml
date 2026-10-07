@@ -5187,6 +5187,224 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/search:
+    post:
+      operationId: SearchProcedureInstances
+      tags: [Tramites]
+      summary: Listado de trámites filtrado con la gramática de consultas
+      description: >
+        HU #12106 (documentado por HU #13374, épica #13216). El MISMO listado que `GET /api/v1/tramites/instances`
+        pero por POST, para aceptar condiciones del catálogo y listas largas (placa, VIN o radicado pegados desde
+        Excel). El tenant sale del JWT (TenantEnforcementMiddleware); el SuperAdmin acota con X-Tenant-Id o lista
+        todas las compañías sin él. Su filtro (`TramitesSearchFilter`) es el que reutiliza el lote de descarga
+        masiva (`POST /api/v1/tramites/consolidados/lotes`, modo `filtro`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: false
+          description: Solo SuperAdmin; para el resto lo impone el JWT.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TramitesSearchRequest"
+      responses:
+        "200":
+          description: Página del listado (máximo 200 ítems) y el total que cumple el filtro.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  total: { type: integer }
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones, o atajo de búsqueda rápida desconocido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Usuario de compañía sin compañía asignada.
+        "422":
+          description: La búsqueda rápida abarca más borradores de los que se evalúan; hay que acotarla.
+
+  /api/v1/tramites/consolidados/lotes:
+    post:
+      operationId: CrearLoteConsolidados
+      tags: [Tramites, Consolidados]
+      summary: Crea un lote de descarga masiva de consolidados (Gestor/Radicador; Super Admin en FA2)
+      description: >
+        Feature #13306 / ADR-0070 (HU #13374). Resuelve la selección EN SERVIDOR con la misma visibilidad y
+        filtros del listado (sin el tope de 200) y congela el total. Exige `confirmaEfectos=true` (CF-08).
+        El origen y la compañía los decide el servidor por el JWT (TenantEnforcementMiddleware), NUNCA el
+        cuerpo: usuario de compañía → origen `tramites` con el tenant del token; SuperAdmin → origen
+        `superadmin`, lote sin compañía (la lógica de ese origen la completa #13383). La auditoría se escribe
+        en la misma transacción: si no se puede registrar, el lote no se crea (503). Un solo lote activo por
+        usuario. Los errores son ProblemDetails con el código estable en `error` (raíz del cuerpo).
+        Códigos estables: 400 `confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`,
+        `seleccion_invalida`, `filtro_invalido` (campo, operador o atajo fuera de catálogo: 400, igual que
+        `POST /api/v1/tramites/instances/search`); 403 `sin_compania`; 409 `lote_activo`; 422
+        `seleccion_excede_tope` (más de 10.000 ids o excluidos) y `busqueda_demasiado_amplia` (el atajo de
+        búsqueda rápida abarca demasiados borradores, igual que el listado); 503 `motor_inactivo` (motor
+        apagado o, mientras llega #13383, origen sin resolver) y `lote_no_creado` (la transacción o la
+        auditoría falló).
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: false
+          description: >
+            Opcional. Usuario de compañía: se acepta si coincide con el tenant del JWT; en cualquier caso el
+            middleware lo reemplaza por el del token. SuperAdmin: acota la selección a una compañía
+            (`scope_tenant_id`); sin él, todas.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrearLoteConsolidadosRequest" }
+      responses:
+        "202":
+          description: Lote creado y en cola (`Location` = `/api/v1/consolidados/lotes/{loteId}`).
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "400":
+          description: "`confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida` o `filtro_invalido`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "Sin permiso consolidado-masivo.download, o `sin_compania` (usuario no SuperAdmin sin compañía)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "409":
+          description: "`lote_activo`: ya existe un lote activo del usuario."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteActivoConflict" }
+        "422":
+          description: "`seleccion_excede_tope` (más de 10.000 ids o excluidos) o `busqueda_demasiado_amplia`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "503":
+          description: "`motor_inactivo` o `lote_no_creado` (no se pudo registrar la auditoría; el lote no se creó)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+
+  /api/v1/consolidados/lotes/actual:
+    get:
+      operationId: ObtenerLoteConsolidadosActual
+      tags: [Consolidados]
+      summary: Lote activo del usuario o el último terminal aún retenido (polling del seguimiento global)
+      description: Feature #13306 / ADR-0070. Se implementa en #13379.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lote activo o retenido.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "204": { description: "El usuario no tiene lote activo ni retenido" }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+
+  /api/v1/consolidados/lotes/{loteId}:
+    get:
+      operationId: ObtenerLoteConsolidados
+      tags: [Consolidados]
+      summary: Lote por id (solo del dueño)
+      description: Feature #13306 / ADR-0070. Se implementa en #13379.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: El lote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+        "404": { description: "No existe o no es del usuario (incluido Super Admin)" }
+
+  /api/v1/consolidados/lotes/{loteId}/partes/{numero}:
+    get:
+      operationId: DescargarParteLoteConsolidados
+      tags: [Consolidados]
+      summary: Descarga una parte del lote (descifrado en streaming; nunca genera PDF)
+      description: Feature #13306 / ADR-0070. Se implementa en #13379.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: numero, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: ZIP de la parte.
+          headers:
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="consolidados_20261006_1430_parte-01-de-04.zip"' }
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+        "404": { description: "No existe, no es del usuario o la parte no existe" }
+        "409": { description: "El lote todavía no terminó (`lote_no_terminado`)" }
+        "410": { description: "Descarga expirada (`descarga_expirada`, lote purgado)" }
+        "503": { description: "No se pudo registrar la auditoría de la descarga (`auditoria_no_registrada`); no se entregan bytes" }
+
+  /api/v1/consolidados/lotes/{loteId}/cancelacion:
+    post:
+      operationId: CancelarLoteConsolidados
+      tags: [Consolidados]
+      summary: Cancela el lote en curso del usuario
+      description: >
+        Ruta reservada por #13374; se implementa en la Feature #13307 (FA2). Solo el solicitante; idempotente.
+        Descarta las partes y libera el cupo; los consolidados ya generados quedan como oficiales.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "202":
+          description: Cancelado (o ya lo estaba); partes descartadas; cupo liberado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+        "404": { description: "No existe o no es del usuario" }
+        "409": { description: "El lote ya terminó (`lote_terminado`)" }
+        "503": { description: "No se pudo registrar la auditoría de la cancelación (`auditoria_no_registrada`)" }
+
   /api/v1/tramites/network/instances/search:
     post:
       operationId: tramitesNetworkSearchInstances
@@ -15428,52 +15646,214 @@ components:
             - $ref: "#/components/schemas/ProcedureInstanceDetail"
       required: [tenantId, instance]
 
-    NetworkTramitesSearchRequest:
+    TramitesSearchFilter:
       type: object
       description: >
-        Cuerpo de `POST /api/v1/tramites/network/instances/search` y `/estado-counts` (HU #12358):
-        el mismo de `POST /api/v1/tramites/instances/search` más `childTenantId`.
+        Filtro del listado de trámites (HU #12106; documentado por HU #13374): el cuerpo de
+        `POST /api/v1/tramites/instances/search` SIN paginación. Lo reutilizan `TramitesSearchRequest`,
+        `NetworkTramitesSearchRequest` y el lote de descarga masiva (`LoteFiltroTramites`). `sortBy`/`sortDir`
+        fijan el orden (en el lote, el orden de proceso).
       properties:
-        childTenantId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
         condiciones:
           type: array
           nullable: true
-          description: Condiciones con la gramática de Consultas (campo, operador, valor). Fuera del catálogo ⇒ 400.
+          description: Condiciones con la gramática de Consultas (campo, operador, valores). Fuera del catálogo ⇒ 400.
           items:
             type: object
             additionalProperties: true
+            properties:
+              fieldId: { type: string }
+              operator: { type: string }
+              values:
+                type: array
+                items: { type: string }
         vin: { type: string, nullable: true }
         placa: { type: string, nullable: true }
         vendedor: { type: string, nullable: true }
         comprador: { type: string, nullable: true }
         gestor: { type: string, nullable: true }
         firmado: { type: boolean, nullable: true }
-        estado:
-          type: string
-          nullable: true
-          description: Estados separados por coma. Se ignora en `estado-counts`.
+        estado: { type: string, nullable: true, description: Estados separados por coma }
         modalidad: { type: string, nullable: true }
         organismoTransito: { type: string, nullable: true }
         tipoCodigo: { type: string, nullable: true }
         busqueda: { type: string, nullable: true }
         prioritario: { type: boolean, nullable: true }
+        busquedaRapida:
+          type: string
+          nullable: true
+          description: "Atajo de búsqueda rápida: mas_de_5_dias, mas_de_10_dias, sin_firmas, sin_documento, pausados, mis_tramites. Otro valor ⇒ 400."
         createdFrom: { type: string, format: date-time, nullable: true }
         createdTo: { type: string, format: date-time, nullable: true }
         updatedFrom: { type: string, format: date-time, nullable: true }
         updatedTo: { type: string, format: date-time, nullable: true }
         sortBy: { type: string, nullable: true }
         sortDir: { type: string, nullable: true, enum: [asc, desc] }
-        skip: { type: integer, nullable: true, minimum: 0 }
-        take:
-          type: integer
+
+    TramitesSearchRequest:
+      description: Cuerpo de `POST /api/v1/tramites/instances/search` y `/estado-counts`. `TramitesSearchFilter` más la página.
+      allOf:
+        - $ref: "#/components/schemas/TramitesSearchFilter"
+        - type: object
+          properties:
+            skip: { type: integer, nullable: true, minimum: 0 }
+            take:
+              type: integer
+              nullable: true
+              minimum: 1
+              maximum: 200
+              description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
+
+    CrearLoteConsolidadosRequest:
+      type: object
+      description: >
+        Cuerpo de `POST /api/v1/tramites/consolidados/lotes` (HU #13374). No lleva origen ni compañía: los decide
+        el servidor por el JWT; un campo `origen`/`origin` en el cuerpo se ignora.
+      required: [tipoDocumento, seleccion, confirmaEfectos]
+      properties:
+        tipoDocumento:
+          type: string
+          enum: [consolidado, consolidado_maestro]
+          description: Origen `tramites` solo `consolidado`; `consolidado_maestro` solo origen `superadmin` (si no ⇒ 400 tipo_no_permitido).
+        confirmaEfectos:
+          type: boolean
+          description: >
+            El usuario vio y aceptó el efecto declarado (se descarga el consolidado guardado tal cual; solo se
+            genera el de los trámites que no tienen). Debe ser true (si no ⇒ 400 confirmacion_requerida).
+        seleccion:
+          $ref: "#/components/schemas/LoteSeleccionRequest"
+
+    LoteSeleccionRequest:
+      type: object
+      description: >
+        Selección del listado tal como la arma el frontend: llega SIEMPRE con las cuatro claves. Modo `ids`: se
+        usa `ids` y se ignoran `excluidos`/`filtro` (llegan `[]`/`null`). Modo `filtro`: se usan `filtro` y
+        `excluidos` y se ignora `ids` (llega `[]`). Modo desconocido o `filtro` nulo en modo filtro ⇒ 400
+        seleccion_invalida. Más de 10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope.
+      required: [modo]
+      properties:
+        modo: { type: string, enum: [ids, filtro] }
+        ids:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        excluidos:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        filtro:
+          type: object
           nullable: true
-          minimum: 1
-          maximum: 200
-          description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
+          allOf:
+            - $ref: "#/components/schemas/LoteFiltroTramites"
+
+    LoteFiltroTramites:
+      description: >
+        Filtro del lote en modo `filtro`: `TramitesSearchFilter` (mismas validaciones que el listado) más
+        `alcanceRed`. `skip`/`take` se aceptan y se ignoran (la selección no tiene página).
+      allOf:
+        - $ref: "#/components/schemas/TramitesSearchFilter"
+        - type: object
+          properties:
+            skip: { type: integer, nullable: true }
+            take: { type: integer, nullable: true }
+            alcanceRed:
+              type: string
+              nullable: true
+              description: >
+                Alcance de la tabla: null = propio; `red` o un childTenantId = vista de red. Se acepta; el motor
+                todavía NO lo aplica (HU #13374): el lote se resuelve con el alcance propio del token.
+
+    LoteProblem:
+      type: object
+      description: ProblemDetails del motor de lotes con el código estable en `error` (raíz del cuerpo).
+      required: [error]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string, description: "Texto para el usuario, sin datos personales." }
+        error:
+          type: string
+          enum:
+            - confirmacion_requerida
+            - tipo_no_permitido
+            - seleccion_requerida
+            - seleccion_invalida
+            - filtro_invalido
+            - sin_compania
+            - seleccion_excede_tope
+            - busqueda_demasiado_amplia
+            - motor_inactivo
+            - lote_no_creado
+            - lote_no_terminado
+            - lote_terminado
+            - descarga_expirada
+            - auditoria_no_registrada
+
+    LoteActivoConflict:
+      type: object
+      description: 409 de la creación (ProblemDetails) con el lote activo que lo impidió.
+      required: [error, loteActivoId]
+      properties:
+        error: { type: string, enum: [lote_activo] }
+        loteActivoId: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    LoteConsolidados:
+      type: object
+      required: [id, estado, tipoDocumento, total, procesados, incluidos, omitidos, creadoEn, partes]
+      properties:
+        id: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [en_cola, en_proceso, empaquetando, completado, completado_con_omitidos, fallido, cancelado, expirado]
+        tipoDocumento: { type: string, enum: [consolidado, consolidado_maestro] }
+        total: { type: integer, description: Congelado al crear (CF-06) }
+        procesados: { type: integer, description: incluidos + omitidos }
+        incluidos: { type: integer }
+        omitidos: { type: integer }
+        generados: { type: integer, description: "De los incluidos, cuántos no tenían consolidado y se generaron" }
+        creadoEn: { type: string, format: date-time }
+        terminadoEn: { type: string, format: date-time, nullable: true }
+        expiraEn: { type: string, format: date-time, nullable: true, description: terminadoEn + 24 h }
+        nombreBase: { type: string, example: consolidados_20261006_1430, description: Ausente hasta que el motor lo fija. }
+        partes:
+          type: array
+          description: Vacío hasta que el lote termina (las partes solo se descargan al terminar, CF-09/H4a).
+          items:
+            type: object
+            required: [numero, nombreArchivo, pdfs, omitidos, bytes]
+            properties:
+              numero: { type: integer }
+              nombreArchivo: { type: string }
+              pdfs: { type: integer }
+              omitidos: { type: integer }
+              bytes: { type: integer, format: int64 }
+
+    NetworkTramitesSearchRequest:
+      description: >
+        Cuerpo de `POST /api/v1/tramites/network/instances/search` y `/estado-counts` (HU #12358):
+        el mismo de `POST /api/v1/tramites/instances/search` (`TramitesSearchFilter` + página) más
+        `childTenantId`. `estado` se ignora en `estado-counts`.
+      allOf:
+        - $ref: "#/components/schemas/TramitesSearchFilter"
+        - type: object
+          properties:
+            childTenantId:
+              type: string
+              format: uuid
+              nullable: true
+              description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
+            skip: { type: integer, nullable: true, minimum: 0 }
+            take:
+              type: integer
+              nullable: true
+              minimum: 1
+              maximum: 200
+              description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
 
     NetworkScope:
       type: object

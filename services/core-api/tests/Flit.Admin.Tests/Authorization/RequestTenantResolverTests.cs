@@ -365,6 +365,10 @@ public sealed class RequestTenantResolverTests
     [InlineData("/api/v1/dr-flit/chat", true)]
     [InlineData("/api/v1/dr-flit/support-cases/attachments", true)]
     [InlineData("/api/v1/dr-flitx", false)]
+    // Épica #13216 (HU #13374) — el lote de consolidados es Prefix: cubre la creación y sus rutas hijas.
+    [InlineData("/api/v1/tramites/consolidados/lotes", true)]
+    [InlineData("/api/v1/tramites/consolidados/lotes/", true)]
+    [InlineData("/api/v1/tramites/consolidadosx", false)]
     public void IsRuntimeScoped_MatchingIdenticoAlHistorico(string path, bool expected)
     {
         TenantEnforcementMiddleware.IsRuntimeScoped(new PathString(path)).Should().Be(expected);
@@ -414,6 +418,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/me/branding", TenantEnforcementMiddleware.RouteMatch.Exact),
             // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
             ("/api/v1/tramites/revocation-requests", TenantEnforcementMiddleware.RouteMatch.Exact),
+            // Épica #13216 (HU #13374, AC5) — lote de descarga masiva: el tenant del Gestor sale del JWT.
+            ("/api/v1/tramites/consolidados", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)
