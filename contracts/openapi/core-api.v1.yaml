@@ -6398,6 +6398,172 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: flujo_manual_no_activo (la validación no está en manual_activo).
+  /api/v1/public/manual-capture/{token}:
+    get:
+      operationId: getPublicManualCapture
+      tags: [Público · Identidad manual]
+      summary: Sesión de captura manual por token — HU #13289, Épica #13202
+      description: >
+        Datos para la pantalla de captura del cliente. Público: el token (256 bits; en BD solo su hash SHA-256) es
+        la credencial; sin Authorization ni X-Tenant-Id. Solo si la validación es del proveedor `manual` y está en
+        `manual_activo`. Un token vacío, desconocido, regenerado o de otro proveedor responde 404 sin revelar si
+        existió. Solo lectura. Límite de tasa por IP (policy manual-capture, 429 sin cuerpo). Errores `{ code, message }`.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Sesión vigente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureView" }
+        "404":
+          description: "`not_found`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "409":
+          description: "`estado_invalido` — ya enviada, aprobada, rechazada o expirada (o trámite anulado/revocado)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "410":
+          description: "`expirada` — el enlace superó sus 24 h."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "429":
+          description: Límite de tasa por IP excedido (policy manual-capture). Sin cuerpo.
+
+  /api/v1/public/manual-capture/{token}/consent:
+    post:
+      operationId: acceptPublicManualCaptureConsent
+      tags: [Público · Identidad manual]
+      summary: Constancia del consentimiento biométrico de la captura manual — HU #13289, Épica #13202
+      description: >
+        Guarda fecha y hora del servidor, IP del cliente (la resuelve el servidor: primer hop de X-Forwarded-For o la
+        conexión; nunca el cuerpo) y la versión del texto aceptado, SOBRESCRIBIENDO la constancia de un ciclo manual
+        previo. Audita `manual_consentimiento` sin PII ni IP en el mensaje. La versión vigente sale de
+        `consentTextVersion` de la vista.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accepted, textVersion]
+              properties:
+                accepted: { type: boolean, description: Debe ser true. }
+                textVersion: { type: string, description: Versión del texto aceptado (la de `consentTextVersion`). }
+      responses:
+        "204":
+          description: Consentimiento registrado.
+        "400":
+          description: "`consentimiento_no_aceptado` (accepted distinto de true) o `version_texto_invalida`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "404":
+          description: "`not_found`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "409":
+          description: "`estado_invalido`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "410":
+          description: "`expirada`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "429":
+          description: Límite de tasa por IP excedido (policy manual-capture). Sin cuerpo.
+
+  /api/v1/public/manual-capture/{token}/submit:
+    post:
+      operationId: submitPublicManualCapture
+      tags: [Público · Identidad manual]
+      summary: Envía rostro, anverso, reverso y firma de la captura manual — HU #13290, Épica #13202
+      description: >
+        Un solo POST final `multipart/form-data` con 4 archivos: `rostro`, `anverso`, `reverso` (JPEG, PNG o WebP) y
+        `firma` (PNG). El tipo se valida por CONTENIDO (magic bytes), no por Content-Type ni extensión. Máximo 5 MiB por
+        foto y 2 MiB la firma (413 `archivo_demasiado_grande`). Exige la sesión vigente y el consentimiento del ciclo
+        actual (`consent_at >= manual_activated_at`; 409 `consentimiento_requerido`). Las imágenes se guardan con el
+        storage de adjuntos bajo la clave del id de la validación y un nombre con sufijo UTC del intento; las de un
+        intento previo NO se sobrescriben ni se borran (sus rutas quedan en la auditoría). Si algo falla no se guarda nada.
+        Pasa a `pendiente_revision_manual` y el enlace queda consumido (un segundo envío responde 409 `estado_invalido`).
+        Audita `manual_captura_recibida` (SHA-256 de cada imagen, sin contenido ni PII).
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [rostro, anverso, reverso, firma]
+              properties:
+                rostro: { type: string, format: binary, description: "Selfie (JPEG, PNG o WebP; máx. 5 MiB)." }
+                anverso: { type: string, format: binary, description: "Anverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
+                reverso: { type: string, format: binary, description: "Reverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
+                firma: { type: string, format: binary, description: "Firma trazada (PNG; máx. 2 MiB)." }
+      responses:
+        "200":
+          description: Captura recibida; la validación queda pendiente de revisión.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [pendiente_revision_manual] }
+        "404":
+          description: "`not_found`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "409":
+          description: "`estado_invalido` (ya enviada, aprobada, rechazada o expirada) o `consentimiento_requerido`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "410":
+          description: "`expirada`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "413":
+          description: "`archivo_demasiado_grande` — una imagen supera su máximo."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "415":
+          description: "`tipo_no_soportado` — el contenido no es JPEG/PNG/WebP (la firma, PNG)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "422":
+          description: "`firma_requerida` (la firma es obligatoria) o `archivo_requerido` (falta rostro, anverso o reverso)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManualCaptureError" }
+        "429":
+          description: Límite de tasa por IP excedido (policy manual-capture). Sin cuerpo.
 
   /api/v1/tramites/biometric-validations/{validationId}/audit:
     get:
@@ -16209,6 +16375,24 @@ components:
         expiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
         activatedAt: { type: string, format: date-time, nullable: true, description: Cuándo se activó el flujo manual. }
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió; se puede volver a regenerar. }
+    ManualCaptureView:
+      type: object
+      required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]
+      description: Datos de la pantalla de captura manual (HU #13289). Sin datos extra del trámite.
+      properties:
+        fullName: { type: string }
+        documentType: { type: string }
+        documentNumber: { type: string }
+        productName: { type: string, nullable: true, description: Tipo de trámite; null en una prevalidación sin trámite. }
+        expiresAt: { type: string, format: date-time, description: Vencimiento del enlace (24 h). }
+        consentTextVersion: { type: string, description: Versión vigente del texto de consentimiento (única constante del backend). }
+    ManualCaptureError:
+      type: object
+      required: [code, message]
+      description: Error de los endpoints públicos de captura manual.
+      properties:
+        code: { type: string, description: "not_found, expirada, estado_invalido, consentimiento_requerido, consentimiento_no_aceptado, version_texto_invalida, ..." }
+        message: { type: string }
     ReenviarPrevalidacionResult:
       type: object
       required: [validation, captureUrl]

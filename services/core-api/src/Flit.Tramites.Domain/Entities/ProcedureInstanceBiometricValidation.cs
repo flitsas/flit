@@ -285,6 +285,89 @@ public sealed class ProcedureInstanceBiometricValidation
     }
 
     /// <summary>
+    /// HU #13289 — estado de la sesión de captura manual en <paramref name="now"/>. Solo el flujo manual en
+    /// <see cref="BiometricEstados.ManualActivo"/> y dentro de su ventana es <see cref="ManualCaptureSessionState.Vigente"/>.
+    /// </summary>
+    public ManualCaptureSessionState EstadoSesionManual(DateTimeOffset now)
+    {
+        if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            return ManualCaptureSessionState.NoManual;
+        if (!string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal))
+            return ManualCaptureSessionState.EstadoInvalido;
+        return now > ExpiresAt ? ManualCaptureSessionState.Vencida : ManualCaptureSessionState.Vigente;
+    }
+
+    /// <summary>
+    /// HU #13289/#13290 — ¿hay consentimiento del ciclo manual ACTUAL? La reactivación (A2) NO limpia el consentimiento de un
+    /// ciclo anterior, así que solo vale el aceptado a partir de la última activación
+    /// (<c>consent_at &gt;= manual_activated_at</c>).
+    /// </summary>
+    public bool TieneConsentimientoManualVigente =>
+        ConsentAt is { } consent && ManualActivatedAt is { } activated && consent >= activated;
+
+    /// <summary>
+    /// HU #13289 — constancia del consentimiento biométrico: fecha/hora (del servidor), IP resuelta por el servidor (nunca la
+    /// del cuerpo) y versión del texto. SOBRESCRIBE la de un ciclo manual previo. Solo con la sesión vigente.
+    /// </summary>
+    /// <exception cref="ManualCaptureStateException">Sesión no vigente (vencida, usada o no manual).</exception>
+    /// <exception cref="ArgumentException">Versión vacía o distinta de la vigente (<see cref="ManualCaptureConsent.TextVersion"/>).</exception>
+    public void RegistrarConsentimientoManual(string textVersion, string? clientIp, DateTimeOffset now)
+    {
+        AsegurarSesionManualVigente(now);
+        if (!string.Equals(textVersion, ManualCaptureConsent.TextVersion, StringComparison.Ordinal))
+            throw new ArgumentException("La versión del texto de consentimiento no es la vigente.", nameof(textVersion));
+
+        ConsentAt = now;
+        ConsentIp = string.IsNullOrWhiteSpace(clientIp) ? null : clientIp.Trim();
+        ConsentTextVersion = textVersion;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// HU #13290 — registra la captura recibida: rutas de rostro, anverso, reverso y firma (ADR-0054: la firma reutiliza
+    /// <see cref="SignatureImagePath"/>/<see cref="SignatureImageSha256"/>) y pasa a
+    /// <see cref="BiometricEstados.PendienteRevisionManual"/>. Solo desde <see cref="BiometricEstados.ManualActivo"/>, con la
+    /// sesión vigente y consentimiento del ciclo actual; consume el enlace (un segundo envío ya no es
+    /// <c>manual_activo</c>). Las rutas del intento previo se pisan aquí, pero los archivos NO se borran (el caso de uso las
+    /// deja en auditoría).
+    /// </summary>
+    /// <exception cref="ManualCaptureStateException">Sesión no vigente o sin consentimiento del ciclo actual.</exception>
+    /// <exception cref="ArgumentException">Falta alguna ruta o el hash de la firma no es SHA-256.</exception>
+    public void RegistrarCapturaManual(
+        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now)
+    {
+        AsegurarSesionManualVigente(now);
+        if (!TieneConsentimientoManualVigente)
+            throw new ManualCaptureStateException(ManualCaptureStateCodes.ConsentimientoRequerido);
+        if (string.IsNullOrWhiteSpace(facePath) || string.IsNullOrWhiteSpace(idFrontPath)
+            || string.IsNullOrWhiteSpace(idBackPath) || string.IsNullOrWhiteSpace(signaturePath))
+            throw new ArgumentException("La captura manual exige las 4 rutas de imagen.");
+        if (string.IsNullOrWhiteSpace(signatureSha256) || signatureSha256.Length != 64)
+            throw new ArgumentException("El hash de la firma debe ser SHA-256 (64 hex).", nameof(signatureSha256));
+
+        FacePhotoPath = facePath;
+        IdFrontPhotoPath = idFrontPath;
+        IdBackPhotoPath = idBackPath;
+        SignatureImagePath = signaturePath;
+        SignatureImageSha256 = signatureSha256;
+        Status = BiometricEstados.PendienteRevisionManual;
+        UpdatedAt = now;
+    }
+
+    private void AsegurarSesionManualVigente(DateTimeOffset now)
+    {
+        switch (EstadoSesionManual(now))
+        {
+            case ManualCaptureSessionState.Vigente:
+                return;
+            case ManualCaptureSessionState.Vencida:
+                throw new ManualCaptureStateException(ManualCaptureStateCodes.Expirada);
+            default:
+                throw new ManualCaptureStateException(ManualCaptureStateCodes.EstadoInvalido);
+        }
+    }
+
+    /// <summary>
     /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y
     /// ESTAMPA la fecha de fin de vigencia (<c>now + VigenciaDias</c>, medianoche Colombia). Punto ÚNICO de
     /// aprobación: garantiza que <see cref="ValidUntil"/> quede siempre en sync con <see cref="ValidatedAt"/>

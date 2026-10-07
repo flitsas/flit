@@ -92,6 +92,7 @@ internal static class ApiEndpoints
         app.MapPublicProcedureEndpoints();
         app.MapPublicProcedureTypeEndpoints();
         app.MapPublicBiometricaEndpoints();
+        app.MapPublicManualCaptureEndpoints(); // HU #13289/#13290 (Épica #13202) — captura manual por token
         app.MapPublicKyverumWebhookEndpoints();
         app.MapPublicPortalEndpoints();
         // HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.

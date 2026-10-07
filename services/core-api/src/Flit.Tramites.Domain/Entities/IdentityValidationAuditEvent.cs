@@ -104,6 +104,19 @@ public static class IdentityValidationAuditStages
     public const string ManualActivado = "manual_activado";
 
     /// <summary>
+    /// HU #13289 (Feature #13281 B) — la persona aceptó el consentimiento biométrico en la captura manual. Sin PII ni
+    /// IP en el mensaje: la IP vive solo en la columna <c>consent_ip</c> de la validación.
+    /// </summary>
+    public const string ManualConsentimiento = "manual_consentimiento";
+
+    /// <summary>
+    /// HU #13290 (Feature #13281 B) — llegó la captura manual (rostro, anverso, reverso y firma) y la validación pasó a
+    /// revisión. Sin PII ni contenido de imágenes: SHA-256 de cada una, rutas opacas de storage (incluidas las del intento
+    /// previo, que se conservan) y agente de usuario.
+    /// </summary>
+    public const string ManualCapturaRecibida = "manual_captura_recibida";
+
+    /// <summary>
     /// HU #13284 — la activación del flujo manual canceló una verificación Kyverum en curso (enviada, en proceso,
     /// encolada o con error de envío). <c>KyverumVerificationId</c> del evento conserva el id externo solo como
     /// trazabilidad; en la fila de la validación ya no existe.
