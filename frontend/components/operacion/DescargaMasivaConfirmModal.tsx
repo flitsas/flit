@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Download, FileArchive } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -9,8 +9,13 @@ import {
   consolidadoLotesClient,
   interpretarErrorCrearLote,
   MENSAJE_LOTE_ACTIVO,
+  MENSAJE_REINTENTAR_DESCARGA,
 } from '@/lib/api/consolidado-lotes-client';
-import { ETIQUETA_ESTADO_LOTE, type LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
+import {
+  ETIQUETA_ESTADO_LOTE,
+  type LoteConsolidados,
+  type TipoDocumentoLote,
+} from '@/lib/api/types-consolidado-lotes';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
@@ -36,8 +41,8 @@ export const TEXTO_CONFIRMACION_DESCARGA_MASIVA =
   'Se descargará el consolidado que cada trámite tiene guardado, tal como está, aunque no refleje cambios posteriores. Solo se generará el consolidado de los trámites que todavía no tienen uno.';
 
 /**
- * HU #13394 — texto aprobado de la variante maestro (bandeja del OT, CF-11), exacto. Mientras no
- * exista el texto por tipo (#13387) es la única variante distinta y no hay selector de tipo.
+ * HU #13394 — texto aprobado de la variante maestro (bandeja del OT, CF-11), exacto. HU #13387: es
+ * también el texto del Super Admin cuando elige «Consolidado maestro» en el selector.
  */
 export const TEXTO_CONFIRMACION_DESCARGA_MAESTROS =
   'Se descargará el consolidado maestro que cada trámite tiene guardado, tal como está, aunque no refleje cambios posteriores. Solo se generará el consolidado maestro de los trámites que todavía no tienen uno.';
@@ -50,10 +55,20 @@ const TEXTO_POR_VARIANTE: Record<VarianteDescargaMasiva, string> = {
   maestro: TEXTO_CONFIRMACION_DESCARGA_MAESTROS,
 };
 
-/** Crea el lote con la selección; lanza `ConsolidadoLotesApiError` (409/422/403/503/red). */
+/**
+ * Crea el lote con la selección; lanza `ConsolidadoLotesApiError` (409/422/403/503/red). HU #13387:
+ * con el selector de tipo visible recibe también el tipo elegido.
+ */
 export type CrearLoteDescargaMasiva<TFiltro> = (
   seleccion: ModeloSeleccionLote<TFiltro>,
+  tipoDocumento?: TipoDocumentoLote,
 ) => Promise<LoteConsolidados>;
+
+/** HU #13387 — opciones del selector del Super Admin (CF-03), en el orden del AC. */
+const OPCIONES_TIPO: ReadonlyArray<{ valor: TipoDocumentoLote; etiqueta: string }> = [
+  { valor: 'consolidado', etiqueta: 'Consolidado' },
+  { valor: 'consolidado_maestro', etiqueta: 'Consolidado maestro' },
+];
 
 const formatoMiles = (n: number) => n.toLocaleString('es-CO');
 const textoTramites = (n: number) =>
@@ -77,6 +92,12 @@ export interface DescargaMasivaConfirmModalProps<TFiltro> {
   variante?: VarianteDescargaMasiva;
   /** HU #13394 — creación inyectada (la bandeja OT usa su ruta); por defecto la del Gestor. */
   crear?: CrearLoteDescargaMasiva<TFiltro>;
+  /**
+   * HU #13387 — selector «Consolidado» / «Consolidado maestro». Solo el Super Admin en /tramites:
+   * el texto sigue al tipo elegido y `crear` lo recibe. Con el selector, un 403 se trata como
+   * cualquier fallo reintentable (AC6).
+   */
+  selectorTipo?: boolean;
 }
 
 type Fase =
@@ -99,15 +120,21 @@ export function DescargaMasivaConfirmModal<TFiltro>({
   onLoteActivo,
   variante = 'consolidado',
   crear,
+  selectorTipo = false,
 }: DescargaMasivaConfirmModalProps<TFiltro>) {
   const [fase, setFase] = useState<Fase>({ tipo: 'lista' });
+  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoLote>('consolidado');
   const creando = fase.tipo === 'creando';
+  const idSelector = useId();
 
   // Cada apertura empieza limpia (un error de la vez anterior no se arrastra).
   const [abiertoAntes, setAbiertoAntes] = useState(open);
   if (open !== abiertoAntes) {
     setAbiertoAntes(open);
-    if (open) setFase({ tipo: 'lista' });
+    if (open) {
+      setFase({ tipo: 'lista' });
+      setTipoDocumento('consolidado');
+    }
   }
 
   // Trampa de foco sobre el diálogo completo (incluye la X del encabezado de `Modal`). `Modal` no
@@ -137,13 +164,21 @@ export function DescargaMasivaConfirmModal<TFiltro>({
     if (contador < 1 || creando) return;
     setFase({ tipo: 'creando' });
     try {
-      const lote = crear ? await crear(seleccion) : await consolidadoLotesClient.crearLote({ seleccion });
+      const tipo = selectorTipo ? tipoDocumento : undefined;
+      const lote = crear
+        ? await (tipo ? crear(seleccion, tipo) : crear(seleccion))
+        : await consolidadoLotesClient.crearLote({ seleccion, tipoDocumento: tipo });
       if (!vivoRef.current) return;
       setFase({ tipo: 'lista' });
       onCreado(lote);
     } catch (err) {
       if (!vivoRef.current) return;
       const r = interpretarErrorCrearLote(err);
+      if (r.tipo === 'permiso' && selectorTipo) {
+        // HU #13387 AC6 — el Super Admin no depende del claim: un 403 es un fallo transitorio.
+        setFase({ tipo: 'error', mensaje: MENSAJE_REINTENTAR_DESCARGA, reintentable: true });
+        return;
+      }
       if (r.tipo !== 'lote_activo') {
         // 403: sin permiso no hay reintento que valga (HU #13394 AC5).
         setFase({ tipo: 'error', mensaje: r.mensaje, reintentable: r.tipo !== 'permiso' });
@@ -160,11 +195,14 @@ export function DescargaMasivaConfirmModal<TFiltro>({
         /* sin resumen: queda el aviso */
       }
     }
-  }, [contador, creando, seleccion, onCreado, onLoteActivo, crear]);
+  }, [contador, creando, seleccion, onCreado, onLoteActivo, crear, selectorTipo, tipoDocumento]);
 
   const vacio = contador < 1;
   const sinReintento = fase.tipo === 'error' && !fase.reintentable;
   const loteActivo = fase.tipo === 'lote_activo' ? fase : null;
+  const textoConfirmacion = selectorTipo
+    ? TEXTO_POR_VARIANTE[tipoDocumento === 'consolidado_maestro' ? 'maestro' : 'consolidado']
+    : TEXTO_POR_VARIANTE[variante];
 
   return (
     <Modal
@@ -205,7 +243,38 @@ export function DescargaMasivaConfirmModal<TFiltro>({
           <p>No hay trámites seleccionados. Marca al menos uno en el listado para descargarlo.</p>
         ) : (
           <>
-            <p>{TEXTO_POR_VARIANTE[variante]}</p>
+            {selectorTipo ? (
+              <div role="radiogroup" aria-labelledby={`${idSelector}-etiqueta`} className="flex flex-col gap-2">
+                <span id={`${idSelector}-etiqueta`} className="text-xs font-semibold text-flit-primary dark:text-white">
+                  Tipo de documento
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {OPCIONES_TIPO.map(({ valor, etiqueta }) => {
+                    const marcado = tipoDocumento === valor;
+                    return (
+                      <label
+                        key={valor}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-flit-primary dark:text-white ${
+                          marcado ? 'border-flit-brand bg-flit-brand/[0.06]' : 'border-flit-gray dark:border-white/20'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`${idSelector}-tipo`}
+                          value={valor}
+                          checked={marcado}
+                          disabled={creando}
+                          onChange={() => setTipoDocumento(valor)}
+                          className="h-4 w-4 accent-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
+                        />
+                        {etiqueta}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            <p>{textoConfirmacion}</p>
             <p className="text-xs font-semibold text-flit-primary dark:text-white">
               {textoTramites(contador)}
             </p>
@@ -242,6 +311,8 @@ export interface BotonDescargaMasivaZipProps<TFiltro> {
   variante?: VarianteDescargaMasiva;
   /** HU #13394 — creación inyectada (ver el modal). */
   crear?: CrearLoteDescargaMasiva<TFiltro>;
+  /** HU #13387 — selector de tipo del Super Admin (ver el modal). */
+  selectorTipo?: boolean;
 }
 
 /**
@@ -255,6 +326,7 @@ export function BotonDescargaMasivaZip<TFiltro>({
   onLoteActivo,
   variante,
   crear,
+  selectorTipo,
 }: BotonDescargaMasivaZipProps<TFiltro>) {
   const [abierto, setAbierto] = useState(false);
   const cerrar = useCallback(() => setAbierto(false), []);
@@ -286,6 +358,7 @@ export function BotonDescargaMasivaZip<TFiltro>({
         onLoteActivo={onLoteActivo}
         variante={variante}
         crear={crear}
+        selectorTipo={selectorTipo}
       />
     </>
   );
