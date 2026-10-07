@@ -1782,4 +1782,33 @@ public sealed class PreflightHandlerTests
         System.Text.Json.JsonSerializer.Deserialize<List<PreflightCheckDto>>(persistido.Checks)!
             .Should().Contain(c => c.Key == RunPreflightHandler.CheckBloqueoPreflight);
     }
+
+    [Fact]
+    public async Task Bug13304_CarroceriaConPersistSnapshotOnBlock_PersisteRojoConCamposHidratadosYMismoError()
+    {
+        // Revisión CR — la tercera salida temprana (carrocería) también deja el snapshot visible en ICT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = InstanceOf(ProcedureTypeFixture.CambioCarroceria, Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        ProcedureInstancePreflightSnapshot? persistido = null;
+        await _repo.AddPreflightSnapshotAsync(Arg.Do<ProcedureInstancePreflightSnapshot>(s => persistido = s), ct);
+        var handler = HandlerWith(("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+        var precomputed = new PreflightVehicleSnapshot(
+            [new PreflightCheckDto("estado_vehiculo", "Estado", "ok", "kyverum_runt", null)],
+            [new HydratedField("vehicle_class", "MOTOCICLETA", null), new HydratedField("vehicle_body_type", "SIN CARROCERIA", null)],
+            ["kyverum_runt"]);
+
+        var (result, error, _, _) = await handler.HandleAsync(
+            instance.Id, instance.TenantId, precomputed, new PreflightRunOptions(PersistSnapshotOnBlock: true), ct);
+
+        error.Should().Be(VehicleBodyTypePolicy.ErrorCode, "mismo error que sin la opción");
+        result.Should().BeNull();
+        persistido.Should().NotBeNull();
+        persistido!.Overall.Should().Be("red");
+        var checks = System.Text.Json.JsonSerializer.Deserialize<List<PreflightCheckDto>>(persistido.Checks)!;
+        checks.Should().Contain(c => c.Key == RunPreflightHandler.CheckBloqueoPreflight && c.Status == "fail");
+        checks.Should().Contain(c => c.Key == "estado_vehiculo" && c.Source == "kyverum_runt");
+        ValueOf(instance, "vehicle_class").Should().Be("MOTOCICLETA");
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
 }
