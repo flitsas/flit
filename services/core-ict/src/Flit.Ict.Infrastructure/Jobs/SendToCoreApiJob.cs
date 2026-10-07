@@ -112,70 +112,26 @@ public sealed class SendToCoreApiJob(
             if (!mappings.TryGetValue((short)master.TransactionType, out var mapping) || !mapping.IsPublished)
             {
                 await FlagNoveltyAsync(db, master, "tipo de trámite no soportado en v2 (modalidad_not_available)", ct);
+                await VehicleSnapshotPurge.BestEffortAsync(
+                    snapshots, master.Id, VehicleSnapshotPurge.CaminoNovedadEnvio, logger, ct);
                 return;
             }
 
-            // Bug #13304 (opción a): sin consulta RUNT vigente no se llama a core-api; el master queda CON
-            // NOVEDADES para que el tercero re-registre (core-api no vuelve a consultar el RUNT).
-            var (sent, novedadRunt) = await EnviarConConsultaRuntAsync(
+            // Bug #13304: sin consulta RUNT vigente no se llama a core-api (no vuelve a consultar el RUNT):
+            // core-ict re-encola su consulta de vehículo una vez por ventana; si ya lo hizo, ps=4.
+            var (sent, novedadRunt, reencolado) = await EnviarConConsultaRuntAsync(
                 master, mapping.Type, draftClient, snapshots, DateTimeOffset.UtcNow,
                 Options.VehicleConsultationMaxAgeHours, ct);
-            if (sent is not { } result)
+            if (reencolado)
             {
-                await PersistirNovedadAsync(db, master, novedadRunt ?? NovedadSinConsultaRunt, ct);
-                return;
+                SendToCoreApiJobLog.VehicleQueryRequeued(logger, master.Id);
             }
 
-            if (result.ErrorCode == "grpc_unavailable")
-            {
-                // gRPC pendiente. No cambiar estado; se reintenta en el siguiente ciclo.
-                return;
-            }
-
-            if (result.ProcedureInstanceId is { } instanceId)
-            {
-                master.ProcedureInstanceId = instanceId;
-                master.ProcessStatusId = 5; // BORRADOR (terminal en ICT tras materializar)
-
-                // Bug #13304 (capa 3): el borrador existe, pero core-api no pudo guardar actores o datos
-                // comerciales. Se deja visible en los comentarios que muestran la bandeja y el GET de estado.
-                var novedad = MaterializacionNovedades.Mensaje(result.ErrorCode);
-                if (novedad is not null)
-                {
-                    MaterializacionNovedades.Aplicar(master, novedad);
-                }
-
-                await db.SaveChangesAsync(ct);
-
-                // starts_procedure_in_paused (contrato v1): el borrador nace pausado, con la
-                // observación que el gestor quiere ver en el dashboard.
-                if (master.StartsProcedureInPaused)
-                {
-                    await draftClient.PauseDraftAsync(
-                        master.TenantId, instanceId, paused: true,
-                        master.ObservationWhenPaused ?? string.Empty,
-                        master.ManagerUser, master.ManagerMail, master.CompanyManagerDocument, ct);
-                }
-
-                // Histórico v1: el trámite pasa por Procesado (3) y luego Borrador (5).
-                await RecordStatusAsync(db, master, 3, "PROCESADO SATISFACTORIAMENTE", ct);
-                await RecordEventAsync(db, master, "procesado", "ok", null, ct);
-                await RecordStatusAsync(db, master, 5, "BORRADOR CREADO EN LA PLATAFORMA", ct);
-                await EnqueueWebhookAsync(
-                    db, master, 5, "borrador_creado",
-                    novedad is null ? "BORRADOR CREADO" : "BORRADOR CREADO (" + novedad + ")", ct);
-                await RecordEventAsync(
-                    db, master, "borrador_creado",
-                    novedad is null ? "ok" : MaterializacionNovedades.OutcomeConNovedades, novedad, ct);
-
-                // Bug #13304 — minimización de PII: el resultado completo del RUNT ya está en core-api.
-                // Va al final para que un fallo aquí no deje sin histórico/webhook un borrador ya creado.
-                await snapshots.PurgeAsync(master.Id, ct);
-            }
-            else
-            {
-                await FlagNoveltyAsync(db, master, result.ErrorCode ?? "error al crear el borrador", ct);
-            }
+            await ResolverEnvioAsync(
+                master, sent, novedadRunt, reencolado,
+                (instanceId, novedad, c) => RegistrarBorradorAsync(db, draftClient, master, instanceId, novedad, c),
+                (message, c) => PersistirNovedadAsync(db, master, message, c),
+                snapshots, logger, ct);
         }
 #pragma warning disable CA1031 // un master fallido no debe abortar los demás del lote; se reintenta el siguiente ciclo
         catch (Exception ex)
@@ -249,41 +205,54 @@ public sealed class SendToCoreApiJob(
         cmd.Parameters.Add(p);
     }
 
-    /// <summary>Novedad cuando el pre-trámite tiene consulta de vehículo pero no quedó resultado completo.</summary>
+    /// <summary>
+    /// Novedad cuando el pre-trámite exige consulta de vehículo y, tras la re-consulta automática de la ventana,
+    /// sigue sin resultado completo vigente.
+    /// </summary>
     internal const string NovedadSinConsultaRunt = "sin consulta RUNT; re-registre el pretrámite";
 
-    /// <summary>Novedad cuando el resultado de la consulta RUNT superó la vigencia.</summary>
-    internal const string NovedadConsultaRuntVencida = "consulta RUNT vencida; re-registre el pretrámite";
+    /// <summary>Vigencia por defecto (horas) cuando <c>VehicleConsultationMaxAgeHours</c> ≤ 0.</summary>
+    internal const int DefaultVehicleConsultationMaxAgeHours = 24;
 
-    private const int DefaultVehicleConsultationMaxAgeHours = 24;
+    /// <summary>Bug #13304 (L-1) — desfase de reloj tolerado para una consulta con fecha en el futuro.</summary>
+    internal static readonly TimeSpan ToleranciaFechaFuturaConsultaRunt = TimeSpan.FromMinutes(5);
+
+    /// <summary>Vigencia efectiva de la consulta RUNT en horas (≤ 0 ⇒ 24).</summary>
+    internal static int VigenciaConsultaRuntHoras(int maxAgeHours) =>
+        maxAgeHours > 0 ? maxAgeHours : DefaultVehicleConsultationMaxAgeHours;
 
     /// <summary>
-    /// Bug #13304 — ¿se puede enviar con la consulta RUNT guardada? null = sí (vigente, o el tipo no consulta
-    /// vehículo). Si no, la novedad: ausente o más vieja que <paramref name="maxAgeHours"/> (≤ 0 ⇒ 24 h).
+    /// Bug #13304 — ¿se puede enviar con la consulta RUNT guardada? true si el tipo no consulta vehículo o si
+    /// el resultado completo existe y está vigente. false si falta, si es más viejo que
+    /// <paramref name="maxAgeHours"/> (≤ 0 ⇒ 24 h) o si su fecha está más de 5 min en el futuro (L-1).
     /// </summary>
-    internal static string? NovedadConsultaRunt(VehicleSnapshotLookup lookup, DateTimeOffset now, int maxAgeHours)
+    internal static bool ConsultaRuntVigente(VehicleSnapshotLookup lookup, DateTimeOffset now, int maxAgeHours)
     {
         ArgumentNullException.ThrowIfNull(lookup);
         if (!lookup.RequiresVehicle)
         {
-            return null;
+            return true;
         }
 
         if (lookup.Snapshot is null)
         {
-            return NovedadSinConsultaRunt;
+            return false;
         }
 
-        var vigencia = TimeSpan.FromHours(maxAgeHours > 0 ? maxAgeHours : DefaultVehicleConsultationMaxAgeHours);
-        return lookup.Snapshot.ConsultedAt < now - vigencia ? NovedadConsultaRuntVencida : null;
+        // L-1: una fecha de consulta en el futuro (más allá del desfase de reloj) no es confiable: vencida.
+        var consultedAt = lookup.Snapshot.ConsultedAt;
+        return consultedAt >= now - TimeSpan.FromHours(VigenciaConsultaRuntHoras(maxAgeHours))
+            && consultedAt <= now + ToleranciaFechaFuturaConsultaRunt;
     }
 
     /// <summary>
-    /// Bug #13304 (D4, opción a) — paso de envío: lee la consulta RUNT del master y, si está vigente, crea el
-    /// borrador con ella (campo 14). Si está vencida o no existe NO llama a core-api: deja el master en
-    /// ps=4 con la novedad (en memoria; el job la persiste con <see cref="PersistirNovedadAsync"/>).
+    /// Bug #13304 — paso de envío: lee la consulta RUNT del master y, si está vigente, crea el borrador con ella
+    /// (campo 14). Si está vencida o ausente NO llama a core-api: re-encola la consulta de vehículo de core-ict
+    /// (una vez por ventana de vigencia) y deja el master en su estado; la source_query pendiente lo saca de la
+    /// elegibilidad y el siguiente ciclo envía con el snapshot fresco. Si la re-consulta de la ventana ya se usó,
+    /// deja el master en ps=4 con <see cref="NovedadSinConsultaRunt"/> (en memoria; el job la persiste).
     /// </summary>
-    internal static async Task<(CreateDraftResult? Result, string? Novedad)> EnviarConConsultaRuntAsync(
+    internal static async Task<(CreateDraftResult? Result, string? Novedad, bool Reencolado)> EnviarConConsultaRuntAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
         IProcedureDraftClient draftClient,
@@ -297,14 +266,124 @@ public sealed class SendToCoreApiJob(
         ArgumentNullException.ThrowIfNull(snapshots);
 
         var lookup = await snapshots.GetLatestAsync(master.Id, ct);
-        var novedad = NovedadConsultaRunt(lookup, now, maxAgeHours);
-        if (novedad is not null)
+        if (ConsultaRuntVigente(lookup, now, maxAgeHours))
         {
-            AplicarNovedad(master, novedad);
-            return (null, novedad);
+            return (await draftClient.CreateDraftAsync(master, procedureType, lookup.Snapshot, ct), null, false);
         }
 
-        return (await draftClient.CreateDraftAsync(master, procedureType, lookup.Snapshot, ct), null);
+        if (await snapshots.RequeueVehicleQueryAsync(master.Id, VigenciaConsultaRuntHoras(maxAgeHours), ct))
+        {
+            return (null, null, true);
+        }
+
+        AplicarNovedad(master, NovedadSinConsultaRunt);
+        return (null, NovedadSinConsultaRunt, false);
+    }
+
+    /// <summary>
+    /// Bug #13304 (H-1) — decide el estado tras el envío y purga el snapshot RUNT en cada camino que deja el
+    /// master fuera del envío. <paramref name="registrarBorrador"/> persiste el ps=5 (histórico, webhook,
+    /// timeline); <paramref name="persistirNovedad"/> persiste un ps=4 ya aplicado en memoria. La purga va
+    /// siempre DESPUÉS de esos registros y es best-effort. Re-consulta encolada o gRPC no disponible: sin
+    /// cambios ni purga.
+    /// </summary>
+    internal static async Task ResolverEnvioAsync(
+        ExternalIntegrationMaster master,
+        CreateDraftResult? sent,
+        string? novedadRunt,
+        bool reencolado,
+        Func<Guid, string?, CancellationToken, Task> registrarBorrador,
+        Func<string, CancellationToken, Task> persistirNovedad,
+        IIctVehicleSnapshotReader snapshots,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(master);
+        ArgumentNullException.ThrowIfNull(registrarBorrador);
+        ArgumentNullException.ThrowIfNull(persistirNovedad);
+
+        ArgumentNullException.ThrowIfNull(snapshots);
+        Func<CancellationToken, Task<int>> purgar = c => snapshots.PurgeAsync(master.Id, c);
+
+        if (reencolado)
+        {
+            // Re-consulta RUNT pendiente: el master no cambia de estado ni se purga; el siguiente ciclo envía.
+            return;
+        }
+
+        if (sent is not { } result)
+        {
+            // La novedad RUNT ya quedó aplicada en memoria por EnviarConConsultaRuntAsync.
+            await VehicleSnapshotPurge.DespuesDeAsync(
+                c => persistirNovedad(novedadRunt ?? NovedadSinConsultaRunt, c), purgar, master.Id,
+                VehicleSnapshotPurge.CaminoNovedadEnvio, logger, ct);
+            return;
+        }
+
+        if (result.ErrorCode == "grpc_unavailable")
+        {
+            // gRPC pendiente. No cambiar estado; se reintenta en el siguiente ciclo.
+            return;
+        }
+
+        if (result.ProcedureInstanceId is { } instanceId)
+        {
+            master.ProcedureInstanceId = instanceId;
+            master.ProcessStatusId = 5; // BORRADOR (terminal en ICT tras materializar)
+
+            // Bug #13304 (capa 3): el borrador existe, pero core-api no pudo guardar actores o datos
+            // comerciales. Se deja visible en los comentarios que muestran la bandeja y el GET de estado.
+            var novedad = MaterializacionNovedades.Mensaje(result.ErrorCode);
+            if (novedad is not null)
+            {
+                MaterializacionNovedades.Aplicar(master, novedad);
+            }
+
+            // Minimización de PII: el resultado completo del RUNT ya está en core-api. Va después de los
+            // registros para que un fallo de la purga no deje sin histórico/webhook un borrador ya creado.
+            await VehicleSnapshotPurge.DespuesDeAsync(
+                c => registrarBorrador(instanceId, novedad, c), purgar, master.Id,
+                VehicleSnapshotPurge.CaminoBorrador, logger, ct);
+            return;
+        }
+
+        var message = result.ErrorCode ?? "error al crear el borrador";
+        AplicarNovedad(master, message);
+        await VehicleSnapshotPurge.DespuesDeAsync(
+            c => persistirNovedad(message, c), purgar, master.Id, VehicleSnapshotPurge.CaminoNovedadEnvio, logger, ct);
+    }
+
+    /// <summary>Persiste el borrador (ps=5): estado, pausa inicial, histórico, webhook y timeline.</summary>
+    private static async Task RegistrarBorradorAsync(
+        IctDbContext db,
+        IProcedureDraftClient draftClient,
+        ExternalIntegrationMaster master,
+        Guid instanceId,
+        string? novedad,
+        CancellationToken ct)
+    {
+        await db.SaveChangesAsync(ct);
+
+        // starts_procedure_in_paused (contrato v1): el borrador nace pausado, con la
+        // observación que el gestor quiere ver en el dashboard.
+        if (master.StartsProcedureInPaused)
+        {
+            await draftClient.PauseDraftAsync(
+                master.TenantId, instanceId, paused: true,
+                master.ObservationWhenPaused ?? string.Empty,
+                master.ManagerUser, master.ManagerMail, master.CompanyManagerDocument, ct);
+        }
+
+        // Histórico v1: el trámite pasa por Procesado (3) y luego Borrador (5).
+        await RecordStatusAsync(db, master, 3, "PROCESADO SATISFACTORIAMENTE", ct);
+        await RecordEventAsync(db, master, "procesado", "ok", null, ct);
+        await RecordStatusAsync(db, master, 5, "BORRADOR CREADO EN LA PLATAFORMA", ct);
+        await EnqueueWebhookAsync(
+            db, master, 5, "borrador_creado",
+            novedad is null ? "BORRADOR CREADO" : "BORRADOR CREADO (" + novedad + ")", ct);
+        await RecordEventAsync(
+            db, master, "borrador_creado",
+            novedad is null ? "ok" : MaterializacionNovedades.OutcomeConNovedades, novedad, ct);
     }
 
     /// <summary>Deja el master CON NOVEDADES (ps=4) con el mensaje en los comentarios externos.</summary>
@@ -372,4 +451,11 @@ public sealed class SendToCoreApiJob(
                                    'procedure_instance_id', {master.ProcedureInstanceId}::uuid,
                                    'message', {message}::text))
             """, ct);
+}
+
+internal static partial class SendToCoreApiJobLog
+{
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "ICT envío: consulta RUNT vencida o ausente del master {MasterId}; se re-encola la consulta de vehículo.")]
+    public static partial void VehicleQueryRequeued(ILogger logger, Guid masterId);
 }

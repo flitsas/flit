@@ -61,6 +61,7 @@ public sealed class OrchestratorJob(
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
             var consult = scope.ServiceProvider.GetRequiredService<IConsultationClient>();
+            var snapshots = scope.ServiceProvider.GetRequiredService<IIctVehicleSnapshotReader>();
             var connection = db.Database.GetDbConnection();
             var wasClosed = connection.State != ConnectionState.Open;
             if (wasClosed)
@@ -70,7 +71,7 @@ public sealed class OrchestratorJob(
 
             try
             {
-                await ProcessOneAsync(connection, consult, q, currentYear, ct);
+                await ProcessOneAsync(connection, consult, snapshots, q, currentYear, ct);
             }
             finally
             {
@@ -87,7 +88,12 @@ public sealed class OrchestratorJob(
     }
 
     private async Task ProcessOneAsync(
-        DbConnection connection, IConsultationClient consult, PendingQuery q, int currentYear, CancellationToken ct)
+        DbConnection connection,
+        IConsultationClient consult,
+        IIctVehicleSnapshotReader snapshots,
+        PendingQuery q,
+        int currentYear,
+        CancellationToken ct)
     {
         try
         {
@@ -114,10 +120,13 @@ public sealed class OrchestratorJob(
             }
 
             // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC y, desde el Bug #13109, DRIVER sin paz y salvo):
-            // terminal, deja el master en ps=4 y SendToCoreApiJob no materializa el borrador.
+            // terminal, deja el master en ps=4 y SendToCoreApiJob no materializa el borrador. Bug #13304
+            // (H-1): el snapshot RUNT ya no se enviará; se purga después de registrar la novedad.
             if (!isValid)
             {
-                await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
+                await FlagNoveltyAndPurgeAsync(
+                    c => FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), c),
+                    snapshots, q.MasterId, logger, ct);
             }
             // Advertencia INFORMATIVA: se registra en el master pero NO bloquea el paso a borrador.
             else if (warnings.Count > 0)
@@ -142,10 +151,32 @@ public sealed class OrchestratorJob(
                 await FlagNoveltyAsync(connection, q.MasterId,
                     $"Fuentes externas no disponibles tras {MaxAttempts} intentos: {ex.Message}", ct);
                 await MarkQueriedAsync(connection, q.Id, isValid: false, ct);
+
+                // Bug #13304 (H-1): también es una novedad que deja el master fuera del envío.
+                await VehicleSnapshotPurge.BestEffortAsync(
+                    snapshots, q.MasterId, VehicleSnapshotPurge.CaminoNovedadOrquestador, logger, ct);
             }
 
             IctJobLog.CycleError(logger, ex, JobName);
         }
+    }
+
+    /// <summary>
+    /// Bug #13304 (H-1) — novedad del orquestador (ps=4, el master no se envía) y luego purga best-effort del
+    /// snapshot RUNT del master. Una consulta VEHICLE/VIN del mismo master que termine después de la novedad
+    /// deja su snapshot: lo vacía el barrido de <see cref="RetentionJob"/>.
+    /// </summary>
+    internal static Task FlagNoveltyAndPurgeAsync(
+        Func<CancellationToken, Task> flag,
+        IIctVehicleSnapshotReader snapshots,
+        Guid masterId,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(snapshots);
+        return VehicleSnapshotPurge.DespuesDeAsync(
+            flag, c => snapshots.PurgeAsync(masterId, c), masterId,
+            VehicleSnapshotPurge.CaminoNovedadOrquestador, logger, ct);
     }
 
     private static async Task<List<PendingQuery>> ReadPendingAsync(DbConnection connection, int limit, CancellationToken ct)
