@@ -41,6 +41,7 @@ internal sealed class ConsolidadoExportAuditEntryConfiguration : IEntityTypeConf
         builder.Property(x => x.OmittedCount).HasColumnName("omitted_count");
         builder.Property(x => x.GeneratedCount).HasColumnName("generated_count");
         builder.Property(x => x.PartNumber).HasColumnName("part_number");
+        builder.Property(x => x.PartsCount).HasColumnName("parts_count");
         builder.Property(x => x.ClientIp).HasColumnName("client_ip").HasColumnType("inet");
         builder.Property(x => x.UserAgent).HasColumnName("user_agent").HasColumnType("text");
         builder.Property(x => x.RowVersion).HasColumnName("row_version").HasDefaultValue(0L).IsConcurrencyToken();

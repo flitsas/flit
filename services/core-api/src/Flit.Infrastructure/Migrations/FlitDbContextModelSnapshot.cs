@@ -6159,6 +6159,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("part_number");
 
+                    b.Property<short?>("PartsCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("parts_count");
+
                     b.PrimitiveCollection<Guid[]>("ReachedTenantIds")
                         .HasColumnType("uuid[]")
                         .HasColumnName("reached_tenant_ids");

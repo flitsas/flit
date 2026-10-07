@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    [Migration("20261007223745_HU13368_ConsolidadoExportItems")]
+    [Migration("20261007232819_HU13368_ConsolidadoExportItems")]
     partial class HU13368_ConsolidadoExportItems
     {
         /// <inheritdoc />
@@ -6161,6 +6161,10 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<short?>("PartNumber")
                         .HasColumnType("smallint")
                         .HasColumnName("part_number");
+
+                    b.Property<short?>("PartsCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("parts_count");
 
                     b.PrimitiveCollection<Guid[]>("ReachedTenantIds")
                         .HasColumnType("uuid[]")

@@ -59,6 +59,12 @@ public sealed class ConsolidadoExportAuditEntry
     /// <summary>Obligatorio en <c>parte_descargada</c>.</summary>
     public short? PartNumber { get; set; }
 
+    /// <summary>
+    /// HU #13378 AC2 — partes del lote al terminar (copia de <c>batches.parts_count</c>). Obligatorio (&gt;= 0) solo en
+    /// <c>lote_finalizado</c>; <c>null</c> en el resto de eventos (<c>ck_consolidado_export_audit_parts</c>).
+    /// </summary>
+    public short? PartsCount { get; set; }
+
     /// <summary>IP del actor (<c>@pii:medium</c>).</summary>
     public IPAddress? ClientIp { get; set; }
 

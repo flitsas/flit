@@ -5,6 +5,7 @@ using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
@@ -285,5 +286,53 @@ public sealed partial class ConsolidadoExportItemsDdlParityTests
         audit.FindProperty(nameof(ConsolidadoExportAuditEntry.ActorTenantId))!.IsNullable.Should().BeTrue("Q8");
         audit.GetIndexes().Single(i => i.GetDatabaseName() == "ix_consolidado_export_audit_reached_tenant_ids")
             .GetMethod().Should().Be("gin");
+    }
+
+    /// <summary>
+    /// HU #13378 AC2 (épica #13216) — <c>lote_finalizado</c> registra también las partes: la columna
+    /// <c>parts_count smallint NULL</c> vive en sitio en el DDL 134 (migración Pending), el CHECK la exige NOT NULL y
+    /// &gt;= 0 en <c>lote_finalizado</c> y NULL en el resto de eventos (las inserciones de <c>parte_descargada</c> y
+    /// <c>lote_purgado</c> no la rellenan), y el modelo EF la mapea anulable.
+    /// </summary>
+    [Fact]
+    public void LoteFinalizadoRegistraLasPartes_ColumnaNullableConCheckPorEvento()
+    {
+        var ddl = LoadDdl();
+        ddl.Should().Contain("    parts_count         smallint    NULL,");
+        Normalizado(ddl).Should().Contain(
+            "CONSTRAINT ck_consolidado_export_audit_parts CHECK ( (event = 'lote_finalizado') = (parts_count IS NOT NULL) "
+            + "AND (parts_count IS NULL OR parts_count >= 0))");
+        LoadDdlConComentarios().Should().Contain("COMMENT ON COLUMN tramites.consolidado_export_audit.parts_count IS");
+
+        using var db = NewModelContext();
+        var audit = db.Model.FindEntityType(typeof(ConsolidadoExportAuditEntry))!;
+        var partes = audit.FindProperty("PartsCount");
+        partes.Should().NotBeNull("la entidad expone PartsCount");
+        partes!.ClrType.Should().Be<short?>();
+        partes.IsNullable.Should().BeTrue("nullable: los demás eventos la dejan NULL");
+        partes.FindAnnotation(RelationalAnnotationNames.ColumnName)?.Value.Should().Be("parts_count");
+    }
+
+    /// <summary>
+    /// La migración HU13368 se regeneró con la herramienta (no a mano): su modelo destino (Designer) y el snapshot
+    /// conocen <c>parts_count</c>, y sigue cargando el DDL 134 embebido.
+    /// </summary>
+    [Fact]
+    public void LaMigracionRegeneradaConoceLaColumnaDePartesEnDesignerYSnapshot()
+    {
+        var migracion = NewMigration();
+        var atributo = migracion.GetType().GetCustomAttributes(typeof(MigrationAttribute), false)
+            .Cast<MigrationAttribute>().Should().ContainSingle().Subject;
+        atributo.Id.Should().EndWith("_HU13368_ConsolidadoExportItems");
+
+        static bool ConocePartes(IReadOnlyModel? modelo) =>
+            modelo?.FindEntityType(typeof(ConsolidadoExportAuditEntry).FullName!)?.FindProperty("PartsCount") is not null;
+
+        ConocePartes(migracion.TargetModel).Should().BeTrue("el Designer regenerado incluye parts_count");
+        var snapshot = (ModelSnapshot)Activator.CreateInstance(
+            typeof(FlitDbContext).Assembly.GetType("Flit.Infrastructure.Migrations.FlitDbContextModelSnapshot")!, nonPublic: true)!;
+        ConocePartes(snapshot.Model)
+            .Should().BeTrue("el snapshot incluye parts_count");
+        migracion.UpOperations.OfType<SqlOperation>().Single().Sql.Should().Contain("parts_count");
     }
 }

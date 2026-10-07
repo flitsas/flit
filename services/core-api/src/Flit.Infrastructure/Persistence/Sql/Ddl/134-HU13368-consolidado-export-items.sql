@@ -262,6 +262,7 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_audit (
     omitted_count       integer     NULL,
     generated_count     integer     NULL,
     part_number         smallint    NULL,
+    parts_count         smallint    NULL,
     client_ip           inet        NULL,
     user_agent          text        NULL,
     row_version         bigint      NOT NULL DEFAULT 0,
@@ -283,6 +284,11 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_audit (
         OR (total_items IS NOT NULL AND included_count IS NOT NULL AND omitted_count IS NOT NULL
             AND generated_count IS NOT NULL AND generated_count <= included_count)),
     CONSTRAINT ck_consolidado_export_audit_part CHECK (event <> 'parte_descargada' OR part_number IS NOT NULL),
+    -- #13378 AC2: lote_finalizado registra las partes (= batches.parts_count, partes en que se dividió el lote; en un
+    -- fallido cuenta también las descartadas/fallidas, 0 si falló antes de crear ninguna). NULL en el resto de eventos.
+    CONSTRAINT ck_consolidado_export_audit_parts CHECK (
+        (event = 'lote_finalizado') = (parts_count IS NOT NULL)
+        AND (parts_count IS NULL OR parts_count >= 0)),
     CONSTRAINT ck_consolidado_export_audit_counts CHECK (
         (ids_count IS NULL OR ids_count >= 0) AND (excluded_count IS NULL OR excluded_count >= 0)
         AND (total_items IS NULL OR total_items >= 0) AND (included_count IS NULL OR included_count >= 0)
@@ -325,4 +331,5 @@ COMMENT ON COLUMN tramites.consolidado_export_audit.reached_tenant_ids IS 'Compa
 COMMENT ON COLUMN tramites.consolidado_export_audit.filter_summary IS '@pii:low — filtro aplicado con las listas pegadas (placa/VIN/radicado) reducidas a {campo, operador, cantidad}. Nunca los valores de esas listas.';
 COMMENT ON COLUMN tramites.consolidado_export_audit.client_ip IS '@pii:medium — IP del actor (evidencia de acceso, Ley 1581).';
 COMMENT ON COLUMN tramites.consolidado_export_audit.user_agent IS '@pii:low — navegador del actor (evidencia de acceso).';
+COMMENT ON COLUMN tramites.consolidado_export_audit.parts_count IS 'HU #13378 AC2 — partes del lote al terminar (copia de consolidado_export_batches.parts_count, incluidas las descartadas o fallidas de un lote fallido). Obligatorio (>= 0) solo en lote_finalizado; NULL en el resto de eventos (ck_consolidado_export_audit_parts).';
 COMMENT ON COLUMN tramites.consolidado_export_audit.row_version IS 'Convención A5. Append-only: ninguna fila cambia de versión (sin trigger de row_version).';
