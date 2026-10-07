@@ -119,6 +119,8 @@ builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
 builder.Services.AddPublicBrandingRateLimiter();
 // HU #13087 — policy external-token (10/min por IP); va después: fija el OnRejected común.
 builder.Services.AddExternalClientRateLimiter(builder.Configuration);
+// HU #13289 (Épica #13202) — policy manual-capture (por IP) de la captura manual pública; no fija OnRejected.
+builder.Services.AddManualCaptureRateLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.

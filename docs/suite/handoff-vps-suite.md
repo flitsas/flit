@@ -407,6 +407,50 @@ llegan ya armados y con su canal resuelto.
 **Volver atrás:** desplegar la imagen anterior de core-api y core-identity con su `.env` de antes (`SMTP_*` y `RENTING_*`
 siguen definidos). core-notificaciones y el broker pueden seguir corriendo.
 
+### 4.11 Epic #13316: orden único por ambiente
+
+El PR de la Epic (Consultas y Notificaciones como servicios) llega con los cortes incluidos: al desplegarlo, core-api ya
+no consulta proveedores ni envía correos por sí mismo. Por eso **toda la preparación va antes de fusionar** (en DEV,
+fusionar es desplegar) y no hay banderas que encender después. El mismo orden se repite en QA y PDN antes de cada paso
+de rama.
+
+**Antes de fusionar o pasar de rama** (no cambia nada para los usuarios):
+
+1. Respaldo de la base (`pg_dump`).
+2. **Broker** (§4.9, paso 1): `RABBITMQ_ADMIN_USER` y `RABBITMQ_ADMIN_PASSWORD`; levantar solo `rabbitmq`
+   (`docker compose up -d rabbitmq`), que importa el vhost `flit` y los exchanges al arrancar.
+3. **Usuarios del broker** (§4.9, paso 6 y §4.10, paso 3), cada uno con su clave:
+   - `tramites` (con destino `notificaciones`) → `RABBITMQ_URL_TRAMITES`;
+   - `consultas` → `RABBITMQ_URL_CONSULTAS`;
+   - `notificaciones` → `RABBITMQ_URL_NOTIFICACIONES`;
+   - `plataforma` (con destino `notificaciones`) → `RABBITMQ_URL_PLATAFORMA`.
+4. **Bases propias** (§4.9, paso 2 y §4.10, paso 1): usuarios `flit_consultas` y `flit_notificaciones` →
+   `CONNECTION_STRING_CONSULTAS` y `CONNECTION_STRING_NOTIFICACIONES`.
+5. **Clientes de servicio**, uno distinto por ambiente: `SVC_TRAMITES_CLIENT_SECRET`, `SVC_CONSULTAS_CLIENT_SECRET`,
+   `SVC_NOTIFICACIONES_CLIENT_SECRET`, `SVC_ICT_CLIENT_SECRET`.
+6. **Secretos de proveedores y de correo:** los mismos de siempre (`VERIFIK_*`, `KYVERUM_*`, `KYVERUM_RUNT_*`,
+   `FASECOLDA_*`, `RUES_*` opcional, `SMTP_*`, `RENTING_API_*`). Ahora los leen core-consultas y core-notificaciones; el
+   certificado `.pfx` se monta solo en core-notificaciones.
+7. **Aviso de Kyverum:** `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL` y, si nginx filtra rutas, abrir
+   `/api/v1/consultas/avisos/*`.
+8. **Comprobar el compose:** `docker compose -f docker-compose.prod.yml config` sin errores. Las variables obligatorias
+   nuevas (`RABBITMQ_URL_TRAMITES`, `RABBITMQ_URL_PLATAFORMA`, `SVC_TRAMITES_CLIENT_SECRET`) hacen que falle aquí, no
+   al desplegar.
+
+**Fusionar o pasar de rama:** el CD construye y levanta core-consultas y core-notificaciones junto con core-api;
+core-consultas aplica sus migraciones al arrancar.
+
+**Apenas termine el despliegue:**
+
+9. `deploy/postgres/migrar-configuracion-consultas.sql` (§4.9, paso 7); en DEV y QA también
+   `migrar-valores-mock-avaluo.sql` (§4.9, paso 8).
+10. Verificar con las listas de §4.9 y §4.10: consulta, avalúo, impronta y Confirmación RUNT; validación de identidad;
+    correo de cambio de estado, invitación, recuperación y simulación de mandato; webhook del OT; canales y buzón de
+    pruebas; consola de mensajes muertos; ICT entrando sin errores.
+
+**Volver atrás:** imagen anterior de core-api, core-identity y core-ict con el `.env` anterior (las variables viejas
+siguen ahí). core-consultas, core-notificaciones y el broker pueden quedar corriendo.
+
 ---
 
 ## 5. Hosts, DNS y certificados

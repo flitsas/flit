@@ -154,7 +154,13 @@ paths:
       description: >
         Edición parcial con concurrencia optimista (rowVersion). Si cambian campos que
         afectan la validación, se resetean los flags y se re-encola el pipeline. Una vez
-        materializado (borrador creado) responde 409 already_materialized.
+        materializado (borrador creado) responde 409 already_materialized, salvo cuando el
+        body trae SOLO sellingPrice (Bug #13304): entonces se aplica en el borrador de FLIT
+        mientras siga en borrador, sin resetear validaciones (409 not_draft si ya avanzó,
+        400 invalid_selling_price si el precio no es mayor que cero con hasta 2 decimales y
+        16 dígitos enteros, 409 core_api_not_found si FLIT no encuentra el trámite,
+        503 core_api_unavailable si FLIT no responde, 502 core_api_error ante cualquier otro
+        error de FLIT, cuyo código interno no se propaga).
       security:
         - ictClientToken: []
       parameters:
@@ -172,8 +178,16 @@ paths:
       responses:
         '200':
           description: Pre-trámite actualizado (row_version incrementado).
+        '400':
+          description: Datos inválidos (p. ej. invalid_selling_price, también cuando FLIT rechaza el valor).
         '409':
-          description: Conflicto de concurrencia (stale), ya materializado, o no editable.
+          description: >
+            Conflicto de concurrencia (stale), ya materializado, no editable, not_draft o
+            core_api_not_found (el pre-trámite existe en ICT pero FLIT no encuentra el trámite).
+        '502':
+          description: core_api_error — FLIT devolvió un error no previsto (sin propagar su código interno).
+        '503':
+          description: core_api_unavailable — FLIT no respondió al editar el precio; reintentar.
 
   /api/v1/ict/logs:
     get:

@@ -53,6 +53,8 @@ public sealed record TenantBiometricValidationListQuery(
         BiometricEstados.Expirado,
         BiometricEstados.PendienteEnvio,
         BiometricEstados.ErrorEnvio,
+        BiometricEstados.ManualActivo,
+        BiometricEstados.PendienteRevisionManual,
     };
 
     private static readonly HashSet<string> ValidPartes = new(StringComparer.OrdinalIgnoreCase)
@@ -68,6 +70,7 @@ public sealed record TenantBiometricValidationListQuery(
         // Identidades traídas de V1 por la migración: poder aislarlas en la grilla es justo lo que
         // necesita el operador para auditar una ola de migración.
         BiometricProviders.MigracionV1,
+        BiometricProviders.Manual,
     };
 
     private static readonly HashSet<string> ValidVigenciaEstados = new(StringComparer.OrdinalIgnoreCase)

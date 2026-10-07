@@ -10,6 +10,7 @@ using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Api.Grpc;
@@ -34,8 +35,15 @@ public sealed class IctOrchestrationService(
     RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
     FlitDbContext db,
+    IConfiguration configuration,
     ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
 {
+    /// <summary>Bug #13304 — vigencia por defecto de la consulta RUNT de la validación ICT.</summary>
+    internal const int DefaultVehicleConsultationMaxAgeHours = 24;
+
+    /// <summary>Bug #13304 (L-1) — margen de reloj tolerado para un <c>consulted_at</c> en el futuro.</summary>
+    internal static readonly TimeSpan MaxConsultedAtClockSkew = TimeSpan.FromMinutes(5);
+
     public override async Task<DraftReply> CreateDraftFromIct(
         CreateDraftFromIctRequest request,
         ServerCallContext context)
@@ -67,6 +75,15 @@ public sealed class IctOrchestrationService(
                     Status = existing.Status,
                 };
 
+                // Bug #13304 — si el intento previo creó el borrador pero se cayó en actores o comercial
+                // (p. ej. 22001 por un teléfono/nombre más largo que la columna), el reintento completa lo
+                // que falte en vez de devolver un borrador vacío sin aviso. Solo en BORRADOR: fuera de él
+                // no se reescriben partes ni precio. Mismas reglas de warning que la primera pasada.
+                if (string.Equals(existing.Status, TramiteEstado.Borrador, StringComparison.Ordinal))
+                {
+                    await CompletarFaltantesAsync(existingReply, existing.Id, tenantId, request, context.CancellationToken);
+                }
+
                 // Bug #13109 — si el intento previo creó el borrador pero perdió los adjuntos (se cayó en
                 // HandleBatchAsync), el reintento los completa aquí: sin esto el master quedaba en BORRADOR
                 // con 0 adjuntos para siempre. Mismo criterio de edición que HandleBatchAsync; la dedup
@@ -76,6 +93,7 @@ public sealed class IctOrchestrationService(
                 {
                     var retryCreatedBy = await ResolveIctCreatorAsync(
                         request.CreatedByUserId, tenantId, context.CancellationToken);
+                    RefrescarRastreo();
                     await RegistrarAdjuntosAsync(
                         existingReply, existing.Id, tenantId, request, retryCreatedBy, context.CancellationToken);
                 }
@@ -211,46 +229,16 @@ public sealed class IctOrchestrationService(
 
         // Actores del pre-trámite (vendedor/comprador + su representante legal). Se reutiliza
         // PutActorsHandler, el único escritor de partes. Fallo NO fatal: el borrador ya existe y el
-        // gestor puede completarlo; se reporta como warning para no perder la trazabilidad.
-        var actorInputs = MapActors(request.Actors, request.ProcedureTypeCode);
-        actorInputs = await CompletarRepresentantesAsync(reply, tenantId, actorInputs, context.CancellationToken);
-        if (actorInputs.Count > 0)
-        {
-            var (_, actorsError) = await actorsHandler.HandleAsync(
-                summary.Id, tenantId, new PutActorsRequest(actorInputs), context.CancellationToken);
-            if (actorsError is not null)
-            {
-                AppendWarning(reply, "actors_warning:" + actorsError);
-            }
-        }
+        // gestor puede completarlo; se reporta como warning para no perder la trazabilidad. Bug #13304:
+        // una EXCEPCIÓN (no solo un error devuelto) también es warning — antes salía como gRPC Unknown
+        // con el borrador ya creado y el reintento lo devolvía sin actores ni precio.
+        await AplicarActoresAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
 
         // Datos comerciales del traspaso (valor de venta / causal / método de pago). core-ict los envía en
         // request.Commercial SOLO para traspaso (tipo 3); en el resto de trámites llega null. Se reutiliza
         // PutCommercialHandler (el MISMO escritor que el paso 5 del wizard) para que el valor de venta
-        // aparezca en el borrador y el gestor lo vea. El handler exige una causal del catálogo cerrado; el
-        // contrato v1 no la trae, así que se usa COMPRAVENTA por defecto (la causal dominante del traspaso
-        // y la primera del selector del front) y el gestor puede cambiarla. Fallo NO fatal: el borrador ya
-        // existe y se reporta como warning acumulado.
-        if (request.Commercial is { } commercial
-            && decimal.TryParse(commercial.ValorVenta, NumberStyles.Any, CultureInfo.InvariantCulture, out var valorVenta)
-            && valorVenta > 0)
-        {
-            var causal = string.IsNullOrWhiteSpace(commercial.Causal)
-                ? "COMPRAVENTA"
-                : commercial.Causal.Trim().ToUpperInvariant();
-            var commercialDto = new CommercialDto(
-                ValorVenta: valorVenta,
-                Causal: causal,
-                TasaImpuesto: null,
-                Derechos: null,
-                MetodoPago: string.IsNullOrWhiteSpace(commercial.MetodoPago) ? null : commercial.MetodoPago.Trim());
-            var (_, commercialError) = await commercialHandler.HandleAsync(
-                summary.Id, tenantId, commercialDto, context.CancellationToken);
-            if (commercialError is not null)
-            {
-                AppendWarning(reply, "commercial_warning:" + commercialError);
-            }
-        }
+        // aparezca en el borrador y el gestor lo vea. Fallo NO fatal (error o excepción): warning acumulado.
+        await AplicarComercialAsync(reply, summary.Id, tenantId, request.Commercial, context.CancellationToken);
 
         // Adjuntos del pre-trámite: se registran por REFERENCIA (el binario ya está en el File Manager
         // corporativo; core-ict envía la metadata + storage_path + el DocTipo YA resuelto por su tabla de
@@ -263,32 +251,14 @@ public sealed class IctOrchestrationService(
         }
 
         // Preflight — PARIDAD con "Consultar RUNT del vehículo" (paso 1 del wizard manual). Un solo
-        // RunPreflightHandler hace TODO: consulta el vehículo por la cadena (kyverum-first→verifik) e HIDRATA
-        // los field_values del vehículo (marca/línea/soat/rtm/…), corre el SIMIT de comprador y vendedor,
-        // auto-vincula el OT desde el RUNT y PERSISTE el snapshot de preflight. Ese snapshot es lo que el gate
-        // del paso Comprador (SIMIT) exige: sin él, el paso 4 queda `incompleto` (simit_pendiente) y el wizard
-        // no avanza aunque los datos de comprador/vendedor ya estén. Requiere placa/VIN + owner_document_* (ya
-        // sembrados) + los actores (ya materializados). Best-effort: un fallo NO tumba la materialización.
-        var tieneVehiculo = request.FieldValues.Any(f =>
-            (string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(f.FieldKey, "vin", StringComparison.OrdinalIgnoreCase))
-            && !string.IsNullOrWhiteSpace(f.ValueText));
-        if (tieneVehiculo)
+        // RunPreflightHandler HIDRATA los field_values del vehículo (marca/línea/soat/rtm/gravámenes/…), corre
+        // el SIMIT de comprador y vendedor, auto-vincula el OT desde el RUNT y PERSISTE el snapshot de
+        // preflight. Ese snapshot es lo que el gate del paso Comprador (SIMIT) exige: sin él, el paso 4 queda
+        // `incompleto` (simit_pendiente). Bug #13304 — el vehículo NO se re-consulta: se reutiliza la consulta
+        // RUNT de la validación ICT (precomputed_vehicle). Best-effort: un fallo NO tumba la materialización.
+        if (TieneVehiculo(request))
         {
-            RefrescarRastreo();
-            try
-            {
-                var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
-                    summary.Id, tenantId, context.CancellationToken);
-                if (preflightError is not null)
-                {
-                    AppendWarning(reply, "preflight_warning:" + preflightError);
-                }
-            }
-            catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
-            {
-                AppendWarning(reply, "preflight_warning:exception");
-            }
+            await CorrerPreflightIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
         }
 
         // Identidad auto-iniciada — PARIDAD con el wizard manual (ensure → biométrica, TramiteWizard) y con
@@ -307,6 +277,310 @@ public sealed class IctOrchestrationService(
 
         return reply;
     }
+
+    /// <summary>
+    /// Bug #13304 — rama de reintento por <c>external_ref</c>: completa lo que el intento previo no alcanzó
+    /// a guardar. Sin actores → aplica los del request (y, si quedaron, vuelve a asegurar la identidad,
+    /// que en la primera pasada corrió sin partes). Sin comercial o con valor 0 → aplica el del request.
+    /// Lo que ya existe NO se toca (el gestor pudo haberlo editado).
+    /// </summary>
+    private async Task CompletarFaltantesAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        if (request.Actors.Count > 0)
+        {
+            var tieneActores = await db.Set<ProcedureInstanceActor>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .AnyAsync(a => a.ProcedureInstanceId == instanceId && a.TenantId == tenantId, ct);
+            if (!tieneActores)
+            {
+                var aplicados = await AplicarActoresAsync(reply, instanceId, tenantId, request, ct);
+                if (aplicados)
+                {
+                    RefrescarRastreo();
+                    var esTraspaso = request.ProcedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
+                    foreach (var parte in esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" })
+                    {
+                        await AsegurarIdentidadAsync(reply, instanceId, tenantId, parte, ct);
+                    }
+                }
+            }
+        }
+
+        await CompletarComercialAsync(reply, instanceId, tenantId, request, ct);
+
+        // Bug #13304 (D7) — si el intento previo no alcanzó a dejar el preflight, se corre con la consulta
+        // RUNT de ICT. Con snapshot existente no se toca (el gestor pudo haberlo refrescado).
+        if (TieneVehiculo(request))
+        {
+            var tieneSnapshot = await db.Set<ProcedureInstancePreflightSnapshot>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .AnyAsync(s => s.ProcedureInstanceId == instanceId && s.TenantId == tenantId, ct);
+            if (!tieneSnapshot)
+            {
+                await CorrerPreflightIctAsync(reply, instanceId, tenantId, request, ct);
+            }
+        }
+    }
+
+    private async Task CompletarComercialAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        if (request.Commercial is not null)
+        {
+            var valorActual = await db.Set<ProcedureInstanceCommercial>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(c => c.ProcedureInstanceId == instanceId && c.TenantId == tenantId)
+                .Select(c => new { c.ValorVenta })
+                .FirstOrDefaultAsync(ct);
+            if (valorActual is null || valorActual.ValorVenta is null or <= 0)
+            {
+                RefrescarRastreo();
+                await AplicarComercialAsync(reply, instanceId, tenantId, request.Commercial, ct);
+            }
+        }
+    }
+
+    private static bool TieneVehiculo(CreateDraftFromIctRequest request) =>
+        FieldValueOf(request, "plate") is not null || FieldValueOf(request, "vin") is not null;
+
+    private static string? FieldValueOf(CreateDraftFromIctRequest request, string key) =>
+        request.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, key, StringComparison.OrdinalIgnoreCase)
+                                 && !string.IsNullOrWhiteSpace(f.ValueText))
+            ?.ValueText;
+
+    /// <summary>
+    /// Bug #13304 (D4/D7) — preflight del borrador ICT con la consulta RUNT de la validación ICT. Válida →
+    /// <see cref="RunPreflightHandler"/> con ella, persistiendo el snapshot también ante bloqueo. Ausente,
+    /// vencida, de otro vehículo o ilegible → NO se consulta: <c>preflight_warning:vehicle_consultation_*</c>.
+    /// </summary>
+    private async Task CorrerPreflightIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        var maxAgeHours = configuration.GetValue("Ict:VehicleConsultationMaxAgeHours", DefaultVehicleConsultationMaxAgeHours);
+        var (precomputed, motivo) = ResolverPrecomputed(
+            request.PrecomputedVehicle,
+            FieldValueOf(request, "plate"),
+            FieldValueOf(request, "vin"),
+            maxAgeHours,
+            DateTimeOffset.UtcNow);
+        if (precomputed is null)
+        {
+            AppendWarning(reply, "preflight_warning:" + motivo);
+            return;
+        }
+
+        RefrescarRastreo();
+        try
+        {
+            var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
+                instanceId, tenantId, precomputed, new PreflightRunOptions(PersistSnapshotOnBlock: true), ct);
+            if (preflightError is not null)
+            {
+                AppendWarning(reply, "preflight_warning:" + preflightError);
+            }
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            RefrescarRastreo();
+            AppendWarning(reply, "preflight_warning:exception");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13304 (D4) — valida la consulta RUNT que trae ICT: presente, con fecha, no más vieja que
+    /// <paramref name="maxAgeHours"/> (≤ 0 ⇒ default de 24 h), del MISMO vehículo (placa si se consultó por
+    /// placa, VIN si por VIN; normalizado a mayúsculas sin espacios) y deserializable. Devuelve el snapshot o
+    /// el motivo (<c>vehicle_consultation_missing|expired|mismatch|invalid</c>).
+    /// </summary>
+    internal static (PreflightVehicleSnapshot? Snapshot, string? Motivo) ResolverPrecomputed(
+        PrecomputedVehicleConsultation? precomputed,
+        string? plate,
+        string? vin,
+        int maxAgeHours,
+        DateTimeOffset now)
+    {
+        if (precomputed is null || string.IsNullOrWhiteSpace(precomputed.SnapshotJson))
+            return (null, "vehicle_consultation_missing");
+
+        if (precomputed.ConsultedAt is null)
+            return (null, "vehicle_consultation_invalid");
+
+        // L-1 — una fecha futura (más allá del margen de reloj) alargaría la vigencia a voluntad: inválida.
+        var consultedAt = precomputed.ConsultedAt.ToDateTimeOffset();
+        if (consultedAt > now + MaxConsultedAtClockSkew)
+            return (null, "vehicle_consultation_invalid");
+
+        var vigencia = TimeSpan.FromHours(maxAgeHours > 0 ? maxAgeHours : DefaultVehicleConsultationMaxAgeHours);
+        if (consultedAt < now - vigencia)
+            return (null, "vehicle_consultation_expired");
+
+        bool? coincide = precomputed.Kind switch
+        {
+            "VehiclePlate" => MismoIdentificador(precomputed.QueriedPlate, plate),
+            "VehicleVin" => MismoIdentificador(precomputed.QueriedVin, vin),
+            _ => null,
+        };
+        if (coincide is null)
+            return (null, "vehicle_consultation_invalid");
+        if (coincide == false)
+            return (null, "vehicle_consultation_mismatch");
+
+        // M-1 — defensa en profundidad: del snapshot recibido solo pasan claves de vehículo (lista blanca).
+        if (!TryLeerSnapshot(precomputed.SnapshotJson, out var snapshot))
+            return (null, "vehicle_consultation_invalid");
+        var filtrado = snapshot!.SoloClavesDeVehiculo();
+        // Sin nada de vehículo tras la lista blanca, es como si no hubiera consulta (core-ict no la filtra).
+        return filtrado.HydratedFields.Count > 0 || filtrado.Checks.Any(c => c.Status is not ("unknown" or "error"))
+            ? (filtrado, null)
+            : (null, "vehicle_consultation_missing");
+    }
+
+    /// <summary>
+    /// Bug #13304 + HU #13348 — el snapshot que guarda core-ict es, desde el corte, el <c>ResultadoConsulta</c> de
+    /// core-consultas en JSON (ICT consulta directo a Consultas); se convierte con el mismo mapeo que la consulta en
+    /// proceso. Los guardados antes del despliegue (vigencia de horas) traen el formato <see cref="PreflightVehicleSnapshot"/>
+    /// que producía core-api: se siguen aceptando. Mismos topes de tamaño en los dos.
+    /// </summary>
+    internal static bool TryLeerSnapshot(string? json, out PreflightVehicleSnapshot? snapshot)
+    {
+        if (PreflightVehicleSnapshotJson.TryDeserialize(json, out snapshot))
+            return true;
+
+        snapshot = null;
+        if (string.IsNullOrWhiteSpace(json) || System.Text.Encoding.UTF8.GetByteCount(json) > PreflightVehicleSnapshotJson.MaxSnapshotBytes)
+            return false;
+        try
+        {
+            var resultado = new Google.Protobuf.JsonParser(Google.Protobuf.JsonParser.Settings.Default.WithRecursionLimit(PreflightVehicleSnapshotJson.MaxDepth))
+                .Parse<Flit.Consultas.Grpc.V1.ResultadoConsulta>(json);
+            if (string.IsNullOrEmpty(resultado.Proveedor))
+                return false;
+            snapshot = PreflightVehicleSnapshot.FromConsultation(Flit.Consultas.Grpc.Mapping.ResultadoConsultaMapper.FromProto(resultado));
+            return true;
+        }
+        catch (Exception ex) when (ex is Google.Protobuf.InvalidProtocolBufferException or Google.Protobuf.InvalidJsonException or FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool MismoIdentificador(string? consultado, string? delBorrador)
+    {
+        var a = Normalizar(consultado);
+        return a.Length > 0 && string.Equals(a, Normalizar(delBorrador), StringComparison.Ordinal);
+    }
+
+    private static string Normalizar(string? valor) =>
+        string.Concat((valor ?? string.Empty).Where(c => !char.IsWhiteSpace(c))).ToUpperInvariant();
+
+    /// <summary>
+    /// Materializa los actores del request con <see cref="PutActorsHandler"/>. Error devuelto →
+    /// <c>actors_warning:&lt;código&gt;</c>; excepción (Bug #13304) → <c>actors_warning:persist_failed</c>
+    /// (o <c>:exception</c> si no fue de persistencia), log sin PII y change tracker limpio para que
+    /// comercial y adjuntos puedan guardar. Devuelve <c>true</c> si quedaron actores persistidos.
+    /// </summary>
+    private async Task<bool> AplicarActoresAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        var actorInputs = MapActors(request.Actors, request.ProcedureTypeCode);
+        actorInputs = await CompletarRepresentantesAsync(reply, tenantId, actorInputs, ct);
+        if (actorInputs.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            var (_, actorsError) = await actorsHandler.HandleAsync(
+                instanceId, tenantId, new PutActorsRequest(actorInputs), ct);
+            if (actorsError is not null)
+            {
+                AppendWarning(reply, "actors_warning:" + actorsError);
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            var code = CodigoDeFallo(ex);
+            IctOrchestrationLog.StepFailed(logger, "actors", code, ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "actors_warning:" + code);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Persiste los datos comerciales del request con <see cref="PutCommercialHandler"/> si traen un valor
+    /// de venta &gt; 0. El handler exige una causal del catálogo cerrado; el contrato v1 no la trae, así que
+    /// se usa COMPRAVENTA por defecto (la causal dominante del traspaso) y el gestor puede cambiarla.
+    /// Error devuelto → <c>commercial_warning:&lt;código&gt;</c>; excepción (Bug #13304) →
+    /// <c>commercial_warning:persist_failed</c> con el change tracker limpio.
+    /// </summary>
+    private async Task AplicarComercialAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CommercialData? commercial, CancellationToken ct)
+    {
+        if (commercial is null
+            || !decimal.TryParse(commercial.ValorVenta, NumberStyles.Any, CultureInfo.InvariantCulture, out var valorVenta)
+            || valorVenta <= 0)
+        {
+            return;
+        }
+
+        var causal = string.IsNullOrWhiteSpace(commercial.Causal)
+            ? "COMPRAVENTA"
+            : commercial.Causal.Trim().ToUpperInvariant();
+        var commercialDto = new CommercialDto(
+            ValorVenta: valorVenta,
+            Causal: causal,
+            TasaImpuesto: null,
+            Derechos: null,
+            MetodoPago: string.IsNullOrWhiteSpace(commercial.MetodoPago) ? null : commercial.MetodoPago.Trim());
+        try
+        {
+            var (_, commercialError) = await commercialHandler.HandleAsync(instanceId, tenantId, commercialDto, ct);
+            if (commercialError is not null)
+            {
+                AppendWarning(reply, "commercial_warning:" + commercialError);
+            }
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            var code = CodigoDeFallo(ex);
+            IctOrchestrationLog.StepFailed(logger, "commercial", code, ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "commercial_warning:" + code);
+        }
+    }
+
+    /// <summary>
+    /// ¿La excepción de un paso NO fatal se convierte en warning? Todo salvo cancelación del llamante y
+    /// OOM (que deben propagarse). Bug #13304.
+    /// </summary>
+    internal static bool EsFalloRecuperable(Exception ex, CancellationToken ct) =>
+        !ct.IsCancellationRequested
+        && ex is not OperationCanceledException
+        && ex is not OutOfMemoryException;
+
+    /// <summary>
+    /// Código estable y SIN PII para el warning: nunca el mensaje de la excepción (puede traer el valor
+    /// que reventó la columna — un nombre, un teléfono). Persistencia → <c>persist_failed</c>.
+    /// </summary>
+    internal static string CodigoDeFallo(Exception ex) =>
+        ex is DbUpdateException ? "persist_failed" : "exception";
+
+    /// <summary>
+    /// SqlState de Postgres (p.ej. 22001 = valor demasiado largo) cuando la excepción es un DbUpdateException
+    /// con PostgresException interna; "-" si no aplica. Diagnóstico sin PII: nunca ex.Message.
+    /// </summary>
+    internal static string SqlStateDe(Exception ex) =>
+        ex is DbUpdateException { InnerException: Npgsql.PostgresException pg } ? pg.SqlState : "-";
 
     /// <summary>
     /// Registra los adjuntos ICT por REFERENCIA en UNA unidad de trabajo (un solo SaveChanges): uno por
@@ -751,6 +1025,102 @@ public sealed class IctOrchestrationService(
     }
 
     /// <summary>
+    /// Bug #13304 — ICT edita el precio de venta del trámite SOLO mientras siga en borrador (decisión del
+    /// usuario). Valida que la instancia sea del tenant y que su <c>external_ref</c> coincida con el
+    /// pre-trámite que la originó (si no, <c>not_found</c>: no se revela la existencia de trámites
+    /// ajenos). Fuera de borrador → <c>not_draft</c>. Reutiliza <see cref="PutCommercialHandler"/>, que
+    /// valida el valor (&gt; 0) y la causal; se conservan la causal, método de pago, tasas y trazabilidad
+    /// del avalúo que ya tuviera el comercial (el gestor pudo editarlos): solo cambia el valor de venta.
+    /// </summary>
+    public override async Task<DraftReply> UpdateDraftCommercial(
+        UpdateDraftCommercialRequest request,
+        ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        var ct = context.CancellationToken;
+
+        if (!Guid.TryParse(request.TenantId, out var tenantId))
+        {
+            return new DraftReply { ErrorCode = "invalid_tenant" };
+        }
+
+        if (!Guid.TryParse(request.ProcedureInstanceId, out var instanceId))
+        {
+            return new DraftReply { ErrorCode = "invalid_instance" };
+        }
+
+        var externalRef = request.ExternalRef?.Trim();
+        if (string.IsNullOrEmpty(externalRef))
+        {
+            return new DraftReply { ErrorCode = "invalid_external_ref" };
+        }
+
+        var instance = await db.Set<ProcedureInstance>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => p.Id == instanceId && p.TenantId == tenantId && p.DeletedAt == null)
+            .Select(p => new { p.Id, p.ReferenceNumber, p.Status, p.ExternalRef })
+            .FirstOrDefaultAsync(ct);
+        if (instance is null || !string.Equals(instance.ExternalRef, externalRef, StringComparison.Ordinal))
+        {
+            return new DraftReply { ErrorCode = "not_found" };
+        }
+
+        if (!string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.Ordinal))
+        {
+            return new DraftReply
+            {
+                ProcedureInstanceId = instance.Id.ToString(),
+                ReferenceNumber = instance.ReferenceNumber,
+                Status = instance.Status,
+                ErrorCode = "not_draft",
+            };
+        }
+
+        if (request.Commercial is null
+            || !decimal.TryParse(request.Commercial.ValorVenta, NumberStyles.Any, CultureInfo.InvariantCulture, out var valorVenta))
+        {
+            return new DraftReply { ErrorCode = "invalid_valor_venta" };
+        }
+
+        var actual = await db.Set<ProcedureInstanceCommercial>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ProcedureInstanceId == instanceId && c.TenantId == tenantId, ct);
+        var causalPedida = request.Commercial.Causal?.Trim();
+        var metodoPedido = request.Commercial.MetodoPago?.Trim();
+        var dto = new CommercialDto(
+            ValorVenta: valorVenta,
+            Causal: !string.IsNullOrEmpty(causalPedida) ? causalPedida.ToUpperInvariant() : actual?.Causal ?? "COMPRAVENTA",
+            TasaImpuesto: actual?.TasaImpuesto,
+            Derechos: actual?.Derechos,
+            MetodoPago: !string.IsNullOrEmpty(metodoPedido) ? metodoPedido : actual?.MetodoPago,
+            ValueOrigin: actual?.ValueOrigin,
+            SuggestedSource: actual?.SuggestedSource,
+            SuggestedValue: actual?.SuggestedValue);
+
+        string? error;
+        try
+        {
+            (_, error) = await commercialHandler.HandleAsync(instanceId, tenantId, dto, ct);
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            error = CodigoDeFallo(ex);
+            IctOrchestrationLog.StepFailed(logger, "update_commercial", error, ex.GetType().Name, SqlStateDe(ex), instanceId);
+        }
+
+        return new DraftReply
+        {
+            ProcedureInstanceId = instance.Id.ToString(),
+            ReferenceNumber = instance.ReferenceNumber,
+            Status = instance.Status,
+            ErrorCode = error ?? string.Empty,
+        };
+    }
+
+    /// <summary>
     /// Pausa o reanuda un borrador (servicio v1 pauseDraftProcess). FLIT 2.0 no tenía pausa: se persiste
     /// en las columnas aditivas <c>is_paused</c>/<c>paused_observation</c> de procedure_instances. Solo
     /// aplica en estado <c>borrador</c> (como v1). TODO(ICT-PAUSE-UI): reflejar la pausa en el dashboard.
@@ -852,4 +1222,9 @@ internal static partial class IctOrchestrationLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: no se pudo consultar el directorio de representantes legales ({ExceptionType}).")]
     public static partial void DirectoryWarning(ILogger logger, string exceptionType);
+
+    // Bug #13304 — un paso NO fatal de la materialización lanzó: solo el paso, el código estable, el TIPO
+    // de la excepción y el id (nunca ex.Message, que puede traer el valor que reventó la columna).
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: el paso {Step} falló ({Code}, {ExceptionType}, SqlState {SqlState}). Instancia {InstanceId}.")]
+    public static partial void StepFailed(ILogger logger, string step, string code, string exceptionType, string sqlState, Guid instanceId);
 }

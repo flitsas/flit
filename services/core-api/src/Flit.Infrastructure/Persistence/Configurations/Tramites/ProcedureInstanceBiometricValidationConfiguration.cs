@@ -23,7 +23,7 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.HasIndex(x => new { x.MandateSignerId, x.CreatedAt })
             .HasDatabaseName("ix_biometric_validations_mandate_signer")
             .HasFilter("mandate_signer_id IS NOT NULL");
-        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(320).IsRequired(); // Bug #13304: = actors.full_name (DDL 132)
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
         builder.Property(x => x.Email).HasColumnName("email").HasMaxLength(320).IsRequired();
@@ -31,7 +31,7 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         // entidad). Default '' para filas insertadas sin el campo explícito (fixtures/tests antiguos).
         builder.Property(x => x.RegisteredEmail).HasColumnName("registered_email").HasMaxLength(320)
             .IsRequired().HasDefaultValue("");
-        builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired().HasDefaultValue("enviado");
+        builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(40).IsRequired().HasDefaultValue("enviado");
         builder.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
         builder.Property(x => x.Attempts).HasColumnName("attempts").IsRequired().HasDefaultValue(0);
@@ -55,6 +55,20 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         // HU #10943 (CF-03) — tope + cooldown de reenvíos de la prevalidación standalone.
         builder.Property(x => x.ResendCount).HasColumnName("resend_count").IsRequired().HasDefaultValue(0);
         builder.Property(x => x.LastResentAt).HasColumnName("last_resent_at");
+
+        // HU #13283 — identidad manual (DDL 130). Todas NULL; CHECKs de status/provider/approval_origin viven en el DDL.
+        builder.Property(x => x.ApprovalOrigin).HasColumnName("approval_origin");
+        builder.Property(x => x.ManualActivatedBy).HasColumnName("manual_activated_by");
+        builder.Property(x => x.ManualActivatedAt).HasColumnName("manual_activated_at");
+        builder.Property(x => x.ConsentAt).HasColumnName("consent_at");
+        builder.Property(x => x.ConsentIp).HasColumnName("consent_ip");
+        builder.Property(x => x.ConsentTextVersion).HasColumnName("consent_text_version");
+        builder.Property(x => x.ReviewedBy).HasColumnName("reviewed_by");
+        builder.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
+        builder.Property(x => x.RejectionReasonCode).HasColumnName("rejection_reason_code");
+        builder.HasIndex(x => new { x.TenantId, x.Status, x.ManualActivatedAt })
+            .HasDatabaseName("ix_biometric_validations_manual_tab")
+            .HasFilter("provider = 'manual'");
 
         // HU #10233 — Kyverum Verify.
         builder.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(20).IsRequired().HasDefaultValue("mock");

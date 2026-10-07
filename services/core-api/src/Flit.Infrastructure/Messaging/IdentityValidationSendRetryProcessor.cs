@@ -162,7 +162,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
         return true;
     }
 
-    private static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, CancellationToken ct)
+    internal static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();
         var transaction = db.Database.CurrentTransaction!.GetDbTransaction();
@@ -174,6 +174,8 @@ internal sealed class IdentityValidationSendRetryProcessor(
             FROM tramites.procedure_instance_biometric_validations v
             WHERE status = @status
               AND attempts < max_attempts
+              -- HU #13286: una fila del flujo manual nunca se envía a Kyverum (ni por la cola ni por reintento).
+              AND provider <> 'manual'
               -- Bug #13055: no se envía el enlace a personas de un trámite anulado o revocado.
               AND NOT EXISTS (
                   SELECT 1 FROM tramites.procedure_instances pi

@@ -62,6 +62,23 @@ public sealed class CorreoPorBusEmailSenderTests
         sobre.DataAs<TrabajoCorreo>().Canal.Should().Be("flit_smtp");
     }
 
+    [Theory]
+    [InlineData(NotificationChannel.TenantApi, "tenant_api")]
+    [InlineData(NotificationChannel.FlitSmtp, "flit_smtp")]
+    public async Task HU13287_IdentidadCapturaManual_NoEsCorreoDeCuenta_SigueElCanalDeLaEmpresa(NotificationChannel canal, string esperado)
+    {
+        // Portada de las pruebas del enrutador en proceso (retirado en HU #13359): la regla vive aquí.
+        Flit.Infrastructure.Notifications.Catalog.NotificationTemplateCatalog.TryResolve("identidad.captura-manual", out var plantilla).Should().BeTrue();
+        plantilla.Should().NotBeNull();
+        var (sender, dbName, provider) = Crear(canal);
+        await using var _ = provider;
+
+        await sender.SendAsync(Mensaje("identidad.captura-manual", Empresa), Ct);
+
+        var sobre = EventEnvelope.FromJson(System.Text.Encoding.UTF8.GetBytes((await TrabajoAsync(dbName)).Payload));
+        sobre.DataAs<TrabajoCorreo>().Canal.Should().Be(esperado);
+    }
+
     [Fact]
     public async Task HU13359_UnCorreoSinEmpresa_VaComoTrabajoDeLaEmpresaPlataforma_PorFlit()
     {

@@ -378,6 +378,19 @@ public sealed class KyverumWebhookHandler(
             return ("ok", null);
         }
 
+        // HU #13286 (Épica #13202) — la validación ya es del flujo manual (A2 limpió id, url y secreto de Kyverum):
+        // un webhook tardío NO la decide. 200 para que Kyverum no reintente; no se verifica firma, no se
+        // consulta al proveedor, no se aplica nada y no se persiste. La bitácora no lleva payload ni secretos.
+        if (string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookIgnoradoManual, IdentityValidationAuditOutcomes.Ok,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                PartyRole: v.PartyRole, SignaturePresent: signaturePresent, HttpStatus: 200,
+                Message: "Webhook de Kyverum ignorado: la validación está en el flujo manual."), ct);
+            return ("ok", null);
+        }
+
         // Descifrado del secreto (vía rápida HMAC). CryptographicException (keyring/ApplicationName) ⇒ NO 500.
         string? secret = null;
         string? decryptError = null;

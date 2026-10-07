@@ -200,7 +200,7 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// (<c>updated_at</c> o <c>created_at</c>) sea anterior a <paramref name="cutoff"/>, con
     /// <c>FOR UPDATE SKIP LOCKED</c>. Devuelve null si no hay ninguna reclamable.
     /// </summary>
-    private static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, DateTimeOffset cutoff, CancellationToken ct)
+    internal static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, DateTimeOffset cutoff, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();
         var transaction = db.Database.CurrentTransaction!.GetDbTransaction();
@@ -237,7 +237,7 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// (<c>expires_at &lt;= @now</c>), con <c>FOR UPDATE SKIP LOCKED</c>. No consulta a Kyverum: solo se usa
     /// para terminalizarla como <c>expirado</c>. Devuelve null si no hay ninguna reclamable.
     /// </summary>
-    private static async Task<Guid?> ClaimNextExpiredIdAsync(FlitDbContext db, DateTimeOffset now, CancellationToken ct)
+    internal static async Task<Guid?> ClaimNextExpiredIdAsync(FlitDbContext db, DateTimeOffset now, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();
         var transaction = db.Database.CurrentTransaction!.GetDbTransaction();

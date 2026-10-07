@@ -67,6 +67,14 @@ public sealed class IctJobOptions
     public int RetentionIntervalHours { get; init; } = 24;
 
     public int RetentionBatchSize { get; init; } = 5000;
+
+    /// <summary>
+    /// Bug #13304 — vigencia (horas) de la consulta RUNT de la validación ICT que se reutiliza al crear el
+    /// borrador. Vencida o ausente ⇒ el envío re-encola la consulta de vehículo (una vez por ventana) sin llamar
+    /// a core-api; si tras esa re-consulta sigue sin resultado, deja el pre-trámite CON NOVEDADES.
+    /// Mismo default que <c>Ict:VehicleConsultationMaxAgeHours</c> de core-api (≤ 0 ⇒ 24).
+    /// </summary>
+    public int VehicleConsultationMaxAgeHours { get; init; } = 24;
 }
 
 /// <summary>

@@ -60,6 +60,76 @@ public sealed class ConsultasConsultationClientTests
         (await cliente.QueryAsync(Empresa, "DRIVER", "", "", "CC", "123", ct)).PazYSalvo.Should().BeFalse();
     }
 
+    // ── Bug #13304 (D6 + snapshot), portado del servicio de core-api que se retiró en HU #13348 ──
+
+    [Fact]
+    public async Task Bug13304_TraspasoConPlacaDocumentoYVin_ConsultaPorPlacaSinVin_YDevuelveElSnapshot()
+    {
+        var consultas = new Invoker(_ => new ConsultarVehiculoResponse { Resultado = ResultadoRunt() });
+
+        var r = await Cliente(consultas).QueryAsync(Empresa, "VEHICLE", "ABC123", "1HGCM82633A004352", "CC", "1013304001", TestContext.Current.CancellationToken);
+
+        var pedido = consultas.Pedidos.Single().Should().BeOfType<ConsultarVehiculoRequest>().Subject;
+        pedido.Vin.Should().BeNull("paridad con el paso 1 del wizard de traspaso");
+        pedido.Placa.Valor.Should().Be("ABC123");
+        pedido.Propietario.Numero.Should().Be("1013304001");
+        r.Vehicle.Should().NotBeNull();
+        r.Vehicle!.Kind.Should().Be("VehiclePlate");
+        r.Vehicle.Provider.Should().Be("kyverum_runt");
+        r.SoatStatus.Should().Be("VIGENTE", "los hechos reducidos siguen saliendo igual");
+    }
+
+    [Fact]
+    public async Task Bug13304_PlacaSinDocumento_ConservaElVin()
+    {
+        var consultas = new Invoker(_ => new ConsultarVehiculoResponse { Resultado = ResultadoRunt() });
+
+        await Cliente(consultas).QueryAsync(Empresa, "VEHICLE", "ABC123", "1HGCM82633A004352", "", "", TestContext.Current.CancellationToken);
+
+        consultas.Pedidos.Single().Should().BeOfType<ConsultarVehiculoRequest>().Which.Vin.Valor.Should().Be("1HGCM82633A004352");
+    }
+
+    [Fact]
+    public async Task Bug13304_PorVin_ConservaElVin_YMarcaLaKind()
+    {
+        var consultas = new Invoker(_ => new ConsultarVehiculoResponse { Resultado = ResultadoRunt() });
+
+        var r = await Cliente(consultas).QueryAsync(Empresa, "VIN", "", "1HGCM82633A004352", "CC", "1013304001", TestContext.Current.CancellationToken);
+
+        consultas.Pedidos.Single().Should().BeOfType<ConsultarVehiculoRequest>().Which.Vin.Valor.Should().Be("1HGCM82633A004352");
+        r.Vehicle!.Kind.Should().Be("VehicleVin");
+    }
+
+    [Fact]
+    public async Task Bug13304_Rnmc_NoTraeSnapshotDeVehiculo()
+    {
+        var consultas = new Invoker(_ => new ConsultarRnmcResponse { Resultado = new ResultadoConsulta { Proveedor = "verifik_rnmc", Campos = { new Campo { Clave = "x", ValorTexto = "y" } } } });
+
+        (await Cliente(consultas).QueryAsync(Empresa, "RNMC", "", "", "CC", "123", TestContext.Current.CancellationToken)).Vehicle.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Bug13304_NoEncontradoEnRunt_SiTraeSnapshot_PorqueElFailEsUnaRespuesta()
+    {
+        var consultas = new Invoker(_ => new ConsultarVehiculoResponse
+        {
+            Resultado = new ResultadoConsulta { Proveedor = "kyverum_runt", Chequeos = { new Chequeo { Clave = "vehiculo", Estado = EstadoChequeo.Fail } } },
+        });
+
+        (await Cliente(consultas).QueryAsync(Empresa, "VEHICLE", "ABC123", "", "CC", "1", TestContext.Current.CancellationToken)).Vehicle.Should().NotBeNull();
+    }
+
+    private static ResultadoConsulta ResultadoRunt() => new()
+    {
+        Proveedor = "kyverum_runt",
+        Chequeos =
+        {
+            new Chequeo { Clave = "soat", Estado = EstadoChequeo.Ok },
+            new Chequeo { Clave = "gravamenes", Estado = EstadoChequeo.Warn },
+        },
+        Campos = { new Campo { Clave = "vehicle_year", ValorTexto = "2020" }, new Campo { Clave = "runt_tiene_gravamenes", ValorTexto = "SI" } },
+    };
+
     [Fact]
     public async Task ConsultasCaido_ElErrorSePropaga_YElOrquestadorReintenta()
     {

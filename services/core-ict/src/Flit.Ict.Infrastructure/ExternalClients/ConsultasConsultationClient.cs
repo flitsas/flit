@@ -1,6 +1,7 @@
 using Flit.Consultas.Grpc.V1;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Validation;
+using Google.Protobuf;
 using Grpc.Core;
 
 namespace Flit.Ict.Infrastructure.ExternalClients;
@@ -31,9 +32,11 @@ public sealed class ConsultasConsultationClient(ConsultasService.ConsultasServic
         var metadata = new Metadata { { "x-flit-tenant-id", tenantId.ToString() } };
         return tipo switch
         {
-            "VIN" or "VEHICLE" => Vehiculo((await consultas.ConsultarVehiculoAsync(new ConsultarVehiculoRequest
+            "VIN" or "VEHICLE" => Vehiculo(tipo, (await consultas.ConsultarVehiculoAsync(new ConsultarVehiculoRequest
             {
-                Vin = tipo == "VIN" && !string.IsNullOrWhiteSpace(vin) ? new Flit.Platform.Grpc.V1.Vin { Valor = vin } : null,
+                // Bug #13304 (D6): con placa Y documento no viaja el VIN (paridad con el paso 1 del wizard de traspaso: con
+                // VIN el proveedor consultaría por VIN y no traería el gravamen del titular). Sin documento se conserva.
+                Vin = !string.IsNullOrWhiteSpace(vin) && !PlacaConDocumento(tipo, plate, documentNumber) ? new Flit.Platform.Grpc.V1.Vin { Valor = vin } : null,
                 Placa = !string.IsNullOrWhiteSpace(plate) ? new Flit.Platform.Grpc.V1.Placa { Valor = plate } : null,
                 Propietario = Documento(documentType, documentNumber),
             }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
@@ -48,13 +51,38 @@ public sealed class ConsultasConsultationClient(ConsultasService.ConsultasServic
         };
     }
 
-    internal static ConsultationResult Vehiculo(ResultadoConsulta r) => new(
+    internal static bool PlacaConDocumento(string tipo, string? plate, string? documentNumber) =>
+        tipo == "VEHICLE" && !string.IsNullOrWhiteSpace(plate) && !string.IsNullOrWhiteSpace(documentNumber);
+
+    internal static ConsultationResult Vehiculo(string tipo, ResultadoConsulta r) => new(
         SoatStatus: Vigencia(EstadoDe(r, CheckSoat)),
         RtmStatus: Vigencia(EstadoDe(r, CheckRtm)),
         VehicleModelYear: int.TryParse(CampoDe(r, FieldVehicleYear), out var year) && year > 0 ? year : null,
         HasActiveSanctions: false,
         PazYSalvo: null,
-        TransitOfficeName: string.IsNullOrWhiteSpace(CampoDe(r, FieldTransitOffice)) ? null : CampoDe(r, FieldTransitOffice));
+        TransitOfficeName: string.IsNullOrWhiteSpace(CampoDe(r, FieldTransitOffice)) ? null : CampoDe(r, FieldTransitOffice),
+        Vehicle: Snapshot(tipo, r));
+
+    /// <summary>
+    /// Bug #13304 + HU #13348 — resultado COMPLETO de la consulta de vehículo para que el borrador lo reutilice sin
+    /// volver a consultar el RUNT. Es el <see cref="ResultadoConsulta"/> de Consultas en JSON (sin respuesta cruda: no se
+    /// pide), opaco para core-ict; core-api lo convierte al materializar con su lista blanca de claves. Si la cadena no
+    /// respondió (sin campos y todos los chequeos desconocidos o en error) no hay nada reutilizable (null), igual que
+    /// cuando la consulta pasaba por core-api.
+    /// </summary>
+    internal static VehicleConsultationSnapshot? Snapshot(string tipo, ResultadoConsulta r)
+    {
+        var respondio = r.Campos.Count > 0
+            || r.Chequeos.Any(c => c.Estado is not (EstadoChequeo.Unknown or EstadoChequeo.Error or EstadoChequeo.Unspecified));
+        if (!respondio)
+            return null;
+
+        return new VehicleConsultationSnapshot(
+            JsonFormatter.Default.Format(r),
+            DateTimeOffset.UtcNow,
+            r.Proveedor ?? string.Empty,
+            tipo == "VIN" ? VehicleConsultationSnapshot.KindVin : VehicleConsultationSnapshot.KindPlate);
+    }
 
     // RNMC bloquea si hay medidas correctivas activas (warn/fail en la respuesta normalizada).
     internal static ConsultationResult Rnmc(ResultadoConsulta r) => new(

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
+using Flit.Ict.Domain.Validation;
 using Flit.Ict.Grpc.Contracts;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -22,11 +23,12 @@ public sealed partial class IctGrpcProcedureDraftClient(
     public async Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
+        VehicleConsultationSnapshot? vehicle,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(master);
 
-        var request = await BuildRequestAsync(master, procedureType, docTypeResolver, logger, ct);
+        var request = await BuildRequestAsync(master, procedureType, docTypeResolver, vehicle, logger, ct);
 
         try
         {
@@ -44,7 +46,11 @@ public sealed partial class IctGrpcProcedureDraftClient(
                     Log.MaterializedWithWarning(logger, reply.ErrorCode, master.Id);
                 }
 
-                return new CreateDraftResult(id, reply.ReferenceNumber, reply.Status, null);
+                // Bug #13304 — el warning viaja en el resultado (antes se descartaba): el job conserva el id
+                // (hay id ⇒ éxito) y puede registrar actors_warning/commercial_warning en el master.
+                return new CreateDraftResult(
+                    id, reply.ReferenceNumber, reply.Status,
+                    string.IsNullOrEmpty(reply.ErrorCode) ? null : reply.ErrorCode);
             }
 
             return new CreateDraftResult(
@@ -64,12 +70,26 @@ public sealed partial class IctGrpcProcedureDraftClient(
     /// lleva datos comerciales. Todas las declara <c>ict.procedure_type_mapping</c>; ninguna se
     /// deduce ya del texto del código ni del número de transacción.
     /// </summary>
-    internal static async Task<CreateDraftFromIctRequest> BuildRequestAsync(
+    internal static Task<CreateDraftFromIctRequest> BuildRequestAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
         IAttachmentDocTypeResolver docTypeResolver,
         ILogger? log = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        BuildRequestAsync(master, procedureType, docTypeResolver, vehicle: null, log, ct);
+
+    /// <summary>
+    /// Igual que la sobrecarga sin consulta, y además (Bug #13304) adjunta en el campo 14
+    /// <c>precomputed_vehicle</c> la consulta RUNT de la validación ICT para que core-api no re-consulte.
+    /// El JSON viaja opaco, sin tocar. <paramref name="vehicle"/> null ⇒ el campo queda ausente.
+    /// </summary>
+    internal static async Task<CreateDraftFromIctRequest> BuildRequestAsync(
+        ExternalIntegrationMaster master,
+        DraftProcedureType procedureType,
+        IAttachmentDocTypeResolver docTypeResolver,
+        VehicleConsultationSnapshot? vehicle,
+        ILogger? log,
+        CancellationToken ct)
     {
         var request = new CreateDraftFromIctRequest
         {
@@ -162,6 +182,18 @@ public sealed partial class IctGrpcProcedureDraftClient(
             });
         }
 
+        if (vehicle is not null && !string.IsNullOrWhiteSpace(vehicle.SnapshotJson))
+        {
+            request.PrecomputedVehicle = new PrecomputedVehicleConsultation
+            {
+                SnapshotJson = vehicle.SnapshotJson,
+                ConsultedAt = Timestamp.FromDateTimeOffset(vehicle.ConsultedAt),
+                Provider = vehicle.Provider ?? string.Empty,
+                Kind = vehicle.Kind ?? string.Empty,
+                QueriedPlate = vehicle.Plate ?? string.Empty,
+                QueriedVin = vehicle.Vin ?? string.Empty,
+            };
+        }
 
         return request;
     }
@@ -227,6 +259,41 @@ public sealed partial class IctGrpcProcedureDraftClient(
         {
             Log.GrpcFailed(logger, ex.StatusCode.ToString(), ex.Status.Detail, procedureInstanceId, ex);
             return new DraftActionResult(null, "grpc_unavailable");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13304 — edita el precio de venta del borrador en core-api (UpdateDraftCommercial). core-api
+    /// valida tenant + external_ref y que siga en borrador; su error_code se devuelve tal cual
+    /// (<c>not_draft</c>, <c>not_found</c>, <c>invalid_*</c>). Canal caído → <c>grpc_unavailable</c>.
+    /// </summary>
+    public async Task<(bool Ok, string? Error)> UpdateCommercialAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        Guid externalRef,
+        decimal sellingPrice,
+        CancellationToken ct = default)
+    {
+        var request = new UpdateDraftCommercialRequest
+        {
+            TenantId = tenantId.ToString(),
+            ProcedureInstanceId = procedureInstanceId.ToString(),
+            ExternalRef = externalRef.ToString(),
+            Commercial = new CommercialData
+            {
+                ValorVenta = sellingPrice.ToString(CultureInfo.InvariantCulture),
+            },
+        };
+
+        try
+        {
+            var reply = await client.UpdateDraftCommercialAsync(request, cancellationToken: ct);
+            return string.IsNullOrEmpty(reply.ErrorCode) ? (true, null) : (false, reply.ErrorCode);
+        }
+        catch (RpcException ex)
+        {
+            Log.GrpcFailed(logger, ex.StatusCode.ToString(), ex.Status.Detail, procedureInstanceId, ex);
+            return (false, "grpc_unavailable");
         }
     }
 

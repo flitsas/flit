@@ -1,4 +1,5 @@
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Domain.Identity;
 
 namespace Flit.Tramites.Domain.Entities;
 
@@ -51,7 +52,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public string RegisteredEmail { get; set; } = string.Empty;
 
-    /// <summary>enviado | en_proceso | aprobado | rechazado | expirado.</summary>
+    /// <summary>enviado | en_proceso | aprobado | rechazado | expirado | pendiente_envio | error_envio |
+    /// manual_activo | pendiente_revision_manual (ver <see cref="BiometricEstados"/>; CHECK en BD, DDL 130).</summary>
     public string Status { get; set; } = BiometricEstados.Enviado;
 
     /// <summary>SHA-256 (hex) del token enviado por magic-link. El token crudo nunca se persiste.</summary>
@@ -60,7 +62,7 @@ public sealed class ProcedureInstanceBiometricValidation
 
     // ── Proveedor de validación de identidad (HU #10233 — Kyverum Verify) ────────
 
-    /// <summary>'mock' | 'kyverum'. Default 'mock' (flujo determinista de 3 fotos). 'kyverum' = validación
+    /// <summary>'mock' | 'kyverum' | 'migracion_v1' | 'manual' (ver <see cref="BiometricProviders"/>). Default 'mock' (flujo determinista de 3 fotos). 'kyverum' = validación
     /// remota delegada al proveedor externo Kyverum Verify (captura + webhook firmado).</summary>
     public string Provider { get; set; } = BiometricProviders.Mock;
 
@@ -154,6 +156,38 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public DateTimeOffset? LastResentAt { get; set; }
 
+    // ── Identidad manual (HU #13283, Feature #13280 A1, Épica #13202; DDL 130) ───────────────
+    // Todas NULL salvo que el flujo manual (o la aprobación) las estampe. La firma trazada reutiliza
+    // SignatureImagePath / SignatureImageSha256 (ADR-0054): no hay columna de firma propia.
+
+    /// <summary>'automatica' | 'manual' (<see cref="BiometricApprovalOrigins"/>). Null mientras no esté aprobada;
+    /// el backfill del DDL 130 dejó 'automatica' en las ya aprobadas.</summary>
+    public string? ApprovalOrigin { get; set; }
+
+    /// <summary>Usuario (identity.users.id) que activó el flujo manual. Sin FK, como created_by.</summary>
+    public Guid? ManualActivatedBy { get; set; }
+
+    /// <summary>Momento de activación del flujo manual.</summary>
+    public DateTimeOffset? ManualActivatedAt { get; set; }
+
+    /// <summary>Momento en que la persona aceptó el consentimiento en el flujo manual.</summary>
+    public DateTimeOffset? ConsentAt { get; set; }
+
+    /// <summary>IP desde la que se aceptó el consentimiento. PII media (Habeas Data).</summary>
+    public string? ConsentIp { get; set; }
+
+    /// <summary>Versión del texto de consentimiento aceptado.</summary>
+    public string? ConsentTextVersion { get; set; }
+
+    /// <summary>Usuario (identity.users.id) que revisó la validación manual. Sin FK, como created_by.</summary>
+    public Guid? ReviewedBy { get; set; }
+
+    /// <summary>Momento de la revisión humana.</summary>
+    public DateTimeOffset? ReviewedAt { get; set; }
+
+    /// <summary>Código (lista cerrada, constante en código) del motivo de rechazo de la revisión manual.</summary>
+    public string? RejectionReasonCode { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 
     /// <summary>
@@ -167,6 +201,171 @@ public sealed class ProcedureInstanceBiometricValidation
 
     /// <summary>HU #10865 — navegación a la entidad persona del tenant.</summary>
     public Person? Person { get; set; }
+
+    /// <summary>
+    /// HU #13284 (Feature #13280 A2) — ¿se puede activar el flujo manual sobre esta validación? Solo si NO está
+    /// aprobada y vigente (<see cref="BiometricRules.EsAprobadaVigente"/>, la misma regla de vigencia de siempre):
+    /// rechazada, expirada, vencida (aprobada fuera de ventana) o en curso sí. No evalúa el trámite dueño
+    /// (<see cref="CongeladaPorTramite"/>): eso lo decide el caso de uso.
+    /// </summary>
+    public bool PuedeActivarFlujoManual(DateTimeOffset now) => !BiometricRules.EsAprobadaVigente(this, now);
+
+    /// <summary>
+    /// HU #13284 — activa el flujo manual SOBRE ESTA MISMA FILA (una sola fuente de vigencia, ADR-0050): pasa a
+    /// <see cref="BiometricProviders.Manual"/> / <see cref="BiometricEstados.ManualActivo"/>, deja el enlace de captura
+    /// vigente <see cref="BiometricRules.TokenTtlHoras"/> horas (<paramref name="tokenHash"/> es el SHA-256 hex del
+    /// token; el crudo jamás entra a la entidad) y estampa quién y cuándo lo activó.
+    /// <para>
+    /// Cancela la verificación Kyverum para FLIT: limpia <see cref="KyverumVerificationId"/>, <see cref="CaptureUrl"/>
+    /// y <see cref="WebhookSecretEncrypted"/> (sin secreto ni id, un webhook posterior no se puede verificar ni
+    /// correlacionar) y reinicia los contadores propios de Kyverum. El id externo NO se conserva aquí: el caso de uso lo
+    /// deja en la bitácora de auditoría. Todo lo demás (fotos, aprobación previa vencida, consentimiento y revisión de un
+    /// ciclo manual anterior) se conserva como historia: las pisan la nueva captura y la nueva revisión.
+    /// </para>
+    /// </summary>
+    /// <exception cref="IdentidadManualNoActivableException">Aprobada y vigente.</exception>
+    public void ActivarFlujoManual(Guid userId, DateTimeOffset now, string tokenHash)
+    {
+        if (userId == Guid.Empty)
+            throw new ArgumentException("El usuario que activa el flujo manual es obligatorio.", nameof(userId));
+        if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
+            throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
+        if (!PuedeActivarFlujoManual(now))
+            throw new IdentidadManualNoActivableException();
+
+        Provider = BiometricProviders.Manual;
+        Status = BiometricEstados.ManualActivo;
+        TokenHash = tokenHash;
+        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ManualActivatedBy = userId;
+        ManualActivatedAt = now;
+        UpdatedAt = now;
+
+        // Cancelación de Kyverum para FLIT.
+        KyverumVerificationId = null;
+        CaptureUrl = null;
+        WebhookSecretEncrypted = null;
+        ProviderStatus = null;
+        Attempts = 0;
+        ReconcilePollCount = 0;
+        LastAttemptAt = null;
+    }
+
+    /// <summary>
+    /// HU #13287 (Feature #13280 A5) — ¿se puede regenerar el enlace de captura? Solo con el flujo manual esperando captura
+    /// (<see cref="BiometricProviders.Manual"/> + <see cref="BiometricEstados.ManualActivo"/>). Un enlace vencido (más de
+    /// <see cref="BiometricRules.TokenTtlHoras"/> h) sí se regenera: es el caso de uso principal.
+    /// </summary>
+    public bool PuedeRegenerarEnlaceManual =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal);
+
+    /// <summary>
+    /// HU #13287 — emite un enlace de captura NUEVO que REEMPLAZA al anterior: <paramref name="tokenHash"/> (SHA-256 hex del
+    /// token nuevo; el crudo jamás entra a la entidad) sustituye a <see cref="TokenHash"/>, así el token viejo deja de
+    /// encontrarse por hash, y la vigencia se reinicia a <see cref="BiometricRules.TokenTtlHoras"/> horas desde
+    /// <paramref name="now"/>. Cuenta el reenvío (<see cref="ResendCount"/>, <see cref="LastResentAt"/>). No toca el estado,
+    /// quién ni cuándo se activó, ni las fotos o el consentimiento.
+    /// </summary>
+    /// <exception cref="FlujoManualNoActivoException">No está en <c>manual_activo</c>.</exception>
+    public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash)
+    {
+        if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
+            throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
+        if (!PuedeRegenerarEnlaceManual)
+            throw new Flit.Tramites.Domain.Identity.FlujoManualNoActivoException();
+        if (string.Equals(tokenHash, TokenHash, StringComparison.Ordinal))
+            throw new ArgumentException("El enlace regenerado debe ser distinto del anterior.", nameof(tokenHash));
+
+        TokenHash = tokenHash;
+        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ResendCount++;
+        LastResentAt = now;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// HU #13289 — estado de la sesión de captura manual en <paramref name="now"/>. Solo el flujo manual en
+    /// <see cref="BiometricEstados.ManualActivo"/> y dentro de su ventana es <see cref="ManualCaptureSessionState.Vigente"/>.
+    /// </summary>
+    public ManualCaptureSessionState EstadoSesionManual(DateTimeOffset now)
+    {
+        if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            return ManualCaptureSessionState.NoManual;
+        if (!string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal))
+            return ManualCaptureSessionState.EstadoInvalido;
+        return now > ExpiresAt ? ManualCaptureSessionState.Vencida : ManualCaptureSessionState.Vigente;
+    }
+
+    /// <summary>
+    /// HU #13289/#13290 — ¿hay consentimiento del ciclo manual ACTUAL? La reactivación (A2) NO limpia el consentimiento de un
+    /// ciclo anterior, así que solo vale el aceptado a partir de la última activación
+    /// (<c>consent_at &gt;= manual_activated_at</c>).
+    /// </summary>
+    public bool TieneConsentimientoManualVigente =>
+        ConsentAt is { } consent && ManualActivatedAt is { } activated && consent >= activated;
+
+    /// <summary>
+    /// HU #13289 — constancia del consentimiento biométrico: fecha/hora (del servidor), IP resuelta por el servidor (nunca la
+    /// del cuerpo) y versión del texto. SOBRESCRIBE la de un ciclo manual previo. Solo con la sesión vigente.
+    /// </summary>
+    /// <exception cref="ManualCaptureStateException">Sesión no vigente (vencida, usada o no manual).</exception>
+    /// <exception cref="ArgumentException">Versión vacía o distinta de la vigente (<see cref="ManualCaptureConsent.TextVersion"/>).</exception>
+    public void RegistrarConsentimientoManual(string textVersion, string? clientIp, DateTimeOffset now)
+    {
+        AsegurarSesionManualVigente(now);
+        if (!string.Equals(textVersion, ManualCaptureConsent.TextVersion, StringComparison.Ordinal))
+            throw new ArgumentException("La versión del texto de consentimiento no es la vigente.", nameof(textVersion));
+
+        ConsentAt = now;
+        ConsentIp = string.IsNullOrWhiteSpace(clientIp) ? null : clientIp.Trim();
+        ConsentTextVersion = textVersion;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// HU #13290 — registra la captura recibida: rutas de rostro, anverso, reverso y firma (ADR-0054: la firma reutiliza
+    /// <see cref="SignatureImagePath"/>/<see cref="SignatureImageSha256"/>) y pasa a
+    /// <see cref="BiometricEstados.PendienteRevisionManual"/>. Solo desde <see cref="BiometricEstados.ManualActivo"/>, con la
+    /// sesión vigente y consentimiento del ciclo actual; consume el enlace (un segundo envío ya no es
+    /// <c>manual_activo</c>). Las rutas del intento previo se pisan aquí, pero los archivos NO se borran (el caso de uso las
+    /// deja en auditoría).
+    /// </summary>
+    /// <exception cref="ManualCaptureStateException">Sesión no vigente o sin consentimiento del ciclo actual.</exception>
+    /// <exception cref="ArgumentException">Falta alguna ruta o el hash de la firma no es SHA-256.</exception>
+    public void RegistrarCapturaManual(
+        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now)
+    {
+        AsegurarSesionManualVigente(now);
+        if (!TieneConsentimientoManualVigente)
+            throw new ManualCaptureStateException(ManualCaptureStateCodes.ConsentimientoRequerido);
+        if (string.IsNullOrWhiteSpace(facePath) || string.IsNullOrWhiteSpace(idFrontPath)
+            || string.IsNullOrWhiteSpace(idBackPath) || string.IsNullOrWhiteSpace(signaturePath))
+            throw new ArgumentException("La captura manual exige las 4 rutas de imagen.");
+        if (string.IsNullOrWhiteSpace(signatureSha256) || signatureSha256.Length != 64)
+            throw new ArgumentException("El hash de la firma debe ser SHA-256 (64 hex).", nameof(signatureSha256));
+
+        FacePhotoPath = facePath;
+        IdFrontPhotoPath = idFrontPath;
+        IdBackPhotoPath = idBackPath;
+        SignatureImagePath = signaturePath;
+        SignatureImageSha256 = signatureSha256;
+        Status = BiometricEstados.PendienteRevisionManual;
+        UpdatedAt = now;
+    }
+
+    private void AsegurarSesionManualVigente(DateTimeOffset now)
+    {
+        switch (EstadoSesionManual(now))
+        {
+            case ManualCaptureSessionState.Vigente:
+                return;
+            case ManualCaptureSessionState.Vencida:
+                throw new ManualCaptureStateException(ManualCaptureStateCodes.Expirada);
+            default:
+                throw new ManualCaptureStateException(ManualCaptureStateCodes.EstadoInvalido);
+        }
+    }
 
     /// <summary>
     /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y
@@ -208,6 +407,24 @@ public static class BiometricProviders
     /// </para>
     /// </summary>
     public const string MigracionV1 = "migracion_v1";
+
+    /// <summary>
+    /// Identidad manual (Épica #13202): el flujo manual cancela la verificación de Kyverum y la persona captura
+    /// fotos, documento y firma por un enlace propio; un humano revisa. No hay proveedor externo ni score.
+    /// Como <see cref="MigracionV1"/>, no debe apalancar el reuso automático de identidad sin pasar por la regla
+    /// de aprobación (hoy solo cuenta como aprobada la fila en estado <see cref="BiometricEstados.Aprobado"/>).
+    /// </summary>
+    public const string Manual = "manual";
+
+    /// <summary>Todos los valores aceptados por <c>ck_biometric_validations_provider</c>.</summary>
+    public static readonly IReadOnlyList<string> Todos = [Mock, Kyverum, MigracionV1, Manual];
+}
+
+/// <summary>Origen de la aprobación de una identidad (columna <c>approval_origin</c>, HU #13283).</summary>
+public static class BiometricApprovalOrigins
+{
+    public const string Automatica = "automatica";
+    public const string Manual = "manual";
 }
 
 /// <summary>Estados de la máquina de biométrica.</summary>
@@ -228,6 +445,21 @@ public static class BiometricEstados
 
     /// <summary>El envío al proveedor agotó los reintentos (o falló de forma definitiva) → requiere acción.</summary>
     public const string ErrorEnvio = "error_envio";
+
+    /// <summary>
+    /// HU #13283 — el flujo manual está activo: Kyverum se canceló y la persona completa la captura por el
+    /// enlace manual. NO es "en vuelo" de Kyverum (no lo cuentan las alertas de atascados ni los reintentos).
+    /// </summary>
+    public const string ManualActivo = "manual_activo";
+
+    /// <summary>HU #13283 — la persona terminó la captura manual y espera la revisión humana.</summary>
+    public const string PendienteRevisionManual = "pendiente_revision_manual";
+
+    /// <summary>Todos los valores aceptados por <c>ck_biometric_validations_status</c>.</summary>
+    public static readonly IReadOnlyList<string> Todos =
+    [
+        Enviado, EnProceso, Aprobado, Rechazado, Expirado, PendienteEnvio, ErrorEnvio, ManualActivo, PendienteRevisionManual,
+    ];
 }
 
 /// <summary>
@@ -414,7 +646,7 @@ public static class IdentityVigenciaEstados
     /// o falló su envío: ver nota de diseño en <see cref="IdentityVigenciaClassifier"/>).</summary>
     public const string SinValidacion = "sin_validacion";
 
-    /// <summary>Hay una validación no terminal (enviada, en proceso o encolada de envío).</summary>
+    /// <summary>Hay una validación no terminal (enviada, en proceso, encolada de envío o en flujo manual).</summary>
     public const string EnCurso = "en_curso";
 
     /// <summary>Aprobada y dentro de la ventana de <see cref="BiometricRules.VigenciaDias"/>.</summary>
@@ -456,7 +688,9 @@ public static class IdentityVigenciaClassifier
                 ? IdentityVigenciaEstados.AprobadaVigente
                 : IdentityVigenciaEstados.Vencida,
             BiometricEstados.Expirado => IdentityVigenciaEstados.Vencida,
+            // HU #13283 — los estados manuales siguen en curso: nunca vigentes hasta que la revisión apruebe.
             BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.PendienteEnvio
+                or BiometricEstados.ManualActivo or BiometricEstados.PendienteRevisionManual
                 => IdentityVigenciaEstados.EnCurso,
             // Rechazado, error_envio o cualquier estado futuro no contemplado: sin_validacion (ver nota
             // de diseño arriba).
