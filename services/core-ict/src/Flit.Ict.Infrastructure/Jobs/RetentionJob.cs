@@ -14,6 +14,7 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// mantenimiento, no pipeline) con cadencia en horas. Borra por LOTES (ctid + LIMIT) para no tomar
 /// locks largos ni inflar el WAL. Cross-tenant: NO fija el GUC de tenant — el rol owner ve todas las
 /// filas (integration_log/job_runs sin RLS; pretramite_events con RLS ENABLE no-FORCE).
+/// Bug #13304: además vacía <c>vehicle_snapshot</c> (PII) de las respuestas con más de 2× la vigencia RUNT.
 /// </summary>
 public sealed class RetentionJob(
     IServiceScopeFactory scopeFactory,
@@ -71,6 +72,9 @@ public sealed class RetentionJob(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
 
+        // Bug #13304 (H-1): primero el snapshot RUNT (PII), para que un fallo de las purgas siguientes no lo retrase.
+        var snapshots = await ExecuteInBatchesAsync(
+            db, VehicleSnapshotSweepSql, () => VehicleSnapshotSweepParameters(Options), ct).ConfigureAwait(false);
         var logs = await PurgeTableAsync(db, "ict.integration_log", Options.IntegrationLogRetentionDays, ct)
             .ConfigureAwait(false);
         var events = await PurgeTableAsync(db, "ict.pretramite_events", Options.PretramiteEventsRetentionDays, ct)
@@ -78,8 +82,38 @@ public sealed class RetentionJob(
         var runs = await PurgeTableAsync(db, "ict.job_runs", Options.JobRunsRetentionDays, ct)
             .ConfigureAwait(false);
 
-        RetentionJobLog.SweepDone(logger, logs, events, runs);
+        RetentionJobLog.SweepDone(logger, logs, events, runs, snapshots);
     }
+
+    /// <summary>
+    /// Bug #13304 (H-1) — barrido por lotes del resultado completo de la consulta RUNT (@pii:high). Vacía la
+    /// columna (la respuesta queda para la trazabilidad) en las filas con más de 2× la vigencia: cubre una
+    /// purga fallida tras ps=4/5/6 y los snapshots de consultas que terminaron después de una novedad.
+    /// </summary>
+    internal const string VehicleSnapshotSweepSql = """
+        UPDATE ict.external_integration_source_response
+        SET vehicle_snapshot = NULL
+        WHERE ctid IN (
+            SELECT ctid FROM ict.external_integration_source_response
+            WHERE vehicle_snapshot IS NOT NULL
+              AND created_at < now() - make_interval(hours => @hours)
+            LIMIT @batch
+        )
+        """;
+
+    /// <summary>Antigüedad (horas) a partir de la cual se vacía el snapshot: 2× la vigencia (≤ 0 ⇒ 24 h).</summary>
+    internal static int VehicleSnapshotRetentionHours(IctJobOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return 2 * SendToCoreApiJob.VigenciaConsultaRuntHoras(options.VehicleConsultationMaxAgeHours);
+    }
+
+    /// <summary>Parámetros del barrido; instancias nuevas por lote (un NpgsqlParameter no se reutiliza).</summary>
+    internal static object[] VehicleSnapshotSweepParameters(IctJobOptions options) =>
+    [
+        new Npgsql.NpgsqlParameter("hours", VehicleSnapshotRetentionHours(options)),
+        new Npgsql.NpgsqlParameter("batch", options.RetentionBatchSize),
+    ];
 
     /// <summary>
     /// Borra por lotes las filas de <paramref name="table"/> con <c>created_at</c> anterior a la
@@ -97,21 +131,29 @@ public sealed class RetentionJob(
             )
             """;
 
+        return await ExecuteInBatchesAsync(
+            db,
+            sql,
+            () =>
+            [
+                new Npgsql.NpgsqlParameter("days", retentionDays),
+                new Npgsql.NpgsqlParameter("batch", Options.RetentionBatchSize),
+            ],
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Repite <paramref name="sql"/> (que afecta a lo sumo un lote) hasta que un lote quede incompleto.</summary>
+    private async Task<int> ExecuteInBatchesAsync(
+        IctDbContext db, string sql, Func<object[]> parameters, CancellationToken ct)
+    {
         var total = 0;
-        int deleted;
+        int affected;
         do
         {
-            deleted = await db.Database.ExecuteSqlRawAsync(
-                sql,
-                new object[]
-                {
-                    new Npgsql.NpgsqlParameter("days", retentionDays),
-                    new Npgsql.NpgsqlParameter("batch", Options.RetentionBatchSize),
-                },
-                ct).ConfigureAwait(false);
-            total += deleted;
+            affected = await db.Database.ExecuteSqlRawAsync(sql, parameters(), ct).ConfigureAwait(false);
+            total += affected;
         }
-        while (deleted >= Options.RetentionBatchSize && !ct.IsCancellationRequested);
+        while (affected >= Options.RetentionBatchSize && !ct.IsCancellationRequested);
 
         return total;
     }
@@ -120,8 +162,8 @@ public sealed class RetentionJob(
 internal static partial class RetentionJobLog
 {
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "ICT retención: purgados {Logs} logs, {Events} eventos, {Runs} corridas de job.")]
-    public static partial void SweepDone(ILogger logger, int logs, int events, int runs);
+        Message = "ICT retención: purgados {Logs} logs, {Events} eventos, {Runs} corridas de job; {Snapshots} snapshots RUNT vaciados.")]
+    public static partial void SweepDone(ILogger logger, int logs, int events, int runs, int snapshots);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "ICT retención: ciclo de purga fallido; se reintenta en el siguiente intervalo.")]

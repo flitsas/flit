@@ -4,6 +4,7 @@ using System.Text.Json;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Validation;
 using Flit.Ict.Infrastructure.Persistence;
+using Flit.Ict.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -60,6 +61,7 @@ public sealed class OrchestratorJob(
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
             var consult = scope.ServiceProvider.GetRequiredService<IConsultationClient>();
+            var snapshots = scope.ServiceProvider.GetRequiredService<IIctVehicleSnapshotReader>();
             var connection = db.Database.GetDbConnection();
             var wasClosed = connection.State != ConnectionState.Open;
             if (wasClosed)
@@ -69,7 +71,7 @@ public sealed class OrchestratorJob(
 
             try
             {
-                await ProcessOneAsync(connection, consult, q, currentYear, ct);
+                await ProcessOneAsync(connection, consult, snapshots, q, currentYear, ct);
             }
             finally
             {
@@ -86,7 +88,12 @@ public sealed class OrchestratorJob(
     }
 
     private async Task ProcessOneAsync(
-        DbConnection connection, IConsultationClient consult, PendingQuery q, int currentYear, CancellationToken ct)
+        DbConnection connection,
+        IConsultationClient consult,
+        IIctVehicleSnapshotReader snapshots,
+        PendingQuery q,
+        int currentYear,
+        CancellationToken ct)
     {
         try
         {
@@ -96,7 +103,11 @@ public sealed class OrchestratorJob(
             var warnings = ExternalSourceValidators.Warnings(result);
             var isValid = issues.Count == 0;
 
-            await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
+            // Bug #13304 — query_response sigue reducido (se ve tal cual en la trazabilidad); el resultado
+            // completo de VEHICLE/VIN va aparte en vehicle_snapshot (PII, se purga al materializar).
+            await InsertResponseAsync(
+                connection, q.Id, q.TenantId, QueryResponseJson(result),
+                VehicleSnapshotColumn.ForQuery(q.QueryType, q.Plate, q.Vin, result.Vehicle), ct);
             await MarkQueriedAsync(connection, q.Id, isValid, ct);
 
             // Traspaso: el organismo de matrícula lo fija el RUNT (paridad v1). Se captura de la
@@ -109,15 +120,18 @@ public sealed class OrchestratorJob(
             }
 
             // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC y, desde el Bug #13109, DRIVER sin paz y salvo):
-            // terminal, deja el master en ps=4 y SendToCoreApiJob no materializa el borrador.
+            // terminal, deja el master en ps=4 y SendToCoreApiJob no materializa el borrador. Bug #13304
+            // (H-1): el snapshot RUNT ya no se enviará; se purga después de registrar la novedad.
             if (!isValid)
             {
-                await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
+                await FlagNoveltyAndPurgeAsync(
+                    c => FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), c),
+                    snapshots, q.MasterId, logger, ct);
             }
             // Advertencia INFORMATIVA: se registra en el master pero NO bloquea el paso a borrador.
             else if (warnings.Count > 0)
             {
-                await RecordWarningAsync(connection, q.MasterId, string.Join("; ", warnings), ct);
+                await RecordWarningAsync(connection, q.MasterId, warnings, ct);
             }
         }
 #pragma warning disable CA1031 // el orquestador debe ser resiliente a CUALQUIER fallo técnico de la fuente
@@ -137,10 +151,32 @@ public sealed class OrchestratorJob(
                 await FlagNoveltyAsync(connection, q.MasterId,
                     $"Fuentes externas no disponibles tras {MaxAttempts} intentos: {ex.Message}", ct);
                 await MarkQueriedAsync(connection, q.Id, isValid: false, ct);
+
+                // Bug #13304 (H-1): también es una novedad que deja el master fuera del envío.
+                await VehicleSnapshotPurge.BestEffortAsync(
+                    snapshots, q.MasterId, VehicleSnapshotPurge.CaminoNovedadOrquestador, logger, ct);
             }
 
             IctJobLog.CycleError(logger, ex, JobName);
         }
+    }
+
+    /// <summary>
+    /// Bug #13304 (H-1) — novedad del orquestador (ps=4, el master no se envía) y luego purga best-effort del
+    /// snapshot RUNT del master. Una consulta VEHICLE/VIN del mismo master que termine después de la novedad
+    /// deja su snapshot: lo vacía el barrido de <see cref="RetentionJob"/>.
+    /// </summary>
+    internal static Task FlagNoveltyAndPurgeAsync(
+        Func<CancellationToken, Task> flag,
+        IIctVehicleSnapshotReader snapshots,
+        Guid masterId,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(snapshots);
+        return VehicleSnapshotPurge.DespuesDeAsync(
+            flag, c => snapshots.PurgeAsync(masterId, c), masterId,
+            VehicleSnapshotPurge.CaminoNovedadOrquestador, logger, ct);
     }
 
     private static async Task<List<PendingQuery>> ReadPendingAsync(DbConnection connection, int limit, CancellationToken ct)
@@ -170,16 +206,32 @@ public sealed class OrchestratorJob(
         return list;
     }
 
-    private static async Task InsertResponseAsync(DbConnection connection, Guid queryId, Guid tenantId, string json, CancellationToken ct)
+    /// <summary>
+    /// JSON de <c>query_response</c>: los hechos normalizados SIN el resultado completo del vehículo
+    /// (Bug #13304). Esa columna la muestra la trazabilidad tal cual; el snapshot es PII.
+    /// </summary>
+    internal static string QueryResponseJson(ConsultationResult result) =>
+        JsonSerializer.Serialize(result with { Vehicle = null });
+
+    /// <summary>SQL del INSERT de la respuesta (incluye <c>vehicle_snapshot</c>, DDL 26).</summary>
+    internal const string InsertResponseSql = """
+        INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response, vehicle_snapshot)
+        VALUES (@id, @tenant, @json::jsonb, @vehicle::jsonb)
+        """;
+
+    private static async Task InsertResponseAsync(
+        DbConnection connection, Guid queryId, Guid tenantId, string json, string? vehicleSnapshot, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response)
-            VALUES (@id, @tenant, @json::jsonb)
-            """;
+        cmd.CommandText = InsertResponseSql;
         AddParam(cmd, "id", queryId);
         AddParam(cmd, "tenant", tenantId);
         AddParam(cmd, "json", json);
+        var vehicle = cmd.CreateParameter();
+        vehicle.ParameterName = "vehicle";
+        vehicle.DbType = DbType.String;
+        vehicle.Value = (object?)vehicleSnapshot ?? DBNull.Value;
+        cmd.Parameters.Add(vehicle);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -218,19 +270,36 @@ public sealed class OrchestratorJob(
     /// Registra una advertencia INFORMATIVA en el master (external_comments_validation) SIN bloquear: no
     /// cambia process_status_id, así que el master avanza a borrador con la observación visible en el estado.
     /// </summary>
-    private static async Task RecordWarningAsync(DbConnection connection, Guid masterId, string message, CancellationToken ct)
+    /// <summary>
+    /// Bug #13304 — registra en el master solo las advertencias que aún no están en
+    /// <c>external_comments_validation</c> (una consulta re-encolada vuelve a producir las mismas) y emite el
+    /// evento «advertencia» únicamente si agregó alguna. Formato del texto agregado: <c>" a; b;"</c>.
+    /// </summary>
+    internal const string RecordWarningSql = """
+        WITH nuevas AS (
+            SELECT string_agg(u.w, '; ' ORDER BY u.ord) AS txt
+            FROM ict.external_integration_master m,
+                 unnest(@warnings::text[]) WITH ORDINALITY AS u(w, ord)
+            WHERE m.id = @id AND position(u.w IN m.external_comments_validation) = 0
+        ), upd AS (
+            UPDATE ict.external_integration_master m
+            SET external_comments_validation = m.external_comments_validation || ' ' || n.txt || ';'
+            FROM nuevas n
+            WHERE m.id = @id AND n.txt IS NOT NULL
+            RETURNING m.id, m.tenant_id, n.txt
+        )
+        SELECT ict.record_pretramite_event(upd.id, upd.tenant_id, 'en_validacion_externa', 'advertencia',
+                   jsonb_build_object('warnings', ' ' || upd.txt || ';'))
+        FROM upd
+        """;
+
+    private static async Task RecordWarningAsync(
+        DbConnection connection, Guid masterId, IReadOnlyCollection<string> warnings, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            UPDATE ict.external_integration_master
-            SET external_comments_validation = external_comments_validation || @msg
-            WHERE id = @id;
-            SELECT ict.record_pretramite_event(m.id, m.tenant_id, 'en_validacion_externa', 'advertencia',
-                       jsonb_build_object('warnings', @msg))
-            FROM ict.external_integration_master m WHERE m.id = @id
-            """;
+        cmd.CommandText = RecordWarningSql;
         AddParam(cmd, "id", masterId);
-        AddParam(cmd, "msg", " " + message + ";");
+        AddParam(cmd, "warnings", warnings.ToArray());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
