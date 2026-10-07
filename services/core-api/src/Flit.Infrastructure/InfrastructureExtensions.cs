@@ -49,6 +49,7 @@ using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -331,6 +332,13 @@ public static class InfrastructureExtensions
         services.AddHttpClient<IAttachmentStorage, FileManagerAttachmentStorage>((sp, c) =>
             FileManagerDownloader.ConfigureClient(
                 c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "el almacenamiento de adjuntos"));
+        // Épica #13216 — HU13372: partes cifradas del lote; sin timeout global (lo aplica el adaptador por llamada).
+        services.AddHttpClient<IConsolidadoLoteParteStorage, ConsolidadoLoteParteStorage>((sp, c) =>
+        {
+            FileManagerDownloader.ConfigureClient(
+                c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "las partes del lote de consolidados");
+            c.Timeout = Timeout.InfiniteTimeSpan;
+        });
     }
 
     private static void AddConsultationProviders(IServiceCollection services, IConfiguration configuration)
@@ -600,6 +608,7 @@ public static class InfrastructureExtensions
         // Epic #13217 (HU #13232): mismo nombre de aplicación y misma tabla que core-identity.
         services.AddFlitDataProtection<FlitDbContext>();
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+        services.AddSingleton<IConsolidadoLoteCipher, ConsolidadoLoteCipher>(); // Épica #13216 — HU13372
         // Bitácora ÚNICA del ciclo de identidad (envío/webhook/descifrado/errores). Escribe en su propio
         // scope, así queda registrada aunque el webhook termine en 500/401.
         services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
