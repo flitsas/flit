@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Flit.Ict.Domain.Validation;
 
 /// <summary>Datos normalizados de las consultas a fuentes externas de un pre-trámite.</summary>
@@ -7,7 +9,30 @@ public sealed record ConsultationResult(
     int? VehicleModelYear = null,
     bool HasActiveSanctions = false,
     bool? PazYSalvo = null,
-    string? TransitOfficeName = null);
+    string? TransitOfficeName = null,
+    [property: JsonIgnore] VehicleConsultationSnapshot? Vehicle = null);
+
+/// <summary>
+/// Bug #13304 — resultado COMPLETO de la consulta de vehículo (VEHICLE/VIN) que core-api devuelve para que
+/// el borrador lo reutilice sin volver a consultar el RUNT. <see cref="SnapshotJson"/> es OPACO para
+/// core-ict (lo serializa y lo lee core-api) y contiene PII (titular, acreedor): no se loguea, no va en
+/// <c>query_response</c> y se purga al materializar. <see cref="Plate"/>/<see cref="Vin"/> son el
+/// identificador con el que se consultó (los pone el orquestador según <see cref="Kind"/>).
+/// </summary>
+public sealed record VehicleConsultationSnapshot(
+    string SnapshotJson,
+    DateTimeOffset ConsultedAt,
+    string Provider,
+    string Kind,
+    string Plate = "",
+    string Vin = "")
+{
+    /// <summary>Kind de la consulta por placa (mismo literal que <c>ConsultationKind</c> de core-api).</summary>
+    public const string KindPlate = "VehiclePlate";
+
+    /// <summary>Kind de la consulta por VIN.</summary>
+    public const string KindVin = "VehicleVin";
+}
 
 /// <summary>
 /// Validadores de negocio externo portados de v1 (SOAT, RTM/antigüedad, RNMC, paz y salvo).
