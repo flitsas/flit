@@ -447,6 +447,10 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
             ConsolidadoLotes.Ot.OtBandejaSeleccionResolver>();
 
+        // Épica #13216 — HU13373: persistencia de la creación del lote (lote + ítems + auditoría en una transacción)
+        // y de su purga (borrado criptográfico), reutilizada por #13379.
+        services.AddScoped<IConsolidadoLoteRepository, ConsolidadoLoteRepository>();
+
         return services;
     }
 

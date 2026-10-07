@@ -13,5 +13,33 @@ namespace Flit.Infrastructure.ConsolidadoLotes.Ot;
 /// <remarks>
 /// Vive en Infrastructure porque <c>Flit.Tramites.Application</c> (contrato del motor) y
 /// <c>Flit.Admin.Domain</c> (filtro de la bandeja) no se referencian entre sí.
+/// <para>HU #13373 — declara su resumen minimizado para <c>filter_summary</c> (<see cref="ILoteFiltroResumible"/>):
+/// texto libre como <c>{presente, longitud}</c> y condiciones como <c>{campo, operador, cantidad}</c>.</para>
 /// </remarks>
-public sealed record OtBandejaLoteFiltro(OtClientProcedureFilter Criterios) : LoteFiltro;
+public sealed record OtBandejaLoteFiltro(OtClientProcedureFilter Criterios) : LoteFiltro, ILoteFiltroResumible
+{
+    public string OrigenFiltro => Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportOrigin.OtBandeja;
+
+    public void Resumir(LoteFiltroResumen resumen)
+    {
+        ArgumentNullException.ThrowIfNull(resumen);
+        var c = Criterios;
+        resumen.TextoLibre("busqueda", c.Busqueda)
+            .TextoLibre("vin", c.Vin)
+            .TextoLibre("placa", c.Placa)
+            .TextoLibre("vendedor", c.Vendedor)
+            .TextoLibre("comprador", c.Comprador)
+            .TextoLibre("gestor", c.Gestor)
+            .Literal("status", c.Status)
+            .Booleano("hasActiveRevocationRequest", c.HasActiveRevocationRequest)
+            .Identificador("procedureTypeId", c.ProcedureTypeId)
+            .Literal("familia", c.Familia)
+            .Fecha("createdFrom", c.CreatedFrom)
+            .Fecha("createdTo", c.CreatedTo)
+            .Fecha("updatedFrom", c.UpdatedFrom)
+            .Fecha("updatedTo", c.UpdatedTo)
+            .Condiciones(c.Condiciones)
+            .Literal("sortBy", c.SortBy)
+            .Literal("sortDir", c.SortDir);
+    }
+}
