@@ -39,7 +39,7 @@ message Chequeo {
   EstadoChequeo estado = 3;
   // Fuente que respalda el chequeo (por ejemplo "RUNT", "SIMIT").
   string fuente = 4;
-  string mensaje = 5;
+  optional string mensaje = 5;
   // Comparendos detallados, en los chequeos de multas.
   repeated Comparendo comparendos = 6;
   // Datos del proveedor que respaldan el chequeo, como pares etiqueta y valor.
@@ -60,14 +60,14 @@ enum EstadoChequeo {
 
 // Un comparendo pendiente. Nunca incluye datos del infractor.
 message Comparendo {
-  string numero = 1;
+  optional string numero = 1;
   // AAAA-MM-DD cuando el proveedor la entrega.
-  string fecha = 2;
+  optional string fecha = 2;
   // Valor en pesos, como texto decimal ("1234567.89"); vacío si no viene.
-  string valor = 3;
-  string organismo = 4;
-  string estado = 5;
-  string infraccion = 6;
+  optional string valor = 3;
+  optional string organismo = 4;
+  optional string estado = 5;
+  optional string infraccion = 6;
 }
 
 message Dato {
@@ -77,16 +77,16 @@ message Dato {
 
 message Campo {
   string clave = 1;
-  string valor_texto = 2;
+  optional string valor_texto = 2;
   // JSON, para campos estructurados (por ejemplo "runt_gravamenes").
-  string valor_json = 3;
+  optional string valor_json = 3;
 }
 
 message RespuestaCruda {
   string proveedor = 1;
   // "vehicle" | "company" | "person".
   string tipo_sujeto = 2;
-  string clave_sujeto = 3;
+  optional string clave_sujeto = 3;
   // JSON sanitizado.
   string json = 4;
 }
@@ -97,7 +97,7 @@ message Avaluo {
   EstadoAvaluo estado = 2;
   // Pesos colombianos; 0 si no hay valor.
   int64 valor = 3;
-  string mensaje = 4;
+  optional string mensaje = 4;
   // Número de muestras, en las fuentes que lo informan; 0 si no aplica.
   int32 muestras = 5;
 }

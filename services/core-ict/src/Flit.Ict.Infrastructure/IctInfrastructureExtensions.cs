@@ -1,4 +1,6 @@
 using Flit.Ict.Application.Register;
+using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Trazabilidad;
 using Flit.Ict.Grpc.Contracts;
@@ -132,7 +134,9 @@ public static class IctInfrastructureExtensions
             // Consulta real de fuentes externas: se delega en core-api (reusa RUNT/SOAT/RTM/RNMC).
             WithServiceToken(services.AddGrpcClient<IctConsultation.IctConsultationClient>(options =>
                     options.Address = grpcUri), useIdentityToken);
-            services.AddScoped<IConsultationClient, IctGrpcConsultationClient>();
+            services.AddScoped<IctGrpcConsultationClient>();
+            if (!AddConsultasRemoto(services, configuration, useIdentityToken))
+                services.AddScoped<IConsultationClient>(sp => sp.GetRequiredService<IctGrpcConsultationClient>());
         }
         else
         {
@@ -186,4 +190,54 @@ public static class IctInfrastructureExtensions
             })
             .ConfigureChannel(channel => channel.UnsafeUseInsecureChannelCallCredentials = true);
     }
+
+    /// <summary>
+    /// Epic #13316 (HU #13346): con <c>CoreConsultas:Address</c> las consultas van directo a core-consultas con el
+    /// cliente svc-ict (scope platform.consultas) y caen a core-api si no responde (<c>CoreConsultas:Respaldo</c>,
+    /// encendida por defecto). Necesita el token de Identidad (<c>Ict:ServiceToken:UseIdentity</c>).
+    /// </summary>
+    internal static bool AddConsultasRemoto(IServiceCollection services, IConfiguration configuration, bool useIdentityToken)
+    {
+        var address = configuration["CoreConsultas:Address"];
+        if (string.IsNullOrWhiteSpace(address))
+            return false;
+        if (!useIdentityToken || !Uri.TryCreate(address, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidOperationException(
+                "CoreConsultas:Address necesita una URL absoluta y Ict:ServiceToken:UseIdentity encendida (svc-ict pide su token a Identidad).");
+        }
+
+        var deadline = TimeSpan.FromSeconds(configuration.GetValue("CoreConsultas:DeadlineSegundos", 90));
+        var usarRespaldo = configuration.GetValue("CoreConsultas:Respaldo", true);
+        services.AddGrpcClient<Flit.Consultas.Grpc.V1.ConsultasService.ConsultasServiceClient>(options => options.Address = uri)
+            .AddCallCredentials(async (context, metadata, serviceProvider) =>
+            {
+                var token = await serviceProvider.GetRequiredService<Security.IdentityServiceTokenProvider>()
+                    .GetTokenAsync("platform.consultas", context.CancellationToken).ConfigureAwait(false);
+                metadata.Add("Authorization", "Bearer " + token);
+            })
+            .ConfigureChannel(channel => channel.UnsafeUseInsecureChannelCallCredentials = true)
+            .AddInterceptor(() => new DeadlinePorDefecto(deadline));
+        services.AddScoped<IConsultationClient>(sp => new ConsultasConsultationClient(
+            sp.GetRequiredService<Flit.Consultas.Grpc.V1.ConsultasService.ConsultasServiceClient>(),
+            sp.GetRequiredService<IctGrpcConsultationClient>(),
+            usarRespaldo,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ConsultasConsultationClient>>()));
+        return true;
+    }
+
+    /// <summary>Deadline por llamada si quien llama no fija uno (contrato v1.3 §6.1).</summary>
+    private sealed class DeadlinePorDefecto(TimeSpan deadline) : Interceptor
+    {
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
+            TRequest request, ClientInterceptorContext<TRequest, TResponse> context, AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
+        {
+            ArgumentNullException.ThrowIfNull(continuation);
+            if (context.Options.Deadline is null)
+                context = new ClientInterceptorContext<TRequest, TResponse>(context.Method, context.Host, context.Options.WithDeadline(DateTime.UtcNow.Add(deadline)));
+
+            return continuation(request, context);
+        }
+    }
 }
+

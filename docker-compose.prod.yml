@@ -320,6 +320,8 @@ services:
       # token de servicio como svc-tramites (SVC_TRAMITES_CLIENT_SECRET).
       Consultas__Remoto__Habilitado: ${CONSULTAS_REMOTO_HABILITADO:-false}
       Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
+      # HU #13346: si core-consultas no responde, Trámites consulta en proceso (y lo registra). false = «consulta no disponible».
+      Consultas__Remoto__Respaldo: ${CONSULTAS_REMOTO_RESPALDO:-true}
       Platform__ServiceClient__ClientId: svc-tramites
       Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
@@ -466,6 +468,10 @@ services:
       Ict__ServiceToken__UseIdentity: ${ICT_SERVICE_TOKEN_USE_IDENTITY:-false}
       Ict__ServiceToken__TokenEndpoint: ${ICT_IDENTITY_TOKEN_ENDPOINT:-http://gateway:${GATEWAY_PORT:-4002}/connect/token}
       Ict__ServiceToken__ClientSecret: ${SVC_ICT_CLIENT_SECRET:-}
+      # Epic #13316 (HU #13346): con la dirección, ICT consulta directo a core-consultas (svc-ict, producto ict) y cae a
+      # core-api si no responde (CoreConsultas__Respaldo). Vacía = como siempre, por core-api. Necesita UseIdentity.
+      CoreConsultas__Address: ${ICT_CORE_CONSULTAS_ADDRESS:-}
+      CoreConsultas__Respaldo: ${CONSULTAS_REMOTO_RESPALDO:-true}
       # File Manager: DONDE SUBE ICT los binarios de los adjuntos. Tiene que ser EXACTAMENTE la
       # misma URL que FileManager__BaseUrl de core-api (misma var FILE_MANAGER_BASE_URL): si difieren,
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador

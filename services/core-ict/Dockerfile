@@ -7,6 +7,9 @@ WORKDIR /src
 COPY global.json ./
 COPY Directory.Build.props Directory.Packages.props ./
 COPY src/ ./src/
+# Epic #13316 (HU #13346): cliente de core-consultas generado desde contracts/proto, que entra como contexto con nombre
+# (--build-context contracts=contracts/proto); Flit.Ict.Infrastructure lo busca en ../../../../contracts/proto.
+COPY --from=contracts . /contracts/proto/
 RUN dotnet publish src/Flit.Ict.Api/Flit.Ict.Api.csproj \
     -c Release -o /app/api /p:PublishAot=false /p:IsAotCompatible=false
 

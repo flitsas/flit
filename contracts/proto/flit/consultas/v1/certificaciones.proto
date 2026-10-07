@@ -60,19 +60,19 @@ message HechosMatriculaVehiculo {
 
 // Valor de texto o numérico: interpretado (vacío si no se pudo) y crudo.
 message ValorCertificado {
-  string valor = 1;
-  string crudo = 2;
+  optional string valor = 1;
+  optional string crudo = 2;
 }
 
 // Fecha: AAAA-MM-DD interpretada (vacía si no se pudo) y el texto crudo.
 message FechaCertificada {
-  string valor = 1;
-  string crudo = 2;
+  optional string valor = 1;
+  optional string crudo = 2;
 }
 
 message EstadoVigencia {
   Vigencia valor = 1;
-  string crudo = 2;
+  optional string crudo = 2;
 }
 
 enum Vigencia {

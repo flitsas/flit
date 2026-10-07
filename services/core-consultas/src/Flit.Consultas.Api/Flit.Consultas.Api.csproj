@@ -17,6 +17,7 @@
     <!-- HU #13343: proveedores, cadena de respaldo y avalúos (ADR-0065). -->
     <ProjectReference Include="..\..\..\core-api\src\Flit.Modules.Consultas\Flit.Modules.Consultas.csproj" />
     <ProjectReference Include="..\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
+    <ProjectReference Include="..\Flit.Consultas.Grpc.Mapping\Flit.Consultas.Grpc.Mapping.csproj" />
   </ItemGroup>
 
   <ItemGroup>

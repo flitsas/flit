@@ -27,6 +27,8 @@
     <ProjectReference Include="..\..\..\core-ict\src\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />
     <!-- Epic #13316 (HU #13344): cliente gRPC de core-consultas (contrato flit.consultas.v1, generado de contracts/proto). -->
     <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
+    <!-- HU #13346: el resultado vuelve a ConsultationResult con el mismo mapeo que usa core-consultas. -->
+    <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Mapping\Flit.Consultas.Grpc.Mapping.csproj" />
   </ItemGroup>
 
   <ItemGroup>

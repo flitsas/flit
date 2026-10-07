@@ -46,6 +46,7 @@ COPY core-identity/src/Flit.Identity.Web/ /services/core-identity/src/Flit.Ident
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
 COPY core-consultas/Directory.Build.props core-consultas/Directory.Packages.props /services/core-consultas/
 COPY core-consultas/src/Flit.Consultas.Grpc.Contracts/ /services/core-consultas/src/Flit.Consultas.Grpc.Contracts/
+COPY core-consultas/src/Flit.Consultas.Grpc.Mapping/ /services/core-consultas/src/Flit.Consultas.Grpc.Mapping/
 COPY --from=contracts . /contracts/proto/
 # Framework-dependent (JIT): desactivar AOT y sus analizadores (IsAotCompatible),
 # que estan en true por defecto en Directory.Build.props y rompen el publish con

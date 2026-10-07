@@ -18,18 +18,25 @@ public sealed class IdentityServiceTokenProvider(IHttpClientFactory httpClients,
 
     private readonly IctServiceTokenOptions _opts = options.Value;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private string? _token;
-    private DateTimeOffset _expires = DateTimeOffset.MinValue;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Token, DateTimeOffset Expires)> _cache = new(StringComparer.Ordinal);
 
-    public async Task<string> GetTokenAsync(CancellationToken ct)
+    /// <summary>Token para el scope de ICT hacia core-api (<see cref="IctServiceTokenOptions.IdentityScope"/>).</summary>
+    public Task<string> GetTokenAsync(CancellationToken ct) => GetTokenAsync(_opts.IdentityScope, ct);
+
+    /// <summary>
+    /// Token para <paramref name="scope"/>: cada scope lleva la audiencia de su servicio destino (HU #13346:
+    /// <c>platform.consultas</c> para core-consultas), así que se guarda uno por scope.
+    /// </summary>
+    public async Task<string> GetTokenAsync(string scope, CancellationToken ct)
     {
-        if (Current() is { } cached)
+        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+        if (Current(scope) is { } cached)
             return cached;
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (Current() is { } renewed)
+            if (Current(scope) is { } renewed)
                 return renewed;
 
             using var form = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -37,7 +44,7 @@ public sealed class IdentityServiceTokenProvider(IHttpClientFactory httpClients,
                 ["grant_type"] = "client_credentials",
                 ["client_id"] = _opts.ClientId,
                 ["client_secret"] = _opts.ClientSecret,
-                ["scope"] = _opts.IdentityScope,
+                ["scope"] = scope,
             });
             using var client = httpClients.CreateClient(HttpClientName);
             using var response = await client.PostAsync(new Uri(_opts.TokenEndpoint), form, ct).ConfigureAwait(false);
@@ -51,9 +58,8 @@ public sealed class IdentityServiceTokenProvider(IHttpClientFactory httpClients,
             if (string.IsNullOrEmpty(body?.AccessToken))
                 throw new InvalidOperationException($"Identidad no devolvió access_token para {_opts.ClientId}.");
 
-            _token = body.AccessToken;
-            _expires = time.GetUtcNow().AddSeconds(body.ExpiresIn > 0 ? body.ExpiresIn : 300);
-            return _token;
+            _cache[scope] = (body.AccessToken, time.GetUtcNow().AddSeconds(body.ExpiresIn > 0 ? body.ExpiresIn : 300));
+            return body.AccessToken;
         }
         finally
         {
@@ -63,7 +69,8 @@ public sealed class IdentityServiceTokenProvider(IHttpClientFactory httpClients,
 
     public void Dispose() => _gate.Dispose();
 
-    private string? Current() => _token is not null && time.GetUtcNow() < _expires - RenewBefore ? _token : null;
+    private string? Current(string scope) =>
+        _cache.TryGetValue(scope, out var entry) && time.GetUtcNow() < entry.Expires - RenewBefore ? entry.Token : null;
 
     private sealed record TokenResponse(
         [property: JsonPropertyName("access_token")] string? AccessToken,

@@ -2,6 +2,7 @@ using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Grpc.Core;
 
 namespace Flit.Api.Consultas;
@@ -14,6 +15,24 @@ internal static class ConsultasRemoto
 {
     public const string FlagKey = "Consultas:Remoto:Habilitado";
     public const string AddressKey = "Consultas:Remoto:Address";
+
+    /// <summary>
+    /// Reemplaza el registro de <typeparamref name="TService"/> por <paramref name="decorador"/> sobre la implementación
+    /// que había (mismo ciclo de vida). La implementación en proceso sigue siendo el respaldo.
+    /// </summary>
+    private static void Decorar<TService>(IServiceCollection services, Func<IServiceProvider, TService, TService> decorador)
+        where TService : class
+    {
+        var original = services.LastOrDefault(d => d.ServiceType == typeof(TService))
+            ?? throw new InvalidOperationException($"No hay registro de {typeof(TService).Name} que decorar.");
+        services.Remove(original);
+        services.Add(ServiceDescriptor.Describe(typeof(TService), sp => decorador(sp, (TService)Crear(sp, original)), original.Lifetime));
+    }
+
+    private static object Crear(IServiceProvider sp, ServiceDescriptor descriptor) =>
+        descriptor.ImplementationInstance
+        ?? descriptor.ImplementationFactory?.Invoke(sp)
+        ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!);
 
     public static IServiceCollection AddConsultasRemoto(this IServiceCollection services, IConfiguration configuration)
     {
@@ -29,6 +48,14 @@ internal static class ConsultasRemoto
         services.AddScoped<IConsultasConfigSync, GrpcConsultasConfigSync>();
         // HU #13345: consumo por empresa para el SuperAdmin.
         services.AddScoped<IConsultasConsumo, GrpcConsultasConsumo>();
+
+        // HU #13346: las consultas de Trámites van a core-consultas, con respaldo en proceso. Deadline amplio: una
+        // consulta al RUNT con su respaldo puede tardar decenas de segundos.
+        var deadline = TimeSpan.FromSeconds(configuration.GetValue("Consultas:Remoto:DeadlineSegundos", 90));
+        services.AddFlitGrpcClient<ConsultasService.ConsultasServiceClient>(configuration, uri, "platform.consultas", o => o.Deadline = deadline);
+        services.AddScoped<ConsultasRemotasCliente>();
+        Decorar<IConsultationProviderRegistry>(services, (sp, enProceso) => new ConsultasRemotasRegistry(enProceso, sp.GetRequiredService<ConsultasRemotasCliente>()));
+        Decorar<IConsultationProviderChainResolver>(services, (sp, enProceso) => new ConsultasRemotasChainResolver(enProceso, sp.GetRequiredService<ConsultasRemotasCliente>()));
         return services;
     }
 }

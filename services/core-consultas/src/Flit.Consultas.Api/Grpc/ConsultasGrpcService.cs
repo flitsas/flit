@@ -1,3 +1,4 @@
+using Flit.Consultas.Grpc.Mapping;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Tramites.Application.UseCases.Avaluos;
@@ -123,7 +124,7 @@ internal sealed class ConsultasGrpcService(
             ("vehicle_passengers", Numero(request.Pasajeros)));
         var set = await avaluoPolicy.GetAsync(caller.TenantId, context.CancellationToken).ConfigureAwait(false);
         var valor = await AvaluoAggregator.SuggestAsync(avaluos, set, new AvaluoContext(Guid.Empty, caller.TenantId, campos), context.CancellationToken).ConfigureAwait(false);
-        return ResultadoMapper.ToProto(valor);
+        return ResultadoConsultaMapper.ToProto(valor);
     }
 
     /// <summary>
@@ -144,7 +145,7 @@ internal sealed class ConsultasGrpcService(
 
         var result = await chain.ConsultAsync(kind, new ConsultationContext(Guid.Empty, caller.TenantId, plantilla, campos), ajustado, context.CancellationToken)
             .ConfigureAwait(false);
-        return ResultadoMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
+        return ResultadoConsultaMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
     }
 
     private async Task<ResultadoConsulta> ConsultarProveedorAsync(
@@ -154,7 +155,7 @@ internal sealed class ConsultasGrpcService(
         var caller = PlatformServiceCaller.From(context);
         var result = await provider.ConsultAsync(new ConsultationContext(Guid.Empty, caller.TenantId, provider.Key, campos), context.CancellationToken)
             .ConfigureAwait(false);
-        return ResultadoMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
+        return ResultadoConsultaMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
     }
 
     private static (string Proveedor, string Resultado, bool DesdeCache) Resumen(ResultadoConsulta r) =>

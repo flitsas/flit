@@ -197,6 +197,7 @@ jobs:
             services/core-consultas/Directory.Build.props
             services/core-consultas/Directory.Packages.props
             services/core-consultas/src/Flit.Consultas.Grpc.Contracts
+            services/core-consultas/src/Flit.Consultas.Grpc.Mapping
             contracts/proto
 
       - name: Extract metadata — core-api
@@ -625,6 +626,7 @@ jobs:
           tag: ${{ needs.setup.outputs.image_tag }}
           paths: |
             services/core-ict
+            contracts/proto
 
       - name: Extract metadata — core-ict
         id: meta
@@ -643,6 +645,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./services/core-ict
+          # HU #13346: cliente de core-consultas generado desde contracts/proto (COPY --from=contracts).
+          build-contexts: |
+            contracts=./contracts/proto
           file: ./services/core-ict/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
