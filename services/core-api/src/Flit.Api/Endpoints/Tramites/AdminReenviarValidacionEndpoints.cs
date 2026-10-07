@@ -54,6 +54,10 @@ internal static class AdminReenviarValidacionEndpoints
                 AdminReenviarValidacionIdentidadHandler.IdentidadAprobada => Results.Problem(
                     statusCode: 409, title: error,
                     detail: "La identidad ya está aprobada. Para revalidar, inicia una validación nueva."),
+                // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                "identidad_manual" => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "validacion_en_curso" => Results.Problem(
                     statusCode: 409, title: error,
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),

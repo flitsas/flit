@@ -43,6 +43,13 @@ public static class NotificationTemplateCatalog
         public const string RevocatoriaSolicitada = "tramites.revocatoria-solicitada";
         public const string RevocatoriaAprobada = "tramites.revocatoria-aprobada";
         public const string RevocatoriaRechazada = "tramites.revocatoria-rechazada";
+
+        // HU #13287 (Feature #13280, Épica #13202) — mismo literal que ManualCaptureEmailComposer.TemplateId
+        // (Flit.Infrastructure), escrito a mano aquí por la regla del AC3: nunca nameof/typeof.
+        public const string IdentidadCapturaManual = "identidad.captura-manual";
+
+        // HU #13299 (Feature #13282, Épica #13202) — mismo literal que ManualCaptureEmailComposer.RejectionTemplateId (también a mano).
+        public const string IdentidadCapturaManualRechazo = "identidad.captura-manual-rechazo";
     }
 
     /// <summary>
@@ -110,6 +117,16 @@ public static class NotificationTemplateCatalog
             "Revocatoria rechazada",
             NotificationModule.Tramites,
             [NotificationTrigger.RevocationRequestRechazada]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.IdentidadCapturaManual,
+            "Identidad: enlace de captura manual",
+            NotificationModule.Identidad,
+            [NotificationTrigger.ManualCaptureLinkIssued]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.IdentidadCapturaManualRechazo,
+            "Identidad: correo de rechazo de captura manual",
+            NotificationModule.Identidad,
+            [NotificationTrigger.ManualCaptureRejected]),
     ];
 
     /// <summary>

@@ -57,4 +57,16 @@ public enum NotificationTrigger
     /// HU #12579 (Feature #12565) — encolado por <c>RevocationRequestNotificationEnqueuer.NotifyDecisionAsync</c>.
     /// </summary>
     RevocationRequestRechazada,
+
+    /// <summary>
+    /// Enlace de captura de la validación de identidad MANUAL (plantilla <c>identidad.captura-manual</c>). HU #13287 (Feature #13280,
+    /// Épica #13202) — <c>EmailManualCaptureLinkNotifier</c>, tras activar el flujo manual o regenerar el enlace.
+    /// </summary>
+    ManualCaptureLinkIssued,
+
+    /// <summary>
+    /// Rechazo de la captura de la validación de identidad MANUAL (plantilla <c>identidad.captura-manual-rechazo</c>). HU #13299
+    /// (Feature #13282, Épica #13202) — motivo de la lista cerrada y enlace nuevo de 24 horas.
+    /// </summary>
+    ManualCaptureRejected,
 }

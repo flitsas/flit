@@ -318,4 +318,24 @@ public sealed class ReenviarPrevalidacionHandlerTests
 
         await _repo.Received(1).SaveChangesAsync(ct);
     }
+
+    // ── HU #13286 (Épica #13202): reenviar una prevalidación manual NO la devuelve a Kyverum ────────────
+
+    [Fact]
+    public async Task FilaManual_NoSeReenviaAKyverum_Devuelve_identidad_manual()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.ManualActivo, provider: BiometricProviders.Manual);
+        StubKyverumOk();
+        var handler = BuildHandler(isKyverum: true);
+
+        var (result, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        result.Should().BeNull();
+        error.Should().Be("identidad_manual"); // el endpoint responde 409 Conflict
+        validation.Provider.Should().Be(BiometricProviders.Manual);
+        validation.Status.Should().Be(BiometricEstados.ManualActivo);
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().SaveChangesAsync(ct);
+    }
 }

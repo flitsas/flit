@@ -828,6 +828,12 @@ internal sealed partial class ProcedureInstanceRepository(
     /// Estado tal como lo ve el gestor: una validación no aprobada con el enlace vencido es "expirada"
     /// aunque en base siga como enviada o en proceso. Misma regla que el filtro por estado (AC3) y que
     /// el flag <c>Expired</c> del DTO; el conteo de KPIs debe hablar el mismo idioma que la fila.
+    /// <para>
+    /// HU #13286 (Épica #13202): una fila del flujo manual (<c>manual_activo</c> / <c>pendiente_revision_manual</c>) con
+    /// <c>ExpiresAt &lt; now</c> también se reporta «expirada»: es CORRECTO, el enlace de captura de 24 h venció. Es solo
+    /// presentación: ningún worker la mueve (el reconcile filtra <c>provider = 'kyverum'</c>) ni genera alertas. No cambia
+    /// el modelo ni el estado persistido.
+    /// </para>
     /// </summary>
     private static string EstadoEfectivo(string status, DateTimeOffset expiresAt, DateTimeOffset now) =>
         status != BiometricEstados.Aprobado && expiresAt < now
@@ -1599,6 +1605,8 @@ internal sealed partial class ProcedureInstanceRepository(
             if (estado == BiometricEstados.Expirado)
             {
                 // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
+                // HU #13286: una fila manual no aprobada con el enlace de 24 h vencido también cuenta como expirada
+                // (aceptado: es solo presentación; ningún worker la toca y no genera alertas).
                 query = query.Where(v =>
                     v.Status == BiometricEstados.Expirado
                     || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now));
@@ -1687,11 +1695,13 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance) // Bug #13055 — CongeladaPorTramite necesita el estado del trámite.
+                .ThenInclude(i => i!.ProcedureType) // HU #13289 — nombre del producto en la vista de captura manual.
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance)
+            .Include(x => x.Person) // HU #13285 — ManualValidationOrigin distingue al representante legal por la persona jurídica.
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     // HU #10943 (CF-03) — TRACKEADA (editar/reenviar la modifica) + Person incluida (ResolveSubject).
@@ -1715,6 +1725,52 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.LastAttemptAt, attemptKey)
                 .SetProperty(x => x.ReconcilePollCount, 0)
                 .SetProperty(x => x.UpdatedAt, now), ct);
+        return affected > 0;
+    }
+
+    // HU #13290 — UPDATE atómico de la captura manual: la guarda por proveedor/estado (más el row-lock del UPDATE) hace que, de
+    // dos envíos simultáneos con el mismo token, solo uno consuma el enlace. Escribe los valores que ya dejó en memoria
+    // RegistrarCapturaManual; el UPDATE no pasa por el change tracker, así que se marca la entidad como sin cambios.
+    public async Task<bool> TryPersistManualCaptureAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        var face = validation.FacePhotoPath;
+        var front = validation.IdFrontPhotoPath;
+        var back = validation.IdBackPhotoPath;
+        var signature = validation.SignatureImagePath;
+        var signatureSha = validation.SignatureImageSha256;
+        var status = validation.Status;
+        var updatedAt = validation.UpdatedAt;
+
+        var affected = await db.ProcedureInstanceBiometricValidations
+            .Where(x => x.Id == validation.Id
+                        && x.Provider == BiometricProviders.Manual
+                        // manual_activo, o rechazado con motivo (repetición tras un rechazo, HU #13299): la misma
+                        // condición que ProcedureInstanceBiometricValidation.EsperaCapturaManual.
+                        && (x.Status == BiometricEstados.ManualActivo
+                            || (x.Status == BiometricEstados.Rechazado && x.RejectionReasonCode != null)))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.FacePhotoPath, face)
+                .SetProperty(x => x.IdFrontPhotoPath, front)
+                .SetProperty(x => x.IdBackPhotoPath, back)
+                .SetProperty(x => x.SignatureImagePath, signature)
+                .SetProperty(x => x.SignatureImageSha256, signatureSha)
+                .SetProperty(x => x.Status, status)
+                // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
+                .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
+                .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
+                .SetProperty(x => x.ReviewedAt, validation.ReviewedAt)
+                .SetProperty(x => x.UpdatedAt, updatedAt), ct);
+
+        if (affected > 0)
+        {
+            // Los valores ya están en la BD: se igualan los originales a los actuales ANTES de marcar la entidad sin
+            // cambios (pasar de Modified a Unchanged a secas revertiría las propiedades al valor original).
+            var entry = db.Entry(validation);
+            entry.OriginalValues.SetValues(entry.CurrentValues);
+            entry.State = EntityState.Unchanged;
+        }
+
         return affected > 0;
     }
 

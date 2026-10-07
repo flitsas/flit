@@ -142,6 +142,8 @@ builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
 builder.Services.AddPublicBrandingRateLimiter();
 // HU #13087 — policy external-token (10/min por IP); va después: fija el OnRejected común.
 builder.Services.AddExternalClientRateLimiter(builder.Configuration);
+// HU #13289 (Épica #13202) — policy manual-capture (por IP) de la captura manual pública; no fija OnRejected.
+builder.Services.AddManualCaptureRateLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -359,6 +361,7 @@ app.MapSuperAdminEndpoints();
 app.MapPublicProcedureEndpoints();
 app.MapPublicProcedureTypeEndpoints();
 app.MapPublicBiometricaEndpoints();
+app.MapPublicManualCaptureEndpoints(); // HU #13289/#13290 (Épica #13202) — captura manual por token
 app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
 // HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
@@ -379,6 +382,7 @@ app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — s
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();
+app.MapManualIdentityReviewEndpoints(); // HU #13296 — listado de validaciones manuales (solo Super Admin)
 app.MapTramitesFirmaEndpoints();
 app.MapTramitesFurEndpoints();
 app.MapTramitesConsolidadoEndpoints();

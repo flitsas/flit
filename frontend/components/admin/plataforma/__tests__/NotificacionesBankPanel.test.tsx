@@ -233,4 +233,65 @@ describe("NotificacionesBankPanel", { timeout: 15_000 }, () => {
       scoped.getByText(/el correo lo emite el proveedor; flit no controla su contenido/i),
     ).toBeInTheDocument();
   });
+
+  it("HU #13287 — la plantilla del enlace de captura manual aparece en módulo Identidad, con preview y envío FLIT/Renting", async () => {
+    listNotificationTemplates.mockResolvedValue([
+      ...sampleTemplates,
+      {
+        id: "identidad.captura-manual",
+        name: "Identidad: enlace de captura manual",
+        module: "Identidad",
+        triggers: ["ManualCaptureLinkIssued"],
+      },
+    ]);
+    render(<NotificacionesBankPanel />);
+
+    const name = await screen.findByText("Identidad: enlace de captura manual");
+    const row = name.closest("tr") as HTMLElement;
+    const scoped = within(row);
+
+    expect(scoped.getByText("Identidad")).toBeInTheDocument();
+    expect(scoped.getByText(/Según botón: FLIT o Renting/i)).toBeInTheDocument();
+    expect(scoped.getByRole("button", { name: /preview flit de identidad: enlace de captura manual/i })).toBeEnabled();
+    expect(scoped.getByRole("button", { name: /enviar flit de identidad: enlace de captura manual/i })).toBeEnabled();
+    expect(scoped.getByRole("button", { name: /preview renting/i })).toBeEnabled();
+    // 9 de muestra + la nueva + la fila informativa de Kyverum.
+    expect(screen.getByRole("heading", { name: /banco de pruebas \(11\)/i })).toBeInTheDocument();
+  });
+
+  it("HU #13299 — el correo de rechazo de captura manual aparece en módulo Identidad, con preview y envío FLIT/Renting", async () => {
+    listNotificationTemplates.mockResolvedValue([
+      // Solo 7 de muestra: la tabla pagina de a 10 filas y las dos de Identidad deben caber en la primera.
+      ...sampleTemplates.slice(0, 7),
+      {
+        id: "identidad.captura-manual",
+        name: "Identidad: enlace de captura manual",
+        module: "Identidad",
+        triggers: ["ManualCaptureLinkIssued"],
+      },
+      {
+        id: "identidad.captura-manual-rechazo",
+        name: "Identidad: correo de rechazo de captura manual",
+        module: "Identidad",
+        triggers: ["ManualCaptureRejected"],
+      },
+    ]);
+    render(<NotificacionesBankPanel />);
+
+    const name = await screen.findByText("Identidad: correo de rechazo de captura manual");
+    const row = name.closest("tr") as HTMLElement;
+    const scoped = within(row);
+
+    expect(scoped.getByText("Identidad")).toBeInTheDocument();
+    expect(scoped.getByText(/Según botón: FLIT o Renting/i)).toBeInTheDocument();
+    expect(
+      scoped.getByRole("button", { name: /preview flit de identidad: correo de rechazo de captura manual/i }),
+    ).toBeEnabled();
+    expect(
+      scoped.getByRole("button", { name: /enviar flit de identidad: correo de rechazo de captura manual/i }),
+    ).toBeEnabled();
+    expect(scoped.getByRole("button", { name: /preview renting/i })).toBeEnabled();
+    // 7 de muestra + las 2 de Identidad + la fila informativa de Kyverum.
+    expect(screen.getByRole("heading", { name: /banco de pruebas \(10\)/i })).toBeInTheDocument();
+  });
 });

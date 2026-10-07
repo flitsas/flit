@@ -293,4 +293,84 @@ public sealed class TenantChannelEmailRouterTests
         await rentingSender.Received(1).SendAsync(Arg.Any<RentingSendEmailRequest>(), Ct);
         await flitTransport.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
+
+    // ---------- HU #13287: identidad.captura-manual está catalogada pero NO es correo de cuenta ----------
+
+    [Fact]
+    public async Task IdentidadCapturaManual_EstaEnElCatalogo_PeroNoEsCorreoDeCuenta_SigueElCanalDelTenant()
+    {
+        Flit.Infrastructure.Notifications.Catalog.NotificationTemplateCatalog
+            .TryResolve("identidad.captura-manual", out _).Should().BeTrue("la plantilla vive en el módulo de notificaciones");
+
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantId, Ct).Returns(Settings(NotificationChannel.TenantApi));
+        var flitTransport = Substitute.For<IEmailSender>();
+        var rentingSender = Substitute.For<IRentingEmailApiSender>();
+        rentingSender.SendAsync(Arg.Any<RentingSendEmailRequest>(), Ct).Returns(EmailSendResult.Sent);
+
+        var router = NewRouter(flitTransport, settingsRepo, rentingSender);
+
+        var result = await router.SendAsync(AnalyticsEmail(templateKey: "identidad.captura-manual"), Ct);
+
+        result.Success.Should().BeTrue();
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelTenantApi);
+        await rentingSender.Received(1).SendAsync(Arg.Any<RentingSendEmailRequest>(), Ct);
+        await flitTransport.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task IdentidadCapturaManual_ConCanalFlitSmtp_SaleDirectoPorElTransporteDeFlit()
+    {
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantId, Ct).Returns(Settings(NotificationChannel.FlitSmtp));
+        var flitTransport = Substitute.For<IEmailSender>();
+        flitTransport.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Sent);
+
+        var router = NewRouter(flitTransport, settingsRepo);
+
+        var result = await router.SendAsync(AnalyticsEmail(templateKey: "identidad.captura-manual"), Ct);
+
+        result.Success.Should().BeTrue();
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelFlitSmtp);
+    }
+
+    // ---------- HU #13299: identidad.captura-manual-rechazo también sigue el canal del tenant ----------
+
+    [Fact]
+    public async Task IdentidadCapturaManualRechazo_EstaEnElCatalogo_PeroNoEsCorreoDeCuenta_SigueElCanalDelTenant()
+    {
+        Flit.Infrastructure.Notifications.Catalog.NotificationTemplateCatalog
+            .TryResolve("identidad.captura-manual-rechazo", out _).Should().BeTrue("la plantilla vive en el módulo de notificaciones");
+
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantId, Ct).Returns(Settings(NotificationChannel.TenantApi));
+        var flitTransport = Substitute.For<IEmailSender>();
+        var rentingSender = Substitute.For<IRentingEmailApiSender>();
+        rentingSender.SendAsync(Arg.Any<RentingSendEmailRequest>(), Ct).Returns(EmailSendResult.Sent);
+
+        var router = NewRouter(flitTransport, settingsRepo, rentingSender);
+
+        var result = await router.SendAsync(AnalyticsEmail(templateKey: "identidad.captura-manual-rechazo"), Ct);
+
+        result.Success.Should().BeTrue();
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelTenantApi);
+        await rentingSender.Received(1).SendAsync(Arg.Any<RentingSendEmailRequest>(), Ct);
+        await flitTransport.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task IdentidadCapturaManualRechazo_ConCanalFlitSmtp_SaleDirectoPorElTransporteDeFlit()
+    {
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantId, Ct).Returns(Settings(NotificationChannel.FlitSmtp));
+        var flitTransport = Substitute.For<IEmailSender>();
+        flitTransport.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Sent);
+
+        var router = NewRouter(flitTransport, settingsRepo);
+
+        var result = await router.SendAsync(AnalyticsEmail(templateKey: "identidad.captura-manual-rechazo"), Ct);
+
+        result.Success.Should().BeTrue();
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelFlitSmtp);
+    }
 }

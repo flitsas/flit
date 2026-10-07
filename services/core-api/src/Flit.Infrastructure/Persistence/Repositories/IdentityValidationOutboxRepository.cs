@@ -51,7 +51,8 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
         // la propia validación. El "id" de la fila es el de la validación (lo usa el requeue por id).
         var envioQuery =
             from v in db.ProcedureInstanceBiometricValidations.AsNoTracking().WhereTenantInScope(scope, v => v.TenantId)
-            where v.Status == BiometricEstados.ErrorEnvio
+            // HU #13286: las filas del flujo manual no son «atascadas de Kyverum» (no hay cola de envío).
+            where v.Status == BiometricEstados.ErrorEnvio && v.Provider != BiometricProviders.Manual
             select new StuckIdentityValidationRow(
                 v.Id,
                 v.Id,
@@ -98,6 +99,7 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
         var validation = await db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(v => v.Id == id
                 && v.TenantId == tenantId
+                && v.Provider != BiometricProviders.Manual
                 && v.Status == BiometricEstados.ErrorEnvio, ct);
 
         if (validation is null)
@@ -121,7 +123,8 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
             .ExecuteUpdateAsync(s => s.SetProperty(o => o.Attempts, 0), ct);
 
         var envioRequeued = await db.ProcedureInstanceBiometricValidations
-            .Where(v => v.TenantId == tenantId && v.Status == BiometricEstados.ErrorEnvio)
+            .Where(v => v.TenantId == tenantId && v.Status == BiometricEstados.ErrorEnvio
+                && v.Provider != BiometricProviders.Manual)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(v => v.Status, BiometricEstados.PendienteEnvio)
                 .SetProperty(v => v.Attempts, 0)

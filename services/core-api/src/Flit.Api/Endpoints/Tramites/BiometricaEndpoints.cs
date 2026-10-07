@@ -513,6 +513,9 @@ internal static class BiometricaEndpoints
                     detail: "El tipo/número de documento no es editable. Anula el registro y crea una prevalidación nueva."),
                 "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
+                // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                "identidad_manual" => Results.Problem(statusCode: 409, title: "identidad_manual",
+                    detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
@@ -552,6 +555,9 @@ internal static class BiometricaEndpoints
                     detail: "Esta prevalidación ya está referenciada por un trámite."),
                 "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
+                // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                "identidad_manual" => Results.Problem(statusCode: 409, title: "identidad_manual",
+                    detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
@@ -596,6 +602,7 @@ internal static class BiometricaEndpoints
         group.MapGet("/biometric-validations/{validationId:guid}/audit", async (
             Guid validationId,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             GetIdentityAuditByValidationHandler handler,
             CancellationToken ct) =>
         {
@@ -603,9 +610,14 @@ internal static class BiometricaEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(tenantId.Value, validationId, ct);
-            return error is "not_found"
-                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
-                : Results.Ok(result);
+            if (error is "not_found")
+                return Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.");
+
+            // El flujo manual es una herramienta interna del Super Admin FLIT: la compañía y el cliente ven la bitácora
+            // de una validación biométrica normal (los eventos manuales se traducen a su equivalente normal).
+            if (result is not null && !CompanyTenantAccess.IsSuperAdmin(http.User))
+                result = result with { Events = IdentityAuditParaCliente.Aplicar(result.Events) };
+            return Results.Ok(result);
         })
         .WithName("GetIdentityAuditByValidation")
         // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
@@ -634,6 +646,87 @@ internal static class BiometricaEndpoints
         })
         .WithName("EnsureProcedureInstanceIdentity")
         .Produces<EnsureIdentityResult>(StatusCodes.Status200OK);
+
+        // POST activar el flujo manual de identidad (HU #13284, Feature #13280, Épica #13202) sobre una validación de
+        // trámite o de prevalidación standalone que NO esté aprobada y vigente. SOLO Super Admin (policy real por rol del
+        // JWT: 401 sin sesión, 403 al resto, incluido AdminCompany).
+        // Cross-tenant: NO lee X-Tenant-Id. El Super Admin opera sobre cualquier compañía, así que el handler resuelve la
+        // validación por id y escribe/audita con el tenant de LA FILA (la ruta normal filtra por el tenant del caller y
+        // daría 404 al Super Admin que mira otra compañía).
+        // El token del enlace NO viaja en esta respuesta: el handler lo entrega al puerto IManualCaptureLinkNotifier
+        // (A5 lo manda por correo). Responde el estado resultante.
+        group.MapPost("/biometric-validations/{id:guid}/activate-manual", async (
+            Guid id,
+            HttpContext http,
+            ActivarIdentidadManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que activa el flujo manual.");
+
+            var (result, error) = await handler.HandleAsync(new ActivarIdentidadManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                ActivarIdentidadManualHandler.NoEncontrada => Results.Problem(
+                    statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                ActivarIdentidadManualHandler.AprobadaVigente => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "La identidad está aprobada y vigente: no se puede activar el flujo manual."),
+                ActivarIdentidadManualHandler.TramiteInactivo => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "El trámite está anulado o revocado: la validación de identidad se conserva sin cambios."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo activar el flujo manual."),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("ActivarIdentidadManual")
+        .WithSummary("Activa el flujo manual de identidad (solo Super Admin); cancela Kyverum y envía el enlace por correo")
+        .Produces<ActivarIdentidadManualResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
+        // POST regenerar el enlace de captura manual (HU #13287, Feature #13280, Épica #13202). SOLO Super Admin (misma policy
+        // que activate-manual). Emite un token nuevo de 24 h (solo su hash en BD) que REEMPLAZA al anterior: el viejo deja de
+        // encontrarse por hash (el público recibe 404, igual que ante un enlace inválido). Cross-tenant: el tenant sale de la
+        // fila, no de X-Tenant-Id. El token NO viaja en la respuesta: se entrega por correo; `emailEnviado` avisa si no salió.
+        group.MapPost("/biometric-validations/{id:guid}/regenerate-manual-link", async (
+            Guid id,
+            HttpContext http,
+            RegenerarEnlaceManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que regenera el enlace.");
+
+            var (result, error) = await handler.HandleAsync(new RegenerarEnlaceManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                RegenerarEnlaceManualHandler.NoEncontrada => Results.Problem(
+                    statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                RegenerarEnlaceManualHandler.FlujoManualNoActivo => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "La validación no está en flujo manual activo: no hay enlace que regenerar."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo regenerar el enlace."),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("RegenerarEnlaceManual")
+        .WithSummary("Regenera el enlace de captura manual (solo Super Admin); invalida el anterior y lo envía por correo")
+        .Produces<RegenerarEnlaceManualResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }

@@ -170,6 +170,11 @@ public static class DependencyInjection
         services.AddScoped<ListBiometriaHandler>();
         // HU #10234 — vista transversal del submódulo "Validaciones de Identidad" (todas las instancias).
         services.AddScoped<ListTenantBiometricValidationsHandler>();
+        // HU #13296 — listado de validaciones manuales del Super Admin (cross-tenant).
+        services.AddScoped<ListManualIdentityValidationsHandler>();
+        // HU #13297 — detalle e imágenes (auditados) de una validación manual, solo Super Admin.
+        services.AddScoped<GetManualDetailHandler>();
+        services.AddScoped<GetManualImageHandler>();
         // HU #11270 — vista agrupada por persona (ADR-0040); endpoint propio.
         services.AddScoped<ListTenantBiometricPersonsHandler>();
         // HU #12708 — Validación de Identidad de la red (cabeza de grupo, solo lectura).
@@ -269,6 +274,17 @@ public static class DependencyInjection
         // HU #12161 — reenvío administrativo de la validación de identidad de un trámite (correo
         // opcional), fuera del gate not_draft y del mecanismo standalone.
         services.AddScoped<AdminReenviarValidacionIdentidadHandler>();
+        // HU #13284/#13287 (Épica #13202) — activar el flujo manual de identidad y regenerar su enlace (Super Admin). El
+        // notificador del enlace (IManualCaptureLinkNotifier, correo al titular) se registra en Infraestructura.
+        services.AddScoped<ActivarIdentidadManualHandler>();
+        services.AddScoped<RegenerarEnlaceManualHandler>();
+        // HU #13298/#13299 (Feature #13282 C) — aprobar y rechazar la revisión manual (Super Admin).
+        services.AddScoped<AprobarValidacionManualHandler>();
+        services.AddScoped<RechazarValidacionManualHandler>();
+        // HU #13289/#13290 (Feature #13281 B) — captura manual pública por token.
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.GetManualCaptureHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.RegistrarConsentimientoManualHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.EnviarCapturaManualHandler>();
         // HU #12162 — reasignar el gestor responsable del trámite (AssignedToUserId), sin tocar
         // CreatedByUserId (quién radicó).
         services.AddScoped<AdminReasignarGestorHandler>();
