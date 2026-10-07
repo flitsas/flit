@@ -14,11 +14,19 @@ export interface TramitesTabProps {
   onChange: (patch: Partial<SettingsForm>) => void;
   fieldErrors?: Record<string, string>;
   whitelistSlot?: ReactNode;
+  /** HU #13401 — interruptor «Generación de improntas»; solo Super Admin. */
+  showImprontas?: boolean;
 }
 
 type FamilyId = "matriculas" | "traspaso" | "otros";
 
-export function TramitesTab({ form, onChange, fieldErrors, whitelistSlot }: TramitesTabProps) {
+export function TramitesTab({
+  form,
+  onChange,
+  fieldErrors,
+  whitelistSlot,
+  showImprontas = false,
+}: TramitesTabProps) {
   // Matrículas abierta por defecto (primera familia); el resto colapsado.
   const [open, setOpen] = useState<Record<FamilyId, boolean>>({
     matriculas: true,
@@ -113,7 +121,52 @@ export function TramitesTab({ form, onChange, fieldErrors, whitelistSlot }: Tram
           onChange={(v) => onChange({ onlyOwnVehiclesOtros: v })}
         />
       </FamilySection>
+
+      {showImprontas && <ImprontasSection form={form} onChange={onChange} />}
     </div>
+  );
+}
+
+/**
+ * HU #13401 — interruptor de la generación automática de improntas. El estado se distingue por
+ * color y por texto («Habilitada» / «Deshabilitada»), no solo por color. Se guarda con «Guardar todo».
+ */
+function ImprontasSection({
+  form,
+  onChange,
+}: {
+  form: SettingsForm;
+  onChange: (patch: Partial<SettingsForm>) => void;
+}) {
+  const enabled = form.generacionImprontas;
+  return (
+    <section
+      className="space-y-3 rounded-2xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
+      aria-labelledby="improntas-title"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p id="improntas-title" className="text-xs font-semibold text-[#162744] dark:text-white">
+          Improntas
+        </p>
+        <span
+          data-testid="improntas-estado"
+          className="rounded-md px-2 py-0.5 text-[11px] font-semibold"
+          style={{
+            color: enabled ? "#557EFF" : "#162744",
+            background: enabled ? "rgba(85,126,255,0.12)" : "rgba(22,39,68,0.08)",
+          }}
+        >
+          {enabled ? "Habilitada" : "Deshabilitada"}
+        </span>
+      </div>
+      <ToggleSwitch
+        id="generacionImprontas"
+        label="Generación de improntas"
+        description="Si se desactiva, el wizard no genera la impronta automáticamente y el radicador la carga a mano. Solo aplica a trámites nuevos."
+        checked={enabled}
+        onChange={(v) => onChange({ generacionImprontas: v })}
+      />
+    </section>
   );
 }
 

@@ -111,6 +111,12 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public bool ResolucionesModuleEnabled { get; set; }
 
+    /// <summary>
+    /// Generación automática de improntas (HU #13400, Feature #13398). Default true: comportamiento
+    /// histórico; solo el SuperAdmin FLIT la apaga por compañía.
+    /// </summary>
+    public bool GenerateImprontas { get; set; } = true;
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

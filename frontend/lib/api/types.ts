@@ -248,6 +248,8 @@ export interface TenantSettings {
   tramitesModuleEnabled?: boolean;
   comparendosModuleEnabled?: boolean;
   resolucionesModuleEnabled?: boolean;
+  /** Feature #13398 — el wizard genera la impronta automáticamente. El backend devuelve `true` por defecto. */
+  generacionImprontas?: boolean;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -278,6 +280,8 @@ export interface TenantSettingsUpdate {
   tramitesModuleEnabled?: boolean;
   comparendosModuleEnabled?: boolean;
   resolucionesModuleEnabled?: boolean;
+  /** Feature #13398 — `null`/omitido: el backend conserva el valor previo. */
+  generacionImprontas?: boolean | null;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────
