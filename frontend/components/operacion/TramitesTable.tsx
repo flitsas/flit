@@ -26,11 +26,12 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { COPY } from '@/lib/copy/copy-catalog';
 import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
-import { useSeleccionLote } from '@/hooks/useSeleccionLote';
+import { useSeleccionLote, type ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
 import { BotonDescargaMasivaZip } from './DescargaMasivaConfirmModal';
 import { useMostrarLoteDescarga } from '@/components/shared/LoteDescargaTracker';
-import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
+import type { LoteConsolidados, TipoDocumentoLote } from '@/lib/api/types-consolidado-lotes';
+import { consolidadoLotesClient } from '@/lib/api/consolidado-lotes-client';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   ETIQUETA_CLIENTE_HIJO,
@@ -811,6 +812,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     },
     [limpiarSeleccionLote, mostrarLote],
   );
+  /**
+   * HU #13387 (W-f) — el Super Admin crea el lote con las MISMAS cabeceras que el listado. El
+   * listado sale sin `filterTenantId` (buildListQuery no lo pone; la red usa solo Bearer), así que
+   * la creación tampoco lleva X-Tenant-Id: nunca el tenant activo ni el interno del JWT. La compañía
+   * se acota con la condición `compania` del filtro. El Gestor sigue con la creación por defecto.
+   */
+  const crearLoteSuperAdmin = useCallback(
+    (seleccion: ModeloSeleccionLote<unknown>, tipoDocumento?: TipoDocumentoLote) =>
+      consolidadoLotesClient.crearLote({ seleccion, tipoDocumento, cabecerasDelListado: {} }),
+    [],
+  );
   const estadoTablaLote = loading ? 'cargando' : error ? 'error' : total === 0 ? 'vacio' : 'lleno';
   const contarEstados = useCallback(
     (query: ListInstancesParams) =>
@@ -1576,12 +1588,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             mensajeTope={lote.mensajeTope}
           >
             {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). HU #13382 — el
-                lote creado y el del 409 `lote_activo` pasan al seguimiento global del Shell. */}
+                lote creado y el del 409 `lote_activo` pasan al seguimiento global del Shell. HU #13387 —
+                el Super Admin elige el tipo y crea con las cabeceras del listado. */}
             <BotonDescargaMasivaZip
               seleccion={lote.modelo}
               contador={lote.contador}
               onCreado={alCrearLote}
               onLoteActivo={mostrarLote}
+              selectorTipo={isAdmin}
+              crear={isAdmin ? crearLoteSuperAdmin : undefined}
             />
           </BarraSeleccionLote>
         ) : null}

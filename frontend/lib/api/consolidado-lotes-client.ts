@@ -1,4 +1,5 @@
 import { apiUrl, tenantHeader } from './tramites-client';
+import { getToken } from './client';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { TOPE_SELECCION_LOTE } from '@/hooks/useSeleccionLote';
 import { downloadFile } from './download';
@@ -96,12 +97,34 @@ export function aErrorDeLote(err: unknown): unknown {
   return new ConsolidadoLotesApiError(0, null);
 }
 
-async function llamar(path: string, init: RequestInit = {}): Promise<Response> {
+/**
+ * HU #13387 (W-f) — cabeceras con las que se pidió el listado (`searchPayload` de
+ * `tramites-client.ts`): Bearer y `X-Tenant-Id` SOLO si el listado llevaba `filterTenantId`. Nunca
+ * se cae al tenant activo ni al del JWT: un Super Admin que listó «todas» crea el lote igual, y el
+ * servidor no lo acota a su compañía interna.
+ */
+export interface CabecerasDelListado {
+  filterTenantId?: string;
+}
+
+function cabecerasComoListado({ filterTenantId }: CabecerasDelListado): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (filterTenantId) headers['X-Tenant-Id'] = filterTenantId;
+  return headers;
+}
+
+async function llamar(
+  path: string,
+  init: RequestInit = {},
+  base: Record<string, string> = tenantHeader() as Record<string, string>,
+): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(apiUrl(path), {
       ...init,
-      headers: { ...(tenantHeader() as Record<string, string>), ...(init.headers as Record<string, string>) },
+      headers: { ...base, ...(init.headers as Record<string, string>) },
     });
   } catch {
     throw new ConsolidadoLotesApiError(0, null);
@@ -136,21 +159,29 @@ export const consolidadoLotesClient = {
   /**
    * Crea el lote (202). Siempre con `confirmaEfectos: true`: solo se llama tras la confirmación del
    * modal (AC1/AC2). Lanza {@link ConsolidadoLotesApiError} en 409/422/503/red.
+   *
+   * HU #13387 — `cabecerasDelListado` (Super Admin): la creación viaja con las mismas cabeceras
+   * que el listado, no con el tenant activo/JWT. Sin él (Gestor) las cabeceras no cambian.
    */
   crearLote: async <TFiltro>(params: {
     seleccion: ModeloSeleccionLote<TFiltro>;
     tipoDocumento?: CrearLoteConsolidadosRequest['tipoDocumento'];
+    cabecerasDelListado?: CabecerasDelListado;
   }): Promise<LoteConsolidados> => {
     const cuerpo: CrearLoteConsolidadosRequest<TFiltro> = {
       tipoDocumento: params.tipoDocumento ?? 'consolidado',
       confirmaEfectos: true,
       seleccion: params.seleccion,
     };
-    const res = await llamar(RUTA_CREAR, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cuerpo),
-    });
+    const res = await llamar(
+      RUTA_CREAR,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      },
+      params.cabecerasDelListado ? cabecerasComoListado(params.cabecerasDelListado) : undefined,
+    );
     return (await res.json()) as LoteConsolidados;
   },
 
