@@ -310,6 +310,28 @@ describe('FirmaFurStep — impronta (Feature #11066)', () => {
   });
 });
 
+describe('FirmaFurStep — improntas deshabilitadas (HU #13403)', () => {
+  it('AC1 — con improntaGeneracionHabilitada=false pre-genera el FUR pero NO llama a generarImpronta ni ofrece «Generar»', async () => {
+    mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, improntaGeneracionHabilitada: false });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    await waitFor(() => expect(mocks.generarFur).toHaveBeenCalledWith(INSTANCE));
+    expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Generar impronta/i })).not.toBeInTheDocument();
+  });
+
+  it('AC4 — con el flag en true conserva la pre-generación de la impronta', async () => {
+    mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, improntaGeneracionHabilitada: true });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE));
+  });
+
+  it('AC4 — con el campo ausente (trámites previos) conserva la pre-generación', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE));
+  });
+});
+
 describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () => {
   it('sin consolidado: no genera FUR a mano; pre-genera paquete+impronta al entrar', async () => {
     mocks.getAttachments.mockResolvedValue([]);
