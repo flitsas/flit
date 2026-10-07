@@ -24,6 +24,10 @@ service IctOrchestration {
   // Actúan sobre tramites.procedure_instances; validan el estado (borrador) en core-api.
   rpc PauseDraft (PauseDraftRequest) returns (DraftReply);
   rpc AbortDraft (AbortDraftRequest) returns (DraftReply);
+
+  // Bug #13304 — edición del precio de venta (datos comerciales) desde ICT, SOLO mientras el
+  // trámite esté en borrador. Valida tenant + external_ref; error_code "not_draft" si ya avanzó.
+  rpc UpdateDraftCommercial (UpdateDraftCommercialRequest) returns (DraftReply);
 }
 
 message CreateDraftFromIctRequest {
@@ -116,6 +120,13 @@ message AbortDraftRequest {
   string actor_user            = 4;
   string actor_mail            = 5;
   string actor_company         = 6;
+}
+
+message UpdateDraftCommercialRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  string external_ref          = 3;   // ict.external_integration_master.id (debe coincidir)
+  CommercialData commercial    = 4;
 }
 
 message DraftReply {
