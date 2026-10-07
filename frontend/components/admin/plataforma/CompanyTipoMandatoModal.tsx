@@ -93,7 +93,7 @@ export function CompanyTipoMandatoModal({
         busy={busy}
         icon={AlertTriangle}
         iconBg="#F9AC00"
-        title="Confirmar Mandato abierto"
+        title="Confirmar mandato Abierto (sin mandatario)"
         titleClassName="text-base font-bold text-[#162744]"
         size="md"
       >
@@ -299,7 +299,7 @@ export function CompanyVolverDefaultModal({
     >
       <div className="space-y-3 text-xs" data-testid="mandato-volver-default">
         <p>
-          <strong>{companyName}</strong> dejará de tener regla propia y volverá a Persona natural
+          <strong>{companyName}</strong> dejará de tener regla propia y volverá a Mandatario de la compañía
           (Default) en este organismo.
         </p>
         {error ? (

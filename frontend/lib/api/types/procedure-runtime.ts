@@ -1785,6 +1785,11 @@ export interface LinkedProcedureRef {
  */
 export interface TenantBiometricValidation {
   /**
+   * Validación PROPIA de un mandatario: se lista aparte y solo se consulta (no se apalanca con el trámite ni
+   * la prevalidación del mismo documento; se gestiona desde la ficha del mandatario).
+   */
+  esMandatario?: boolean;
+  /**
    * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
    * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
    */
@@ -1910,6 +1915,8 @@ export interface TenantBiometricValidationFilters {
  * peor alerta. Espejo de TenantBiometricPersonDto.
  */
 export interface TenantBiometricPerson {
+  /** Fila de la validación PROPIA de un mandatario (persona aparte; ver `TenantBiometricValidation.esMandatario`). */
+  esMandatario?: boolean;
   /**
    * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
    * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.

@@ -212,18 +212,21 @@ internal static class BiometricaEndpoints
             [FromQuery] string? documentNumber,
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
+            [FromQuery] bool? mandatario,
             ListPersonBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
+            // ?mandatario=true — historial de la fila «Mandatario» (validación propia del mandatario, aparte).
             var (result, error) = await handler.HandleAsync(
                 tenantId.Value,
                 documentType,
                 documentNumber,
                 page ?? 1,
                 pageSize ?? ListPersonBiometricValidationsHandler.DefaultPageSize,
+                mandatario ?? false,
                 ct);
 
             return error switch

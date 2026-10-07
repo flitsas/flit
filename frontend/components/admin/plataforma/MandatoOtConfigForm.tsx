@@ -45,6 +45,7 @@ import {
   tipoNegocioLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
+import { TipoMandatoAyuda } from "./TipoMandatoAyuda";
 
 const EDITOR_PLACEHOLDER = `Entre las partes, EL MANDANTE {{mandante_nombre}} identificado con {{mandante_documento}}, y EL MANDATARIO.
 
@@ -218,7 +219,7 @@ export function MandatoOtConfigForm({
                 companyTaxId: lockedCompany.nit,
                 companyCode: null,
                 // HU #13182b (H17): sin regla propia la compañía hereda el tipo REAL del organismo (el OT
-                // nace como Persona natural), no «Mandato abierto».
+                // nace como Mandatario de la compañía), no «Abierto».
                 assignmentMode: office.assignmentMode || "signer",
                 mandataryFamily: office.mandataryFamily || "individuo",
                 institutionalMandataryName: office.institutionalMandataryName ?? null,
@@ -551,7 +552,7 @@ export function MandatoOtConfigForm({
       {
         // HU #13150 — tipo de mandato de la compañía en este organismo.
         key: "tipoMandato",
-        header: "Tipo de mandato",
+        header: <TipoMandatoAyuda />,
         cellClassName: "!px-2.5",
         headerClassName: "!px-2.5",
         render: (row) => (
@@ -563,7 +564,7 @@ export function MandatoOtConfigForm({
               {tipoNegocioLabel(resolveTipoNegocio(row.assignmentMode))}
             </span>
             {row.hasExplicitRule ? null : (
-              <span title="Sin configuración propia: la compañía usa el tipo de mandato del organismo, Persona natural.">
+              <span title="Sin configuración propia: la compañía usa el tipo de mandato del organismo, Mandatario de la compañía.">
                 <StatusBadge label="Default" tone="neutral" />
               </span>
             )}
@@ -1103,7 +1104,7 @@ export function MandatoOtConfigForm({
                   Tipo de mandatario por compañía
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Si una compañía no tiene configuración propia, usa la del organismo. En «Persona natural»
+                  Si una compañía no tiene configuración propia, usa la del organismo. En «Mandatario de la compañía»
                   puedes elegir un mandatario preferido, que aparece ya seleccionado al radicar.{" "}
                   {rulesStatus === "ready" ? (
                     <span className="font-medium text-[#162244] dark:text-white/80">
