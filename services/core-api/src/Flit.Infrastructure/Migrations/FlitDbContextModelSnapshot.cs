@@ -7738,10 +7738,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lease_until");
 
-                    b.Property<byte[]>("NoncePrefix")
-                        .HasColumnType("bytea")
-                        .HasColumnName("nonce_prefix");
-
                     b.Property<int>("OmittedCount")
                         .HasColumnType("integer")
                         .HasColumnName("omitted_count");
