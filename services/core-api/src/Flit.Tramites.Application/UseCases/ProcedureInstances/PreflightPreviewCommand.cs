@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Entities;
@@ -72,7 +73,67 @@ public sealed record PreflightPreviewTransitOfficeDto(Guid Id, string Code, stri
 public sealed record PreflightVehicleSnapshot(
     IReadOnlyList<PreflightCheckDto> Checks,
     IReadOnlyList<HydratedField> HydratedFields,
-    IReadOnlyList<string> Providers);
+    IReadOnlyList<string> Providers)
+{
+    /// <summary>
+    /// Bug #13304 — única fuente del mapeo <c>ConsultationResult → snapshot</c>: la usan el preflight
+    /// (consulta fresca) y la fachada gRPC de ICT, para que la consulta reutilizada sea idéntica a la
+    /// que habría hecho el preflight. Deja fuera <c>RawPayload</c> y <c>Certifications</c>.
+    /// </summary>
+    public static PreflightVehicleSnapshot FromConsultation(ConsultationResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return new PreflightVehicleSnapshot(
+            result.Checks
+                .Select(c => new PreflightCheckDto(c.Key, c.Label, c.Status, c.Source, c.Message, c.Details, c.Datos))
+                .ToList(),
+            result.HydratedFields.ToList(),
+            [result.Provider]);
+    }
+}
+
+/// <summary>
+/// Bug #13304 — formato del snapshot de vehículo que viaja opaco por ICT
+/// (<c>ConsultationReply.vehicle_snapshot_json</c> → <c>PrecomputedVehicleConsultation.snapshot_json</c>).
+/// core-api lo produce y lo consume con las MISMAS opciones; core-ict nunca lo interpreta. Contiene PII
+/// (titular, acreedor): no se loguea.
+/// </summary>
+public static class PreflightVehicleSnapshotJson
+{
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+
+    public static string Serialize(PreflightVehicleSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return JsonSerializer.Serialize(snapshot, Options);
+    }
+
+    /// <summary><c>false</c> si el texto está vacío, no es JSON o no trae checks/campos/proveedores.</summary>
+    public static bool TryDeserialize(string? json, out PreflightVehicleSnapshot? snapshot)
+    {
+        snapshot = null;
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<PreflightVehicleSnapshot>(json, Options);
+            if (parsed?.Checks is null || parsed.HydratedFields is null || parsed.Providers is null)
+                return false;
+
+            snapshot = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
+}
 
 /// <summary>
 /// Custodia server-side de las consultas del paso 1 mientras el trámite aún no existe. El payload

@@ -1696,4 +1696,90 @@ public sealed class PreflightHandlerTests
             new PreflightCheckDto("b", "B", "fail", "s", null),
         ]).Should().Be("red");
     }
+
+    // ── Bug #13304 — persistencia del snapshot ante bloqueo (solo materialización ICT) ─────────
+    // Uso de ejemplo: handler.HandleAsync(id, tenant, precomputed, new PreflightRunOptions(PersistSnapshotOnBlock: true), ct)
+
+    private static PreflightVehicleSnapshot SnapshotIctConGravamen() => new(
+        [new PreflightCheckDto("gravamenes", "Gravámenes", "warn", "kyverum_runt", "Prenda vigente")],
+        [new HydratedField("runt_tiene_gravamenes", "SI", null), new HydratedField("vehicle_brand", "MARCA", null)],
+        ["kyverum_runt"]);
+
+    private ProcedureInstance TraspasoDuplicado(CancellationToken ct, out Guid existingId)
+    {
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        var dup = Guid.NewGuid();
+        existingId = dup;
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByPlacaAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<PlacaTramiteExistente> { new(dup, TramiteEstado.Preparado, Placa: "ABC123") });
+        return instance;
+    }
+
+    [Fact]
+    public async Task Bug13304_BloqueoConPersistSnapshotOnBlock_PersisteSnapshotRojoConCamposHidratadosYMismoError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoDuplicado(ct, out var existingId);
+        ProcedureInstancePreflightSnapshot? persistido = null;
+        await _repo.AddPreflightSnapshotAsync(Arg.Do<ProcedureInstancePreflightSnapshot>(s => persistido = s), ct);
+        // Sin proveedor de vehículo registrado: si el handler consultara, el check saldría en error.
+        var handler = HandlerWith(("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (result, error, existing, _) = await handler.HandleAsync(
+            instance.Id, instance.TenantId, SnapshotIctConGravamen(), new PreflightRunOptions(PersistSnapshotOnBlock: true), ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE", "mismo error que sin la opción");
+        result.Should().BeNull();
+        existing.Should().Be(existingId);
+        persistido.Should().NotBeNull("con la opción el bloqueo deja el snapshot visible en el borrador");
+        persistido!.Overall.Should().Be("red");
+        var checks = System.Text.Json.JsonSerializer.Deserialize<List<PreflightCheckDto>>(persistido.Checks)!;
+        checks.Should().Contain(c => c.Key == RunPreflightHandler.CheckBloqueoPreflight && c.Status == "fail" && c.Source == "system");
+        checks.Should().Contain(c => c.Key == "gravamenes" && c.Source == "kyverum_runt");
+        checks.Should().NotContain(c => c.Key == "vehiculo" && c.Status == "error", "no hubo consulta fresca");
+        ValueOf(instance, "runt_tiene_gravamenes").Should().Be("SI");
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Bug13304_BloqueoSinOpcion_ComoElWizard_NoPersisteNada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoDuplicado(ct, out _);
+        var handler = HandlerWith(("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, SnapshotIctConGravamen(), ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE");
+        await _repo.DidNotReceive().AddPreflightSnapshotAsync(Arg.Any<ProcedureInstancePreflightSnapshot>(), ct);
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Bug13304_EstadoRegistralConPersistSnapshotOnBlock_PersisteRojoYDevuelveVehicleState()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: "XYZ789",
+                    Vin: "1HGCM82633A004352", Secretaria: "Secretaría X",
+                    FechaRegistro: new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)),
+            });
+        ProcedureInstancePreflightSnapshot? persistido = null;
+        await _repo.AddPreflightSnapshotAsync(Arg.Do<ProcedureInstancePreflightSnapshot>(s => persistido = s), ct);
+
+        var (result, error, _, vehicleState) = await VehiculoOkHandler().HandleAsync(
+            instance.Id, instance.TenantId, null, new PreflightRunOptions(PersistSnapshotOnBlock: true), ct);
+
+        error.Should().Be(VehicleStatePolicy.ErrorCode);
+        result.Should().BeNull();
+        vehicleState!.VehicleStatus.Should().Be(VehicleStatePolicy.VehicleStatusAprobadoFlit);
+        persistido!.Overall.Should().Be("red");
+        System.Text.Json.JsonSerializer.Deserialize<List<PreflightCheckDto>>(persistido.Checks)!
+            .Should().Contain(c => c.Key == RunPreflightHandler.CheckBloqueoPreflight);
+    }
 }

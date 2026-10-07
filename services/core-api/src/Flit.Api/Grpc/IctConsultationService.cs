@@ -1,5 +1,7 @@
 using Flit.Ict.Grpc.Contracts;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 
 namespace Flit.Api.Grpc;
@@ -68,7 +70,13 @@ public sealed class IctConsultationService(
         ConsultationTenantOverride? tenantOverride, ConsultationRequest request, CancellationToken ct)
     {
         var fv = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(request.Vin))
+        // Bug #13304 (D6) — consulta por placa con placa Y documento: paridad con el paso 1 del wizard de
+        // traspaso, que nunca manda VIN. Si viajara, el proveedor (VIN prioritario) consultaría por VIN y
+        // la respuesta no traería el gravamen asociado al titular. Sin documento se conserva el VIN.
+        var placaConDocumento = kind == ConsultationKind.VehiclePlate
+            && !string.IsNullOrWhiteSpace(request.Plate)
+            && !string.IsNullOrWhiteSpace(request.DocumentNumber);
+        if (!placaConDocumento && !string.IsNullOrWhiteSpace(request.Vin))
         {
             fv["vin"] = request.Vin;
         }
@@ -87,6 +95,13 @@ public sealed class IctConsultationService(
 
         var ctx = new ConsultationContext(Guid.Empty, tenantId, "vehiculo", fv);
         var result = await chainResolver.ConsultAsync(kind, ctx, tenantOverride, ct);
+
+        // Bug #13304 — resultado COMPLETO para que el borrador ICT lo reutilice sin re-consultar. JSON
+        // opaco para core-ict, con PII (titular, acreedor): nunca se loguea ni lleva RawPayload.
+        reply.VehicleSnapshotJson = PreflightVehicleSnapshotJson.Serialize(PreflightVehicleSnapshot.FromConsultation(result));
+        reply.ConsultedAt = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+        reply.Provider = result.Provider ?? string.Empty;
+        reply.ConsultationKind = kind.ToString();
 
         reply.SoatStatus = MapVigencia(StatusOf(result, CheckSoat));
         reply.RtmStatus = MapVigencia(StatusOf(result, CheckRtm));
