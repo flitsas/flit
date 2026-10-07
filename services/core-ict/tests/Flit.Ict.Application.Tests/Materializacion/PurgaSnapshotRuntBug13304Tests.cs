@@ -275,6 +275,38 @@ public sealed class PurgaSnapshotRuntBug13304Tests
             .And.Contain("barrido de retención vacía las de más de 2 veces la vigencia");
     }
 
+    [Fact]
+    public void Ddl26_IndiceParcialDelBarridoDeRetencion_Idempotente()
+    {
+        var ddl = EmbeddedDdl.LoadUp("26-ICT-source-response-vehicle-snapshot.sql");
+
+        ddl.Should().Contain("CREATE INDEX IF NOT EXISTS ix_eisr_vehicle_snapshot_created")
+            .And.Contain("ON ict.external_integration_source_response (created_at)")
+            .And.Contain("WHERE vehicle_snapshot IS NOT NULL;");
+        RetentionJob.VehicleSnapshotSweepSql.Should().Contain("WHERE vehicle_snapshot IS NOT NULL")
+            .And.Contain("AND created_at < now()", "el predicado del barrido es el que soporta el índice parcial");
+    }
+
+    // ---------------------------------------------------------------- 1d — advertencias sin duplicar
+
+    /// <summary>
+    /// Una consulta re-encolada vuelve a producir las mismas advertencias: solo se agregan las que no estén ya en
+    /// external_comments_validation y el evento «advertencia» sale únicamente si se agregó alguna.
+    /// </summary>
+    [Fact]
+    public void Advertencia_ReEncolada_NoSeDuplicaNiRepiteElEvento()
+    {
+        var sql = OrchestratorJob.RecordWarningSql;
+
+        sql.Should().Contain("unnest(@warnings::text[]) WITH ORDINALITY")
+            .And.Contain("position(u.w IN m.external_comments_validation) = 0", "una advertencia ya contenida no se agrega")
+            .And.Contain("WHERE m.id = @id AND n.txt IS NOT NULL", "sin advertencias nuevas no hay UPDATE")
+            .And.Contain("RETURNING m.id, m.tenant_id, n.txt")
+            .And.Contain("'advertencia'")
+            .And.Contain("FROM upd", "el evento solo se registra por la fila efectivamente actualizada");
+        sql.Should().NotContain("|| @msg", "ya no se concatena a ciegas");
+    }
+
     // ---------------------------------------------------------------- 2 — L-1 consulted_at en el futuro
 
     [Theory]
