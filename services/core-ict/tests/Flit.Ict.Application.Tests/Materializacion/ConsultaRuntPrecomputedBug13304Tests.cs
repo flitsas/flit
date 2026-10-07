@@ -155,8 +155,34 @@ public sealed class ConsultaRuntPrecomputedBug13304Tests
             .And.Contain("ORDER BY sq.created_at DESC, sq.id DESC")
             .And.Contain("NOT EXISTS")
             .And.Contain("r.created_at >= now() - make_interval(hours => @hours)")
-            .And.Contain("r.id <> (", "la consulta original del SP no cuenta como re-consulta");
+            .And.Contain("r.created_at > (", "solo cuenta como re-consulta lo creado después de la última validación");
         sql.Should().NotContain("is_data_queried = true", "la nueva source_query nace pendiente (default false)");
+    }
+
+    /// <summary>
+    /// Regla de la re-consulta: cuenta solo una consulta VEHICLE/VIN con created_at posterior a
+    /// m.external_date_validation. El SP externo fija esa fecha con now() en la misma transacción en que inserta
+    /// las consultas (created_at DEFAULT now(): mismo instante), y un reproceso o una edición que reinicia la
+    /// validación pasa otra vez por el SP y la mueve; así la consulta nueva del SP no se toma por re-consulta usada.
+    /// </summary>
+    [Fact]
+    public void Reencolado_TrasReprocesoOEdicion_LaConsultaNuevaDelSpNoCuentaComoReconsulta()
+    {
+        DbVehicleSnapshotReader.RequeueSql.Should()
+            .Contain("SELECT m.external_date_validation FROM ict.external_integration_master m")
+            .And.Contain("WHERE m.id = @master")
+            .And.NotContain("r.id <> (", "la primera consulta de TODA la historia del master ya no es la referencia")
+            .And.NotContain("ORDER BY f.created_at, f.id");
+
+        var sp = EmbeddedDdl.LoadUp("06-ICT-sp-external.sql");
+        var inicio = sp.IndexOf("SET external_validation = 1, external_date_validation = now()", StringComparison.Ordinal);
+        var insercion = sp.IndexOf("INSERT INTO ict.external_integration_source_query", StringComparison.Ordinal);
+        var fin = sp.IndexOf("SET external_validation = 2, external_date_validation = now()", StringComparison.Ordinal);
+        inicio.Should().BePositive();
+        insercion.Should().BeGreaterThan(inicio);
+        fin.Should().BeGreaterThan(insercion, "la fecha y las consultas se escriben en la misma iteración del SP");
+        sp.Should().NotContain("COMMIT;", "una sola transacción: now() es el mismo instante para la fecha y las consultas");
+        EmbeddedDdl.LoadUp("03-ICT-pipeline.sql").Should().Contain("created_at          timestamptz NOT NULL DEFAULT now()");
     }
 
     [Fact]

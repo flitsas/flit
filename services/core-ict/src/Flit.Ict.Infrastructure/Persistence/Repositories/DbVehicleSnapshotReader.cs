@@ -46,7 +46,12 @@ public sealed class DbVehicleSnapshotReader(IctDbContext db) : IIctVehicleSnapsh
     /// Re-encola la consulta de vehículo: copia la última source_query VEHICLE/VIN del master como una nueva
     /// pendiente (is_data_queried=false por defecto), que procesa el orquestador. Sin DDL nuevo, el tope de UNA
     /// re-consulta por ventana se cuenta en la propia tabla: no se inserta si ya hay, dentro de las últimas
-    /// @hours, una consulta de vehículo del master que NO sea la original (la primera, creada por el SP externo).
+    /// @hours, una re-consulta de vehículo del master. Re-consulta = creada DESPUÉS de
+    /// <c>m.external_date_validation</c>: el SP externo fija esa fecha con <c>now()</c> en la misma transacción
+    /// en que inserta las consultas (cuyo <c>created_at</c> por defecto también es <c>now()</c>, el instante de
+    /// inicio de la transacción), así que las consultas originales quedan iguales a la fecha y no cuentan. Un
+    /// reproceso o una edición que reinicia la validación vuelve a pasar por el SP y mueve la fecha: la consulta
+    /// nueva que crea es original de esa validación, no una re-consulta ya usada.
     /// </summary>
     internal const string RequeueSql = """
         INSERT INTO ict.external_integration_source_query
@@ -60,11 +65,9 @@ public sealed class DbVehicleSnapshotReader(IctDbContext db) : IIctVehicleSnapsh
               SELECT 1 FROM ict.external_integration_source_query r
               WHERE r.eim_id = @master AND r.query_type IN ('VEHICLE', 'VIN')
                 AND r.created_at >= now() - make_interval(hours => @hours)
-                AND r.id <> (
-                    SELECT f.id FROM ict.external_integration_source_query f
-                    WHERE f.eim_id = @master AND f.query_type IN ('VEHICLE', 'VIN')
-                    ORDER BY f.created_at, f.id
-                    LIMIT 1))
+                AND r.created_at > (
+                    SELECT m.external_date_validation FROM ict.external_integration_master m
+                    WHERE m.id = @master))
         ORDER BY sq.created_at DESC, sq.id DESC
         LIMIT 1
         """;

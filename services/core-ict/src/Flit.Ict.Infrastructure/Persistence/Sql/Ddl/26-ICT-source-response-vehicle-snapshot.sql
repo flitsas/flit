@@ -16,3 +16,9 @@ ALTER TABLE ict.external_integration_source_response
 
 COMMENT ON COLUMN ict.external_integration_source_response.vehicle_snapshot IS
   '@pii:high Resultado completo de la consulta RUNT de vehículo (titular, acreedor de la prenda) que core-api reutiliza al crear el borrador ICT: {snapshot_json, consulted_at, provider, kind, plate, vin}. No se expone en trazabilidad. Retención: se vacía al materializar el borrador, al anular o al marcar novedad; el barrido de retención vacía las de más de 2 veces la vigencia (48 h por defecto).';
+
+-- Índice PARCIAL del barrido de RetentionJob (vehicle_snapshot IS NOT NULL AND created_at < …): solo indexa las
+-- filas que aún guardan el snapshot, así que se mantiene pequeño (salen al vaciarse). Idempotente.
+CREATE INDEX IF NOT EXISTS ix_eisr_vehicle_snapshot_created
+    ON ict.external_integration_source_response (created_at)
+    WHERE vehicle_snapshot IS NOT NULL;
