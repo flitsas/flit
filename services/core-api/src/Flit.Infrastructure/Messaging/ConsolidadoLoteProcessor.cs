@@ -19,8 +19,8 @@ internal sealed record ConsolidadoLoteProcessorOptions(TimeSpan Sondeo, TimeSpan
 
 /// <summary>
 /// HU #13376 (Épica #13216, ADR-0070 D2, CF-05/CF-20/CF-21) — carril de ítems del lote de descarga masiva de
-/// consolidados. En este PR solo el carril de ítems y la transición <c>en_cola → en_proceso</c>; el cierre del lote y el
-/// empaquetado son de #13377.
+/// consolidados: el carril de ítems, la transición <c>en_cola → en_proceso</c> y (HU #13377) el cierre del carril de
+/// ítems de cada lote terminado (última parte + <c>en_proceso → empaquetando</c>). El empaquetado es de #13378.
 /// <list type="bullet">
 ///   <item><b>Parámetros en BD</b>: cada ciclo lee <c>consolidado_export_settings</c>. Sin fila o con
 ///   <c>is_active = false</c> (decisión S4) no reclama nada y no toca ningún lote; al encenderse retoma los pendientes.
@@ -53,6 +53,9 @@ internal sealed partial class ConsolidadoLoteProcessor : BackgroundService
     private readonly ConsolidadoLoteProcessorOptions _opciones;
     private readonly TimeProvider _time;
     private readonly string _instancia = $"{Environment.MachineName}/{Environment.ProcessId}";
+
+    /// <summary>HU #13377 — lotes cuyo carril se cierra como mucho en un ciclo (el resto, en el siguiente).</summary>
+    internal const int MaxCierresPorCiclo = 20;
 
     /// <summary>Ítems en ejecución. Solo lo toca el bucle de <see cref="ExecuteAsync"/>.</summary>
     private readonly List<Task> _enCurso = [];
@@ -154,6 +157,9 @@ internal sealed partial class ConsolidadoLoteProcessor : BackgroundService
         // Hallazgo de #13373: un lote sin ítems no tiene nada que reclamar; queda en en_proceso para el cierre (#13377).
         await repo.IniciarLotesSinItemsAsync(stoppingToken).ConfigureAwait(false);
 
+        // HU #13377: los lotes cuyo carril de ítems terminó reciben su última parte y pasan a empaquetando.
+        await CerrarCarrilesTerminadosAsync(repo, stoppingToken).ConfigureAwait(false);
+
         while (_enCurso.Count(t => !t.IsCompleted) < settings!.ItemSlots)
         {
             var reclamado = await repo
@@ -164,6 +170,29 @@ internal sealed partial class ConsolidadoLoteProcessor : BackgroundService
 
             LogReclamado(_logger, reclamado.Lote.Id, reclamado.Item.Id, reclamado.Item.Attempts);
             _enCurso.Add(Task.Run(() => ProcesarAsync(reclamado, settings, stoppingToken), CancellationToken.None));
+        }
+    }
+
+    /// <summary>
+    /// HU #13377 — cierra el carril de cada lote <c>en_proceso</c> sin ítems vivos (hasta
+    /// <see cref="MaxCierresPorCiclo"/> por ciclo). Cada cierre es su propia transacción con el lock del lote; un fallo
+    /// en un lote se registra (solo id y tipo) y no frena a los demás: el ciclo siguiente lo reintenta.
+    /// </summary>
+    private async Task CerrarCarrilesTerminadosAsync(IConsolidadoLoteRepository repo, CancellationToken stoppingToken)
+    {
+        var terminados = await repo.ObtenerLotesConCarrilTerminadoAsync(MaxCierresPorCiclo, stoppingToken).ConfigureAwait(false);
+        foreach (var loteId in terminados)
+        {
+            try
+            {
+                var cierre = await repo.CerrarCarrilAsync(loteId, stoppingToken).ConfigureAwait(false);
+                if (cierre.Aplicado)
+                    LogCarrilCerrado(_logger, loteId, cierre.PartesCreadas, cierre.PartesTotales);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogCierreCarrilFallido(_logger, loteId, ex.GetType().Name);
+            }
         }
     }
 
@@ -313,6 +342,14 @@ internal sealed partial class ConsolidadoLoteProcessor : BackgroundService
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Lote {BatchId}: ítem {ItemId} interrumpido por la parada del host; lo retoma el reclamo por lease.")]
     private static partial void LogInterrumpido(ILogger logger, Guid batchId, Guid itemId);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Lote {BatchId}: carril de ítems cerrado; {PartesCreadas} parte(s) nueva(s), {PartesTotales} en total; pasa a empaquetando.")]
+    private static partial void LogCarrilCerrado(ILogger logger, Guid batchId, int partesCreadas, int partesTotales);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "Lote {BatchId}: el cierre del carril de ítems lanzó {ExceptionType}; se reintentará en el ciclo siguiente.")]
+    private static partial void LogCierreCarrilFallido(ILogger logger, Guid batchId, string exceptionType);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Carril de ítems de lotes: falló un ciclo ({ExceptionType}); se reintentará.")]
     private static partial void LogCicloFallido(ILogger logger, string exceptionType);

@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence.Entities.Tramites;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -207,6 +208,63 @@ internal sealed partial class ConsolidadoLoteRepository(
             .Select(b => b.Id)
             .Take(maximo)
             .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #13377 — una transacción corta (estrategia de reintentos del contexto): lock del lote, comprobación de que
+    /// sigue <c>en_proceso</c> sin ítems vivos, asignación final de partes y transición a <c>empaquetando</c>. El lock
+    /// del lote se toma primero (orden lote → ítem, igual que reclamo, cierre de ítem y cancelación); con él, un cierre
+    /// de ítem o un reclamo concurrente del mismo lote espera o lo salta.
+    /// </summary>
+    public async Task<CierreCarrilResultado> CerrarCarrilAsync(Guid loteId, CancellationToken ct = default)
+    {
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            loteId,
+            async (_, id, token) =>
+            {
+                db.ChangeTracker.Clear();
+                await using var tx = await db.Database.BeginTransactionAsync(token).ConfigureAwait(false);
+                var enProceso = ConsolidadoExportStatus.EnProceso;
+                string[] vivos = [.. ConsolidadoExportItemStatus.Vivos];
+                var bloqueado = await db.Database.SqlQuery<Guid>(
+                    $"""
+                    SELECT b.id AS "Value"
+                      FROM tramites.consolidado_export_batches b
+                     WHERE b.id = {id} AND b.status = {enProceso} AND b.deleted_at IS NULL
+                       FOR UPDATE
+                    """)
+                    .ToListAsync(token).ConfigureAwait(false);
+                if (bloqueado.Count == 0
+                    || await db.ConsolidadoExportBatchItems.AnyAsync(i => i.BatchId == id && vivos.Contains(i.Status), token)
+                        .ConfigureAwait(false))
+                {
+                    await tx.RollbackAsync(token).ConfigureAwait(false);
+                    return CierreCarrilResultado.NoAplicado;
+                }
+
+                var asignacion = await ConsolidadoLotePartesAsignacion
+                    .AsignarAsync(db, id, ModoAsignacion.Final, token).ConfigureAwait(false);
+                if (!asignacion.Asignado || asignacion.PartesTotales == 0)
+                {
+                    await tx.RollbackAsync(token).ConfigureAwait(false);
+                    return CierreCarrilResultado.NoAplicado;
+                }
+
+                var empaquetando = ConsolidadoExportStatus.Empaquetando;
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    UPDATE tramites.consolidado_export_batches
+                       SET status = {empaquetando},
+                           updated_at = now()
+                     WHERE id = {id} AND status = {enProceso}
+                    """,
+                    token).ConfigureAwait(false);
+                await tx.CommitAsync(token).ConfigureAwait(false);
+                return new CierreCarrilResultado(true, asignacion.PartesCreadas, asignacion.PartesTotales);
+            },
+            verifySucceeded: null,
+            ct).ConfigureAwait(false);
     }
 
     private async Task<CrearLoteResultado> CrearEnTransaccionAsync(NuevoLoteConsolidados nuevo, CancellationToken ct)

@@ -192,6 +192,11 @@ public sealed class ConsolidadoLoteProcessorIntegrationTests(PostgresDatabaseFix
             await carril.Processor.StartAsync(Ct);
             await EsperarAsync(async () => (await Task.WhenAll(lotes.Select(l => CerradosAsync(l.Id)))).Sum() == 12,
                 "los 12 ítems de los 3 lotes se cierran");
+
+            // HU #13377: al terminar su carril de ítems, el procesador cierra cada lote con su única parte (4 PDF < N).
+            foreach (var l in lotes)
+                await EsperarAsync(async () => await EstadoLoteAsync(l.Id) == ConsolidadoExportStatus.Empaquetando,
+                    "el ciclo siguiente cierra el carril del lote");
             await carril.Processor.StopAsync(Ct);
         }
 
@@ -200,13 +205,20 @@ public sealed class ConsolidadoLoteProcessorIntegrationTests(PostgresDatabaseFix
         foreach (var l in lotes)
         {
             (await ContarAsync(l.Id, ConsolidadoExportItemStatus.Incluido)).Should().Be(4);
-            (await EstadoLoteAsync(l.Id)).Should().Be(ConsolidadoExportStatus.EnProceso,
-                "el empaquetado (#13377) no es de esta HU");
+        }
+
+        foreach (var l in lotes)
+        {
+            (await ScalarAsync<short>("SELECT parts_count FROM tramites.consolidado_export_batches WHERE id = @l", ("l", l.Id)))
+                .Should().Be(1);
+            (await ScalarAsync<long>(
+                "SELECT count(*) FROM tramites.consolidado_export_batch_items WHERE batch_id = @l AND part_number = 1", ("l", l.Id)))
+                .Should().Be(4);
         }
 
         await using var ctx = NewContext();
         (await new ConsolidadoLoteRepository(ctx).ObtenerLotesConCarrilTerminadoAsync(10, Ct))
-            .Should().BeEquivalentTo(lotes.Select(l => l.Id), "los tres terminaron su carril de ítems");
+            .Should().BeEmpty("ya no quedan lotes en_proceso con el carril terminado");
     }
 
     // ── AC2 ─────────────────────────────────────────────────────────────────────────────────

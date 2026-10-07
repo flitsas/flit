@@ -380,6 +380,9 @@ public sealed class CrearLoteConsolidadosHandlerTests
 
         public Task<IReadOnlyList<Guid>> ObtenerLotesConCarrilTerminadoAsync(int maximo, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<CierreCarrilResultado> CerrarCarrilAsync(Guid loteId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeResolver(string origen) : ILoteSeleccionResolver

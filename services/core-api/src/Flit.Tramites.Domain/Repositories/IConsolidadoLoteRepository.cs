@@ -65,7 +65,7 @@ public interface IConsolidadoLoteRepository
     /// <summary>
     /// HU #13376 — pasa a <c>en_proceso</c> los lotes <c>en_cola</c> sin ningún ítem (selección vacía): no tienen nada
     /// que reclamar y sin esto quedarían colgados. A partir de ahí los recoge el cierre del lote (#13377) por
-    /// <see cref="ObtenerLotesConCarrilTerminadoAsync"/>. Devuelve cuántos lotes pasó.
+    /// <see cref="ObtenerLotesConCarrilTerminadoAsync"/> y <see cref="CerrarCarrilAsync"/>. Devuelve cuántos lotes pasó.
     /// </summary>
     Task<int> IniciarLotesSinItemsAsync(CancellationToken ct = default);
 
@@ -74,6 +74,33 @@ public interface IConsolidadoLoteRepository
     /// <c>procesando</c> (incluye el lote sin ítems). Es la señal con la que #13377 pasa el lote a empaquetar.
     /// </summary>
     Task<IReadOnlyList<Guid>> ObtenerLotesConCarrilTerminadoAsync(int maximo, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13377 (diseño §3, CF-09/CF-10) — cierra el carril de ítems de un lote en UNA transacción con
+    /// <c>SELECT … FOR UPDATE</c> del lote (orden lote → ítem):
+    /// <list type="bullet">
+    ///   <item>Solo procede si el lote sigue <c>en_proceso</c>, sin borrado lógico y sin ítems <c>pendiente</c> ni
+    ///   <c>procesando</c> (un lote cancelado o ya cerrado no se toca).</item>
+    ///   <item>Asigna la última parte con todo lo que quede sin parte (PDF y omitidos) según <c>max_pdfs_per_part</c> y
+    ///   <c>max_mb_per_part</c>; si el lote no tenía ninguna parte y todo fue omitido (o no tenía ítems), crea una
+    ///   única parte solo con <c>omitidos.csv</c>.</item>
+    ///   <item>Las partes nuevas quedan <c>pendiente</c> con <c>pdf_count</c>/<c>omitted_count</c>, numeradas sin huecos
+    ///   a continuación de las existentes; los ítems quedan con su <c>part_number</c>; el lote pasa a
+    ///   <c>empaquetando</c> con <c>parts_count</c> = número de partes.</item>
+    /// </list>
+    /// Sin fila de parámetros no hace nada (motor apagado).
+    /// </summary>
+    Task<CierreCarrilResultado> CerrarCarrilAsync(Guid loteId, CancellationToken ct = default);
+}
+
+/// <summary>Resultado de <see cref="IConsolidadoLoteRepository.CerrarCarrilAsync"/>.</summary>
+/// <param name="Aplicado"><c>true</c> si el lote pasó a <c>empaquetando</c>.</param>
+/// <param name="PartesCreadas">Partes creadas en este cierre.</param>
+/// <param name="PartesTotales">Partes del lote tras el cierre (<c>parts_count</c>).</param>
+public sealed record CierreCarrilResultado(bool Aplicado, int PartesCreadas, int PartesTotales)
+{
+    /// <summary>El lote no estaba en condiciones de cerrar el carril (cancelado, ya cerrado, ítems vivos, motor sin parámetros).</summary>
+    public static CierreCarrilResultado NoAplicado { get; } = new(false, 0, 0);
 }
 
 /// <summary>Resultado de <see cref="IConsolidadoLoteRepository.ReclamarSiguienteItemAsync"/>.</summary>
