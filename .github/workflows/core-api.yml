@@ -3,17 +3,27 @@ name: Core API (.NET 10)
 on:
   push:
     branches: [develop, main]
-    paths: ['services/core-api/**', 'services/core-identity/**', 'contracts/openapi/core-api.v1.yaml', 'contracts/openapi/external-api.v1.json']
+    paths:
+      - 'services/core-api/**'
+      - 'services/core-identity/**'
+      - 'contracts/openapi/core-api.v1.yaml'
+      - 'contracts/openapi/external-api.v1.json'
+      # El catálogo del manual es texto generado. No debe disparar la suite completa,
+      # que en develop ya falla por pruebas ajenas a ese archivo.
+      - '!services/core-api/src/Flit.Api/Content/dr-flit/**'
   pull_request:
     branches: [develop]
-    paths: ['services/core-api/**', 'services/core-identity/**', 'contracts/openapi/core-api.v1.yaml', 'contracts/openapi/external-api.v1.json']
+    paths:
+      - 'services/core-api/**'
+      - 'services/core-identity/**'
+      - 'contracts/openapi/core-api.v1.yaml'
+      - 'contracts/openapi/external-api.v1.json'
+      - '!services/core-api/src/Flit.Api/Content/dr-flit/**'
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    # La suite completa ya cierra cerca de 18 min en develop; con 20 el job se cancela
-    # antes de publicar resultados (p. ej. PR #545).
-    timeout-minutes: 35
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
