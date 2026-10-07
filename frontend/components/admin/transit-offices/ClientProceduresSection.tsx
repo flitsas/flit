@@ -46,6 +46,7 @@ import { downloadFile } from "@/lib/api/download";
 import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { claveEstable, useSeleccionLote } from "@/hooks/useSeleccionLote";
 import { BarraSeleccionLote } from "@/components/operacion/BarraSeleccionLote";
+import { BotonDescargaMaestrosOt } from "./BotonDescargaMaestrosOt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
 import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
@@ -1781,7 +1782,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           onAlternarTodos={lote.alternarTodos}
           onLimpiar={lote.limpiar}
           mensajeTope={lote.mensajeTope}
-        />
+        >
+          <BotonDescargaMaestrosOt seleccion={lote.modelo} contador={lote.contador} scope={scope} onCreado={lote.limpiar} />
+        </BarraSeleccionLote>
       ) : null}
 
       <UiStateBoundary
