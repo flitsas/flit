@@ -261,6 +261,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // el endpoint confiaría en el X-Tenant-Id crudo del cliente (mismo defecto de fondo que Bug
         // #12554/#12558/#12564).
         new("/api/v1/tramites/revocation-requests", RouteMatch.Exact),
+        // Épica #13216 (HU #13374, ADR-0070 A4.1) — lote de descarga masiva de consolidados. BLOQUEANTE de
+        // seguridad: fuera de esta lista RequestTenantResolver.FromItems devuelve (null, false) y el lote de un
+        // Gestor abarcaría TODAS las compañías. El origen (tramites / superadmin) también sale de aquí
+        // (IsSuperAdmin), nunca del cuerpo. Prefix: cubre la creación y cualquier ruta hija futura.
+        new("/api/v1/tramites/consolidados", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

@@ -42,6 +42,13 @@ public sealed class LoteSeleccionResolverPorOrigen
         }
     }
 
+    /// <summary>
+    /// HU #13374 — <c>true</c> si hay resolver para <paramref name="origen"/>. Punto de extensión del endpoint:
+    /// el origen <c>superadmin</c> lo decide el servidor, pero su resolver llega con #13383; mientras tanto el
+    /// endpoint responde 503 en vez de dejar que <see cref="Para"/> lance.
+    /// </summary>
+    public bool Atiende(string origen) => _porOrigen.ContainsKey(origen);
+
     /// <exception cref="InvalidOperationException">No hay resolver registrado para el origen.</exception>
     public ILoteSeleccionResolver Para(string origen) =>
         _porOrigen.TryGetValue(origen, out var resolver)
