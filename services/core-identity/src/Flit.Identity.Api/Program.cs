@@ -8,6 +8,7 @@ using Flit.Identity.Api.Grpc;
 using Flit.Identity.Web;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
+using Flit.Modules.Notificaciones;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Network;

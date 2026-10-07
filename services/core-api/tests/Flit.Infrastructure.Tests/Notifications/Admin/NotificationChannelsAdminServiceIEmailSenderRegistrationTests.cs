@@ -47,8 +47,10 @@ public sealed class NotificationChannelsAdminServiceIEmailSenderRegistrationTest
     [Fact]
     public void IEmailSender_ImplementationsInInfrastructureAssembly_MatchTheKnownBaseline()
     {
-        var implementations = typeof(SmtpEmailSender).Assembly
-            .GetTypes()
+        // HU #13353: los transportes viven en Flit.Modules.Notificaciones; el enrutador y la bitácora, en Identity.
+        var implementations = new[] { typeof(SmtpEmailSender).Assembly, typeof(NotificationDeliveryLoggingEmailSender).Assembly }
+            .Distinct()
+            .SelectMany(a => a.GetTypes())
             .Where(t => t.IsClass && !t.IsAbstract && typeof(IEmailSender).IsAssignableFrom(t))
             .Select(t => t.Name)
             .ToHashSet();

@@ -21,6 +21,7 @@ using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Consultas.KyverumVerify;
+using Flit.Modules.Notificaciones;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Platform;
 using Flit.Infrastructure.Security;
@@ -283,7 +284,7 @@ public static class InfrastructureExtensions
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
         AddRues(services, configuration);
-        services.AddRentingChannel(configuration); // HU #13232: vive en Flit.Identity.Infrastructure
+        services.AddRentingChannel(configuration); // HU #13353: vive en Flit.Modules.Notificaciones
         AddOcr(services, configuration);
         AddDrFlit(services, configuration, environment);
         AddQuipux(services);

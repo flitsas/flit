@@ -547,6 +547,73 @@ services:
     cpus: ${CORE_CONSULTAS_CPUS:-0}
     logging: *default-logging
 
+  # Notificaciones como servicio (Epic #13316, Feature #13324): envía los correos que arman core-api y core-identity
+  # (llegan por el bus o, el buzón de pruebas, por gRPC) y lleva su registro de entregas. Perfil "notificaciones": no
+  # arranca si no se pide. Sin `ports`: ni REST ni gRPC se publican. Pasos en docs/suite/handoff-vps-suite.md §4.11.
+  core-notificaciones:
+    profiles: ["notificaciones"]
+    image: ghcr.io/flitsas/flitdev/core-notificaciones:${CORE_NOTIFICACIONES_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:${CORE_NOTIFICACIONES_PORT:-4027}
+      Servicio__GrpcPort: ${CORE_NOTIFICACIONES_GRPC_PORT:-8085}
+      # Usuario de base dueño del esquema notificaciones (deploy/postgres/servicio-con-esquema-propio.sql).
+      ConnectionStrings__Servicio: ${CONNECTION_STRING_NOTIFICACIONES:-}
+      Platform__ServiceClient__ClientSecret: ${SVC_NOTIFICACIONES_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
+      Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
+      Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh notificaciones).
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_NOTIFICACIONES:-amqp://notificaciones:sin-clave@rabbitmq:5672/flit}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Transportes: las MISMAS variables que hoy tiene core-api (hasta el corte, HU #13359, conviven en los dos).
+      Smtp__UseConsoleWhenNoHost: ${SMTP_USE_CONSOLE_WHEN_NO_HOST:-true}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__UseStartTls: ${SMTP_USE_STARTTLS:-true}
+      Smtp__DisableAuthentication: ${SMTP_DISABLE_AUTH:-false}
+      Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
+      Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
+      Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
+      Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
+      RENTING_API_ENABLED: ${RENTING_API_ENABLED:-false}
+      RENTING_API_PFX_CERTIFICATE_PATH: ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}
+      RENTING_API_PASSPHRASE: ${RENTING_API_PASSPHRASE:-}
+      RENTING_API_BASE_URL: ${RENTING_API_BASE_URL:-}
+      RENTING_API_KEY_NAME: ${RENTING_API_KEY_NAME:-Ocp-Apim-Subscription-Key}
+      RENTING_API_KEY_VALUE: ${RENTING_API_KEY_VALUE:-}
+      RENTING_API_SECONDS_TIMEOUT: ${RENTING_API_SECONDS_TIMEOUT:-30}
+      RENTING_API_LOGIN_PATH: ${RENTING_API_LOGIN_PATH:-}
+      RENTING_API_LOGIN_SECONDS_TIMEOUT: ${RENTING_API_LOGIN_SECONDS_TIMEOUT:-30}
+      RENTING_API_LOGIN_SUBJECT: ${RENTING_API_LOGIN_SUBJECT:-}
+      RENTING_API_LOGIN_SECRET_NAME: ${RENTING_API_LOGIN_SECRET_NAME:-}
+      RENTING_API_LOGIN_CACHE_KEY: ${RENTING_API_LOGIN_CACHE_KEY:-renting-api-login-token}
+      RENTING_API_LOGIN_CACHE_SECONDS_TTL: ${RENTING_API_LOGIN_CACHE_SECONDS_TTL:-3600}
+      RENTING_API_SEND_EMAIL_PATH: ${RENTING_API_SEND_EMAIL_PATH:-RentingNotification/emailNotification/sendEmailFile}
+      RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT: ${RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT:-30}
+      RENTING_API_SEND_EMAIL_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_SENDER_EMAIL:-}
+      RENTING_API_SEND_EMAIL_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_SENDER_USERNAME:-Tramites Renting}"
+      RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL:-}
+      RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME:-Tramites Vehiculos}"
+      RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED: ${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-true}
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
+    volumes:
+      # El certificado del canal Renting, el mismo archivo y la misma ruta que core-api.
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_NOTIFICACIONES_PORT:-4027}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${CORE_NOTIFICACIONES_MEM_LIMIT:-0}
+    cpus: ${CORE_NOTIFICACIONES_CPUS:-0}
+    logging: *default-logging
+
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
   core-ict:
     image: ghcr.io/flitsas/flitdev/core-ict:${CORE_ICT_TAG:-latest}

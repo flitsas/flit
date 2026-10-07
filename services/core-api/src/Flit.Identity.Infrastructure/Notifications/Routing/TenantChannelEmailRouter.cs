@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Notifications.Catalog;
 using Flit.Infrastructure.Notifications.Renting;
+using Flit.Modules.Notificaciones;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -94,6 +95,8 @@ internal sealed partial class TenantChannelEmailRouter(
     IOptions<RentingChannelOptions> rentingOptions,
     ILogger<TenantChannelEmailRouter> logger) : IEmailSender, IExplicitChannelEmailSender
 {
+    private readonly CorreoPorCanal porCanal = new(flitTransport, rentingEmailApiSender, rentingOptions);
+
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -139,7 +142,7 @@ internal sealed partial class TenantChannelEmailRouter(
     /// adaptador Renting está registrado en este ambiente.
     /// </summary>
     public bool IsChannelAvailable(NotificationChannel channel) =>
-        channel != NotificationChannel.TenantApi || rentingEmailApiSender is not null;
+        porCanal.Disponible(channel == NotificationChannel.TenantApi ? CanalCorreo.EmpresaApi : CanalCorreo.FlitSmtp);
 
     private async Task<EmailSendResult> SendViaChannelAsync(
         NotificationChannel channel,
@@ -147,48 +150,14 @@ internal sealed partial class TenantChannelEmailRouter(
         CancellationToken cancellationToken,
         ControlledMailboxRecipient? recipientExemption = null)
     {
-        if (channel != NotificationChannel.TenantApi)
-        {
-            // AC2/AC6 — FlitSmtp explícito, o tenant sin política operativa (default).
-            var flitResult = await flitTransport.SendAsync(message, cancellationToken).ConfigureAwait(false);
-            return flitResult with { Channel = TenantSettingsCodes.ChannelFlitSmtp };
-        }
-
-        if (rentingEmailApiSender is null)
-        {
-            // Caso heredado de la HU #11359 AC6 — canal solicitado pero NO habilitado por
-            // configuración en este ambiente. Nunca se cae a SMTP en silencio. Se etiqueta con
-            // TenantApi: es el canal que se INTENTÓ (nunca cayó a FlitSmtp en silencio), no un
-            // envío que efectivamente haya salido por FlitSmtp.
+        // HU #13353 — el envío por canal vive en Flit.Modules.Notificaciones (lo comparte core-notificaciones). Las
+        // reglas no cambian: FlitSmtp (o sin política) ⇒ transporte de FLIT; TenantApi ⇒ Renting con su remitente;
+        // TenantApi sin el canal habilitado ⇒ ConfigurationIncomplete, nunca SMTP en silencio (HU #11359 AC6). El
+        // desvío de la HU #11364 aplica salvo la exención del banco de pruebas (HU #11372).
+        var canal = channel == NotificationChannel.TenantApi ? CanalCorreo.EmpresaApi : CanalCorreo.FlitSmtp;
+        if (!porCanal.Disponible(canal))
             LogTenantApiChannelNotAvailable(logger, message.TenantId ?? Guid.Empty, message.TemplateKey);
-            return EmailSendResult.Failed(EmailSendOutcome.ConfigurationIncomplete)
-                with
-            { Channel = TenantSettingsCodes.ChannelTenantApi };
-        }
-
-        var options = rentingOptions.Value;
-        // HU #12430 AC2 — el canal Renting IGNORA message.SenderDisplayName a propósito: el
-        // remitente de este canal es siempre el configurado para él (options.SendEmailSenderEmail/
-        // SendEmailSenderUsername), nunca el de la marca del tenant ni el de FLIT. No hay una rama
-        // condicional que "apague" el campo porque simplemente nunca se lee aquí.
-        var request = new RentingSendEmailRequest(
-            message.Subject,
-            message.HtmlBody,
-            new RentingEmailAddress(options.SendEmailSenderEmail, options.SendEmailSenderUsername),
-            [new RentingEmailAddress(message.ToEmail, message.ToName)],
-            message.BccEmails.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList(),
-            message.Attachments
-                .Select(a => new RentingEmailAttachment(a.FileName, a.ContentType, a.Content))
-                .ToList());
-
-        // HU #11372 — solo el camino del banco de pruebas (SendAsync(NotificationChannel, ...))
-        // suministra recipientExemption; el camino de producción (SendAsync(EmailMessage, ...)) lo
-        // deja en null, así que el desvío de la HU #11364 sigue aplicando siempre para los 6 puntos
-        // de envío reales.
-        var tenantApiResult = recipientExemption is not null
-            ? await rentingEmailApiSender.SendAsync(request, recipientExemption, cancellationToken).ConfigureAwait(false)
-            : await rentingEmailApiSender.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        return tenantApiResult with { Channel = TenantSettingsCodes.ChannelTenantApi };
+        return await porCanal.SendAsync(canal, message, recipientExemption, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -21,6 +21,7 @@ COPY core-api/src/Flit.Admin.Application/ /services/core-api/src/Flit.Admin.Appl
 COPY core-api/src/Flit.Admin.Domain/ /services/core-api/src/Flit.Admin.Domain/
 COPY core-api/src/Flit.Identity.Infrastructure/ /services/core-api/src/Flit.Identity.Infrastructure/
 COPY core-api/src/Flit.Modules.Improntas.Domain/ /services/core-api/src/Flit.Modules.Improntas.Domain/
+COPY core-api/src/Flit.Modules.Notificaciones/ /services/core-api/src/Flit.Modules.Notificaciones/
 COPY core-api/src/Flit.Modules.Platform/ /services/core-api/src/Flit.Modules.Platform/
 COPY core-api/src/Flit.Modules.Security.Application/ /services/core-api/src/Flit.Modules.Security.Application/
 COPY core-api/src/Flit.Modules.Security.Domain/ /services/core-api/src/Flit.Modules.Security.Domain/

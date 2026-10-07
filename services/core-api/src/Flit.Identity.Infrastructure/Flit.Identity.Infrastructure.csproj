@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
+    <!-- HU #13353: transportes de correo (SMTP, consola, Renting), compartidos con core-notificaciones. -->
+    <ProjectReference Include="..\Flit.Modules.Notificaciones\Flit.Modules.Notificaciones.csproj" />
     <!-- Constantes de dominio de Marca Blanca (TenantDomainPurpose). Librería pura: no arrastra Trámites. -->
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <!-- Puertos que implementan los repositorios de identidad (HU #13231). Librerías puras: ninguna llega a Trámites. -->

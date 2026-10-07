@@ -25,6 +25,7 @@
     <Project Path="src/Flit.Modules.Improntas.Domain/Flit.Modules.Improntas.Domain.csproj" />
     <Project Path="src/Flit.Modules.Quipux.Domain/Flit.Modules.Quipux.Domain.csproj" />
     <Project Path="src/Flit.Modules.Quipux.Application/Flit.Modules.Quipux.Application.csproj" />
+    <Project Path="src/Flit.Modules.Notificaciones/Flit.Modules.Notificaciones.csproj" />
     <Project Path="src/Flit.Modules.Platform/Flit.Modules.Platform.csproj" />
   </Folder>
   <Folder Name="/tests/">

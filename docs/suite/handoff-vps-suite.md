@@ -341,6 +341,21 @@ Volver atrás: `TRAMITES_BUS_HABILITADO=false`. `TRAMITES_BUS_ENTREGA_EN_PROCESO
 Volver atrás: `CONSULTAS_REMOTO_VALIDACION_IDENTIDAD=false`. Las validaciones en curso creadas por Consultas se
 terminan por la reconciliación de Trámites (consulta el estado a Kyverum directo).
 
+### 4.11 Notificaciones como servicio (Epic #13316, Feature #13324)
+
+core-notificaciones envía los correos que arman core-api y core-identity (el correo llega ya armado, con su tema; el
+servicio pone el transporte, los reintentos y el registro de entregas). Sin tocar nada, todo sigue como hoy: core-api
+envía en proceso. Por ambiente:
+
+1. **Base:** `psql "$ADMIN_URL" -v servicio=notificaciones -v conexiones=20 -v clave="$CLAVE" -f deploy/postgres/servicio-con-esquema-propio.sql`
+   y con eso `CONNECTION_STRING_NOTIFICACIONES` (usuario `flit_notificaciones`).
+2. **Secretos y broker:** `SVC_NOTIFICACIONES_CLIENT_SECRET` (recrear core-api y core-identity para que registren el
+   cliente) y `deploy/rabbitmq/usuario-de-servicio.sh notificaciones "$CLAVE"` → `RABBITMQ_URL_NOTIFICACIONES`.
+   SMTP y Renting usan las mismas variables (y el mismo certificado) que core-api.
+3. **Arrancar:** sumar `notificaciones` a `COMPOSE_PROFILES` y desplegar (`build-core-notificaciones` en el CD). No
+   publica puertos (REST `CORE_NOTIFICACIONES_PORT` 4027, gRPC `CORE_NOTIFICACIONES_GRPC_PORT` 8085). El CD revisa su
+   `/health/ready` desde dentro del contenedor.
+
 ---
 
 ## 5. Hosts, DNS y certificados

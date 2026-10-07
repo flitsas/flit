@@ -41,6 +41,7 @@ public sealed class BuildClosureTests
             "Flit.Identity.Infrastructure",
             "Flit.Identity.Web",
             "Flit.Modules.Improntas.Domain",
+            "Flit.Modules.Notificaciones",
             "Flit.Modules.Platform",
             "Flit.Modules.Security.Application",
             "Flit.Modules.Security.Domain",

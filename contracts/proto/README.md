@@ -13,7 +13,8 @@ contracts/proto/
 └── flit/
     ├── platform/v1/               # tipos comunes: Placa, Vin, DocumentoIdentidad, CodigoError
     ├── identidad/v1/              # IdentidadService (lo atiende core-identity)
-    └── consultas/v1/              # ConsultasService (lo atiende core-consultas)
+    ├── consultas/v1/              # ConsultasService (lo atiende core-consultas)
+    └── notificaciones/v1/         # NotificacionesService (lo atiende core-notificaciones)
 ```
 
 - Paquete `flit.<servicio>.v<n>` en la carpeta `flit/<servicio>/v<n>/`; servicios con sufijo `Service`;
@@ -50,6 +51,7 @@ npx -y @bufbuild/buf@1.73.0 breaking . --against "../../.git#ref=origin/develop,
 | `Flit.Platform.Grpc.Contracts` | `flit.platform.v1` | `services/core-identity/src/` |
 | `Flit.Identidad.Grpc.Contracts` | `flit.identidad.v1` | `services/core-identity/src/` |
 | `Flit.Consultas.Grpc.Contracts` | `flit.consultas.v1` | `services/core-consultas/src/` |
+| `Flit.Notificaciones.Grpc.Contracts` | `flit.notificaciones.v1` | `services/core-notificaciones/src/` |
 
 Los proyectos de un servicio que importan `flit.platform.v1` referencian `Flit.Platform.Grpc.Contracts` y no
 vuelven a generar esos tipos.

@@ -22,6 +22,7 @@ env:
   # Epic #13217 (HU #13234): el servicio de identidad, con su propia imagen y su propio build.
   CORE_IDENTITY_IMAGE: ghcr.io/flitsas/flitdev/core-identity
   CORE_CONSULTAS_IMAGE: ghcr.io/flitsas/flitdev/core-consultas
+  CORE_NOTIFICACIONES_IMAGE: ghcr.io/flitsas/flitdev/core-notificaciones
   CORE_ICT_IMAGE: ghcr.io/flitsas/flitdev/core-ict
   FRONTEND_IMAGE: ghcr.io/flitsas/flitdev/frontend
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
@@ -285,6 +286,7 @@ jobs:
             services/core-api/src/Flit.Admin.Domain
             services/core-api/src/Flit.Identity.Infrastructure
             services/core-api/src/Flit.Modules.Improntas.Domain
+            services/core-api/src/Flit.Modules.Notificaciones
             services/core-api/src/Flit.Modules.Platform
             services/core-api/src/Flit.Modules.Security.Application
             services/core-api/src/Flit.Modules.Security.Domain
@@ -406,6 +408,92 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=core-consultas
           cache-to: type=gha,mode=max,scope=core-consultas
+
+
+  # Epic #13316 (HU #13353): core-notificaciones (perfil «notificaciones»; ver docs/suite/servicio-nuevo.md).
+  build-core-notificaciones:
+    name: Build & push core-notificaciones (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_NOTIFICACIONES_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-notificaciones
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Modules.Notificaciones
+            services/core-api/src/Flit.Modules.Security.Domain
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-notificaciones
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_NOTIFICACIONES_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-notificaciones
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK y el módulo de transportes de correo de core-api (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-notificaciones/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-notificaciones
+          cache-to: type=gha,mode=max,scope=core-notificaciones
 
 
   build-frontend:
@@ -744,7 +832,7 @@ jobs:
 
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
     # HU #13329: corre aunque falle el build de algún servicio. En despliegue por servicio (FLIT_DEPLOY_ROLLING) se
     # despliegan los demás y el que falló conserva su versión; sin él, se detiene sin tocar nada, como antes.
     if: ${{ !cancelled() && needs.setup.result == 'success' }}
@@ -840,6 +928,7 @@ jobs:
             export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}
             export CORE_IDENTITY_TAG=${{ needs.setup.outputs.deploy_tag }}
             export CORE_CONSULTAS_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export CORE_NOTIFICACIONES_TAG=${{ needs.setup.outputs.deploy_tag }}
             export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_HUB_TAG=${{ needs.setup.outputs.deploy_tag }}
@@ -870,12 +959,13 @@ jobs:
             # HU #13329 (Epic #13316): resultado y digest del build de cada imagen (sin arreglos asociativos, para
             # que el script corra igual en cualquier bash).
             IMAGE_TAG="${{ needs.setup.outputs.image_tag }}"
-            SERVICES="core-api core-identity core-consultas core-ict frontend frontend-hub python-ml"
+            SERVICES="core-api core-identity core-consultas core-notificaciones core-ict frontend frontend-hub python-ml"
             build_result() {
               case "$1" in
                 core-api) echo "${{ needs.build-core-api.result }}" ;;
                 core-identity) echo "${{ needs.build-core-identity.result }}" ;;
                 core-consultas) echo "${{ needs.build-core-consultas.result }}" ;;
+                core-notificaciones) echo "${{ needs.build-core-notificaciones.result }}" ;;
                 core-ict) echo "${{ needs.build-core-ict.result }}" ;;
                 frontend) echo "${{ needs.build-frontend.result }}" ;;
                 frontend-hub) echo "${{ needs.build-frontend-hub.result }}" ;;
@@ -887,6 +977,7 @@ jobs:
                 core-api) echo "${{ needs.build-core-api.outputs.digest }}" ;;
                 core-identity) echo "${{ needs.build-core-identity.outputs.digest }}" ;;
                 core-consultas) echo "${{ needs.build-core-consultas.outputs.digest }}" ;;
+                core-notificaciones) echo "${{ needs.build-core-notificaciones.outputs.digest }}" ;;
                 core-ict) echo "${{ needs.build-core-ict.outputs.digest }}" ;;
                 frontend) echo "${{ needs.build-frontend.outputs.digest }}" ;;
                 frontend-hub) echo "${{ needs.build-frontend-hub.outputs.digest }}" ;;
@@ -895,7 +986,7 @@ jobs:
             }
             tag_var() {
               case "$1" in
-                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-ict) echo CORE_ICT_TAG ;;
+                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-notificaciones) echo CORE_NOTIFICACIONES_TAG ;; core-ict) echo CORE_ICT_TAG ;;
                 frontend) echo FRONTEND_TAG ;; frontend-hub) echo FRONTEND_HUB_TAG ;; python-ml) echo PYTHON_ML_TAG ;;
               esac
             }
@@ -1019,6 +1110,16 @@ jobs:
                 exit 1
               fi
               echo "core-consultas listo."
+            fi
+            # HU #13353: si core-notificaciones corre (perfil «notificaciones»), también tiene que estar listo. Sin puerto publicado:
+            # se pregunta desde dentro del contenedor.
+            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q core-notificaciones 2>/dev/null)" ]; then
+              if ! docker compose -f docker-compose.prod.yml exec -T core-notificaciones wget -qO- "http://localhost:${CORE_NOTIFICACIONES_PORT:-4027}/health/ready" > /dev/null; then
+                echo "::error::core-notificaciones no está listo (/health/ready)"
+                docker compose -f docker-compose.prod.yml logs --tail=100 core-notificaciones
+                exit 1
+              fi
+              echo "core-notificaciones listo."
             fi
             if [ -n "$FAILED_BUILDS" ]; then
               echo "::error::Despliegue parcial: fallaron los builds de$FAILED_BUILDS; esos servicios conservan su versión anterior."
