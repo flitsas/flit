@@ -3137,6 +3137,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue("external")
                         .HasColumnName("fines_query_source");
 
+                    b.Property<bool>("GenerateImprontas")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("generate_improntas");
+
                     b.Property<string>("NotificationChannel")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

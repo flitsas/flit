@@ -13953,8 +13953,13 @@ components:
         resolucionesModuleEnabled:
           type: boolean
           description: Muestra el módulo Resoluciones del dashboard (HU #12250). Default false.
+        generacionImprontas:
+          type: boolean
+          description: >-
+            Generación automática de improntas habilitada para la compañía (HU #13400). Default true.
+            Solo la sirve este endpoint, reservado al SuperAdmin FLIT.
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled, generacionImprontas]
 
     ActiveModulesResponse:
       type: object
@@ -14037,6 +14042,13 @@ components:
           description: >-
             Opcional (HU #12250). Muestra el módulo Resoluciones del dashboard. Si se omite (null), se
             conserva el valor previo.
+        generacionImprontas:
+          type: boolean
+          nullable: true
+          description: >-
+            Opcional (HU #13400). Habilita o deshabilita la generación automática de improntas de la
+            compañía. Si se omite (null), se conserva el valor previo. Cada cambio real queda en la
+            auditoría de configuración (campo generate_improntas).
       required:
         [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, metodosRecaudo]
 

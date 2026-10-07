@@ -41,6 +41,9 @@ internal static class SettingsDiff
         AddBool(changes, "comparendos_module_enabled", previous.ComparendosModuleEnabled, updated.ComparendosModuleEnabled);
         AddBool(changes, "resoluciones_module_enabled", previous.ResolucionesModuleEnabled, updated.ResolucionesModuleEnabled);
 
+        // HU #13400 (Feature #13398) — generación automática de improntas por compañía.
+        AddBool(changes, "generate_improntas", previous.GenerateImprontas, updated.GenerateImprontas);
+
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);
 

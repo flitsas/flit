@@ -86,6 +86,7 @@ describe("CompanyConfigTabs (AC2)", () => {
       tramitesModuleEnabled: false,
       comparendosModuleEnabled: false,
       resolucionesModuleEnabled: false,
+      generacionImprontas: true,
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.
