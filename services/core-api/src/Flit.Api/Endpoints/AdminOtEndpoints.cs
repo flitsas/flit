@@ -3397,6 +3397,32 @@ internal sealed record OtBandejaSearchRequest
     };
 
     /// <summary>
+    /// Épica #13216 (HU #13390) — el MISMO filtro de la tabla (criterios, estado, revocatoria y orden) para
+    /// «Seleccionar todos» del lote de consolidados (<c>OtBandejaLoteFiltro</c>). Sin página: la selección
+    /// toma todo lo que la bandeja muestra con este filtro, no la página visible.
+    /// </summary>
+    public OtClientProcedureFilter ToFilter() => new()
+    {
+        Status = Status,
+        HasActiveRevocationRequest = HasActiveRevocationRequest,
+        ProcedureTypeId = ProcedureTypeId,
+        Familia = Familia,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        Busqueda = Busqueda,
+        Condiciones = Condiciones,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+        SortBy = SortBy,
+        SortDir = SortDir,
+    };
+
+    /// <summary>
     /// Filtros de la tabla para los contadores (Epic #12686). Sin estado, revocatoria, orden ni
     /// página: las tarjetas cuentan cada clase bajo el resto de criterios.
     /// </summary>

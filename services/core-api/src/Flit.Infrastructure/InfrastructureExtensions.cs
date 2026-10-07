@@ -316,6 +316,11 @@ public static class InfrastructureExtensions
         services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
             OtClientProcedures.OtClientProcedureConsolidadoContext>();
 
+        // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
+        // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            ConsolidadoLotes.Ot.OtBandejaSeleccionResolver>();
+
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
         // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).

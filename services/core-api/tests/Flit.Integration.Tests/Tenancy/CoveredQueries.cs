@@ -125,6 +125,8 @@ internal static class CoveredQueries
         new("Q47", "ProcedureInstanceRepository.ListBiometricValidationsByTenantAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
         new("Q48", "ProcedureInstanceRepository.CountBiometricValidationsByEstadoAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
         new("Q49", "IdentityValidationOutboxRepository.ListStuckAsync (TenantScope)", "TenantScope", 1, SupportsGlobal: true),
+        // HU #13390 (Épica #13216) — selección del lote desde la bandeja OT, mismo universo que Q24 sin paginar (OtBandejaSeleccionResolverIntegrationTests).
+        new("Q50", "OtClientProcedureRepository.ListAccessibleRefsAsync (selección del lote, bandeja OT sin paginar)", "Guid otTenantId", 1, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

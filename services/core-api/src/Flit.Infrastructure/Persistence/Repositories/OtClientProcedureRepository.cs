@@ -207,6 +207,51 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             },
             cancellationToken);
 
+    /// <summary>
+    /// Épica #13216 (HU #13390) — ver XML doc de la interfaz. Misma cadena que <see cref="ListAsync"/>
+    /// (<see cref="ExecuteOtScopedAsync{T}(Guid,Guid?,Func{Guid,Task{T}},CancellationToken)"/> →
+    /// <see cref="ExecuteCrossTenantReadAsync{T}"/> → <see cref="BuildAccessibleQuery"/> →
+    /// <see cref="ApplyListFilters"/> → <see cref="ApplyListSort"/>), sin <c>Skip</c>/<c>Take</c> ni
+    /// <c>Include</c>: la selección del lote es exactamente lo que la bandeja mostraría con el mismo filtro.
+    /// </summary>
+    public async Task<IReadOnlyList<OtClientProcedureRef>> ListAccessibleRefsAsync(
+        Guid otTenantId,
+        OtClientProcedureFilter? filter,
+        IReadOnlyCollection<Guid>? ids,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        var refs = await ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId => await ExecuteCrossTenantReadAsync(
+                async () =>
+                {
+                    var query = BuildAccessibleQuery(transitOfficeId);
+                    if (filter is not null)
+                    {
+                        query = ApplyListFilters(query, filter);
+                    }
+
+                    if (ids is not null)
+                    {
+                        var idList = ids as List<Guid> ?? ids.ToList();
+                        query = query.Where(p => idList.Contains(p.Id));
+                    }
+
+                    // Modo ids: orden por defecto de la bandeja (prioritario, fecha desc, id desc).
+                    return (IReadOnlyList<OtClientProcedureRef>)await ApplyListSort(query, filter ?? new OtClientProcedureFilter())
+                        .Select(p => new OtClientProcedureRef(p.Id, p.TenantId, p.ReferenceNumber, p.Plate))
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+
+        // Sin organismo resoluble ExecuteOtScopedAsync devuelve default (null) sin leer nada: lista vacía.
+        return refs ?? [];
+    }
+
     public Task<OtClientProcedure?> GetByIdAsync(
         Guid otTenantId,
         Guid procedureInstanceId,

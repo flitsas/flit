@@ -159,6 +159,7 @@ debe ser del lector; C2 es simétrico a C1 y actúa como dueño de las filas que
 | Q47 | `ProcedureInstanceRepository.ListBiometricValidationsByTenantAsync` (listado plano: Dashboard y submódulo) | `TenantScope` | ✔ (`Single(C)` solo C) | ✔ (firma por `Guid` sin cambios para alertas) | ✔ (`All`: 5 validaciones de 3 compañías) |
 | Q48 | `ProcedureInstanceRepository.CountBiometricValidationsByEstadoAsync` (KPIs del listado plano) | `TenantScope` | ✔ | ✔ | ✔ (`All` = 5) |
 | Q49 | `IdentityValidationOutboxRepository.ListStuckAsync` (atascadas: outbox de completado + cola de envío) | `TenantScope` | ✔ (`Single(A)` solo A) | ✔ (firma por `Guid` ≡ `Single`) | ✔ (`All`: A y C con su `TenantId`) |
+| Q50 | `OtClientProcedureRepository.ListAccessibleRefsAsync` (selección del lote de consolidados desde la bandeja OT, sin paginar — HU #13390, `OtBandejaSeleccionResolverIntegrationTests`) | `Guid otTenantId` (+ `transitOfficeIdOverride`) | ✔ (solo lo recibido por el organismo; ids de otro organismo, borrador o borrado quedan fuera; tenant sin organismo ⇒ vacío) | — | — |
 
 **Demostración de que la suite detecta fugas:** `TenantLeakTests.El_helper_de_fuga_detecta_filas_ajenas` ejecuta
 `WhereTenantInScope(TenantScope.All)` sobre el escenario (10 filas de 5 clientes) y afirma que `LeakAssert` lanza
