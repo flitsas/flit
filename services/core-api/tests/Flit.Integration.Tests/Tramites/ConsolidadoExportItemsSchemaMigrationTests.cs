@@ -20,6 +20,9 @@ public sealed class ConsolidadoExportItemsSchemaMigrationTests(PostgresDatabaseF
 {
     private const string MigrationName = "HU13368_ConsolidadoExportItems";
 
+    /// <summary>ID exacto tras regenerar la migración con la columna <c>parts_count</c> (HU #13378 AC2).</summary>
+    private const string MigrationId = "20261007232819_HU13368_ConsolidadoExportItems";
+
     private static readonly Guid Company = new("b3000000-0000-7000-8000-0000000013c1");
     private static readonly Guid OtherCompany = new("b3100000-0000-7000-8000-0000000013c2");
     private static readonly Guid UserU = new("0199c300-0000-7000-8000-0000000013d1");
@@ -423,6 +426,66 @@ public sealed class ConsolidadoExportItemsSchemaMigrationTests(PostgresDatabaseF
 
         (await ConstraintOfViolationAsync(cn, () => InsertAuditAsync(cn, ConsolidadoExportAuditEvent.LoteCancelado)))
             .Should().BeNull("lote_cancelado con sus conteos");
+
+        await tx.RollbackAsync(Ct);
+    }
+
+    private static Task InsertAuditConPartesAsync(NpgsqlConnection cn, string evento, short? partes) =>
+        ExecAsync(cn,
+            """
+            INSERT INTO tramites.consolidado_export_audit
+                (event, origin, batch_id, actor_user_id, actor_tenant_id, actor_role_code, reached_tenant_ids,
+                 document_type, selection_mode, total_items, included_count, omitted_count, generated_count, parts_count)
+            VALUES (@e, 'tramites', @l, @u, @c, 'Radicador', ARRAY[@c]::uuid[],
+                    'consolidado', 'ids', 2, 1, 1, 0, @p)
+            """,
+            ("e", evento), ("l", LoteL), ("u", UserU), ("c", Company), ("p", partes));
+
+    /// <summary>
+    /// HU #13378 AC2 — <c>lote_finalizado</c> registra las partes: <c>parts_count smallint NULL</c>, exigido NOT NULL
+    /// y &gt;= 0 en <c>lote_finalizado</c> (también 0, el fallido que no llegó a crear partes) y NULL en el resto de
+    /// eventos, por <c>ck_consolidado_export_audit_parts</c>. La migración regenerada queda con su ID exacto.
+    /// </summary>
+    [PostgresFact]
+    public async Task AC7_LoteFinalizadoExigeLasPartes_YLosDemasEventosLasDejanNull()
+    {
+        var (cn, tx) = await SeedAsync();
+        await using var _ = cn;
+
+        (await ScalarAsync<long>(cn,
+            "SELECT count(*) FROM public.\"__EFMigrationsHistory\" WHERE migration_id = @m", ("m", MigrationId)))
+            .Should().Be(1, "la migración regenerada se aplica con su ID nuevo");
+        (await ScalarAsync<string>(cn,
+            """
+            SELECT concat_ws(',', data_type, is_nullable, coalesce(column_default, 'sin default'))
+              FROM information_schema.columns
+             WHERE table_schema = 'tramites' AND table_name = 'consolidado_export_audit' AND column_name = 'parts_count'
+            """)).Should().Be("smallint,YES,sin default");
+
+        foreach (var (evento, partes, motivo) in new (string, short?, string)[]
+                 {
+                     (ConsolidadoExportAuditEvent.LoteFinalizado, null, "lote_finalizado sin partes"),
+                     (ConsolidadoExportAuditEvent.LoteFinalizado, -1, "partes negativas"),
+                     (ConsolidadoExportAuditEvent.LoteCancelado, 1, "lote_cancelado no lleva partes"),
+                     (ConsolidadoExportAuditEvent.LoteCreado, 0, "lote_creado no lleva partes"),
+                 })
+        {
+            (await ConstraintOfViolationAsync(cn, () => InsertAuditConPartesAsync(cn, evento, partes)))
+                .Should().Be("ck_consolidado_export_audit_parts", motivo);
+        }
+
+        foreach (var partes in new short?[] { 0, 3 })
+        {
+            (await ConstraintOfViolationAsync(cn, () =>
+                    InsertAuditConPartesAsync(cn, ConsolidadoExportAuditEvent.LoteFinalizado, partes)))
+                .Should().BeNull($"lote_finalizado con {partes} partes");
+        }
+
+        (await ConstraintOfViolationAsync(cn, () => InsertAuditConPartesAsync(cn, ConsolidadoExportAuditEvent.LoteCancelado, null)))
+            .Should().BeNull("lote_cancelado con conteos y sin partes (inserción de la entidad actual)");
+        (await ScalarAsync<string>(cn,
+            "SELECT string_agg(coalesce(parts_count::text, 'null'), ',' ORDER BY parts_count NULLS LAST) FROM tramites.consolidado_export_audit"))
+            .Should().Be("0,3,null");
 
         await tx.RollbackAsync(Ct);
     }
