@@ -99,7 +99,8 @@ public sealed class ConsolidadoExportDdlParityTests
             .And.Contain("retry_delay_seconds   integer     NOT NULL DEFAULT 30")
             .And.Contain("item_timeout_seconds  integer     NOT NULL DEFAULT 300")
             .And.Contain("item_lease_seconds    integer     NOT NULL DEFAULT 600")
-            .And.Contain("retention_hours       integer     NOT NULL DEFAULT 24");
+            .And.Contain("retention_hours       integer     NOT NULL DEFAULT 24")
+            .And.Contain("max_items_per_batch   integer     NOT NULL DEFAULT 10000");
         ddl.Should().Contain("ON tramites.consolidado_export_settings ((true))");
         ddl.Should().Contain("WHERE NOT EXISTS (SELECT 1 FROM tramites.consolidado_export_settings)", "sembrado reproducible");
     }
@@ -216,12 +217,29 @@ public sealed class ConsolidadoExportDdlParityTests
             [nameof(ConsolidadoExportSettings.RetryDelaySeconds)] = "retry_delay_seconds",
             [nameof(ConsolidadoExportSettings.RetentionHours)] = "retention_hours",
             [nameof(ConsolidadoExportSettings.IsActive)] = "is_active",
+            [nameof(ConsolidadoExportSettings.MaxItemsPerBatch)] = "max_items_per_batch",
         };
         foreach (var (propiedad, columna) in columnas)
         {
             entity.FindProperty(propiedad)!.GetColumnName().Should().Be(columna);
         }
 
+        entity.FindProperty(nameof(ConsolidadoExportSettings.MaxItemsPerBatch))!.IsNullable.Should().BeFalse();
         entity.FindProperty(nameof(ConsolidadoExportSettings.RowVersion))!.IsConcurrencyToken.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// M1 (épica #13216) — tope total del lote: en sitio en el DDL 133 (migración Pending), con CHECK nombrado de
+    /// rango y el mismo DEFAULT que la constante de la entidad.
+    /// </summary>
+    [Fact]
+    public void M1_ElTopeTotalDelLoteViveEnElDdl133ConCheckDeRangoYElDefaultDeLaEntidad()
+    {
+        var ddl = LoadDdl();
+
+        ddl.Should().Contain(
+            "CONSTRAINT ck_consolidado_export_settings_max_items CHECK (max_items_per_batch BETWEEN 1 AND 50000)");
+        ddl.Should().Contain("COMMENT ON COLUMN tramites.consolidado_export_settings.max_items_per_batch");
+        ddl.Should().Contain($"DEFAULT {ConsolidadoExportSettings.MaxItemsPerBatchPorDefecto}");
     }
 }

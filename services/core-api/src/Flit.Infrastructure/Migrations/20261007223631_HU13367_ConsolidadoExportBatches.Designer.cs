@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    [Migration("20261007165951_HU13367_ConsolidadoExportBatches")]
+    [Migration("20261007223631_HU13367_ConsolidadoExportBatches")]
     partial class HU13367_ConsolidadoExportBatches
     {
         /// <inheritdoc />
@@ -7471,6 +7471,10 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<short>("MaxItemAttempts")
                         .HasColumnType("smallint")
                         .HasColumnName("max_item_attempts");
+
+                    b.Property<int>("MaxItemsPerBatch")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_items_per_batch");
 
                     b.Property<int>("MaxMbPerPart")
                         .HasColumnType("integer")

@@ -41,6 +41,16 @@ public sealed class ConsolidadoExportSettings
     /// <summary>Interruptor del motor.</summary>
     public bool IsActive { get; set; }
 
+    /// <summary>Valor sembrado de <see cref="MaxItemsPerBatch"/> (DEFAULT del DDL 133).</summary>
+    public const int MaxItemsPerBatchPorDefecto = 10_000;
+
+    /// <summary>
+    /// M1 (épica #13216) — tope total de trámites de un lote, en todos los orígenes y en los dos modos de selección
+    /// (1–50.000, por defecto 10.000). Se compara con la selección ya resuelta (exclusiones e intersección de seguridad
+    /// aplicadas); superarlo es <c>422 seleccion_excede_tope</c> y no se crea nada.
+    /// </summary>
+    public int MaxItemsPerBatch { get; set; } = MaxItemsPerBatchPorDefecto;
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public Guid? CreatedBy { get; set; }

@@ -7856,6 +7856,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("max_item_attempts");
 
+                    b.Property<int>("MaxItemsPerBatch")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_items_per_batch");
+
                     b.Property<int>("MaxMbPerPart")
                         .HasColumnType("integer")
                         .HasColumnName("max_mb_per_part");
