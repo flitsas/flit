@@ -252,22 +252,32 @@ public sealed class ProcedureInstanceBiometricValidation
     }
 
     /// <summary>
+    /// HU #13299 — ¿el flujo manual espera una captura del cliente con un enlace emitido? Dos situaciones: <c>manual_activo</c>
+    /// (activación o regeneración) y <c>rechazado</c> tras una revisión manual (<see cref="RejectionReasonCode"/> no nulo): el rechazo
+    /// deja el estado en <c>rechazado</c> y emite en la misma operación un enlace nuevo para repetir la captura. Un <c>rechazado</c>
+    /// manual SIN motivo no es una situación de este flujo y no espera nada.
+    /// </summary>
+    public bool EsperaCapturaManual =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && (string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal)
+            || (string.Equals(Status, BiometricEstados.Rechazado, StringComparison.Ordinal) && RejectionReasonCode is not null));
+
+    /// <summary>
     /// HU #13287 (Feature #13280 A5) — ¿se puede regenerar el enlace de captura? Solo con el flujo manual esperando captura
-    /// (<see cref="BiometricProviders.Manual"/> + <see cref="BiometricEstados.ManualActivo"/>). Un enlace vencido (más de
+    /// (<see cref="EsperaCapturaManual"/>: <see cref="BiometricEstados.ManualActivo"/> o <c>rechazado</c> con motivo, HU #13299: el
+    /// Super Admin puede reenviar el enlace si el cliente no lo recibió). Un enlace vencido (más de
     /// <see cref="BiometricRules.TokenTtlHoras"/> h) sí se regenera: es el caso de uso principal.
     /// </summary>
-    public bool PuedeRegenerarEnlaceManual =>
-        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
-        && string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal);
+    public bool PuedeRegenerarEnlaceManual => EsperaCapturaManual;
 
     /// <summary>
     /// HU #13287 — emite un enlace de captura NUEVO que REEMPLAZA al anterior: <paramref name="tokenHash"/> (SHA-256 hex del
     /// token nuevo; el crudo jamás entra a la entidad) sustituye a <see cref="TokenHash"/>, así el token viejo deja de
     /// encontrarse por hash, y la vigencia se reinicia a <see cref="BiometricRules.TokenTtlHoras"/> horas desde
     /// <paramref name="now"/>. Cuenta el reenvío (<see cref="ResendCount"/>, <see cref="LastResentAt"/>). No toca el estado,
-    /// quién ni cuándo se activó, ni las fotos o el consentimiento.
+    /// quién ni cuándo se activó, ni las fotos o el consentimiento (en <c>rechazado</c> sigue <c>rechazado</c>).
     /// </summary>
-    /// <exception cref="FlujoManualNoActivoException">No está en <c>manual_activo</c>.</exception>
+    /// <exception cref="FlujoManualNoActivoException">No espera captura (<see cref="EsperaCapturaManual"/>).</exception>
     public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash)
     {
         if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
@@ -285,14 +295,16 @@ public sealed class ProcedureInstanceBiometricValidation
     }
 
     /// <summary>
-    /// HU #13289 — estado de la sesión de captura manual en <paramref name="now"/>. Solo el flujo manual en
-    /// <see cref="BiometricEstados.ManualActivo"/> y dentro de su ventana es <see cref="ManualCaptureSessionState.Vigente"/>.
+    /// HU #13289 — estado de la sesión de captura manual en <paramref name="now"/>. Solo el flujo manual que espera captura
+    /// (<see cref="EsperaCapturaManual"/>: <c>manual_activo</c>, o <c>rechazado</c> con motivo tras una revisión — HU #13299) y dentro
+    /// de la ventana de su enlace es <see cref="ManualCaptureSessionState.Vigente"/>; con el enlace vencido es
+    /// <see cref="ManualCaptureSessionState.Vencida"/> también en <c>rechazado</c>.
     /// </summary>
     public ManualCaptureSessionState EstadoSesionManual(DateTimeOffset now)
     {
         if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal))
             return ManualCaptureSessionState.NoManual;
-        if (!string.Equals(Status, BiometricEstados.ManualActivo, StringComparison.Ordinal))
+        if (!EsperaCapturaManual)
             return ManualCaptureSessionState.EstadoInvalido;
         return now > ExpiresAt ? ManualCaptureSessionState.Vencida : ManualCaptureSessionState.Vigente;
     }
@@ -326,8 +338,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>
     /// HU #13290 — registra la captura recibida: rutas de rostro, anverso, reverso y firma (ADR-0054: la firma reutiliza
     /// <see cref="SignatureImagePath"/>/<see cref="SignatureImageSha256"/>) y pasa a
-    /// <see cref="BiometricEstados.PendienteRevisionManual"/>. Solo desde <see cref="BiometricEstados.ManualActivo"/>, con la
-    /// sesión vigente y consentimiento del ciclo actual; consume el enlace (un segundo envío ya no es
+    /// <see cref="BiometricEstados.PendienteRevisionManual"/>. Solo desde <see cref="BiometricEstados.ManualActivo"/> o desde
+    /// <c>rechazado</c> con motivo (repetición tras un rechazo, HU #13299), con la sesión vigente y consentimiento del ciclo actual; consume el enlace (un segundo envío ya no es
     /// <c>manual_activo</c>). Las rutas del intento previo se pisan aquí, pero los archivos NO se borran (el caso de uso las
     /// deja en auditoría).
     /// </summary>
@@ -351,6 +363,81 @@ public sealed class ProcedureInstanceBiometricValidation
         SignatureImagePath = signaturePath;
         SignatureImageSha256 = signatureSha256;
         Status = BiometricEstados.PendienteRevisionManual;
+        // HU #13299 — la captura nueva abre una revisión nueva: el motivo y la revisión (quién y cuándo) del rechazo previo, que se
+        // conservan mientras el cliente repite la captura, se LIMPIAN aquí; la historia queda en la auditoría (manual_rechazado).
+        RejectionReasonCode = null;
+        ReviewedBy = null;
+        ReviewedAt = null;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// HU #13298/#13299 (Feature #13282 C) — ¿espera revisión humana? Solo el flujo manual con la captura ya recibida
+    /// (<see cref="BiometricProviders.Manual"/> + <see cref="BiometricEstados.PendienteRevisionManual"/>).
+    /// </summary>
+    public bool PuedeRevisarManual =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && string.Equals(Status, BiometricEstados.PendienteRevisionManual, StringComparison.Ordinal);
+
+    /// <summary>
+    /// HU #13298 — sella la aprobación MANUAL de una validación que YA pasó por <see cref="Approve"/> (el caso de uso la aprueba por
+    /// el mismo camino que una aprobación de Kyverum, <c>IdentityValidationResultApplier</c>, para que ValidatedAt/ValidUntil y el
+    /// evento de completado salgan de un solo punto): origen <c>manual</c> y quién/cuándo revisó. No toca la vigencia.
+    /// </summary>
+    /// <exception cref="ArgumentException">Revisor vacío.</exception>
+    /// <exception cref="InvalidOperationException">No es una validación manual aprobada.</exception>
+    public void SellarAprobacionManual(Guid reviewerId, DateTimeOffset now)
+    {
+        if (reviewerId == Guid.Empty)
+            throw new ArgumentException("El usuario que revisa es obligatorio.", nameof(reviewerId));
+        if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+            || !string.Equals(Status, BiometricEstados.Aprobado, StringComparison.Ordinal))
+            throw new InvalidOperationException("Solo una validación manual ya aprobada se sella como aprobada manualmente.");
+
+        ApprovalOrigin = BiometricApprovalOrigins.Manual;
+        ReviewedBy = reviewerId;
+        ReviewedAt = now;
+        RejectionReasonCode = null;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// HU #13299 — rechaza la revisión con un motivo de la lista cerrada (<see cref="ManualRejectionReasons"/>) y, en la MISMA
+    /// operación, emite un enlace nuevo para repetir la captura. La fila queda en <see cref="BiometricEstados.Rechazado"/> (visible
+    /// como «Rechazada»; NO vuelve a <c>manual_activo</c>): registra <see cref="RejectionReasonCode"/>, <see cref="ReviewedBy"/> y
+    /// <see cref="ReviewedAt"/> (se conservan hasta que la siguiente captura los limpie, ver <see cref="RegistrarCapturaManual"/>) y
+    /// deja el enlace nuevo (<paramref name="tokenHash"/>, SHA-256 hex; el crudo jamás entra a la entidad) vigente
+    /// <see cref="BiometricRules.TokenTtlHoras"/> horas. Con ese enlace la sesión de captura cuenta como vigente
+    /// (<see cref="EsperaCapturaManual"/>). Sin tope de intentos.
+    /// <para>
+    /// Abre un CICLO nuevo: <see cref="ManualActivatedAt"/> pasa a <paramref name="now"/> (como una activación), así el consentimiento
+    /// del ciclo anterior ya no vale y la persona lo acepta de nuevo, y ese consentimiento nuevo sobrescribe al anterior.
+    /// <see cref="ManualActivatedBy"/> no cambia. Las rutas de imagen anteriores se conservan (decisión del PO).
+    /// </para>
+    /// </summary>
+    /// <exception cref="RevisionManualNoPendienteException">No está en <c>pendiente_revision_manual</c>.</exception>
+    /// <exception cref="ArgumentException">Revisor vacío, motivo fuera de la lista o token mal formado/repetido.</exception>
+    public void RechazarRevisionManual(Guid reviewerId, string reasonCode, DateTimeOffset now, string tokenHash)
+    {
+        if (reviewerId == Guid.Empty)
+            throw new ArgumentException("El usuario que revisa es obligatorio.", nameof(reviewerId));
+        if (!ManualRejectionReasons.IsValid(reasonCode))
+            throw new ArgumentException("El motivo de rechazo no está en la lista cerrada.", nameof(reasonCode));
+        if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
+            throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
+        if (!PuedeRevisarManual)
+            throw new RevisionManualNoPendienteException();
+        if (string.Equals(tokenHash, TokenHash, StringComparison.Ordinal))
+            throw new ArgumentException("El enlace nuevo debe ser distinto del anterior.", nameof(tokenHash));
+
+        Status = BiometricEstados.Rechazado;
+        RejectionReasonCode = reasonCode;
+        ReviewedBy = reviewerId;
+        ReviewedAt = now;
+
+        TokenHash = tokenHash;
+        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ManualActivatedAt = now;
         UpdatedAt = now;
     }
 
@@ -379,6 +466,11 @@ public sealed class ProcedureInstanceBiometricValidation
         Status = BiometricEstados.Aprobado;
         ValidatedAt = now;
         ValidUntil = BiometricRules.FechaFinVigencia(now);
+        // HU #13303: toda aprobación que pasa por aquí (Kyverum, mock, reconciliación) es AUTOMÁTICA. La del flujo manual también
+        // pasa por aquí (la aprueba el mismo IdentityValidationResultApplier) pero NO se estampa: la sella SellarAprobacionManual
+        // justo después, y 'manual' gana siempre.
+        if (!string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            ApprovalOrigin = BiometricApprovalOrigins.Automatica;
         UpdatedAt = now;
     }
 }

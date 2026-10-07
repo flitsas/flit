@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CapturaManualFlow } from "@/app/captura-manual/[token]/_components/CapturaManualFlow";
-import { StepBar } from "@/app/captura-manual/[token]/_components/StepBar";
+import { CapturaManualFlow } from "@/app/verificacion/[token]/_components/CapturaManualFlow";
+import { StepBar } from "@/app/verificacion/[token]/_components/StepBar";
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import type { ManualCaptureClient } from "@/lib/captura-manual/types";
 
@@ -12,7 +12,7 @@ const client: ManualCaptureClient = {
     documentNumber: "1000000000",
     productName: "FLIT 2.0",
     expiresAt: "2030-01-01T00:00:00Z",
-    consentTextVersion: "manual-ley1581-v1",
+    consentTextVersion: "manual-ley1581-v2",
   }),
   postConsent: vi.fn().mockResolvedValue(undefined),
   submit: vi.fn().mockResolvedValue({ status: "pendiente_revision_manual" }),

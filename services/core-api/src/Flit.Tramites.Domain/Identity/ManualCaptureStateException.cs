@@ -43,5 +43,5 @@ public enum ManualCaptureSessionState
 /// </summary>
 public static class ManualCaptureConsent
 {
-    public const string TextVersion = "manual-ley1581-v1";
+    public const string TextVersion = "manual-ley1581-v2";
 }

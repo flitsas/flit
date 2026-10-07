@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PasoDatos } from "@/app/captura-manual/[token]/_components/PasoDatos";
+import { PasoDatos } from "@/app/verificacion/[token]/_components/PasoDatos";
 import { createHttpClient, createMockClient, getManualCaptureClient } from "@/lib/captura-manual/client";
 import { RENDERED_CONSENT_TEXT_VERSION } from "@/lib/captura-manual/consent";
 import { ManualCaptureError, terminalKindOf, type ManualCaptureClient } from "@/lib/captura-manual/types";
@@ -71,7 +71,7 @@ describe("cliente HTTP real: contrato del backend", () => {
         documentNumber: "1",
         productName: null,
         expiresAt: "2030-01-01T00:00:00+00:00",
-        consentTextVersion: "manual-ley1581-v1",
+        consentTextVersion: "manual-ley1581-v2",
       }),
     );
     const view = await client.getManualCapture("a b/c");
@@ -84,11 +84,11 @@ describe("cliente HTTP real: contrato del backend", () => {
 
   it("POST consent: método, ruta, JSON {accepted,textVersion}, sin auth", async () => {
     const { fetchImpl, client } = setup(new Response(null, { status: 204 }));
-    await client.postConsent("tok", { accepted: true, textVersion: "manual-ley1581-v1" });
+    await client.postConsent("tok", { accepted: true, textVersion: "manual-ley1581-v2" });
     const [url, init] = fetchImpl.mock.calls[0];
     expect(String(url)).toMatch(/\/api\/v1\/public\/manual-capture\/tok\/consent$/);
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ accepted: true, textVersion: "manual-ley1581-v1" });
+    expect(JSON.parse(init.body)).toEqual({ accepted: true, textVersion: "manual-ley1581-v2" });
     expect(init.headers["Content-Type"]).toBe("application/json");
     expect(headerNames(init)).not.toContain("authorization");
     expect(headerNames(init)).not.toContain("x-tenant-id");

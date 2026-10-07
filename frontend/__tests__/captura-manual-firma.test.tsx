@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CapturaManualFlow } from "@/app/captura-manual/[token]/_components/CapturaManualFlow";
+import { CapturaManualFlow } from "@/app/verificacion/[token]/_components/CapturaManualFlow";
 import { createHttpClient } from "@/lib/captura-manual/client";
 import { ManualCaptureError, type ManualCaptureClient } from "@/lib/captura-manual/types";
 
@@ -10,7 +10,7 @@ const VIEW = {
   documentNumber: "1000000000",
   productName: "FLIT 2.0",
   expiresAt: "2030-01-01T00:00:00Z",
-  consentTextVersion: "manual-ley1581-v1",
+  consentTextVersion: "manual-ley1581-v2",
 };
 
 function fakeClient(submit = vi.fn().mockResolvedValue({ status: "pendiente_revision_manual" })): ManualCaptureClient {
@@ -122,7 +122,7 @@ describe("paso Firma y envío (HU #13295)", () => {
     expect(files.firma.type).toBe("image/png");
     resolve({ status: "pendiente_revision_manual" });
     expect(await screen.findByText("Recibimos tu información")).toBeInTheDocument();
-    expect(screen.getByText(/Será revisada/)).toBeInTheDocument();
+    expect(screen.queryByText(/Será revisada/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 

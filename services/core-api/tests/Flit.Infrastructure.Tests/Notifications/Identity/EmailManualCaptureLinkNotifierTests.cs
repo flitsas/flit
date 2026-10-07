@@ -15,7 +15,7 @@ namespace Flit.Infrastructure.Tests.Notifications.Identity;
 /// <summary>
 /// HU #13287 (Feature #13280 A5, Épica #13202) — <see cref="EmailManualCaptureLinkNotifier"/> y
 /// <see cref="ManualCaptureEmailComposer"/>: el correo sale por <see cref="IEmailSender"/> (proveedor simulado) al titular, con el
-/// enlace <c>{base pública}/captura-manual/{token}</c>, texto corto en español, sin número de documento; nunca lanza y reporta
+/// enlace <c>{base pública}/verificacion/{token}</c>, texto corto en español, sin número de documento; nunca lanza y reporta
 /// <c>false</c> cuando no sale.
 /// <para>Uso: <c>await notifier.NotifyAsync(new ManualCaptureLink(id, tenant, token, vence, correo, nombre))</c>.</para>
 /// </summary>
@@ -57,7 +57,7 @@ public sealed class EmailManualCaptureLinkNotifierTests
         enviado.ToName.Should().Be("Ana Perez");
         enviado.TenantId.Should().Be(Tenant);
         enviado.TemplateKey.Should().Be("identidad.captura-manual");
-        enviado.HtmlBody.Should().Contain("https://app.flit.example/captura-manual/enlace-de-prueba-uno");
+        enviado.HtmlBody.Should().Contain("https://app.flit.example/verificacion/enlace-de-prueba-uno");
         enviado.Subject.Should().Be("[FLIT 2.0] Verifica tu identidad");
     }
 
@@ -129,13 +129,13 @@ public sealed class EmailManualCaptureLinkNotifierTests
     }
 
     [Theory]
-    [InlineData("https://app.flit.example", "https://app.flit.example/captura-manual/t1")]
-    [InlineData("https://app.flit.example///", "https://app.flit.example/captura-manual/t1")]
-    [InlineData("", "http://localhost:3000/captura-manual/t1")]
+    [InlineData("https://app.flit.example", "https://app.flit.example/verificacion/t1")]
+    [InlineData("https://app.flit.example///", "https://app.flit.example/verificacion/t1")]
+    [InlineData("", "http://localhost:3000/verificacion/t1")]
     public void BuildLink_NormalizaLaBase(string baseUrl, string esperado) =>
         ManualCaptureEmailComposer.BuildLink(baseUrl, "t1").Should().Be(esperado);
 
     [Fact]
     public void BuildLink_CodificaElTokenParaLaRuta() =>
-        ManualCaptureEmailComposer.BuildLink("https://x.test", "a/b c").Should().Be("https://x.test/captura-manual/a%2Fb%20c");
+        ManualCaptureEmailComposer.BuildLink("https://x.test", "a/b c").Should().Be("https://x.test/verificacion/a%2Fb%20c");
 }

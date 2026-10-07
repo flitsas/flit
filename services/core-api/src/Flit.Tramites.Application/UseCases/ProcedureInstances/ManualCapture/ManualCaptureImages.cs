@@ -50,6 +50,15 @@ public static class ManualCaptureImages
     /// <summary>La firma trazada es siempre un PNG (lienzo con transparencia).</summary>
     public static bool IsAllowedSignature(ManualCaptureImageFormat format) => format == ManualCaptureImageFormat.Png;
 
+    /// <summary>Content-Type real del formato detectado por contenido (HU #13297: se entrega al Super Admin tal cual).</summary>
+    public static string ContentType(ManualCaptureImageFormat format) => format switch
+    {
+        ManualCaptureImageFormat.Jpeg => "image/jpeg",
+        ManualCaptureImageFormat.Png => "image/png",
+        ManualCaptureImageFormat.Webp => "image/webp",
+        _ => "application/octet-stream",
+    };
+
     public static string Extension(ManualCaptureImageFormat format) => format switch
     {
         ManualCaptureImageFormat.Jpeg => "jpg",

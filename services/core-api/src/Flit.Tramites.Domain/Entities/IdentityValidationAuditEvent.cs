@@ -139,6 +139,25 @@ public static class IdentityValidationAuditStages
     /// regeneración ya estaban confirmadas; el Super Admin puede regenerar. Sin correo, sin token y sin PII.
     /// </summary>
     public const string ManualCorreoFallido = "manual_correo_fallido";
+
+    /// <summary>
+    /// HU #13297 (Feature #13282 C) — el Super Admin consultó el detalle de una validación manual o una de sus imágenes
+    /// (rostro, documento, firma). Sin PII ni rutas de storage: solo el usuario y qué se consultó (<c>recurso=detalle</c> o
+    /// <c>recurso=imagen:&lt;kind&gt;</c>).
+    /// </summary>
+    public const string ManualImagenesConsultadas = "manual_imagenes_consultadas";
+
+    /// <summary>
+    /// HU #13298 (Feature #13282 C) — el Super Admin aprobó la validación manual (vigencia 30 días, origen <c>manual</c>). Sin PII ni
+    /// rutas: solo el usuario que revisó y la vigencia.
+    /// </summary>
+    public const string ManualAprobado = "manual_aprobado";
+
+    /// <summary>
+    /// HU #13299 — el Super Admin rechazó la validación manual con un motivo de la lista cerrada y se reactivó la captura. Sin PII ni
+    /// texto libre: el usuario, el código del motivo y el vencimiento del enlace nuevo.
+    /// </summary>
+    public const string ManualRechazado = "manual_rechazado";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

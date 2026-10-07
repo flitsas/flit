@@ -18,7 +18,7 @@ namespace Flit.Infrastructure.Tests.Notifications.Identity;
 public sealed class ManualCaptureEmailComposerTests
 {
     private const string Assets = "https://app.flit.example/email-assets";
-    private const string Link = "https://app.flit.example/captura-manual/tok_ABC";
+    private const string Link = "https://app.flit.example/verificacion/tok_ABC";
 
     private static readonly EmailTheme Brand = new(
         EmailThemeKind.Brand, "Movilidad Andina", "https://dev.flit.example/api/v1/public/branding/logos/11111111-1111-4111-8111-111111111111",

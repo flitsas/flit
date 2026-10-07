@@ -29,7 +29,7 @@ import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C).
  *
- * Estado por parte + descarga de certificado + bitácora Kyverum (`IdentityValidationTrackingPanel`)
+ * Estado por parte + descarga de certificado + bitácora de identidad (`IdentityValidationTrackingPanel`)
  * cuando hay `validationId`. Firma del baúl: sin tracking de identidad.
  */
 
@@ -187,7 +187,7 @@ function FilaValidacion({
         </span>
       </div>
       {fila.validationId ? (
-        <IdentityValidationTrackingPanel validationId={fila.validationId} tenantId={tenantId} />
+        <IdentityValidationTrackingPanel validationId={fila.validationId} tenantId={tenantId} compacto />
       ) : null}
     </li>
   );

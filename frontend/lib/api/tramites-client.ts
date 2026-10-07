@@ -156,7 +156,8 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { esFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { resolveApiBase } from './base-url';
-import { decodeJwtPayload } from '@/lib/auth/jwt';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { ocultarManualAlCliente } from '@/lib/identity/ocultar-manual';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 import type {
   NetworkChildFilter,
@@ -551,7 +552,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
 
-  return JSON.parse(text) as T;
+  // Lo «manual» del flujo de identidad solo lo ve el Super Admin FLIT: para el resto es una validación biométrica normal.
+  return ocultarManualAlCliente(JSON.parse(text) as T, isSuperAdmin(decodeJwtPayload(token)));
 }
 
 /**

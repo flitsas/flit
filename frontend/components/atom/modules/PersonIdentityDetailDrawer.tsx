@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import {
   AssociatedProceduresList,
@@ -21,6 +22,7 @@ import {
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityManualFlowActions';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import type {
@@ -72,6 +74,8 @@ export interface PersonIdentityDetailDrawerProps {
    * trámites de la hija, bitácora por la ruta de red). Ausente = la vista propia de siempre.
    */
   networkTenantId?: string;
+  /** Super Admin: abre el detalle de una validación manual en su pestaña (el detalle actual se cierra aparte). */
+  onVerEnManuales?: (validationId: string) => void;
 }
 
 export function PersonIdentityDetailDrawer({
@@ -80,6 +84,7 @@ export function PersonIdentityDetailDrawer({
   onClose,
   onStatusChanged,
   networkTenantId,
+  onVerEnManuales,
 }: PersonIdentityDetailDrawerProps) {
   const soloConsulta = Boolean(networkTenantId);
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
@@ -304,7 +309,12 @@ export function PersonIdentityDetailDrawer({
                     defaultOpen={idx === 0}
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
-                    onManualChanged={() => void load()}
+                    onManualChanged={() => {
+                      void load();
+                      // La lista de abajo y el contador de «Validaciones manuales» se actualizan al instante.
+                      onStatusChanged?.();
+                    }}
+                    onVerEnManuales={onVerEnManuales}
                   />
                 ))}
               </div>
@@ -323,10 +333,12 @@ function ValidationAccordionItem({
   trackingTick,
   soloConsulta = false,
   onManualChanged,
+  onVerEnManuales,
 }: {
   validation: BiometricValidation;
   /** HU #13288 — recarga el detalle tras activar el flujo manual o regenerar el enlace. */
   onManualChanged?: () => void;
+  onVerEnManuales?: (validationId: string) => void;
   /** HU #12709 — persona de una compañía hija vista por la cabeza: sin captura ni enlaces a trámites. */
   soloConsulta?: boolean;
   index: number;
@@ -337,6 +349,10 @@ function ValidationAccordionItem({
   const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
   const showCaptura = !soloConsulta && hasKyverumCaptureQr(v.captureUrl);
+  // Rechazada del flujo manual: el motivo que eligió el Super Admin (etiqueta homologada); Kyverum/mock, el texto de siempre.
+  const motivoManual =
+    v.status === 'rechazado' && v.provider === 'manual' ? etiquetaMotivoRechazoManual(v.rejectionReasonCode) : null;
+  const motivoRechazo = motivoManual ?? v.rejectionReason;
   const title = index === 0 ? 'Sesión más reciente' : 'Sesión anterior / Histórica';
   const enlaceTone: StatusTone = v.expired ? 'warning' : 'success';
   const enlaceEstado = v.expired ? 'Vencido' : 'Vigente';
@@ -377,7 +393,13 @@ function ValidationAccordionItem({
               accent={Boolean(v.referenceNumber)}
             />
             <SessionStat label="Fecha de registro" value={formatFecha(v.createdAt)} />
-            <SessionStat label="Intentos Kyverum" value={`${v.intentos} / ${v.maxIntentos}`} />
+            {/* El flujo manual no tiene contador de intentos del proveedor (los reenvíos están en la bitácora). */}
+            {v.provider !== 'manual' && (
+              <SessionStat
+                label={v.provider === 'mock' ? 'Intentos' : 'Intentos Kyverum'}
+                value={`${v.intentos} / ${v.maxIntentos}`}
+              />
+            )}
             <SessionStat
               label="Estado del enlace"
               value={enlaceEstado}
@@ -388,22 +410,30 @@ function ValidationAccordionItem({
               value={v.score != null ? String(v.score) : '—'}
             />
             <SessionStat label="Fecha aprobación" value={formatFecha(v.validatedAt)} />
+            {puedeVerOrigenAprobacion(v.approvalOrigin) && v.approvalOrigin ? (
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Origen de la aprobación</p>
+                <div className="mt-1">
+                  <ApprovalOriginChip origin={v.approvalOrigin} />
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {!soloConsulta && onManualChanged && (
-            <IdentityManualFlowActions validation={v} onChanged={onManualChanged} />
+            <IdentityManualFlowActions validation={v} onChanged={onManualChanged} onVerEnManuales={onVerEnManuales} />
           )}
 
           {associated.length > 0 && (
             <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
           )}
 
-          {v.status === 'rechazado' && v.rejectionReason && (
+          {v.status === 'rechazado' && motivoRechazo && (
             <p
               className="rounded-xl px-3 py-2 text-[11px]"
               style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
             >
-              Motivo del rechazo: {v.rejectionReason}
+              Motivo del rechazo: {motivoRechazo}
             </p>
           )}
 
@@ -428,7 +458,7 @@ function ValidationAccordionItem({
             </div>
           )}
 
-          {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} />}
+          {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
           <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
             <p className="mb-1 text-[13px] font-semibold text-[#162744] dark:text-white">
@@ -465,7 +495,7 @@ function SessionStat({
 }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p>
       {badgeTone ? (
         <div className="mt-1">
           <StatusBadge label={value} tone={badgeTone} ariaLabel={`${label}: ${value}`} />

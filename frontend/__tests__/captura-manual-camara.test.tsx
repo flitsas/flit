@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CameraViewer } from "@/app/captura-manual/[token]/_components/CameraViewer";
+import { CameraViewer } from "@/app/verificacion/[token]/_components/CameraViewer";
 
 function makeStream() {
   const track = { stop: vi.fn() };

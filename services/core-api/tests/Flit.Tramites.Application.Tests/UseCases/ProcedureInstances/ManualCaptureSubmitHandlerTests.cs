@@ -120,6 +120,56 @@ public sealed class ManualCaptureSubmitHandlerTests
         $"{entry.Message} {entry.Detail}".Should().NotContain("900111222").And.NotContain("Ana").And.NotContain(Token);
     }
 
+    // ── HU #13299 — repetición de la captura estando 'rechazado' (rechazo con enlace nuevo) ─────────────────
+
+    private ProcedureInstanceBiometricValidation FilaRechazada(DateTimeOffset? expiresAt = null)
+    {
+        var v = Fila(BiometricEstados.Rechazado, expiresAt: expiresAt);
+        v.RejectionReasonCode = "imagen_borrosa";
+        v.ReviewedBy = Guid.NewGuid();
+        v.ReviewedAt = Now.AddHours(-1);
+        v.FacePhotoPath = "ruta-previa-rostro";
+        return v;
+    }
+
+    [Fact]
+    public async Task Rechazada_con_enlace_vigente_acepta_la_captura_pasa_a_revision_y_limpia_el_motivo_y_la_revision()
+    {
+        var v = FilaRechazada();
+        v.ManualActivatedAt = Now.AddHours(-2);
+        v.ConsentAt = Now.AddMinutes(-30); // consentimiento NUEVO del ciclo abierto por el rechazo
+
+        var (result, error) = await Handler().HandleAsync(Command(), Ct);
+
+        error.Should().BeNull();
+        result.Should().Be(new EnviarCapturaManualResult("pendiente_revision_manual"));
+        v.Status.Should().Be(BiometricEstados.PendienteRevisionManual);
+        v.RejectionReasonCode.Should().BeNull();
+        v.ReviewedBy.Should().BeNull();
+        v.ReviewedAt.Should().BeNull();
+        v.FacePhotoPath.Should().Be(_storage.Saved[0].Path).And.NotBe("ruta-previa-rostro");
+    }
+
+    [Fact]
+    public async Task Rechazada_sin_consentimiento_del_ciclo_nuevo_exige_consentimiento()
+    {
+        var v = FilaRechazada();
+        v.ManualActivatedAt = Now.AddHours(-1);
+        v.ConsentAt = Now.AddHours(-5); // el del ciclo anterior ya no vale
+
+        (await Handler().HandleAsync(Command(), Ct)).Error.Should().Be(ManualCaptureErrors.ConsentimientoRequerido);
+        NadaGuardado();
+    }
+
+    [Fact]
+    public async Task Rechazada_con_enlace_vencido_responde_expirada()
+    {
+        FilaRechazada(expiresAt: Now.AddSeconds(-1));
+
+        (await Handler().HandleAsync(Command(), Ct)).Error.Should().Be(ManualCaptureErrors.Expirada);
+        NadaGuardado();
+    }
+
     [Fact]
     public async Task ClaveDeAlmacenamiento_EsElIdDeLaValidacion_TantoEnTramiteComoEnStandalone()
     {

@@ -109,3 +109,22 @@ export function mensajeErrorFlujoManual(err: unknown, accion: AccionManual): str
     ? 'No se pudo activar el flujo manual. Inténtalo de nuevo.'
     : 'No se pudo regenerar el enlace. Inténtalo de nuevo.';
 }
+
+/**
+ * ¿La validación tiene un detalle en «Validaciones manuales»? Cualquier estado manual: esperando captura,
+ * pendiente de revisión, rechazada o aprobada. Kyverum y simulada nunca pasan por esa pestaña.
+ */
+export function tieneDetalleManual(v: Pick<BiometricValidation, 'provider' | 'status'>): boolean {
+  return (
+    v.provider === 'manual' &&
+    (v.status === 'manual_activo' ||
+      v.status === 'pendiente_revision_manual' ||
+      v.status === 'rechazado' ||
+      v.status === 'aprobado')
+  );
+}
+
+/** Enlace profundo al detalle de una validación manual: módulo Validaciones, pestaña manual y el id abierto. */
+export function enlaceDetalleManual(id: string): string {
+  return `/?m=validaciones&tab=manuales&manual=${encodeURIComponent(id)}`;
+}

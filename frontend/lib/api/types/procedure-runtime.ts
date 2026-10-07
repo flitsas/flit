@@ -1625,6 +1625,9 @@ export interface BiometricValidation {
   captureUrl: string | null;
   // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
   rejectionReason?: string | null;
+  // Épica #13202: código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL.
+  // Solo con status 'rechazado' y provider 'manual'; null/ausente en los demás casos (Kyverum/mock usan rejectionReason).
+  rejectionReasonCode?: string | null;
   // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
   // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
   ultimoIntentoMotivo?: string | null;
@@ -1650,6 +1653,12 @@ export interface BiometricValidation {
    * `null`/ausente en filas anteriores a este campo — el consumidor cae a `email`.
    */
   registeredEmail?: string | null;
+  /**
+   * Épica #13202 (HU-C8) — cómo se aprobó la validación: `automatica` (Kyverum) o `manual` (revisión del
+   * Super Admin). `null`/ausente = no aprobada o respuesta anterior a este campo: la UI no muestra la fila.
+   * Nunca trae el nombre del revisor.
+   */
+  approvalOrigin?: 'automatica' | 'manual' | null;
 }
 
 /**

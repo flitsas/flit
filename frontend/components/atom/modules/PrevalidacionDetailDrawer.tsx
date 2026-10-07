@@ -25,6 +25,7 @@ import {
   hasKyverumCaptureQr,
   IdentityCaptureLinkBlock,
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
+import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { FLIT } from '@/lib/flit-design-tokens';
@@ -222,6 +223,16 @@ export function PrevalidacionDetailDrawer({
                   label="Score"
                   value={detail.score != null ? String(detail.score) : '—'}
                 />
+                {puedeVerOrigenAprobacion(detail.approvalOrigin) && detail.approvalOrigin ? (
+                  <div className="flex items-start gap-2.5 rounded-xl border px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">Origen de la aprobación</p>
+                      <div className="mt-1">
+                        <ApprovalOriginChip origin={detail.approvalOrigin} />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* HU #11069 — trámites asociados a la VID (enlace, id, tipo). */}

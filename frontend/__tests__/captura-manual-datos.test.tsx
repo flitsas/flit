@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { PasoDatos } from "@/app/captura-manual/[token]/_components/PasoDatos";
+import { PasoDatos } from "@/app/verificacion/[token]/_components/PasoDatos";
 import { CONSENT_TEXT, RENDERED_CONSENT_TEXT_VERSION } from "@/lib/captura-manual/consent";
 import type { ManualCaptureClient, ManualCaptureView } from "@/lib/captura-manual/types";
 
@@ -40,9 +40,11 @@ describe("PasoDatos", () => {
     expect(screen.getByRole("link", { name: "samuel.cardenas@flitsas.com" })).toBeInTheDocument();
   });
 
-  it("el texto de consentimiento es el literal de Kyverum", () => {
+  it("el texto de consentimiento no menciona a Kyverum", () => {
     setup();
-    expect(CONSENT_TEXT.endsWith("no conserva las imágenes. Aviso de privacidad.")).toBe(true);
+    expect(CONSENT_TEXT.endsWith("No estoy obligado(a). Aviso de privacidad.")).toBe(true);
+    expect(CONSENT_TEXT).not.toMatch(/kyverum/i);
+    expect(document.body.textContent).not.toMatch(/kyverum/i);
     expect(screen.getByLabelText(/Autorizo de forma libre, previa y expresa a Flit/)).toBeInTheDocument();
   });
 
@@ -58,7 +60,7 @@ describe("PasoDatos", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(button());
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: "manual-ley1581-v1" });
+    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: "manual-ley1581-v2" });
   });
 
   it("si falla el registro muestra error, conserva la casilla y permite reintentar", async () => {
@@ -75,16 +77,16 @@ describe("PasoDatos", () => {
   });
 
   it("la versión enviada es la que devolvió el GET y coincide con la del backend", async () => {
-    expect(RENDERED_CONSENT_TEXT_VERSION).toBe("manual-ley1581-v1");
+    expect(RENDERED_CONSENT_TEXT_VERSION).toBe("manual-ley1581-v2");
     const { postConsent, onDone } = setup(undefined, { ...VIEW, consentTextVersion: RENDERED_CONSENT_TEXT_VERSION });
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(button());
     await waitFor(() => expect(onDone).toHaveBeenCalled());
-    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: "manual-ley1581-v1" });
+    expect(postConsent).toHaveBeenCalledWith("tok", { accepted: true, textVersion: "manual-ley1581-v2" });
   });
 
   it("si el backend usa otra versión del texto bloquea con error claro y no llama a postConsent", () => {
-    const { postConsent, onDone } = setup(undefined, { ...VIEW, consentTextVersion: "manual-ley1581-v2" });
+    const { postConsent, onDone } = setup(undefined, { ...VIEW, consentTextVersion: "manual-ley1581-v1" });
     expect(screen.getByRole("alert")).toHaveTextContent("El texto de consentimiento cambió; recarga la página.");
     fireEvent.click(screen.getByRole("checkbox"));
     expect(button()).toBeDisabled();
