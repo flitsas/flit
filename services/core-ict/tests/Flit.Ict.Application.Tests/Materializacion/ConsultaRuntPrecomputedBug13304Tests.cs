@@ -16,12 +16,13 @@ namespace Flit.Ict.Application.Tests.Materializacion;
 /// <summary>
 /// Bug #13304 (numeral 3, carril B) — core-ict guarda la consulta RUNT de su validación y la envía a
 /// core-api en el campo 14 (<c>precomputed_vehicle</c>) para que el borrador no re-consulte el RUNT.
-/// Vigencia de 24 h: vencida o ausente ⇒ el master queda CON NOVEDADES (ps=4) sin llamar a core-api.
+/// Vigencia de 24 h: vencida o ausente ⇒ core-ict re-encola su consulta de vehículo (una vez por ventana) sin
+/// llamar a core-api; si sigue sin snapshot válido, el master queda CON NOVEDADES (ps=4).
 /// <para>Uso de ejemplo:</para>
 /// <code>
-/// var (result, novedad) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
+/// var (result, novedad, reencolado) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
 ///     master, tipo, draftClient, snapshots, DateTimeOffset.UtcNow, maxAgeHours: 24, ct);
-/// // novedad != null ⇒ master.ProcessStatusId == 4 y draftClient no fue llamado.
+/// // reencolado ⇒ estado intacto; novedad != null ⇒ ps=4; en ambos draftClient no fue llamado.
 /// </code>
 /// </summary>
 public sealed class ConsultaRuntPrecomputedBug13304Tests
@@ -56,35 +57,106 @@ public sealed class ConsultaRuntPrecomputedBug13304Tests
 
     // ---------------------------------------------------------------- (1) vigencia ⇒ ps=4 sin core-api
 
-    public static TheoryData<string, int?> CasosSinConsultaVigente => new()
-    {
-        // (novedad esperada, horas de antigüedad; null = sin resultado guardado)
-        { SendToCoreApiJob.NovedadConsultaRuntVencida, 25 },
-        { SendToCoreApiJob.NovedadConsultaRuntVencida, 24 * 7 },
-        { SendToCoreApiJob.NovedadSinConsultaRunt, null },
-    };
+    /// <summary>Horas de antigüedad de la última consulta; null = sin resultado guardado (ausente).</summary>
+    public static TheoryData<int?> CasosSinConsultaVigente => new((int?)25, (int?)(24 * 7), (int?)null);
 
+    private static VehicleSnapshotLookup LookupSinConsultaVigente(int? horasDeAntiguedad) => new(
+        RequiresVehicle: true,
+        horasDeAntiguedad is { } h ? Snapshot(Ahora.AddHours(-h)) : null);
+
+    // (a) vencida y (b) ausente: primera vez en la ventana ⇒ re-encola, sin core-api y sin cambiar el estado.
     [Theory]
     [MemberData(nameof(CasosSinConsultaVigente))]
-    public async Task Envio_ConsultaRuntVencidaOAusente_DejaElMasterEn4ConNovedad_SinLlamarACoreApi(
-        string novedadEsperada, int? horasDeAntiguedad)
+    public async Task Envio_ConsultaRuntVencidaOAusente_ReencolaLaConsulta_SinLlamarACoreApiNiCambiarEstado(int? horasDeAntiguedad)
     {
         var master = Master();
         var draftClient = Substitute.For<IProcedureDraftClient>();
-        var lookup = new VehicleSnapshotLookup(
-            RequiresVehicle: true,
-            horasDeAntiguedad is { } h ? Snapshot(Ahora.AddHours(-h)) : null);
+        var reader = Reader(LookupSinConsultaVigente(horasDeAntiguedad));
+        reader.RequeueVehicleQueryAsync(master.Id, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
 
-        var (result, novedad) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
-            master, Traspaso, draftClient, Reader(lookup), Ahora, maxAgeHours: 24, TestContext.Current.CancellationToken);
+        var (result, novedad, reencolado) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
+            master, Traspaso, draftClient, reader, Ahora, maxAgeHours: 24, TestContext.Current.CancellationToken);
 
+        reencolado.Should().BeTrue();
         result.Should().BeNull();
-        novedad.Should().Be(novedadEsperada);
-        master.ProcessStatusId.Should().Be(4, "sin consulta RUNT vigente el pre-trámite queda CON NOVEDADES");
-        master.ExternalCommentsValidation.Should().Contain(novedadEsperada);
+        novedad.Should().BeNull();
+        master.ProcessStatusId.Should().Be(2, "el master queda en su estado: la consulta pendiente lo saca de la elegibilidad");
+        master.ExternalCommentsValidation.Should().BeEmpty();
+        await reader.Received(1).RequeueVehicleQueryAsync(master.Id, 24, Arg.Any<CancellationToken>());
         await draftClient.DidNotReceive().CreateDraftAsync(
             Arg.Any<ExternalIntegrationMaster>(), Arg.Any<DraftProcedureType>(),
             Arg.Any<VehicleConsultationSnapshot?>(), Arg.Any<CancellationToken>());
+    }
+
+    // (c) ya se re-consultó dentro de la ventana y sigue sin snapshot válido ⇒ ps=4 con la novedad y purga.
+    [Theory]
+    [MemberData(nameof(CasosSinConsultaVigente))]
+    public async Task Envio_SegundaVezSinSnapshotEnLaVentana_DejaPs4ConNovedadYPurga(int? horasDeAntiguedad)
+    {
+        var master = Master();
+        var draftClient = Substitute.For<IProcedureDraftClient>();
+        var reader = Reader(LookupSinConsultaVigente(horasDeAntiguedad));
+        reader.RequeueVehicleQueryAsync(master.Id, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
+        var bitacora = new List<string>();
+        reader.PurgeAsync(master.Id, Arg.Any<CancellationToken>()).Returns(_ => { bitacora.Add("purga"); return 1; });
+
+        var (result, novedad, reencolado) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
+            master, Traspaso, draftClient, reader, Ahora, maxAgeHours: 24, TestContext.Current.CancellationToken);
+        await SendToCoreApiJob.ResolverEnvioAsync(
+            master, result, novedad, reencolado,
+            (_, _, _) => { bitacora.Add("ps5"); return Task.CompletedTask; },
+            (msg, _) => { bitacora.Add("ps4:" + msg); return Task.CompletedTask; },
+            reader, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, TestContext.Current.CancellationToken);
+
+        reencolado.Should().BeFalse();
+        novedad.Should().Be(SendToCoreApiJob.NovedadSinConsultaRunt);
+        SendToCoreApiJob.NovedadSinConsultaRunt.Should().Be("sin consulta RUNT; re-registre el pretrámite");
+        master.ProcessStatusId.Should().Be(4);
+        master.ExternalCommentsValidation.Should().Contain(SendToCoreApiJob.NovedadSinConsultaRunt);
+        bitacora.Should().Equal("ps4:" + SendToCoreApiJob.NovedadSinConsultaRunt, "purga");
+        await draftClient.DidNotReceive().CreateDraftAsync(
+            Arg.Any<ExternalIntegrationMaster>(), Arg.Any<DraftProcedureType>(),
+            Arg.Any<VehicleConsultationSnapshot?>(), Arg.Any<CancellationToken>());
+    }
+
+    // (d) la re-consulta quedó resuelta y vigente ⇒ envía con el campo 14 y no vuelve a encolar.
+    [Fact]
+    public async Task Envio_ReconsultaResueltaYVigente_EnviaConElCampo14()
+    {
+        var master = Master();
+        var fresca = Snapshot(Ahora.AddMinutes(-3));
+        var reader = Reader(new VehicleSnapshotLookup(true, fresca));
+        var draftClient = Substitute.For<IProcedureDraftClient>();
+        draftClient.CreateDraftAsync(master, Traspaso, fresca, Arg.Any<CancellationToken>())
+            .Returns(new CreateDraftResult(Guid.NewGuid(), "REF", "borrador", null));
+
+        var (result, novedad, reencolado) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
+            master, Traspaso, draftClient, reader, Ahora, 24, TestContext.Current.CancellationToken);
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, Traspaso, SinAdjuntos(), fresca, log: null, TestContext.Current.CancellationToken);
+
+        reencolado.Should().BeFalse();
+        novedad.Should().BeNull();
+        result!.ProcedureInstanceId.Should().NotBeNull();
+        await draftClient.Received(1).CreateDraftAsync(master, Traspaso, fresca, Arg.Any<CancellationToken>());
+        await reader.DidNotReceive().RequeueVehicleQueryAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        request.PrecomputedVehicle.Should().NotBeNull();
+        request.PrecomputedVehicle.ConsultedAt.Should().Be(Timestamp.FromDateTimeOffset(fresca.ConsultedAt));
+    }
+
+    [Fact]
+    public void Reencolado_SqlCopiaLaUltimaConsultaDeVehiculo_UnaVezPorVentana()
+    {
+        var sql = DbVehicleSnapshotReader.RequeueSql;
+
+        sql.Should().Contain("INSERT INTO ict.external_integration_source_query")
+            .And.Contain("query_type IN ('VEHICLE', 'VIN')")
+            .And.Contain("sq.eim_id = @master")
+            .And.Contain("ORDER BY sq.created_at DESC, sq.id DESC")
+            .And.Contain("NOT EXISTS")
+            .And.Contain("r.created_at >= now() - make_interval(hours => @hours)")
+            .And.Contain("r.id <> (", "la consulta original del SP no cuenta como re-consulta");
+        sql.Should().NotContain("is_data_queried = true", "la nueva source_query nace pendiente (default false)");
     }
 
     [Fact]
@@ -96,10 +168,11 @@ public sealed class ConsultaRuntPrecomputedBug13304Tests
         draftClient.CreateDraftAsync(master, Traspaso, vigente, Arg.Any<CancellationToken>())
             .Returns(new CreateDraftResult(Guid.NewGuid(), "REF", "borrador", null));
 
-        var (result, novedad) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
+        var (result, novedad, reencolado) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
             master, Traspaso, draftClient, Reader(new VehicleSnapshotLookup(true, vigente)), Ahora, 24,
             TestContext.Current.CancellationToken);
 
+        reencolado.Should().BeFalse();
         novedad.Should().BeNull();
         result!.ProcedureInstanceId.Should().NotBeNull();
         master.ProcessStatusId.Should().Be(2, "el estado lo fija el job tras crear el borrador");
@@ -115,7 +188,7 @@ public sealed class ConsultaRuntPrecomputedBug13304Tests
         draftClient.CreateDraftAsync(master, Traspaso, null, Arg.Any<CancellationToken>())
             .Returns(new CreateDraftResult(Guid.NewGuid(), null, null, null));
 
-        var (_, novedad) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
+        var (_, novedad, _) = await SendToCoreApiJob.EnviarConConsultaRuntAsync(
             master, Traspaso, draftClient, Reader(new VehicleSnapshotLookup(false, null)), Ahora, 24,
             TestContext.Current.CancellationToken);
 
@@ -128,10 +201,10 @@ public sealed class ConsultaRuntPrecomputedBug13304Tests
     [InlineData(-5)]
     public void Vigencia_NoConfiguradaOInvalida_Usa24Horas(int maxAgeHours)
     {
-        SendToCoreApiJob.NovedadConsultaRunt(new VehicleSnapshotLookup(true, Snapshot(Ahora.AddHours(-23))), Ahora, maxAgeHours)
-            .Should().BeNull();
-        SendToCoreApiJob.NovedadConsultaRunt(new VehicleSnapshotLookup(true, Snapshot(Ahora.AddHours(-25))), Ahora, maxAgeHours)
-            .Should().Be(SendToCoreApiJob.NovedadConsultaRuntVencida);
+        SendToCoreApiJob.ConsultaRuntVigente(new VehicleSnapshotLookup(true, Snapshot(Ahora.AddHours(-23))), Ahora, maxAgeHours)
+            .Should().BeTrue();
+        SendToCoreApiJob.ConsultaRuntVigente(new VehicleSnapshotLookup(true, Snapshot(Ahora.AddHours(-25))), Ahora, maxAgeHours)
+            .Should().BeFalse();
     }
 
     // ---------------------------------------------------------------- (2) request con el campo 14

@@ -111,4 +111,11 @@ public interface IIctVehicleSnapshotReader
 
     /// <summary>Vacía <c>vehicle_snapshot</c> de todas las respuestas del master (minimización de PII).</summary>
     Task<int> PurgeAsync(Guid masterId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bug #13304 — re-encola la consulta VEHICLE/VIN del master (nueva source_query pendiente, copia de la
+    /// última) para que el orquestador la resuelva. Como máximo UNA re-consulta por master dentro de la
+    /// ventana de <paramref name="windowHours"/>: devuelve false (sin insertar) si ya se usó.
+    /// </summary>
+    Task<bool> RequeueVehicleQueryAsync(Guid masterId, int windowHours, CancellationToken ct = default);
 }

@@ -10,8 +10,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Bug #13304 — lee y purga el resultado completo de la consulta RUNT de vehículo que el orquestador
-/// guardó en <c>ict.external_integration_source_response.vehicle_snapshot</c> (DDL 26). La columna tiene
+/// Bug #13304 — lee, purga y re-encola la consulta RUNT de vehículo; el resultado completo que el orquestador
+/// guardó está en <c>ict.external_integration_source_response.vehicle_snapshot</c> (DDL 26). La columna tiene
 /// PII (titular, acreedor): ningún lector de trazabilidad la selecciona y se vacía al materializar.
 /// Corre desde los jobs (RLS saltada por el rol de sistema).
 /// </summary>
@@ -41,6 +41,59 @@ public sealed class DbVehicleSnapshotReader(IctDbContext db) : IIctVehicleSnapsh
         FROM ict.external_integration_source_query sq
         WHERE sq.id = sr.eisq_id AND sq.eim_id = @master AND sr.vehicle_snapshot IS NOT NULL
         """;
+
+    /// <summary>
+    /// Re-encola la consulta de vehículo: copia la última source_query VEHICLE/VIN del master como una nueva
+    /// pendiente (is_data_queried=false por defecto), que procesa el orquestador. Sin DDL nuevo, el tope de UNA
+    /// re-consulta por ventana se cuenta en la propia tabla: no se inserta si ya hay, dentro de las últimas
+    /// @hours, una consulta de vehículo del master que NO sea la original (la primera, creada por el SP externo).
+    /// </summary>
+    internal const string RequeueSql = """
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, eia_id, eis_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, rnmc_date_expedition)
+        SELECT sq.eim_id, sq.tenant_id, sq.eia_id, sq.eis_id, sq.actor_level, sq.query_type, sq.document_type,
+               sq.document_number, sq.plate_complete, sq.vehicle_vin, sq.rnmc_date_expedition
+        FROM ict.external_integration_source_query sq
+        WHERE sq.eim_id = @master AND sq.query_type IN ('VEHICLE', 'VIN')
+          AND NOT EXISTS (
+              SELECT 1 FROM ict.external_integration_source_query r
+              WHERE r.eim_id = @master AND r.query_type IN ('VEHICLE', 'VIN')
+                AND r.created_at >= now() - make_interval(hours => @hours)
+                AND r.id <> (
+                    SELECT f.id FROM ict.external_integration_source_query f
+                    WHERE f.eim_id = @master AND f.query_type IN ('VEHICLE', 'VIN')
+                    ORDER BY f.created_at, f.id
+                    LIMIT 1))
+        ORDER BY sq.created_at DESC, sq.id DESC
+        LIMIT 1
+        """;
+
+    public async Task<bool> RequeueVehicleQueryAsync(Guid masterId, int windowHours, CancellationToken ct = default)
+    {
+        var connection = db.Database.GetDbConnection();
+        var wasClosed = connection.State != ConnectionState.Open;
+        if (wasClosed)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = RequeueSql;
+            AddParam(cmd, "master", masterId);
+            AddParam(cmd, "hours", windowHours);
+            return await cmd.ExecuteNonQueryAsync(ct) > 0;
+        }
+        finally
+        {
+            if (wasClosed)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
 
     public async Task<VehicleSnapshotLookup> GetLatestAsync(Guid masterId, CancellationToken ct = default)
     {
