@@ -17,7 +17,8 @@ namespace Flit.Infrastructure.Security;
 ///   o rol <c>SuperAdmin</c> activo, el mismo bypass de <c>RequirePermission</c>); el trámite debe ser de esa
 ///   compañía.</item>
 ///   <item><b>Origen <c>superadmin</c></b>: usuario activo con rol <c>SuperAdmin</c> activo; la compañía congelada es
-///   la del trámite en el ítem.</item>
+///   SIEMPRE la del trámite en el ítem (<c>items.tenant_id</c>), nunca la del lote ni el <c>scope_tenant_id</c>
+///   (HU #13384 AC1).</item>
 ///   <item>En ambos: el trámite existe, sin borrado lógico, y es de la compañía congelada.</item>
 ///   <item><b>AC7</b>: el solicitante no tiene una suspensión vigente (<see cref="UserTempSuspension.VigenteEn"/>, la
 ///   misma regla con la que el login lo bloquea) en la compañía congelada del lote (<c>tramites</c>) o en las compañías
@@ -58,7 +59,8 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
                 break;
 
             case ConsolidadoExportOrigin.Superadmin:
-                compania = contexto.CompaniaCongelada;
+                // HU #13384 AC1: siempre la compañía del ítem (items.tenant_id), nunca la del lote ni el scope.
+                compania = contexto.CompaniaTramiteId;
                 solicitanteConAcceso = await CacheadoAsync(
                     $"consolidado-lote-acceso:{contexto.BatchId:N}:superadmin",
                     c => EsSuperAdminActivoAsync(contexto.SolicitanteId, c),
