@@ -46,6 +46,17 @@ message CreateDraftFromIctRequest {
   // MISMO organismo (transit_office_name lleva su nombre del catálogo): core-api siembra los field_values.
   string transit_office_code       = 12;
   string transit_office_city       = 13;  // city_code DANE del organismo
+  // Bug #13304 — consulta RUNT de la validación ICT para reutilizar (core-api NO re-consulta).
+  PrecomputedVehicleConsultation precomputed_vehicle = 14;
+}
+
+message PrecomputedVehicleConsultation {
+  string snapshot_json = 1;                     // = ConsultationReply.vehicle_snapshot_json, sin tocar
+  google.protobuf.Timestamp consulted_at = 2;
+  string provider = 3;
+  string kind = 4;                              // "VehiclePlate" | "VehicleVin"
+  string queried_plate = 5;                     // placa con la que se consultó ("" si VIN)
+  string queried_vin = 6;                       // VIN con el que se consultó ("" si placa)
 }
 
 message FieldValue {
