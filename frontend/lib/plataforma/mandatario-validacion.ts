@@ -5,6 +5,7 @@
  */
 import type {
   MandateSigner,
+  MandateSignerIdentityReconcile,
   MandateSignerIdentityResend,
   MandateSignerSaved,
   SignatureMethod,
@@ -80,6 +81,40 @@ export function puedeReenviarValidacion(
     signer.identityStatus !== "valid" &&
     signer.puedeEditar !== false
   );
+}
+
+/**
+ * «Consultar estado» aplica mientras la validación propia está en curso: el mandatario pudo aprobar (por
+ * ejemplo, en el segundo intento) sin que el aviso del proveedor llegara.
+ */
+export function puedeConsultarEstado(
+  signer: Pick<MandateSigner, "signerModel" | "signatureMethod" | "signatureVaultId" | "isActive" | "identityStatus">,
+): boolean {
+  return requiereValidacionPropia(signer) && signer.isActive && signer.identityStatus === "pending";
+}
+
+/** Tope de consultas automáticas por carga de la lista (el resto lo cubre el servidor por su cuenta). */
+export const MAX_CONSULTAS_AUTOMATICAS = 10;
+
+/**
+ * Al abrir la lista, consulta el estado de las validaciones en curso, como la pantalla de espera del
+ * trámite. Una a una y sin avisos: un fallo no interrumpe la pantalla. Devuelve si alguna cambió, para
+ * recargar la lista solo en ese caso.
+ */
+export async function sincronizarValidacionesEnCurso(
+  signers: readonly MandateSigner[],
+  consultar: (signer: MandateSigner) => Promise<MandateSignerIdentityReconcile>,
+): Promise<boolean> {
+  let cambio = false;
+  for (const signer of signers.filter(puedeConsultarEstado).slice(0, MAX_CONSULTAS_AUTOMATICAS)) {
+    try {
+      const result = await consultar(signer);
+      cambio = cambio || result.updated;
+    } catch {
+      // Sin aviso: el servidor sigue consultando por su cuenta.
+    }
+  }
+  return cambio;
 }
 
 /** Mensaje de éxito del reenvío. */

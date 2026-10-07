@@ -330,6 +330,27 @@ export function resendMandateSignerIdentity(
   );
 }
 
+/** Respuesta de «Consultar estado»: estado vigente de la validación propia y si la consulta lo cambió. */
+export interface MandateSignerIdentityReconcile {
+  status: string | null;
+  updated: boolean;
+}
+
+/**
+ * POST /{signerId}/identity-validation/reconcile — «Consultar estado» desde el hub del OT: pregunta al
+ * proveedor y aplica el resultado si el webhook no llegó (lo mismo que hace la pantalla de espera del
+ * trámite). 409 si no requiere validación o aún no tiene ninguna; 503 si el proveedor no responde.
+ */
+export function reconcileMandateSignerIdentity(
+  transitOfficeId: string,
+  mandateSignerId: string,
+): Promise<MandateSignerIdentityReconcile> {
+  return apiFetch<MandateSignerIdentityReconcile>(
+    `${base(transitOfficeId)}/${mandateSignerId}/identity-validation/reconcile`,
+    { method: "POST" },
+  );
+}
+
 /** PUT /{signerId} — edición (RF23, regenera la huella). */
 export function updateMandateSigner(
   transitOfficeId: string,
@@ -572,6 +593,18 @@ export function resendCompanyMandateSignerIdentity(
 ): Promise<MandateSignerIdentityResend> {
   return apiFetch<MandateSignerIdentityResend>(
     `${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/identity-validation/resend`,
+    { method: "POST" },
+  );
+}
+
+/** «Consultar estado» desde la compañía (mismas respuestas que el hub del OT). */
+export function reconcileCompanyMandateSignerIdentity(
+  tenantId: string,
+  mandateSignerId: string,
+  networkHeadId?: string | null,
+): Promise<MandateSignerIdentityReconcile> {
+  return apiFetch<MandateSignerIdentityReconcile>(
+    `${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/identity-validation/reconcile`,
     { method: "POST" },
   );
 }

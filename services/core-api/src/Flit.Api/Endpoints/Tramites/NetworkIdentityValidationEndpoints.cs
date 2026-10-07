@@ -118,6 +118,7 @@ internal static class NetworkIdentityValidationEndpoints
             [FromQuery] string? documentNumber,
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
+            [FromQuery] bool? mandatario,
             CancellationToken ct) =>
         {
             var (result, error) = await handler.HandleAsync(
@@ -127,6 +128,7 @@ internal static class NetworkIdentityValidationEndpoints
                 documentNumber,
                 page ?? 1,
                 pageSize ?? ListPersonBiometricValidationsHandler.DefaultPageSize,
+                mandatario ?? false,
                 ct);
 
             // El acceso a la persona de una hija se audita con su desenlace; la cabeza sobre sí misma

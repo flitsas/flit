@@ -40,7 +40,10 @@ public sealed record TenantBiometricPersonDto(
     // HU #12706 — compañía dueña de la persona (la persona es compañía + documento). Aditivos: el
     // front que no los lee sigue funcionando. TenantName null si la compañía no resuelve nombre.
     Guid TenantId = default,
-    string? TenantName = null);
+    string? TenantName = null,
+    // Validación PROPIA de un mandatario: fila aparte (no se mezcla ni se apalanca con el trámite o la prevalidación del
+    // mismo documento). Su aprobación no vence a los 30 días (HU #13130b), por eso no lleva días restantes.
+    bool EsMandatario = false);
 
 /// <summary>
 /// Respuesta del listado agrupado. <see cref="Stats"/> cuenta PERSONAS por el estado de su validación
@@ -197,7 +200,9 @@ public sealed class ListTenantBiometricPersonsHandler(
         var persons = rows.Select(r =>
         {
             worstByPerson.TryGetValue(PersonKey(r.TenantId, $"{r.DocumentTypeNorm}|{r.DocumentNumberNorm}"), out var worst);
-            return ToDto(r, worst, now, tenantNames.GetValueOrDefault(r.TenantId));
+            // Las alertas se calculan sobre las validaciones del trámite y la prevalidación de ese documento: no son de la
+            // fila del mandatario.
+            return ToDto(r, r.EsMandatario ? null : worst, now, tenantNames.GetValueOrDefault(r.TenantId));
         }).ToList();
 
         return (new TenantBiometricPersonsResponse(persons, stats, page, pageSize, totalPersons), null);
@@ -293,7 +298,7 @@ public sealed class ListTenantBiometricPersonsHandler(
     {
         // DaysRemaining solo aplica a aprobadas; reusa BiometricRules vía proyección mínima.
         int? daysRemaining = null;
-        if (r.Status == BiometricEstados.Aprobado && r.ValidatedAt is { } validatedAt)
+        if (!r.EsMandatario && r.Status == BiometricEstados.Aprobado && r.ValidatedAt is { } validatedAt)
         {
             var validUntil = r.ValidUntil ?? validatedAt.AddDays(BiometricRules.VigenciaDias);
             var days = (int)Math.Ceiling((validUntil - now).TotalDays);
@@ -325,7 +330,8 @@ public sealed class ListTenantBiometricPersonsHandler(
             daysRemaining,
             r.ExpiresAt,
             r.TenantId,
-            tenantName);
+            tenantName,
+            r.EsMandatario);
     }
 
     /// <summary>
