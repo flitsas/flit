@@ -551,6 +551,11 @@ export interface ProcedureInstanceDetail {
   /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
   draftFinalizedAt?: string | null;
   /**
+   * HU #13403 — false ⇒ la compañía tiene deshabilitada la generación automática de improntas: el
+   * radicador la carga a mano. Ausente/undefined ⇒ true (comportamiento histórico).
+   */
+  improntaGeneracionHabilitada?: boolean;
+  /**
    * HU #10879/#10883 — paso actual PERSISTIDO del wizard (autosave por paso). `null`/ausente ⇒ el
    * frontend cae al paso derivado de los gates (comportamiento previo).
    */

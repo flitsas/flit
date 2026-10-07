@@ -153,6 +153,11 @@ public sealed class CreateProcedureInstanceHandler(
             // que AddWithUniqueReferenceAsync: nada de UPDATE posterior que dejaría external_ref sin grabar.
             Origin = request.Origin,
             ExternalRef = request.ExternalRef,
+            // HU #13402 — se congela el parámetro «generar improntas» de la compañía en este instante:
+            // cambiarlo o reactivarlo después no altera este trámite.
+            ImprontaGeneracionHabilitada = await familyGate
+                .IsImprontaGenerationEnabledAsync(request.TenantId, ct)
+                .ConfigureAwait(false),
             CreatedAt = now,
             CreatedBy = request.CreatedByUserId
         };
