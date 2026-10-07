@@ -2,7 +2,7 @@ import { apiUrl, tenantHeader } from './tramites-client';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { TOPE_SELECCION_LOTE } from '@/hooks/useSeleccionLote';
 import { downloadFile } from './download';
-import { ApiError } from './types';
+import { ApiError, ApiValidationError } from './types';
 import type {
   CodigoErrorLote,
   CrearLoteConsolidadosRequest,
@@ -78,6 +78,22 @@ function leerProblemaObjeto(cuerpo: unknown): { codigo: string | null; loteActiv
     codigo: typeof codigo === 'string' ? codigo : null,
     loteActivoId: typeof lote === 'string' ? lote : null,
   };
+}
+
+/**
+ * HU #13394 — traduce el error de un cliente que no pasa por {@link llamar} (p. ej. `apiFetch` de
+ * la bandeja OT) a {@link ConsolidadoLotesApiError}, para que {@link interpretarErrorCrearLote}
+ * lo lea igual. Una cancelación (`AbortError`) se devuelve tal cual: no es una falla de red.
+ */
+export function aErrorDeLote(err: unknown): unknown {
+  if (err instanceof ConsolidadoLotesApiError) return err;
+  if ((err as { name?: unknown } | null)?.name === 'AbortError') return err;
+  if (err instanceof ApiError) {
+    const { codigo, loteActivoId } = leerProblemaObjeto(err.body);
+    return new ConsolidadoLotesApiError(err.status, codigo, loteActivoId);
+  }
+  if (err instanceof ApiValidationError) return new ConsolidadoLotesApiError(err.status, null);
+  return new ConsolidadoLotesApiError(0, null);
 }
 
 async function llamar(path: string, init: RequestInit = {}): Promise<Response> {
