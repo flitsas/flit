@@ -131,7 +131,7 @@ public sealed class OrchestratorJob(
             // Advertencia INFORMATIVA: se registra en el master pero NO bloquea el paso a borrador.
             else if (warnings.Count > 0)
             {
-                await RecordWarningAsync(connection, q.MasterId, string.Join("; ", warnings), ct);
+                await RecordWarningAsync(connection, q.MasterId, warnings, ct);
             }
         }
 #pragma warning disable CA1031 // el orquestador debe ser resiliente a CUALQUIER fallo técnico de la fuente
@@ -270,19 +270,36 @@ public sealed class OrchestratorJob(
     /// Registra una advertencia INFORMATIVA en el master (external_comments_validation) SIN bloquear: no
     /// cambia process_status_id, así que el master avanza a borrador con la observación visible en el estado.
     /// </summary>
-    private static async Task RecordWarningAsync(DbConnection connection, Guid masterId, string message, CancellationToken ct)
+    /// <summary>
+    /// Bug #13304 — registra en el master solo las advertencias que aún no están en
+    /// <c>external_comments_validation</c> (una consulta re-encolada vuelve a producir las mismas) y emite el
+    /// evento «advertencia» únicamente si agregó alguna. Formato del texto agregado: <c>" a; b;"</c>.
+    /// </summary>
+    internal const string RecordWarningSql = """
+        WITH nuevas AS (
+            SELECT string_agg(u.w, '; ' ORDER BY u.ord) AS txt
+            FROM ict.external_integration_master m,
+                 unnest(@warnings::text[]) WITH ORDINALITY AS u(w, ord)
+            WHERE m.id = @id AND position(u.w IN m.external_comments_validation) = 0
+        ), upd AS (
+            UPDATE ict.external_integration_master m
+            SET external_comments_validation = m.external_comments_validation || ' ' || n.txt || ';'
+            FROM nuevas n
+            WHERE m.id = @id AND n.txt IS NOT NULL
+            RETURNING m.id, m.tenant_id, n.txt
+        )
+        SELECT ict.record_pretramite_event(upd.id, upd.tenant_id, 'en_validacion_externa', 'advertencia',
+                   jsonb_build_object('warnings', ' ' || upd.txt || ';'))
+        FROM upd
+        """;
+
+    private static async Task RecordWarningAsync(
+        DbConnection connection, Guid masterId, IReadOnlyCollection<string> warnings, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            UPDATE ict.external_integration_master
-            SET external_comments_validation = external_comments_validation || @msg
-            WHERE id = @id;
-            SELECT ict.record_pretramite_event(m.id, m.tenant_id, 'en_validacion_externa', 'advertencia',
-                       jsonb_build_object('warnings', @msg))
-            FROM ict.external_integration_master m WHERE m.id = @id
-            """;
+        cmd.CommandText = RecordWarningSql;
         AddParam(cmd, "id", masterId);
-        AddParam(cmd, "msg", " " + message + ";");
+        AddParam(cmd, "warnings", warnings.ToArray());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
