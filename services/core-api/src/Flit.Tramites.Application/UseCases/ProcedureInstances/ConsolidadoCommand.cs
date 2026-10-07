@@ -134,12 +134,30 @@ public sealed class GenerarConsolidadoHandler(
     /// explícita "Limpiar consolidado" del admin (<c>LimpiarConsolidadoHandler</c>) lo pone en
     /// <c>true</c> para forzar SIEMPRE la regeneración, sin importar el <c>Source</c> del vigente.
     /// </param>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid? userId,
+        bool force,
+        bool bypassSourceUserProtection,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, userId, force, bypassSourceUserProtection, soloSiNoExiste: false, ct);
+
+    /// <param name="soloSiNoExiste">
+    /// HU #13371 (Épica #13216) — guarda del lote de descarga masiva: si ya hay un adjunto
+    /// <c>consolidado</c>, se devuelve ese tal cual con <c>Regenerado=false</c>, ANTES de la protección
+    /// <c>Source="user"</c>, del atajo de caché y de cualquier cascada (FUR, impronta). Sin mirar la
+    /// bandera de vigencia ni el estado. Cubre la carrera «otro flujo lo creó entre la lectura del lote y
+    /// la generación». Con <c>false</c> (las demás sobrecargas) el comportamiento es el de siempre; solo
+    /// <c>ConsolidadoLoteEntregador</c> lo pasa en <c>true</c> (lo vigila <c>ConsolidadoLoteArchitectureTests</c>).
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid? userId,
         bool force,
         bool bypassSourceUserProtection,
+        bool soloSiNoExiste,
         CancellationToken ct = default)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
@@ -174,6 +192,15 @@ public sealed class GenerarConsolidadoHandler(
         // Feature #11066 — `force=true` invalida y salta el atajo de caché para reconstruir desde cero.
         var consolidadoVigente = instance.Attachments
             .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+
+        // HU #13371 — el lote nunca regenera: si el trámite ya tiene consolidado (aunque esté
+        // desactualizado, sea del usuario o el trámite esté en estado final), se entrega ese. Va en el
+        // mismo read que decidiría generar, así que una generación simultánea no produce un segundo PDF.
+        if (soloSiNoExiste && ConsolidadoEntregaModos.Existente(instance, "consolidado") is { } yaExiste)
+        {
+            var existenteDto = new ConsolidadoDocumentDto(yaExiste.Id, yaExiste.Tipo, yaExiste.Filename, yaExiste.Sha256);
+            return (new GenerarConsolidadoResult(existenteDto, Regenerado: false), null);
+        }
 
         // HU #12158 (AC2) — un consolidado cargado a mano por el admin (Source="user") prevalece sobre
         // cualquier regeneración AUTOMÁTICA, incluida la que dispara `force=true` desde el botón
@@ -521,7 +548,8 @@ public sealed class GenerarConsolidadoHandler(
         return result;
     }
 
-    private static bool TieneFur(ProcedureInstance instance) =>
+    /// <summary>¿El trámite tiene adjunto <c>fur</c>? Lo comparte el lote (HU #13371) para omitir el final sin FUR.</summary>
+    internal static bool TieneFur(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
