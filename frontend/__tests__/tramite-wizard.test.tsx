@@ -1899,7 +1899,7 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
     return user;
   }
 
-  it('AC1: con mandatario válido muestra «Firmará: nombre / forma» sin controles para cambiarlo', async () => {
+  it('AC1: con mandatario válido dice en una frase quién firmará el mandato, sin controles para cambiarlo', async () => {
     mocks.getMandateSigner.mockResolvedValue({
       estado: 'valido',
       nombre: 'Ana Restrepo',
@@ -1908,7 +1908,9 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
     });
     await abrirResumen();
     const ind = await screen.findByTestId('mandatario-firma-valido');
-    expect(ind).toHaveTextContent('Firmará: Ana Restrepo / Baúl de firmas');
+    expect(ind).toHaveTextContent(
+      'Ana Restrepo firmará el contrato de mandato con la firma que ya tiene guardada.',
+    );
     expect(within(ind).queryByRole('button')).not.toBeInTheDocument();
     expect(within(ind).queryByRole('combobox')).not.toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
