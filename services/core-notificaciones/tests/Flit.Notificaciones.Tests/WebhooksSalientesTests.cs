@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using Flit.Infrastructure.Notifications.Renting;
-using Flit.Modules.Notificaciones;
-using Flit.Modules.Security.Domain.Auth;
+using System.Net;
+using Flit.Modules.Notificaciones.Webhooks;
 using Flit.Notificaciones.Api;
 using Flit.Notificaciones.Api.Persistence;
+using Flit.Notificaciones.Api.Webhooks;
 using Flit.Platform.Sdk.Messaging;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -19,19 +19,19 @@ using Xunit;
 namespace Flit.Notificaciones.Tests;
 
 /// <summary>
-/// HU #13354 (Epic #13316) — core-notificaciones atiende trabajos <c>notificaciones.email.send</c> desde el bus, contra
-/// Postgres y RabbitMQ reales (<c>FLIT_TEST_RABBITMQ</c>; sin broker se omite): envía y registra (AC1); con el proveedor
-/// caído reintenta y termina en <c>notificaciones.email.send.dlq</c>, con cada intento en el registro (AC2); un rechazo
-/// definitivo no se reintenta. Esperas entre reintentos cortas para la prueba.
+/// HU #13356 (Epic #13316) — core-notificaciones entrega los webhooks salientes que le dejan como trabajos, contra
+/// Postgres y RabbitMQ reales (<c>FLIT_TEST_RABBITMQ</c>; sin broker se omite): el POST sale con el cuerpo exacto y las
+/// cabeceras firmadas (AC1); un destino interno se bloquea y se registra (AC2); un destino caído se reintenta y termina
+/// en la .dlq (AC3). El destino es un HttpMessageHandler falso; el filtro, uno que bloquea los hosts «interno».
 /// </summary>
 [Collection(ColeccionBus.Nombre)]
-public sealed class TrabajosCorreoTests : IAsyncLifetime
+public sealed class WebhooksSalientesTests : IAsyncLifetime
 {
     private static readonly string RabbitMq = Environment.GetEnvironmentVariable("FLIT_TEST_RABBITMQ") ?? "amqp://flit:flit-prueba@127.0.0.1:5672/";
-    private const string Cola = TrabajoCorreo.Tipo;
+    private const string Cola = TrabajoWebhookConsumer.Cola;
 
     private readonly Guid _empresa = Guid.NewGuid();
-    private readonly RentingFalso _renting = new();
+    private readonly DestinoFalso _destino = new();
     private string _database = string.Empty;
     private string? _skip;
     private WebApplication? _app;
@@ -79,9 +79,10 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
                 ["Notificaciones:Correo:EsperasReintento:0"] = "00:00:00.200",
                 ["Notificaciones:Correo:EsperasReintento:1"] = "00:00:00.300",
                 ["Notificaciones:Correo:EsperasReintento:2"] = "00:00:00.400",
-                [ServicioSettings.GrpcPortKey] = "5995",
+                [ServicioSettings.GrpcPortKey] = "5994",
             });
-            b.Services.AddSingleton<IRentingEmailApiSender>(_renting);
+            b.Services.AddSingleton<IFiltroDestinosWebhook>(new FiltroDePrueba());
+            b.Services.AddHttpClient(TrabajoWebhookConsumer.ClienteHttp).ConfigurePrimaryHttpMessageHandler(() => _destino);
         });
         await Program.MigrateAsync(_app);
         await _app.StartAsync();
@@ -102,58 +103,60 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AC1_UnTrabajoDelBus_SeEnvia_YQuedaEnElRegistroConSuOrigen()
+    public async Task AC1_ElWebhookSaleConElCuerpoExactoYLasCabecerasFirmadas()
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
-        var trabajo = await PublicarAsync(Trabajo(CanalCorreo.FlitSmtp));
+        const string cuerpo = """{"event_type":"procedure.state_changed","to_status":"aprobado"}""";
+        var sobre = await PublicarAsync(Trabajo("https://ot.prueba/hook", cuerpo));
 
-        await EsperarAsync(async () => await Entregas().AnyAsync(e => e.TrabajoId == trabajo.EventId));
+        await EsperarAsync(async () => await Registro().AnyAsync(w => w.TrabajoId == sobre.EventId));
 
-        var entrega = await Entregas().SingleAsync(e => e.TrabajoId == trabajo.EventId, TestContext.Current.CancellationToken);
-        entrega.Should().BeEquivalentTo(new
-        {
-            TenantId = (Guid?)_empresa, Plantilla = "tramites.aprobado", Canal = "flit_smtp", Resultado = "enviado", Origen = "tramites",
-        });
+        var pedido = _destino.Pedidos.Should().ContainSingle().Subject;
+        pedido.Url.Should().Be("https://ot.prueba/hook");
+        pedido.Cuerpo.Should().Be(cuerpo, "la firma es del cuerpo: no se re-serializa");
+        pedido.Cabeceras["X-Webhook-Signature"].Should().Be("sha256=abc123");
+        pedido.Cabeceras["X-Correlation-Id"].Should().Be("corr-ot-1");
+        var w = await Registro().SingleAsync(x => x.TrabajoId == sobre.EventId, TestContext.Current.CancellationToken);
+        w.Should().BeEquivalentTo(new { Resultado = "entregado", CodigoHttp = (int?)200, Origen = "ot", CorrelacionId = "corr-ot-1", TenantId = _empresa });
     }
 
     [Fact]
-    public async Task AC2_ConElProveedorCaido_SeReintenta_YTerminaEnLaDlq_ConCadaIntentoRegistrado()
+    public async Task AC2_UnDestinoInterno_SeBloquea_YSeRegistra_SinReintentos()
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
-        _renting.Respuesta = EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable);
-        var trabajo = await PublicarAsync(Trabajo(CanalCorreo.EmpresaApi));
+        var sobre = await PublicarAsync(Trabajo("http://interno.prueba/metadata", "{}"));
+
+        await EsperarAsync(async () => await Registro().AnyAsync(w => w.TrabajoId == sobre.EventId));
+        await Task.Delay(1200, TestContext.Current.CancellationToken);
+
+        (await Registro().SingleAsync(w => w.TrabajoId == sobre.EventId, TestContext.Current.CancellationToken)).Resultado.Should().Be("bloqueado");
+        _destino.Pedidos.Should().BeEmpty();
+        (await MensajesAsync($"{Cola}.dlq")).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AC3_UnDestinoCaido_SeReintenta_YTerminaEnLaDlq()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        _destino.Estado = HttpStatusCode.ServiceUnavailable;
+        var sobre = await PublicarAsync(Trabajo("https://ot.prueba/caido", "{}"));
 
         await EsperarAsync(async () => await MensajesAsync($"{Cola}.dlq") == 1, TimeSpan.FromSeconds(20));
 
-        var intentos = await Entregas().Where(e => e.TrabajoId == trabajo.EventId).ToListAsync(TestContext.Current.CancellationToken);
-        intentos.Should().HaveCount(4, "el primero y uno por cada espera");
-        intentos.Should().OnlyContain(e => e.Resultado == "fallido" && e.Desenlace == nameof(EmailSendOutcome.ProviderUnavailable));
-        _renting.Pedidos.Should().HaveCount(4);
-    }
-
-    [Fact]
-    public async Task UnRechazoDefinitivo_NoSeReintenta()
-    {
-        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
-        _renting.Respuesta = EmailSendResult.Failed(EmailSendOutcome.RecipientRejected);
-        var trabajo = await PublicarAsync(Trabajo(CanalCorreo.EmpresaApi));
-
-        await EsperarAsync(async () => await Entregas().AnyAsync(e => e.TrabajoId == trabajo.EventId));
-        await Task.Delay(1500, TestContext.Current.CancellationToken);
-
-        (await Entregas().CountAsync(e => e.TrabajoId == trabajo.EventId, TestContext.Current.CancellationToken)).Should().Be(1);
-        (await MensajesAsync($"{Cola}.dlq")).Should().Be(0);
+        var intentos = await Registro().Where(w => w.TrabajoId == sobre.EventId).ToListAsync(TestContext.Current.CancellationToken);
+        intentos.Should().HaveCount(4).And.OnlyContain(w => w.Resultado == "fallido" && w.CodigoHttp == 503);
     }
 
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static TrabajoCorreo Trabajo(CanalCorreo canal) => TrabajoCorreo.De(
-        new EmailMessage(null, "tramites.aprobado", "cliente@prueba.test", "Cliente", "Su trámite fue aprobado", "<p>Hola</p>"), canal);
+    private static TrabajoWebhook Trabajo(string url, string cuerpo) => new(
+        url, cuerpo, new Dictionary<string, string> { ["X-Webhook-Signature"] = "sha256=abc123", ["X-Correlation-Id"] = "corr-ot-1" },
+        "ot", "procedure.state_changed");
 
-    /// <summary>Publica como lo hace Trámites: un trabajo del SDK, con «tramites» de productor, en flit.notificaciones.</summary>
-    private async Task<EventEnvelope> PublicarAsync(TrabajoCorreo trabajo)
+    /// <summary>Publica como core-api: un trabajo con «tramites» de productor, en flit.notificaciones.</summary>
+    private async Task<EventEnvelope> PublicarAsync(TrabajoWebhook trabajo)
     {
-        var sobre = new EventEnvelope(Guid.CreateVersion7(), TrabajoCorreo.Tipo, 1, DateTimeOffset.UtcNow, _empresa, "tramites", "corr",
+        var sobre = new EventEnvelope(Guid.CreateVersion7(), TrabajoWebhook.Tipo, 1, DateTimeOffset.UtcNow, _empresa, "tramites", "corr",
             System.Text.Json.JsonSerializer.SerializeToElement(trabajo, EventEnvelope.JsonOptions));
         await using var publicador = new RabbitMqEventPublisher(new PlatformMessagingOptions { Producer = "tramites", ConnectionString = RabbitMq });
         await publicador.PublishAsync(new OutboxMessage
@@ -163,8 +166,8 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
         return sobre;
     }
 
-    private IQueryable<Entrega> Entregas() =>
-        _app!.Services.CreateScope().ServiceProvider.GetRequiredService<NotificacionesDb>().Entregas.AsNoTracking();
+    private IQueryable<EntregaWebhook> Registro() =>
+        _app!.Services.CreateScope().ServiceProvider.GetRequiredService<NotificacionesDb>().Webhooks.AsNoTracking();
 
     private static async Task<uint> ConsumidoresAsync()
     {
@@ -186,9 +189,12 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
     {
         await using var conexion = await new ConnectionFactory { Uri = new Uri(RabbitMq) }.CreateConnectionAsync();
         await using var canal = await conexion.CreateChannelAsync();
-        foreach (var c in new[] { Cola, $"{Cola}.retry.1", $"{Cola}.retry.2", $"{Cola}.retry.3", $"{Cola}.dlq" })
-            await canal.QueueDeleteAsync(c);
-        await canal.ExchangeDeleteAsync($"{Cola}.reintentos");
+        foreach (var cola in new[] { Cola, "notificaciones.email.send" })
+        {
+            foreach (var c in new[] { cola, $"{cola}.retry.1", $"{cola}.retry.2", $"{cola}.retry.3", $"{cola}.dlq" })
+                await canal.QueueDeleteAsync(c);
+            await canal.ExchangeDeleteAsync($"{cola}.reintentos");
+        }
     }
 
     private static async Task EsperarAsync(Func<Task<bool>> condicion, TimeSpan? limite = null)
@@ -202,21 +208,26 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
         }
     }
 
-    /// <summary>API de correo de Renting falsa: responde lo que se le indique y guarda cada pedido.</summary>
-    private sealed class RentingFalso : IRentingEmailApiSender
+    private sealed class FiltroDePrueba : IFiltroDestinosWebhook
     {
-        public EmailSendResult Respuesta { get; set; } = EmailSendResult.Sent;
+        public Task<bool> PermitidoAsync(string url, CancellationToken ct) => Task.FromResult(!url.Contains("interno", StringComparison.Ordinal));
+    }
 
-        public List<RentingSendEmailRequest> Pedidos { get; } = [];
+    private sealed record Pedido(string Url, string Cuerpo, Dictionary<string, string> Cabeceras);
 
-        public Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, CancellationToken cancellationToken)
+    /// <summary>El destino del webhook: guarda cada pedido y responde el estado configurado.</summary>
+    private sealed class DestinoFalso : HttpMessageHandler
+    {
+        public HttpStatusCode Estado { get; set; } = HttpStatusCode.OK;
+
+        public List<Pedido> Pedidos { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var cuerpo = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
             lock (Pedidos)
-                Pedidos.Add(request);
-            return Task.FromResult(Respuesta);
+                Pedidos.Add(new Pedido(request.RequestUri!.ToString(), cuerpo, request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value))));
+            return new HttpResponseMessage(Estado);
         }
-
-        public Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, ControlledMailboxRecipient recipient, CancellationToken cancellationToken) =>
-            SendAsync(request, cancellationToken);
     }
 }

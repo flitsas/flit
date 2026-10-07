@@ -80,6 +80,7 @@ internal static class TramitesBusRegistration
         var options = new TramitesBusOptions();
         configuration.GetSection(TramitesBusOptions.SectionName).Bind(options);
         services.AddSingleton(options);
+        services.AddSingleton(new OtWebhooks.OtWebhooksPorNotificaciones(configuration.GetValue(OtWebhooks.OtWebhooksPorNotificaciones.FlagKey, false)));
 
         var rabbitIdentidad = string.Equals(identityValidationMessaging, "rabbitmq", StringComparison.OrdinalIgnoreCase);
         if (!options.Habilitado)
@@ -90,6 +91,8 @@ internal static class TramitesBusRegistration
                 throw new InvalidOperationException("Messaging:IdentityValidation=rabbitmq exige Tramites:Bus:Habilitado=true y Platform:Messaging (RABBITMQ_URL_TRAMITES).");
             if (configuration.GetValue(Flit.Infrastructure.Notifications.Bus.NotificacionesRemoto.FlagKey, false))
                 throw new InvalidOperationException("Notificaciones:Remoto:Habilitado exige Tramites:Bus:Habilitado=true: los correos se dejan por la outbox de Trámites.");
+            if (configuration.GetValue(OtWebhooks.OtWebhooksPorNotificaciones.FlagKey, false))
+                throw new InvalidOperationException("Notificaciones:Remoto:Webhooks exige Tramites:Bus:Habilitado=true: los webhooks se dejan por la outbox de Trámites.");
             return options;
         }
 

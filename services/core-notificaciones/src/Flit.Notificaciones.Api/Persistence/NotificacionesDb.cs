@@ -42,9 +42,31 @@ public sealed class NotificacionesDb(DbContextOptions<NotificacionesDb> options)
             e.Property(x => x.OcurridoEn).HasColumnName("ocurrido_en");
             e.HasIndex(x => new { x.TenantId, x.OcurridoEn }).HasDatabaseName("ix_entregas_empresa_fecha");
         });
+
+        // HU #13356: registro de webhooks salientes.
+        modelBuilder.Entity<EntregaWebhook>(e =>
+        {
+            e.ToTable("webhooks");
+            e.HasKey(x => x.Id).HasName("pk_webhooks");
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id");
+            e.Property(x => x.Origen).HasColumnName("origen").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Evento).HasColumnName("evento").HasMaxLength(100).IsRequired();
+            e.Property(x => x.Url).HasColumnName("url").HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Resultado).HasColumnName("resultado").HasMaxLength(20).IsRequired();
+            e.Property(x => x.CodigoHttp).HasColumnName("codigo_http");
+            e.Property(x => x.Motivo).HasColumnName("motivo").HasMaxLength(1000);
+            e.Property(x => x.DuracionMs).HasColumnName("duracion_ms");
+            e.Property(x => x.CorrelacionId).HasColumnName("correlacion_id").HasMaxLength(100);
+            e.Property(x => x.TrabajoId).HasColumnName("trabajo_id");
+            e.Property(x => x.OcurridoEn).HasColumnName("ocurrido_en");
+            e.HasIndex(x => new { x.TenantId, x.OcurridoEn }).HasDatabaseName("ix_webhooks_empresa_fecha");
+        });
     }
 
     public DbSet<Entrega> Entregas => Set<Entrega>();
+
+    public DbSet<EntregaWebhook> Webhooks => Set<EntregaWebhook>();
 
     /// <summary>Opciones comunes: Npgsql con la tabla de migraciones dentro del propio esquema.</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString) =>

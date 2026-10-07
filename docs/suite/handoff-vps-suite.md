@@ -365,6 +365,10 @@ envía en proceso. Por ambiente:
    core-api y core-identity. Desde ahí los correos con empresa salen por Notificaciones; los que no tienen empresa
    (simulación de mandato) y el buzón de pruebas siguen en proceso hasta el corte (#13359). Verificar: un cambio de
    estado de prueba deja su fila en `notificaciones.entregas`. Volver atrás: la bandera en `false`.
+6. **Webhooks del OT (HU #13356):** `NOTIFICACIONES_REMOTO_WEBHOOKS=true` y recrear core-api. core-api los sigue
+   firmando; Notificaciones los entrega (bloquea destinos internos, reintenta y deja lo que no salió en
+   `notificaciones.webhooks.salientes.dlq`). Cada intento queda en `notificaciones.webhooks`. Los webhooks de ICT
+   siguen saliendo de core-ict hasta que tengan su llave de firma (pendiente anotado en la HU).
 
 ---
 

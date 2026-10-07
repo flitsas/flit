@@ -334,6 +334,8 @@ services:
       # HU #13355: con Notificaciones remoto los correos se dejan como trabajos a core-notificaciones (exige el bus de
       # Trámites en core-api; core-identity usa su propio usuario, abajo). Apagado: salen en proceso como siempre.
       Notificaciones__Remoto__Habilitado: ${NOTIFICACIONES_REMOTO_HABILITADO:-false}
+      # HU #13356: los webhooks del OT salen por Notificaciones (firmados aquí; filtro anti-SSRF, reintentos y .dlq allá).
+      Notificaciones__Remoto__Webhooks: ${NOTIFICACIONES_REMOTO_WEBHOOKS:-false}
       Platform__ServiceClient__ClientId: svc-tramites
       Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token

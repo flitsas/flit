@@ -11,8 +11,11 @@ using Flit.Infrastructure.OtWebhooks;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Modules.Notificaciones.Webhooks;
+using Flit.Platform.Sdk.Messaging;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -255,6 +258,63 @@ public sealed class OtWebhookHandlerTests
         log.DurationMs.Should().NotBeNull();
         log.CorrelationId.Should().NotBeNull();
         log.PayloadHash.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task HU13356_ConNotificacionesRemoto_ElWebhookQuedaComoTrabajoFirmado_YNoSaleDeCoreApi()
+    {
+        var db = NewDbName();
+        const string secret = "dispatch-secret";
+        const string targetUrl = "https://hooks.example.com/ot";
+        var recordingHandler = new RecordingHttpMessageHandler();
+        await using (var seed = NewContext(db))
+        {
+            seed.OtWebhookSubscriptions.Add(new OtWebhookSubscriptionEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantA,
+                EventType = OtWebhookEventTypes.VehicleStateChanged,
+                TargetUrl = targetUrl,
+                SecretHash = OtWebhookSecretHasher.HashSecret(secret),
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient(nameof(OtWebhookDispatchService)).ConfigurePrimaryHttpMessageHandler(() => recordingHandler);
+        services.AddScoped(_ => NewContext(db));
+        services.AddFlitOutbox<FlitDbContext>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Platform:Messaging:Producer"] = "tramites",
+                ["Platform:Messaging:ConnectionString"] = "amqp://tramites:x@127.0.0.1:5672/flit",
+            }).Build());
+        await using var provider = services.BuildServiceProvider();
+
+        await using var ctx = NewContext(db);
+        var dispatch = new OtWebhookDispatchService(
+            new OtWebhookSubscriptionRepository(ctx),
+            new OtApiCallLogRepository(ctx),
+            provider.GetRequiredService<IHttpClientFactory>(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new OtWebhooksPorNotificaciones(true));
+
+        await dispatch.DispatchAsync(TenantA, OtWebhookEventTypes.VehicleStateChanged, new { to_status = "submitted" }, TestContext.Current.CancellationToken);
+
+        recordingHandler.LastRequest.Should().BeNull("el POST lo hace Notificaciones");
+        await using var verify = NewContext(db);
+        var mensaje = await verify.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken);
+        mensaje.Exchange.Should().Be("flit.notificaciones");
+        var trabajo = EventEnvelope.FromJson(Encoding.UTF8.GetBytes(mensaje.Payload)).DataAs<TrabajoWebhook>();
+        trabajo.Url.Should().Be(targetUrl);
+        trabajo.Origen.Should().Be("ot");
+        var firmaEsperada = ComputeHmacSha256Hex(trabajo.Cuerpo, OtWebhookSecretHasher.SigningKeyFromStoredHash(OtWebhookSecretHasher.HashSecret(secret)));
+        trabajo.Cabeceras["X-Webhook-Signature"].Should().Be($"sha256={firmaEsperada}", "viaja la firma del cuerpo, no la llave");
+        trabajo.Cabeceras.Should().ContainKey("X-Correlation-Id");
+        (await verify.OtApiCallLogs.SingleAsync(TestContext.Current.CancellationToken)).ResponseCode.Should().BeNull("aún no hay respuesta del destino");
     }
 
     private sealed class RecordingHttpMessageHandler : HttpMessageHandler

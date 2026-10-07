@@ -417,6 +417,7 @@ Flit.Infrastructure.Ocr.AnthropicDocumentOcrAnalyzer => Flit.Infrastructure.Ocr.
 Flit.Infrastructure.Ocr.AnthropicMessagesClient => factory (Transient)
 Flit.Infrastructure.Ocr.AnthropicOrientationProbe => Flit.Infrastructure.Ocr.AnthropicOrientationProbe (Scoped)
 Flit.Infrastructure.OtWebhooks.OtWebhookProcedureStateChangeNotifier => Flit.Infrastructure.OtWebhooks.OtWebhookProcedureStateChangeNotifier (Scoped)
+Flit.Infrastructure.OtWebhooks.OtWebhooksPorNotificaciones => instance:Flit.Infrastructure.OtWebhooks.OtWebhooksPorNotificaciones (Singleton)
 Flit.Infrastructure.Persistence.FlitDbContext => Flit.Infrastructure.Persistence.FlitDbContext (Scoped)
 Flit.Infrastructure.Persistence.IIdentityDb => factory (Scoped)
 Flit.Infrastructure.Quipux.IQuipuxSecretProtector => Flit.Infrastructure.Quipux.DataProtectionQuipuxSecretProtector (Singleton)

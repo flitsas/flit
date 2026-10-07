@@ -10,6 +10,8 @@ using Flit.Modules.Notificaciones;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Notificaciones.Api.Envio;
 using Flit.Notificaciones.Api.Grpc;
+using Flit.Notificaciones.Api.Webhooks;
+using Flit.Modules.Notificaciones.Webhooks;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -58,10 +60,23 @@ public static class Program
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddScoped<EnvioDeCorreo>();
         // HU #13354: trabajos de correo desde el bus (notificaciones.email.send, con reintentos y .dlq).
+        // HU #13356: webhooks salientes (notificaciones.webhook.send) con filtro de destinos internos, reintentos y .dlq.
+        builder.Services.TryAddSingleton<IFiltroDestinosWebhook, FiltroDestinosPublicos>();
+        builder.Services.AddHttpClient(TrabajoWebhookConsumer.ClienteHttp, c => c.Timeout = TimeSpan.FromSeconds(30));
+
         // Las esperas entre reintentos son las del ADR (10 s, 1 min, 10 min) salvo Notificaciones:Correo:EsperasReintento.
         var esperas = builder.Configuration.GetSection("Notificaciones:Correo:EsperasReintento").Get<TimeSpan[]>();
         builder.Services.AddFlitConsumer<NotificacionesDb, TrabajoCorreoConsumer, TrabajoCorreo>(
             builder.Configuration, TrabajoCorreoConsumer.Cola, producer: ServicioSettings.Codigo, [TrabajoCorreo.Tipo], o =>
+            {
+                if (esperas is not { Length: > 0 })
+                    return;
+                o.RetryDelays.Clear();
+                foreach (var espera in esperas)
+                    o.RetryDelays.Add(espera);
+            });
+        builder.Services.AddFlitConsumer<NotificacionesDb, TrabajoWebhookConsumer, TrabajoWebhook>(
+            builder.Configuration, TrabajoWebhookConsumer.Cola, producer: ServicioSettings.Codigo, [TrabajoWebhook.Tipo], o =>
             {
                 if (esperas is not { Length: > 0 })
                     return;
