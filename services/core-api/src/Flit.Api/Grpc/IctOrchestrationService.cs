@@ -41,6 +41,9 @@ public sealed class IctOrchestrationService(
     /// <summary>Bug #13304 — vigencia por defecto de la consulta RUNT de la validación ICT.</summary>
     internal const int DefaultVehicleConsultationMaxAgeHours = 24;
 
+    /// <summary>Bug #13304 (L-1) — margen de reloj tolerado para un <c>consulted_at</c> en el futuro.</summary>
+    internal static readonly TimeSpan MaxConsultedAtClockSkew = TimeSpan.FromMinutes(5);
+
     public override async Task<DraftReply> CreateDraftFromIct(
         CreateDraftFromIctRequest request,
         ServerCallContext context)
@@ -407,8 +410,13 @@ public sealed class IctOrchestrationService(
         if (precomputed.ConsultedAt is null)
             return (null, "vehicle_consultation_invalid");
 
+        // L-1 — una fecha futura (más allá del margen de reloj) alargaría la vigencia a voluntad: inválida.
+        var consultedAt = precomputed.ConsultedAt.ToDateTimeOffset();
+        if (consultedAt > now + MaxConsultedAtClockSkew)
+            return (null, "vehicle_consultation_invalid");
+
         var vigencia = TimeSpan.FromHours(maxAgeHours > 0 ? maxAgeHours : DefaultVehicleConsultationMaxAgeHours);
-        if (precomputed.ConsultedAt.ToDateTimeOffset() < now - vigencia)
+        if (consultedAt < now - vigencia)
             return (null, "vehicle_consultation_expired");
 
         bool? coincide = precomputed.Kind switch
@@ -422,8 +430,9 @@ public sealed class IctOrchestrationService(
         if (coincide == false)
             return (null, "vehicle_consultation_mismatch");
 
+        // M-1 — defensa en profundidad: del snapshot recibido solo pasan claves de vehículo (lista blanca).
         return PreflightVehicleSnapshotJson.TryDeserialize(precomputed.SnapshotJson, out var snapshot)
-            ? (snapshot, null)
+            ? (snapshot!.SoloClavesDeVehiculo(), null)
             : (null, "vehicle_consultation_invalid");
     }
 

@@ -121,4 +121,35 @@ public sealed class PreflightSnapshotRoundTripTests
         ok.Should().BeFalse();
         snapshot.Should().BeNull();
     }
+
+    // ── Bug #13304 (L-2) — tamaño y profundidad del snapshot recibido ────────────────────────
+
+    [Fact]
+    public void Bug13304_TryDeserialize_MasDe256KB_DevuelveFalseAntesDeDeserializar()
+    {
+        var json = "{\"checks\":[],\"hydratedFields\":[],\"providers\":[\"" + new string('x', 256 * 1024) + "\"]}";
+
+        PreflightVehicleSnapshotJson.TryDeserialize(json, out var snapshot).Should().BeFalse();
+        snapshot.Should().BeNull();
+    }
+
+    [Fact]
+    public void Bug13304_TryDeserialize_DentroDelLimite_SigueFuncionando()
+    {
+        var json = "{\"checks\":[],\"hydratedFields\":[],\"providers\":[\"" + new string('x', 200 * 1024) + "\"]}";
+
+        PreflightVehicleSnapshotJson.TryDeserialize(json, out var snapshot).Should().BeTrue();
+        snapshot!.Providers.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Bug13304_TryDeserialize_AnidamientoMayorA16_DevuelveFalse()
+    {
+        // Propiedad desconocida con 20 niveles: el lector la recorre igual y debe cortar en 16.
+        var profundo = new string('[', 20) + new string(']', 20);
+        var json = "{\"checks\":[],\"hydratedFields\":[],\"providers\":[],\"x\":" + profundo + "}";
+
+        PreflightVehicleSnapshotJson.TryDeserialize(json, out var snapshot).Should().BeFalse();
+        snapshot.Should().BeNull();
+    }
 }
