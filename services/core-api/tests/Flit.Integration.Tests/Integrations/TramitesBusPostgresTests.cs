@@ -101,12 +101,13 @@ public sealed class TramitesBusPostgresTests(PostgresDatabaseFixture fixture) : 
     {
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
-        var publisher = new ProcedureStateChangeOutboxPublisher(
-            // Sin la outbox propia: su fila exige un trámite real (FK) y aquí solo importa el evento del bus.
-            db, scope.ServiceProvider.GetRequiredService<IPlatformOutbox>(), new TramitesBusOptions { Habilitado = true, EntregaEnProceso = false });
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await publisher.EnqueueAsync(new TramiteTransitionRecord(
-            Guid.NewGuid(), instancia, TramiteEstado.Borrador, TramiteEstado.Preparado, null, null, DateTimeOffset.UtcNow), ct);
+        // Solo el evento del bus, como lo encola ProcedureStateChangeOutboxPublisher: la fila de la outbox propia exige
+        // un trámite real (FK) y aquí solo importa la publicación.
+        var registro = new TramiteTransitionRecord(
+            Guid.NewGuid(), instancia, TramiteEstado.Borrador, TramiteEstado.Preparado, null, null, DateTimeOffset.UtcNow);
+        scope.ServiceProvider.GetRequiredService<IPlatformOutbox>()
+            .Enqueue(TramitesEventos.EstadoCambiado, 1, registro.TenantId, TramitesEventos.Datos(registro));
         await db.SaveChangesAsync(ct);
         if (confirmar)
             await tx.CommitAsync(ct);

@@ -1,3 +1,5 @@
+using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Notifications.Renting;
 using Flit.Modules.Notificaciones;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Notificaciones.Api.Envio;
@@ -7,15 +9,23 @@ using Flit.Platform.Sdk.Grpc;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using EntregaProto = Flit.Notificaciones.Grpc.V1.Entrega;
 
 namespace Flit.Notificaciones.Api.Grpc;
 
 /// <summary>
 /// <c>flit.notificaciones.v1.NotificacionesService</c> (HU #13353): envío directo de un correo ya armado (lo usa el buzón
-/// de pruebas, que necesita la respuesta en el momento) y consulta de entregas de la empresa de la llamada.
+/// de pruebas, que necesita la respuesta en el momento), consulta de entregas de la empresa de la llamada y, desde el corte
+/// (HU #13359), los canales del ambiente para las pantallas del SuperAdmin.
 /// </summary>
-internal sealed class NotificacionesGrpcService(EnvioDeCorreo envio, NotificacionesDb db) : NotificacionesService.NotificacionesServiceBase
+internal sealed class NotificacionesGrpcService(
+    EnvioDeCorreo envio,
+    NotificacionesDb db,
+    CorreoPorCanal porCanal,
+    EmailSettings smtp,
+    IOptions<RentingChannelOptions> renting,
+    EmailTransportDescriptor transporte) : NotificacionesService.NotificacionesServiceBase
 {
     public const string Scope = "platform.notificaciones.send";
 
@@ -78,6 +88,24 @@ internal sealed class NotificacionesGrpcService(EnvioDeCorreo envio, Notificacio
         }
 
         return respuesta;
+    }
+
+    public override Task<ListarCanalesResponse> ListarCanales(ListarCanalesRequest request, ServerCallContext context)
+    {
+        var respuesta = new ListarCanalesResponse();
+        respuesta.Canales.Add(Info(Canal.FlitSmtp, porCanal.Disponible(CanalCorreo.FlitSmtp), smtp.DefaultSenderEmail, smtp.DefaultSenderName, transporte.IsConsole));
+        respuesta.Canales.Add(Info(Canal.EmpresaApi, porCanal.Disponible(CanalCorreo.EmpresaApi), renting.Value.SendEmailSenderEmail, renting.Value.SendEmailSenderUsername, consola: false));
+        return Task.FromResult(respuesta);
+    }
+
+    private static CanalInfo Info(Canal canal, bool disponible, string? email, string? nombre, bool consola)
+    {
+        var info = new CanalInfo { Canal = canal, Disponible = disponible, Consola = consola };
+        if (!string.IsNullOrWhiteSpace(email))
+            info.RemitenteEmail = email;
+        if (!string.IsNullOrWhiteSpace(nombre))
+            info.RemitenteNombre = nombre;
+        return info;
     }
 
     private static string Origen(string clientId) => clientId.StartsWith("svc-", StringComparison.Ordinal) ? clientId["svc-".Length..] : clientId;

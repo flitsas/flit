@@ -105,14 +105,8 @@ public sealed class CorreosPorBusPostgresTests(PostgresDatabaseFixture fixture) 
     }
 
     private static Task<EmailSendResult> Enviar(ServiceProvider provider, string plantilla, Guid empresa, CancellationToken ct) =>
-        new CorreoPorBusEmailSender(new SinEnvio(), new CanalFlit(), provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CorreoPorBusEmailSender>.Instance)
+        new CorreoPorBusEmailSender(new CanalFlit(), provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CorreoPorBusEmailSender>.Instance)
             .SendAsync(new EmailMessage(empresa, plantilla, "persona@prueba.test", "Persona", "Asunto", "<p>Hola</p>"), ct);
-
-    private sealed class SinEnvio : IEmailSender
-    {
-        public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Con empresa, nada sale en proceso.");
-    }
 
     private sealed class CanalFlit : INotificationChannelResolver
     {

@@ -41,7 +41,8 @@ public sealed class IdentityHostTests : IClassFixture<IdentityHostTests.Host>
             .Where(t => t.Assembly.GetName().Name?.StartsWith("Flit.", StringComparison.Ordinal) == true)
             .Select(t => t.Name);
 
-        flitHostedServices.Should().BeEquivalentTo(["OidcClientSync", "OidcPruningService"]);
+        // HU #13359: core-identity publica sus correos por su outbox siempre (OutboxPublisherService del SDK).
+        flitHostedServices.Should().BeEquivalentTo(["OidcClientSync", "OidcPruningService", "OutboxPublisherService`1"]);
     }
 
     [Fact]

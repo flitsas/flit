@@ -181,7 +181,7 @@ builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (S
 // === FLIT Suite: fin servicios ===
 builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13348: consultas, avalúos y documentos por core-consultas
-builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13357 (solo con Notificaciones:Remoto:Address)
+builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
 
 var app = builder.Build();
 

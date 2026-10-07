@@ -4,7 +4,6 @@ using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Bus;
-using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
@@ -119,80 +118,12 @@ public static class IdentityInfrastructureExtensions
                 ?? string.Empty,
         });
 
-        // SMTP real, o consola cuando no hay host configurado y Smtp:UseConsoleWhenNoHost está encendida (HU #12895,
-        // A-02: por defecto, solo en Development).
-        // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son
-        // Transient, así que un adaptador HTTP debajo de IEmailSender (HU #11361) sería una
-        // dependencia cautiva si el puerto siguiera siendo instancia única.
-        var useConsoleEmailSender = configuration.GetValue("Smtp:UseConsoleWhenNoHost", environment.IsDevelopment())
-            && string.IsNullOrWhiteSpace(emailSettings.Host);
-        if (useConsoleEmailSender)
-            services.AddScoped<ConsoleEmailSender>();
-        else
-            services.AddScoped<SmtpEmailSender>();
-
-        // HU #11368 (Feature #11349, AC8) — mismo booleano que decide el transporte, publicado como
-        // Singleton para que el banco de pruebas de notificaciones pueda declarar "esto fue consola,
-        // no salió correo real" sin inspeccionar el árbol de DI (ver EmailTransportDescriptor).
-        services.AddSingleton(new EmailTransportDescriptor(useConsoleEmailSender));
-
-        // HU #11363 (Feature #11348) — decorador que envuelve el sender real y escribe la bitácora
-        // append-only admin.notification_delivery_logs SIN tocar los 6 puntos de llamada de
-        // IEmailSender: mide duración con Stopwatch, delega el envío y registra el intento en un
-        // scope PROPIO (aislado del DbContext ambiente de la petición). Un fallo al escribir la
-        // bitácora NUNCA cambia el resultado del envío (AC6) — ver NotificationDeliveryLoggingEmailSender.
-        services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
-
-        // HU #11371 (Feature #11349, cierra el retorno-temprano fijo del banco de pruebas) —
-        // TenantChannelEmailRouter deja de construirse INLINE dentro de la fábrica de IEmailSender:
-        // se registra como servicio propio (Scoped) para que el banco de pruebas de notificaciones
-        // pueda alcanzarlo vía IExplicitChannelEmailSender y enviar por un canal explícito. El orden
-        // del pipeline de producción NO cambia: la fábrica de IEmailSender de abajo sigue resolviendo
-        // ESTA MISMA instancia como el "concreteSender" que NotificationDeliveryLoggingEmailSender
-        // envuelve — los 6 puntos de llamada de producción siguen viendo el mismo decorador
-        // envolviendo al mismo router. IRentingEmailApiSender solo está registrado cuando
-        // AddRentingChannel lo habilitó (RENTING_API_ENABLED=true); sp.GetService (no
-        // GetRequiredService) lo resuelve como null en cualquier otro ambiente — el router trata ese
-        // null como "canal no disponible" y responde ConfigurationIncomplete en vez de fallar al
-        // resolver el árbol de DI.
+        // HU #13359 (Epic #13316, el corte): core-api y core-identity no tienen transportes de correo. Todo correo, con o
+        // sin empresa, se deja YA ARMADO como trabajo notificaciones.email.send en la outbox del SDK (core-api: la de
+        // Trámites; core-identity: la suya) y lo envía core-notificaciones, que lleva el registro de entregas. El canal
+        // lo sigue resolviendo quien arma el correo (política de la empresa).
         services.AddScoped<INotificationChannelResolver, NotificationChannelResolver>();
-
-        services.AddScoped(sp =>
-        {
-            IEmailSender flitTransport = useConsoleEmailSender
-                ? sp.GetRequiredService<ConsoleEmailSender>()
-                : sp.GetRequiredService<SmtpEmailSender>();
-
-            return new TenantChannelEmailRouter(
-                flitTransport,
-                sp.GetRequiredService<INotificationChannelResolver>(),
-                sp.GetService<IRentingEmailApiSender>(),
-                sp.GetRequiredService<IOptions<RentingChannelOptions>>(),
-                sp.GetRequiredService<ILogger<TenantChannelEmailRouter>>());
-        });
-        services.AddScoped<IExplicitChannelEmailSender>(sp => sp.GetRequiredService<TenantChannelEmailRouter>());
-
-        // HU #13355 (Epic #13316): con Notificaciones remoto, los correos se dejan como trabajos a core-notificaciones
-        // (quien registra la bitácora de esas entregas); el envío en proceso queda solo para los que no tienen empresa.
-        // Exige la outbox del SDK registrada (core-api: Tramites:Bus:Habilitado; core-identity: su Platform:Messaging).
-        var notificacionesRemoto = configuration.GetValue(NotificacionesRemoto.FlagKey, false);
-        services.AddScoped<IEmailSender>(sp =>
-        {
-            TenantChannelEmailRouter router = sp.GetRequiredService<TenantChannelEmailRouter>();
-
-            IEmailSender enProceso = new NotificationDeliveryLoggingEmailSender(
-                router,
-                sp.GetRequiredService<IServiceScopeFactory>(),
-                sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>(),
-                sp.GetRequiredService<EmailSettings>());
-            return notificacionesRemoto
-                ? new CorreoPorBusEmailSender(
-                    enProceso,
-                    sp.GetRequiredService<INotificationChannelResolver>(),
-                    sp.GetRequiredService<IServiceScopeFactory>(),
-                    sp.GetRequiredService<ILogger<CorreoPorBusEmailSender>>())
-                : enProceso;
-        });
+        services.AddScoped<IEmailSender, CorreoPorBusEmailSender>();
 
         return services;
     }

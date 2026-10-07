@@ -33,8 +33,7 @@ public sealed class TramitesBusTests
         await using var provider = Servicios(dbName, habilitado: true);
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
-        var publisher = new ProcedureStateChangeOutboxPublisher(
-            db, scope.ServiceProvider.GetRequiredService<IPlatformOutbox>(), scope.ServiceProvider.GetRequiredService<TramitesBusOptions>());
+        var publisher = new ProcedureStateChangeOutboxPublisher(db, scope.ServiceProvider.GetRequiredService<IPlatformOutbox>());
 
         await publisher.EnqueueAsync(Registro(), Ct);
 
@@ -61,7 +60,7 @@ public sealed class TramitesBusTests
             datos.GetProperty("toStatus").GetString().Should().Be(TramiteEstado.Preparado);
             datos.GetProperty("reason").GetString().Should().Be("gates ok");
 
-            (await verify.ProcedureStateChangeOutbox.CountAsync(Ct)).Should().Be(1, "la entrega en proceso sigue (AC2)");
+            (await verify.ProcedureStateChangeOutbox.CountAsync(Ct)).Should().Be(1, "la orquestación del cambio de estado en core-api sigue (HU #13359)");
         }
     }
 
@@ -77,24 +76,6 @@ public sealed class TramitesBusTests
         await using var verify = NewContext(dbName);
         (await verify.ProcedureStateChangeOutbox.CountAsync(Ct)).Should().Be(1);
         (await verify.Set<OutboxMessage>().CountAsync(Ct)).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task ConLaEntregaEnProcesoApagada_SoloSaleElEventoDelBus()
-    {
-        var dbName = NewDbName();
-        await using var provider = Servicios(dbName, habilitado: true, entregaEnProceso: false);
-        await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
-        var publisher = new ProcedureStateChangeOutboxPublisher(
-            db, scope.ServiceProvider.GetRequiredService<IPlatformOutbox>(), scope.ServiceProvider.GetRequiredService<TramitesBusOptions>());
-
-        await publisher.EnqueueAsync(Registro(), Ct);
-        await db.SaveChangesAsync(Ct);
-
-        await using var verify = NewContext(dbName);
-        (await verify.ProcedureStateChangeOutbox.CountAsync(Ct)).Should().Be(0);
-        (await verify.Set<OutboxMessage>().CountAsync(Ct)).Should().Be(1);
     }
 
     [Fact]
@@ -149,16 +130,14 @@ public sealed class TramitesBusTests
             .Should().Contain(s => s.GetType().Name.StartsWith("OutboxPublisherService", StringComparison.Ordinal));
     }
 
-    [Theory]
-    [InlineData("false", "false", "inprocess", "EntregaEnProceso")]
-    [InlineData("false", "true", "rabbitmq", "Messaging:IdentityValidation")]
-    public void LasCombinacionesQuePerderianEventos_FallanAlArrancar(string habilitado, string entrega, string mensajeria, string menciona)
+    [Fact]
+    public void LaMensajeriaDeIdentidadPorRabbit_SinElBus_FallaAlArrancar()
     {
-        var config = Config(new() { ["Tramites:Bus:Habilitado"] = habilitado, ["Tramites:Bus:EntregaEnProceso"] = entrega });
+        var config = Config(new() { ["Tramites:Bus:Habilitado"] = "false" });
 
-        var registrar = () => new ServiceCollection().AddTramitesBus(config, mensajeria);
+        var registrar = () => new ServiceCollection().AddTramitesBus(config, "rabbitmq");
 
-        registrar.Should().Throw<InvalidOperationException>().WithMessage($"*{menciona}*");
+        registrar.Should().Throw<InvalidOperationException>().WithMessage("*Messaging:IdentityValidation*");
     }
 
     [Fact]
@@ -178,7 +157,7 @@ public sealed class TramitesBusTests
 
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static ServiceProvider Servicios(string dbName, bool habilitado, bool entregaEnProceso = true)
+    private static ServiceProvider Servicios(string dbName, bool habilitado)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -186,7 +165,6 @@ public sealed class TramitesBusTests
         services.AddTramitesBus(Config(new()
         {
             ["Tramites:Bus:Habilitado"] = habilitado.ToString(),
-            ["Tramites:Bus:EntregaEnProceso"] = entregaEnProceso.ToString(),
             ["Platform:Messaging:Producer"] = "tramites",
             ["Platform:Messaging:ConnectionString"] = "amqp://tramites:clave@127.0.0.1:5672/flit",
         }), "inprocess");

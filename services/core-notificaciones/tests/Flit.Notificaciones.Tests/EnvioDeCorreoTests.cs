@@ -165,6 +165,35 @@ public sealed class EnvioDeCorreoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task HU13359_ListarCanales_DiceQueSePuedeUsarYSiFlitEsConsola()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+
+        var r = await Cliente(Token()).ListarCanalesAsync(new ListarCanalesRequest(), Empresa(_empresa), cancellationToken: TestContext.Current.CancellationToken);
+
+        var flit = r.Canales.Single(c => c.Canal == Canal.FlitSmtp);
+        flit.Disponible.Should().BeTrue();
+        flit.Consola.Should().BeTrue("sin servidor SMTP y con Smtp:UseConsoleWhenNoHost");
+        var empresa = r.Canales.Single(c => c.Canal == Canal.EmpresaApi);
+        empresa.Disponible.Should().BeTrue("la API de la empresa está habilitada en esta prueba");
+        empresa.Consola.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HU13359_SinLaApiDeLaEmpresa_ElCanalNoEstaDisponible()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        await DisposeAsync();
+        _skip = null;
+        await IniciarAsync(conRenting: false);
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+
+        var r = await Cliente(Token()).ListarCanalesAsync(new ListarCanalesRequest(), Empresa(_empresa), cancellationToken: TestContext.Current.CancellationToken);
+
+        r.Canales.Single(c => c.Canal == Canal.EmpresaApi).Disponible.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task SinElScopeDeEnvio_PermissionDenied()
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);

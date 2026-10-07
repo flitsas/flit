@@ -345,37 +345,67 @@ ellas; core-api consulta su estado por Consultas.
 **Volver atrás:** desplegar la imagen anterior de core-api y core-ict (con su `.env` de antes: banderas apagadas).
 core-consultas y el broker pueden seguir corriendo. Las variables nuevas no estorban a la versión anterior.
 
-### 4.10 Notificaciones como servicio (Epic #13316, Feature #13324)
+### 4.10 Notificaciones: obligatorio desde el corte (Epic #13316, Feature #13324 y HU #13359)
 
-core-notificaciones envía los correos que arman core-api y core-identity (el correo llega ya armado, con su tema; el
-servicio pone el transporte, los reintentos y el registro de entregas). Sin tocar nada, todo sigue como hoy: core-api
-envía en proceso. Por ambiente:
+Con el corte (HU #13359), core-api y core-identity ya no tienen transportes de correo. **SMTP, el canal Renting y su
+certificado viven solo en core-notificaciones**, que envía todos los correos y entrega los webhooks del OT. Los correos
+llegan ya armados y con su canal resuelto.
 
-1. **Base:** `psql "$ADMIN_URL" -v servicio=notificaciones -v conexiones=20 -v clave="$CLAVE" -f deploy/postgres/servicio-con-esquema-propio.sql`
-   y con eso `CONNECTION_STRING_NOTIFICACIONES` (usuario `flit_notificaciones`).
-2. **Secretos y broker:** `SVC_NOTIFICACIONES_CLIENT_SECRET` (recrear core-api y core-identity para que registren el
-   cliente) y `deploy/rabbitmq/usuario-de-servicio.sh notificaciones "$CLAVE"` → `RABBITMQ_URL_NOTIFICACIONES`.
-   SMTP y Renting usan las mismas variables (y el mismo certificado) que core-api.
-3. **Arrancar:** sumar `notificaciones` a `COMPOSE_PROFILES` y desplegar (`build-core-notificaciones` en el CD). No
-   publica puertos (REST `CORE_NOTIFICACIONES_PORT` 4027, gRPC `CORE_NOTIFICACIONES_GRPC_PORT` 8085). El CD revisa su
-   `/health/ready` desde dentro del contenedor.
-4. **Correos por el bus (HU #13354):** Notificaciones consume la cola `notificaciones.email.send` (reintentos a 10 s,
-   1 min y 10 min; luego `notificaciones.email.send.dlq`, que avisa la alerta de `deploy/rabbitmq/alerta-dlq.sh`). Los servicios que dejan
-   correos necesitan escribir en `flit.notificaciones`: volver a correr
-   `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES" notificaciones` con la misma clave que ya
-   tiene, y crear el de core-identity: `deploy/rabbitmq/usuario-de-servicio.sh plataforma "$CLAVE" notificaciones` →
-   `RABBITMQ_URL_PLATAFORMA`.
-5. **Encender (HU #13355):** `NOTIFICACIONES_REMOTO_HABILITADO=true` (con `TRAMITES_BUS_HABILITADO=true`) y recrear
-   core-api y core-identity. Desde ahí los correos con empresa salen por Notificaciones; los que no tienen empresa
-   (simulación de mandato) y el buzón de pruebas siguen en proceso hasta el corte (#13359). Verificar: un cambio de
-   estado de prueba deja su fila en `notificaciones.entregas`. Volver atrás: la bandera en `false`.
-6. **Webhooks del OT (HU #13356):** `NOTIFICACIONES_REMOTO_WEBHOOKS=true` y recrear core-api. core-api los sigue
-   firmando; Notificaciones los entrega (bloquea destinos internos, reintenta y deja lo que no salió en
-   `notificaciones.webhooks.salientes.dlq`). Cada intento queda en `notificaciones.webhooks`. Los webhooks de ICT
-   siguen saliendo de core-ict hasta que tengan su llave de firma (pendiente anotado en la HU).
-7. **Mensajes muertos (HU #13357):** `NOTIFICACIONES_REMOTO_ADDRESS=http://core-notificaciones:8085` y recrear core-api
-   (y core-identity, para que el cliente svc-tramites tenga el scope `platform.notificaciones.admin`). El SuperAdmin
-   lista, reintenta y descarta en `/api/v1/superadmin/notificaciones/mensajes-muertos?cola=correos|webhooks`.
+- **Lo que va por el bus:**
+  - Todos los correos.
+  - Los webhooks del OT, que core-api sigue firmando: viaja la firma, no la llave.
+- **Lo que necesita respuesta inmediata va por gRPC:** pantalla de canales, buzón de pruebas, registro de entregas de una
+  empresa y consola de mensajes muertos.
+- **Lo que no es de ninguna empresa va con la empresa «plataforma»** (`00000000-0000-0000-0000-0000000f1170`) y por FLIT:
+  simulación de mandato, buzón de pruebas, recuperación de contraseña de un usuario sin rol y reportes de alcance
+  SuperAdmin.
+- **Ya no existen:** el perfil `notificaciones` ni las banderas `NOTIFICACIONES_REMOTO_HABILITADO`,
+  `NOTIFICACIONES_REMOTO_WEBHOOKS` y `TRAMITES_BUS_ENTREGA_EN_PROCESO`.
+
+**Antes de desplegar la rama, por ambiente** (junto con los pasos de §4.9):
+
+1. **Base:** crear el usuario `flit_notificaciones` con
+   `psql "$ADMIN_URL" -v servicio=notificaciones -v conexiones=20 -v clave="$CLAVE" -f deploy/postgres/servicio-con-esquema-propio.sql`
+   y poner `CONNECTION_STRING_NOTIFICACIONES` en el `.env`.
+2. **Secretos:**
+   - `SVC_NOTIFICACIONES_CLIENT_SECRET`.
+   - SMTP: las mismas variables `SMTP_*` de siempre.
+   - Renting: las mismas `RENTING_API_*` y el mismo certificado `.pfx`, montado ahora en core-notificaciones. core-api y
+     core-identity ya no montan el certificado.
+3. **Broker:**
+   - `deploy/rabbitmq/usuario-de-servicio.sh notificaciones "$CLAVE"` → `RABBITMQ_URL_NOTIFICACIONES`.
+   - Los que dejan trabajos necesitan escribir en `flit.notificaciones`:
+     - volver a correr `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES" notificaciones`, con la misma
+       clave que ya tiene;
+     - crear el de core-identity: `deploy/rabbitmq/usuario-de-servicio.sh plataforma "$CLAVE" notificaciones` →
+       `RABBITMQ_URL_PLATAFORMA` (obligatoria).
+
+**Desplegar** (`build-core-notificaciones` en el CD). No publica puertos: REST `CORE_NOTIFICACIONES_PORT` (4027) y gRPC
+`CORE_NOTIFICACIONES_GRPC_PORT` (8085). El CD revisa su `/health/ready` desde dentro del contenedor.
+
+**Verificar:**
+
+- Un cambio de estado de prueba deja su fila en `notificaciones.entregas`.
+- Una invitación y una recuperación de contraseña llegan.
+- La simulación de mandato llega y queda con la empresa «plataforma».
+- En la pantalla de notificaciones del SuperAdmin:
+  - los canales muestran su remitente;
+  - el buzón de pruebas envía.
+- Un webhook del OT llega al destino y queda en `notificaciones.webhooks`.
+- Correos (`notificaciones.email.send`): reintentos a 10 s, 1 min y 10 min; si se agotan, el mensaje pasa a la
+  `.dlq`.
+- Webhooks (`notificaciones.webhooks.salientes`): lo que no sale queda en su `.dlq`.
+- La alerta `deploy/rabbitmq/alerta-dlq.sh` avisa de lo que llega a cualquier `.dlq`. El SuperAdmin lista, reintenta y
+  descarta en `/api/v1/superadmin/notificaciones/mensajes-muertos?cola=correos|webhooks`.
+- Los webhooks de ICT siguen saliendo de core-ict hasta que tengan su llave de firma (pendiente anotado en la HU #13356).
+
+**Lo que no se mueve:**
+- El reflejo de estado a ICT es gRPC a core-ict, no un webhook: sigue en core-api.
+- La orquestación del cambio de estado se queda en core-api: decide los destinatarios y arma el correo y el webhook. Su
+  tabla `tramites.procedure_state_change_outbox` se sigue llenando.
+
+**Volver atrás:** desplegar la imagen anterior de core-api y core-identity con su `.env` de antes (`SMTP_*` y `RENTING_*`
+siguen definidos). core-notificaciones y el broker pueden seguir corriendo.
 
 ---
 

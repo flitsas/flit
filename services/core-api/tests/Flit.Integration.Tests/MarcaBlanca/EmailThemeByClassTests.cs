@@ -1,6 +1,5 @@
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Email;
-using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Theme;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
@@ -76,60 +75,6 @@ public sealed class EmailThemeByClassTests(PostgresDatabaseFixture fixture) : Po
         composedForA.HtmlBody.Should().NotBeEquivalentTo(composedForLone.HtmlBody);
     }
 
-    [PostgresFact]
-    public async Task AC6_ElDecorador_PersisteSenderNameSaneadoSoloParaLaHijaDeLaRed()
-    {
-        var resolver = NewResolver();
-        var themeA = await resolver.ResolveAsync(MarcaBlancaScenario.ChildA, TestContext.Current.CancellationToken);
-        var themeLone = await resolver.ResolveAsync(MarcaBlancaScenario.Lone, TestContext.Current.CancellationToken);
-
-        // HU #12430 AC1/AC6 (NotificationDeliveryLoggingEmailSender.appliedSenderName) — en el canal
-        // flit_smtp el remitente visible SIEMPRE se persiste: el de la marca cuando el tema es Brand,
-        // o el nombre por defecto de la plataforma (EmailSettings.DefaultSenderName) cuando es FLIT.
-        // Nunca null — eso solo ocurre en canales que no son flit_smtp (Renting/tenant_api).
-        await SendAndAssertAsync(MarcaBlancaScenario.ChildA, themeA, expectedSenderName: MarcaBlancaScenario.PlatformNameA);
-        await SendAndAssertAsync(MarcaBlancaScenario.Lone, themeLone, expectedSenderName: DefaultSenderName);
-    }
-
-    private const string DefaultSenderName = "FLIT Trámites";
-
-    private async Task SendAndAssertAsync(Guid tenantId, EmailTheme theme, string? expectedSenderName)
-    {
-        var services = new ServiceCollection();
-        services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
-        services.AddScoped(_ => Fixture.CreateDbContext());
-        // HU #13231: los escritores resuelven IIdentityDb en su propio scope, como en producción.
-        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
-        await using var provider = services.BuildServiceProvider();
-        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
-
-        var emailSettings = new EmailSettings { DefaultSenderEmail = "no-reply@flitsas.online", DefaultSenderName = DefaultSenderName };
-        var inner = new FixedResultEmailSender(EmailSendResult.Sent with { Channel = "flit_smtp" });
-        var decorator = new NotificationDeliveryLoggingEmailSender(
-            inner, scopeFactory, NullLogger<NotificationDeliveryLoggingEmailSender>.Instance, emailSettings);
-
-        var message = new EmailMessage(tenantId, "security.invitation", "destinatario@ejemplo.test", "Destinatario", "Asunto", "<html/>")
-        {
-            ThemeKind = theme.KindWireValue,
-            ThemeVersion = theme.IsBrand ? theme.Version : null,
-            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
-        };
-
-        await decorator.SendAsync(message, TestContext.Current.CancellationToken);
-
-        await using var check = NewContext();
-        var row = await check.NotificationDeliveryLogs.AsNoTracking()
-            .Where(l => l.TenantId == tenantId)
-            .OrderByDescending(l => l.CreatedAt)
-            .FirstAsync(TestContext.Current.CancellationToken);
-
-        row.SenderName.Should().Be(expectedSenderName);
-        if (expectedSenderName is not null)
-        {
-            row.SenderEmail.Should().Be(emailSettings.DefaultSenderEmail);
-        }
-    }
-
     private DbEmailThemeResolver NewResolver() =>
         new(
             new BrandingTenantLookupRepository(NewContext()),
@@ -137,12 +82,6 @@ public sealed class EmailThemeByClassTests(PostgresDatabaseFixture fixture) : Po
             new MemoryCache(new MemoryCacheOptions()),
             new EmailThemePublicBrandingOptions { PublicBaseUrl = "https://dev.flitsas.online" },
             NullLogger<DbEmailThemeResolver>.Instance);
-
-    private sealed class FixedResultEmailSender(EmailSendResult result) : IEmailSender
-    {
-        public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken) =>
-            Task.FromResult(result);
-    }
 
     /// <summary>Hasher trivial: esta suite no ejercita login, solo necesita satisfacer <see cref="MarcaBlancaScenario.SeedAsync"/>.</summary>
     private sealed class PlainPasswordHasher : IPasswordHasher

@@ -19,7 +19,15 @@ service NotificacionesService {
 
   // Entregas de la empresa de la metadata, de la más reciente a la más antigua.
   rpc ListarEntregas(ListarEntregasRequest) returns (ListarEntregasResponse);
+
+  // Canales de este ambiente con su remitente y si se puede enviar por ellos (HU #13359: pantallas de canales y del
+  // buzón de pruebas del SuperAdmin, que ya no tienen los transportes en core-api).
+  rpc ListarCanales(ListarCanalesRequest) returns (ListarCanalesResponse);
 }
+
+// HU #13359: lo que es de la plataforma y no de una empresa (simulación de mandato, buzón de pruebas, recuperación de
+// contraseña de un usuario sin rol, reportes de alcance SuperAdmin) usa esta empresa fija en x-flit-tenant-id y en el
+// tenant del trabajo: 00000000-0000-0000-0000-0000000f1170.
 
 // Por dónde sale el correo. Lo resuelve quien lo pide (canal de la empresa; los correos de cuenta siempre por FLIT).
 enum Canal {
@@ -97,4 +105,20 @@ message Entrega {
   bool desviado = 9;
   google.protobuf.Timestamp ocurrido_en = 10;
   optional string origen = 11;
+}
+
+message ListarCanalesRequest {}
+
+message ListarCanalesResponse {
+  repeated CanalInfo canales = 1;
+}
+
+message CanalInfo {
+  Canal canal = 1;
+  // Se puede enviar por él en este ambiente (el canal de la empresa solo si su API está habilitada).
+  bool disponible = 2;
+  optional string remitente_email = 3;
+  optional string remitente_nombre = 4;
+  // FLIT sin servidor SMTP: el correo se escribe en el log en vez de enviarse (solo ambientes de desarrollo).
+  bool consola = 5;
 }

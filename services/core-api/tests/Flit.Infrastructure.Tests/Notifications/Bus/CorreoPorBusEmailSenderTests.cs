@@ -17,10 +17,10 @@ using Xunit;
 namespace Flit.Infrastructure.Tests.Notifications.Bus;
 
 /// <summary>
-/// HU #13355 (Epic #13316) — con Notificaciones remoto, el <see cref="IEmailSender"/> de core-api deja el correo armado
-/// como trabajo en la outbox en vez de enviarlo (AC1). Como todos los flujos (cambio de estado, placa, revocación,
-/// reportes, invitaciones, recuperación) envían por este puerto, basta con probarlo aquí y en su registro; con la bandera
-/// apagada el puerto es el envío en proceso de siempre (AC2).
+/// HU #13355/#13359 (Epic #13316) — el <see cref="IEmailSender"/> de core-api deja el correo armado como trabajo en la
+/// outbox en vez de enviarlo. Como todos los flujos (cambio de estado, placa, revocación, reportes, invitaciones,
+/// recuperación, simulación de mandato) envían por este puerto, basta con probarlo aquí y en su registro. Desde el corte
+/// es el único: core-api no tiene transportes.
 /// </summary>
 public sealed class CorreoPorBusEmailSenderTests
 {
@@ -29,16 +29,15 @@ public sealed class CorreoPorBusEmailSenderTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task AC1_UnCorreoDeEmpresa_QuedaComoTrabajoConElCanalDeLaEmpresa_YNoSaleEnProceso()
+    public async Task AC1_UnCorreoDeEmpresa_QuedaComoTrabajoConElCanalDeLaEmpresa()
     {
-        var (sender, enProceso, dbName, provider) = Crear(NotificationChannel.TenantApi);
+        var (sender, dbName, provider) = Crear(NotificationChannel.TenantApi);
         await using var _ = provider;
 
         var r = await sender.SendAsync(Mensaje("tramites.aprobado", Empresa), Ct);
 
         r.Success.Should().BeTrue();
         r.Channel.Should().Be("tenant_api");
-        enProceso.Enviados.Should().BeEmpty();
         var trabajo = await TrabajoAsync(dbName);
         trabajo.Exchange.Should().Be("flit.notificaciones");
         trabajo.RoutingKey.Should().Be(TrabajoCorreo.Tipo);
@@ -54,7 +53,7 @@ public sealed class CorreoPorBusEmailSenderTests
     [Fact]
     public async Task LosCorreosDeCuenta_VanSiemprePorFlit_AunqueLaEmpresaTengaSuApi()
     {
-        var (sender, _, dbName, provider) = Crear(NotificationChannel.TenantApi);
+        var (sender, dbName, provider) = Crear(NotificationChannel.TenantApi);
         await using var _ = provider;
 
         await sender.SendAsync(Mensaje("security.invitation", Empresa), Ct);
@@ -64,16 +63,18 @@ public sealed class CorreoPorBusEmailSenderTests
     }
 
     [Fact]
-    public async Task UnCorreoSinEmpresa_SaleEnProceso()
+    public async Task HU13359_UnCorreoSinEmpresa_VaComoTrabajoDeLaEmpresaPlataforma_PorFlit()
     {
-        var (sender, enProceso, dbName, provider) = Crear(NotificationChannel.FlitSmtp);
+        // Aunque la «política» resolviera la API de la empresa: un correo de la plataforma no es de ninguna empresa.
+        var (sender, dbName, provider) = Crear(NotificationChannel.TenantApi);
         await using var _ = provider;
 
-        await sender.SendAsync(Mensaje("admin.mandato-simulacion", null), Ct);
+        var r = await sender.SendAsync(Mensaje("admin.mandato-simulacion", null), Ct);
 
-        enProceso.Enviados.Should().ContainSingle();
-        await using var db = NewContext(dbName);
-        (await db.Set<OutboxMessage>().CountAsync(Ct)).Should().Be(0);
+        r.Success.Should().BeTrue();
+        var sobre = EventEnvelope.FromJson(System.Text.Encoding.UTF8.GetBytes((await TrabajoAsync(dbName)).Payload));
+        sobre.TenantId.Should().Be(Flit.Platform.Sdk.PlatformTenants.Plataforma);
+        sobre.DataAs<TrabajoCorreo>().Canal.Should().Be("flit_smtp");
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public sealed class CorreoPorBusEmailSenderTests
         services.AddLogging();
         // Sin outbox registrada: encolar falla.
         await using var provider = services.BuildServiceProvider();
-        var sender = new CorreoPorBusEmailSender(new EnProcesoFalso(), new CanalFijo(NotificationChannel.FlitSmtp),
+        var sender = new CorreoPorBusEmailSender(new CanalFijo(NotificationChannel.FlitSmtp),
             provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CorreoPorBusEmailSender>.Instance);
 
         var r = await sender.SendAsync(Mensaje("tramites.aprobado", Empresa), Ct);
@@ -92,10 +93,8 @@ public sealed class CorreoPorBusEmailSenderTests
         r.Outcome.Should().Be(EmailSendOutcome.ProviderUnavailable);
     }
 
-    [Theory]
-    [InlineData(true, nameof(CorreoPorBusEmailSender))]
-    [InlineData(false, "NotificationDeliveryLoggingEmailSender")]
-    public void ConLaBandera_ElPuertoDeCorreoEsElDelBus_YSinEllaElDeSiempre(bool remoto, string esperado)
+    [Fact]
+    public void HU13359_ElPuertoDeCorreoEsSiempreElDelBus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -103,8 +102,7 @@ public sealed class CorreoPorBusEmailSenderTests
             "Host=localhost;Database=flit_13355;Username=flit;Password=flit",
             Config(new()
             {
-                ["Notificaciones:Remoto:Habilitado"] = remoto.ToString(),
-                ["Tramites:Bus:Habilitado"] = remoto.ToString(),
+                ["Tramites:Bus:Habilitado"] = "true",
                 ["Platform:Messaging:Producer"] = "tramites",
                 ["Platform:Messaging:ConnectionString"] = "amqp://tramites:x@127.0.0.1:5672/flit",
             }),
@@ -113,23 +111,12 @@ public sealed class CorreoPorBusEmailSenderTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        scope.ServiceProvider.GetRequiredService<IEmailSender>().GetType().Name.Should().Be(esperado);
-    }
-
-    [Fact]
-    public void LaBanderaSinElBusDeTramites_NoArranca()
-    {
-        var registrar = () => new ServiceCollection().AddPostgresInfrastructure(
-            "Host=localhost;Database=flit_13355;Username=flit;Password=flit",
-            Config(new() { ["Notificaciones:Remoto:Habilitado"] = "true" }),
-            new FakeEnvironment());
-
-        registrar.Should().Throw<InvalidOperationException>().WithMessage("*Notificaciones:Remoto:Habilitado*Tramites:Bus:Habilitado*");
+        scope.ServiceProvider.GetRequiredService<IEmailSender>().Should().BeOfType<CorreoPorBusEmailSender>();
     }
 
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static (CorreoPorBusEmailSender Sender, EnProcesoFalso EnProceso, string DbName, ServiceProvider Provider) Crear(NotificationChannel canal)
+    private static (CorreoPorBusEmailSender Sender, string DbName, ServiceProvider Provider) Crear(NotificationChannel canal)
     {
         var dbName = $"flit-13355-{Guid.NewGuid()}";
         var services = new ServiceCollection();
@@ -142,10 +129,9 @@ public sealed class CorreoPorBusEmailSenderTests
             ["Platform:Messaging:ConnectionString"] = "amqp://tramites:x@127.0.0.1:5672/flit",
         }));
         var provider = services.BuildServiceProvider();
-        var enProceso = new EnProcesoFalso();
-        var sender = new CorreoPorBusEmailSender(enProceso, new CanalFijo(canal),
+        var sender = new CorreoPorBusEmailSender(new CanalFijo(canal),
             provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CorreoPorBusEmailSender>.Instance);
-        return (sender, enProceso, dbName, provider);
+        return (sender, dbName, provider);
     }
 
     private static async Task<OutboxMessage> TrabajoAsync(string dbName)
@@ -162,17 +148,6 @@ public sealed class CorreoPorBusEmailSenderTests
 
     private static FlitDbContext NewContext(string dbName) =>
         new(new DbContextOptionsBuilder<FlitDbContext>().UseInMemoryDatabase(dbName).Options);
-
-    private sealed class EnProcesoFalso : IEmailSender
-    {
-        public List<EmailMessage> Enviados { get; } = [];
-
-        public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
-        {
-            Enviados.Add(message);
-            return Task.FromResult(EmailSendResult.Sent);
-        }
-    }
 
     private sealed class CanalFijo(NotificationChannel canal) : INotificationChannelResolver
     {

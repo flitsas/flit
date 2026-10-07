@@ -1,6 +1,5 @@
 using System.Reflection;
 using Flit.Infrastructure.Email;
-using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -36,13 +35,12 @@ public sealed class NotificationChannelsAdminServiceIEmailSenderRegistrationTest
     // concretos, el enrutador por canal del tenant y el decorador que envuelve al enrutador.
     // Cualquier clase NUEVA que implemente IEmailSender en este ensamblado es, por definición, un
     // transporte/adaptador nuevo — justo lo que el AC4 de la HU #11367 prohíbe.
+    // HU #13359: el enrutador y el decorador de bitácora en proceso se retiraron; los transportes quedan en el módulo
+    // (los aloja core-notificaciones) y el puerto de core-api/core-identity solo encola.
     private static readonly HashSet<string> BaselineImplementationNames =
     [
         nameof(ConsoleEmailSender),
         nameof(SmtpEmailSender),
-        nameof(TenantChannelEmailRouter),
-        nameof(NotificationDeliveryLoggingEmailSender),
-        // HU #13355: con Notificaciones remoto, el puerto deja los correos como trabajos a core-notificaciones.
         nameof(Flit.Infrastructure.Notifications.Bus.CorreoPorBusEmailSender),
     ];
 
@@ -50,7 +48,7 @@ public sealed class NotificationChannelsAdminServiceIEmailSenderRegistrationTest
     public void IEmailSender_ImplementationsInInfrastructureAssembly_MatchTheKnownBaseline()
     {
         // HU #13353: los transportes viven en Flit.Modules.Notificaciones; el enrutador y la bitácora, en Identity.
-        var implementations = new[] { typeof(SmtpEmailSender).Assembly, typeof(NotificationDeliveryLoggingEmailSender).Assembly }
+        var implementations = new[] { typeof(SmtpEmailSender).Assembly, typeof(Flit.Infrastructure.Notifications.Bus.CorreoPorBusEmailSender).Assembly }
             .Distinct()
             .SelectMany(a => a.GetTypes())
             .Where(t => t.IsClass && !t.IsAbstract && typeof(IEmailSender).IsAssignableFrom(t))
@@ -79,7 +77,7 @@ public sealed class NotificationChannelsAdminServiceIEmailSenderRegistrationTest
 
         descriptors.Should().HaveCount(
             1,
-            "un único puerto IEmailSender (el decorador de bitácora envolviendo el transporte real) — "
+            "un único puerto IEmailSender (el que encola en Notificaciones) — "
                 + "ningún registro adicional de un transporte nuevo (AC4)");
     }
 

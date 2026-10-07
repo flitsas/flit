@@ -18,12 +18,10 @@ public sealed class TramitesBusOptions
     /// <summary>Publica los eventos al broker. Apagado por defecto: sin broker en el ambiente no cambia nada.</summary>
     public bool Habilitado { get; set; }
 
-    /// <summary>
-    /// Sigue llenando <c>tramites.procedure_state_change_outbox</c>, de la que salen hoy el correo, el webhook del OT
-    /// y el reflejo a ICT (AC2). Solo se apaga en el corte (#13359), cuando Notificaciones atienda el correo y el
-    /// webhook desde el bus y el reflejo a ICT tenga su propio camino; apagarla antes los deja sin enviar.
-    /// </summary>
-    public bool EntregaEnProceso { get; set; } = true;
+    // HU #13359: la opción EntregaEnProceso se retiró. tramites.procedure_state_change_outbox se sigue llenando siempre:
+    // de ella sale la orquestación del cambio de estado en core-api (destinatarios, correo armado y webhook firmado,
+    // que se entregan a Notificaciones; reflejo a ICT por gRPC). Mover esa orquestación a consumidores del evento
+    // tramites.procedure.state_changed queda como evolución, decisión de Samuel del 2026-10-07.
 }
 
 /// <summary>Tipos y datos de los eventos de Trámites, tal como los fija <c>contracts/asyncapi/tramites-events.v1.yaml</c>.</summary>
@@ -80,19 +78,12 @@ internal static class TramitesBusRegistration
         var options = new TramitesBusOptions();
         configuration.GetSection(TramitesBusOptions.SectionName).Bind(options);
         services.AddSingleton(options);
-        services.AddSingleton(new OtWebhooks.OtWebhooksPorNotificaciones(configuration.GetValue(OtWebhooks.OtWebhooksPorNotificaciones.FlagKey, false)));
 
         var rabbitIdentidad = string.Equals(identityValidationMessaging, "rabbitmq", StringComparison.OrdinalIgnoreCase);
         if (!options.Habilitado)
         {
-            if (!options.EntregaEnProceso)
-                throw new InvalidOperationException("Tramites:Bus:EntregaEnProceso=false exige Tramites:Bus:Habilitado=true: los cambios de estado no saldrían por ningún lado.");
             if (rabbitIdentidad)
                 throw new InvalidOperationException("Messaging:IdentityValidation=rabbitmq exige Tramites:Bus:Habilitado=true y Platform:Messaging (RABBITMQ_URL_TRAMITES).");
-            if (configuration.GetValue(Flit.Infrastructure.Notifications.Bus.NotificacionesRemoto.FlagKey, false))
-                throw new InvalidOperationException("Notificaciones:Remoto:Habilitado exige Tramites:Bus:Habilitado=true: los correos se dejan por la outbox de Trámites.");
-            if (configuration.GetValue(OtWebhooks.OtWebhooksPorNotificaciones.FlagKey, false))
-                throw new InvalidOperationException("Notificaciones:Remoto:Webhooks exige Tramites:Bus:Habilitado=true: los webhooks se dejan por la outbox de Trámites.");
             return options;
         }
 

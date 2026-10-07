@@ -88,20 +88,19 @@ public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> 
     }
 
     [Fact]
-    public async Task SinNotificacionesEnElAmbiente_503ConSuCodigo()
+    public async Task NotificacionesCaido_503ConSuCodigo()
     {
-        var response = await Client(invoker: null, "SuperAdmin").GetAsync($"{Base}?cola=correos", Ct);
+        var response = await Client(new NotificacionesFalso { Caido = true }, "SuperAdmin").GetAsync($"{Base}?cola=correos", Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("NOTIFICACIONES_NO_CONFIGURADO");
+        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("NOTIFICACIONES_NO_DISPONIBLE");
     }
 
-    private HttpClient Client(NotificacionesFalso? invoker, string role, AuditoriaFalsa? auditoria = null)
+    private HttpClient Client(NotificacionesFalso invoker, string role, AuditoriaFalsa? auditoria = null)
     {
         var host = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
         {
-            if (invoker is not null)
-                s.AddSingleton(new MensajesMuertosService.MensajesMuertosServiceClient(invoker));
+            s.AddSingleton(new MensajesMuertosService.MensajesMuertosServiceClient(invoker));
             if (auditoria is not null)
                 s.AddScoped<IAdminAuditWriter>(_ => auditoria);
         }));
@@ -137,6 +136,8 @@ public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> 
     {
         public bool NoEsta { get; init; }
 
+        public bool Caido { get; init; }
+
         public List<object> Pedidos { get; } = [];
 
         public List<string?> Empresas { get; } = [];
@@ -165,9 +166,11 @@ public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> 
                 ReintentarMensajeMuertoRequest => new ReintentarMensajeMuertoResponse(),
                 _ => new DescartarMensajeMuertoResponse(),
             };
-            var tarea = NoEsta
-                ? Task.FromException<TResponse>(new RpcException(new Status(StatusCode.NotFound, "no está")))
-                : Task.FromResult((TResponse)respuesta);
+            var tarea = Caido
+                ? Task.FromException<TResponse>(new RpcException(new Status(StatusCode.Unavailable, "caído")))
+                : NoEsta
+                    ? Task.FromException<TResponse>(new RpcException(new Status(StatusCode.NotFound, "no está")))
+                    : Task.FromResult((TResponse)respuesta);
             return new AsyncUnaryCall<TResponse>(tarea, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => [], () => { });
         }
 

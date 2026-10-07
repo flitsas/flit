@@ -13,21 +13,17 @@ namespace Flit.Infrastructure.Messaging;
 /// transición confirmada ⇒ exactamente un evento; rollback ⇒ cero eventos. La entrega efectiva
 /// la hace <see cref="ProcedureStateChangeOutboxProcessor"/> tras el commit.
 /// HU #13350: con el bus encendido (<paramref name="bus"/> registrado) encola además
-/// <c>tramites.procedure.state_changed</c> en la outbox del SDK, en la misma unidad de trabajo. Con
-/// <see cref="TramitesBusOptions.EntregaEnProceso"/> apagada deja de escribir la outbox propia.
+/// <c>tramites.procedure.state_changed</c> en la outbox del SDK, en la misma unidad de trabajo.
 /// </summary>
 internal sealed class ProcedureStateChangeOutboxPublisher(
     FlitDbContext db,
-    IPlatformOutbox? bus = null,
-    TramitesBusOptions? options = null) : ITramiteTransitionPublisher
+    IPlatformOutbox? bus = null) : ITramiteTransitionPublisher
 {
     public Task EnqueueAsync(TramiteTransitionRecord record, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(record);
 
         bus?.Enqueue(TramitesEventos.EstadoCambiado, 1, record.TenantId, TramitesEventos.Datos(record));
-        if (options is { EntregaEnProceso: false })
-            return Task.CompletedTask;
 
         var now = DateTimeOffset.UtcNow;
 

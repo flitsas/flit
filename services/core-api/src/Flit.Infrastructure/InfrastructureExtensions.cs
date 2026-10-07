@@ -12,7 +12,6 @@ using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
-using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications;
@@ -271,7 +270,6 @@ public static class InfrastructureExtensions
 
         AddConsultationProviders(services);
         AddIdentityValidation(services, configuration);
-        services.AddRentingChannel(configuration); // HU #13353: vive en Flit.Modules.Notificaciones
         AddOcr(services, configuration);
         AddDrFlit(services, configuration, environment);
         AddQuipux(services);

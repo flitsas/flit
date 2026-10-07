@@ -11,8 +11,7 @@ namespace Flit.Api.Endpoints.SuperAdmin;
 /// Mensajes muertos de Notificaciones (Epic #13316, HU #13357): los correos y webhooks que agotaron sus reintentos.
 /// El SuperAdmin los lista, los reintenta (vuelven a su cola y se procesan) o los descarta; reintentar y descartar quedan
 /// en la auditoría administrativa. Solo SuperAdmin (lo exige el grupo: un AdminCompany recibe 403). Los mensajes viven
-/// en el broker; core-api los administra por gRPC con core-notificaciones. Sin Notificaciones en el ambiente responde 503
-/// <c>NOTIFICACIONES_NO_CONFIGURADO</c>.
+/// en el broker; core-api los administra por gRPC con core-notificaciones (obligatorio desde el corte, HU #13359).
 /// </summary>
 internal static class MensajesMuertosEndpoints
 {
@@ -32,10 +31,9 @@ internal static class MensajesMuertosEndpoints
             .AddEndpointFilter(new AdminAuditFilter(AuditVocabulary.Modules.Notifications, AuditVocabulary.Operations.DiscardDeadLetter, Entidad, Objetivo, "mensajeId"));
     }
 
-    private static async Task<IResult> ListarAsync(string? cola, int? limite, HttpContext http, IServiceProvider services, CancellationToken ct)
+    private static async Task<IResult> ListarAsync(
+        string? cola, int? limite, HttpContext http, MensajesMuertosService.MensajesMuertosServiceClient cliente, CancellationToken ct)
     {
-        if (services.GetService<MensajesMuertosService.MensajesMuertosServiceClient>() is not { } cliente)
-            return NoConfigurado();
         if (Cola(cola) is not { } c)
             return ColaInvalida();
 
@@ -61,19 +59,20 @@ internal static class MensajesMuertosEndpoints
         }, http).ConfigureAwait(false);
     }
 
-    private static Task<IResult> ReintentarAsync(string cola, Guid mensajeId, HttpContext http, IServiceProvider services, CancellationToken ct) =>
-        AccionAsync(cola, http, services, (cliente, c, metadata) => cliente.ReintentarMensajeMuertoAsync(
+    private static Task<IResult> ReintentarAsync(
+        string cola, Guid mensajeId, HttpContext http, MensajesMuertosService.MensajesMuertosServiceClient cliente, CancellationToken ct) =>
+        AccionAsync(cola, http, cliente, (cliente, c, metadata) => cliente.ReintentarMensajeMuertoAsync(
             new ReintentarMensajeMuertoRequest { Cola = c, Id = mensajeId.ToString() }, metadata, cancellationToken: ct).ResponseAsync);
 
-    private static Task<IResult> DescartarAsync(string cola, Guid mensajeId, HttpContext http, IServiceProvider services, CancellationToken ct) =>
-        AccionAsync(cola, http, services, (cliente, c, metadata) => cliente.DescartarMensajeMuertoAsync(
+    private static Task<IResult> DescartarAsync(
+        string cola, Guid mensajeId, HttpContext http, MensajesMuertosService.MensajesMuertosServiceClient cliente, CancellationToken ct) =>
+        AccionAsync(cola, http, cliente, (cliente, c, metadata) => cliente.DescartarMensajeMuertoAsync(
             new DescartarMensajeMuertoRequest { Cola = c, Id = mensajeId.ToString() }, metadata, cancellationToken: ct).ResponseAsync);
 
     private static async Task<IResult> AccionAsync<T>(
-        string cola, HttpContext http, IServiceProvider services, Func<MensajesMuertosService.MensajesMuertosServiceClient, ColaMuertos, Metadata, Task<T>> accion)
+        string cola, HttpContext http, MensajesMuertosService.MensajesMuertosServiceClient cliente,
+        Func<MensajesMuertosService.MensajesMuertosServiceClient, ColaMuertos, Metadata, Task<T>> accion)
     {
-        if (services.GetService<MensajesMuertosService.MensajesMuertosServiceClient>() is not { } cliente)
-            return NoConfigurado();
         if (Cola(cola) is not { } c)
             return ColaInvalida();
 
@@ -110,9 +109,6 @@ internal static class MensajesMuertosEndpoints
         "webhooks" => ColaMuertos.Webhooks,
         _ => null,
     };
-
-    private static IResult NoConfigurado() =>
-        Problem(StatusCodes.Status503ServiceUnavailable, "NOTIFICACIONES_NO_CONFIGURADO", "El servicio de Notificaciones no está configurado en este ambiente.");
 
     private static IResult ColaInvalida() =>
         Problem(StatusCodes.Status400BadRequest, "COLA_INVALIDA", "La cola es «correos» o «webhooks».");

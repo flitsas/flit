@@ -90,14 +90,12 @@ public static class Program
         services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<IdentityDbContext>());
         services.AddFlitDataProtection<IdentityDbContext>();
 
-        // Infraestructura compartida: login, llaves, correo (con el canal Renting), auditoría, Marca Blanca y productos.
-        services.AddRentingChannel(configuration);
+        // Infraestructura compartida: login, llaves, correo, auditoría, Marca Blanca y productos.
         services.AddIdentityLoginServices(configuration, environment);
-        // HU #13355 (Epic #13316): con Notificaciones remoto, los correos de core-identity (recuperación de clave,
-        // activación) se dejan como trabajos por su outbox (identity.outbox), con el productor «plataforma» y su usuario
-        // del broker (Platform:Messaging).
-        if (configuration.GetValue(Flit.Infrastructure.Notifications.Bus.NotificacionesRemoto.FlagKey, false))
-            services.AddFlitOutbox<IdentityDbContext>(configuration);
+        // HU #13355/#13359 (Epic #13316): core-identity no tiene transportes de correo. Sus correos (recuperación de
+        // clave, activación) se dejan como trabajos por su outbox (identity.outbox), con el productor «plataforma» y su
+        // usuario del broker (Platform:Messaging, obligatorio).
+        services.AddFlitOutbox<IdentityDbContext>(configuration);
         services.AddIdentityAuditing();
         services.AddIdentityMarcaBlanca(configuration);
         services.AddBrandLogoReader(configuration);
