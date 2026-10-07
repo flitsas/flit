@@ -240,6 +240,9 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("impronta_generacion_habilitada")
             .IsRequired()
             .HasDefaultValue(true)
+            // Sentinel true: sin él EF toma el default CLR (false) como «no establecido» y podría omitir un
+            // false explícito en el INSERT, dejando el trámite en true en silencio (mismo criterio que HU #13400).
+            .HasSentinel(true)
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
         // ICT — pausa del trámite (servicio v1 pauseDraftProcess + bandera starts_procedure_in_paused).
