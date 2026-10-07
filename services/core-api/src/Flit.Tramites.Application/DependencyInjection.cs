@@ -400,6 +400,12 @@ public static class DependencyInjection
 
         // Épica #13216 — HU13373: crear el lote (selección congelada + auditoría lote_creado en una transacción).
         services.AddScoped<UseCases.ConsolidadoLotes.CrearLoteConsolidadosHandler>();
+        // Épica #13216 — HU13375: procesamiento por ítem del lote (entregador común, procesadores por origen y handler).
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemEntregador, UseCases.ConsolidadoLotes.ConsolidadoLoteEntregador>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.TramitesLoteItemOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.SuperAdminLoteItemOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.LoteItemOrigenPorOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ProcesarItemLoteHandler>();
 
         return services;
     }
