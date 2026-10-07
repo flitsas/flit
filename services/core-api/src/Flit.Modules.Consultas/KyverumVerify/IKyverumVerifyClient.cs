@@ -11,6 +11,7 @@ namespace Flit.Tramites.Application.Identity;
 /// <param name="TipoDoc">Tipo de documento (CC, CE, …).</param>
 /// <param name="Documento">Número de documento.</param>
 /// <param name="Email">Correo de la persona: Kyverum lo usa para notificarle el enlace de captura.</param>
+/// <param name="TenantId">HU #13351 — empresa de la validación; Consultas la exige cuando atiende a Kyverum.</param>
 public sealed record KyverumVerifyStartRequest(
     /// <summary>HU #10865 — nullable para prevalidaciones standalone (sin trámite).</summary>
     Guid? ProcedureInstanceId,
@@ -19,7 +20,8 @@ public sealed record KyverumVerifyStartRequest(
     string Nombre,
     string TipoDoc,
     string Documento,
-    string Email);
+    string Email,
+    Guid? TenantId = null);
 
 /// <summary>
 /// Resultado de iniciar una verificación en Kyverum. El <paramref name="WebhookSecret"/> es el secreto

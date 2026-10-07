@@ -326,6 +326,21 @@ nada cambia: Trámites sigue entregando correo, webhook del OT y reflejo a ICT e
 
 Volver atrás: `TRAMITES_BUS_HABILITADO=false`. `TRAMITES_BUS_ENTREGA_EN_PROCESO` no se toca hasta el corte (#13359).
 
+**Avisos de Kyverum por Consultas (HU #13351).** Con el bus de Trámites encendido y core-consultas arriba (§4.9):
+
+1. En el `.env`: `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL=https://<host del ambiente>/api/v1/consultas/avisos/kyverum-verify`
+   (core-consultas toma la misma `KYVERUM_API_KEY` que core-api). El gateway ya enruta `/api/v1/consultas/avisos/*` a
+   core-consultas; si nginx filtra rutas, abrir esa también.
+2. `CONSULTAS_REMOTO_VALIDACION_IDENTIDAD=true` y recrear core-api y core-consultas. Desde ahí cada validación nueva
+   se crea a través de Consultas, Kyverum avisa a su receptor y el resultado llega a Trámites por el bus. Las
+   validaciones creadas antes siguen avisando al webhook de core-api, que no cambia.
+3. Verificar: una validación de prueba queda en `consultas.validaciones_kyverum`, su aviso en `consultas.avisos`
+   (`resultado = publicado`) y el trámite se actualiza. Un aviso con firma inválida queda como `firma_invalida` y no
+   llega a Trámites.
+
+Volver atrás: `CONSULTAS_REMOTO_VALIDACION_IDENTIDAD=false`. Las validaciones en curso creadas por Consultas se
+terminan por la reconciliación de Trámites (consulta el estado a Kyverum directo).
+
 ---
 
 ## 5. Hosts, DNS y certificados

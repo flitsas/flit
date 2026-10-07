@@ -28,7 +28,8 @@ internal sealed class KyverumIdentityValidationProvider(IKyverumVerifyClient kyv
                     request.Nombre,
                     request.TipoDoc,
                     request.Documento,
-                    request.Email),
+                    request.Email,
+                    request.TenantId),
                 ct);
 
             return new IdentityProviderStartResult(

@@ -86,7 +86,8 @@ internal sealed class PrevalidacionResendService(
                     Nombre: subject.Nombre,
                     TipoDoc: subject.TipoDocumento,
                     Documento: subject.NumeroDocumento,
-                    Email: subject.Email),
+                    Email: subject.Email,
+                    TenantId: tenantId),
                 ct);
         }
         catch (KyverumVerifyException ex)

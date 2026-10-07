@@ -1,8 +1,10 @@
 using Flit.Api.Telemetry;
+using Flit.Consultas.Api.Avisos;
 using Flit.Consultas.Api.Configuracion;
 using Flit.Consultas.Api.Grpc;
 using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Modules.Consultas;
+using Flit.Modules.Consultas.KyverumVerify;
 using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Consultas.Api;
@@ -10,6 +12,7 @@ using Flit.Consultas.Api.Persistence;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Platform.Sdk.Messaging;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -51,7 +54,8 @@ public static class Program
         builder.Services.AddAuthorization();
         builder.Services.AddFlitGrpcServer()
             .RequireServiceToken<ConsultasGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
-            .RequireServiceToken<ConsultasAdminGrpcService>(ConsultasAdminGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
+            .RequireServiceToken<ConsultasAdminGrpcService>(ConsultasAdminGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
+            .RequireServiceToken<ValidacionIdentidadGrpcService>(ValidacionIdentidadGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
         builder.Services.AddFlitOutbox<ConsultasDb>(builder.Configuration);
 
         // HU #13343 (ADR-0065): los proveedores del módulo, con sus modos mock|real y credenciales (las mismas claves de
@@ -63,6 +67,23 @@ public static class Program
         builder.Services.AddScoped<IAvaluoProviderPolicy, ConsultasAvaluoPolicy>();
         builder.Services.AddSingleton<IAvaluoMockValueSource, SinValoresMockDeAvaluo>();
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
+
+        // HU #13351 (ADR-0065 §6-7): Kyverum Verify por Consultas. Mismas variables que core-api (la de entorno primero);
+        // KYVERUM_WEBHOOK_CALLBACK_URL apunta al receptor de Consultas (AvisosKyverumEndpoints.Ruta sin el id). Las llaves
+        // de Data Protection que cifran los secretos de los avisos viven en el esquema propio.
+        string? EnvPrimero(string key, string env) =>
+            Environment.GetEnvironmentVariable(env) is { Length: > 0 } v ? v : builder.Configuration[key];
+        builder.Services.AddKyverumVerifyClients(o =>
+        {
+            o.BaseUrl = EnvPrimero("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";
+            o.ApiKey = EnvPrimero("Kyverum:ApiKey", "KYVERUM_API_KEY") ?? "";
+            o.AuthScheme = EnvPrimero("Kyverum:AuthScheme", "KYVERUM_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(EnvPrimero("Kyverum:TimeoutSeconds", "KYVERUM_TIMEOUT_SECONDS"), out var t) ? t : 30;
+            o.WebhookCallbackUrl = EnvPrimero("Kyverum:WebhookCallbackUrl", "KYVERUM_WEBHOOK_CALLBACK_URL") ?? "";
+        });
+        builder.Services.AddDataProtection()
+            .PersistKeysToDbContext<ConsultasDb>()
+            .SetApplicationName($"flit-core-{ServicioSettings.Codigo}");
 
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
@@ -97,6 +118,8 @@ public static class Program
         var grpcHost = $"*:{grpcPort}";
         app.MapGrpcService<ConsultasGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<ConsultasAdminGrpcService>().RequireHost(grpcHost);
+        app.MapGrpcService<ValidacionIdentidadGrpcService>().RequireHost(grpcHost);
+        app.MapAvisosKyverum(); // HU #13351: receptor público de avisos (lo expone el gateway)
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;
     }

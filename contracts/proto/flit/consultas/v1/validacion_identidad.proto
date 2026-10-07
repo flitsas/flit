@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Validación de identidad con Kyverum Verify a través de Consultas (Epic #13316, HU #13351; ADR-0065 §6-7). Consultas
+// habla con el proveedor y guarda el secreto con el que firma sus avisos; el resultado vuelve al pedidor por el bus
+// (`consultas.aviso.kyverum_verify`), no por esta llamada.
+//
+// Autenticación: token de servicio con `aud=consultas` y scope `platform.consultas`; la empresa en la metadata
+// `x-flit-tenant-id`, como en ConsultasService.
+//
+// Errores: proveedor caído o lento → UNAVAILABLE (el pedidor reintenta); el proveedor rechazó la solicitud →
+// FAILED_PRECONDITION con reason `PROVEEDOR_RECHAZO` (no se reintenta).
+service ValidacionIdentidadService {
+  // Crea la validación en el proveedor. El aviso del proveedor llegará al receptor de Consultas con `validacion_id`.
+  rpc Iniciar(IniciarValidacionRequest) returns (IniciarValidacionResponse);
+
+  // Estado actual en el proveedor (reconciliación cuando el aviso no llegó). `encontrada = false` si no la conoce.
+  rpc ConsultarEstado(ConsultarEstadoValidacionRequest) returns (ConsultarEstadoValidacionResponse);
+
+  // Certificado de la validación (PDF). `encontrado = false` si el proveedor aún no lo tiene.
+  rpc DescargarCertificado(DescargarCertificadoRequest) returns (DescargarCertificadoResponse);
+}
+
+message IniciarValidacionRequest {
+  // Id de la validación en el servicio que la pide: correlaciona el aviso del proveedor.
+  string validacion_id = 1;
+  optional string tramite_id = 2;
+  optional string parte = 3;
+  string nombre = 4;
+  string tipo_documento = 5;
+  string documento = 6;
+  string email = 7;
+}
+
+message IniciarValidacionResponse {
+  string verification_id = 1;
+  string capture_url = 2;
+  string provider_status = 3;
+  // Respuesta del proveedor sin secretos ni datos sensibles, para la traza del pedidor.
+  string raw_payload_sanitized = 4;
+  google.protobuf.Timestamp expira = 5;
+}
+
+message ConsultarEstadoValidacionRequest {
+  string verification_id = 1;
+  optional string parte = 2;
+}
+
+message ConsultarEstadoValidacionResponse {
+  bool encontrada = 1;
+  string status = 2;
+  optional int32 score = 3;
+  string raw_payload_sanitized = 4;
+  optional string attempt_at = 5;
+  optional string motivo = 6;
+  optional string firma_serie = 7;
+}
+
+message DescargarCertificadoRequest {
+  string verification_id = 1;
+}
+
+message DescargarCertificadoResponse {
+  bool encontrado = 1;
+  bytes contenido = 2;
+  string content_type = 3;
+  string nombre_archivo = 4;
+}

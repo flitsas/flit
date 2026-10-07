@@ -424,6 +424,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
         // HU #13350 (Epic #13316): outbox del SDK para los eventos que Trámites publica en flit.tramites.
         modelBuilder.AddFlitOutbox("tramites");
+        // HU #13351: bandeja de entrada de los eventos que Trámites consume (avisos de Kyverum desde Consultas).
+        modelBuilder.AddFlitInbox("tramites");
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

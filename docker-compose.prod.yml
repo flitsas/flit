@@ -322,6 +322,8 @@ services:
       Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
       # HU #13346: si core-consultas no responde, Trámites consulta en proceso (y lo registra). false = «consulta no disponible».
       Consultas__Remoto__Respaldo: ${CONSULTAS_REMOTO_RESPALDO:-true}
+      # HU #13351: Kyverum Verify por Consultas y su aviso por el bus (exige TRAMITES_BUS_HABILITADO=true).
+      Consultas__Remoto__ValidacionIdentidad: ${CONSULTAS_REMOTO_VALIDACION_IDENTIDAD:-false}
       # HU #13350: Trámites publica sus eventos en flit.tramites (outbox del SDK). Apagado por defecto. Encendido necesita
       # el broker (perfil bus) y el usuario tramites (deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE").
       # TRAMITES_BUS_ENTREGA_EN_PROCESO=false solo en el corte (#13359): sin ella dejan de salir correo, webhook OT y reflejo ICT.
@@ -526,6 +528,13 @@ services:
       KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
       KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
       KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
+      # HU #13351: Kyverum Verify por Consultas (misma llave que core-api). La URL del aviso es la del receptor de
+      # Consultas (https://<host>/api/v1/consultas/avisos/kyverum-verify), distinta de la de core-api.
+      KYVERUM_API_KEY: ${KYVERUM_API_KEY:-}
+      KYVERUM_BASE_URL: ${KYVERUM_BASE_URL:-https://verify.kyverum.com}
+      KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
+      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
+      KYVERUM_WEBHOOK_CALLBACK_URL: ${CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL:-}
     healthcheck:
       # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]
@@ -718,6 +727,8 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
+      # HU #13351: avisos de proveedores al receptor de core-consultas (/api/v1/consultas/avisos/*).
+      ReverseProxy__Clusters__core-consultas-cluster__Destinations__core-consultas-1__Address: http://core-consultas:${CORE_CONSULTAS_PORT:-4026}/
       # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
       # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
       Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}

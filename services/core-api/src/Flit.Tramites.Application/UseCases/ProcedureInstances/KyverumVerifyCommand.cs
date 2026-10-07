@@ -170,7 +170,7 @@ public sealed class IniciarKyverumVerifyHandler(
         try
         {
             provider = await kyverum.StartVerificationAsync(
-                new KyverumVerifyStartRequest(id, validationId, parte, nombre, tipoDoc, documento, email),
+                new KyverumVerifyStartRequest(id, validationId, parte, nombre, tipoDoc, documento, email, tenantId),
                 ct);
         }
         catch (KyverumVerifyException ex)
@@ -426,6 +426,47 @@ public sealed class KyverumWebhookHandler(
             return ("ok", null);
 
         return await ApplyFromBodyAsync(v, input.RawBody, ct);
+    }
+
+    /// <summary>
+    /// HU #13351 (ADR-0065 §6) — aviso de Kyverum que llegó a Consultas, ya verificado contra el secreto que guarda
+    /// Consultas, y que llega aquí por el bus. Mismo tratamiento que <see cref="HandleAsync"/> después de la firma:
+    /// trámite congelado, estados terminales idempotentes, conteo de intentos y aplicación del resultado.
+    /// </summary>
+    public async Task<(string? Result, string? Error)> HandleVerifiedAsync(Guid validationId, byte[] rawBody, CancellationToken ct = default)
+    {
+        if (rawBody is null || rawBody.Length == 0)
+            return (null, "cuerpo_invalido");
+
+        var v = await repo.GetBiometricByIdAsync(validationId, ct);
+        if (v is null)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.NotFound,
+                ValidationId: validationId, Message: "Aviso verificado por Consultas para una validación que no existe."), ct);
+            return (null, "not_found");
+        }
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Received,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            SignaturePresent: true, Message: "Aviso recibido por Consultas (firma verificada allí) y entregado por el bus."), ct);
+
+        if (v.CongeladaPorTramite)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.TramiteInactivo,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                Message: $"Trámite {v.ProcedureInstance!.Status}: el resultado del proveedor no se aplica."), ct);
+            return ("ok", null);
+        }
+
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            return ("ok", null);
+
+        return await ApplyFromBodyAsync(v, rawBody, ct);
     }
 
     /// <summary>Vía rápida: firma válida ⇒ confiar en el cuerpo del webhook y aplicar.</summary>

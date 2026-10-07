@@ -20,6 +20,7 @@ using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
+using Flit.Modules.Consultas.KyverumVerify;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Platform;
 using Flit.Infrastructure.Security;
@@ -367,30 +368,13 @@ public static class InfrastructureExtensions
         };
         services.AddSingleton(biometrics);
 
-        services.Configure<KyverumOptions>(o =>
+        services.AddKyverumVerifyClients(o =>
         {
             o.BaseUrl = Cfg("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";
             o.ApiKey = Cfg("Kyverum:ApiKey", "KYVERUM_API_KEY") ?? "";
             o.AuthScheme = Cfg("Kyverum:AuthScheme", "KYVERUM_AUTH_SCHEME") ?? "Bearer";
             o.TimeoutSeconds = int.TryParse(Cfg("Kyverum:TimeoutSeconds", "KYVERUM_TIMEOUT_SECONDS"), out var t) ? t : 30;
             o.WebhookCallbackUrl = Cfg("Kyverum:WebhookCallbackUrl", "KYVERUM_WEBHOOK_CALLBACK_URL") ?? "";
-        });
-
-        services.AddHttpClient<IKyverumVerifyClient, KyverumVerifyClient>((sp, c) =>
-        {
-            var o = sp.GetRequiredService<IOptions<KyverumOptions>>().Value;
-            c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
-        });
-
-        // Descarga del certificado de la validación (PDF) desde la API pública de Kyverum
-        // (GET /v1/validations/{id}/certificado). Reusa el MISMO Bearer API key que el create — sin cookie
-        // ni login admin (el panel /admin/api exige MFA y no aplica para integración server-to-server).
-        services.AddHttpClient<IKyverumCertificateClient, KyverumCertificateClient>((sp, c) =>
-        {
-            var o = sp.GetRequiredService<IOptions<KyverumOptions>>().Value;
-            c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
         services.AddSingleton<IIdentitySignatureExtractor, Documents.IdentitySignatureExtractor>();
         services.AddScoped<IIdentitySignatureArtifactStorage, Storage.IdentitySignatureArtifactStorage>();

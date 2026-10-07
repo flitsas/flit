@@ -1,9 +1,13 @@
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Consultas.Grpc.V1;
+using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Platform.Sdk.Messaging;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Grpc.Core;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Api.Consultas;
 
@@ -34,14 +38,24 @@ internal static class ConsultasRemoto
         ?? descriptor.ImplementationFactory?.Invoke(sp)
         ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!);
 
+    /// <summary>HU #13351: Kyverum Verify a través de Consultas y sus avisos por el bus. Independiente de <see cref="FlagKey"/>.</summary>
+    public const string ValidacionIdentidadFlagKey = "Consultas:Remoto:ValidacionIdentidad";
+
     public static IServiceCollection AddConsultasRemoto(this IServiceCollection services, IConfiguration configuration)
     {
-        if (!configuration.GetValue(FlagKey, false))
+        var consultas = configuration.GetValue(FlagKey, false);
+        var validacionIdentidad = configuration.GetValue(ValidacionIdentidadFlagKey, false);
+        if (!consultas && !validacionIdentidad)
             return services;
 
         var address = configuration[AddressKey];
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
-            throw new InvalidOperationException($"{FlagKey} está encendida pero {AddressKey} no es una URL (p. ej. http://core-consultas:8084).");
+            throw new InvalidOperationException($"Consultas remoto está encendido pero {AddressKey} no es una URL (p. ej. http://core-consultas:8084).");
+
+        if (validacionIdentidad)
+            AddValidacionIdentidadRemota(services, configuration, uri);
+        if (!consultas)
+            return services;
 
         // HU #13344: la configuración por empresa que guarda el SuperAdmin también queda en Consultas.
         services.AddFlitGrpcClient<ConsultasAdminService.ConsultasAdminServiceClient>(configuration, uri, "platform.consultas.admin");
@@ -57,6 +71,24 @@ internal static class ConsultasRemoto
         Decorar<IConsultationProviderRegistry>(services, (sp, enProceso) => new ConsultasRemotasRegistry(enProceso, sp.GetRequiredService<ConsultasRemotasCliente>()));
         Decorar<IConsultationProviderChainResolver>(services, (sp, enProceso) => new ConsultasRemotasChainResolver(enProceso, sp.GetRequiredService<ConsultasRemotasCliente>()));
         return services;
+    }
+
+    /// <summary>
+    /// HU #13351: los clientes de Kyverum Verify pasan a Consultas (que guarda el secreto del aviso) y el aviso vuelve
+    /// por el bus. Exige el bus de Trámites: sin él el resultado no llegaría.
+    /// </summary>
+    private static void AddValidacionIdentidadRemota(IServiceCollection services, IConfiguration configuration, Uri uri)
+    {
+        if (!configuration.GetValue("Tramites:Bus:Habilitado", false))
+            throw new InvalidOperationException($"{ValidacionIdentidadFlagKey} exige Tramites:Bus:Habilitado=true: el aviso de Kyverum vuelve por el bus.");
+
+        services.AddFlitGrpcClient<ValidacionIdentidadService.ValidacionIdentidadServiceClient>(configuration, uri, "platform.consultas");
+        services.RemoveAll<IKyverumVerifyClient>();
+        services.RemoveAll<IKyverumCertificateClient>();
+        services.AddScoped<IKyverumVerifyClient, KyverumVerifyPorConsultas>();
+        services.AddScoped<IKyverumCertificateClient, KyverumCertificadoPorConsultas>();
+        services.AddFlitConsumer<FlitDbContext, AvisoKyverumConsumer, AvisoKyverumVerify>(
+            configuration, AvisoKyverumConsumer.Cola, producer: "consultas", [AvisoKyverumConsumer.Tipo]);
     }
 }
 
