@@ -1140,6 +1140,7 @@ Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.Star
 Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
+Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<Swashbuckle.AspNetCore.SwaggerGen.SchemaGeneratorOptions> => Swashbuckle.AspNetCore.SwaggerGen.ConfigureSchemaGeneratorOptions (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<Swashbuckle.AspNetCore.SwaggerGen.SwaggerGenOptions> => instance:Microsoft.Extensions.Options.ConfigureNamedOptions<Swashbuckle.AspNetCore.SwaggerGen.SwaggerGenOptions> (Singleton)
 Microsoft.Extensions.Options.IConfigureOptions<Swashbuckle.AspNetCore.SwaggerGen.SwaggerGeneratorOptions> => Swashbuckle.AspNetCore.SwaggerGen.ConfigureSwaggerGeneratorOptions (Transient)
