@@ -480,6 +480,8 @@ Aditivos; entran como AC de las HUs del motor antes de implementarlas:
 
 **Formato.** Se conserva el nombre FLZ1: no se había publicado ni cifrado nada. Los vectores fijos se regeneraron con una implementación independiente en Python.
 
+**Auditoría genérica (hallazgo H1 del security-agent, HU #13367).** La DEK envuelta nunca se copia a `audit.audit_logs`: `tramites.consolidado_export_batches` no lleva el trigger `trg_audit_log` (excepción E6 del DDL 133). Esa función guarda `to_jsonb(NEW/OLD)` completo, incluida `dek_wrapped`; y el keyring de Data Protection vive en la misma BD, así que quien leyera la BD desenvolvería la DEK y descifraría las partes de un lote ya purgado, lo que anula el borrado criptográfico de Q5. La traza Ley 1581 del lote es `consolidado_export_audit`, igual que en ítems y partes (E3). No se toca la función global compartida. Las migraciones 133/134 no se habían aplicado en ningún entorno compartido, así que se editó el DDL embebido y no hizo falta limpiar `audit.audit_logs`.
+
 ## Referencias externas
 
 - NIST SP 800-38D (GCM); construcción STREAM (Hoang, Reyhanitabar, Rogaway, Vizár, 2015) para AEAD por bloques.
