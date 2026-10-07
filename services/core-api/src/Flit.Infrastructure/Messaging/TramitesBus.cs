@@ -88,6 +88,8 @@ internal static class TramitesBusRegistration
                 throw new InvalidOperationException("Tramites:Bus:EntregaEnProceso=false exige Tramites:Bus:Habilitado=true: los cambios de estado no saldrían por ningún lado.");
             if (rabbitIdentidad)
                 throw new InvalidOperationException("Messaging:IdentityValidation=rabbitmq exige Tramites:Bus:Habilitado=true y Platform:Messaging (RABBITMQ_URL_TRAMITES).");
+            if (configuration.GetValue(Flit.Infrastructure.Notifications.Bus.NotificacionesRemoto.FlagKey, false))
+                throw new InvalidOperationException("Notificaciones:Remoto:Habilitado exige Tramites:Bus:Habilitado=true: los correos se dejan por la outbox de Trámites.");
             return options;
         }
 

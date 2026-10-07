@@ -42,6 +42,8 @@ public sealed class NotificationChannelsAdminServiceIEmailSenderRegistrationTest
         nameof(SmtpEmailSender),
         nameof(TenantChannelEmailRouter),
         nameof(NotificationDeliveryLoggingEmailSender),
+        // HU #13355: con Notificaciones remoto, el puerto deja los correos como trabajos a core-notificaciones.
+        nameof(Flit.Infrastructure.Notifications.Bus.CorreoPorBusEmailSender),
     ];
 
     [Fact]

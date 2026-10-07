@@ -167,7 +167,7 @@ internal sealed partial class TenantChannelEmailRouter(
     /// resolución por canal — el bypass de AC3 es una excepción explícita, no el comportamiento por
     /// defecto.
     /// </summary>
-    private static bool IsAccountEmail(string templateKey) =>
+    internal static bool IsAccountEmail(string templateKey) =>
         NotificationTemplateCatalog.TryResolve(templateKey, out var descriptor)
         && descriptor.Module == NotificationModule.Security;
 

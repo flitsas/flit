@@ -36,7 +36,7 @@ Ningún servicio necesita escribir en el exchange por defecto: los reintentos va
 **Trabajos (HU #13354).** Un servicio que le deja trabajos a otro (p. ej. correos a Notificaciones) necesita escribir
 en el exchange de ese otro. Se le da con un tercer argumento, sin tocar configure ni read:
 `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE" notificaciones`. Hoy lo necesitan `tramites` (core-api) y
-`identidad` (core-identity).
+`plataforma` (core-identity).
 
 ## Un exchange nuevo
 

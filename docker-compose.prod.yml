@@ -331,6 +331,9 @@ services:
       Tramites__Bus__EntregaEnProceso: ${TRAMITES_BUS_ENTREGA_EN_PROCESO:-true}
       Platform__Messaging__Producer: tramites
       Platform__Messaging__ConnectionString: ${RABBITMQ_URL_TRAMITES:-}
+      # HU #13355: con Notificaciones remoto los correos se dejan como trabajos a core-notificaciones (exige el bus de
+      # Trámites en core-api; core-identity usa su propio usuario, abajo). Apagado: salen en proceso como siempre.
+      Notificaciones__Remoto__Habilitado: ${NOTIFICACIONES_REMOTO_HABILITADO:-false}
       Platform__ServiceClient__ClientId: svc-tramites
       Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
@@ -433,6 +436,10 @@ services:
       # Epic #13316 (HU #13334): gRPC de Identidad (flit.identidad.v1) para los demás servicios, solo en la red interna
       # (sin mapeo en ports, como el 8082 de core-api). Sin la variable no escucha gRPC: todo queda como antes.
       Identidad__GrpcPort: ${CORE_IDENTITY_GRPC_PORT:-}
+      # HU #13355: core-identity publica como «plataforma» (outbox identity.outbox) con su usuario del broker
+      # (usuario-de-servicio.sh plataforma "$CLAVE" notificaciones); no el de Trámites que trae el ancla.
+      Platform__Messaging__Producer: plataforma
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_PLATAFORMA:-}
     volumes:
       # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
       - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro

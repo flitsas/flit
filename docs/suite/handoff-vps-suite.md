@@ -358,8 +358,13 @@ envía en proceso. Por ambiente:
 4. **Correos por el bus (HU #13354):** Notificaciones consume la cola `notificaciones.email.send` (reintentos a 10 s,
    1 min y 10 min; luego `notificaciones.email.send.dlq`, que avisa la alerta de §4.10). Los servicios que dejan
    correos necesitan escribir en `flit.notificaciones`: volver a correr
-   `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES" notificaciones` (y `identidad`), con la misma
-   clave que ya tienen.
+   `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES" notificaciones` con la misma clave que ya
+   tiene, y crear el de core-identity: `deploy/rabbitmq/usuario-de-servicio.sh plataforma "$CLAVE" notificaciones` →
+   `RABBITMQ_URL_PLATAFORMA`.
+5. **Encender (HU #13355):** `NOTIFICACIONES_REMOTO_HABILITADO=true` (con `TRAMITES_BUS_HABILITADO=true`) y recrear
+   core-api y core-identity. Desde ahí los correos con empresa salen por Notificaciones; los que no tienen empresa
+   (simulación de mandato) y el buzón de pruebas siguen en proceso hasta el corte (#13359). Verificar: un cambio de
+   estado de prueba deja su fila en `notificaciones.entregas`. Volver atrás: la bandera en `false`.
 
 ---
 

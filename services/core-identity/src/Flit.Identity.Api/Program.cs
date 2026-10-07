@@ -9,6 +9,7 @@ using Flit.Identity.Web;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Notificaciones;
+using Flit.Platform.Sdk.Messaging;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Network;
@@ -92,6 +93,11 @@ public static class Program
         // Infraestructura compartida: login, llaves, correo (con el canal Renting), auditoría, Marca Blanca y productos.
         services.AddRentingChannel(configuration);
         services.AddIdentityLoginServices(configuration, environment);
+        // HU #13355 (Epic #13316): con Notificaciones remoto, los correos de core-identity (recuperación de clave,
+        // activación) se dejan como trabajos por su outbox (identity.outbox), con el productor «plataforma» y su usuario
+        // del broker (Platform:Messaging).
+        if (configuration.GetValue(Flit.Infrastructure.Notifications.Bus.NotificacionesRemoto.FlagKey, false))
+            services.AddFlitOutbox<IdentityDbContext>(configuration);
         services.AddIdentityAuditing();
         services.AddIdentityMarcaBlanca(configuration);
         services.AddBrandLogoReader(configuration);

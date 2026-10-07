@@ -3,6 +3,7 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications;
+using Flit.Infrastructure.Notifications.Bus;
 using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
@@ -171,15 +172,26 @@ public static class IdentityInfrastructureExtensions
         });
         services.AddScoped<IExplicitChannelEmailSender>(sp => sp.GetRequiredService<TenantChannelEmailRouter>());
 
+        // HU #13355 (Epic #13316): con Notificaciones remoto, los correos se dejan como trabajos a core-notificaciones
+        // (quien registra la bitácora de esas entregas); el envío en proceso queda solo para los que no tienen empresa.
+        // Exige la outbox del SDK registrada (core-api: Tramites:Bus:Habilitado; core-identity: su Platform:Messaging).
+        var notificacionesRemoto = configuration.GetValue(NotificacionesRemoto.FlagKey, false);
         services.AddScoped<IEmailSender>(sp =>
         {
             TenantChannelEmailRouter router = sp.GetRequiredService<TenantChannelEmailRouter>();
 
-            return new NotificationDeliveryLoggingEmailSender(
+            IEmailSender enProceso = new NotificationDeliveryLoggingEmailSender(
                 router,
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>(),
                 sp.GetRequiredService<EmailSettings>());
+            return notificacionesRemoto
+                ? new CorreoPorBusEmailSender(
+                    enProceso,
+                    sp.GetRequiredService<INotificationChannelResolver>(),
+                    sp.GetRequiredService<IServiceScopeFactory>(),
+                    sp.GetRequiredService<ILogger<CorreoPorBusEmailSender>>())
+                : enProceso;
         });
 
         return services;
