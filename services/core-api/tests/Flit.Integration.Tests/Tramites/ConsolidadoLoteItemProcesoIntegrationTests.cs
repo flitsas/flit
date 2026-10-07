@@ -258,6 +258,76 @@ public sealed class ConsolidadoLoteItemProcesoIntegrationTests(PostgresDatabaseF
     }
 
     [PostgresFact]
+    public async Task AC7_AccessChecker_SqlReal_SuspensionVigenteSinAcceso_YAlVencer_ConAcceso()
+    {
+        await SeedAsync();
+        await using (var ctx = NewContext())
+        {
+            // SuperAdmin: el bypass de rol evita sembrar el permiso; la suspensión se mira en la compañía del lote.
+            var superAdmin = await ctx.Roles.FirstOrDefaultAsync(r => r.Code == "SuperAdmin", Ct);
+            if (superAdmin is null)
+            {
+                superAdmin = new Role
+                {
+                    Id = Guid.NewGuid(),
+                    Code = "SuperAdmin",
+                    Name = "Super Admin",
+                    ProductCode = "plataforma",
+                    IsSystem = true,
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                ctx.Roles.Add(superAdmin);
+            }
+
+            ctx.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                UserId = UserU,
+                RoleId = superAdmin.Id,
+                TenantId = Company,
+                AssignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            ctx.UserTempSuspensions.Add(new UserTempSuspension
+            {
+                Id = Guid.NewGuid(),
+                TenantId = Company,
+                UserId = UserU,
+                StartsAt = DateTimeOffset.UtcNow.AddHours(-1),
+                EndsAt = DateTimeOffset.UtcNow.AddDays(1),
+                Reason = "HU #13375 AC7 (test)",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await ctx.SaveChangesAsync(Ct);
+        }
+
+        var contexto = new LoteItemContexto(LoteL, ItemI, ConsolidadoExportOrigin.Tramites, Company, Company, null, UserU,
+            "SuperAdmin", TramiteT, ConsolidadoExportDocumentType.Consolidado);
+
+        await using (var ctx = NewContext())
+        {
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            (await new ConsolidadoLoteAccessChecker(ctx, cache).TieneAccesoAsync(contexto, Ct))
+                .Should().BeFalse("suspensión temporal vigente en la compañía del lote");
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var s = await ctx.UserTempSuspensions.SingleAsync(x => x.UserId == UserU, Ct);
+            s.EndsAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await ctx.SaveChangesAsync(Ct);
+        }
+
+        await using (var ctx = NewContext())
+        {
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            (await new ConsolidadoLoteAccessChecker(ctx, cache).TieneAccesoAsync(contexto, Ct))
+                .Should().BeTrue("la suspensión ya venció");
+        }
+    }
+
+    [PostgresFact]
     public async Task Contrato_ItemCancelado_NingunCierreLoSobrescribe()
     {
         await SeedAsync(ConsolidadoExportItemStatus.Cancelado);

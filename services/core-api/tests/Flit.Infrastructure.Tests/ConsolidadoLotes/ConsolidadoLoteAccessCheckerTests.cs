@@ -200,6 +200,70 @@ public sealed class ConsolidadoLoteAccessCheckerTests : IDisposable
         (await CheckAsync(db, Ctx(borrado, null, ConsolidadoExportOrigin.Superadmin))).Should().BeFalse();
     }
 
+    // ── AC7: suspensión temporal del solicitante ──────────────────────────────────────────────
+
+    private static UserTempSuspension Suspension(Guid compania, DateTimeOffset inicio, DateTimeOffset? fin, DateTimeOffset? levantada = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = compania,
+        UserId = Usuario,
+        StartsAt = inicio,
+        EndsAt = fin,
+        Reason = "HU #13375 AC7 (test)",
+        CreatedAt = DateTimeOffset.UtcNow,
+        DeletedAt = levantada,
+    };
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AC7_SuspensionVigente_EnLaCompaniaDelLote_PierdeAcceso(bool indefinida)
+    {
+        await using var db = await SeedAsync();
+        var t = Tramite(CompaniaC);
+        db.ProcedureInstances.Add(t);
+        db.UserRoleAssignments.Add(Asignacion(RolRadicador, CompaniaC));
+        db.UserTempSuspensions.Add(Suspension(CompaniaC, DateTimeOffset.UtcNow.AddHours(-1), indefinida ? null : DateTimeOffset.UtcNow.AddDays(1)));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        (await CheckAsync(db, Ctx(t, CompaniaC))).Should().BeFalse("el login ya bloquea al suspendido; el lote tampoco sigue");
+    }
+
+    [Fact]
+    public async Task AC7_SuspensionVencida_Levantada_NoIniciada_OEnOtraCompania_ConservaAcceso()
+    {
+        await using var db = await SeedAsync();
+        var t = Tramite(CompaniaC);
+        db.ProcedureInstances.Add(t);
+        db.UserRoleAssignments.Add(Asignacion(RolRadicador, CompaniaC));
+        db.UserTempSuspensions.AddRange(
+            Suspension(CompaniaC, DateTimeOffset.UtcNow.AddDays(-3), DateTimeOffset.UtcNow.AddDays(-1)),
+            Suspension(CompaniaC, DateTimeOffset.UtcNow.AddHours(-1), null, levantada: DateTimeOffset.UtcNow.AddMinutes(-5)),
+            Suspension(CompaniaC, DateTimeOffset.UtcNow.AddDays(1), DateTimeOffset.UtcNow.AddDays(2)),
+            Suspension(CompaniaD, DateTimeOffset.UtcNow.AddHours(-1), null));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        (await CheckAsync(db, Ctx(t, CompaniaC))).Should().BeTrue("ninguna suspensión está vigente en la compañía del lote");
+    }
+
+    [Fact]
+    public async Task AC7_LoteDeSuperAdmin_SuspendidoDondeTieneElRolSuperAdmin_PierdeAcceso_YVencida_LoRecupera()
+    {
+        await using var db = await SeedAsync();
+        var t = Tramite(CompaniaD);
+        db.ProcedureInstances.Add(t);
+        db.UserRoleAssignments.Add(Asignacion(RolSuperAdmin, CompaniaC));
+        var suspension = Suspension(CompaniaC, DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddDays(1));
+        db.UserTempSuspensions.Add(suspension);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        (await CheckAsync(db, Ctx(t, null, ConsolidadoExportOrigin.Superadmin))).Should().BeFalse();
+
+        suspension.EndsAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        (await CheckAsync(db, Ctx(t, null, ConsolidadoExportOrigin.Superadmin))).Should().BeTrue("vencida: otro lote, sin caché");
+    }
+
     // ── caché y contrato ────────────────────────────────────────────────────────────────────────
 
     [Fact]

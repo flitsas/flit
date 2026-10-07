@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
@@ -18,9 +19,14 @@ namespace Flit.Infrastructure.Security;
 ///   <item><b>Origen <c>superadmin</c></b>: usuario activo con rol <c>SuperAdmin</c> activo; la compañía congelada es
 ///   la del trámite en el ítem.</item>
 ///   <item>En ambos: el trámite existe, sin borrado lógico, y es de la compañía congelada.</item>
+///   <item><b>AC7</b>: el solicitante no tiene una suspensión vigente (<see cref="UserTempSuspension.VigenteEn"/>, la
+///   misma regla con la que el login lo bloquea) en la compañía congelada del lote (<c>tramites</c>) o en las compañías
+///   donde tiene asignado el rol <c>SuperAdmin</c> activo (<c>superadmin</c>). Si la tiene, el ítem se omite como
+///   <c>acceso_revocado</c>; vencida o levantada, se procesa con normalidad.</item>
 /// </list>
-/// La decisión sobre el solicitante (usuario + rol) se cachea 60 s por lote y compañía; la del trámite se consulta
-/// en cada ítem. Solo lecturas parametrizadas por EF; sin logs.
+/// La decisión sobre el solicitante (usuario + rol + suspensión) se cachea 60 s por lote y compañía; la del trámite se
+/// consulta en cada ítem. Por esa caché, una suspensión (o su vencimiento) puede tardar hasta 60 s en reflejarse en un
+/// lote en curso — aceptado (AC7). Solo lecturas parametrizadas por EF; sin logs.
 /// </summary>
 /// <remarks>
 /// Uso de ejemplo: <c>var ok = await checker.TieneAccesoAsync(LoteItemContexto.Desde(lote, item), ct);</c>.
@@ -93,13 +99,26 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
         where a.UserId == userId && a.DeletedAt == null && r.DeletedAt == null && r.IsActive
         select new RolActivo { TenantId = a.TenantId, RoleId = r.Id, Code = r.Code };
 
-    private async Task<bool> EsSuperAdminActivoAsync(Guid userId, CancellationToken ct) =>
-        await UsuarioActivoAsync(userId, ct).ConfigureAwait(false)
-        && await RolesActivos(userId).AnyAsync(r => r.Code == AdminRoleCodes.SuperAdmin, ct).ConfigureAwait(false);
+    /// <summary>AC7 — suspensiones del usuario vigentes ahora, con la misma regla del login.</summary>
+    private IQueryable<UserTempSuspension> SuspensionesVigentes(Guid userId) =>
+        db.UserTempSuspensions.AsNoTracking()
+            .Where(UserTempSuspension.VigenteEn(DateTimeOffset.UtcNow))
+            .Where(s => s.UserId == userId);
+
+    private async Task<bool> EsSuperAdminActivoAsync(Guid userId, CancellationToken ct)
+    {
+        if (!await UsuarioActivoAsync(userId, ct).ConfigureAwait(false))
+            return false;
+
+        var companiasSuperAdmin = RolesActivos(userId).Where(r => r.Code == AdminRoleCodes.SuperAdmin).Select(r => r.TenantId);
+        return await companiasSuperAdmin.AnyAsync(ct).ConfigureAwait(false)
+            && !await SuspensionesVigentes(userId).AnyAsync(s => companiasSuperAdmin.Contains(s.TenantId), ct).ConfigureAwait(false);
+    }
 
     private async Task<bool> TienePermisoEnCompaniaAsync(Guid userId, Guid compania, CancellationToken ct)
     {
-        if (!await UsuarioActivoAsync(userId, ct).ConfigureAwait(false))
+        if (!await UsuarioActivoAsync(userId, ct).ConfigureAwait(false)
+            || await SuspensionesVigentes(userId).AnyAsync(s => s.TenantId == compania, ct).ConfigureAwait(false))
             return false;
 
         var conPermiso = await (
