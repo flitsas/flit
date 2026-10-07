@@ -310,6 +310,22 @@ la red interna. Sin tocar nada, todo sigue como hoy: core-api consulta en proces
 Volver atrás: en orden inverso (apagar las banderas basta; core-consultas puede seguir corriendo). El corte, cuando
 todo esté verificado en PDN, es la HU #13348: quita los proveedores y sus secretos de core-api.
 
+### 4.10 Bus de eventos y Trámites publicando (Epic #13316, HUs #13349-#13350)
+
+Un RabbitMQ por ambiente, con el vhost `flit` y un usuario por servicio (`deploy/rabbitmq/README.md`). Sin tocar nada,
+nada cambia: Trámites sigue entregando correo, webhook del OT y reflejo a ICT en proceso.
+
+1. **Broker:** `RABBITMQ_ADMIN_USER`/`RABBITMQ_ADMIN_PASSWORD` en el `.env`, sumar `bus` a `COMPOSE_PROFILES` y desplegar.
+   El vhost y los exchanges salen de `deploy/rabbitmq/definitions.json` al arrancar.
+2. **Usuarios:** `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE"` (y `consultas`); las cadenas van a
+   `RABBITMQ_URL_TRAMITES` y `RABBITMQ_URL_CONSULTAS`. Cada usuario escribe solo en su exchange.
+3. **Trámites publica:** `TRAMITES_BUS_HABILITADO=true` y recrear core-api. La migración crea `tramites.outbox`; cada
+   cambio de estado sale como `tramites.procedure.state_changed` y cada validación de identidad como
+   `tramites.identity_validation.*`. Con el broker caído los eventos esperan en la tabla y salen en orden al volver.
+   Para verlos: `rabbitmqctl list_exchanges -p flit` y, en la tabla, `published_at IS NULL` = pendientes.
+
+Volver atrás: `TRAMITES_BUS_HABILITADO=false`. `TRAMITES_BUS_ENTREGA_EN_PROCESO` no se toca hasta el corte (#13359).
+
 ---
 
 ## 5. Hosts, DNS y certificados

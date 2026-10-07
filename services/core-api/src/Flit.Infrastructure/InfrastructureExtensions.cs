@@ -407,16 +407,18 @@ public static class InfrastructureExtensions
         // scope, así queda registrada aunque el webhook termine en 500/401.
         services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
 
-        // Publisher de eventos (AC6): in-process por defecto; stub RabbitMQ activable por flag (fase 2).
+        // Publisher de eventos (AC6): in-process por defecto. HU #13350: con el bus de Trámites encendido
+        // (Tramites:Bus:Habilitado) los eventos salen además a flit.tramites por la outbox del SDK.
         var messaging = Cfg("Messaging:IdentityValidation", "MESSAGING_IDENTITY_VALIDATION") ?? "inprocess";
-        if (string.Equals(messaging, "rabbitmq", StringComparison.OrdinalIgnoreCase))
+        var bus = services.AddTramitesBus(configuration, messaging);
+        if (bus.Habilitado)
             services.AddScoped<IIdentityValidationEventPublisher, RabbitMqIdentityValidationEventPublisher>();
         else
             services.AddScoped<IIdentityValidationEventPublisher, InProcessIdentityValidationEventDispatcher>();
 
         // HU #10349 (AC4/AC6) — worker que consume los eventos 'completed' pendientes de la outbox y
         // encadena el auto-flujo (firma/FUR) de los borradores finalizados. Único para ambos modos:
-        // in-process (default) y el stub RabbitMQ dejan el evento en la outbox; este servicio lo procesa.
+        // in-process (default) y el publicador a RabbitMQ dejan el evento en la outbox; este servicio lo procesa.
         services.AddHostedService<IdentityValidationOutboxProcessor>();
 
         // Cola de ENVÍO de validaciones de identidad (provider-agnostic): proveedores registrados +

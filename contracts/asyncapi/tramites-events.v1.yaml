@@ -19,7 +19,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: procedureStateChanged
       message:
@@ -29,7 +29,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: identityValidationRequested
       message:
@@ -39,7 +39,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: identityValidationCompleted
       message:

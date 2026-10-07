@@ -14,7 +14,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: tenantProductChanged
       message:
@@ -24,7 +24,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: userSuspended
       message:
@@ -34,7 +34,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: tenantSuspended
       message:
@@ -44,7 +44,7 @@ channels:
     bindings:
       amqp:
         is: routingKey
-        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: / }
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
     subscribe:
       operationId: rolesChanged
       message:

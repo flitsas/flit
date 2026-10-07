@@ -9,8 +9,8 @@ namespace Flit.Infrastructure.Messaging;
 /// Publisher de eventos de validación de identidad por defecto (HU #10233, fase 1). Encola el evento en
 /// la outbox (<c>tramites.identity_validation_outbox</c>) usando el MISMO <see cref="FlitDbContext"/>
 /// scoped que el handler: la fila se confirma en el <c>SaveChanges</c> del caso de uso (outbox
-/// transaccional). El despacho es in-process (log). En fase 2 un worker leerá la outbox y publicará a
-/// RabbitMQ (ver <see cref="RabbitMqIdentityValidationEventPublisher"/>).
+/// transaccional). El despacho es in-process (log). Con el bus de Trámites encendido se usa
+/// <see cref="RabbitMqIdentityValidationEventPublisher"/>, que además lo publica a RabbitMQ (HU #13350).
 /// </summary>
 internal sealed class InProcessIdentityValidationEventDispatcher(
     FlitDbContext db,
@@ -32,6 +32,6 @@ internal static partial class IdentityValidationLog
     public static partial void EventDispatched(ILogger logger, string eventType, Guid validationId);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "[STUB RabbitMQ] Se publicaría {EventType} para validación {ValidationId} (fase 2 — no implementado).")]
-    public static partial void RabbitMqStub(ILogger logger, string eventType, Guid validationId);
+        Message = "Evento de validación de identidad encolado al bus: {EventType} para validación {ValidationId} (evento {EventId})")]
+    public static partial void EnqueuedToBus(ILogger logger, string eventType, Guid validationId, Guid eventId);
 }

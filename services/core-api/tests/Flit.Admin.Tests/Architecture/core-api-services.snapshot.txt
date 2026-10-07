@@ -406,6 +406,7 @@ Flit.Infrastructure.Email.EmailTransportDescriptor => instance:Flit.Infrastructu
 Flit.Infrastructure.KyverumRunt.KyverumRuntApiClient => factory (Transient)
 Flit.Infrastructure.Messaging.ChannelConsolidadoRegeneracionQueue => Flit.Infrastructure.Messaging.ChannelConsolidadoRegeneracionQueue (Singleton)
 Flit.Infrastructure.Messaging.ProcedureStateChangeEmailEnqueueNotifier => Flit.Infrastructure.Messaging.ProcedureStateChangeEmailEnqueueNotifier (Scoped)
+Flit.Infrastructure.Messaging.TramitesBusOptions => instance:Flit.Infrastructure.Messaging.TramitesBusOptions (Singleton)
 Flit.Infrastructure.Notifications.DeliveryLog.INotificationDeliveryLogWriter => Flit.Infrastructure.Notifications.DeliveryLog.NotificationDeliveryLogWriter (Scoped)
 Flit.Infrastructure.Notifications.Routing.IExplicitChannelEmailSender => factory (Scoped)
 Flit.Infrastructure.Notifications.Routing.INotificationChannelResolver => Flit.Infrastructure.Notifications.Routing.NotificationChannelResolver (Scoped)

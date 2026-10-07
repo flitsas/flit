@@ -322,6 +322,13 @@ services:
       Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
       # HU #13346: si core-consultas no responde, Trámites consulta en proceso (y lo registra). false = «consulta no disponible».
       Consultas__Remoto__Respaldo: ${CONSULTAS_REMOTO_RESPALDO:-true}
+      # HU #13350: Trámites publica sus eventos en flit.tramites (outbox del SDK). Apagado por defecto. Encendido necesita
+      # el broker (perfil bus) y el usuario tramites (deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE").
+      # TRAMITES_BUS_ENTREGA_EN_PROCESO=false solo en el corte (#13359): sin ella dejan de salir correo, webhook OT y reflejo ICT.
+      Tramites__Bus__Habilitado: ${TRAMITES_BUS_HABILITADO:-false}
+      Tramites__Bus__EntregaEnProceso: ${TRAMITES_BUS_ENTREGA_EN_PROCESO:-true}
+      Platform__Messaging__Producer: tramites
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_TRAMITES:-}
       Platform__ServiceClient__ClientId: svc-tramites
       Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
