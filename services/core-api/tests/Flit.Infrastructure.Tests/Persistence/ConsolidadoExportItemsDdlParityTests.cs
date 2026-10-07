@@ -232,7 +232,6 @@ public sealed partial class ConsolidadoExportItemsDdlParityTests
                      (item, nameof(ConsolidadoExportBatchItem.PartNumber), true),
                      (item, nameof(ConsolidadoExportBatchItem.OmissionCode), true),
                      (parte, nameof(ConsolidadoExportBatchPart.TenantId), true),
-                     (parte, nameof(ConsolidadoExportBatchPart.NoncePrefix), true),
                  })
         {
             entidad.FindProperty(prop)!.IsNullable.Should().Be(nulable, $"{entidad.ClrType.Name}.{prop}");
@@ -240,6 +239,24 @@ public sealed partial class ConsolidadoExportItemsDdlParityTests
 
         item.FindProperty(nameof(ConsolidadoExportBatchItem.RowVersion))!.IsConcurrencyToken.Should().BeTrue();
         parte.FindProperty(nameof(ConsolidadoExportBatchPart.RowVersion))!.IsConcurrencyToken.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LaParteNoTieneNoncePrefix_LaSubclavePorParteLaRetiroYElCierreNoLaExige()
+    {
+        // ADR-0070 adenda v6: la sal viaja en la cabecera FLZ1 y el nonce es 0(4) ‖ contador; no queda prefijo por parte.
+        LoadDdlConComentarios().Should().NotContain("nonce_prefix", "ni la columna, ni su COMMENT, ni el CHECK de cierre");
+        Normalizado(LoadDdl()).Should().Contain(
+            "CONSTRAINT ck_consolidado_export_batch_parts_closed CHECK ( status NOT IN ('cerrada', 'purgada') "
+            + "OR (storage_path IS NOT NULL AND stored_sha256 IS NOT NULL AND stored_size_bytes IS NOT NULL "
+            + "AND plain_size_bytes IS NOT NULL AND closed_at IS NOT NULL))");
+
+        using var db = NewModelContext();
+        var parte = db.Model.FindEntityType(typeof(ConsolidadoExportBatchPart))!;
+        parte.GetProperties().Select(p => p.Name).Should().NotContain("NoncePrefix");
+        parte.GetProperties().Select(p => p.FindAnnotation(RelationalAnnotationNames.ColumnName)?.Value as string)
+            .Should().NotContain("nonce_prefix");
+        typeof(ConsolidadoExportBatchPart).GetProperty("NoncePrefix").Should().BeNull("la entidad tampoco la expone");
     }
 
     [Fact]

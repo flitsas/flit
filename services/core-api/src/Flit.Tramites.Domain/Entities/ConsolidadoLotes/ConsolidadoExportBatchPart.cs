@@ -41,9 +41,6 @@ public sealed class ConsolidadoExportBatchPart
     /// <summary>Id opaco del texto cifrado en el file-manager (no es una URL pública).</summary>
     public string? StoragePath { get; set; }
 
-    /// <summary>Prefijo de nonce de la parte (framing AES-GCM por bloques).</summary>
-    public byte[]? NoncePrefix { get; set; }
-
     public DateTimeOffset? ClosedAt { get; set; }
 
     public DateTimeOffset? PurgedAt { get; set; }

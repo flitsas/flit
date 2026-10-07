@@ -125,8 +125,8 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
                     now() - interval '2 hours', now() - interval '1 hour', now() + interval '23 hours', @u);
             INSERT INTO tramites.consolidado_export_batch_parts
               (batch_id, part_number, status, pdf_count, plain_size_bytes, stored_size_bytes, stored_sha256, storage_path,
-               nonce_prefix, closed_at)
-            VALUES (@l, 1, 'cerrada', 1, 10, 40, repeat('a', 64), 'obj-13373', '\x01020304'::bytea, now() - interval '1 hour');
+               closed_at)
+            VALUES (@l, 1, 'cerrada', 1, 10, 40, repeat('a', 64), 'obj-13373', now() - interval '1 hour');
             INSERT INTO tramites.consolidado_export_batch_items
               (tenant_id, batch_id, procedure_instance_id, position, status, reference_number, plate, attachment_id,
                storage_path, size_bytes, delivery_mode, part_number, processed_at, created_by)

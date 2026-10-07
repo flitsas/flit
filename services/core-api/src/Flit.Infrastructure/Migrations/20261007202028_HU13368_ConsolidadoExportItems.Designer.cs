@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    [Migration("20261007175044_HU13368_ConsolidadoExportItems")]
+    [Migration("20261007202028_HU13368_ConsolidadoExportItems")]
     partial class HU13368_ConsolidadoExportItems
     {
         /// <inheritdoc />
@@ -7740,10 +7740,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("LeaseUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lease_until");
-
-                    b.Property<byte[]>("NoncePrefix")
-                        .HasColumnType("bytea")
-                        .HasColumnName("nonce_prefix");
 
                     b.Property<int>("OmittedCount")
                         .HasColumnType("integer")

@@ -474,6 +474,7 @@ Aditivos; entran como AC de las HUs del motor antes de implementarlas:
 - El AAD de cada bloque no cambia.
 - La subclave vive en un búfer que se pone a cero en un `finally`, igual que la DEK, que sigue sin salir de `ConsolidadoLoteCipher`.
 - Una cabecera truncada (sal incompleta) es `ParteCorrupta`.
+- La columna `nonce_prefix` de `tramites.consolidado_export_batch_parts` se retira (DDL 134, entidad, configuración y el CHECK `ck_consolidado_export_batch_parts_closed`): ya no hay prefijo por parte y exigirla bloqueaba el cierre. La migración `HU13368_ConsolidadoExportItems` se regeneró, porque no se había aplicado en ningún entorno compartido.
 
 **Motivo.** La unicidad del par (clave, nonce) queda garantizada por construcción entre partes y entre reintentos. Antes dependía de un prefijo aleatorio de 32 bits bajo una DEK compartida (colisión ≈ p²/2³³).
 

@@ -38,7 +38,6 @@ internal sealed class ConsolidadoExportBatchPartConfiguration : IEntityTypeConfi
         builder.Property(x => x.StoredSizeBytes).HasColumnName("stored_size_bytes");
         builder.Property(x => x.StoredSha256).HasColumnName("stored_sha256").HasColumnType("text");
         builder.Property(x => x.StoragePath).HasColumnName("storage_path").HasColumnType("text");
-        builder.Property(x => x.NoncePrefix).HasColumnName("nonce_prefix").HasColumnType("bytea");
         builder.Property(x => x.ClosedAt).HasColumnName("closed_at");
         builder.Property(x => x.PurgedAt).HasColumnName("purged_at");
 

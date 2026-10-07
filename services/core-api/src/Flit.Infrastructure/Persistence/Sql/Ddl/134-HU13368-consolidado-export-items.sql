@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_batch_parts (
     stored_size_bytes  bigint      NULL,
     stored_sha256      text        NULL,
     storage_path       text        NULL,
-    nonce_prefix       bytea       NULL,
     closed_at          timestamptz NULL,
     purged_at          timestamptz NULL,
     created_at         timestamptz NOT NULL DEFAULT now(),
@@ -67,7 +66,7 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_batch_parts (
     CONSTRAINT ck_consolidado_export_batch_parts_closed CHECK (
         status NOT IN ('cerrada', 'purgada')
         OR (storage_path IS NOT NULL AND stored_sha256 IS NOT NULL AND stored_size_bytes IS NOT NULL
-            AND plain_size_bytes IS NOT NULL AND nonce_prefix IS NOT NULL AND closed_at IS NOT NULL)),
+            AND plain_size_bytes IS NOT NULL AND closed_at IS NOT NULL)),
     CONSTRAINT ck_consolidado_export_batch_parts_purged CHECK ((status = 'purgada') = (purged_at IS NOT NULL))
 );
 
@@ -113,7 +112,6 @@ COMMENT ON COLUMN tramites.consolidado_export_batch_parts.tenant_id IS 'Copia de
 COMMENT ON COLUMN tramites.consolidado_export_batch_parts.status IS 'pendiente → empaquetando → cerrada | fallida; cerrada → purgada (retención). descartada (#13307): parte sin cerrar cuando se canceló el lote.';
 COMMENT ON COLUMN tramites.consolidado_export_batch_parts.storage_path IS 'Id opaco en el file-manager del texto cifrado. No es una URL pública; sin la DEK del lote es ilegible.';
 COMMENT ON COLUMN tramites.consolidado_export_batch_parts.stored_sha256 IS 'SHA-256 (hex minúsculas) del texto cifrado almacenado.';
-COMMENT ON COLUMN tramites.consolidado_export_batch_parts.nonce_prefix IS 'Prefijo de nonce de la parte (framing AES-GCM por bloques; revisión del security-agent).';
 
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 -- 2. tramites.consolidado_export_batch_items — un trámite por fila
