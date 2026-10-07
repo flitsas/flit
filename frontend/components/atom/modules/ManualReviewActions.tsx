@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
-import { Modal } from '@flit/ui/Modal';
+import { Modal } from '@/components/atom/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO, MANUAL_FOCO, MANUAL_SELECT_CLASS } from './manual-field-styles';
 import { WIZARD_CTA_GRADIENT, WIZARD_CTA_GRADIENT_DANGER, WIZARD_LABEL, WIZARD_SELECT } from '@/components/operacion/wizard-field-styles';

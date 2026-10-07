@@ -1,4 +1,4 @@
-import type { StatusTone } from '@flit/ui/StatusBadge';
+import type { StatusTone } from '@/components/atom/StatusBadge';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 /**

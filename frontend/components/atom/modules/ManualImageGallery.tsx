@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, RefreshCw } from 'lucide-react';
-import { Modal } from '@flit/ui/Modal';
+import { Modal } from '@/components/atom/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { MANUAL_BTN_SECUNDARIO, MANUAL_FOCO } from './manual-field-styles';

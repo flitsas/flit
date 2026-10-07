@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, ScanFace, ShieldCheck } from 'lucide-react';
-import { Modal } from '@flit/ui/Modal';
-import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
+import { Modal } from '@/components/atom/Modal';
+import { UiStateBoundary } from '@/components/admin/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { ApiError } from '@/lib/api/types';

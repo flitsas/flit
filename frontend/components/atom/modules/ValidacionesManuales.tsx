@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Eye, Info, Search } from 'lucide-react';
-import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
+import { DataTable, type DataTableColumn } from '@/components/atom/DataTable';
 import { RowActions } from '@/components/atom/RowActions';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { usePaginacion } from '@/components/atom/usePaginacion';

@@ -4,7 +4,6 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Flit.Api.Authorization;
-using Flit.Modules.Platform.Domain.Access;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
@@ -176,13 +175,6 @@ public sealed class ManualIdentityReviewEndpointsTests : IClassFixture<ManualIde
                 services.AddScoped(_ => Repo);
                 services.AddScoped<ITenantScopeResolver>(_ => new SingleScopeResolver());
                 services.AddScoped<ITransitOfficeTenantProbe>(_ => new NoTransitOffices());
-                // El middleware de producto consulta la BD para un usuario de compañía: se responde «Trámites encendido».
-                var products = Substitute.For<IProductAccessStore>();
-                products.GetTenantChainAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(call => (IReadOnlyList<Guid>)[call.ArgAt<Guid>(0)]);
-                products.GetTenantsWithProductEnabledAsync(Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-                    .Returns(call => (IReadOnlySet<Guid>)call.ArgAt<IReadOnlyList<Guid>>(0).ToHashSet());
-                services.AddScoped(_ => products);
             });
         }
     }
