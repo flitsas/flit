@@ -5259,7 +5259,9 @@ paths:
         Códigos estables: 400 `confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`,
         `seleccion_invalida`, `filtro_invalido` (campo, operador o atajo fuera de catálogo: 400, igual que
         `POST /api/v1/tramites/instances/search`); 403 `sin_compania`; 409 `lote_activo`; 422
-        `seleccion_excede_tope` (más de 10.000 ids o excluidos) y `busqueda_demasiado_amplia` (el atajo de
+        `seleccion_excede_tope` (más de 10.000 ids o excluidos, o la selección resuelta supera el tope total
+        `max_items_per_batch` de los parámetros del motor, por defecto 10.000: entonces el cuerpo trae `total` y
+        `tope` y no se crea nada) y `busqueda_demasiado_amplia` (el atajo de
         búsqueda rápida abarca demasiados borradores, igual que el listado); 503 `motor_inactivo` (motor
         apagado u origen sin resolver) y `lote_no_creado` (la transacción o la
         auditoría falló).
@@ -5306,7 +5308,7 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteActivoConflict" }
         "422":
-          description: "`seleccion_excede_tope` (más de 10.000 ids o excluidos) o `busqueda_demasiado_amplia`."
+          description: "`seleccion_excede_tope` (más de 10.000 ids o excluidos, o selección resuelta por encima del tope total `max_items_per_batch`, con `total` y `tope` en la raíz) o `busqueda_demasiado_amplia`."
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
@@ -10932,7 +10934,8 @@ paths:
         `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida`, `filtro_invalido` (condición o familia
         fuera de catálogo, igual que la búsqueda de la bandeja); 403 `sin_organismo` (tenant OT sin organismo
         resoluble); 404 (SuperAdmin: organismo sin tenant OT vinculado); 409 `lote_activo`; 422
-        `seleccion_excede_tope`; 503 `motor_inactivo` y `lote_no_creado`.
+        `seleccion_excede_tope` (más de 10.000 ids o excluidos, o la selección resuelta supera el tope total
+        `max_items_per_batch`, con `total` y `tope`); 503 `motor_inactivo` y `lote_no_creado`.
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -10979,7 +10982,7 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteActivoConflict" }
         "422":
-          description: "`seleccion_excede_tope`: más de 10.000 ids o excluidos."
+          description: "`seleccion_excede_tope`: más de 10.000 ids o excluidos, o selección resuelta por encima del tope total `max_items_per_batch` (con `total` y `tope` en la raíz)."
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
@@ -15860,7 +15863,9 @@ components:
         Selección del listado tal como la arma el frontend: llega SIEMPRE con las cuatro claves. Modo `ids`: se
         usa `ids` y se ignoran `excluidos`/`filtro` (llegan `[]`/`null`). Modo `filtro`: se usan `filtro` y
         `excluidos` y se ignora `ids` (llega `[]`). Modo desconocido o `filtro` nulo en modo filtro ⇒ 400
-        seleccion_invalida. Más de 10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope.
+        seleccion_invalida. Más de 10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope. La selección resuelta
+        (exclusiones e intersección de seguridad aplicadas) por encima del tope total `max_items_per_batch` ⇒ 422
+        seleccion_excede_tope con `total` y `tope`.
       required: [modo]
       properties:
         modo: { type: string, enum: [ids, filtro] }
@@ -15919,7 +15924,8 @@ components:
         Selección de la bandeja OT tal como la arma el frontend (#13394): llega SIEMPRE con las cuatro claves.
         Modo `ids`: se usa `ids` y se ignoran `excluidos`/`filtro`. Modo `filtro`: se usan `filtro` y `excluidos`
         y se ignora `ids`. Modo desconocido o `filtro` nulo en modo filtro ⇒ 400 seleccion_invalida. Más de
-        10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope.
+        10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope. La selección resuelta por encima del tope total
+        `max_items_per_batch` ⇒ 422 seleccion_excede_tope con `total` y `tope`.
       required: [modo]
       properties:
         modo: { type: string, enum: [ids, filtro] }
@@ -16017,6 +16023,14 @@ components:
             - lote_terminado
             - descarga_expirada
             - auditoria_no_registrada
+        total:
+          type: integer
+          description: >
+            Solo en `seleccion_excede_tope` por tope total (M1): trámites de la selección resuelta. Ausente en el
+            tope de las listas `ids`/`excluidos`.
+        tope:
+          type: integer
+          description: Solo junto a `total`; `max_items_per_batch` vigente (1–50.000, por defecto 10.000).
 
     LoteActivoConflict:
       type: object

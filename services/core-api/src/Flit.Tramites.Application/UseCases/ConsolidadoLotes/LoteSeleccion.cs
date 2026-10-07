@@ -23,8 +23,9 @@ public abstract record LoteSeleccion;
 public sealed record SeleccionPorIds(IReadOnlyList<Guid> Ids) : LoteSeleccion;
 
 /// <summary>
-/// Modo <c>filtro</c>: todos los trámites del filtro activo, sin tope, menos <see cref="Excluidos"/>
-/// (máximo <see cref="LoteSeleccionTopes.MaxExcluidos"/>).
+/// Modo <c>filtro</c>: todos los trámites del filtro activo menos <see cref="Excluidos"/>
+/// (máximo <see cref="LoteSeleccionTopes.MaxExcluidos"/>). El resultado resuelto queda sujeto al tope total del
+/// lote (M1, <c>max_items_per_batch</c>), que aplica el caso de uso de creación.
 /// </summary>
 public sealed record SeleccionPorFiltro(LoteFiltro Filtro, IReadOnlyList<Guid>? Excluidos = null) : LoteSeleccion;
 
@@ -38,7 +39,10 @@ public sealed record SeleccionPorFiltro(LoteFiltro Filtro, IReadOnlyList<Guid>? 
 /// </summary>
 public sealed record LoteSeleccionContexto(Guid? TenantId, Guid? UsuarioActualId, Guid? OtTransitOfficeId = null);
 
-/// <summary>Topes de la selección (ADR-0070, Q7). El modo filtro no tiene tope de resultados.</summary>
+/// <summary>
+/// Topes de las listas que trae el cuerpo (ADR-0070, Q7). El tope TOTAL de trámites del lote (M1) no es constante:
+/// vive en <c>tramites.consolidado_export_settings.max_items_per_batch</c> y se aplica a la selección resuelta.
+/// </summary>
 public static class LoteSeleccionTopes
 {
     public const int MaxIds = 10_000;

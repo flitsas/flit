@@ -318,6 +318,34 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
         await _factory.Lotes.DidNotReceiveWithAnyArgs().CrearAsync(default!, default);
     }
 
+    /// <summary>M1 — el filtro de la bandeja resuelve más trámites que <c>max_items_per_batch</c>.</summary>
+    [Fact]
+    public async Task M1_FiltroDeLaBandejaQueSuperaElTopeTotal_422_ConTotalYTopeEnLaRaiz_SinCrear()
+    {
+        _factory.Lotes.ObtenerSettingsAsync(Arg.Any<CancellationToken>())
+            .Returns(new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 2 });
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<CancellationToken>())
+            .Returns([
+                new OtClientProcedureRef(Guid.NewGuid(), Cliente1, "FT1-1", null),
+                new OtClientProcedureRef(Guid.NewGuid(), Cliente1, "FT1-2", null),
+                new OtClientProcedureRef(Guid.NewGuid(), Cliente2, "FT1-3", null),
+            ]);
+
+        var response = await Cliente(OtAdmin()).PostAsync(Ruta, Json(new
+        {
+            tipoDocumento = "consolidado_maestro",
+            confirmaEfectos = true,
+            seleccion = new { modo = "filtro", ids = Array.Empty<Guid>(), excluidos = Array.Empty<Guid>(), filtro = new { familia = "TRASPASO" } },
+        }), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await response.Content.ReadAsStringAsync(Ct));
+        var raiz = await Raiz(response);
+        raiz.GetProperty("error").GetString().Should().Be("seleccion_excede_tope");
+        raiz.GetProperty("total").GetInt32().Should().Be(3);
+        raiz.GetProperty("tope").GetInt32().Should().Be(2);
+        await _factory.Lotes.DidNotReceiveWithAnyArgs().CrearAsync(default!, default);
+    }
+
     // ── AC8 — lote activo ────────────────────────────────────────────────────────────────
 
     [Fact]

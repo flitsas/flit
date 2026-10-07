@@ -73,7 +73,8 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
         new(new TramitesLoteFiltro(new ProcedureInstanceListRequest { Estados = [TramiteEstado.Preparado] }), excluidos);
 
     /// <summary>El reset del arnés vacía la tabla de parámetros: cada prueba la siembra.</summary>
-    private async Task SembrarSettingsAsync(bool activo = true)
+    /// <remarks>M1: <paramref name="tope"/> <c>null</c> = el DEFAULT de la columna <c>max_items_per_batch</c> (10.000).</remarks>
+    private async Task SembrarSettingsAsync(bool activo = true, int? tope = null)
     {
         await using var cn = await Fixture.OpenConnectionAsync();
         await ExecAsync(cn,
@@ -81,6 +82,8 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
             DELETE FROM tramites.consolidado_export_settings;
             INSERT INTO tramites.consolidado_export_settings (id, is_active) VALUES (uuidv7(), @a);
             """, ("a", activo));
+        if (tope is { } t)
+            await ExecAsync(cn, "UPDATE tramites.consolidado_export_settings SET max_items_per_batch = @t", ("t", t));
     }
 
     private async Task<IReadOnlyList<Guid>> SembrarTramitesAsync(Guid tenant, int cuantos, string prefijoPlaca)
@@ -461,7 +464,8 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
     public async Task AC7_LoteDe20000Items_SeCreaEnDiezSegundosOMenos()
     {
         await HierarchyScenario.SeedAsync(Fixture);
-        await SembrarSettingsAsync();
+        // M1: el tope total por defecto es 10.000; la medición de AC7 lo sube a 20.000 (dentro del CHECK 1–50.000).
+        await SembrarSettingsAsync(tope: 20_000);
         await using (var cn = await Fixture.OpenConnectionAsync())
         {
             await ExecAsync(cn,
@@ -508,6 +512,43 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
         (await ContarAsync(
                 "SELECT count(*) FROM tramites.consolidado_export_batches WHERE id = @a AND dek_wrapped IS NOT NULL AND purged_at IS NULL",
                 ("a", anterior))).Should().Be(1);
+    }
+
+    // ── M1 — tope total configurable ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// M1 (épica #13216) — el tope se lee de <c>max_items_per_batch</c> y se compara con la selección resuelta (filtro
+    /// menos excluidos). Superarlo no escribe nada: ni lote, ni ítems, ni <c>lote_creado</c>, ni se purga el retenido.
+    /// Con las exclusiones que la dejan justo en el tope, el lote se crea.
+    /// </summary>
+    [PostgresFact]
+    public async Task M1_FiltroQueSuperaElTopeDeLaBase_NoEscribeNada_YConExclusionesHastaElTopeSeCrea()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await SembrarSettingsAsync(tope: 5);
+        var anterior = await SembrarLoteTerminalAsync(HierarchyScenario.DeliveredProcedureOf(C1));
+        var ids = await SembrarTramitesAsync(C1, 8, "QZM1");
+
+        CrearLoteConsolidadosResultado r;
+        await using (var ctx = NewContext())
+            r = await Handler(ctx).HandleAsync(Gestor(Preparados([ids[0]])), Ct);
+
+        r.Creado.Should().BeFalse();
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(7, "8 del filtro menos 1 excluido");
+        r.Tope.Should().Be(5);
+        (await ContarAsync("SELECT count(*) FROM tramites.consolidado_export_batches WHERE id <> @a", ("a", anterior))).Should().Be(0);
+        (await ContarAsync("SELECT count(*) FROM tramites.consolidado_export_batch_items WHERE batch_id <> @a", ("a", anterior))).Should().Be(0);
+        (await ContarAsync("SELECT count(*) FROM tramites.consolidado_export_audit")).Should().Be(0, "ni lote_creado ni lote_purgado");
+        (await ContarAsync(
+                "SELECT count(*) FROM tramites.consolidado_export_batches WHERE id = @a AND dek_wrapped IS NOT NULL AND purged_at IS NULL",
+                ("a", anterior))).Should().Be(1, "el retenido no se purga si el lote nuevo no se crea");
+
+        await using (var ctx = NewContext())
+            r = await Handler(ctx).HandleAsync(Gestor(Preparados([ids[0], ids[1], ids[2]])), Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        r.Lote!.TotalItems.Should().Be(5, "exactamente el tope");
     }
 
     // ── SQL ─────────────────────────────────────────────────────────────────────────────

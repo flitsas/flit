@@ -190,6 +190,48 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         (await Raiz(response, ct)).GetProperty("error").GetString().Should().Be("seleccion_excede_tope");
     }
 
+    /// <summary>M1 — «Seleccionar todos» con un filtro que resuelve más trámites que <c>max_items_per_batch</c>.</summary>
+    [Fact]
+    public async Task M1_FiltroQueResuelveMasQueElTopeTotal_422_ConTotalYTopeEnLaRaiz_SinCrear()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _factory.Lotes.ObtenerSettingsAsync(Arg.Any<CancellationToken>())
+            .Returns(new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 2 });
+        _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+            .Returns(Enumerable.Range(1, 3).Select(i => new ProcedureInstanceRef(Guid.NewGuid(), TenantC, $"TRM-{i}", null)).ToArray());
+
+        var response = await Cliente(Gestor()).PostAsync(Ruta, Json(new
+        {
+            tipoDocumento = "consolidado",
+            confirmaEfectos = true,
+            seleccion = new { modo = "filtro", ids = Array.Empty<Guid>(), excluidos = Array.Empty<Guid>(), filtro = new { estado = "entregado" } },
+        }), ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await response.Content.ReadAsStringAsync(ct));
+        var raiz = await Raiz(response, ct);
+        raiz.GetProperty("error").GetString().Should().Be("seleccion_excede_tope");
+        raiz.GetProperty("total").GetInt32().Should().Be(3);
+        raiz.GetProperty("tope").GetInt32().Should().Be(2);
+        raiz.GetProperty("detail").GetString().Should().NotBeNullOrWhiteSpace();
+        await _factory.Lotes.DidNotReceiveWithAnyArgs().CrearAsync(default!, default);
+    }
+
+    /// <summary>M1 — el tope de las listas del cuerpo no resuelve nada: su 422 no lleva <c>total</c> ni <c>tope</c>.</summary>
+    [Fact]
+    public async Task M1_TopeDeLaListaDeIds_422_SinTotalNiTope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ids = Enumerable.Range(0, LoteSeleccionTopes.MaxIds + 1).Select(_ => Guid.NewGuid()).ToArray();
+
+        var response = await Cliente(Gestor()).PostAsync(Ruta, CuerpoIds(ids), ct);
+
+        var raiz = await Raiz(response, ct);
+        raiz.GetProperty("error").GetString().Should().Be("seleccion_excede_tope");
+        raiz.TryGetProperty("total", out _).Should().BeFalse();
+        raiz.TryGetProperty("tope", out _).Should().BeFalse();
+    }
+
     [Fact]
     public async Task AC3_AuditoriaNoRegistrada_503_LoteNoCreado()
     {

@@ -78,6 +78,22 @@ public sealed class ConsolidadoLoteContratoOpenApiTests
         lote.Should().Contain("en_cola").And.Contain("expirado");
     }
 
+    /// <summary>
+    /// M1 (épica #13216) — el 422 <c>seleccion_excede_tope</c> por tope total lleva <c>total</c> y <c>tope</c>
+    /// opcionales en la raíz del ProblemDetails, y el POST documenta el tope configurable.
+    /// </summary>
+    [Fact]
+    public void M1_ElProblemaDelLoteDeclaraTotalYTopeOpcionales_YElPostDocumentaElTopeTotal()
+    {
+        var yaml = Yaml();
+
+        var problema = Schema(yaml, "LoteProblem");
+        problema.Should().Contain("        total:").And.Contain("        tope:");
+        problema.Should().Contain("required: [error]", "total y tope son opcionales");
+        Path(yaml, "/api/v1/tramites/consolidados/lotes").Should().Contain("max_items_per_batch");
+        Path(yaml, "/api/v1/admin/ot/consolidados/lotes").Should().Contain("max_items_per_batch");
+    }
+
     [Fact]
     public void AC4_DocumentaElSearchDeTramites_YTramitesSearchFilterReutilizado()
     {

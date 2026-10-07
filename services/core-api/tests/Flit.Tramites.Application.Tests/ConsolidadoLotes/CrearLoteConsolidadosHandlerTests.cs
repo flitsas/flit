@@ -332,6 +332,103 @@ public sealed class CrearLoteConsolidadosHandlerTests
         r.Error.Should().Be(CrearLoteConsolidadosErrores.MotorInactivo);
     }
 
+    // ── M1 — tope total configurable (max_items_per_batch) ─────────────────────────────────
+
+    private static CrearLoteConsolidadosCommand DelOrigen(string origen, LoteSeleccion seleccion) => origen switch
+    {
+        ConsolidadoExportOrigin.Superadmin => Gestor(seleccion) with
+        {
+            Origen = origen,
+            TenantId = null,
+            ScopeTenantId = null,
+            RolCodigo = "SuperAdmin",
+        },
+        ConsolidadoExportOrigin.OtBandeja => Gestor(seleccion, tipo: ConsolidadoExportDocumentType.ConsolidadoMaestro) with
+        {
+            Origen = origen,
+            OtTransitOfficeId = Organismo,
+            RolCodigo = "ot_admin",
+        },
+        _ => Gestor(seleccion),
+    };
+
+    private FakeResolver ResolverDe(string origen) => origen switch
+    {
+        ConsolidadoExportOrigin.Superadmin => _sa,
+        ConsolidadoExportOrigin.OtBandeja => _ot,
+        _ => _tramites,
+    };
+
+    [Theory]
+    [InlineData(ConsolidadoExportOrigin.Tramites)]
+    [InlineData(ConsolidadoExportOrigin.Superadmin)]
+    [InlineData(ConsolidadoExportOrigin.OtBandeja)]
+    public async Task M1_ModoFiltro_SeleccionResueltaSuperaElTope_ExcedeTopeConTotalYTope_SinCrearNada(string origen)
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 5 };
+        ResolverDe(origen).Devuelve = Refs(6, TenantC);
+        var seleccion = new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()));
+
+        var r = await _sut.HandleAsync(DelOrigen(origen, seleccion), Ct);
+
+        r.Creado.Should().BeFalse();
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(6);
+        r.Tope.Should().Be(5);
+        r.Mensaje.Should().Contain("6").And.Contain("5");
+        _repo.Creado.Should().BeNull("ni lote, ni ítems, ni auditoría lote_creado");
+        _repo.CrearLlamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task M1_ModoIds_SeleccionResueltaSuperaElTope_ExcedeTope_SinCrear()
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 3 };
+        var refs = Refs(4, TenantC);
+        _tramites.Devuelve = refs;
+
+        var r = await _sut.HandleAsync(Gestor(new SeleccionPorIds(refs.Select(x => x.Id).ToList())), Ct);
+
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(4);
+        r.Tope.Should().Be(3);
+        _repo.CrearLlamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task M1_ExclusionesEInterseccionDeSeguridadBajanDelTope_SeCrea()
+    {
+        // El filtro abarcaría 9, pero el resolver ya quitó 2 excluidos y 3 son de otra compañía (CF-15): quedan 4.
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 4 };
+        var propios = Refs(4, TenantC);
+        _tramites.Devuelve = [.. propios, .. Refs(3, TenantD, "D")];
+        var seleccion = new SeleccionPorFiltro(
+            new TramitesLoteFiltro(new ProcedureInstanceListRequest()), [Guid.NewGuid(), Guid.NewGuid()]);
+
+        var r = await _sut.HandleAsync(Gestor(seleccion), Ct);
+
+        r.Creado.Should().BeTrue(r.Mensaje);
+        r.Total.Should().BeNull();
+        _repo.Creado!.Items.Select(i => i.Id).Should().Equal(propios.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task M1_TopeExactamenteIgual_SeCrea()
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 5 };
+        var refs = Refs(5, TenantC);
+        _tramites.Devuelve = [.. refs, refs[0]];
+
+        var r = await _sut.HandleAsync(Gestor(new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()))), Ct);
+
+        r.Creado.Should().BeTrue(r.Mensaje);
+        _repo.Creado!.Items.Should().HaveCount(5, "el duplicado no cuenta contra el tope");
+    }
+
+    [Fact]
+    public void M1_ElTopePorDefectoDeLaEntidadEsElDelDdl() =>
+        new ConsolidadoExportSettings().MaxItemsPerBatch.Should().Be(10_000);
+
     // ── Dobles ────────────────────────────────────────────────────────────────────────────
 
     private sealed class FakeRepo : IConsolidadoLoteRepository
@@ -341,6 +438,7 @@ public sealed class CrearLoteConsolidadosHandlerTests
         public CrearLoteResultado? Resultado { get; set; }
         public NuevoLoteConsolidados? Creado { get; private set; }
         public int Llamadas { get; private set; }
+        public int CrearLlamadas { get; private set; }
 
         public Task<ConsolidadoExportSettings?> ObtenerSettingsAsync(CancellationToken ct = default)
         {
@@ -357,6 +455,7 @@ public sealed class CrearLoteConsolidadosHandlerTests
         public Task<CrearLoteResultado> CrearAsync(NuevoLoteConsolidados nuevo, CancellationToken ct = default)
         {
             Llamadas++;
+            CrearLlamadas++;
             if (Resultado is { Estado: not CrearLoteEstado.Creado } r)
                 return Task.FromResult(r);
             Creado = nuevo;
