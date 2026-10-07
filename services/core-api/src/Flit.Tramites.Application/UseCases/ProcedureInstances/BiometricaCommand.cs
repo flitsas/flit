@@ -751,6 +751,12 @@ public sealed class CompletarBiometriaHandler(
         if (v.CongeladaPorTramite)
             return (null, "tramite_inactivo");
 
+        // HU #13284 — el token del flujo manual se busca por el mismo hash que el magic-link mock: este flujo
+        // (3 fotos + scorer mock) NO puede completar ni aprobar una validación manual; la captura manual y su
+        // revisión humana son otro flujo (Feature B/C).
+        if (string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            return (null, "estado_invalido");
+
         var now = DateTimeOffset.UtcNow;
 
         // Expiración: marca expirado y rechaza el intento.

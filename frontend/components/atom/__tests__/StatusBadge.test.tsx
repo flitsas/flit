@@ -38,3 +38,20 @@ describe("statusTones — mapeo estado → tone", () => {
     expect(procedureTypeTone("archived")).toBe("neutral");
   });
 });
+
+describe("StatusBadge — red de seguridad `wrap` (HU #13288)", () => {
+  it("por defecto sigue en una sola línea", () => {
+    render(<StatusBadge tone="info" label="Corto" />);
+    expect(screen.getByRole("status").className).toContain("whitespace-nowrap");
+  });
+
+  it("con wrap no excede su contenedor y se parte en líneas; title opcional", () => {
+    render(<StatusBadge tone="info" label="Texto largo" wrap title="Texto largo completo" />);
+    const badge = screen.getByRole("status");
+    expect(badge.className).toContain("max-w-full");
+    expect(badge.className).toContain("min-w-0");
+    expect(badge.className).toContain("whitespace-normal");
+    expect(badge.className).not.toContain("whitespace-nowrap");
+    expect(badge).toHaveAttribute("title", "Texto largo completo");
+  });
+});

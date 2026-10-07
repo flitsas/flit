@@ -783,6 +783,10 @@ public static class InfrastructureExtensions
             PlateAssignmentBrandResolver>();
         services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailModelProjector,
             PlateAssignmentEmailModelProjectorService>();
+        // HU #13287 (Feature #13280, Épica #13202) — correo con el enlace de captura de la identidad manual, por el mismo
+        // canal de correo (IEmailSender) y el mismo tema de marca que el resto de avisos.
+        services.AddScoped<Flit.Tramites.Application.Identity.IManualCaptureLinkNotifier,
+            Flit.Infrastructure.Notifications.Identity.EmailManualCaptureLinkNotifier>();
         // HU #11487 — worker de la cola de avisos de correo al asignar placa (ADR-0046).
         services.AddHostedService<PlateAssignmentEmailDispatchProcessor>();
         // HU #12579 (Feature #12565, ADR-0046 Opción B extendido) — worker de la cola de avisos de

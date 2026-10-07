@@ -56,6 +56,9 @@ internal sealed class PrevalidacionResendService(
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events)
 {
+    /// <summary>HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum (409).</summary>
+    internal const string IdentidadManualError = "identidad_manual";
+
     public async Task<(string? Error, bool Queued, int? CooldownMinutos, string CaptureUrl)> ResendAsync(
         Guid tenantId,
         ProcedureInstanceBiometricValidation validation,
@@ -63,6 +66,13 @@ internal sealed class PrevalidacionResendService(
         DateTimeOffset now,
         CancellationToken ct)
     {
+        // HU #13286 (Épica #13202) — una validación del flujo manual NO se reenvía a Kyverum: hacerlo reescribiría
+        // la MISMA fila con un id/secreto de Kyverum y la sacaría del flujo manual. El enlace manual se regenera
+        // por su propio caso de uso (activar), no por este núcleo. Este guard cubre los tres llamadores
+        // (reenvío standalone, edición de correo y reenvío admin) y corre antes de tocar la fila o el proveedor.
+        if (string.Equals(validation.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
+            return (IdentidadManualError, false, null, string.Empty);
+
         return providerOptions.IsKyverum
             ? await ResendKyverumAsync(tenantId, validation, subject, now, ct)
             : ResendMock(tenantId, validation, subject, now);

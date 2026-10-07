@@ -19,6 +19,14 @@ export interface StatusBadgeProps extends StatusBadgeStyle {
   /** Nombre accesible; por defecto usa `label` si es texto. */
   ariaLabel?: string;
   className?: string;
+  /**
+   * Red de seguridad para celdas angostas: el chip nunca excede su contenedor (`max-w-full min-w-0`) y,
+   * si el texto no cabe, se parte en varias líneas centradas en vez de montarse sobre la columna vecina.
+   * Por defecto el chip sigue en una sola línea (`whitespace-nowrap`).
+   */
+  wrap?: boolean;
+  /** Tooltip nativo con el texto completo (útil cuando la tabla muestra una etiqueta corta). */
+  title?: string;
 }
 
 /**
@@ -38,6 +46,8 @@ export function StatusBadge({
   border,
   ariaLabel,
   className = "",
+  wrap = false,
+  title,
 }: StatusBadgeProps) {
   const style: CSSProperties = tone
     ? {
@@ -53,7 +63,10 @@ export function StatusBadge({
       aria-label={aria}
       // 12px es el piso tipográfico del sistema; estaba en 11 y es texto que el gestor lee para
       // saber en qué estado va cada fila.
-      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${className}`}
+      title={title}
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+        wrap ? "min-w-0 max-w-full justify-center whitespace-normal text-center leading-tight" : "whitespace-nowrap"
+      } ${className}`}
       style={style}
     >
       {label}

@@ -24,6 +24,7 @@ import {
   type SeccionDetalleProps,
 } from './primitivos';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C).
@@ -51,6 +52,8 @@ const ESTADO_LABEL: Record<BiometricEstado, string> = {
   expirado: 'Expirado',
   pendiente_envio: 'Pendiente de envío',
   error_envio: 'Error de envío',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.label,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.label,
 };
 
 const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
@@ -61,6 +64,8 @@ const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
   expirado: 'neutral',
   pendiente_envio: 'info',
   error_envio: 'danger',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.tone,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.tone,
 };
 
 interface FilaIdentidad {

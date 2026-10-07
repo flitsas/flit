@@ -267,4 +267,60 @@ public sealed class ListIdentityValidationAlertsTests
         result.Alerts[0].InstanceId.Should().Be(id);
         result.Alerts[0].AlertKind.Should().Be(IdentityValidationAlertKinds.Rechazada);
     }
+
+    // ── HU #13286 (Épica #13202): el flujo manual NO genera alertas (decisión del PO) ───────────────────────
+
+    [Theory]
+    [InlineData(BiometricEstados.ManualActivo)]
+    [InlineData(BiometricEstados.PendienteRevisionManual)]
+    public async Task FilaManual_conEnlaceVencido_NoGeneraAlertaNiRecordatorio(string estado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var manual = Val(tenant, estado, expiresAt: DateTimeOffset.UtcNow.AddHours(-1)); // pasaron las 24 h del enlace
+        manual.Provider = BiometricProviders.Manual;
+        _repo.ListBiometricValidationsByTenantAsync(tenant, 0, ListIdentityValidationAlertsHandler.MaxRows, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { manual });
+        NoStuck(tenant, ct);
+
+        var result = await Handler().HandleTenantAsync(tenant, ct);
+
+        result.Alerts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FilaManual_aunqueEstuvieraEnLaListaDeAtascadas_NoGeneraAlerta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var manual = Val(tenant, BiometricEstados.ManualActivo);
+        manual.Provider = BiometricProviders.Manual;
+        _repo.ListBiometricValidationsByTenantAsync(tenant, 0, ListIdentityValidationAlertsHandler.MaxRows, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { manual });
+        _outboxRepo.ListStuckAsync(tenant, Arg.Any<int>(), ct).Returns(new List<StuckIdentityValidationRow>
+        {
+            new(manual.Id, manual.Id, "identity_validation.send_failed", 3, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+                manual.Name, manual.DocumentType, manual.DocumentNumber, StuckIdentityValidationKinds.Envio, tenant),
+        });
+
+        var result = await Handler().HandleTenantAsync(tenant, ct);
+
+        result.Alerts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FilaKyverum_conEnlaceVencido_SigueMarcandoseExpirada_ReglaIntacta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var kyverum = Val(tenant, BiometricEstados.EnProceso, expiresAt: DateTimeOffset.UtcNow.AddHours(-1));
+        kyverum.Provider = BiometricProviders.Kyverum;
+        _repo.ListBiometricValidationsByTenantAsync(tenant, 0, ListIdentityValidationAlertsHandler.MaxRows, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { kyverum });
+        NoStuck(tenant, ct);
+
+        var result = await Handler().HandleTenantAsync(tenant, ct);
+
+        result.Alerts.Should().ContainSingle().Which.AlertKind.Should().Be(IdentityValidationAlertKinds.Expirada);
+    }
 }
