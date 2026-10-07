@@ -31,5 +31,5 @@ public sealed class ServiceTokenAudienceTests
     [Fact]
     public void LosScopesRegistradosSonExactamenteLosDelMapa() =>
         OidcDefaults.ServiceScopes.Should().BeEquivalentTo(
-            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.consultas", "platform.notificaciones.send", "platform.tramites.ict"]);
+            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.tramites.ict"]);
 }
