@@ -24,6 +24,11 @@ import {
  * nombre accesible «Descargar parte k de n») operable con Tab/Enter/Espacio; el estado no depende
  * solo del color (icono + texto).</p>
  *
+ * <p>HU #13388 — en un lote en curso, botón «Cancelar» (nombre accesible «Cancelar la descarga»),
+ * independiente de la X de cerrar: un clic, sin confirmación; deshabilitado mientras `cancelando`.
+ * El lote cancelado se pinta neutro con «Descarga cancelada», sin partes ni botones; un 404/403 al
+ * cancelar muestra «No se pudo cancelar la descarga» en tono error (`--badge-danger-*`).</p>
+ *
  * Uso de ejemplo:
  *   <LoteDescargaAlertCard lote={lote} expirado={expirado} onDescargarParte={(n) => descargar(n)}
  *     onCerrar={ocultar} errorConsulta={errorConsulta} descargandoParte={null} />
@@ -31,6 +36,8 @@ import {
 
 /** AC2/AC4 — texto aprobado del lote expirado. */
 export const TEXTO_DESCARGA_EXPIRADA = 'Descarga expirada';
+/** HU #13388 AC3 — texto aprobado del lote cancelado. */
+export const TEXTO_DESCARGA_CANCELADA = 'Descarga cancelada';
 
 const formatoMiles = (n: number) => n.toLocaleString('es-CO');
 
@@ -46,6 +53,7 @@ export function toneLoteConsolidados(lote: LoteConsolidados, expirado: boolean):
 
 /** Frase del estado que se anuncia en la región viva. */
 function textoEstado(lote: LoteConsolidados, expirado: boolean): string {
+  if (lote.estado === 'cancelado') return TEXTO_DESCARGA_CANCELADA;
   if (expirado || lote.estado === 'expirado') return TEXTO_DESCARGA_EXPIRADA;
   switch (lote.estado) {
     case 'en_cola':
@@ -60,8 +68,6 @@ function textoEstado(lote: LoteConsolidados, expirado: boolean): string {
       return 'Descarga lista, con trámites omitidos';
     case 'fallido':
       return 'La descarga falló';
-    case 'cancelado':
-      return 'Descarga cancelada';
     default: {
       const etiqueta = ETIQUETA_ESTADO_LOTE[lote.estado as keyof typeof ETIQUETA_ESTADO_LOTE] ?? '';
       return etiqueta ? etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1) : 'Descarga';
@@ -88,6 +94,12 @@ export interface LoteDescargaAlertCardProps {
   errorConsulta?: boolean;
   descargandoParte?: number | null;
   errorDescarga?: string | null;
+  /** HU #13388 — cancela el lote en curso; omitido ⇒ no se pinta «Cancelar». */
+  onCancelar?: () => void;
+  /** HU #13388 AC2 — la cancelación está en curso: botón deshabilitado. */
+  cancelando?: boolean;
+  /** HU #13388 AC6 — error de la cancelación (404/403). */
+  errorCancelacion?: string | null;
   className?: string;
 }
 
@@ -99,6 +111,9 @@ export function LoteDescargaAlertCard({
   errorConsulta = false,
   descargandoParte = null,
   errorDescarga = null,
+  onCancelar,
+  cancelando = false,
+  errorCancelacion = null,
   className,
 }: LoteDescargaAlertCardProps) {
   const tone = toneLoteConsolidados(lote, expirado);
@@ -168,6 +183,22 @@ export function LoteDescargaAlertCard({
               />
             </div>
           ) : null}
+          {activo && onCancelar ? (
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={onCancelar}
+                disabled={cancelando}
+                aria-busy={cancelando}
+                aria-label="Cancelar la descarga"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 font-semibold transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-wait disabled:opacity-60"
+                style={{ borderColor: 'var(--badge-danger-border)', color: 'var(--badge-danger-fg)' }}
+              >
+                {cancelando ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+                Cancelar
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -211,6 +242,12 @@ export function LoteDescargaAlertCard({
       {errorDescarga ? (
         <p role="alert" className="mt-2 font-semibold" style={{ color: 'var(--badge-danger-fg)' }}>
           {errorDescarga}
+        </p>
+      ) : null}
+
+      {errorCancelacion ? (
+        <p role="alert" className="mt-2 font-semibold" style={{ color: 'var(--badge-danger-fg)' }}>
+          {errorCancelacion}
         </p>
       ) : null}
 
