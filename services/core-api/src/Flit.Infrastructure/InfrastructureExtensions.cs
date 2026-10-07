@@ -437,6 +437,11 @@ public static class InfrastructureExtensions
 
         services.AddSecurityApplication();
 
+        // Épica #13216 — HU13389: acceso del OT + scope del tenant cliente + precedencia de la matriz del
+        // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
+        services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
+            OtClientProcedures.OtClientProcedureConsolidadoContext>();
+
         return services;
     }
 
