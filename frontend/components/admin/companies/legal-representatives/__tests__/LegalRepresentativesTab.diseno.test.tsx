@@ -131,3 +131,19 @@ describe("LegalRepresentativesTab — diseño", () => {
     expect(within(fila2).getByText("Con firma o identidad")).toBeInTheDocument();
   });
 });
+
+describe("LegalRepresentativesTab — directorio muy grande", () => {
+  it("avisa cuando se alcanza el tope de carga en lugar de truncar en silencio", async () => {
+    vi.clearAllMocks();
+    vi.mocked(fetchAssignableProcedureTypes).mockResolvedValue([]);
+    vi.mocked(fetchLegalRepresentatives).mockImplementation(async (_t, page) => ({
+      data: [rep(page * 2 - 1), rep(page * 2)],
+      totalCount: 999999,
+      page,
+      pageSize: 100,
+    }));
+    renderTab();
+    const aviso = await screen.findByTestId("representantes-truncado");
+    expect(aviso).toHaveTextContent("de 999999 representantes");
+  });
+});

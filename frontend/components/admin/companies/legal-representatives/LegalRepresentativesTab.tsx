@@ -91,6 +91,8 @@ export function LegalRepresentativesTab({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
+  // Total que informa el API: si supera lo cargado (tope MAX_PAGES) se avisa en lugar de truncar en silencio.
+  const [totalReported, setTotalReported] = useState(0);
   const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -106,6 +108,7 @@ export function LegalRepresentativesTab({
       setStatus("loading");
       try {
         const all: LegalRepresentativeItem[] = [];
+        let reported = 0;
         for (let p = 1; p <= MAX_PAGES; p++) {
           const result = await fetchLegalRepresentatives(
             tenantId,
@@ -115,10 +118,12 @@ export function LegalRepresentativesTab({
             networkHeadId,
           );
           if (signal?.aborted) return;
+          reported = result.totalCount;
           all.push(...result.data);
           if (result.data.length === 0 || all.length >= result.totalCount) break;
         }
         setItems(all);
+        setTotalReported(reported);
         setStatus(all.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) setStatus("error");
@@ -320,6 +325,11 @@ export function LegalRepresentativesTab({
               {items.length} {items.length === 1 ? "representante" : "representantes"}
               {sinFirma > 0 ? ` · ${sinFirma} sin firma ni identidad` : ""}
             </p>
+            {totalReported > items.length && (
+              <p className="text-xs font-semibold text-[#B45309]" role="status" data-testid="representantes-truncado">
+                Solo se cargaron {items.length} de {totalReported} representantes: la búsqueda y el resumen no cubren el resto.
+              </p>
+            )}
           </div>
 
           {filtered.length === 0 ? (
