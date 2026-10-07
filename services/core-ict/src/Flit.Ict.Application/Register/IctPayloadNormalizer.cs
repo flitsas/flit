@@ -1,3 +1,4 @@
+using System.Text;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 
@@ -163,12 +164,13 @@ public static class IctPayloadNormalizer
             {
                 TenantId = tenantId,
                 ActorType = actorType,
-                DocumentType = a.DocumentType?.Trim() ?? string.Empty,
+                // Bug #13304: se guarda (y viaja a core-api) el CÓDIGO del catálogo, no el alias recibido.
+                DocumentType = NormalizeDocumentType(a.DocumentType) ?? a.DocumentType?.Trim() ?? string.Empty,
                 DocumentNumber = a.DocumentNumber?.Trim() ?? string.Empty,
                 Name = a.Name?.Trim() ?? string.Empty,
                 FirstLastName = a.FirstLastName?.Trim() ?? string.Empty,
                 SecondLastName = a.SecondLastName?.Trim(),
-                Phone = a.Phone?.Trim() ?? string.Empty,
+                Phone = NormalizePhone(a.Phone),
                 Email = a.Email?.Trim() ?? string.Empty,
                 City = a.City?.Trim(),
                 State = a.State?.Trim(),
@@ -207,6 +209,130 @@ public static class IctPayloadNormalizer
             master.Actors.Add(actor);
         }
     }
+
+    /// <summary>
+    /// Tope del nombre completo del actor en core-api (<c>procedure_instance_actors.full_name varchar(320)</c>).
+    /// Con los topes por parte (name/first_last_name/second_last_name ≤ 100) el armado llega como mucho a 302.
+    /// </summary>
+    public const int MaxActorFullNameLength = 320;
+
+    /// <summary>
+    /// Tope del teléfono del actor en core-api (<c>procedure_instance_actors.phone varchar(50)</c>); coincide con
+    /// la columna de ICT (<c>external_integration_actors.phone varchar(50)</c>).
+    /// </summary>
+    public const int MaxActorPhoneLength = 50;
+
+    /// <summary>Códigos de documento que core-api acepta para un actor (ActorsCommand.ValidDocumentTypes).</summary>
+    public static readonly IReadOnlyList<string> DocumentTypeCodes = ["CC", "CE", "NIT", "PAS", "TI"];
+
+    /// <summary>
+    /// Alias habituales → código del catálogo (Bug #13304). La clave ya viene normalizada: mayúsculas, sin
+    /// tildes, sin puntos/guiones y con espacios colapsados (ver <see cref="NormalizeDocumentType"/>). Las
+    /// letras sueltas (C/E/N/P/T) son el código RUNT que ya usa el proyecto (KyverumRuntDocType). NO se
+    /// aceptan códigos numéricos: el proyecto no tiene una convención numérica propia para el tipo de
+    /// documento (la de Quipux, C=2, choca con un «1 = CC»), así que un número se rechaza.
+    /// </summary>
+    private static readonly Dictionary<string, string> DocumentTypeAliases = new(StringComparer.Ordinal)
+    {
+        ["CC"] = "CC",
+        ["C"] = "CC",
+        ["CEDULA"] = "CC",
+        ["CEDULA DE CIUDADANIA"] = "CC",
+        ["CEDULA CIUDADANIA"] = "CC",
+        ["CE"] = "CE",
+        ["E"] = "CE",
+        ["CEDULA DE EXTRANJERIA"] = "CE",
+        ["CEDULA EXTRANJERIA"] = "CE",
+        ["NIT"] = "NIT",
+        ["N"] = "NIT",
+        ["NUMERO DE IDENTIFICACION TRIBUTARIA"] = "NIT",
+        ["PAS"] = "PAS",
+        ["P"] = "PAS",
+        ["PA"] = "PAS",
+        ["PP"] = "PAS",
+        ["PASAPORTE"] = "PAS",
+        ["TI"] = "TI",
+        ["T"] = "TI",
+        ["TARJETA DE IDENTIDAD"] = "TI",
+        ["TARJETA IDENTIDAD"] = "TI",
+    };
+
+    /// <summary>
+    /// Convierte el tipo de documento del actor al código que core-api acepta (CC, CE, NIT, PAS, TI).
+    /// Tolera mayúsculas/minúsculas, tildes, puntos y guiones (<c>"c.c."</c>, <c>"Cédula de ciudadanía"</c>,
+    /// <c>"N.I.T"</c>). Devuelve null si no lo reconoce: esa fila se rechaza en la entrada.
+    /// </summary>
+    public static string? NormalizeDocumentType(string? documentType)
+    {
+        if (string.IsNullOrWhiteSpace(documentType))
+        {
+            return null;
+        }
+
+        // Sin string.Normalize(FormD): el servicio corre con InvariantGlobalization y ahí la descomposición no
+        // quita las tildes. Se mapean explícitamente las vocales acentuadas del español.
+        var value = documentType.Trim();
+        var sb = new StringBuilder(value.Length);
+        var lastWasSpace = false;
+        foreach (var raw in value)
+        {
+            var c = char.ToUpperInvariant(StripAccent(raw));
+            if (c is '.' or '-' or '_')
+            {
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (!lastWasSpace && sb.Length > 0)
+                {
+                    sb.Append(' ');
+                }
+
+                lastWasSpace = true;
+                continue;
+            }
+
+            sb.Append(c);
+            lastWasSpace = false;
+        }
+
+        var key = sb.ToString().Trim();
+        // "C C" (puntos con espacios) y "N I T" → sin espacios también.
+        if (DocumentTypeAliases.TryGetValue(key, out var code)
+            || DocumentTypeAliases.TryGetValue(key.Replace(" ", string.Empty, StringComparison.Ordinal), out code))
+        {
+            return code;
+        }
+
+        return null;
+    }
+
+    private static char StripAccent(char c) => c switch
+    {
+        'á' or 'à' or 'Á' or 'À' => 'A',
+        'é' or 'è' or 'É' or 'È' => 'E',
+        'í' or 'ì' or 'Í' or 'Ì' => 'I',
+        'ó' or 'ò' or 'Ó' or 'Ò' => 'O',
+        'ú' or 'ù' or 'ü' or 'Ú' or 'Ù' or 'Ü' => 'U',
+        'ñ' or 'Ñ' => 'N',
+        _ => c,
+    };
+
+    /// <summary>
+    /// Teléfono del actor tal como se guarda y viaja a core-api: solo dígitos (se quitan espacios, '+',
+    /// paréntesis, guiones, puntos...). Vacío si no hay dígitos.
+    /// </summary>
+    public static string NormalizePhone(string? phone) =>
+        string.IsNullOrWhiteSpace(phone) ? string.Empty : new string(phone.Where(char.IsAsciiDigit).ToArray());
+
+    /// <summary>
+    /// Nombre completo del actor EXACTAMENTE como lo arma el cliente gRPC para core-api
+    /// (<c>IctGrpcProcedureDraftClient.BuildRequestAsync</c>: <c>$"{Name} {FirstLastName} {SecondLastName}".Trim()</c>
+    /// sobre los valores ya recortados por <see cref="ToMaster"/>).
+    /// </summary>
+    public static string ActorFullName(string? name, string? firstLastName, string? secondLastName) =>
+        $"{name?.Trim() ?? string.Empty} {firstLastName?.Trim() ?? string.Empty} {secondLastName?.Trim()}".Trim();
 
     /// <summary>Normaliza un opcional del payload: recorta y convierte vacío en null (no se persiste ruido).</summary>
     private static string? Clean(string? value)
