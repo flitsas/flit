@@ -1,0 +1,274 @@
+using Flit.Queries.Domain;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Repositories;
+using FluentAssertions;
+using NSubstitute;
+using Xunit;
+
+namespace Flit.Tramites.Application.Tests.ConsolidadoLotes;
+
+/// <summary>
+/// HU #13370 (épica #13216) — <see cref="TramitesSeleccionResolver"/>: la selección del lote se resuelve con el
+/// MISMO filtro, búsqueda rápida y orden del listado, con el tenant del token y con los topes de 10.000.
+/// El repositorio va mockeado; la traducción a consulta real (orden, tenant, borrado lógico) la cubre
+/// <c>ProcedureInstanceListIdsFilteredRepositoryTests</c> en <c>Flit.Infrastructure.Tests</c>.
+/// </summary>
+/// <remarks>
+/// Uso de ejemplo:
+/// <code>
+/// var sut = new TramitesSeleccionResolver(new ListProcedureInstancesFilteredHandler(repo), repo);
+/// var refs = await sut.ResolverAsync(new SeleccionPorIds(ids), new LoteSeleccionContexto(tenant, user), ct);
+/// </code>
+/// </remarks>
+public sealed class TramitesSeleccionResolverTests
+{
+    private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
+    private readonly TramitesSeleccionResolver _sut;
+    private static readonly Guid TenantC = Guid.NewGuid();
+    private static readonly Guid UsuarioC = Guid.NewGuid();
+
+    public TramitesSeleccionResolverTests()
+    {
+        _sut = new TramitesSeleccionResolver(new ListProcedureInstancesFilteredHandler(_repo), _repo);
+    }
+
+    private static List<ProcedureInstanceRef> Refs(int n, Guid tenant) =>
+        Enumerable.Range(1, n)
+            .Select(i => new ProcedureInstanceRef(Guid.NewGuid(), tenant, $"R-{i:D5}", $"AB{i:D4}"))
+            .ToList();
+
+    private void RepoDevuelve(IReadOnlyList<ProcedureInstanceRef> refs) =>
+        _repo.ListIdsFilteredAsync(
+                Arg.Any<Guid?>(), Arg.Any<ProcedureInstanceListFilter>(),
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+            .Returns(refs);
+
+    // ── AC1 — selección por filtro sin tope de página ────────────────────────────────────
+
+    [Fact]
+    public async Task Filtro_350MenosDosExcluidos_Devuelve348EnElOrdenDelListado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var refs = Refs(350, TenantC);
+        RepoDevuelve(refs);
+        var excluidos = new[] { refs[10].Id, refs[200].Id };
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()), excluidos),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        resultado.Should().HaveCount(348);
+        resultado.Should().Equal(refs.Where(r => !excluidos.Contains(r.Id)),
+            "se conserva el orden del listado y solo se quitan los excluidos");
+    }
+
+    [Fact]
+    public async Task Filtro_UsaElMismoFiltroYOrdenQueElListado_YElTenantDelToken()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        RepoDevuelve([]);
+        var tenantDelCuerpo = Guid.NewGuid();
+        var criterios = new ProcedureInstanceListRequest
+        {
+            TenantId = tenantDelCuerpo, // nunca se usa: el tenant sale del token
+            Skip = 400,
+            Take = 50,
+            Placa = "ABC123",
+            Estados = ["borrador"],
+            SortBy = "placa",
+            SortDescending = false,
+        };
+
+        await _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(criterios)),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await _repo.Received(1).ListIdsFilteredAsync(
+            TenantC,
+            Arg.Is<ProcedureInstanceListFilter>(f =>
+                f.Placa == "ABC123" && f.Estados != null && f.Estados.Count == 1 && f.Estados[0] == "borrador"),
+            ProcedureInstanceSortBy.Placa,
+            SortDirection.Ascending,
+            Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().ListIdsFilteredAsync(
+            tenantDelCuerpo, Arg.Any<ProcedureInstanceListFilter>(),
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Filtro_MisTramites_UsaElUsuarioDelToken()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        RepoDevuelve([]);
+
+        await _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest
+            {
+                BusquedaRapida = BusquedaRapida.MisTramites,
+                UsuarioActualId = Guid.NewGuid(), // del cuerpo: se ignora
+            })),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await _repo.Received(1).ListIdsFilteredAsync(
+            TenantC, Arg.Is<ProcedureInstanceListFilter>(f => f.ResponsableId == UsuarioC),
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── AC2 — selección manual acotada a la compañía ─────────────────────────────────────
+
+    [Fact]
+    public async Task Ids_SeResuelvenContraElRepositorioConElTenantDelTokenYSinFiltrosDelListado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var deC = Refs(3, TenantC);
+        var idDeD = Guid.NewGuid();
+        RepoDevuelve(deC); // el repositorio acota por tenant: el id de D no vuelve
+        var ids = deC.Select(r => r.Id).Append(idDeD).ToList();
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorIds(ids), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        resultado.Select(r => r.Id).Should().BeEquivalentTo(deC.Select(r => r.Id));
+        resultado.Select(r => r.Id).Should().NotContain(idDeD);
+        await _repo.Received(1).ListIdsFilteredAsync(
+            TenantC,
+            Arg.Is<ProcedureInstanceListFilter>(f =>
+                f.IdsIncluidos != null && f.IdsIncluidos.Count == 4 && f.IdsIncluidos.Contains(idDeD)
+                && f.Estados == null && f.Placa == null && f.Condiciones == null),
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Ids_Vacios_NoConsultaYDevuelveVacio()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorIds([]), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        resultado.Should().BeEmpty();
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, ct);
+    }
+
+    // ── AC3 — topes de 10.000 ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Ids_10001_SeRechazaConErrorDeValidacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ids = Enumerable.Range(0, LoteSeleccionTopes.MaxIds + 1).Select(_ => Guid.NewGuid()).ToList();
+
+        var act = () => _sut.ResolverAsync(new SeleccionPorIds(ids), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        var ex = (await act.Should().ThrowAsync<LoteSeleccionInvalidaException>()).Which;
+        ex.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        ex.Message.Should().Contain("10001").And.Contain("10000");
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, ct);
+    }
+
+    [Fact]
+    public async Task Ids_Exactamente10000_SeAceptan()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        RepoDevuelve([]);
+        var ids = Enumerable.Range(0, LoteSeleccionTopes.MaxIds).Select(_ => Guid.NewGuid()).ToList();
+
+        var act = () => _sut.ResolverAsync(new SeleccionPorIds(ids), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task Excluidos_10001_SeRechazaConErrorDeValidacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var excluidos = Enumerable.Range(0, LoteSeleccionTopes.MaxExcluidos + 1).Select(_ => Guid.NewGuid()).ToList();
+
+        var act = () => _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()), excluidos),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        var ex = (await act.Should().ThrowAsync<LoteSeleccionInvalidaException>()).Which;
+        ex.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        ex.Message.Should().Contain("excluye");
+    }
+
+    [Fact]
+    public async Task Filtro_QueResuelve25000_NoSeRechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        RepoDevuelve(Refs(25_000, TenantC));
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest())),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        resultado.Should().HaveCount(25_000, "el modo filtro no tiene tope de resultados");
+    }
+
+    // ── AC4 — búsqueda rápida demasiado amplia ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Filtro_BusquedaRapidaDemasiadoAmplia_SePropaga()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _repo.ListWithSummaryGraphFilteredAsync(
+                Arg.Any<Guid?>(), 0, BusquedaRapidaResolver.TopeBorradores,
+                Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<ProcedureInstanceSortBy>(),
+                Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<ProcedureInstance>)[], BusquedaRapidaResolver.TopeBorradores + 1));
+
+        var act = () => _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(
+                new ProcedureInstanceListRequest { BusquedaRapida = BusquedaRapida.SinFirmas })),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await act.Should().ThrowAsync<BusquedaRapidaDemasiadoAmpliaException>();
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, ct);
+    }
+
+    // ── Contrato — filtros fuera de catálogo, carga de otro origen y registro por origen ──
+
+    [Fact]
+    public async Task Filtro_ConCondicionFueraDeCatalogo_SeRechazaEnVezDeIgnorarse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var act = () => _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest
+            {
+                Condiciones = [new QueryCondition("campo_inexistente", "eq", ["x"])],
+            })),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        (await act.Should().ThrowAsync<LoteSeleccionInvalidaException>())
+            .Which.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoFiltroInvalido);
+    }
+
+    [Fact]
+    public async Task Filtro_DeOtroOrigen_NoSeAcepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var act = () => _sut.ResolverAsync(
+            new SeleccionPorFiltro(new FiltroDeOtroOrigen()), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public void PorOrigen_EligeElResolverPorClave_YFallaConOrigenDesconocidoODuplicado()
+    {
+        var porOrigen = new LoteSeleccionResolverPorOrigen([_sut]);
+
+        porOrigen.Para("tramites").Should().BeSameAs(_sut);
+        _sut.Origen.Should().Be(TramitesSeleccionResolver.OrigenTramites);
+        FluentActions.Invoking(() => porOrigen.Para("ot_bandeja")).Should().Throw<InvalidOperationException>();
+        FluentActions.Invoking(() => new LoteSeleccionResolverPorOrigen([_sut, _sut]))
+            .Should().Throw<InvalidOperationException>();
+    }
+
+    private sealed record FiltroDeOtroOrigen : LoteFiltro;
+}

@@ -393,6 +393,11 @@ public static class DependencyInjection
         services.AddScoped<GetImprintSignaturePreviewUrlHandler>();
         services.AddScoped<ListImprintSignatureValidationsHandler>();
 
+        // Épica #13216 — HU13370: resolución de la selección del lote por origen (la bandeja OT añade el suyo).
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            UseCases.ConsolidadoLotes.TramitesSeleccionResolver>();
+        services.AddScoped<UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen>();
+
         return services;
     }
 }

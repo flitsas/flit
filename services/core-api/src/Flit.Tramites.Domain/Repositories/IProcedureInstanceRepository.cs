@@ -714,6 +714,20 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// Épica #13216 (HU #13370) — TODOS los trámites que cumplen el filtro del listado, sin el tope de
+    /// página, en el mismo orden que <see cref="ListWithSummaryGraphFilteredAsync(Guid?, int, int, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, CancellationToken)"/>.
+    /// Misma base (<c>deleted_at IS NULL</c> + tenant), mismos filtros y mismo orden: solo cambia la
+    /// proyección (<see cref="ProcedureInstanceRef"/>, sin grafo) y la ausencia de <c>Skip/Take</c>.
+    /// <c>tenantId</c> <c>null</c> = todas las compañías (solo Super Admin; el guard vive en quien llama).
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Las opciones de los filtros que dependen de los datos del tenant: los organismos con los que
     /// esta empresa tramita de verdad y los tipos de trámite que usa (HU #12106).
     ///

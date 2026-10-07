@@ -155,6 +155,24 @@ public sealed class ListProcedureInstancesFilteredHandler(
     }
 
     /// <summary>
+    /// Épica #13216 (HU #13370) — todos los trámites que el listado devolvería para
+    /// <paramref name="request"/>, sin el tope de página y en el mismo orden. Mismo
+    /// <see cref="BuildFilter"/>, misma búsqueda rápida (propaga
+    /// <see cref="BusquedaRapidaDemasiadoAmpliaException"/>) y mismo orden que <see cref="HandleAsync"/>;
+    /// <c>Skip</c>/<c>Take</c> se ignoran.
+    /// </summary>
+    public async Task<IReadOnlyList<ProcedureInstanceRef>> ResolveIdsAsync(
+        ProcedureInstanceListRequest request, CancellationToken ct = default)
+    {
+        var sortBy = ProcedureInstanceSortFields.Resolve(request.SortBy);
+        var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
+        var filter = BuildFilter(request);
+        filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
+
+        return await repo.ListIdsFilteredAsync(request.TenantId, filter, sortBy, direction, ct);
+    }
+
+    /// <summary>
     /// Epic #12686 — aplica el atajo de la búsqueda rápida sobre el universo de la compañía (o todas,
     /// para el SuperAdmin). Compartido con el conteo por estado para que la tira y la tabla coincidan.
     /// </summary>

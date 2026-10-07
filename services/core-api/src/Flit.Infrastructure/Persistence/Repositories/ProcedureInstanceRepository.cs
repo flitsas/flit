@@ -2310,6 +2310,26 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToListAsync(ct);
     }
 
+    // Épica #13216 (HU #13370) — selección del lote de consolidados. Reutiliza ApplyListFilters y
+    // ApplyListSort tal cual (ADR-0070 D3: cero lógica de visibilidad copiada); sin Skip/Take ni grafo.
+    public async Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking().Where(x => x.DeletedAt == null);
+        if (tenantId is { } tid)
+            query = query.Where(x => x.TenantId == tid);
+
+        query = ApplyListFilters(query, filter);
+
+        return await ApplyListSort(query, sortBy, direction)
+            .Select(x => new ProcedureInstanceRef(x.Id, x.TenantId, x.ReferenceNumber, x.Plate))
+            .ToListAsync(ct);
+    }
+
     /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>
     private async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(
         IQueryable<ProcedureInstance> query,
