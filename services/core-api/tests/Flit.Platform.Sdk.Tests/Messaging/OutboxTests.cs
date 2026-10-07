@@ -169,6 +169,24 @@ public sealed class OutboxTests(MessagingFixture fixture) : IClassFixture<Messag
         ((Action)(() => outbox.Enqueue("prueba.pedido.creado", 1, Guid.Empty, new { }))).Should().Throw<ArgumentException>();
     }
 
+    [Fact]
+    public void HU13354_UnTrabajo_VaAlExchangeDelServicioQueLoAtiende_ConEsteServicioDeProductor()
+    {
+        fixture.SkipIfUnavailable();
+        using var scope = _services.CreateScope();
+        var outbox = scope.ServiceProvider.GetRequiredService<IPlatformOutbox>();
+        var db = scope.ServiceProvider.GetRequiredService<PruebaDb>();
+
+        var sobre = outbox.EnqueueJob("notificaciones.email.send", 1, _tenant, new { plantilla = "x" });
+
+        sobre.Producer.Should().Be(MessagingFixture.Producer);
+        var mensaje = db.ChangeTracker.Entries<OutboxMessage>().Single(e => e.Entity.Id == sobre.EventId).Entity;
+        mensaje.Exchange.Should().Be("flit.notificaciones");
+        mensaje.RoutingKey.Should().Be("notificaciones.email.send");
+        ((Action)(() => outbox.EnqueueJob($"{MessagingFixture.Producer}.algo", 1, _tenant, new { }))).Should().Throw<ArgumentException>("eso es un evento");
+        ((Action)(() => outbox.EnqueueJob("sinpunto", 1, _tenant, new { }))).Should().Throw<ArgumentException>();
+    }
+
     [Theory]
     [InlineData("", "amqp://h/")]
     [InlineData("Consultas", "amqp://h/")]

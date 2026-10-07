@@ -33,6 +33,11 @@ reintento y su exchange `<cola>.reintentos`), y lee cualquier `flit.*` (para ata
 y solo sus colas. Publicar en el exchange de otro servicio o leer sus colas lo rechaza el broker (`ACCESS_REFUSED`).
 Ningún servicio necesita escribir en el exchange por defecto: los reintentos van por `<cola>.reintentos`.
 
+**Trabajos (HU #13354).** Un servicio que le deja trabajos a otro (p. ej. correos a Notificaciones) necesita escribir
+en el exchange de ese otro. Se le da con un tercer argumento, sin tocar configure ni read:
+`deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE" notificaciones`. Hoy lo necesitan `tramites` (core-api) y
+`identidad` (core-identity).
+
 ## Un exchange nuevo
 
 Un productor nuevo se agrega a `definitions.json` (los consumidores no pueden crear el exchange de otro) y se recarga:

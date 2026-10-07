@@ -68,6 +68,14 @@ outbox.Enqueue("consultas.consulta.realizada", 1, tenantId, new { proveedor, fue
 await db.SaveChangesAsync(ct);
 ```
 
+Dejarle un trabajo a otro servicio (HU #13354): va al exchange de quien lo atiende (`flit.notificaciones`), con este
+servicio de productor. Su usuario del broker necesita escribir ahí (`usuario-de-servicio.sh tramites "$CLAVE" notificaciones`):
+
+```csharp
+outbox.EnqueueJob(TrabajoCorreo.Tipo, 1, tenantId, TrabajoCorreo.De(mensaje, CanalCorreo.FlitSmtp));
+await db.SaveChangesAsync(ct);
+```
+
 Consumir (solo se escribe el efecto; corre en la misma transacción que la bandeja):
 
 ```csharp

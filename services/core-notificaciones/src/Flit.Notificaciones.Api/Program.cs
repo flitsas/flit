@@ -57,6 +57,18 @@ public static class Program
         AddTransportes(builder);
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddScoped<EnvioDeCorreo>();
+        // HU #13354: trabajos de correo desde el bus (notificaciones.email.send, con reintentos y .dlq).
+        // Las esperas entre reintentos son las del ADR (10 s, 1 min, 10 min) salvo Notificaciones:Correo:EsperasReintento.
+        var esperas = builder.Configuration.GetSection("Notificaciones:Correo:EsperasReintento").Get<TimeSpan[]>();
+        builder.Services.AddFlitConsumer<NotificacionesDb, TrabajoCorreoConsumer, TrabajoCorreo>(
+            builder.Configuration, TrabajoCorreoConsumer.Cola, producer: ServicioSettings.Codigo, [TrabajoCorreo.Tipo], o =>
+            {
+                if (esperas is not { Length: > 0 })
+                    return;
+                o.RetryDelays.Clear();
+                foreach (var espera in esperas)
+                    o.RetryDelays.Add(espera);
+            });
 
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.

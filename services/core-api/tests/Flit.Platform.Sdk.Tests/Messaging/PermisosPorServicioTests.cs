@@ -16,7 +16,8 @@ namespace Flit.Platform.Sdk.Tests.Messaging;
 /// HU #13349 (Epic #13316) AC2 — con el usuario de un servicio creado por <c>deploy/rabbitmq/usuario-de-servicio.sh</c>,
 /// el broker deja publicar en su exchange y rechaza el de otro servicio. Necesita un broker con
 /// <c>deploy/rabbitmq/definitions.json</c> cargado y la cadena del usuario <c>consultas</c> en
-/// <c>FLIT_TEST_RABBITMQ_CONSULTAS</c> (p. ej. <c>amqp://consultas:clave@127.0.0.1:5673/flit</c>); sin ella se omite.
+/// <c>FLIT_TEST_RABBITMQ_CONSULTAS</c> (p. ej. <c>amqp://consultas:clave@127.0.0.1:5673/flit</c>; usuario creado con
+/// trabajos a <c>notificaciones</c>); sin ella se omite.
 /// </summary>
 public sealed class PermisosPorServicioTests
 {
@@ -50,6 +51,23 @@ public sealed class PermisosPorServicioTests
         }, TestContext.Current.CancellationToken);
 
         await publicar.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task HU13354_ConPermisoDeTrabajos_ElPublicadorDelSdk_DejaUnTrabajoEnFlitNotificaciones()
+    {
+        // Usuario creado con «usuario-de-servicio.sh consultas <clave> notificaciones».
+        Assert.SkipWhen(Cadena is null, "Sin FLIT_TEST_RABBITMQ_CONSULTAS");
+        await using var publicador = new RabbitMqEventPublisher(new PlatformMessagingOptions { Producer = "consultas", ConnectionString = Cadena! });
+        var sobre = new EventEnvelope(Guid.CreateVersion7(), "notificaciones.email.send", 1, DateTimeOffset.UtcNow, Guid.NewGuid(), "consultas", "corr",
+            System.Text.Json.JsonSerializer.SerializeToElement(new { plantilla = "x" }));
+
+        var publicar = () => publicador.PublishAsync(new OutboxMessage
+        {
+            Id = sobre.EventId, Exchange = "flit.notificaciones", RoutingKey = sobre.Type, Payload = sobre.ToJson(), OccurredAt = sobre.OccurredAt,
+        }, TestContext.Current.CancellationToken);
+
+        await publicar.Should().NotThrowAsync("declara el exchange ajeno en modo pasivo y tiene permiso de escritura");
     }
 
     [Fact]

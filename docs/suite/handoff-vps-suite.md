@@ -355,6 +355,11 @@ envía en proceso. Por ambiente:
 3. **Arrancar:** sumar `notificaciones` a `COMPOSE_PROFILES` y desplegar (`build-core-notificaciones` en el CD). No
    publica puertos (REST `CORE_NOTIFICACIONES_PORT` 4027, gRPC `CORE_NOTIFICACIONES_GRPC_PORT` 8085). El CD revisa su
    `/health/ready` desde dentro del contenedor.
+4. **Correos por el bus (HU #13354):** Notificaciones consume la cola `notificaciones.email.send` (reintentos a 10 s,
+   1 min y 10 min; luego `notificaciones.email.send.dlq`, que avisa la alerta de §4.10). Los servicios que dejan
+   correos necesitan escribir en `flit.notificaciones`: volver a correr
+   `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES" notificaciones` (y `identidad`), con la misma
+   clave que ya tienen.
 
 ---
 

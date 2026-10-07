@@ -63,6 +63,8 @@
     <InternalsVisibleTo Include="Flit.Integration.Tests" />
     <InternalsVisibleTo Include="Flit.Identity.Tests" />
     <InternalsVisibleTo Include="Flit.Platform.Sdk.Tests" />
+    <!-- HU #13354: las pruebas de un servicio publican como lo haría otro servicio. -->
+    <InternalsVisibleTo Include="Flit.Notificaciones.Tests" />
   </ItemGroup>
 
 </Project>

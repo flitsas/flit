@@ -13,8 +13,8 @@ public interface IEventPublisher
 /// <summary>
 /// Publicador sobre RabbitMQ.Client (ADR-0064): una conexión por proceso, canal con confirmaciones del broker
 /// (<c>BasicPublishAsync</c> espera el ack y falla con un nack o si se cae la conexión), mensajes persistentes y el
-/// exchange topic <c>flit.&lt;productor&gt;</c> declarado (durable, idempotente) la primera vez. Si la conexión se pierde,
-/// la siguiente publicación abre otra.
+/// exchange topic <c>flit.&lt;productor&gt;</c> declarado (durable, idempotente) la primera vez; el exchange de otro servicio
+/// (trabajos) solo se comprueba. Si la conexión se pierde, la siguiente publicación abre otra.
 /// </summary>
 internal sealed class RabbitMqEventPublisher(PlatformMessagingOptions options) : IEventPublisher, IAsyncDisposable
 {
@@ -32,7 +32,12 @@ internal sealed class RabbitMqEventPublisher(PlatformMessagingOptions options) :
             var channel = await ChannelAsync(ct).ConfigureAwait(false);
             if (!_declared.ContainsKey(message.Exchange))
             {
-                await channel.ExchangeDeclareAsync(message.Exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
+                // Su exchange lo declara; el de otro servicio (un trabajo, HU #13354) solo se comprueba: no tiene permiso
+                // de declararlo y lo crea definitions.json del broker.
+                if (string.Equals(message.Exchange, EventEnvelope.ExchangeFor(options.Producer), StringComparison.Ordinal))
+                    await channel.ExchangeDeclareAsync(message.Exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
+                else
+                    await channel.ExchangeDeclarePassiveAsync(message.Exchange, ct).ConfigureAwait(false);
                 _declared[message.Exchange] = true;
             }
 
