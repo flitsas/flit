@@ -10862,6 +10862,133 @@ paths:
         "404": { description: "Trámite no encontrado, o radicado ante Quipux sin consolidado maestro disponible (consolidado_no_generado)." }
         "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
+  # ── Admin · OT · Bandeja y lote de consolidados maestros (Épica #13216, HU #13391) ──
+
+  /api/v1/admin/ot/client-procedures/search:
+    post:
+      operationId: AdminOtSearchClientProcedures
+      tags: [Admin · OT]
+      summary: Bandeja del OT filtrada con la gramática de consultas
+      description: >
+        HU #12217 (documentado por HU #13391, deriva FB-l). La MISMA bandeja que
+        `GET /api/v1/admin/ot/client-procedures`, por POST para aceptar condiciones del catálogo y listas
+        pegadas. El tenant OT sale del JWT; el SuperAdmin acota con `?transitOfficeId`. Su filtro
+        (`OtBandejaSearchFilter`) es el que reutiliza el lote de maestros (`POST /api/v1/admin/ot/consolidados/lotes`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: transitOfficeId
+          required: false
+          description: Solo SuperAdmin (organismo cuya bandeja consulta); se ignora para el resto.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OtBandejaSearchRequest" }
+      responses:
+        "200":
+          description: Página de la bandeja y el total que cumple el filtro.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, totalCount, page, pageSize]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  totalCount: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones, familia no válida, o `transitOfficeId` fuera del catálogo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin OtModulePolicy.
+
+  /api/v1/admin/ot/consolidados/lotes:
+    post:
+      operationId: CrearLoteConsolidadosMaestrosOt
+      tags: [Admin · OT]
+      summary: Crea un lote de descarga masiva de consolidados maestros desde la bandeja del OT
+      description: >
+        Feature #13308 / ADR-0070 adenda v4 (HU #13391). Resuelve la selección EN SERVIDOR con el mismo universo,
+        filtros y orden de la bandeja (`POST /api/v1/admin/ot/client-procedures/search`) sin paginar y congela el
+        total; un id fuera de la bandeja (otro organismo, borrador) no entra (CF-06). Siempre
+        `consolidado_maestro`. Exige OtModulePolicy Y el permiso consolidado-masivo.download (AND). El tenant OT
+        sale del JWT; el SuperAdmin debe indicar `?transitOfficeId` y el lote queda con el tenant OT dueño de ese
+        organismo. Cada ítem queda con la compañía cliente de su trámite. La auditoría `lote_creado` se escribe
+        en la misma transacción (`filter_summary` con el organismo, condiciones como {campo, operador, cantidad}
+        y la búsqueda libre como {presente, longitud}); si no se puede registrar, el lote no se crea (503). La
+        consulta, descarga y cancelación usan `/api/v1/consolidados/lotes/*`. Errores: ProblemDetails con el
+        código estable en `error` (raíz). Códigos: 400 `transit_office_requerido` (SuperAdmin sin
+        `?transitOfficeId`), `transit_office_invalido` (organismo fuera del catálogo), `confirmacion_requerida`,
+        `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida`, `filtro_invalido` (condición o familia
+        fuera de catálogo, igual que la búsqueda de la bandeja); 403 `sin_organismo` (tenant OT sin organismo
+        resoluble); 404 (SuperAdmin: organismo sin tenant OT vinculado); 409 `lote_activo`; 422
+        `seleccion_excede_tope`; 503 `motor_inactivo` y `lote_no_creado`.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: transitOfficeId
+          required: false
+          description: Solo SuperAdmin (obligatorio para él); se ignora para ot_admin.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrearLoteConsolidadosOtRequest" }
+      responses:
+        "202":
+          description: Lote creado y en cola (`Location` = `/api/v1/consolidados/lotes/{loteId}`).
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "400":
+          description: "`transit_office_requerido`, `transit_office_invalido`, `confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida` o `filtro_invalido`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "Sin OtModulePolicy, sin consolidado-masivo.download, o `sin_organismo`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "404":
+          description: SuperAdmin con un `transitOfficeId` sin tenant OT vinculado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: "`lote_activo`: ya existe un lote activo del usuario (de cualquier origen)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteActivoConflict" }
+        "422":
+          description: "`seleccion_excede_tope`: más de 10.000 ids o excluidos."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "503":
+          description: "`motor_inactivo` o `lote_no_creado` (no se pudo registrar la auditoría; el lote no se creó)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+
   # ── Admin · Baúl de Firmas (HU #10643, #11175) ──────────────────────────────
 
   /api/v1/admin/companies/{tenantId}/signature-vault:
@@ -15768,6 +15895,99 @@ components:
                 Alcance de la tabla: null = propio; `red` o un childTenantId = vista de red. Se acepta; el motor
                 todavía NO lo aplica (HU #13374): el lote se resuelve con el alcance propio del token.
 
+    CrearLoteConsolidadosOtRequest:
+      type: object
+      description: >
+        Cuerpo de `POST /api/v1/admin/ot/consolidados/lotes` (HU #13391). No lleva origen, tenant ni organismo:
+        los decide el servidor.
+      required: [seleccion, confirmaEfectos]
+      properties:
+        tipoDocumento:
+          type: string
+          enum: [consolidado_maestro]
+          default: consolidado_maestro
+          description: Solo `consolidado_maestro`; otro valor ⇒ 400 tipo_no_permitido.
+        confirmaEfectos:
+          type: boolean
+          description: Debe ser true (texto de confirmación variante maestro); si no ⇒ 400 confirmacion_requerida.
+        seleccion:
+          $ref: "#/components/schemas/LoteSeleccionOtRequest"
+
+    LoteSeleccionOtRequest:
+      type: object
+      description: >
+        Selección de la bandeja OT tal como la arma el frontend (#13394): llega SIEMPRE con las cuatro claves.
+        Modo `ids`: se usa `ids` y se ignoran `excluidos`/`filtro`. Modo `filtro`: se usan `filtro` y `excluidos`
+        y se ignora `ids`. Modo desconocido o `filtro` nulo en modo filtro ⇒ 400 seleccion_invalida. Más de
+        10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope.
+      required: [modo]
+      properties:
+        modo: { type: string, enum: [ids, filtro] }
+        ids:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        excluidos:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        filtro:
+          type: object
+          nullable: true
+          description: El cuerpo de la búsqueda de la bandeja; `page`/`pageSize` se aceptan y se ignoran.
+          allOf:
+            - $ref: "#/components/schemas/OtBandejaSearchFilter"
+
+    OtBandejaSearchFilter:
+      type: object
+      description: >
+        Filtro de la bandeja del OT (HU #12217; documentado por HU #13391): el cuerpo de
+        `POST /api/v1/admin/ot/client-procedures/search` SIN paginación. Lo reutilizan `OtBandejaSearchRequest`
+        y el lote de maestros (`LoteSeleccionOtRequest.filtro`). `sortBy`/`sortDir` fijan el orden.
+      properties:
+        condiciones:
+          type: array
+          nullable: true
+          description: Condiciones con la gramática de Consultas (campo, operador, valores). Fuera del catálogo ⇒ 400.
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              fieldId: { type: string }
+              operator: { type: string }
+              values:
+                type: array
+                items: { type: string }
+        busqueda: { type: string, nullable: true, description: Texto libre de la barra de búsqueda. }
+        status: { type: string, nullable: true, description: Estados separados por coma }
+        hasActiveRevocationRequest: { type: boolean, nullable: true }
+        procedureTypeId: { type: string, format: uuid, nullable: true }
+        familia:
+          type: string
+          nullable: true
+          enum: [MATRICULAS, TRASPASO, OTROS, null]
+          description: Otro valor ⇒ 400.
+        vin: { type: string, nullable: true }
+        placa: { type: string, nullable: true }
+        vendedor: { type: string, nullable: true }
+        comprador: { type: string, nullable: true }
+        gestor: { type: string, nullable: true }
+        createdFrom: { type: string, format: date-time, nullable: true }
+        createdTo: { type: string, format: date-time, nullable: true }
+        updatedFrom: { type: string, format: date-time, nullable: true }
+        updatedTo: { type: string, format: date-time, nullable: true }
+        sortBy: { type: string, nullable: true }
+        sortDir: { type: string, nullable: true, enum: [asc, desc] }
+
+    OtBandejaSearchRequest:
+      description: Cuerpo de `POST /api/v1/admin/ot/client-procedures/search` y `/counters`. `OtBandejaSearchFilter` más la página.
+      allOf:
+        - $ref: "#/components/schemas/OtBandejaSearchFilter"
+        - type: object
+          properties:
+            page: { type: integer, nullable: true, minimum: 1 }
+            pageSize: { type: integer, nullable: true, minimum: 1 }
+
     LoteProblem:
       type: object
       description: ProblemDetails del motor de lotes con el código estable en `error` (raíz del cuerpo).
@@ -15790,6 +16010,9 @@ components:
             - busqueda_demasiado_amplia
             - motor_inactivo
             - lote_no_creado
+            - transit_office_requerido
+            - transit_office_invalido
+            - sin_organismo
             - lote_no_terminado
             - lote_terminado
             - descarga_expirada
