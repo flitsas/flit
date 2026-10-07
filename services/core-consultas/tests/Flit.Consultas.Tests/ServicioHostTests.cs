@@ -1,6 +1,6 @@
 using System.Net;
-using Flit.Plantilla.Api;
-using Flit.Plantilla.Api.Persistence;
+using Flit.Consultas.Api;
+using Flit.Consultas.Api.Persistence;
 using FluentAssertions;
 using Grpc.Health.V1;
 using Grpc.Net.Client;
@@ -13,10 +13,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
-namespace Flit.Plantilla.Tests;
+namespace Flit.Consultas.Tests;
 
 /// <summary>
-/// HU #13340 (Epic #13316) — un servicio de la plantilla arranca, expone /health y grpc.health.v1, su primera migración
+/// HU #13340 (Epic #13316) — un servicio de la consultas arranca, expone /health y grpc.health.v1, su primera migración
 /// crea su esquema con outbox e inbox, y sin su secreto svc-* no arranca y nombra la variable. Usa el Postgres de
 /// <c>ConnectionStrings__Core</c> con una base efímera propia (sin motor: se omite en local y falla en CI).
 /// </summary>
@@ -59,7 +59,7 @@ public sealed class ServicioHostTests : IAsyncLifetime
         if (_skip is null)
         {
             NpgsqlConnection.ClearAllPools();
-            await using var db = new PlantillaDb(new DbContextOptionsBuilder<PlantillaDb>().UseNpgsql(_database).Options);
+            await using var db = new ConsultasDb(new DbContextOptionsBuilder<ConsultasDb>().UseNpgsql(_database).Options);
             await db.Database.EnsureDeletedAsync();
         }
     }
@@ -89,7 +89,7 @@ public sealed class ServicioHostTests : IAsyncLifetime
         await connection.OpenAsync(ct);
         await using var query = new NpgsqlCommand(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = @s ORDER BY table_name", connection);
-        query.Parameters.AddWithValue("s", PlantillaDb.Schema);
+        query.Parameters.AddWithValue("s", ConsultasDb.Schema);
         var tables = new List<string>();
         await using (var reader = await query.ExecuteReaderAsync(ct))
             while (await reader.ReadAsync(ct))
@@ -121,7 +121,7 @@ public sealed class ServicioHostTests : IAsyncLifetime
         });
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Platform__ServiceClient__ClientSecret*SVC_PLANTILLA_CLIENT_SECRET*")
+            .WithMessage("*Platform__ServiceClient__ClientSecret*SVC_CONSULTAS_CLIENT_SECRET*")
             .Which.Message.Should().NotContain("RABBITMQ_URL", "solo nombra lo que falta");
     }
 

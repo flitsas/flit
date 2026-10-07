@@ -220,4 +220,31 @@ public static class ConsultasModuleExtensions
         services.AddScoped<IAvaluoProvider, MercadoLibreAvaluoProvider>();
         services.AddScoped<IAvaluoProviderRegistry, AvaluoProviderRegistry>();
     }
+
+    /// <summary>
+    /// Opciones de Kyverum RUNT (<c>ImprontaRunt:*</c> / <c>KYVERUM_RUNT_*</c>), compartidas por las consultas RUNT y las
+    /// improntas de core-api. Se movió tal cual de <c>AddImprontas</c> (HU #13342).
+    /// </summary>
+    public static void ConfigureKyverumRunt(IServiceCollection services, IConfiguration configuration)
+    {
+        // HU #10465 — Kyverum RUNT (improntas:generar). Mismo orden de precedencia que Kyverum Verify
+        // (AddIdentityValidation): env var CRUDA primero (override de deploy 12-factor), fallback a
+        // configuration (appsettings/user-secrets/`ImprontaRunt__*`). runt.kyverum.com es un dominio
+        // DISTINTO de verify.kyverum.com (mismo proveedor, otro producto/scope). La API key NUNCA se
+        // loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<ImprontaRuntOptions>(o =>
+        {
+            o.BaseUrl = Cfg("ImprontaRunt:BaseUrl", "KYVERUM_RUNT_BASE_URL") ?? "https://runt.kyverum.com";
+            o.ApiKey = Cfg("ImprontaRunt:ApiKey", "KYVERUM_RUNT_API_KEY") ?? "";
+            o.AuthScheme = Cfg("ImprontaRunt:AuthScheme", "KYVERUM_RUNT_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("ImprontaRunt:TimeoutSeconds", "KYVERUM_RUNT_TIMEOUT_SECONDS"), out var t)
+                ? t : 30;
+        });
+    }
 }

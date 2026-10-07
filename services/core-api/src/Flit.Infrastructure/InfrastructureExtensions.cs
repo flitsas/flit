@@ -481,25 +481,9 @@ public static class InfrastructureExtensions
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)
     {
-        // HU #10465 — Kyverum RUNT (improntas:generar). Mismo orden de precedencia que Kyverum Verify
-        // (AddIdentityValidation): env var CRUDA primero (override de deploy 12-factor), fallback a
-        // configuration (appsettings/user-secrets/`ImprontaRunt__*`). runt.kyverum.com es un dominio
-        // DISTINTO de verify.kyverum.com (mismo proveedor, otro producto/scope). La API key NUNCA se
-        // loguea.
-        string? Cfg(string key, string env)
-        {
-            var fromEnv = Environment.GetEnvironmentVariable(env);
-            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
-        }
-
-        services.Configure<ImprontaRuntOptions>(o =>
-        {
-            o.BaseUrl = Cfg("ImprontaRunt:BaseUrl", "KYVERUM_RUNT_BASE_URL") ?? "https://runt.kyverum.com";
-            o.ApiKey = Cfg("ImprontaRunt:ApiKey", "KYVERUM_RUNT_API_KEY") ?? "";
-            o.AuthScheme = Cfg("ImprontaRunt:AuthScheme", "KYVERUM_RUNT_AUTH_SCHEME") ?? "Bearer";
-            o.TimeoutSeconds = int.TryParse(Cfg("ImprontaRunt:TimeoutSeconds", "KYVERUM_RUNT_TIMEOUT_SECONDS"), out var t)
-                ? t : 30;
-        });
+        // HU #10465 — Kyverum RUNT (improntas:generar). Opciones compartidas con las consultas RUNT: las configura el
+        // módulo de consultas (HU #13342), que también las usa core-consultas.
+        Flit.Modules.Consultas.ConsultasModuleExtensions.ConfigureKyverumRunt(services, configuration);
 
         services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
         {
