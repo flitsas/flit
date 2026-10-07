@@ -49,7 +49,8 @@ public static class Program
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
         builder.Services.AddFlitGrpcServer()
-            .RequireServiceToken<ConsultasGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
+            .RequireServiceToken<ConsultasGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
+            .RequireServiceToken<ConsultasAdminGrpcService>(ConsultasAdminGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
         builder.Services.AddFlitOutbox<ConsultasDb>(builder.Configuration);
 
         // HU #13343 (ADR-0065): los proveedores del módulo, con sus modos mock|real y credenciales (las mismas claves de
@@ -93,6 +94,7 @@ public static class Program
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).
         var grpcHost = $"*:{grpcPort}";
         app.MapGrpcService<ConsultasGrpcService>().RequireHost(grpcHost);
+        app.MapGrpcService<ConsultasAdminGrpcService>().RequireHost(grpcHost);
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;
     }

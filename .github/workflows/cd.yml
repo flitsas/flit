@@ -193,6 +193,11 @@ jobs:
             services/core-identity/Directory.Packages.props
             services/core-identity/src/Flit.Identity.Application
             services/core-identity/src/Flit.Identity.Web
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            services/core-consultas/Directory.Build.props
+            services/core-consultas/Directory.Packages.props
+            services/core-consultas/src/Flit.Consultas.Grpc.Contracts
+            contracts/proto
 
       - name: Extract metadata — core-api
         id: meta
@@ -212,6 +217,9 @@ jobs:
         with:
           # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
           context: ./services
+          # HU #13344: el contrato de core-consultas se genera desde contracts/proto (COPY --from=contracts).
+          build-contexts: |
+            contracts=./contracts/proto
           file: ./services/core-api/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

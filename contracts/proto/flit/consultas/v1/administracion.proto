@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Configuración de consultas por empresa (Epic #13316, HU #13344; ADR-0065): la escribe la administración de FLIT
+// (core-api reenvía lo que guarda el SuperAdmin) y la usa Consultas en cada consulta.
+//
+// Autenticación: token de servicio con `aud=consultas` y scope `platform.consultas.admin`; la empresa en la metadata
+// `x-flit-tenant-id`, como en ConsultasService.
+service ConsultasAdminService {
+  // Reemplaza la configuración de la empresa. Idempotente.
+  rpc GuardarConfiguracionEmpresa(GuardarConfiguracionEmpresaRequest) returns (GuardarConfiguracionEmpresaResponse);
+
+  // La configuración vigente; sin fila, la por defecto (cadenas vacías = las globales).
+  rpc ObtenerConfiguracionEmpresa(ObtenerConfiguracionEmpresaRequest) returns (ObtenerConfiguracionEmpresaResponse);
+}
+
+message ConfiguracionEmpresa {
+  // Cadena por tipo de consulta: vehicle_vin, vehicle_plate, conductor. Sin entrada = la cadena global.
+  map<string, CadenaProveedores> cadenas = 1;
+  // Presupuesto del primer proveedor antes del respaldo, en ms. 0 = el global.
+  int32 failover_timeout_ms = 2;
+  // Fuente de comparendos: internal | external.
+  string fuente_multas = 3;
+  // Proveedores de avalúo habilitados (Fasecolda siempre) y el sugerido.
+  repeated string avaluos_habilitados = 4;
+  string avaluo_principal = 5;
+}
+
+message CadenaProveedores {
+  string principal = 1;
+  repeated string respaldo = 2;
+}
+
+message GuardarConfiguracionEmpresaRequest {
+  ConfiguracionEmpresa configuracion = 1;
+}
+
+message GuardarConfiguracionEmpresaResponse {}
+
+message ObtenerConfiguracionEmpresaRequest {}
+
+message ObtenerConfiguracionEmpresaResponse {
+  ConfiguracionEmpresa configuracion = 1;
+}

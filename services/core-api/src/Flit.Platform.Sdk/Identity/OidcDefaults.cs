@@ -19,6 +19,8 @@ public static class OidcDefaults
         ["platform.me.read"] = ServiceAudiences.Plataforma,
         ["platform.identidad.read"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
+        // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).
+        ["platform.consultas.admin"] = ServiceAudiences.Consultas,
         ["platform.notificaciones.send"] = ServiceAudiences.Notificaciones,
         ["platform.tramites.ict"] = ServiceAudiences.Tramites,
     };

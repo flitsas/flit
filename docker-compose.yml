@@ -23,6 +23,9 @@ services:
       # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
       context: ./services
       dockerfile: core-api/Dockerfile
+      # HU #13344: contratos gRPC (contracts/proto) como contexto con nombre (COPY --from=contracts).
+      additional_contexts:
+        contracts: ./contracts/proto
     container_name: flit-backend-dev
     environment:
       ASPNETCORE_ENVIRONMENT: Development

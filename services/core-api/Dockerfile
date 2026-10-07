@@ -41,6 +41,12 @@ COPY core-ict/src/Flit.Ict.Grpc.Contracts/ /services/core-ict/src/Flit.Ict.Grpc.
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Identity.Application/ /services/core-identity/src/Flit.Identity.Application/
 COPY core-identity/src/Flit.Identity.Web/ /services/core-identity/src/Flit.Identity.Web/
+# Epic #13316 (HU #13344): cliente gRPC de core-consultas. Su contrato se genera desde contracts/proto, que entra como
+# contexto con nombre (--build-context contracts=contracts/proto), igual que en core-identity.
+COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
+COPY core-consultas/Directory.Build.props core-consultas/Directory.Packages.props /services/core-consultas/
+COPY core-consultas/src/Flit.Consultas.Grpc.Contracts/ /services/core-consultas/src/Flit.Consultas.Grpc.Contracts/
+COPY --from=contracts . /contracts/proto/
 # Framework-dependent (JIT): desactivar AOT y sus analizadores (IsAotCompatible),
 # que estan en true por defecto en Directory.Build.props y rompen el publish con
 # TreatWarningsAsErrors (IL2026/IL3050) al no ser un build AOT real.

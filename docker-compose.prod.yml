@@ -315,6 +315,14 @@ services:
       # además el de Identidad; AcceptLegacy=false es el corte (el HMAC deja de entrar). Sin tocarlas, como siempre.
       Ict__ServiceToken__AcceptIdentity: ${ICT_SERVICE_TOKEN_ACCEPT_IDENTITY:-false}
       Ict__ServiceToken__AcceptLegacy: ${ICT_SERVICE_TOKEN_ACCEPT_LEGACY:-true}
+      # Epic #13316 (HU #13344): Consultas remoto (core-consultas). Apagado por defecto: core-api consulta en proceso como
+      # siempre. Encendido, la configuración por empresa que guarda el SuperAdmin también va a Consultas. core-api pide su
+      # token de servicio como svc-tramites (SVC_TRAMITES_CLIENT_SECRET).
+      Consultas__Remoto__Habilitado: ${CONSULTAS_REMOTO_HABILITADO:-false}
+      Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
+      Platform__ServiceClient__ClientId: svc-tramites
+      Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
       # ── Canal de notificaciones "API Renting cliente" (Feature #11348) ──────

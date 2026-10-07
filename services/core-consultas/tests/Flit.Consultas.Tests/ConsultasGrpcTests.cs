@@ -74,6 +74,7 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
             b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_key));
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_rapido", TimeSpan.Zero));
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_lento", Timeout.InfiniteTimeSpan));
+            b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_otro", TimeSpan.Zero));
         });
         await Program.MigrateAsync(_app);
         await using (var scope = _app.Services.CreateAsyncScope())
@@ -160,21 +161,63 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
         respuesta.ValorSugerido.Should().Be(0);
     }
 
+    [Fact]
+    public async Task HU13344_LoQueGuardaLaAdministracion_AplicaALaSiguienteConsulta()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid();
+        var admin = new ConsultasAdminService.ConsultasAdminServiceClient(Canal(Token("platform.consultas.admin")));
+        var consultas = Cliente(Token("platform.consultas"));
+        var pedido = new ConsultarVehiculoRequest { Placa = new Flit.Platform.Grpc.V1.Placa { Valor = "ABC123" } };
+
+        await admin.GuardarConfiguracionEmpresaAsync(Guardar("falso_rapido"), Empresa(empresa), cancellationToken: ct);
+        (await consultas.ConsultarVehiculoAsync(pedido, Empresa(empresa), cancellationToken: ct)).Resultado.Proveedor.Should().Be("falso_rapido");
+
+        await admin.GuardarConfiguracionEmpresaAsync(Guardar("falso_otro"), Empresa(empresa), cancellationToken: ct);
+        (await consultas.ConsultarVehiculoAsync(pedido, Empresa(empresa), cancellationToken: ct)).Resultado.Proveedor.Should().Be("falso_otro");
+
+        var leida = await admin.ObtenerConfiguracionEmpresaAsync(new ObtenerConfiguracionEmpresaRequest(), Empresa(empresa), cancellationToken: ct);
+        leida.Configuracion.Cadenas["vehicle_plate"].Principal.Should().Be("falso_otro");
+        leida.Configuracion.FuenteMultas.Should().Be("internal");
+        leida.Configuracion.AvaluosHabilitados.Should().Equal("fasecolda", "base_gravable");
+    }
+
+    [Fact]
+    public async Task HU13344_ConsultarConElScopeDeAdministracion_PermissionDenied()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var admin = new ConsultasAdminService.ConsultasAdminServiceClient(Canal(Token("platform.consultas")));
+        var llamada = async () => await admin.GuardarConfiguracionEmpresaAsync(Guardar("falso_rapido"), Empresa(Guid.NewGuid()), cancellationToken: TestContext.Current.CancellationToken);
+
+        (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
+    }
+
+    private static GuardarConfiguracionEmpresaRequest Guardar(string principal)
+    {
+        var config = new Flit.Consultas.Grpc.V1.ConfiguracionEmpresa { FuenteMultas = "internal", AvaluoPrincipal = "base_gravable" };
+        config.Cadenas["vehicle_plate"] = new CadenaProveedores { Principal = principal };
+        config.AvaluosHabilitados.AddRange(["fasecolda", "base_gravable"]);
+        return new GuardarConfiguracionEmpresaRequest { Configuracion = config };
+    }
+
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private ConsultasService.ConsultasServiceClient Cliente(string token)
+    private ConsultasService.ConsultasServiceClient Cliente(string token) => new(Canal(token));
+
+    private CallInvoker Canal(string token)
     {
         var channel = GrpcChannel.ForAddress($"http://localhost:{GrpcPort}", new GrpcChannelOptions { HttpHandler = _app!.GetTestServer().CreateHandler() });
-        return new ConsultasService.ConsultasServiceClient(channel.CreateCallInvoker().Intercept(m =>
+        return channel.CreateCallInvoker().Intercept(m =>
         {
             m.Add("authorization", $"Bearer {token}");
             return m;
-        }));
+        });
     }
 
     private static Metadata Empresa(Guid tenant) => new() { { "x-flit-tenant-id", tenant.ToString() } };
 
-    private static ConfiguracionEmpresa Config(Guid tenant, string cadenas) =>
+    private static Api.Persistence.ConfiguracionEmpresa Config(Guid tenant, string cadenas) =>
         new() { TenantId = tenant, CadenasJson = cadenas, FuenteMultas = "external", ActualizadoEn = DateTimeOffset.UtcNow };
 
     private string Token(string scope) => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
