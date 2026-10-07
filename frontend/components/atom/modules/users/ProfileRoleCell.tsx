@@ -8,10 +8,12 @@ import {
   type UserProfileKind,
 } from "@/lib/users/profiles";
 
-const PROFILE_STYLE: Record<UserProfileKind, { bg: string; color: string }> = {
-  FLIT: { bg: "rgba(85,126,255,0.12)", color: "#557EFF" },
-  GESTOR: { bg: "rgba(0,219,213,0.12)", color: "#0AA8A3" },
-  OT: { bg: "rgba(249,172,0,0.14)", color: "#8a6000" },
+// El perfil es un dato de clasificación, no un estado: el cian de Gestor se leía como «éxito», así
+// que usa el tono neutral tintado de la paleta de badges (FLIT = info, OT = warning).
+const PROFILE_TONE: Record<UserProfileKind, "info" | "neutral" | "warning"> = {
+  FLIT: "info",
+  GESTOR: "neutral",
+  OT: "warning",
 };
 
 /**
@@ -29,12 +31,16 @@ export function ProfileBadge({
   /** Bug #13055 — añade «· Admin» al chip del administrador de la compañía u organismo. */
   admin?: boolean;
 }) {
-  const style = PROFILE_STYLE[profile];
+  const tone = PROFILE_TONE[profile];
   const base = full ? profileLabel(profile) : profileShortLabel(profile);
   return (
     <span
-      className="inline-flex w-fit max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-      style={{ background: style.bg, color: style.color }}
+      className="inline-flex w-fit max-w-full truncate rounded-md border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide"
+      style={{
+        background: `var(--badge-${tone}-bg)`,
+        color: `var(--badge-${tone}-fg)`,
+        borderColor: `var(--badge-${tone}-border)`,
+      }}
     >
       {admin ? `${base} · Admin` : base}
     </span>

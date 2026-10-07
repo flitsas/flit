@@ -17,7 +17,7 @@ export function ScopeBadge({ scope }: { scope: BadgeLevel }) {
   const style = STYLES[scope];
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
       style={{ background: style.bg, color: style.fg }}
     >
       {style.label}

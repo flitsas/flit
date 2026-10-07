@@ -70,7 +70,7 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
           <h2 id="children-section-title" className="text-sm font-bold">
             Clientes hijos
           </h2>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             {company.tenantType === "MARCA_BLANCA"
               ? "Clientes vinculados a esta Marca Blanca."
               : "Clientes de la Concesión vinculados por el SuperAdmin."}

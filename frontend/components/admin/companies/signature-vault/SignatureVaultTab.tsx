@@ -98,7 +98,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="max-w-xl text-[11px] opacity-60">
+        <p className="max-w-xl text-xs opacity-60">
           Registra las firmas de los apoderados de la compañía para reutilizarlas al firmar los
           documentos de cada trámite. El archivo de firma se guarda de forma segura y no se descarga
           desde esta consola.
@@ -179,7 +179,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                     </td>
                     <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                       <span
-                        className="inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                        className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
                         style={{ color: badge.color, borderColor: badge.border, background: badge.bg }}
                       >
                         {ESTADO_LABELS[item.estado] ?? item.estado}

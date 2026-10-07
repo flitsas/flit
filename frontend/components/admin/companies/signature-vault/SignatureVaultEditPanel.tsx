@@ -90,7 +90,7 @@ export function SignatureVaultEditPanel({
   return (
     <Modal open onClose={onClose} title="Corregir firma" size="md">
       <div className="space-y-3 text-xs">
-        <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-[11px] opacity-80">
+        <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs opacity-80">
           Se corrigen los datos de captura. El documento ({item.documentType} {item.documentNumber}) y
           la imagen de la firma no se editan: para cambiarlos, registra una firma nueva de la persona,
           que sustituye a esta y la conserva como histórico.
@@ -108,7 +108,7 @@ export function SignatureVaultEditPanel({
             disabled={saving}
           />
           {fieldErrors.fullName && (
-            <p className="mt-1 text-[11px]" style={{ color: "#FF4E00" }}>
+            <p className="mt-1 text-xs" style={{ color: "#FF4E00" }}>
               {fieldErrors.fullName}
             </p>
           )}
@@ -127,12 +127,12 @@ export function SignatureVaultEditPanel({
             maxLength={100}
             disabled={saving}
           />
-          <p className="mt-1 text-[10px] opacity-60">
+          <p className="mt-1 text-xs opacity-60">
             Es lo que se estampa como «Hash» junto a la firma en el FUR, la compraventa, el mandato y
             la solicitud de trámite virtual. Sin código, esa línea no aparece.
           </p>
           {fieldErrors.codigoHash && (
-            <p className="mt-1 text-[11px]" style={{ color: "#FF4E00" }}>
+            <p className="mt-1 text-xs" style={{ color: "#FF4E00" }}>
               {fieldErrors.codigoHash}
             </p>
           )}
@@ -165,7 +165,7 @@ export function SignatureVaultEditPanel({
               disabled={saving}
             />
             {fieldErrors.vigenciaHasta && (
-              <p className="mt-1 text-[11px]" style={{ color: "#FF4E00" }}>
+              <p className="mt-1 text-xs" style={{ color: "#FF4E00" }}>
                 {fieldErrors.vigenciaHasta}
               </p>
             )}
@@ -173,7 +173,7 @@ export function SignatureVaultEditPanel({
         </div>
 
         {error && (
-          <p role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
             {error}
           </p>
         )}
@@ -181,7 +181,7 @@ export function SignatureVaultEditPanel({
         <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
-            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold"
+            className="rounded-xl border px-3 py-1.5 text-xs font-semibold"
             onClick={onClose}
             disabled={saving}
           >
@@ -189,7 +189,7 @@ export function SignatureVaultEditPanel({
           </button>
           <button
             type="button"
-            className="rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: "#557EFF" }}
             onClick={() => void guardar()}
             disabled={saving || !valido}

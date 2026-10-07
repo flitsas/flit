@@ -73,7 +73,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         <Mail className="h-4 w-4" style={{ color: "#557EFF" }} />
         <h4 className="text-sm font-semibold">Lista Blanca</h4>
       </div>
-      <p className="text-[11px] opacity-70">
+      <p className="text-xs opacity-70">
         Correos exentos de la regla de propiedad vehicular. Uno por línea o separados por coma.
       </p>
 
@@ -87,14 +87,14 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         rows={5}
         placeholder={"comprador@dominio.com\nradicador@dominio.com"}
         aria-invalid={errors.length > 0}
-        className="w-full rounded-xl border bg-transparent px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF]"
+        className="w-full rounded-xl border bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF]"
         style={{ borderColor: errors.length > 0 ? "#FF4E00" : "#DFE5ED" }}
       />
 
       {errors.length > 0 && (
         <ul className="space-y-1" role="alert" data-testid="whitelist-errors">
           {errors.map((e, i) => (
-            <li key={`${e.line}-${i}`} className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <li key={`${e.line}-${i}`} className="text-xs font-medium" style={{ color: "#FF4E00" }}>
               Línea {e.line}: {e.value ? `"${e.value}" — ` : ""}
               {e.message}
             </li>
@@ -103,7 +103,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
       )}
 
       {savedMessage && (
-        <p className="text-[11px] font-medium" style={{ color: "#00DBD5" }} role="status">
+        <p className="text-xs font-medium" style={{ color: "#00DBD5" }} role="status">
           {savedMessage}
         </p>
       )}
@@ -120,12 +120,12 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
 
       {entries.length > 0 && (
         <div className="rounded-xl border p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase opacity-60">
+          <p className="mb-2 text-xs font-semibold uppercase opacity-60">
             Correos exentos actuales ({entries.length})
           </p>
           <ul className="space-y-1">
             {entries.map((entry) => (
-              <li key={entry.email} className="font-mono text-[11px] opacity-80">
+              <li key={entry.email} className="font-mono text-xs opacity-80">
                 {entry.email}
               </li>
             ))}

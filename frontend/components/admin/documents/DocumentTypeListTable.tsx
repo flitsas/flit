@@ -85,7 +85,7 @@ export function DocumentTypeListTable({
                 </td>
                 <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
                   {d.nombre}
-                  {d.descripcion && <p className="mt-0.5 text-[10px] font-normal opacity-60">{d.descripcion}</p>}
+                  {d.descripcion && <p className="mt-0.5 text-xs font-normal opacity-60">{d.descripcion}</p>}
                 </td>
                 <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                   <StatusBadge

@@ -83,7 +83,7 @@ export function TransitBlocksReadOnlySection({
         <Ban className="h-4 w-4 opacity-70" aria-hidden />
         <h5 className="text-xs font-semibold">Organismos bloqueados</h5>
       </div>
-      <p className="text-[10px] opacity-60" role="note">
+      <p className="text-xs opacity-60" role="note">
         {legend}
       </p>
       {status === "loading" ? (

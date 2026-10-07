@@ -8,7 +8,7 @@ import { LEYENDA_CONFIGURADO_POR_ORGANISMO } from "@/lib/plataforma/mandatario-p
 export function MandatarioCandado() {
   return (
     <span
-      className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[#59677D] dark:text-white/60"
+      className="mt-0.5 flex items-center gap-1 text-xs font-medium text-[#59677D] dark:text-white/60"
       data-testid="mandatario-candado"
     >
       <Lock className="h-3 w-3 shrink-0" aria-hidden={true} />

@@ -345,11 +345,11 @@ export function CreateCompanyDialog({
                   aria-invalid={Boolean(errors.domainHost)}
                 />
                 {errors.domainHost ? (
-                  <p role="alert" id="cc-domain-hint" className="text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+                  <p role="alert" id="cc-domain-hint" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
                     {errors.domainHost}
                   </p>
                 ) : (
-                  <p id="cc-domain-hint" className="text-[10px] opacity-60">
+                  <p id="cc-domain-hint" className="text-xs opacity-60">
                     Puedes dejarlo en blanco y registrarlo después desde la ficha de la compañía.
                   </p>
                 )}
@@ -431,9 +431,9 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-[10px] opacity-60">{hint}</p>}
+      {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}

@@ -105,7 +105,7 @@ export function TransitGrantsPicker({
   return (
     <fieldset className="space-y-2" disabled={disabled}>
       <legend className="text-xs font-semibold">Organismos de tránsito de la Concesión</legend>
-      <p className="text-[10px] opacity-60">
+      <p className="text-xs opacity-60">
         Selecciona los organismos que esta Concesión podrá usar. La Concesión y sus clientes hijos
         verán esta lista en solo lectura.
       </p>
@@ -120,7 +120,7 @@ export function TransitGrantsPicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre, código o municipio…"
-          className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+          className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF]"
           style={{ borderColor: "#DFE5ED" }}
         />
       </div>
@@ -152,7 +152,7 @@ export function TransitGrantsPicker({
                     <span className="font-semibold">{office.name}</span>
                     <span className="ml-1 font-mono opacity-60">{office.code}</span>
                     {office.cityCode && (
-                      <span className="block text-[10px] opacity-50">{office.cityCode}</span>
+                      <span className="block text-xs opacity-50">{office.cityCode}</span>
                     )}
                   </span>
                 </label>
@@ -162,7 +162,7 @@ export function TransitGrantsPicker({
         )}
       </div>
       {error && (
-        <p className="text-[10px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
           {error}
         </p>
       )}
