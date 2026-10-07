@@ -33,6 +33,13 @@ public sealed record PreflightCheckDto(
     IReadOnlyList<CheckDato>? Datos = null);
 
 /// <summary>
+/// Bug #13304 — opciones del preflight que solo usa la materialización ICT. Con
+/// <paramref name="PersistSnapshotOnBlock"/> en <c>true</c> el bloqueo (estado registral, carrocería,
+/// duplicidad) deja el snapshot en rojo persistido para que el gestor lo vea en el borrador.
+/// </summary>
+public sealed record PreflightRunOptions(bool PersistSnapshotOnBlock = false);
+
+/// <summary>
 /// Snapshot preflight server-driven. <c>Overall</c> ∈ {green|yellow|red} (DI-1: 'yellow', no 'amber').
 /// </summary>
 public sealed record PreflightSnapshotDto(
@@ -99,6 +106,9 @@ public sealed class RunPreflightHandler(
     /// <summary>Epic #12550 — check informativo con la ruta de la matrícula inicial que decidió el RUNT.</summary>
     public const string CheckRutaMatricula = "ruta_matricula";
 
+    /// <summary>Bug #13304 — check del snapshot que ICT persiste cuando el preflight corta con bloqueo.</summary>
+    public const string CheckBloqueoPreflight = "bloqueo_preflight";
+
     // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
     // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
     // declarado; el snapshot RUNT vive en "{key}_runt". Ver UpsertTransformationAwareField.
@@ -125,12 +135,28 @@ public sealed class RunPreflightHandler(
     /// segunda llamada al proveedor externo. Con <paramref name="precomputedVehicle"/> en <c>null</c>
     /// el comportamiento es el histórico (consulta fresca).
     /// </summary>
-    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
+    public Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         Guid id,
         Guid tenantId,
         PreflightVehicleSnapshot? precomputedVehicle,
         CancellationToken ct)
+        => HandleAsync(id, tenantId, precomputedVehicle, options: null, ct);
+
+    /// <summary>
+    /// Bug #13304 — variante con <see cref="PreflightRunOptions"/>. Solo la usa la materialización ICT:
+    /// con <see cref="PreflightRunOptions.PersistSnapshotOnBlock"/> las tres salidas tempranas (estado
+    /// registral, carrocería, duplicidad) persisten el snapshot en rojo con el check
+    /// <c>bloqueo_preflight</c> y los campos ya hidratados, y devuelven el MISMO error que sin la opción.
+    /// El wizard y el preview no la pasan: su comportamiento no cambia.
+    /// </summary>
+    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        PreflightVehicleSnapshot? precomputedVehicle,
+        PreflightRunOptions? options,
+        CancellationToken ct)
     {
+        var persistOnBlock = options?.PersistSnapshotOnBlock == true;
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found", null, null);
@@ -251,7 +277,12 @@ public sealed class RunPreflightHandler(
         vehicleStateBlock ??= EndurecerEstadoVehiculoMatricula(
             checks, modalidad, _validationPolicy.VehicleRegistrationState);
         if (vehicleStateBlock is not null)
+        {
+            if (persistOnBlock)
+                await PersistirBloqueoAsync(instance, tenantId, checks, providersUsed,
+                    "El vehículo no puede continuar por su estado registral (" + vehicleStateBlock.VehicleStatus + ").", ct);
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
+        }
 
         // Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna: no hay atributo
         // que sustituir, así que el trámite no puede radicarse. Se evalúa sobre lo que devolvió ESTA
@@ -271,7 +302,12 @@ public sealed class RunPreflightHandler(
             if (bodyTypeBlock is not null)
             {
                 if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block)
+                {
+                    if (persistOnBlock)
+                        await PersistirBloqueoAsync(instance, tenantId, checks, providersUsed,
+                            "El RUNT no reporta carrocería para este vehículo, así que no hay carrocería que cambiar.", ct);
                     return (null, VehicleBodyTypePolicy.ErrorCode, null, null);
+                }
 
                 checks.Add(BuildCarroceriaAusenteCheck());
             }
@@ -303,7 +339,12 @@ public sealed class RunPreflightHandler(
             if (duplicateId is not null)
             {
                 if (_validationPolicy.DuplicateActiveProcedure == TramiteValidationMode.Block)
+                {
+                    if (persistOnBlock)
+                        await PersistirBloqueoAsync(instance, tenantId, checks, providersUsed,
+                            $"Ya existe un trámite en curso para la misma placa/VIN (id {duplicateId}).", ct);
                     return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+                }
 
                 checks.Add(BuildDuplicidadCheck(duplicateId.Value));
             }
@@ -329,6 +370,36 @@ public sealed class RunPreflightHandler(
         await repo.SaveChangesAsync(ct);
 
         return (new PreflightSnapshotDto(overall, checks, provider, now), null, null, null);
+    }
+
+    /// <summary>
+    /// Bug #13304 — salida temprana con <see cref="PreflightRunOptions.PersistSnapshotOnBlock"/>: añade el
+    /// check <c>bloqueo_preflight</c> (fail, system), compone el overall (rojo) y persiste el snapshot junto
+    /// con los field_values hidratados y el OT autovinculado que ya están en el change tracker. El llamador
+    /// devuelve después el mismo error que sin la opción.
+    /// </summary>
+    private async Task PersistirBloqueoAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        List<PreflightCheckDto> checks,
+        SortedSet<string> providersUsed,
+        string mensaje,
+        CancellationToken ct)
+    {
+        checks.Add(new PreflightCheckDto(CheckBloqueoPreflight, "Bloqueo del pre-vuelo", "fail", SystemSource, mensaje));
+        var snapshot = new ProcedureInstancePreflightSnapshot
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instance.Id,
+            Overall = ComposeOverall(checks),
+            Checks = JsonSerializer.Serialize(checks),
+            Provider = providersUsed.Count == 0 ? null : string.Join(",", providersUsed),
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        await repo.AddPreflightSnapshotAsync(snapshot, ct);
+        await repo.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -715,9 +786,9 @@ public sealed class RunPreflightHandler(
         {
             var ctx = new ConsultationContext(instanceId, tenantId, "vehiculo", fv);
             var result = await chainResolver.ConsultAsync(kind, ctx, tenantOverride, ct);
+            // Bug #13304 — mismo mapeo que la consulta reutilizada desde ICT (una sola fuente).
             providersUsed.Add(result.Provider);
-            foreach (var c in result.Checks)
-                checks.Add(new PreflightCheckDto(c.Key, c.Label, c.Status, c.Source, c.Message, c.Details, c.Datos));
+            checks.AddRange(PreflightVehicleSnapshot.FromConsultation(result).Checks);
 
             return result.HydratedFields;
         }
