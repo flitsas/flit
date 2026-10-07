@@ -43,7 +43,6 @@ export const CANAL_LOTES_CONSOLIDADOS = 'flit:consolidado-lotes';
 export const OCULTAR_CANCELADO_MS = 8_000;
 
 const PREFIJO_CANDADO = 'flit:consolidado-lotes:autodescarga:';
-const CLAVE_OCULTO = 'flit:consolidado-lotes:oculto';
 /** Candados más viejos que esto se limpian (el lote ya expiró de todas formas). */
 const VIDA_CANDADO_MS = 2 * RETENCION_LOTE_MS;
 /** Tope de `setTimeout` (2^31 - 1 ms). */
@@ -96,22 +95,6 @@ const descargable = (lote: LoteConsolidados) =>
 
 // ── Almacenamiento: todo acceso va en try/catch (modo privado, cuota, política del navegador) ──────
 
-function leer(clave: string): string | null {
-  try {
-    return window.localStorage.getItem(clave);
-  } catch {
-    return null;
-  }
-}
-function escribir(clave: string, valor: string | null): boolean {
-  try {
-    if (valor === null) window.localStorage.removeItem(clave);
-    else window.localStorage.setItem(clave, valor);
-    return true;
-  } catch {
-    return false;
-  }
-}
 function purgarCandadosViejos(ahora: number): void {
   try {
     const ls = window.localStorage;
@@ -152,12 +135,10 @@ export interface UseConsolidadoLoteActual {
   errorConsulta: boolean;
   /** AC4 — expirado por estado o por reloj: «Descarga expirada», sin botones. */
   expirado: boolean;
-  /** El usuario cerró el aviso de este lote. */
+  /** HU #13388 — el aviso del lote cancelado ya cumplió su tiempo visible: no se pinta. */
   oculto: boolean;
-  /** Sigue un lote concreto (objeto ya leído, o su id). Vuelve a mostrar el aviso. */
+  /** Sigue un lote concreto (objeto ya leído, o su id). */
   mostrarLote: (lote: LoteConsolidados | string) => void;
-  /** Cierra el aviso del lote actual (hasta que llegue otro o se pida mostrarlo). */
-  ocultar: () => void;
   descargarParte: (numero: number) => Promise<void>;
   /** Número de la parte que se está descargando, o `null`. */
   descargandoParte: number | null;
@@ -177,9 +158,6 @@ export function useConsolidadoLoteActual({
   const [errorConsulta, setErrorConsulta] = useState(false);
   const [fijado, setFijado] = useState<{ id: string | null; version: number }>({ id: null, version: 0 });
   const [ahora, setAhora] = useState(() => Date.now());
-  const [ocultoId, setOcultoId] = useState<string | null>(() =>
-    typeof window === 'undefined' ? null : leer(CLAVE_OCULTO),
-  );
   const [descargandoParte, setDescargandoParte] = useState<number | null>(null);
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null);
   const [expiradoPorServidor, setExpiradoPorServidor] = useState<string | null>(null);
@@ -382,18 +360,10 @@ export function useConsolidadoLoteActual({
     (objetivo: LoteConsolidados | string) => {
       const id = typeof objetivo === 'string' ? objetivo : objetivo.id;
       if (typeof objetivo !== 'string') aplicar(objetivo);
-      setOcultoId(null);
-      escribir(CLAVE_OCULTO, null);
       setFijado((f) => ({ id, version: f.version + 1 }));
     },
     [aplicar],
   );
-
-  const ocultar = useCallback(() => {
-    const id = loteRef.current?.id ?? null;
-    setOcultoId(id);
-    escribir(CLAVE_OCULTO, id);
-  }, []);
 
   /** Vuelve a leer el lote por id (AC5/AC6: estado real tras un 409/404/403). */
   const refrescar = useCallback((id: string) => {
@@ -447,9 +417,8 @@ export function useConsolidadoLoteActual({
     lote,
     errorConsulta,
     expirado,
-    oculto: lote !== null && (ocultoId === lote.id || canceladoVencido),
+    oculto: lote !== null && canceladoVencido,
     mostrarLote,
-    ocultar,
     descargarParte,
     descargandoParte,
     errorDescarga,

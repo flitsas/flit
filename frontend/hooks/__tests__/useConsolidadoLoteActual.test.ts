@@ -303,16 +303,6 @@ describe('useConsolidadoLoteActual — HU #13382', () => {
     expect(result.current.lote?.id).toBe('creado');
   });
 
-  it('ocultar() esconde el aviso del lote; mostrarLote lo vuelve a mostrar', async () => {
-    servidor.lote = { ...BASE, id: 'oculto' };
-    const { result } = montar();
-    await avanzar(0);
-    act(() => result.current.ocultar());
-    expect(result.current.oculto).toBe(true);
-    act(() => result.current.mostrarLote('oculto'));
-    expect(result.current.oculto).toBe(false);
-  });
-
   it('descargarParte — 410 marca expirado; otro error deja el mensaje de reintento', async () => {
     servidor.lote = terminado({ ...BASE, id: 'manual' });
     const { result } = montar();

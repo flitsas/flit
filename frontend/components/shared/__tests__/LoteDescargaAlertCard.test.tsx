@@ -12,7 +12,7 @@ import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
 
 // Uso de ejemplo:
 //   <LoteDescargaAlertCard lote={lote} expirado={false} onDescargarParte={(n) => descargar(n)}
-//     onCerrar={ocultar} errorConsulta={false} />
+//     errorConsulta={false} />
 
 /** Datos sintéticos según `LoteConsolidados` del contrato §5. */
 const LOTE: LoteConsolidados = {
@@ -46,7 +46,7 @@ const COMPLETADO: LoteConsolidados = {
 };
 
 function montar(over: Partial<Parameters<typeof LoteDescargaAlertCard>[0]> = {}) {
-  const props = { lote: LOTE, expirado: false, onDescargarParte: vi.fn(), onCerrar: vi.fn(), ...over };
+  const props = { lote: LOTE, expirado: false, onDescargarParte: vi.fn(), ...over };
   const view = render(<LoteDescargaAlertCard {...props} />);
   return { ...props, ...view };
 }
@@ -126,8 +126,6 @@ describe('LoteDescargaAlertCard — HU #13382', () => {
     const { onDescargarParte } = montar({ lote: COMPLETADO });
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
     await user.tab();
-    expect(screen.getByRole('button', { name: 'Cerrar aviso de descarga' })).toHaveFocus();
-    await user.tab();
     expect(screen.getByRole('button', { name: 'Descargar parte 1 de 3' })).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(onDescargarParte).toHaveBeenCalledWith(1);
@@ -138,11 +136,11 @@ describe('LoteDescargaAlertCard — HU #13382', () => {
   });
 
   it('AC6 — el texto del estado cambia en la misma región al pasar a terminal', () => {
-    const { rerender, onDescargarParte, onCerrar } = montar();
+    const { rerender, onDescargarParte } = montar();
     const region = screen.getByRole('status');
     expect(region).toHaveTextContent(/en proceso/i);
     rerender(
-      <LoteDescargaAlertCard lote={COMPLETADO} expirado={false} onDescargarParte={onDescargarParte} onCerrar={onCerrar} />,
+      <LoteDescargaAlertCard lote={COMPLETADO} expirado={false} onDescargarParte={onDescargarParte} />,
     );
     expect(screen.getByRole('status')).toBe(region);
     expect(region).toHaveTextContent(/lista/i);
@@ -161,12 +159,10 @@ describe('LoteDescargaAlertCard — HU #13382', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(MENSAJE_REINTENTAR_DESCARGA);
   });
 
-  it('a11y — cerrar el aviso tiene nombre accesible y todos los botones lo tienen', async () => {
-    const { onCerrar } = montar({ lote: COMPLETADO });
+  it('a11y — todos los botones tienen nombre accesible', () => {
+    montar({ lote: COMPLETADO });
     screen.getAllByRole('button').forEach((b) => {
       expect(b.getAttribute('aria-label') || b.textContent?.trim()).toBeTruthy();
     });
-    await userEvent.click(screen.getByRole('button', { name: 'Cerrar aviso de descarga' }));
-    expect(onCerrar).toHaveBeenCalled();
   });
 });

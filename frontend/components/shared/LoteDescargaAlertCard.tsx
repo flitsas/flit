@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Clock, Download, FileArchive, Loader2, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Download, FileArchive, Loader2, XCircle } from 'lucide-react';
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import { MENSAJE_REINTENTAR_DESCARGA } from '@/lib/api/consolidado-lotes-client';
 import {
@@ -25,13 +25,13 @@ import {
  * solo del color (icono + texto).</p>
  *
  * <p>HU #13388 — en un lote en curso, botón «Cancelar» (nombre accesible «Cancelar la descarga»),
- * independiente de la X de cerrar: un clic, sin confirmación; deshabilitado mientras `cancelando`.
+ * un clic, sin confirmación; deshabilitado mientras `cancelando`.
  * El lote cancelado se pinta neutro con «Descarga cancelada», sin partes ni botones; un 404/403 al
  * cancelar muestra «No se pudo cancelar la descarga» en tono error (`--badge-danger-*`).</p>
  *
  * Uso de ejemplo:
  *   <LoteDescargaAlertCard lote={lote} expirado={expirado} onDescargarParte={(n) => descargar(n)}
- *     onCerrar={ocultar} errorConsulta={errorConsulta} descargandoParte={null} />
+ *     errorConsulta={errorConsulta} descargandoParte={null} />
  */
 
 /** AC2/AC4 — texto aprobado del lote expirado. */
@@ -88,8 +88,6 @@ export interface LoteDescargaAlertCardProps {
   /** AC4 — expirado (por estado o pasadas 24 h desde el fin). */
   expirado: boolean;
   onDescargarParte: (numero: number) => void;
-  /** Cierra el aviso; omitido ⇒ no se pinta la X. */
-  onCerrar?: () => void;
   /** AC5 — la última consulta falló: se muestran los datos anteriores y se avisa del reintento. */
   errorConsulta?: boolean;
   descargandoParte?: number | null;
@@ -107,7 +105,6 @@ export function LoteDescargaAlertCard({
   lote,
   expirado,
   onDescargarParte,
-  onCerrar,
   errorConsulta = false,
   descargandoParte = null,
   errorDescarga = null,
@@ -144,16 +141,6 @@ export function LoteDescargaAlertCard({
             {textoEstado(lote, expirado)}
           </p>
         </div>
-        {onCerrar ? (
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label="Cerrar aviso de descarga"
-            className="shrink-0 rounded-lg p-1 text-flit-primary/70 transition hover:bg-flit-primary/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white/70"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        ) : null}
       </div>
 
       {!expirado && lote.estado !== 'cancelado' ? (

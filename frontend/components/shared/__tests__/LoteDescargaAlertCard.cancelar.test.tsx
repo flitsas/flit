@@ -152,11 +152,29 @@ describe('LoteDescargaAlertCard — cancelar (HU #13388)', () => {
     expect(screen.getByRole('alert').getAttribute('style') ?? '').not.toMatch(hex);
   });
 
-  it('independencia — «Cerrar aviso de descarga» y «Cancelar la descarga» son botones distintos', async () => {
-    const onCerrar = vi.fn();
-    const { onCancelar } = montar({ onCerrar });
-    await userEvent.click(screen.getByRole('button', { name: 'Cerrar aviso de descarga' }));
-    expect(onCerrar).toHaveBeenCalledTimes(1);
-    expect(onCancelar).not.toHaveBeenCalled();
+  it.each<[EstadoLoteConsolidados, boolean]>([
+    ['en_cola', false],
+    ['en_proceso', false],
+    ['empaquetando', false],
+    ['completado', false],
+    ['completado_con_omitidos', false],
+    ['fallido', false],
+    ['cancelado', false],
+    ['completado', true],
+    ['expirado', true],
+  ])('sin cierre manual — %s (expirado=%s) no pinta «Cerrar aviso de descarga»', (estado, expirado) => {
+    // Aunque un llamador antiguo siga pasando `onCerrar`, la tarjeta ya no lo admite: el aviso solo
+    // desaparece solo (cancelado a los 8 s, expirado a las 24 h).
+    const legado = { onCerrar: vi.fn() } as object;
+    render(
+      <LoteDescargaAlertCard
+        lote={{ ...LOTE, estado, partes: estado.startsWith('completado') ? PARTES : [] }}
+        expirado={expirado}
+        onDescargarParte={vi.fn()}
+        onCancelar={vi.fn()}
+        {...legado}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Cerrar aviso de descarga' })).not.toBeInTheDocument();
   });
 });
