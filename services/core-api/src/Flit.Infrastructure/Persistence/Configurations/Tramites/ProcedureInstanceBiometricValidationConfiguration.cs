@@ -17,7 +17,7 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
         builder.Property(x => x.PartyRole).HasColumnName("party_role").HasMaxLength(20);
-        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(320).IsRequired(); // Bug #13304: = actors.full_name (DDL 132)
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
         builder.Property(x => x.Email).HasColumnName("email").HasMaxLength(320).IsRequired();
