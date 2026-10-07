@@ -10,6 +10,7 @@ using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Api.Grpc;
@@ -34,8 +35,12 @@ public sealed class IctOrchestrationService(
     RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
     FlitDbContext db,
+    IConfiguration configuration,
     ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
 {
+    /// <summary>Bug #13304 — vigencia por defecto de la consulta RUNT de la validación ICT.</summary>
+    internal const int DefaultVehicleConsultationMaxAgeHours = 24;
+
     public override async Task<DraftReply> CreateDraftFromIct(
         CreateDraftFromIctRequest request,
         ServerCallContext context)
@@ -243,32 +248,14 @@ public sealed class IctOrchestrationService(
         }
 
         // Preflight — PARIDAD con "Consultar RUNT del vehículo" (paso 1 del wizard manual). Un solo
-        // RunPreflightHandler hace TODO: consulta el vehículo por la cadena (kyverum-first→verifik) e HIDRATA
-        // los field_values del vehículo (marca/línea/soat/rtm/…), corre el SIMIT de comprador y vendedor,
-        // auto-vincula el OT desde el RUNT y PERSISTE el snapshot de preflight. Ese snapshot es lo que el gate
-        // del paso Comprador (SIMIT) exige: sin él, el paso 4 queda `incompleto` (simit_pendiente) y el wizard
-        // no avanza aunque los datos de comprador/vendedor ya estén. Requiere placa/VIN + owner_document_* (ya
-        // sembrados) + los actores (ya materializados). Best-effort: un fallo NO tumba la materialización.
-        var tieneVehiculo = request.FieldValues.Any(f =>
-            (string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(f.FieldKey, "vin", StringComparison.OrdinalIgnoreCase))
-            && !string.IsNullOrWhiteSpace(f.ValueText));
-        if (tieneVehiculo)
+        // RunPreflightHandler HIDRATA los field_values del vehículo (marca/línea/soat/rtm/gravámenes/…), corre
+        // el SIMIT de comprador y vendedor, auto-vincula el OT desde el RUNT y PERSISTE el snapshot de
+        // preflight. Ese snapshot es lo que el gate del paso Comprador (SIMIT) exige: sin él, el paso 4 queda
+        // `incompleto` (simit_pendiente). Bug #13304 — el vehículo NO se re-consulta: se reutiliza la consulta
+        // RUNT de la validación ICT (precomputed_vehicle). Best-effort: un fallo NO tumba la materialización.
+        if (TieneVehiculo(request))
         {
-            RefrescarRastreo();
-            try
-            {
-                var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
-                    summary.Id, tenantId, context.CancellationToken);
-                if (preflightError is not null)
-                {
-                    AppendWarning(reply, "preflight_warning:" + preflightError);
-                }
-            }
-            catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
-            {
-                AppendWarning(reply, "preflight_warning:exception");
-            }
+            await CorrerPreflightIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
         }
 
         // Identidad auto-iniciada — PARIDAD con el wizard manual (ensure → biométrica, TramiteWizard) y con
@@ -318,6 +305,26 @@ public sealed class IctOrchestrationService(
             }
         }
 
+        await CompletarComercialAsync(reply, instanceId, tenantId, request, ct);
+
+        // Bug #13304 (D7) — si el intento previo no alcanzó a dejar el preflight, se corre con la consulta
+        // RUNT de ICT. Con snapshot existente no se toca (el gestor pudo haberlo refrescado).
+        if (TieneVehiculo(request))
+        {
+            var tieneSnapshot = await db.Set<ProcedureInstancePreflightSnapshot>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .AnyAsync(s => s.ProcedureInstanceId == instanceId && s.TenantId == tenantId, ct);
+            if (!tieneSnapshot)
+            {
+                await CorrerPreflightIctAsync(reply, instanceId, tenantId, request, ct);
+            }
+        }
+    }
+
+    private async Task CompletarComercialAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
         if (request.Commercial is not null)
         {
             var valorActual = await db.Set<ProcedureInstanceCommercial>()
@@ -333,6 +340,101 @@ public sealed class IctOrchestrationService(
             }
         }
     }
+
+    private static bool TieneVehiculo(CreateDraftFromIctRequest request) =>
+        FieldValueOf(request, "plate") is not null || FieldValueOf(request, "vin") is not null;
+
+    private static string? FieldValueOf(CreateDraftFromIctRequest request, string key) =>
+        request.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, key, StringComparison.OrdinalIgnoreCase)
+                                 && !string.IsNullOrWhiteSpace(f.ValueText))
+            ?.ValueText;
+
+    /// <summary>
+    /// Bug #13304 (D4/D7) — preflight del borrador ICT con la consulta RUNT de la validación ICT. Válida →
+    /// <see cref="RunPreflightHandler"/> con ella, persistiendo el snapshot también ante bloqueo. Ausente,
+    /// vencida, de otro vehículo o ilegible → NO se consulta: <c>preflight_warning:vehicle_consultation_*</c>.
+    /// </summary>
+    private async Task CorrerPreflightIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        var maxAgeHours = configuration.GetValue("Ict:VehicleConsultationMaxAgeHours", DefaultVehicleConsultationMaxAgeHours);
+        var (precomputed, motivo) = ResolverPrecomputed(
+            request.PrecomputedVehicle,
+            FieldValueOf(request, "plate"),
+            FieldValueOf(request, "vin"),
+            maxAgeHours,
+            DateTimeOffset.UtcNow);
+        if (precomputed is null)
+        {
+            AppendWarning(reply, "preflight_warning:" + motivo);
+            return;
+        }
+
+        RefrescarRastreo();
+        try
+        {
+            var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
+                instanceId, tenantId, precomputed, new PreflightRunOptions(PersistSnapshotOnBlock: true), ct);
+            if (preflightError is not null)
+            {
+                AppendWarning(reply, "preflight_warning:" + preflightError);
+            }
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            RefrescarRastreo();
+            AppendWarning(reply, "preflight_warning:exception");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13304 (D4) — valida la consulta RUNT que trae ICT: presente, con fecha, no más vieja que
+    /// <paramref name="maxAgeHours"/> (≤ 0 ⇒ default de 24 h), del MISMO vehículo (placa si se consultó por
+    /// placa, VIN si por VIN; normalizado a mayúsculas sin espacios) y deserializable. Devuelve el snapshot o
+    /// el motivo (<c>vehicle_consultation_missing|expired|mismatch|invalid</c>).
+    /// </summary>
+    internal static (PreflightVehicleSnapshot? Snapshot, string? Motivo) ResolverPrecomputed(
+        PrecomputedVehicleConsultation? precomputed,
+        string? plate,
+        string? vin,
+        int maxAgeHours,
+        DateTimeOffset now)
+    {
+        if (precomputed is null || string.IsNullOrWhiteSpace(precomputed.SnapshotJson))
+            return (null, "vehicle_consultation_missing");
+
+        if (precomputed.ConsultedAt is null)
+            return (null, "vehicle_consultation_invalid");
+
+        var vigencia = TimeSpan.FromHours(maxAgeHours > 0 ? maxAgeHours : DefaultVehicleConsultationMaxAgeHours);
+        if (precomputed.ConsultedAt.ToDateTimeOffset() < now - vigencia)
+            return (null, "vehicle_consultation_expired");
+
+        bool? coincide = precomputed.Kind switch
+        {
+            "VehiclePlate" => MismoIdentificador(precomputed.QueriedPlate, plate),
+            "VehicleVin" => MismoIdentificador(precomputed.QueriedVin, vin),
+            _ => null,
+        };
+        if (coincide is null)
+            return (null, "vehicle_consultation_invalid");
+        if (coincide == false)
+            return (null, "vehicle_consultation_mismatch");
+
+        return PreflightVehicleSnapshotJson.TryDeserialize(precomputed.SnapshotJson, out var snapshot)
+            ? (snapshot, null)
+            : (null, "vehicle_consultation_invalid");
+    }
+
+    private static bool MismoIdentificador(string? consultado, string? delBorrador)
+    {
+        var a = Normalizar(consultado);
+        return a.Length > 0 && string.Equals(a, Normalizar(delBorrador), StringComparison.Ordinal);
+    }
+
+    private static string Normalizar(string? valor) =>
+        string.Concat((valor ?? string.Empty).Where(c => !char.IsWhiteSpace(c))).ToUpperInvariant();
 
     /// <summary>
     /// Materializa los actores del request con <see cref="PutActorsHandler"/>. Error devuelto →
