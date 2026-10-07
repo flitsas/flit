@@ -829,6 +829,12 @@ internal sealed partial class ProcedureInstanceRepository(
     /// Estado tal como lo ve el gestor: una validación no aprobada con el enlace vencido es "expirada"
     /// aunque en base siga como enviada o en proceso. Misma regla que el filtro por estado (AC3) y que
     /// el flag <c>Expired</c> del DTO; el conteo de KPIs debe hablar el mismo idioma que la fila.
+    /// <para>
+    /// HU #13286 (Épica #13202): una fila del flujo manual (<c>manual_activo</c> / <c>pendiente_revision_manual</c>) con
+    /// <c>ExpiresAt &lt; now</c> también se reporta «expirada»: es CORRECTO, el enlace de captura de 24 h venció. Es solo
+    /// presentación: ningún worker la mueve (el reconcile filtra <c>provider = 'kyverum'</c>) ni genera alertas. No cambia
+    /// el modelo ni el estado persistido.
+    /// </para>
     /// </summary>
     private static string EstadoEfectivo(string status, DateTimeOffset expiresAt, DateTimeOffset now) =>
         status != BiometricEstados.Aprobado && expiresAt < now
@@ -1559,6 +1565,8 @@ internal sealed partial class ProcedureInstanceRepository(
             if (estado == BiometricEstados.Expirado)
             {
                 // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
+                // HU #13286: una fila manual no aprobada con el enlace de 24 h vencido también cuenta como expirada
+                // (aceptado: es solo presentación; ningún worker la toca y no genera alertas).
                 query = query.Where(v =>
                     v.Status == BiometricEstados.Expirado
                     || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now));
@@ -1652,6 +1660,7 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance)
+            .Include(x => x.Person) // HU #13285 — ManualValidationOrigin distingue al representante legal por la persona jurídica.
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     // HU #10943 (CF-03) — TRACKEADA (editar/reenviar la modifica) + Person incluida (ResolveSubject).

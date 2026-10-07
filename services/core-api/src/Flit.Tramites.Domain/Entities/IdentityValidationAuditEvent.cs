@@ -96,6 +96,36 @@ public static class IdentityValidationAuditStages
 
     /// <summary>HU #10943 (CF-03) — se reenvió la validación (manual o automático por cambio de correo).</summary>
     public const string Resend = "resend";
+
+    /// <summary>
+    /// HU #13284 (Épica #13202) — el Super Admin activó el flujo manual sobre la validación. Sin PII, sin secretos y
+    /// sin el token del enlace: solo ids, estado y proveedor previos y la vigencia.
+    /// </summary>
+    public const string ManualActivado = "manual_activado";
+
+    /// <summary>
+    /// HU #13284 — la activación del flujo manual canceló una verificación Kyverum en curso (enviada, en proceso,
+    /// encolada o con error de envío). <c>KyverumVerificationId</c> del evento conserva el id externo solo como
+    /// trazabilidad; en la fila de la validación ya no existe.
+    /// </summary>
+    public const string KyverumCanceladoPorManual = "kyverum_cancelado_por_manual";
+
+    /// <summary>
+    /// HU #13286 — llegó un webhook de Kyverum para una validación que ya es del flujo manual: se responde 200
+    /// (para que Kyverum no reintente) sin aplicar nada. Sin payload, sin firma y sin secretos en el evento.
+    /// </summary>
+    public const string WebhookIgnoradoManual = "webhook_ignorado_manual";
+
+    /// <summary>
+    /// HU #13287 — el Super Admin regeneró el enlace de captura manual: el token anterior dejó de valer. Sin PII ni token.
+    /// </summary>
+    public const string ManualEnlaceRegenerado = "manual_enlace_regenerado";
+
+    /// <summary>
+    /// HU #13287 — el correo con el enlace de captura manual NO salió (titular sin correo o fallo de envío). La activación o la
+    /// regeneración ya estaban confirmadas; el Super Admin puede regenerar. Sin correo, sin token y sin PII.
+    /// </summary>
+    public const string ManualCorreoFallido = "manual_correo_fallido";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

@@ -6324,6 +6324,81 @@ paths:
         "503":
           description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
 
+  /api/v1/tramites/biometric-validations/{id}/activate-manual:
+    post:
+      operationId: activarIdentidadManual
+      tags: [Tramites, Identidad]
+      summary: Activar el flujo manual de identidad (solo Super Admin) — HU #13284, Épica #13202
+      description: >
+        Activa el flujo manual sobre una validación de trámite, de prevalidación standalone, de mandatario o de
+        representante legal (HU #13285: mismo endpoint por id; no hay rutas propias, las de admin están retiradas) que NO esté
+        aprobada y vigente (rechazada, expirada, vencida o en curso sí). La misma fila pasa a proveedor
+        `manual` y estado `manual_activo`, con un enlace de captura de 24 h cuyo token se guarda solo como
+        hash. Si había una verificación Kyverum en curso queda cancelada para FLIT (se audita; el id de
+        Kyverum se conserva solo en la bitácora). Solo Super Admin; opera sobre cualquier compañía (el
+        tenant sale de la fila, NO se usa X-Tenant-Id). El token en claro NO viaja en la respuesta: el
+        backend lo entrega por correo al titular (HU #13287); si el correo no sale (titular sin correo o fallo
+        del proveedor) la activación NO se revierte y la respuesta trae `emailEnviado: false`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Flujo manual activado; estado resultante (sin token).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivarIdentidadManualResult"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin.
+        "404":
+          description: Validación de identidad no encontrada.
+        "409":
+          description: >
+            identidad_aprobada_vigente (la identidad ya vale) o tramite_inactivo (trámite anulado o
+            revocado: la validación se conserva).
+
+  /api/v1/tramites/biometric-validations/{id}/regenerate-manual-link:
+    post:
+      operationId: regenerarEnlaceManual
+      tags: [Tramites, Identidad]
+      summary: Regenerar el enlace de captura manual (solo Super Admin) — HU #13287, Épica #13202
+      description: >
+        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación en
+        `manual_activo`; el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
+        público recibe 404; no se distingue «reemplazado» de «inválido» y el front lo cubre con «enlace inválido o
+        reemplazado»). Envía el correo al titular y audita `manual_enlace_regenerado`. Si el correo no sale la
+        regeneración NO se revierte: `emailEnviado` es false y se audita `manual_correo_fallido`. Solo Super Admin;
+        el tenant sale de la fila (NO se usa X-Tenant-Id). El token en claro NO viaja en la respuesta.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Enlace regenerado; estado resultante (sin token).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegenerarEnlaceManualResult"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin.
+        "404":
+          description: Validación de identidad no encontrada.
+        "409":
+          description: flujo_manual_no_activo (la validación no está en manual_activo).
+
   /api/v1/tramites/biometric-validations/{validationId}/audit:
     get:
       operationId: getIdentityAuditByValidation
@@ -16103,6 +16178,37 @@ components:
             true si el cambio de correo disparó el reenvío automático (D8); false si solo cambió
             el nombre (o ningún dato de contacto).
 
+    ActivarIdentidadManualResult:
+      type: object
+      description: Estado resultante de activar el flujo manual (HU #13284). No incluye el token del enlace.
+      properties:
+        validationId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        provider: { type: string, enum: [manual] }
+        status: { type: string, enum: [manual_activo] }
+        expiresAt: { type: string, format: date-time, description: Vencimiento del enlace (24 h). }
+        activatedAt: { type: string, format: date-time }
+        kyverumCancelado: { type: boolean, description: true si había una verificación Kyverum en curso que se canceló. }
+        origin:
+          type: string
+          enum: [tramite, prevalidacion, mandatario, representante_legal]
+          description: >
+            Origen de la validación (HU #13285). `mandatario` = fila con MandateSignerId (se conserva);
+            `representante_legal` = prevalidación standalone de persona jurídica.
+        emailEnviado: { type: boolean, description: false si el correo con el enlace no salió (titular sin correo o fallo de envío); el Super Admin puede regenerar el enlace. }
+    RegenerarEnlaceManualResult:
+      type: object
+      description: Estado resultante de regenerar el enlace de captura manual (HU #13287). No incluye el token del enlace.
+      properties:
+        validationId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        provider: { type: string, enum: [manual] }
+        status: { type: string, enum: [manual_activo] }
+        expiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
+        activatedAt: { type: string, format: date-time, nullable: true, description: Cuándo se activó el flujo manual. }
+        emailEnviado: { type: boolean, description: false si el correo con el enlace no salió; se puede volver a regenerar. }
     ReenviarPrevalidacionResult:
       type: object
       required: [validation, captureUrl]

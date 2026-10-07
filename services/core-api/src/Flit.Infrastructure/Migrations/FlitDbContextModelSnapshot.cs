@@ -9000,6 +9000,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
+                    b.Property<string>("ApprovalOrigin")
+                        .HasColumnType("text")
+                        .HasColumnName("approval_origin");
+
                     b.Property<int>("Attempts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -9015,6 +9019,18 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("certificate_hash");
+
+                    b.Property<DateTimeOffset?>("ConsentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consent_at");
+
+                    b.Property<string>("ConsentIp")
+                        .HasColumnType("text")
+                        .HasColumnName("consent_ip");
+
+                    b.Property<string>("ConsentTextVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("consent_text_version");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -9079,6 +9095,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("mandate_signer_id");
 
+                    b.Property<DateTimeOffset?>("ManualActivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("manual_activated_at");
+
+                    b.Property<Guid?>("ManualActivatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manual_activated_by");
+
                     b.Property<int>("MaxAttempts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -9135,11 +9159,23 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue("")
                         .HasColumnName("registered_email");
 
+                    b.Property<string>("RejectionReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason_code");
+
                     b.Property<int>("ResendCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("resend_count");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by");
 
                     b.Property<int?>("Score")
                         .HasColumnType("integer")
@@ -9158,8 +9194,8 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
                         .HasDefaultValue("enviado")
                         .HasColumnName("status");
 
@@ -9215,6 +9251,10 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ProcedureInstanceId")
                         .HasDatabaseName("ix_procedure_instance_biometric_validations_tenant_id_instance");
+
+                    b.HasIndex("TenantId", "Status", "ManualActivatedAt")
+                        .HasDatabaseName("ix_biometric_validations_manual_tab")
+                        .HasFilter("provider = 'manual'");
 
                     b.HasIndex("TenantId", "DocumentType", "DocumentNumber", "Status", "ValidUntil")
                         .HasDatabaseName("ix_biometric_validations_vigente_approved")
@@ -11383,7 +11423,7 @@ namespace Flit.Infrastructure.Migrations
                         .HasForeignKey("MandateSignerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_mandate_signer_associated_companies_mandate_signers_mandat");
+                        .HasConstraintName("fk_mandate_signer_associated_companies_mandate_signers_mandate");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
@@ -11903,6 +11943,7 @@ namespace Flit.Infrastructure.Migrations
 
                     b.Navigation("Steps");
                 });
+
 #pragma warning restore 612, 618
         }
     }

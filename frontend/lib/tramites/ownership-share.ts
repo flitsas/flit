@@ -297,6 +297,8 @@ const BIOMETRIC_ESTADO_STATUS: Record<BiometricEstado, ActorIdentityStatus> = {
   enviado: { label: 'Enlace de validación enviado', tone: 'info' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'warning' },
   error_envio: { label: 'Error al enviar la validación', tone: 'warning' },
+  manual_activo: { label: 'Esperando captura del cliente', tone: 'info' },
+  pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info' },
 };
 
 /**

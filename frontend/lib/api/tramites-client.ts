@@ -73,6 +73,8 @@ import type {
   ProcedureConfiguration,
   ProcedureInstanceDetail,
   ReconcileIdentityResult,
+  ActivarIdentidadManualResult,
+  RegenerarEnlaceManualResult,
   ProcedureInstanceSummary,
   EnviarAlOtResult,
   RuntPersonLookupInput,
@@ -2324,6 +2326,21 @@ export const tramitesClient = {
     request<ReconcileIdentityResult>(
       `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/reconcile`,
       { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // HU #13288 (Épica #13202) — SOLO Super Admin (el backend responde 403 al resto). Cross-tenant: el tenant
+  // sale de la fila, no de X-Tenant-Id. Errores: 404, 409 (identidad_aprobada_vigente | tramite_inactivo).
+  activateManualIdentity: (validationId: string): Promise<ActivarIdentidadManualResult> =>
+    request<ActivarIdentidadManualResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/activate-manual`,
+      { method: 'POST' },
+    ),
+
+  // HU #13288 — regenera el enlace de captura manual (el anterior deja de funcionar). 409 flujo_manual_no_activo.
+  regenerateManualLink: (validationId: string): Promise<RegenerarEnlaceManualResult> =>
+    request<RegenerarEnlaceManualResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/regenerate-manual-link`,
+      { method: 'POST' },
     ),
 
   // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
