@@ -43,7 +43,9 @@ import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { downloadFile } from "@/lib/api/download";
-import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { claveEstable, useSeleccionLote } from "@/hooks/useSeleccionLote";
+import { BarraSeleccionLote } from "@/components/operacion/BarraSeleccionLote";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
 import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
@@ -622,6 +624,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // (los endpoints approve/reject YA soportan el override de organismo del SuperAdmin vía
   // ?transitOfficeId=; en esta bandeja OT nativa el SuperAdmin no decide, solo supervisa).
   const [superAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  // HU #13393 — sin el permiso en el token no hay casillas, barra ni contador (AC5). Un token
+  // emitido antes del grant no lo trae y NO se «arregla» aquí (FB-i): hay que renovar la sesión.
+  const [puedeLote] = useState(() => canDescargarConsolidadosMasivo(decodeJwtPayload(getToken())));
 
   const isReadOnly = Boolean(
     profile?.operationMode === "quipux" && profile?.quipuxReadOnly,
@@ -739,6 +744,24 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       sortDir,
     ],
   );
+
+  /**
+   * HU #13393 — selección para la descarga masiva. El filtro es el de `buildListQuery` sin el orden
+   * (reordenar no cambia el universo); la página no entra, así que paginar conserva la selección
+   * (AC3). La clave suma el organismo: cambiar filtro, lista pegada, familia u organismo la reinicia
+   * (AC4). Contador = `totalCount` del servidor − excluidos (AC2), lo calcula el hook.
+   */
+  const filtroLote = useMemo(() => {
+    const criterios = buildListQuery();
+    delete criterios.sortBy;
+    delete criterios.sortDir;
+    return criterios;
+  }, [buildListQuery]);
+  const claveLote = useCallback(
+    (f: OtClientProceduresParams) => claveEstable({ f, transitOfficeId: transitOfficeId ?? null }),
+    [transitOfficeId],
+  );
+  const lote = useSeleccionLote({ filtro: filtroLote, total: totalCount, claveFiltro: claveLote });
 
   /**
    * ADR-0059 — cada tarjeta de la cabecera es un estado real, así que toda decisión del OT (asignar,
@@ -1747,6 +1770,20 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         darkBgClassName="dark:bg-[#0B0F14]"
       />
 
+      {/* HU #13393 — fuera del UiStateBoundary: en cargando/vacío/error sigue visible y deshabilitada
+          (AC7). «Descargar ZIP» y su confirmación (HU #13394) entran por `children`. */}
+      {puedeLote ? (
+        <BarraSeleccionLote
+          estadoTabla={status === "ready" ? "lleno" : status === "empty" ? "vacio" : status === "error" ? "error" : "cargando"}
+          estadoCabecera={lote.estadoCabecera}
+          contador={lote.contador}
+          todosDelFiltro={lote.modo === "filtro"}
+          onAlternarTodos={lote.alternarTodos}
+          onLimpiar={lote.limpiar}
+          mensajeTope={lote.mensajeTope}
+        />
+      ) : null}
+
       <UiStateBoundary
         status={status}
         emptyMessage={
@@ -1804,6 +1841,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             setDetailSection("vehiculo");
             setDetailProcedure(row);
           }}
+          seleccionable={puedeLote}
+          seleccion={lote}
+          onToggle={lote.alternar}
         />
       </UiStateBoundary>
 
