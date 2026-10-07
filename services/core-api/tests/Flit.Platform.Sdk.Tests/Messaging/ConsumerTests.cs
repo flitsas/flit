@@ -87,6 +87,7 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
             await using var channel = await cleanup.CreateChannelAsync();
             foreach (var cola in new[] { _cola, $"{_cola}.retry.1", $"{_cola}.retry.2", $"{_cola}.retry.3", $"{_cola}.dlq" })
                 await channel.QueueDeleteAsync(cola);
+            await channel.ExchangeDeleteAsync($"{_cola}.reintentos");
         }
 
         if (_channel is not null)

@@ -49,7 +49,7 @@ public static class PlatformMessagingMetrics
 /// <list type="bullet">
 ///   <item>Topología declarada al arrancar, idempotente: cola durable <c>&lt;cola&gt;</c> atada al exchange del productor,
 ///   una cola de espera por reintento (<c>&lt;cola&gt;.retry.&lt;n&gt;</c>, con TTL que la devuelve a la cola principal) y
-///   <c>&lt;cola&gt;.dlq</c>. Sin plugins del broker.</item>
+///   <c>&lt;cola&gt;.dlq</c>, todas detrás del exchange directo <c>&lt;cola&gt;.reintentos</c>. Sin plugins del broker.</item>
 ///   <item>Bandeja de entrada: un <c>eventId</c> ya procesado por esta cola se confirma sin repetir el efecto (AC1).</item>
 ///   <item>Si el efecto falla, el mensaje va a la siguiente cola de espera; agotadas las esperas, a la DLQ y suma la
 ///   métrica <see cref="PlatformMessagingMetrics.DeadLettered"/> (AC2). Un mensaje que no es un sobre válido va
@@ -124,27 +124,54 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
         await DisposeConnectionAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Exchange propio de la cola para reintentos y DLQ: así el servicio nunca necesita escribir en <c>amq.default</c>.</summary>
+    internal string RetryExchange => $"{consumer.Queue}.reintentos";
+
     internal async Task DeclareTopologyAsync(IChannel channel, CancellationToken ct)
     {
         var exchange = EventEnvelope.ExchangeFor(consumer.Producer);
-        await channel.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
+        await AsegurarExchangeDelProductorAsync(exchange, ct).ConfigureAwait(false);
         await channel.QueueDeclareAsync(consumer.Queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
         foreach (var type in consumer.EventTypes)
             await channel.QueueBindAsync(consumer.Queue, exchange, type, cancellationToken: ct).ConfigureAwait(false);
 
+        // HU #13349: reintentos y DLQ por un exchange directo de la cola (permisos por servicio: solo <servicio>.*).
+        await channel.ExchangeDeclareAsync(RetryExchange, ExchangeType.Direct, durable: true, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
+        await channel.QueueBindAsync(consumer.Queue, RetryExchange, consumer.Queue, cancellationToken: ct).ConfigureAwait(false);
         for (var i = 0; i < consumer.RetryDelays.Count; i++)
         {
-            // Al vencer el TTL, el broker devuelve el mensaje a la cola principal por el exchange por defecto.
+            // Al vencer el TTL, el broker devuelve el mensaje a la cola principal por el exchange de reintentos.
             await channel.QueueDeclareAsync(RetryQueue(i), durable: true, exclusive: false, autoDelete: false,
                 new Dictionary<string, object?>
                 {
                     ["x-message-ttl"] = (long)consumer.RetryDelays[i].TotalMilliseconds,
-                    ["x-dead-letter-exchange"] = string.Empty,
+                    ["x-dead-letter-exchange"] = RetryExchange,
                     ["x-dead-letter-routing-key"] = consumer.Queue,
                 }, cancellationToken: ct).ConfigureAwait(false);
+            await channel.QueueBindAsync(RetryQueue(i), RetryExchange, RetryQueue(i), cancellationToken: ct).ConfigureAwait(false);
         }
 
         await channel.QueueDeclareAsync(DeadLetterQueue, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
+        await channel.QueueBindAsync(DeadLetterQueue, RetryExchange, DeadLetterQueue, cancellationToken: ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// El exchange del productor lo declara su dueño (o la definición del broker, <c>deploy/rabbitmq</c>). Se intenta
+    /// declarar (en local y en pruebas el usuario puede); si el broker lo niega (403: no es de este servicio), basta con
+    /// que exista. Cada intento va en un canal propio porque un error del broker cierra el canal.
+    /// </summary>
+    private async Task AsegurarExchangeDelProductorAsync(string exchange, CancellationToken ct)
+    {
+        try
+        {
+            await using var intento = await _connection!.CreateChannelAsync(cancellationToken: ct).ConfigureAwait(false);
+            await intento.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (RabbitMQ.Client.Exceptions.OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == 403)
+        {
+            await using var verificacion = await _connection!.CreateChannelAsync(cancellationToken: ct).ConfigureAwait(false);
+            await verificacion.ExchangeDeclarePassiveAsync(exchange, ct).ConfigureAwait(false);
+        }
     }
 
     private async Task OnReceivedAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken ct)
@@ -238,8 +265,11 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
             .AnyAsync(m => m.EventId == envelope.EventId && m.Consumer == consumer.Queue, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Republica el mensaje a otra cola (por el exchange por defecto) y confirma el original.</summary>
-    private static async Task ForwardAsync(IChannel channel, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, CancellationToken ct)
+    /// <summary>Republica el mensaje a otra cola de esta suscripción (por su exchange de reintentos) y confirma el original.</summary>
+    private Task ForwardAsync(IChannel channel, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, CancellationToken ct) =>
+        ForwardAsync(channel, RetryExchange, delivery, queue, attempt, reason, ct);
+
+    private static async Task ForwardAsync(IChannel channel, string retryExchange, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, CancellationToken ct)
     {
         var properties = new BasicProperties(delivery.BasicProperties)
         {
@@ -252,7 +282,7 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
         if (reason is not null)
             properties.Headers["x-flit-dead-letter-reason"] = reason;
 
-        await channel.BasicPublishAsync(string.Empty, queue, mandatory: false, properties, delivery.Body, ct).ConfigureAwait(false);
+        await channel.BasicPublishAsync(retryExchange, queue, mandatory: false, properties, delivery.Body, ct).ConfigureAwait(false);
         await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct).ConfigureAwait(false);
     }
 

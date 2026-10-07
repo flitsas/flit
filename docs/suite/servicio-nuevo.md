@@ -87,7 +87,7 @@ Con perfil propio: no arranca hasta que se pida (`COMPOSE_PROFILES`), como core-
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
       Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
-      Platform__Messaging__ConnectionString: ${RABBITMQ_URL:-}
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_CONSULTAS:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]
@@ -101,8 +101,8 @@ Con perfil propio: no arranca hasta que se pida (`COMPOSE_PROFILES`), como core-
     logging: *default-logging
 ```
 
-Si falta una variable, el contenedor no arranca y su log dice cuál y de dónde sale. `RABBITMQ_URL` existe desde el
-broker de la Feature #13323. Documentar las variables nuevas en `.env.prod.example`.
+Si falta una variable, el contenedor no arranca y su log dice cuál y de dónde sale. `RABBITMQ_URL_CONSULTAS` es la
+cadena de su usuario del broker (`deploy/rabbitmq/usuario-de-servicio.sh consultas <clave>`, ver `deploy/rabbitmq`). Documentar las variables nuevas en `.env.prod.example`.
 
 ## 7. CD (`.github/workflows/cd.yml`)
 

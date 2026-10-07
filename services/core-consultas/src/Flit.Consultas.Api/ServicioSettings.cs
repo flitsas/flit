@@ -18,7 +18,7 @@ internal static class ServicioSettings
         ("Platform:ServiceClient:TokenEndpoint", "valor del compose"),
         ("Platform:Auth:JwksUri", "valor del compose"),
         ("Platform:Auth:Issuers:0", "FLIT_HUB_URL"),
-        ("Platform:Messaging:ConnectionString", "RABBITMQ_URL"),
+        ("Platform:Messaging:ConnectionString", "RABBITMQ_URL_CONSULTAS"),
         (GrpcPortKey, "CORE_CONSULTAS_GRPC_PORT"),
     ];
 

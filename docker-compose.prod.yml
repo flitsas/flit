@@ -444,6 +444,34 @@ services:
     oom_score_adj: ${CORE_IDENTITY_OOM_SCORE_ADJ:-0}
     logging: *default-logging
 
+  # ── rabbitmq (Epic #13316, HU #13349) — bus de eventos, perfil "bus" ─────────
+  # Un broker por ambiente (ADR-0064) hasta k3s. Vhost "flit" y exchanges de los productores desde
+  # deploy/rabbitmq/definitions.json; un usuario por servicio con deploy/rabbitmq/usuario-de-servicio.sh. AMQP solo en
+  # la red interna; la consola de administración solo en 127.0.0.1 (túnel SSH). Ver deploy/rabbitmq/README.md.
+  rabbitmq:
+    profiles: ["bus"]
+    image: rabbitmq:4.1-management-alpine
+    # Nombre de nodo fijo: el volumen guarda los datos por nombre de nodo.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_ADMIN_USER:-flit-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_ADMIN_PASSWORD:-}
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq
+      - ./deploy/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-flit.conf:ro
+      - ./deploy/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    ports:
+      - "127.0.0.1:${RABBITMQ_MGMT_PORT:-4672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${RABBITMQ_MEM_LIMIT:-0}
+    logging: *default-logging
+
   # ── core-consultas (Epic #13316, HU #13347) — CORE_CONSULTAS_PORT / CORE_CONSULTAS_GRPC_PORT, sin publicar ──
   # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Perfil
   # "consultas": no arranca si no se pide (COMPOSE_PROFILES=...,consultas). Sin `ports`: ni REST ni gRPC se publican.
@@ -464,7 +492,8 @@ services:
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
       Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
-      Platform__Messaging__ConnectionString: ${RABBITMQ_URL:-amqp://flit:sin-broker@rabbitmq:5672/}
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh consultas).
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_CONSULTAS:-amqp://consultas:sin-clave@rabbitmq:5672/flit}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # Proveedores: las MISMAS variables que hoy tiene core-api (hasta el corte, HU #13348, conviven en los dos).
       VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
@@ -914,3 +943,4 @@ networks:
 # HU #13332: datos de trazas y logs del perfil `observabilidad`.
 volumes:
   observabilidad-datos:
+  rabbitmq-datos:
