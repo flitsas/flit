@@ -108,7 +108,7 @@ public sealed class AvisosKyverumTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         var validacion = Guid.NewGuid();
 
-        var respuesta = await Cliente(Token("platform.consultas")).IniciarAsync(Pedido(validacion), Empresa(_empresa), cancellationToken: ct);
+        var respuesta = await Cliente(Token("platform.consultas")).IniciarValidacionAsync(Pedido(validacion), Empresa(_empresa), cancellationToken: ct);
 
         respuesta.VerificationId.Should().Be("kyv_123");
         respuesta.CaptureUrl.Should().StartWith("https://verify.kyverum.prueba/session/");
@@ -126,7 +126,7 @@ public sealed class AvisosKyverumTests : IAsyncLifetime
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
         _kyverum.Estado = HttpStatusCode.ServiceUnavailable;
 
-        var llamada = async () => await Cliente(Token("platform.consultas")).IniciarAsync(
+        var llamada = async () => await Cliente(Token("platform.consultas")).IniciarValidacionAsync(
             Pedido(Guid.NewGuid()), Empresa(_empresa), cancellationToken: TestContext.Current.CancellationToken);
 
         (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.Unavailable);
@@ -138,7 +138,7 @@ public sealed class AvisosKyverumTests : IAsyncLifetime
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         var validacion = Guid.NewGuid();
-        await Cliente(Token("platform.consultas")).IniciarAsync(Pedido(validacion), Empresa(_empresa), cancellationToken: ct);
+        await Cliente(Token("platform.consultas")).IniciarValidacionAsync(Pedido(validacion), Empresa(_empresa), cancellationToken: ct);
         const string cuerpo = """{"evento":"validation.approved","ts":"2026-10-06T12:00:00Z","data":{"aprobado":true}}""";
 
         var respuesta = await AvisarAsync(validacion, cuerpo, Firma(cuerpo, SecretoKyverum), ct);
@@ -168,7 +168,7 @@ public sealed class AvisosKyverumTests : IAsyncLifetime
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         var validacion = Guid.NewGuid();
-        await Cliente(Token("platform.consultas")).IniciarAsync(Pedido(validacion), Empresa(_empresa), cancellationToken: ct);
+        await Cliente(Token("platform.consultas")).IniciarValidacionAsync(Pedido(validacion), Empresa(_empresa), cancellationToken: ct);
         const string cuerpo = """{"evento":"validation.approved","data":{"aprobado":true}}""";
 
         var respuesta = await AvisarAsync(validacion, cuerpo, Firma(cuerpo, "otro-secreto"), ct);
@@ -202,7 +202,7 @@ public sealed class AvisosKyverumTests : IAsyncLifetime
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
 
-        var llamada = async () => await Cliente(Token("platform.identidad.read")).IniciarAsync(
+        var llamada = async () => await Cliente(Token("platform.identidad.read")).IniciarValidacionAsync(
             Pedido(Guid.NewGuid()), Empresa(_empresa), cancellationToken: TestContext.Current.CancellationToken);
 
         (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied);

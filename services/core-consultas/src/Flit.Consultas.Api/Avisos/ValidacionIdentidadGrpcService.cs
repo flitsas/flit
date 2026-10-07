@@ -25,7 +25,7 @@ internal sealed class ValidacionIdentidadGrpcService(
     public const string Scope = "platform.consultas";
     public const string ProveedorRechazo = "PROVEEDOR_RECHAZO";
 
-    public override async Task<IniciarValidacionResponse> Iniciar(IniciarValidacionRequest request, ServerCallContext context)
+    public override async Task<IniciarValidacionResponse> IniciarValidacion(IniciarValidacionRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
@@ -82,7 +82,7 @@ internal sealed class ValidacionIdentidadGrpcService(
         return respuesta;
     }
 
-    public override async Task<ConsultarEstadoValidacionResponse> ConsultarEstado(ConsultarEstadoValidacionRequest request, ServerCallContext context)
+    public override async Task<ConsultarEstadoValidacionResponse> ConsultarEstadoValidacion(ConsultarEstadoValidacionRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);

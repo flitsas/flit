@@ -39,7 +39,7 @@ internal sealed class KyverumVerifyPorConsultas(
 
         try
         {
-            var r = await client.IniciarAsync(pedido, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
+            var r = await client.IniciarValidacionAsync(pedido, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
             return new KyverumVerifyStartResult(
                 r.VerificationId, r.CaptureUrl, WebhookSecret: string.Empty, r.ProviderStatus, r.RawPayloadSanitized, r.Expira?.ToDateTimeOffset());
         }
@@ -59,7 +59,7 @@ internal sealed class KyverumVerifyPorConsultas(
 
         try
         {
-            var r = await client.ConsultarEstadoAsync(pedido, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
+            var r = await client.ConsultarEstadoValidacionAsync(pedido, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
             return r.Encontrada
                 ? new KyverumVerifyStatus(
                     r.Status, r.HasScore ? r.Score : null, r.RawPayloadSanitized,

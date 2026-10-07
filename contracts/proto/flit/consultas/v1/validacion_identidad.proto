@@ -17,10 +17,10 @@ option csharp_namespace = "Flit.Consultas.Grpc.V1";
 // FAILED_PRECONDITION con reason `PROVEEDOR_RECHAZO` (no se reintenta).
 service ValidacionIdentidadService {
   // Crea la validación en el proveedor. El aviso del proveedor llegará al receptor de Consultas con `validacion_id`.
-  rpc Iniciar(IniciarValidacionRequest) returns (IniciarValidacionResponse);
+  rpc IniciarValidacion(IniciarValidacionRequest) returns (IniciarValidacionResponse);
 
   // Estado actual en el proveedor (reconciliación cuando el aviso no llegó). `encontrada = false` si no la conoce.
-  rpc ConsultarEstado(ConsultarEstadoValidacionRequest) returns (ConsultarEstadoValidacionResponse);
+  rpc ConsultarEstadoValidacion(ConsultarEstadoValidacionRequest) returns (ConsultarEstadoValidacionResponse);
 
   // Certificado de la validación (PDF). `encontrado = false` si el proveedor aún no lo tiene.
   rpc DescargarCertificado(DescargarCertificadoRequest) returns (DescargarCertificadoResponse);
