@@ -104,6 +104,11 @@ export interface CompanyConfigTabsProps {
    * inyecta `usuariosSlot` (la cabeza administrando una hija), Usuarios se conserva.
    */
   restrictedToRepresentatives?: boolean;
+  /**
+   * HU #13401 (Feature #13398) — muestra el interruptor «Generación de improntas» en la pestaña
+   * Trámites. Solo el Super Admin lo recibe en `true`; por defecto queda oculto.
+   */
+  canConfigureImprontas?: boolean;
 }
 
 /** HU #12710 — pestañas que conserva el Administrador de Compañía. */
@@ -121,6 +126,7 @@ export function CompanyConfigTabs({
   usuariosSlot,
   company,
   restrictedToRepresentatives = false,
+  canConfigureImprontas = false,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>(restrictedToRepresentatives ? "representantes" : "productos");
   // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
@@ -289,6 +295,7 @@ export function CompanyConfigTabs({
             onChange={patch}
             fieldErrors={fieldErrors}
             whitelistSlot={whitelistSlot}
+            showImprontas={canConfigureImprontas && !restrictedToRepresentatives}
           />
         )}
         {activeTabId === "config" && (
