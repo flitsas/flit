@@ -79,8 +79,18 @@ public static class CrearLoteConsolidadosErrores
 /// <param name="Error">Uno de <see cref="CrearLoteConsolidadosErrores"/> o de <see cref="LoteSeleccionInvalidaException"/>.</param>
 /// <param name="Mensaje">Texto para el usuario, sin datos personales.</param>
 /// <param name="LoteActivoId">Solo con <see cref="CrearLoteConsolidadosErrores.LoteActivo"/>.</param>
+/// <param name="Total">
+/// M1 — solo con <see cref="LoteSeleccionInvalidaException.CodigoExcedeTope"/> por tope total: trámites de la
+/// selección resuelta. <c>null</c> en el tope de las listas del cuerpo (allí no se resolvió nada).
+/// </param>
+/// <param name="Tope">M1 — <c>max_items_per_batch</c> vigente, junto a <paramref name="Total"/>.</param>
 public sealed record CrearLoteConsolidadosResultado(
-    ConsolidadoExportBatch? Lote, string? Error = null, string? Mensaje = null, Guid? LoteActivoId = null)
+    ConsolidadoExportBatch? Lote,
+    string? Error = null,
+    string? Mensaje = null,
+    Guid? LoteActivoId = null,
+    int? Total = null,
+    int? Tope = null)
 {
     public bool Creado => Lote is not null && Error is null;
 
@@ -130,7 +140,8 @@ public sealed partial class CrearLoteConsolidadosHandler(
             return CrearLoteConsolidadosResultado.Falla(
                 CrearLoteConsolidadosErrores.SinCompania, "El usuario no tiene una compañía activa.");
 
-        // 3. Topes Q7 (422): los aplica la creación para todos los orígenes (el resolver OT no los aplica).
+        // 3. Topes Q7 de las listas del cuerpo (422): los aplica la creación para todos los orígenes (el resolver OT no
+        // los aplica). El tope TOTAL del lote (M1) va en el paso 6b, sobre la selección resuelta.
         if (ExcedeTope(seleccion) is { } tope)
             return CrearLoteConsolidadosResultado.Falla(LoteSeleccionInvalidaException.CodigoExcedeTope, tope);
 
@@ -163,6 +174,23 @@ public sealed partial class CrearLoteConsolidadosHandler(
         }
 
         var items = Congelar(command, refs);
+
+        // 6b. M1 — tope total (max_items_per_batch), todos los orígenes y modos, sobre la selección YA resuelta: después
+        // de las exclusiones (resolver) y de la intersección de seguridad y la deduplicación (Congelar). Los resolvers ya
+        // devuelven las referencias materializadas (id, compañía, radicado, placa), así que contarlas aquí no añade
+        // consultas; se corta antes de cualquier escritura: ni lote, ni ítems, ni lote_creado, ni purga del retenido.
+        if (items.Count > settings.MaxItemsPerBatch)
+        {
+            LogExcedeTope(_logger, command.UsuarioId, command.Origen, items.Count, settings.MaxItemsPerBatch);
+            return new CrearLoteConsolidadosResultado(
+                null,
+                LoteSeleccionInvalidaException.CodigoExcedeTope,
+                $"La selección tiene {items.Count} trámites y el máximo por descarga masiva es {settings.MaxItemsPerBatch}. " +
+                "Acota el filtro o desmarca trámites.",
+                Total: items.Count,
+                Tope: settings.MaxItemsPerBatch);
+        }
+
         var tiposConocidos = await TiposDeTramiteSiHacenFaltaAsync(seleccion, ct).ConfigureAwait(false);
 
         // 7. Una sola transacción: purga del retenido + lote + ítems + auditoría lote_creado.
@@ -305,6 +333,10 @@ public sealed partial class CrearLoteConsolidadosHandler(
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Lote de consolidados {LoteId} creado: origen {Origen}, {Total} ítems, {Purgados} lote(s) retenido(s) purgado(s).")]
     private static partial void LogCreado(ILogger logger, Guid loteId, string origen, int total, int purgados);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Lote de consolidados rechazado por tope total: usuario {UsuarioId}, origen {Origen}, {Total} trámites, tope {Tope}.")]
+    private static partial void LogExcedeTope(ILogger logger, Guid usuarioId, string origen, int total, int tope);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Lote de consolidados no creado para el usuario {UsuarioId}: la transacción falló.")]
     private static partial void LogNoCreado(ILogger logger, Guid usuarioId);

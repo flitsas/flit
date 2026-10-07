@@ -151,15 +151,23 @@ internal static partial class ConsolidadoLoteEndpoints
             _ => StatusCodes.Status500InternalServerError,
         };
 
-        return Problema(status, r.Error ?? "error_desconocido", r.Mensaje, r.LoteActivoId);
+        return Problema(status, r.Error ?? "error_desconocido", r.Mensaje, r.LoteActivoId, r.Total, r.Tope);
     }
 
-    /// <summary>ProblemDetails del motor con el código estable en <c>error</c> (raíz). Compartido con la ruta OT (#13391).</summary>
-    internal static IResult Problema(int status, string error, string? detail, Guid? loteActivoId = null)
+    /// <summary>
+    /// ProblemDetails del motor con el código estable en <c>error</c> (raíz). Compartido con la ruta OT (#13391).
+    /// M1: <paramref name="total"/> y <paramref name="tope"/> solo en el 422 <c>seleccion_excede_tope</c> por tope total.
+    /// </summary>
+    internal static IResult Problema(
+        int status, string error, string? detail, Guid? loteActivoId = null, int? total = null, int? tope = null)
     {
         var extensions = new Dictionary<string, object?> { ["error"] = error };
         if (loteActivoId is { } id)
             extensions["loteActivoId"] = id;
+        if (total is { } t)
+            extensions["total"] = t;
+        if (tope is { } max)
+            extensions["tope"] = max;
         return Results.Problem(statusCode: status, title: error, detail: detail, extensions: extensions);
     }
 
