@@ -116,6 +116,13 @@ public static class ProcedureInstanceSortFields
         };
 
     /// <summary>
+    /// Épica #13216 (L3) — ¿<paramref name="sortBy"/> está en la lista blanca? Lo usa la auditoría del lote para
+    /// guardar el literal solo si es un campo ordenable conocido.
+    /// </summary>
+    public static bool EsConocido(string? sortBy) =>
+        !string.IsNullOrWhiteSpace(sortBy) && Whitelist.ContainsKey(sortBy.Trim());
+
+    /// <summary>
     /// Resuelve <paramref name="sortBy"/> contra la lista blanca; <see cref="ProcedureInstanceSortBy.Default"/>
     /// para null/vacío o cualquier valor no reconocido (incluidos intentos de inyección: nunca se usa el
     /// string crudo para construir SQL, así que lo peor que puede pasar es caer al orden por defecto).

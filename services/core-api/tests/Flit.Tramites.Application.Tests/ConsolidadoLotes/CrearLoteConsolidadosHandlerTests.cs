@@ -3,6 +3,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Tramites.Application.Tests.ConsolidadoLotes;
@@ -84,6 +85,32 @@ public sealed class CrearLoteConsolidadosHandlerTests
         nuevo.IdsCount.Should().BeNull();
         nuevo.ResumenFiltroJson.Should().Contain("\"excluidos\":{\"cantidad\":2}").And.NotContain("ABC");
         _tramites.Contexto.Should().Be(new LoteSeleccionContexto(TenantC, Usuario, null), "tenant y usuario del token");
+    }
+
+    [Fact]
+    public async Task L3_TipoCodigoDelCatalogo_LlegaLiteralAlResumen_YSinTipoCodigoNoSeConsultaElCatalogo()
+    {
+        var tipos = Substitute.For<IProcedureTypeRepository>();
+        tipos.ListAsync(null, null, Arg.Any<CancellationToken>())
+            .Returns(new List<Flit.Tramites.Domain.Entities.ProcedureType> { new() { Code = "TRASPASO_STANDARD" } });
+        var resolvers = new LoteSeleccionResolverPorOrigen([_tramites, _ot, _sa]);
+        var sut = new CrearLoteConsolidadosHandler(_repo, resolvers, new FakeCipher(), tiposDeTramite: tipos);
+        _tramites.Devuelve = Refs(1, TenantC);
+
+        var conTipo = await sut.HandleAsync(Gestor(new SeleccionPorFiltro(
+            new TramitesLoteFiltro(new ProcedureInstanceListRequest { TipoCodigo = "traspaso_standard" }))), Ct);
+
+        conTipo.Creado.Should().BeTrue();
+        _repo.Creado!.ResumenFiltroJson.Should().Contain("\"tipoCodigo\":\"TRASPASO_STANDARD\"");
+        await tipos.Received(1).ListAsync(null, null, Arg.Any<CancellationToken>());
+
+        tipos.ClearReceivedCalls();
+        var otroRepo = new FakeRepo();
+        var sinTipo = await new CrearLoteConsolidadosHandler(otroRepo, resolvers, new FakeCipher(), tiposDeTramite: tipos).HandleAsync(Gestor(new SeleccionPorFiltro(
+            new TramitesLoteFiltro(new ProcedureInstanceListRequest { Placa = "ABC" }))), Ct);
+
+        sinTipo.Creado.Should().BeTrue();
+        await tipos.DidNotReceiveWithAnyArgs().ListAsync(default, default, Ct);
     }
 
     [Fact]

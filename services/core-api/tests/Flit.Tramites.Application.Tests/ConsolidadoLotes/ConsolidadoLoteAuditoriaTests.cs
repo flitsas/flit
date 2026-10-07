@@ -71,7 +71,7 @@ public sealed class ConsolidadoLoteAuditoriaTests
         var desde = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.FromHours(-5));
         var criterios = new ProcedureInstanceListRequest
         {
-            Estados = ["radicado", "aprobado"],
+            Estados = ["entregado", "aprobado"],
             Modalidad = "TRASPASO",
             BusquedaRapida = "mis_tramites",
             Prioritario = true,
@@ -88,13 +88,76 @@ public sealed class ConsolidadoLoteAuditoriaTests
         raiz.GetProperty("origenFiltro").GetString().Should().Be("tramites");
         raiz.GetProperty("excluidos").GetProperty("cantidad").GetInt32().Should().Be(1);
         var filtro = raiz.GetProperty("filtro");
-        filtro.GetProperty("estados").EnumerateArray().Select(e => e.GetString()).Should().Equal("radicado", "aprobado");
+        filtro.GetProperty("estados").EnumerateArray().Select(e => e.GetString()).Should().Equal("entregado", "aprobado");
         filtro.GetProperty("modalidad").GetString().Should().Be("TRASPASO");
         filtro.GetProperty("prioritario").GetBoolean().Should().BeTrue();
         filtro.GetProperty("createdFrom").GetString().Should().Be(desde.ToString("O"));
         filtro.TryGetProperty("vin", out _).Should().BeFalse("solo se registran los criterios presentes");
         json.Should().NotContain(criterios.TenantId!.Value.ToString("D"), "tenant y usuario salen del token, no del filtro");
         json.Should().NotContain(criterios.UsuarioActualId!.Value.ToString("D"));
+    }
+
+    [Fact]
+    public void L3_ValoresFueraDeCatalogo_SeGuardanComoPresenteYLongitud_NuncaElLiteral()
+    {
+        var criterios = new ProcedureInstanceListRequest
+        {
+            Estados = ["entregado", " ABC123 ", "Pedro Perez"],
+            Modalidad = "1020304050",
+            TipoCodigo = "XYZ987",
+            SortBy = "maria@correo.co",
+        };
+
+        var json = ConsolidadoLoteAuditoria.ResumirSeleccion(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(criterios)), tiposDeTramite: new HashSet<string> { "TRASPASO_STANDARD" });
+
+        json.Should().NotContain("ABC123").And.NotContain("Pedro").And.NotContain("1020304050")
+            .And.NotContain("XYZ987").And.NotContain("maria");
+        var filtro = Parse(json).GetProperty("filtro");
+        var estados = filtro.GetProperty("estados");
+        estados.GetArrayLength().Should().Be(3);
+        estados[0].GetString().Should().Be("entregado");
+        estados[1].GetProperty("presente").GetBoolean().Should().BeTrue();
+        estados[1].GetProperty("longitud").GetInt32().Should().Be(6);
+        estados[2].GetProperty("longitud").GetInt32().Should().Be("Pedro Perez".Length);
+        filtro.GetProperty("modalidad").GetProperty("longitud").GetInt32().Should().Be(10);
+        filtro.GetProperty("tipoCodigo").GetProperty("longitud").GetInt32().Should().Be(6);
+        filtro.GetProperty("sortBy").GetProperty("presente").GetBoolean().Should().BeTrue();
+        filtro.GetProperty("sortBy").GetProperty("longitud").GetInt32().Should().Be("maria@correo.co".Length);
+    }
+
+    [Fact]
+    public void L3_ValoresDeCatalogo_SeGuardanConLaFormaCanonicaQueUsaElListado()
+    {
+        var criterios = new ProcedureInstanceListRequest
+        {
+            Estados = [" Entregado ", "rechazado_preasignacion"],
+            Modalidad = "traspaso",
+            TipoCodigo = "traspaso_standard",
+            SortBy = " placa ",
+        };
+
+        var json = ConsolidadoLoteAuditoria.ResumirSeleccion(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(criterios)), tiposDeTramite: new HashSet<string> { "TRASPASO_STANDARD" });
+
+        var filtro = Parse(json).GetProperty("filtro");
+        filtro.GetProperty("estados").EnumerateArray().Select(e => e.GetString())
+            .Should().Equal("entregado", "rechazado_preasignacion");
+        filtro.GetProperty("modalidad").GetString().Should().Be("TRASPASO");
+        filtro.GetProperty("tipoCodigo").GetString().Should().Be("TRASPASO_STANDARD");
+        filtro.GetProperty("sortBy").GetString().Should().Be("placa");
+    }
+
+    [Fact]
+    public void L3_TipoCodigoSinCatalogoDisponible_SeMinimiza()
+    {
+        var criterios = new ProcedureInstanceListRequest { TipoCodigo = "TRASPASO_STANDARD" };
+
+        var json = ConsolidadoLoteAuditoria.ResumirSeleccion(new SeleccionPorFiltro(new TramitesLoteFiltro(criterios)));
+
+        json.Should().NotContain("TRASPASO_STANDARD", "sin el catálogo no se puede afirmar que el valor sea un código de tipo");
+        Parse(json).GetProperty("filtro").GetProperty("tipoCodigo").GetProperty("longitud").GetInt32()
+            .Should().Be("TRASPASO_STANDARD".Length);
     }
 
     [Fact]

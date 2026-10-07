@@ -94,7 +94,8 @@ public sealed partial class CrearLoteConsolidadosHandler(
     LoteSeleccionResolverPorOrigen resolvers,
     IConsolidadoLoteCipher cipher,
     TimeProvider? reloj = null,
-    ILogger<CrearLoteConsolidadosHandler>? logger = null)
+    ILogger<CrearLoteConsolidadosHandler>? logger = null,
+    IProcedureTypeRepository? tiposDeTramite = null)
 {
     /// <summary>Mensaje de la UI para los 503 (AC8): el usuario no ve el detalle técnico.</summary>
     public const string MensajeNoDisponible = "No se pudo completar la descarga, intente de nuevo";
@@ -162,6 +163,7 @@ public sealed partial class CrearLoteConsolidadosHandler(
         }
 
         var items = Congelar(command, refs);
+        var tiposConocidos = await TiposDeTramiteSiHacenFaltaAsync(seleccion, ct).ConfigureAwait(false);
 
         // 7. Una sola transacción: purga del retenido + lote + ítems + auditoría lote_creado.
         var nuevo = new NuevoLoteConsolidados
@@ -180,7 +182,9 @@ public sealed partial class CrearLoteConsolidadosHandler(
             EfectosAceptadosEn = _reloj.GetUtcNow(),
             Items = items,
             ResumenFiltroJson = ConsolidadoLoteAuditoria.ResumirSeleccion(
-                seleccion, command.Origen == ConsolidadoExportOrigin.OtBandeja ? command.OtTransitOfficeId : null),
+                seleccion,
+                command.Origen == ConsolidadoExportOrigin.OtBandeja ? command.OtTransitOfficeId : null,
+                tiposConocidos),
             IdsCount = ConsolidadoLoteAuditoria.ContarIds(seleccion),
             ExcluidosCount = ConsolidadoLoteAuditoria.ContarExcluidos(seleccion),
             ClientIp = command.ClientIp,
@@ -199,6 +203,22 @@ public sealed partial class CrearLoteConsolidadosHandler(
                 LogNoCreado(_logger, command.UsuarioId);
                 return CrearLoteConsolidadosResultado.Falla(CrearLoteConsolidadosErrores.LoteNoCreado, MensajeNoDisponible);
         }
+    }
+
+    /// <summary>
+    /// L3 (Habeas Data): el código de tipo de trámite solo se audita literal si pertenece al catálogo
+    /// <c>tramites.procedure_types</c>, que vive en la BD. Se consulta solo si el filtro trae <c>tipoCodigo</c>; sin
+    /// repositorio el resumen lo minimiza (falla en privado).
+    /// </summary>
+    private async Task<IReadOnlySet<string>?> TiposDeTramiteSiHacenFaltaAsync(LoteSeleccion seleccion, CancellationToken ct)
+    {
+        if (tiposDeTramite is null
+            || seleccion is not SeleccionPorFiltro { Filtro: TramitesLoteFiltro { Criterios.TipoCodigo: { } tipo } }
+            || string.IsNullOrWhiteSpace(tipo))
+            return null;
+
+        var tipos = await tiposDeTramite.ListAsync(null, null, ct).ConfigureAwait(false);
+        return tipos.Select(t => t.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
