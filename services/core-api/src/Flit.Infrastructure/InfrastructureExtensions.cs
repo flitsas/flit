@@ -2,7 +2,6 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Analytics.Application.Abstractions;
 using Flit.DrFlit.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
-using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.DrFlit;
@@ -20,7 +19,6 @@ using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
-using Flit.Modules.Consultas.KyverumVerify;
 using Flit.Modules.Notificaciones;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Platform;
@@ -51,7 +49,6 @@ using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
-using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.DataProtection;
@@ -168,14 +165,6 @@ public static class InfrastructureExtensions
             StaleRunAfterHours = int.TryParse(configuration["RuntConfirmation:StaleRunAfterHours"], out var rcStale) && rcStale > 0 ? rcStale : 6,
             MaxCandidatesPerRun = int.TryParse(configuration["RuntConfirmation:MaxCandidatesPerRun"], out var rcCap) && rcCap > 0 ? rcCap : 5000,
         });
-        services.AddHttpClient<RuntConfirmation.VerifikRuntRawHttpClient>((sp, c) =>
-        {
-            var o = sp.GetRequiredService<IOptions<VerifikOptions>>().Value;
-            c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
-        });
-        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntVehicleRawClient,
-            RuntConfirmation.RuntVehicleRawClient>();
         services.AddHostedService<RuntConfirmation.RuntConfirmationSchedulerProcessor>();
         // HU #12310 — lecturas del Historial (cross-tenant, pantalla de plataforma).
         services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationHistoryReader,
@@ -280,10 +269,8 @@ public static class InfrastructureExtensions
         // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.
         services.AddSingleton<ISoatRtmCertificateGenerator, Documents.SoatRtmCertificatePdfGenerator>();
 
-        AddConsultationProviders(services, configuration);
+        AddConsultationProviders(services);
         AddIdentityValidation(services, configuration);
-        AddImprontas(services, configuration);
-        AddRues(services, configuration);
         services.AddRentingChannel(configuration); // HU #13353: vive en Flit.Modules.Notificaciones
         AddOcr(services, configuration);
         AddDrFlit(services, configuration, environment);
@@ -333,19 +320,12 @@ public static class InfrastructureExtensions
                 c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "el almacenamiento de adjuntos"));
     }
 
-    private static void AddConsultationProviders(IServiceCollection services, IConfiguration configuration)
+    private static void AddConsultationProviders(IServiceCollection services)
     {
-        // HU #13342 (Epic #13316): los proveedores viven en Flit.Modules.Consultas; aquí quedan los puentes que leen
-        // tablas de core-api.
-        Flit.Modules.Consultas.ConsultasModuleExtensions.AddConsultationProviders(services, configuration);
-
-        // Puente tenant → override de cadena/timeout (HU #10478, Fase 5). Lee
-        // admin.tenant_operational_policies vía ITenantSettingsRepository.
+        // HU #13348 (Epic #13316): los proveedores, sus secretos y los avalúos viven en core-consultas (Flit.Api registra
+        // los clientes remotos). Aquí queda solo el puente tenant → override de cadena/timeout (HU #10478, Fase 5),
+        // que también leen las políticas de Trámites. Lee admin.tenant_operational_policies vía ITenantSettingsRepository.
         services.AddScoped<IConsultationTenantOverrideProvider, TenantConsultationOverrideProvider>();
-        services.AddScoped<AvaluoMockValueReader>();
-        services.AddScoped<IAvaluoMockValueSource>(sp => sp.GetRequiredService<AvaluoMockValueReader>());
-        // Feature #10707 — proveedores habilitados por tenant (lee tenant_operational_policies).
-        services.AddScoped<IAvaluoProviderPolicy, TenantAvaluoPolicyProvider>();
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
@@ -369,14 +349,7 @@ public static class InfrastructureExtensions
         };
         services.AddSingleton(biometrics);
 
-        services.AddKyverumVerifyClients(o =>
-        {
-            o.BaseUrl = Cfg("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";
-            o.ApiKey = Cfg("Kyverum:ApiKey", "KYVERUM_API_KEY") ?? "";
-            o.AuthScheme = Cfg("Kyverum:AuthScheme", "KYVERUM_AUTH_SCHEME") ?? "Bearer";
-            o.TimeoutSeconds = int.TryParse(Cfg("Kyverum:TimeoutSeconds", "KYVERUM_TIMEOUT_SECONDS"), out var t) ? t : 30;
-            o.WebhookCallbackUrl = Cfg("Kyverum:WebhookCallbackUrl", "KYVERUM_WEBHOOK_CALLBACK_URL") ?? "";
-        });
+        // HU #13348: los clientes de Kyverum Verify viven en core-consultas (Flit.Api registra los remotos).
         services.AddSingleton<IIdentitySignatureExtractor, Documents.IdentitySignatureExtractor>();
         services.AddScoped<IIdentitySignatureArtifactStorage, Storage.IdentitySignatureArtifactStorage>();
 
@@ -464,54 +437,6 @@ public static class InfrastructureExtensions
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
         services.AddIctStateReflection(configuration);
-    }
-
-    private static void AddImprontas(IServiceCollection services, IConfiguration configuration)
-    {
-        // HU #10465 — Kyverum RUNT (improntas:generar). Opciones compartidas con las consultas RUNT: las configura el
-        // módulo de consultas (HU #13342), que también las usa core-consultas.
-        Flit.Modules.Consultas.ConsultasModuleExtensions.ConfigureKyverumRunt(services, configuration);
-
-        services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
-        {
-            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
-            c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
-        });
-    }
-
-    private static void AddRues(IServiceCollection services, IConfiguration configuration)
-    {
-        // RF36 — autogeneración del Certificado RUES. Opt-in: solo se registra el cliente HTTP cuando
-        // Rues:Enabled=true y hay BaseUrl. Sin registro, GenerarRuesAttachmentHandler recibe el cliente
-        // opcional en null y responde "rues_autogen_disabled" (respaldo: carga manual). Env var CRUDA
-        // primero (override 12-factor), fallback a configuration. La API key NUNCA se loguea.
-        string? Cfg(string key, string env)
-        {
-            var fromEnv = Environment.GetEnvironmentVariable(env);
-            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
-        }
-
-        var enabled = string.Equals(Cfg("Rues:Enabled", "RUES_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
-        var baseUrl = Cfg("Rues:BaseUrl", "RUES_BASE_URL");
-        if (!enabled || string.IsNullOrWhiteSpace(baseUrl))
-            return;
-
-        services.Configure<RuesOptions>(o =>
-        {
-            o.Enabled = true;
-            o.BaseUrl = baseUrl;
-            o.ApiKey = Cfg("Rues:ApiKey", "RUES_API_KEY") ?? "";
-            o.AuthScheme = Cfg("Rues:AuthScheme", "RUES_AUTH_SCHEME") ?? "Bearer";
-            o.TimeoutSeconds = int.TryParse(Cfg("Rues:TimeoutSeconds", "RUES_TIMEOUT_SECONDS"), out var t) ? t : 30;
-        });
-
-        services.AddHttpClient<IRuesExternalClient, RuesApiClient>((sp, c) =>
-        {
-            var o = sp.GetRequiredService<IOptions<RuesOptions>>().Value;
-            c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
-        });
     }
 
     /// <summary>

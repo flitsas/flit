@@ -19,9 +19,7 @@ internal static class ApiEndpoints
         // solo core-ict autenticado como sistema pueda invocar la orquestación (no un tercero en el puerto interno).
         app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>()
             .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
-        // Consulta de fuentes externas para ICT (reusa el subsistema de consultas de core-api).
-        app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
-            .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
+        // HU #13348: la consulta de fuentes de ICT va directo a core-consultas (ya no hay IctConsultation aquí).
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token

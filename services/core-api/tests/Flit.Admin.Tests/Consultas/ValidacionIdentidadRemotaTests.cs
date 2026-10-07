@@ -21,7 +21,7 @@ using Xunit;
 namespace Flit.Admin.Tests.Consultas;
 
 /// <summary>
-/// HU #13351 (Epic #13316, ADR-0065 §6-7) — con <c>Consultas:Remoto:ValidacionIdentidad</c>, Trámites crea, consulta y
+/// HU #13351/#13348 (Epic #13316, ADR-0065 §6-7) — Trámites crea, consulta y
 /// descarga sus validaciones de Kyverum a través de core-consultas (que se queda con el secreto) y aplica el aviso que
 /// le llega por el bus. core-consultas se reemplaza por un CallInvoker falso.
 /// </summary>
@@ -108,7 +108,7 @@ public sealed class ValidacionIdentidadRemotaTests
     }
 
     [Fact]
-    public void LaBanderaSinElBusDeTramites_NoArranca()
+    public void SinElBusDeTramites_NoArranca()
     {
         var registrar = () => new ServiceCollection().AddConsultasRemoto(Config(new() { ["Tramites:Bus:Habilitado"] = "false" }));
 
@@ -116,7 +116,7 @@ public sealed class ValidacionIdentidadRemotaTests
     }
 
     [Fact]
-    public async Task ConLaBandera_KyverumVaPorConsultas_YSeEscuchanLosAvisos()
+    public async Task KyverumVaPorConsultas_YSeEscuchanLosAvisos()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -159,7 +159,6 @@ public sealed class ValidacionIdentidadRemotaTests
     {
         var valores = new Dictionary<string, string?>
         {
-            ["Consultas:Remoto:ValidacionIdentidad"] = "true",
             ["Consultas:Remoto:Address"] = "http://core-consultas:8084",
             ["Platform:ServiceClient:TokenEndpoint"] = "http://gateway/connect/token",
             ["Platform:ServiceClient:ClientId"] = "svc-tramites",

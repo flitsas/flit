@@ -107,7 +107,8 @@ public sealed class GenerarImprontaAttachmentHandler(
                     Operador: operador.Trim(),
                     // Matrícula inicial (entryMode VIN): siempre VIN. Resto: no se envía (se
                     // identifica por placa).
-                    Vin: usaPlaca ? null : vin),
+                    Vin: usaPlaca ? null : vin,
+                    TenantId: tenantId),
                 ct).ConfigureAwait(false);
         }
         catch (ImprontaRuntException ex)

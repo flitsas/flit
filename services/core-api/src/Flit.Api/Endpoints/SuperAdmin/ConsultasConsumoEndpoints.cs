@@ -5,7 +5,7 @@ namespace Flit.Api.Endpoints.SuperAdmin;
 /// <summary>
 /// Consumo de consultas de una empresa (Epic #13316, HU #13345): totales por producto y fuente entre dos fechas, para
 /// controlar el costo de los proveedores. Solo SuperAdmin (lo exige el grupo). Los datos viven en Consultas; core-api
-/// los pide por gRPC. Con Consultas remoto apagado responde 503 <c>CONSULTAS_REMOTO_APAGADO</c>.
+/// los pide por gRPC. Si Consultas no responde, 503 <c>CONSULTAS_NO_DISPONIBLE</c>.
 /// </summary>
 internal static class ConsultasConsumoEndpoints
 {
@@ -15,13 +15,11 @@ internal static class ConsultasConsumoEndpoints
             Guid tenantId,
             DateTimeOffset desde,
             DateTimeOffset hasta,
-            IServiceProvider services,
+            IConsultasConsumo consumo,
             CancellationToken ct) =>
         {
             if (hasta <= desde)
                 return Problem(StatusCodes.Status400BadRequest, "RANGO_INVALIDO", "«desde» tiene que ser anterior a «hasta».");
-            if (services.GetService<IConsultasConsumo>() is not { } consumo)
-                return Problem(StatusCodes.Status503ServiceUnavailable, "CONSULTAS_REMOTO_APAGADO", "El consumo vive en el servicio de Consultas, que no está encendido en este ambiente.");
 
             try
             {

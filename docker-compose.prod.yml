@@ -36,7 +36,8 @@
 #                           OBLIGATORIA: sin ella `docker compose` aborta (ver servicio core-api)
 #   CORS_ORIGIN_MARCA_BLANCA  segundo origen del gateway: dominio de marca blanca
 #                             (https://marcablanca<env>.flitsas.online, mismo front)
-#   VERIFIK_API_TOKEN       token Verifik (RUNT)
+#   VERIFIK_API_TOKEN       token Verifik (RUNT); lo lee core-consultas (HU #13348)
+#   RABBITMQ_URL_TRAMITES   usuario tramites del broker; OBLIGATORIA desde el corte (HU #13348)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
 #   FLIT_INTERNAL_API_KEY   clave compartida Gateway <-> core-api para GET /internal/domains/active
@@ -204,34 +205,8 @@ services:
       Suite__Oidc__ServiceClients__svc-consultas__Secret: ${SVC_CONSULTAS_CLIENT_SECRET:-}
       Suite__Oidc__ServiceClients__svc-notificaciones__Secret: ${SVC_NOTIFICACIONES_CLIENT_SECRET:-}
       Suite__Oidc__ServiceClients__svc-identidad__Secret: ${SVC_IDENTIDAD_CLIENT_SECRET:-}
-      # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
-      # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
-      # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
-      VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
-      VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
-      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
-      # Modos real|mock por proveedor (explícitos para un deploy determinista).
-      VERIFIK_VEHICLE_MODE: ${VERIFIK_VEHICLE_MODE:-real}
-      VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
-      VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
-      VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
-      VERIFIK_RUES_MODE: ${VERIFIK_RUES_MODE:-mock}
-      INTEMPO_MODE: ${INTEMPO_MODE:-mock}
-      # Avalúo Fasecolda (Feature #10707). Mismo patrón CRUDO que Verifik/Kyverum:
-      # InfrastructureExtensions lee Environment.GetEnvironmentVariable("FASECOLDA_*");
-      # pasar `Fasecolda__*` NO funciona. Sin FASECOLDA_MODE el proveedor cae a mock y
-      # suggested-value responde "Sin valor de referencia mock para el VIN".
-      # Credenciales solo en el .env del VPS — NUNCA en el repo.
-      FASECOLDA_MODE: ${FASECOLDA_MODE:-mock}
-      FASECOLDA_API_USERNAME: ${FASECOLDA_API_USERNAME:-}
-      FASECOLDA_API_PASSWORD: ${FASECOLDA_API_PASSWORD:-}
-      FASECOLDA_BY_VIN_API_BASE_URL: ${FASECOLDA_BY_VIN_API_BASE_URL:-https://fasecoldaback.quantil.co}
-      FASECOLDA_BY_VIN_API_PATH: ${FASECOLDA_BY_VIN_API_PATH:-/api/busquedaVin}
-      FASECOLDA_API_BASE_URL: ${FASECOLDA_API_BASE_URL:-https://guiadevalores.fasecolda.com/apifasecolda}
-      FASECOLDA_AUTH_API_PATH: ${FASECOLDA_AUTH_API_PATH:-/token}
-      FASECOLDA_LIST_CODE_API_PATH: ${FASECOLDA_LIST_CODE_API_PATH:-/api/listacodigosid/consultabycodigo}
-      FASECOLDA_API_GRANT_TYPE: ${FASECOLDA_API_GRANT_TYPE:-password}
-      FASECOLDA_API_SECONDS_TIMEOUT: ${FASECOLDA_API_SECONDS_TIMEOUT:-55}
+      # HU #13348 (Epic #13316): core-api ya no tiene proveedores (Verifik, Intempo, Fasecolda, Kyverum RUNT y Verify,
+      # RUES): sus variables y secretos viven solo en core-consultas (abajo).
       # HU #10970 — modo por AMBIENTE de las validaciones transversales del ciclo de vida:
       #   · CF-01 duplicidad de trámite en curso (409 DUPLICATE_ACTIVE_PROCEDURE)
       #   · CF-03 precondición registral / vehículo ya matriculado (422 VEHICLE_STATE_INVALID_FOR_TYPE)
@@ -266,27 +241,8 @@ services:
       # porque en redes con proxy o antivirus que inspecciona TLS la consulta de revocación no
       # llega, y el handshake falla ANTES de autenticar (visto en local el 2026-08-11).
       Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
-      # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
-      # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
-      # Default mock ⇒ no rompe regresión si el .env no define el proveedor.
+      # Biometría (HU #10233): el proveedor elegido (mock | kyverum). Kyverum Verify se llama por core-consultas (HU #13348).
       BIOMETRICS_PROVIDER: ${BIOMETRICS_PROVIDER:-mock}
-      KYVERUM_API_KEY: ${KYVERUM_API_KEY:-}
-      KYVERUM_BASE_URL: ${KYVERUM_BASE_URL:-https://verify.kyverum.com}
-      KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
-      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
-      KYVERUM_WEBHOOK_CALLBACK_URL: ${KYVERUM_WEBHOOK_CALLBACK_URL:-}
-      # Kyverum RUNT — dominio DISTINTO de Kyverum Verify (runt.kyverum.com vs
-      # verify.kyverum.com): mismo proveedor, otro producto y otra API key/scope.
-      # UN SOLO bloque alimenta DOS consumidores porque comparten ImprontaRuntOptions:
-      #   · improntas (HU #10465, ImprontaRuntClient — endpoint improntas:generar)
-      #   · consultas RUNT (HU #10478, KyverumRuntApiClient — vehículo/conductor default,
-      #     con fallback a Verifik).
-      # Mismo patrón CRUDO: InfrastructureExtensions.AddImprontas lee
-      # Environment.GetEnvironmentVariable("KYVERUM_RUNT_*"), NO `ImprontaRunt__*`.
-      KYVERUM_RUNT_BASE_URL: ${KYVERUM_RUNT_BASE_URL:-https://runt.kyverum.com}
-      KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
-      KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
-      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
       # OCR de trámites (Anthropic). Mismo patrón: el código lee env vars CRUDAS
       # (OCR_PROVIDER / ANTHROPIC_*), no `Anthropic__*`. Default mock ⇒ no rompe si el .env no lo define.
       OCR_PROVIDER: ${OCR_PROVIDER:-mock}
@@ -311,26 +267,22 @@ services:
       Ict__GrpcPort: ${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-ict (valida el canal directo y firma el inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
-      # Epic #13316 (HU #13335): transición al token de servicio de Identidad (svc-ict). AcceptIdentity=true acepta
-      # además el de Identidad; AcceptLegacy=false es el corte (el HMAC deja de entrar). Sin tocarlas, como siempre.
-      Ict__ServiceToken__AcceptIdentity: ${ICT_SERVICE_TOKEN_ACCEPT_IDENTITY:-false}
+      # Epic #13316 (HU #13335/#13348): core-ict usa el token de servicio de Identidad (svc-ict), que necesita para
+      # consultar en core-consultas; core-api lo acepta siempre. AcceptLegacy=false es el corte del HMAC.
+      Ict__ServiceToken__AcceptIdentity: "true"
       Ict__ServiceToken__AcceptLegacy: ${ICT_SERVICE_TOKEN_ACCEPT_LEGACY:-true}
-      # Epic #13316 (HU #13344): Consultas remoto (core-consultas). Apagado por defecto: core-api consulta en proceso como
-      # siempre. Encendido, la configuración por empresa que guarda el SuperAdmin también va a Consultas. core-api pide su
-      # token de servicio como svc-tramites (SVC_TRAMITES_CLIENT_SECRET).
-      Consultas__Remoto__Habilitado: ${CONSULTAS_REMOTO_HABILITADO:-false}
+      # Epic #13316 (HU #13348, el corte): core-api consulta, pide avalúos, impronta, certificado RUES y validación de
+      # identidad a core-consultas, sin respaldo en proceso. core-api pide su token de servicio como svc-tramites
+      # (SVC_TRAMITES_CLIENT_SECRET).
       Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
-      # HU #13346: si core-consultas no responde, Trámites consulta en proceso (y lo registra). false = «consulta no disponible».
-      Consultas__Remoto__Respaldo: ${CONSULTAS_REMOTO_RESPALDO:-true}
-      # HU #13351: Kyverum Verify por Consultas y su aviso por el bus (exige TRAMITES_BUS_HABILITADO=true).
-      Consultas__Remoto__ValidacionIdentidad: ${CONSULTAS_REMOTO_VALIDACION_IDENTIDAD:-false}
-      # HU #13350: Trámites publica sus eventos en flit.tramites (outbox del SDK). Apagado por defecto. Encendido necesita
-      # el broker (perfil bus) y el usuario tramites (deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE").
+      # HU #13350/#13348: Trámites publica sus eventos en flit.tramites (outbox del SDK) y recibe los avisos de Kyverum
+      # de Consultas por el bus: el bus es obligatorio. Necesita el usuario tramites del broker
+      # (deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE").
       # TRAMITES_BUS_ENTREGA_EN_PROCESO=false solo en el corte (#13359): sin ella dejan de salir correo, webhook OT y reflejo ICT.
-      Tramites__Bus__Habilitado: ${TRAMITES_BUS_HABILITADO:-false}
+      Tramites__Bus__Habilitado: "true"
       Tramites__Bus__EntregaEnProceso: ${TRAMITES_BUS_ENTREGA_EN_PROCESO:-true}
       Platform__Messaging__Producer: tramites
-      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_TRAMITES:-}
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_TRAMITES:?RABBITMQ_URL_TRAMITES es obligatoria (amqp://tramites:<clave>@rabbitmq:5672/flit; el bus de Trámites ya no es opcional)}
       # HU #13355: con Notificaciones remoto los correos se dejan como trabajos a core-notificaciones (exige el bus de
       # Trámites en core-api; core-identity usa su propio usuario, abajo). Apagado: salen en proceso como siempre.
       Notificaciones__Remoto__Habilitado: ${NOTIFICACIONES_REMOTO_HABILITADO:-false}
@@ -339,7 +291,8 @@ services:
       # HU #13357: mensajes muertos para la consola del SuperAdmin (gRPC a core-notificaciones). Vacío = sin consola.
       Notificaciones__Remoto__Address: ${NOTIFICACIONES_REMOTO_ADDRESS:-}
       Platform__ServiceClient__ClientId: svc-tramites
-      Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
+      # Obligatoria desde el corte (HU #13348): core-api llama a core-consultas con este cliente.
+      Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:?SVC_TRAMITES_CLIENT_SECRET es obligatoria (core-api consulta por core-consultas como svc-tramites)}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
@@ -469,7 +422,6 @@ services:
   # deploy/rabbitmq/definitions.json; un usuario por servicio con deploy/rabbitmq/usuario-de-servicio.sh. AMQP solo en
   # la red interna; la consola de administración solo en 127.0.0.1 (túnel SSH). Ver deploy/rabbitmq/README.md.
   rabbitmq:
-    profiles: ["bus"]
     image: rabbitmq:4.1-management-alpine
     # Nombre de nodo fijo: el volumen guarda los datos por nombre de nodo.
     hostname: rabbitmq
@@ -493,12 +445,11 @@ services:
     logging: *default-logging
 
   # ── core-consultas (Epic #13316, HU #13347) — CORE_CONSULTAS_PORT / CORE_CONSULTAS_GRPC_PORT, sin publicar ──
-  # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Perfil
-  # "consultas": no arranca si no se pide (COMPOSE_PROFILES=...,consultas). Sin `ports`: ni REST ni gRPC se publican.
+  # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Obligatorio
+  # desde el corte (HU #13348): core-api e ICT ya no tienen proveedores. Sin `ports`: ni REST ni gRPC se publican.
   # Si falta configuración o el secreto de un proveedor en modo real, no arranca y el log dice qué variable falta.
   # Pasos en docs/suite/handoff-vps-suite.md §4.9.
   core-consultas:
-    profiles: ["consultas"]
     image: ghcr.io/flitsas/flitdev/core-consultas:${CORE_CONSULTAS_TAG:-latest}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -515,7 +466,7 @@ services:
       # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh consultas).
       Platform__Messaging__ConnectionString: ${RABBITMQ_URL_CONSULTAS:-amqp://consultas:sin-clave@rabbitmq:5672/flit}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      # Proveedores: las MISMAS variables que hoy tiene core-api (hasta el corte, HU #13348, conviven en los dos).
+      # Proveedores: desde el corte (HU #13348) solo aquí; los nombres son los que tenía core-api.
       VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
       VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
       VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
@@ -546,6 +497,13 @@ services:
       KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
       KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
       KYVERUM_WEBHOOK_CALLBACK_URL: ${CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL:-}
+      # HU #13348: autogeneración del certificado RUES (RF36). Opt-in: sin RUES_ENABLED=true y RUES_BASE_URL, Trámites
+      # cae a la carga manual del documento.
+      RUES_ENABLED: ${RUES_ENABLED:-false}
+      RUES_BASE_URL: ${RUES_BASE_URL:-}
+      RUES_API_KEY: ${RUES_API_KEY:-}
+      RUES_AUTH_SCHEME: ${RUES_AUTH_SCHEME:-Bearer}
+      RUES_TIMEOUT_SECONDS: ${RUES_TIMEOUT_SECONDS:-30}
     healthcheck:
       # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]
@@ -560,7 +518,7 @@ services:
 
   # Notificaciones como servicio (Epic #13316, Feature #13324): envía los correos que arman core-api y core-identity
   # (llegan por el bus o, el buzón de pruebas, por gRPC) y lleva su registro de entregas. Perfil "notificaciones": no
-  # arranca si no se pide. Sin `ports`: ni REST ni gRPC se publican. Pasos en docs/suite/handoff-vps-suite.md §4.11.
+  # arranca si no se pide. Sin `ports`: ni REST ni gRPC se publican. Pasos en docs/suite/handoff-vps-suite.md §4.10.
   core-notificaciones:
     profiles: ["notificaciones"]
     image: ghcr.io/flitsas/flitdev/core-notificaciones:${CORE_NOTIFICACIONES_TAG:-latest}
@@ -640,19 +598,17 @@ services:
       # HU #12895 (A-02) — misma variable que core-api.
       Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
-      # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
+      # gRPC hacia core-api (orquestación): puerto interno dedicado HTTP/2.
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-api (canal directo e inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
-      # Epic #13316 (HU #13335): con UseIdentity=true core-ict pide su token a Identidad (cliente svc-ict, mismo secreto
-      # que SVC_ICT_CLIENT_SECRET) en vez de firmar el HMAC. Encenderla solo después de AcceptIdentity en core-api.
-      Ict__ServiceToken__UseIdentity: ${ICT_SERVICE_TOKEN_USE_IDENTITY:-false}
+      # Epic #13316 (HU #13335/#13348): core-ict pide su token a Identidad (cliente svc-ict, mismo secreto que
+      # SVC_ICT_CLIENT_SECRET): lo necesita para consultar en core-consultas.
+      Ict__ServiceToken__UseIdentity: "true"
       Ict__ServiceToken__TokenEndpoint: ${ICT_IDENTITY_TOKEN_ENDPOINT:-http://gateway:${GATEWAY_PORT:-4002}/connect/token}
       Ict__ServiceToken__ClientSecret: ${SVC_ICT_CLIENT_SECRET:-}
-      # Epic #13316 (HU #13346): con la dirección, ICT consulta directo a core-consultas (svc-ict, producto ict) y cae a
-      # core-api si no responde (CoreConsultas__Respaldo). Vacía = como siempre, por core-api. Necesita UseIdentity.
-      CoreConsultas__Address: ${ICT_CORE_CONSULTAS_ADDRESS:-}
-      CoreConsultas__Respaldo: ${CONSULTAS_REMOTO_RESPALDO:-true}
+      # Epic #13316 (HU #13346/#13348): ICT consulta directo a core-consultas (svc-ict, producto ict), sin respaldo.
+      CoreConsultas__Address: ${ICT_CORE_CONSULTAS_ADDRESS:-http://core-consultas:8084}
       # File Manager: DONDE SUBE ICT los binarios de los adjuntos. Tiene que ser EXACTAMENTE la
       # misma URL que FileManager__BaseUrl de core-api (misma var FILE_MANAGER_BASE_URL): si difieren,
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador

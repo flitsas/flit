@@ -1,5 +1,4 @@
 using Flit.Consultas.Grpc.V1;
-using Flit.Ict.Grpc.Contracts;
 using Flit.Ict.Infrastructure;
 using Flit.Ict.Infrastructure.ExternalClients;
 using FluentAssertions;
@@ -7,14 +6,13 @@ using Grpc.Core;
 using GrpcStatus = Grpc.Core.Status;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Flit.Ict.Application.Tests.Consultas;
 
 /// <summary>
-/// HU #13346 (Epic #13316) — ICT consulta por core-consultas con su cliente svc-ict (producto ict) y cae a core-api si
-/// Consultas no responde. Los hechos que ven los validadores son los mismos que con core-api.
+/// HU #13346/#13348 (Epic #13316) — ICT consulta directo a core-consultas con su cliente svc-ict (producto ict), sin
+/// respaldo por core-api. Los hechos que ven los validadores son los mismos que daba core-api.
 /// </summary>
 public sealed class ConsultasConsultationClientTests
 {
@@ -33,7 +31,7 @@ public sealed class ConsultasConsultationClientTests
             },
         });
 
-        var r = await Cliente(consultas, new Invoker(_ => throw new InvalidOperationException("no debía ir a core-api")), respaldo: true)
+        var r = await Cliente(consultas)
             .QueryAsync(Empresa, "VEHICLE", "ABC123", "", "CC", "123", TestContext.Current.CancellationToken);
 
         r.SoatStatus.Should().Be("VIGENTE");
@@ -55,7 +53,7 @@ public sealed class ConsultasConsultationClientTests
             ConsultarRnmcRequest => new ConsultarRnmcResponse { Resultado = new ResultadoConsulta { Chequeos = { new Chequeo { Clave = "medidas_correctivas", Estado = EstadoChequeo.Warn } } } },
             _ => new ConsultarConductorResponse { Resultado = new ResultadoConsulta { Campos = { new Campo { Clave = "person_has_pending_fines", ValorTexto = "true" } } } },
         });
-        var cliente = Cliente(consultas, new Invoker(_ => throw new InvalidOperationException()), respaldo: true);
+        var cliente = Cliente(consultas);
         var ct = TestContext.Current.CancellationToken;
 
         (await cliente.QueryAsync(Empresa, "RNMC", "", "", "CC", "123", ct)).HasActiveSanctions.Should().BeTrue();
@@ -63,21 +61,9 @@ public sealed class ConsultasConsultationClientTests
     }
 
     [Fact]
-    public async Task ConsultasCaido_ConRespaldo_VaACoreApi()
+    public async Task ConsultasCaido_ElErrorSePropaga_YElOrquestadorReintenta()
     {
-        var coreApi = new Invoker(_ => new ConsultationReply { SoatStatus = "VIGENTE" });
-        var cliente = Cliente(new Invoker(_ => throw new RpcException(new GrpcStatus(StatusCode.Unavailable, "caído"))), coreApi, respaldo: true);
-
-        var r = await cliente.QueryAsync(Empresa, "VEHICLE", "ABC123", "", "", "", TestContext.Current.CancellationToken);
-
-        r.SoatStatus.Should().Be("VIGENTE");
-        coreApi.Pedidos.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task ConsultasCaido_SinRespaldo_ElErrorSePropaga_YElOrquestadorReintenta()
-    {
-        var cliente = Cliente(new Invoker(_ => throw new RpcException(new GrpcStatus(StatusCode.Unavailable, "caído"))), new Invoker(_ => new ConsultationReply()), respaldo: false);
+        var cliente = Cliente(new Invoker(_ => throw new RpcException(new GrpcStatus(StatusCode.Unavailable, "caído"))));
 
         var act = () => cliente.QueryAsync(Empresa, "VEHICLE", "ABC123", "", "", "", TestContext.Current.CancellationToken);
 
@@ -85,19 +71,27 @@ public sealed class ConsultasConsultationClientTests
     }
 
     [Fact]
-    public void SinDireccion_NoSeRegistra_YConDireccionSinTokenDeIdentidad_NoArranca()
+    public async Task UnTipoDeConsultaDesconocido_Falla_SinLlamar()
     {
-        IctInfrastructureExtensions.AddConsultasRemoto(new ServiceCollection(), Config(), useIdentityToken: true).Should().BeFalse();
+        var consultas = new Invoker(_ => throw new InvalidOperationException("no debía llamar"));
 
-        var act = () => IctInfrastructureExtensions.AddConsultasRemoto(new ServiceCollection(), Config(("CoreConsultas:Address", "http://core-consultas:8084")), useIdentityToken: false);
-        act.Should().Throw<InvalidOperationException>().WithMessage("*UseIdentity*");
+        var act = () => Cliente(consultas).QueryAsync(Empresa, "OTRA", "ABC123", "", "", "", TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*unknown_query_type*");
+        consultas.Pedidos.Should().BeEmpty();
     }
 
-    private static ConsultasConsultationClient Cliente(CallInvoker consultas, CallInvoker coreApi, bool respaldo) =>
-        new(new ConsultasService.ConsultasServiceClient(consultas),
-            new IctGrpcConsultationClient(new IctConsultation.IctConsultationClient(coreApi)),
-            respaldo,
-            NullLogger<ConsultasConsultationClient>.Instance);
+    [Fact]
+    public void SinDireccionOSinTokenDeIdentidad_NoArranca()
+    {
+        var sinDireccion = () => IctInfrastructureExtensions.AddConsultasRemoto(new ServiceCollection(), Config(), useIdentityToken: true);
+        sinDireccion.Should().Throw<InvalidOperationException>().WithMessage("*CoreConsultas:Address*");
+
+        var sinToken = () => IctInfrastructureExtensions.AddConsultasRemoto(new ServiceCollection(), Config(("CoreConsultas:Address", "http://core-consultas:8084")), useIdentityToken: false);
+        sinToken.Should().Throw<InvalidOperationException>().WithMessage("*UseIdentity*");
+    }
+
+    private static ConsultasConsultationClient Cliente(CallInvoker consultas) => new(new ConsultasService.ConsultasServiceClient(consultas));
 
     private static IConfiguration Config(params (string Key, string Value)[] values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value))).Build();

@@ -65,11 +65,19 @@ internal sealed class ConsultasAvaluoPolicy(ConsultasDb db) : IAvaluoProviderPol
     }
 }
 
-/// <summary>
-/// Valores de avalúo para el modo mock. core-consultas aún no tiene la tabla de valores sembrados de DEV/QA: sin valor,
-/// los proveedores en mock responden «sin datos», igual que con la tabla vacía de producción.
-/// </summary>
-internal sealed class SinValoresMockDeAvaluo : IAvaluoMockValueSource
+/// <summary>Valores de avalúo para el modo mock (HU #13348), de <c>consultas.valores_mock_avaluo</c>.</summary>
+internal sealed class ValoresMockDeAvaluo(ConsultasDb db) : IAvaluoMockValueSource
 {
-    public Task<long?> GetValueAsync(string matchKey, string source, CancellationToken ct) => Task.FromResult<long?>(null);
+    public async Task<long?> GetValueAsync(string matchKey, string source, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(matchKey))
+            return null;
+
+        var clave = matchKey.Trim().ToUpperInvariant();
+        var valor = await db.ValoresMockAvaluo.AsNoTracking()
+            .Where(v => v.Clave == clave && v.Fuente == source)
+            .Select(v => (decimal?)v.ValorCop)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return valor is { } cop ? (long)decimal.Round(cop, MidpointRounding.AwayFromZero) : null;
+    }
 }

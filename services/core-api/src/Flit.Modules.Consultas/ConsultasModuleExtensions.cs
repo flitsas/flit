@@ -2,6 +2,11 @@ using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.KyverumRunt;
+using Flit.Infrastructure.Rues;
+using Flit.Infrastructure.RuntConfirmation;
+using Flit.Modules.Improntas.Domain;
+using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.RuntConfirmation;
 using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Microsoft.Extensions.Configuration;
@@ -179,6 +184,68 @@ public static class ConsultasModuleExtensions
         // Avalúo comercial multi-proveedor (Feature #10707, ADR-0029): capa aparte de la de
         // consultas (verificación) — agrega VALOR de varias fuentes en paralelo.
         AddAvaluoProviders(services, configuration);
+    }
+
+    /// <summary>
+    /// HU #13348 (Epic #13316): los clientes de los documentos que generan los proveedores (impronta de Kyverum RUNT,
+    /// certificado RUES) y el RUNT crudo de la Confirmación RUNT. Se movieron tal cual de
+    /// <c>Flit.Infrastructure.InfrastructureExtensions</c>; los registra core-consultas después de
+    /// <see cref="AddConsultationProviders"/> y <see cref="ConfigureKyverumRunt"/> (usan sus opciones).
+    /// </summary>
+    public static void AddClientesDeDocumentos(this IServiceCollection services, IConfiguration configuration)
+    {
+        // HU #12309 — consumidor propio del RUNT según providerKey (sin la cadena de proveedores del wizard).
+        services.AddHttpClient<VerifikRuntRawHttpClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<VerifikOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        services.AddScoped<IRuntVehicleRawClient, RuntVehicleRawClient>();
+
+        // HU #10465 — Kyverum RUNT (improntas:generar), con las opciones de ConfigureKyverumRunt.
+        services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        AddRues(services, configuration);
+    }
+
+    private static void AddRues(IServiceCollection services, IConfiguration configuration)
+    {
+        // RF36 — autogeneración del Certificado RUES. Opt-in: solo se registra el cliente HTTP cuando
+        // Rues:Enabled=true y hay BaseUrl; sin él, Consultas responde «no habilitado» y Trámites cae al
+        // respaldo de carga manual. Env var CRUDA primero (override 12-factor), fallback a configuration.
+        // La API key NUNCA se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        var enabled = string.Equals(Cfg("Rues:Enabled", "RUES_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+        var baseUrl = Cfg("Rues:BaseUrl", "RUES_BASE_URL");
+        if (!enabled || string.IsNullOrWhiteSpace(baseUrl))
+            return;
+
+        services.Configure<RuesOptions>(o =>
+        {
+            o.Enabled = true;
+            o.BaseUrl = baseUrl;
+            o.ApiKey = Cfg("Rues:ApiKey", "RUES_API_KEY") ?? "";
+            o.AuthScheme = Cfg("Rues:AuthScheme", "RUES_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("Rues:TimeoutSeconds", "RUES_TIMEOUT_SECONDS"), out var t) ? t : 30;
+        });
+
+        services.AddHttpClient<IRuesExternalClient, RuesApiClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<RuesOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
     }
 
     private static void AddAvaluoProviders(IServiceCollection services, IConfiguration configuration)

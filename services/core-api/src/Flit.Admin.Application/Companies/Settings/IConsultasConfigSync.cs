@@ -4,8 +4,8 @@ namespace Flit.Admin.Application.Companies.Settings;
 
 /// <summary>
 /// Lleva a Consultas la configuración de consultas que el SuperAdmin guarda en la pantalla de siempre (Epic #13316,
-/// HU #13344; ADR-0065): cadena por tipo, presupuesto de failover, fuente de comparendos y avalúos. Solo existe con
-/// <c>Consultas:Remoto:Habilitado</c>; sin ella no hay nada que sincronizar.
+/// HU #13344; ADR-0065): cadena por tipo, presupuesto de failover, fuente de comparendos y avalúos. Desde el corte
+/// (HU #13348) siempre está registrada: Consultas es quien ejecuta la cadena.
 /// </summary>
 public interface IConsultasConfigSync
 {

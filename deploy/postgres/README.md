@@ -41,7 +41,7 @@ psql "postgresql://flit_consultas:$CLAVE@<host>/<base>" -v servicio=consultas -v
 ## Migrar la configuración de consultas a Consultas (HU #13344)
 
 Una vez por ambiente, con un usuario administrador (el de Consultas no puede leer `admin`, a propósito), después de que
-core-consultas aplicó sus migraciones y **antes** de encender `CONSULTAS_REMOTO_HABILITADO` en core-api:
+core-consultas aplicó sus migraciones y **antes** de desplegar core-api con el corte (HU #13348):
 
 ```bash
 psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-configuracion-consultas.sql
@@ -49,6 +49,18 @@ psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-configuracion-con
 
 Copia de `admin.tenant_operational_policies` a `consultas.configuracion_empresa` la cadena de proveedores por tipo, el
 presupuesto de failover, la fuente de comparendos y los avalúos, con los mismos valores; si alguna empresa no queda
-igual, no confirma nada. Es idempotente. Desde que la bandera está encendida, core-api escribe en las dos cada vez que
+igual, no confirma nada. Es idempotente. Con el corte desplegado, core-api escribe en las dos cada vez que
 el SuperAdmin guarda (primero en Consultas: si no responde, no se guarda nada).
 
+
+## Migrar los valores de avalúo del modo mock (HU #13348)
+
+Solo en DEV/QA, una vez, con un usuario administrador y después de las migraciones de core-consultas (que ya siembran
+los fixtures de la Feature #10707):
+
+```bash
+psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-valores-mock-avaluo.sql
+```
+
+Copia `tramites.avaluo_mock_values` a `consultas.valores_mock_avaluo` (los que se hayan agregado a mano en el ambiente);
+si alguno no queda igual, no confirma nada. Es idempotente. En producción no hace falta: la tabla de origen está vacía.

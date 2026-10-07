@@ -5,9 +5,11 @@ using System.Text.Json;
 using Flit.Consultas.Api;
 using Flit.Consultas.Api.Persistence;
 using Flit.Consultas.Grpc.V1;
+using Flit.Modules.Improntas.Domain;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Messaging;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.RuntConfirmation;
 using FluentAssertions;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
@@ -78,6 +80,12 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_rapido", TimeSpan.Zero));
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_lento", Timeout.InfiniteTimeSpan));
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_otro", TimeSpan.Zero));
+        },
+        // HU #13348: RUNT crudo e impronta sin salir a la red (después del registro de Program, para reemplazarlo).
+        s =>
+        {
+            s.AddScoped<IRuntVehicleRawClient, CrudoFalso>();
+            s.AddScoped<IImprontaExternalClient, ImprontaFalsa>();
         });
         await Program.MigrateAsync(_app);
         await using (var scope = _app.Services.CreateAsyncScope())
@@ -162,6 +170,90 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
         // Sin configuración de avalúos: solo Fasecolda; en mock y sin valores sembrados, «sin datos».
         respuesta.Avaluos.Should().ContainSingle(a => a.Fuente == "fasecolda").Which.Estado.Should().Be(EstadoAvaluo.SinDatos);
         respuesta.ValorSugerido.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU13348_ConsultarAvaluos_UsaLosValoresMockDeSuPropiaTabla()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        await using (var scope = _app!.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ConsultasDb>();
+            db.ValoresMockAvaluo.Add(new ValorMockAvaluo { Id = Guid.NewGuid(), Clave = "93Y9SR333RJ563653", Fuente = "fasecolda", ValorCop = 105_600_000.40m });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var respuesta = await Cliente(Token("platform.consultas")).ConsultarAvaluosAsync(
+            new ConsultarAvaluosRequest { Vin = new Flit.Platform.Grpc.V1.Vin { Valor = "93y9sr333rj563653" } },
+            Empresa(_empresaRapida), cancellationToken: TestContext.Current.CancellationToken);
+
+        respuesta.ValorSugerido.Should().Be(105_600_000, "la clave se normaliza a mayúsculas y el valor se redondea a pesos");
+        respuesta.FuentePrincipal.Should().Be("fasecolda");
+    }
+
+    [Fact]
+    public async Task HU13348_ConsultarVehiculoCrudo_DevuelveElCrudoYSuClasificacion()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var respuesta = await Cliente(Token("platform.consultas")).ConsultarVehiculoCrudoAsync(
+            new ConsultarVehiculoCrudoRequest
+            {
+                Proveedor = "kyverum_runt",
+                Placa = new Flit.Platform.Grpc.V1.Placa { Valor = "ABC123" },
+                Propietario = new Flit.Platform.Grpc.V1.DocumentoIdentidad { Tipo = "CC", Numero = "123" },
+            },
+            Empresa(_empresaRapida), cancellationToken: TestContext.Current.CancellationToken);
+
+        respuesta.Resultado.Should().Be(ResultadoCrudo.Encontrado);
+        respuesta.RespuestaCruda.Should().Be("""{"placa":"ABC123","documento":"123"}""");
+        respuesta.HasMensaje.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("otro_proveedor", "ABC123", "123")]
+    [InlineData("verifik", "ABC123", "")]
+    public async Task HU13348_ConsultarVehiculoCrudo_ProveedorDesconocidoOPlacaSinDocumento_InvalidArgument(string proveedor, string placa, string documento)
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var llamada = async () => await Cliente(Token("platform.consultas")).ConsultarVehiculoCrudoAsync(
+            new ConsultarVehiculoCrudoRequest
+            {
+                Proveedor = proveedor,
+                Placa = new Flit.Platform.Grpc.V1.Placa { Valor = placa },
+                Propietario = new Flit.Platform.Grpc.V1.DocumentoIdentidad { Tipo = "CC", Numero = documento },
+            },
+            Empresa(_empresaRapida), cancellationToken: TestContext.Current.CancellationToken);
+
+        (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+    }
+
+    [Fact]
+    public async Task HU13348_GenerarImpronta_ElErrorDelProveedorViajaEnLaRespuesta()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var respuesta = await Cliente(Token("platform.consultas")).GenerarImprontaAsync(
+            new GenerarImprontaRequest { Documento = "123", Placa = "FALLA1", OrgNombre = "OT", Operador = "op" },
+            Empresa(_empresaRapida), cancellationToken: TestContext.Current.CancellationToken);
+
+        respuesta.Error.Should().NotBeNull();
+        respuesta.Error.Mensaje.Should().Be("UPSTREAM_UNAVAILABLE: caído");
+        respuesta.Error.Transitorio.Should().BeTrue();
+
+        var ok = await Cliente(Token("platform.consultas")).GenerarImprontaAsync(
+            new GenerarImprontaRequest { Documento = "123", Vin = "VIN1", OrgNombre = "OT", Operador = "op" },
+            Empresa(_empresaRapida), cancellationToken: TestContext.Current.CancellationToken);
+        ok.Error.Should().BeNull();
+        ok.Radicado.Should().Be("IMPR-VIN1");
+    }
+
+    [Fact]
+    public async Task HU13348_GenerarCertificadoRues_SinConfigurar_NoHabilitado()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var respuesta = await Cliente(Token("platform.consultas")).GenerarCertificadoRuesAsync(
+            new GenerarCertificadoRuesRequest { Nit = "900123456" }, Empresa(_empresaRapida), cancellationToken: TestContext.Current.CancellationToken);
+
+        respuesta.Habilitado.Should().BeFalse("sin RUES_ENABLED/RUES_BASE_URL Trámites cae a la carga manual");
     }
 
     [Fact]
@@ -315,6 +407,22 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
                 [new ConsultationCheck("soat", "SOAT", "ok", key, null)],
                 [new HydratedField("placa_vista", ctx.FieldValues.GetValueOrDefault("plate"), null)]);
         }
+    }
+
+    /// <summary>RUNT crudo falso: devuelve lo que le pidieron como «crudo».</summary>
+    private sealed class CrudoFalso : IRuntVehicleRawClient
+    {
+        public Task<RuntRawQueryResult> ConsultAsync(string providerKey, RuntRawQuery query, CancellationToken ct = default) =>
+            Task.FromResult(new RuntRawQueryResult(RuntRawOutcome.Found, $$"""{"placa":"{{query.Plate}}","documento":"{{query.Document?.Number}}"}""", null));
+    }
+
+    /// <summary>Impronta falsa: la placa FALLA1 es un proveedor caído.</summary>
+    private sealed class ImprontaFalsa : IImprontaExternalClient
+    {
+        public Task<ImprontaExternalResult> GenerarAsync(ImprontaExternalRequest request, CancellationToken ct = default) =>
+            request.Placa == "FALLA1"
+                ? throw new ImprontaRuntException("UPSTREAM_UNAVAILABLE: caído", isTransient: true)
+                : Task.FromResult(new ImprontaExternalResult("data:application/pdf;base64,JVBERg==", "h", $"IMPR-{request.Vin}", "2026-10-07 10:00:00"));
     }
 
     private sealed class Jwks(RsaSecurityKey key) : HttpMessageHandler

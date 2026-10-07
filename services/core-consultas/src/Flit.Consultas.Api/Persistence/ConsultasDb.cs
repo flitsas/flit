@@ -75,6 +75,18 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
             e.HasIndex(a => new { a.ReferenciaId, a.RecibidoEn }).HasDatabaseName("ix_avisos_referencia");
         });
 
+        // HU #13348: valores de avalúo del modo mock, antes en tramites.avaluo_mock_values.
+        modelBuilder.Entity<ValorMockAvaluo>(e =>
+        {
+            e.ToTable("valores_mock_avaluo");
+            e.HasKey(v => v.Id).HasName("pk_valores_mock_avaluo");
+            e.Property(v => v.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(v => v.Clave).HasColumnName("clave").HasMaxLength(32).IsRequired();
+            e.Property(v => v.Fuente).HasColumnName("fuente").HasMaxLength(30).IsRequired();
+            e.Property(v => v.ValorCop).HasColumnName("valor_cop").HasColumnType("numeric(15,2)");
+            e.HasIndex(v => new { v.Clave, v.Fuente }).IsUnique().HasDatabaseName("uq_valores_mock_avaluo");
+        });
+
         // Llaves de Data Protection del servicio (cifran los secretos de los avisos), en su esquema.
         modelBuilder.Entity<DataProtectionKey>(e => e.ToTable("data_protection_keys"));
     }
@@ -88,6 +100,8 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<ConfiguracionEmpresa> ConfiguracionEmpresas => Set<ConfiguracionEmpresa>();
+
+    public DbSet<ValorMockAvaluo> ValoresMockAvaluo => Set<ValorMockAvaluo>();
 
     /// <summary>Opciones comunes: Npgsql con la tabla de migraciones dentro del propio esquema.</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString) =>

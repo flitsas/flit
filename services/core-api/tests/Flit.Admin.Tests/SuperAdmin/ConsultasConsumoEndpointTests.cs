@@ -48,12 +48,12 @@ public sealed class ConsultasConsumoEndpointTests(WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task ConConsultasRemotoApagado_503ConSuCodigo()
+    public async Task ConsultasCaido_503ConSuCodigo()
     {
-        var response = await Client(consumo: null, "SuperAdmin").GetAsync(Url(_empresaA), TestContext.Current.CancellationToken);
+        var response = await Client(new ConsumoCaido(), "SuperAdmin").GetAsync(Url(_empresaA), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("CONSULTAS_REMOTO_APAGADO");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("CONSULTAS_NO_DISPONIBLE");
     }
 
     private static string Url(Guid tenant) =>
@@ -87,5 +87,11 @@ public sealed class ConsultasConsumoEndpointTests(WebApplicationFactory<Program>
                 tenantId == a ? [new("tramites", "vehiculo", 7, 2, 0, 120)]
                 : tenantId == b ? [new("ict", "conductor", 3, 0, 1, 90)]
                 : []);
+    }
+
+    private sealed class ConsumoCaido : IConsultasConsumo
+    {
+        public Task<IReadOnlyList<ConsumoConsultasDto>> ObtenerAsync(Guid tenantId, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct) =>
+            throw new ConsultasNoDisponibleException("Consultas respondió Unavailable", new InvalidOperationException());
     }
 }

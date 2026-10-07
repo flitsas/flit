@@ -2,60 +2,33 @@ using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Consultas.Grpc.V1;
 using Flit.Infrastructure.Persistence;
+using Flit.Modules.Improntas.Domain;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Platform.Sdk.Messaging;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.RuntConfirmation;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Api.Consultas;
 
 /// <summary>
-/// core-api frente a core-consultas (Epic #13316; ADR-0065). Todo detrás de <c>Consultas:Remoto:Habilitado</c>
-/// (apagada por defecto): sin ella core-api sigue consultando en proceso como siempre y no se registra nada aquí.
+/// core-api frente a core-consultas (Epic #13316; ADR-0065). Desde el corte (HU #13348) core-api no tiene proveedores
+/// ni sus secretos: toda consulta, avalúo, documento de proveedor y validación de identidad va a core-consultas, sin
+/// respaldo en proceso. <see cref="AddressKey"/> es obligatoria.
 /// </summary>
 internal static class ConsultasRemoto
 {
-    public const string FlagKey = "Consultas:Remoto:Habilitado";
     public const string AddressKey = "Consultas:Remoto:Address";
-
-    /// <summary>
-    /// Reemplaza el registro de <typeparamref name="TService"/> por <paramref name="decorador"/> sobre la implementación
-    /// que había (mismo ciclo de vida). La implementación en proceso sigue siendo el respaldo.
-    /// </summary>
-    private static void Decorar<TService>(IServiceCollection services, Func<IServiceProvider, TService, TService> decorador)
-        where TService : class
-    {
-        var original = services.LastOrDefault(d => d.ServiceType == typeof(TService))
-            ?? throw new InvalidOperationException($"No hay registro de {typeof(TService).Name} que decorar.");
-        services.Remove(original);
-        services.Add(ServiceDescriptor.Describe(typeof(TService), sp => decorador(sp, (TService)Crear(sp, original)), original.Lifetime));
-    }
-
-    private static object Crear(IServiceProvider sp, ServiceDescriptor descriptor) =>
-        descriptor.ImplementationInstance
-        ?? descriptor.ImplementationFactory?.Invoke(sp)
-        ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!);
-
-    /// <summary>HU #13351: Kyverum Verify a través de Consultas y sus avisos por el bus. Independiente de <see cref="FlagKey"/>.</summary>
-    public const string ValidacionIdentidadFlagKey = "Consultas:Remoto:ValidacionIdentidad";
 
     public static IServiceCollection AddConsultasRemoto(this IServiceCollection services, IConfiguration configuration)
     {
-        var consultas = configuration.GetValue(FlagKey, false);
-        var validacionIdentidad = configuration.GetValue(ValidacionIdentidadFlagKey, false);
-        if (!consultas && !validacionIdentidad)
-            return services;
-
         var address = configuration[AddressKey];
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
-            throw new InvalidOperationException($"Consultas remoto está encendido pero {AddressKey} no es una URL (p. ej. http://core-consultas:8084).");
-
-        if (validacionIdentidad)
-            AddValidacionIdentidadRemota(services, configuration, uri);
-        if (!consultas)
-            return services;
+            throw new InvalidOperationException($"{AddressKey} no es una URL (p. ej. http://core-consultas:8084): core-api consulta por core-consultas.");
 
         // HU #13344: la configuración por empresa que guarda el SuperAdmin también queda en Consultas.
         services.AddFlitGrpcClient<ConsultasAdminService.ConsultasAdminServiceClient>(configuration, uri, "platform.consultas.admin");
@@ -63,24 +36,34 @@ internal static class ConsultasRemoto
         // HU #13345: consumo por empresa para el SuperAdmin.
         services.AddScoped<IConsultasConsumo, GrpcConsultasConsumo>();
 
-        // HU #13346: las consultas de Trámites van a core-consultas, con respaldo en proceso. Deadline amplio: una
-        // consulta al RUNT con su respaldo puede tardar decenas de segundos.
+        // HU #13346/#13348: las consultas de Trámites van a core-consultas. Deadline amplio: una consulta al RUNT con su
+        // respaldo puede tardar decenas de segundos. Las cadenas globales (Consultations:DefaultChains) solo sirven
+        // para mostrar la configuración: la cadena la ejecuta Consultas.
         var deadline = TimeSpan.FromSeconds(configuration.GetValue("Consultas:Remoto:DeadlineSegundos", 90));
         services.AddFlitGrpcClient<ConsultasService.ConsultasServiceClient>(configuration, uri, "platform.consultas", o => o.Deadline = deadline);
+        services.Configure<ConsultationChainOptions>(o => configuration.GetSection(ConsultationChainOptions.SectionName).Bind(o));
         services.AddScoped<ConsultasRemotasCliente>();
-        Decorar<IConsultationProviderRegistry>(services, (sp, enProceso) => new ConsultasRemotasRegistry(enProceso, sp.GetRequiredService<ConsultasRemotasCliente>()));
-        Decorar<IConsultationProviderChainResolver>(services, (sp, enProceso) => new ConsultasRemotasChainResolver(enProceso, sp.GetRequiredService<ConsultasRemotasCliente>()));
+        services.AddScoped<IConsultationProviderRegistry, ConsultasRemotasRegistry>();
+        services.AddScoped<IConsultationProviderChainResolver, ConsultasRemotasChainResolver>();
+
+        // HU #13348: avalúos, Confirmación RUNT, impronta y certificado RUES.
+        services.AddScoped<IAvaluoSugeridor, AvaluoSugeridorRemoto>();
+        services.AddScoped<IRuntVehicleRawClient, RuntCrudoPorConsultas>();
+        services.AddScoped<IImprontaExternalClient, ImprontaPorConsultas>();
+        services.AddScoped<IRuesExternalClient, RuesPorConsultas>();
+
+        AddValidacionIdentidadRemota(services, configuration, uri);
         return services;
     }
 
     /// <summary>
-    /// HU #13351: los clientes de Kyverum Verify pasan a Consultas (que guarda el secreto del aviso) y el aviso vuelve
+    /// HU #13351: los clientes de Kyverum Verify están en Consultas (que guarda el secreto del aviso) y el aviso vuelve
     /// por el bus. Exige el bus de Trámites: sin él el resultado no llegaría.
     /// </summary>
     private static void AddValidacionIdentidadRemota(IServiceCollection services, IConfiguration configuration, Uri uri)
     {
         if (!configuration.GetValue("Tramites:Bus:Habilitado", false))
-            throw new InvalidOperationException($"{ValidacionIdentidadFlagKey} exige Tramites:Bus:Habilitado=true: el aviso de Kyverum vuelve por el bus.");
+            throw new InvalidOperationException("core-api exige Tramites:Bus:Habilitado=true: el aviso de Kyverum Verify vuelve de Consultas por el bus.");
 
         services.AddFlitGrpcClient<ValidacionIdentidadService.ValidacionIdentidadServiceClient>(configuration, uri, "platform.consultas");
         services.RemoveAll<IKyverumVerifyClient>();

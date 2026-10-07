@@ -7,7 +7,8 @@ namespace Flit.Tramites.Application.Documents;
 /// </summary>
 /// <param name="Nit">Número de identificación tributaria del actor jurídico (sin dígito de verificación).</param>
 /// <param name="RazonSocial">Razón social del actor, si se conoce (opcional; el proveedor la resuelve por NIT).</param>
-public sealed record RuesExternalRequest(string Nit, string? RazonSocial = null);
+/// <param name="TenantId">Empresa del trámite: core-consultas mide la generación por empresa (HU #13348).</param>
+public sealed record RuesExternalRequest(string Nit, string? RazonSocial = null, Guid? TenantId = null);
 
 /// <summary>
 /// Resultado exitoso del proveedor RUES. <see cref="PdfDataUri"/> viene como Data URI
@@ -21,9 +22,15 @@ public sealed record RuesExternalResult(string PdfDataUri, string? Radicado);
 /// Error del proveedor RUES. <see cref="IsTransient"/> distingue fallos reintentables (timeout, red,
 /// upstream caído) de los definitivos (validación, no autorizado). El mensaje NUNCA contiene la API key.
 /// </summary>
-public sealed class RuesExternalException(string message, bool isTransient) : Exception(message)
+public sealed class RuesExternalException(string message, bool isTransient, bool autogenDeshabilitada = false) : Exception(message)
 {
     public bool IsTransient { get; } = isTransient;
+
+    /// <summary>
+    /// HU #13348: la autogeneración no está configurada en core-consultas. El handler lo trata igual que cuando no
+    /// había cliente registrado (respaldo: carga manual).
+    /// </summary>
+    public bool AutogenDeshabilitada { get; } = autogenDeshabilitada;
 }
 
 /// <summary>

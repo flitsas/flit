@@ -2,22 +2,16 @@ using Flit.Consultas.Grpc.V1;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Validation;
 using Grpc.Core;
-using Microsoft.Extensions.Logging;
 
 namespace Flit.Ict.Infrastructure.ExternalClients;
 
 /// <summary>
 /// Consulta de fuentes externas por core-consultas (Epic #13316, HU #13346; ADR-0065): ICT llama directo a Consultas
 /// con su cliente <c>svc-ict</c>, así el consumo queda medido como producto <c>ict</c>. Traduce el resultado normalizado
-/// a los 5 hechos que aplican los validadores, con la MISMA regla que <c>IctConsultationService</c> de core-api. Si
-/// Consultas no responde, cae al camino de siempre (core-api) cuando <c>CoreConsultas:Respaldo</c> está encendida (por
-/// defecto); si no, el error se propaga y el orquestador reintenta (fail-closed, como hoy).
+/// a los 5 hechos que aplican los validadores, con la misma regla que tenía <c>IctConsultationService</c> de core-api
+/// (retirado en HU #13348). Si Consultas no responde, el error se propaga y el orquestador reintenta (fail-closed).
 /// </summary>
-public sealed class ConsultasConsultationClient(
-    ConsultasService.ConsultasServiceClient consultas,
-    IctGrpcConsultationClient respaldo,
-    bool usarRespaldo,
-    ILogger<ConsultasConsultationClient> logger) : IConsultationClient
+public sealed class ConsultasConsultationClient(ConsultasService.ConsultasServiceClient consultas) : IConsultationClient
 {
     // Claves normalizadas del módulo de consultas (ConsultationCheck.Key / HydratedField.FieldKey).
     private const string CheckSoat = "soat";
@@ -32,34 +26,26 @@ public sealed class ConsultasConsultationClient(
     {
         var tipo = (queryType ?? string.Empty).ToUpperInvariant();
         if (tipo is not ("VIN" or "VEHICLE" or "RNMC" or "DRIVER"))
-            return await respaldo.QueryAsync(tenantId, queryType ?? string.Empty, plate, vin, documentType, documentNumber, ct).ConfigureAwait(false);
+            throw new InvalidOperationException($"Consulta de fuentes falló: unknown_query_type ({queryType}).");
 
-        try
+        var metadata = new Metadata { { "x-flit-tenant-id", tenantId.ToString() } };
+        return tipo switch
         {
-            var metadata = new Metadata { { "x-flit-tenant-id", tenantId.ToString() } };
-            return tipo switch
+            "VIN" or "VEHICLE" => Vehiculo((await consultas.ConsultarVehiculoAsync(new ConsultarVehiculoRequest
             {
-                "VIN" or "VEHICLE" => Vehiculo((await consultas.ConsultarVehiculoAsync(new ConsultarVehiculoRequest
-                {
-                    Vin = tipo == "VIN" && !string.IsNullOrWhiteSpace(vin) ? new Flit.Platform.Grpc.V1.Vin { Valor = vin } : null,
-                    Placa = !string.IsNullOrWhiteSpace(plate) ? new Flit.Platform.Grpc.V1.Placa { Valor = plate } : null,
-                    Propietario = Documento(documentType, documentNumber),
-                }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
-                "RNMC" => Rnmc((await consultas.ConsultarRnmcAsync(new ConsultarRnmcRequest
-                {
-                    Documento = Documento(documentType, documentNumber),
-                }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
-                _ => Conductor((await consultas.ConsultarConductorAsync(new ConsultarConductorRequest
-                {
-                    Documento = Documento(documentType, documentNumber),
-                }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
-            };
-        }
-        catch (Exception ex) when (ex is RpcException or InvalidOperationException && usarRespaldo && !ct.IsCancellationRequested)
-        {
-            ConsultasIctLog.Respaldo(logger, tipo, tenantId, ex);
-            return await respaldo.QueryAsync(tenantId, queryType ?? string.Empty, plate, vin, documentType, documentNumber, ct).ConfigureAwait(false);
-        }
+                Vin = tipo == "VIN" && !string.IsNullOrWhiteSpace(vin) ? new Flit.Platform.Grpc.V1.Vin { Valor = vin } : null,
+                Placa = !string.IsNullOrWhiteSpace(plate) ? new Flit.Platform.Grpc.V1.Placa { Valor = plate } : null,
+                Propietario = Documento(documentType, documentNumber),
+            }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
+            "RNMC" => Rnmc((await consultas.ConsultarRnmcAsync(new ConsultarRnmcRequest
+            {
+                Documento = Documento(documentType, documentNumber),
+            }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
+            _ => Conductor((await consultas.ConsultarConductorAsync(new ConsultarConductorRequest
+            {
+                Documento = Documento(documentType, documentNumber),
+            }, metadata, cancellationToken: ct).ConfigureAwait(false)).Resultado),
+        };
     }
 
     internal static ConsultationResult Vehiculo(ResultadoConsulta r) => new(
@@ -98,11 +84,4 @@ public sealed class ConsultasConsultationClient(
 
     private static Flit.Platform.Grpc.V1.DocumentoIdentidad? Documento(string tipo, string numero) =>
         string.IsNullOrWhiteSpace(numero) ? null : new Flit.Platform.Grpc.V1.DocumentoIdentidad { Tipo = tipo ?? string.Empty, Numero = numero };
-}
-
-internal static partial class ConsultasIctLog
-{
-    [LoggerMessage(EventId = 7421, Level = LogLevel.Warning,
-        Message = "core-consultas no respondió la consulta {Tipo} de {TenantId}: se usó el respaldo (core-api)")]
-    public static partial void Respaldo(ILogger logger, string tipo, Guid tenantId, Exception ex);
 }

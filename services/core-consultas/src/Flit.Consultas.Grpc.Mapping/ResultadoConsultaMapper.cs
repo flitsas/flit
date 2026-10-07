@@ -81,6 +81,29 @@ public static class ResultadoConsultaMapper
         return response;
     }
 
+    /// <summary>proto → módulo (core-api, HU #13348): el inverso de <see cref="ToProto(SuggestedCommercialValue)"/>.</summary>
+    public static SuggestedCommercialValue FromProto(ConsultarAvaluosResponse r)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+        var fuentes = r.Avaluos.Select(a => new AvaluoResult(
+                a.Fuente,
+                a.Estado switch
+                {
+                    EstadoAvaluo.Ok => "ok",
+                    EstadoAvaluo.Error => "error",
+                    _ => "no_data",
+                },
+                a.Estado == EstadoAvaluo.Ok ? a.Valor : null,
+                "COP",
+                a.HasMensaje ? a.Mensaje : null,
+                a.Muestras > 0 ? a.Muestras : null))
+            .ToList();
+        return new SuggestedCommercialValue(
+            r.ValorSugerido > 0 ? r.ValorSugerido : null,
+            string.IsNullOrEmpty(r.FuentePrincipal) ? null : r.FuentePrincipal,
+            fuentes);
+    }
+
     private static Chequeo ToProto(ConsultationCheck c)
     {
         var chequeo = new Chequeo { Clave = c.Key, Etiqueta = c.Label, Estado = Estado(c.Status), Fuente = c.Source ?? string.Empty };

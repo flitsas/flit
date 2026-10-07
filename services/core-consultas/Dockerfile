@@ -13,6 +13,7 @@ COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
 # HU #13343: proveedores y cadena de respaldo (módulo de consultas) y los tipos de tiempo que usa.
 COPY core-api/src/Flit.Modules.Consultas/ /services/core-api/src/Flit.Modules.Consultas/
 COPY core-api/src/Flit.Queries.Domain/ /services/core-api/src/Flit.Queries.Domain/
+COPY core-api/src/Flit.Modules.Improntas.Domain/ /services/core-api/src/Flit.Modules.Improntas.Domain/
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/

@@ -19,8 +19,9 @@ namespace Flit.Admin.Tests.Identity;
 /// <summary>
 /// HU #13335 (Epic #13316) — el gRPC de ICT en core-api acepta el token de servicio de Identidad (svc-ict,
 /// platform.tramites.ict) detrás de <c>Ict:ServiceToken:AcceptIdentity</c>, y deja de aceptar el HMAC compartido al
-/// apagar <c>Ict:ServiceToken:AcceptLegacy</c> (el corte). La sonda es <c>IctConsultation.Query</c> sin empresa:
-/// autorizada responde <c>invalid_tenant</c> sin tocar proveedores.
+/// apagar <c>Ict:ServiceToken:AcceptLegacy</c> (el corte). La sonda es <c>IctOrchestration.AbortDraft</c> sin
+/// empresa: autorizada responde <c>invalid_tenant</c> sin tocar nada (HU #13348: la consulta de ICT ya no pasa por
+/// core-api).
 /// </summary>
 public sealed class IctServiceTokenTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -79,7 +80,7 @@ public sealed class IctServiceTokenTests(WebApplicationFactory<Program> factory)
                 b.UseSetting(key, value);
         });
 
-    private static async Task<ConsultationReply> QueryAsync(WebApplicationFactory<Program> host, string? token, CancellationToken ct)
+    private static async Task<DraftReply> QueryAsync(WebApplicationFactory<Program> host, string? token, CancellationToken ct)
     {
         var channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions { HttpHandler = host.Server.CreateHandler() });
         var invoker = token is null
@@ -89,7 +90,7 @@ public sealed class IctServiceTokenTests(WebApplicationFactory<Program> factory)
                 metadata.Add("authorization", $"Bearer {token}");
                 return metadata;
             });
-        return await new IctConsultation.IctConsultationClient(invoker).QueryAsync(new ConsultationRequest(), cancellationToken: ct);
+        return await new IctOrchestration.IctOrchestrationClient(invoker).AbortDraftAsync(new AbortDraftRequest(), cancellationToken: ct);
     }
 
     private static async Task RejectedAsync(WebApplicationFactory<Program> host, string? token, CancellationToken ct)

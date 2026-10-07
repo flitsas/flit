@@ -33,7 +33,8 @@ public static class Program
         await app.RunAsync().ConfigureAwait(false);
     }
 
-    internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
+    /// <param name="reemplazos">Solo pruebas: corre después de todo el registro, para reemplazar un servicio.</param>
+    internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? reemplazos = null)
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
@@ -63,9 +64,10 @@ public static class Program
         builder.Services.TryAddSingleton(TimeProvider.System);
         ConsultasModuleExtensions.ConfigureKyverumRunt(builder.Services, builder.Configuration);
         builder.Services.AddConsultationProviders(builder.Configuration);
+        builder.Services.AddClientesDeDocumentos(builder.Configuration); // HU #13348: impronta, RUES y RUNT crudo
         builder.Services.AddScoped<IConsultationTenantOverrideProvider, ConsultasTenantOverrideProvider>();
         builder.Services.AddScoped<IAvaluoProviderPolicy, ConsultasAvaluoPolicy>();
-        builder.Services.AddSingleton<IAvaluoMockValueSource, SinValoresMockDeAvaluo>();
+        builder.Services.AddScoped<IAvaluoMockValueSource, ValoresMockDeAvaluo>(); // HU #13348
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
 
         // HU #13351 (ADR-0065 §6-7): Kyverum Verify por Consultas. Mismas variables que core-api (la de entorno primero);
@@ -102,6 +104,7 @@ public static class Program
             options.ListenAnyIP(grpcPort, lo => lo.Protocols = HttpProtocols.Http2);
         });
 
+        reemplazos?.Invoke(builder.Services);
         var app = builder.Build();
         app.UseFlitCorrelationId();
         app.UseAuthentication();

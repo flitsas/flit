@@ -2,11 +2,11 @@
 -- admin.tenant_operational_policies a consultas.configuracion_empresa, con los MISMOS valores.
 --
 -- Lo corre el líder con un usuario administrador (el usuario de Consultas no puede leer admin, a propósito), después
--- de que core-consultas aplicó sus migraciones y antes de encender Consultas:Remoto:Habilitado en core-api:
+-- de que core-consultas aplicó sus migraciones y antes de desplegar core-api con el corte (HU #13348):
 --
 --   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-configuracion-consultas.sql
 --
--- Idempotente: correrlo otra vez deja lo mismo (actualiza las filas existentes). Desde que la bandera está encendida,
+-- Idempotente: correrlo otra vez deja lo mismo (actualiza las filas existentes). Con el corte desplegado,
 -- core-api mantiene las dos copias iguales en cada guardado del SuperAdmin; esto solo carga lo que ya existía.
 -- Mismas reglas que core-api al leer: '{}' = sin override (las cadenas globales) y fuente de comparendos
 -- normalizada (todo lo que no es 'internal' es 'external').

@@ -1,8 +1,11 @@
 using Flit.Consultas.Grpc.Mapping;
 using Flit.Consultas.Grpc.V1;
+using Flit.Modules.Improntas.Domain;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.RuntConfirmation;
 using Grpc.Core;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +18,7 @@ namespace Flit.Consultas.Api.Grpc;
 /// (<c>vin</c>, <c>plate</c>, <c>owner_document_*</c>, …) y el resultado a <c>ResultadoConsulta</c>. La empresa y quién
 /// llama los validó el interceptor del SDK (token de servicio con <see cref="Scope"/>).
 /// </summary>
-internal sealed class ConsultasGrpcService(
+internal sealed partial class ConsultasGrpcService(
     IConsultationProviderChainResolver chain,
     IConsultationProviderRegistry registry,
     IConsultationTenantOverrideProvider overrides,
@@ -23,7 +26,10 @@ internal sealed class ConsultasGrpcService(
     IAvaluoProviderPolicy avaluoPolicy,
     IOptions<ConsultationChainOptions> chainOptions,
     ConsumoRecorder consumo,
-    TimeProvider time) : ConsultasService.ConsultasServiceBase
+    TimeProvider time,
+    IRuntVehicleRawClient runtCrudo,
+    IImprontaExternalClient improntas,
+    IEnumerable<IRuesExternalClient> rues) : ConsultasService.ConsultasServiceBase
 {
     public const string Scope = "platform.consultas";
 

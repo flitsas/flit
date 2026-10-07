@@ -379,6 +379,7 @@ jobs:
             services/core-api/Directory.Packages.props
             services/core-api/src/Flit.Platform.Sdk
             services/core-api/src/Flit.Modules.Consultas
+            services/core-api/src/Flit.Modules.Improntas.Domain
             services/core-api/src/Flit.Queries.Domain
             services/core-identity/Directory.Build.props
             services/core-identity/Directory.Packages.props

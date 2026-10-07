@@ -21,6 +21,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
+    <!-- HU #13348: el cliente de Kyverum RUNT para improntas implementa su contrato. -->
+    <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -38,7 +38,7 @@ public static class ApiSecurityExtensions
 
         // Service-token gRPC este-oeste (ICT): esquema JwtBearer APARTE con secreto compartido (HMAC),
         // aislado del token de plataforma. Solo lo consume la policy IctServicePolicy en los gRPC services
-        // (IctOrchestration/IctConsultation). Sin secreto configurado → llave aleatoria = fail-closed
+        // (IctOrchestration). Sin secreto configurado → llave aleatoria = fail-closed
         // (ningún token real valida). El secreto real llega por Ict__ServiceToken__Secret (env/appsettings).
         var svcSecret = configuration["Ict:ServiceToken:Secret"];
         var svcIssuer = configuration["Ict:ServiceToken:Issuer"] ?? "flit-ict-svc";

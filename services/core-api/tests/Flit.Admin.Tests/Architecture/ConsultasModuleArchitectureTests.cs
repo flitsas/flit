@@ -19,7 +19,8 @@ public sealed class ConsultasModuleArchitectureTests
 
         closure.Should().NotContain(name => name!.StartsWith("Flit.Tramites.", StringComparison.Ordinal));
         closure.Should().NotContain(["Flit.Infrastructure", "Flit.Api", "Flit.Identity.Infrastructure"]);
-        closure.Should().BeEquivalentTo(["Flit.Queries.Domain"], "solo los tipos de tiempo compartidos");
+        // HU #13348: el contrato de la impronta (sin dependencias) para el cliente de Kyverum RUNT que vive aquí.
+        closure.Should().BeEquivalentTo(["Flit.Queries.Domain", "Flit.Modules.Improntas.Domain"], "solo los tipos de tiempo compartidos y el contrato de la impronta");
     }
 
     private static IReadOnlyList<string> Closure(string project)

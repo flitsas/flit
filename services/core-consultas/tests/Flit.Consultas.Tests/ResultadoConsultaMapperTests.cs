@@ -1,4 +1,5 @@
 using Flit.Consultas.Grpc.Mapping;
+using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Certifications;
 using FluentAssertions;
@@ -60,5 +61,31 @@ public sealed class ResultadoConsultaMapperTests
         vuelta.RawPayload.Should().BeNull();
         vuelta.Certifications.Should().BeNull();
         vuelta.QueriedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void HU13348_Avaluos_IdaYVuelta_SinCambios()
+    {
+        var original = new SuggestedCommercialValue(98_000_000, "base_gravable",
+        [
+            AvaluoResult.Ok("base_gravable", 98_000_000),
+            AvaluoResult.Ok("mercado_libre", 112_000_000, muestras: 12),
+            AvaluoResult.NoData("fasecolda"),
+            AvaluoResult.Error("otra", "caída"),
+        ]);
+
+        var vuelta = ResultadoConsultaMapper.FromProto(ResultadoConsultaMapper.ToProto(original));
+
+        vuelta.Should().BeEquivalentTo(original);
+    }
+
+    [Fact]
+    public void HU13348_Avaluos_SinValor_LlegaNull()
+    {
+        var vuelta = ResultadoConsultaMapper.FromProto(ResultadoConsultaMapper.ToProto(new SuggestedCommercialValue(null, null, [])));
+
+        vuelta.Sugerido.Should().BeNull();
+        vuelta.FuentePrincipal.Should().BeNull();
+        vuelta.Sources.Should().BeEmpty();
     }
 }
