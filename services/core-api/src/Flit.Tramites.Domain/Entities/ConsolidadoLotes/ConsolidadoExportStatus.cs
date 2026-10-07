@@ -61,3 +61,75 @@ public static class ConsolidadoExportSelectionMode
 
     public static readonly IReadOnlyList<string> Todos = [Ids, Filtro];
 }
+
+/// <summary>
+/// HU #13368 — estados de <c>tramites.consolidado_export_batch_parts.status</c>. Deben coincidir con
+/// <c>ck_consolidado_export_batch_parts_status</c> del DDL 134 (lo vigila <c>ConsolidadoExportItemsDdlParityTests</c>).
+/// </summary>
+public static class ConsolidadoExportPartStatus
+{
+    public const string Pendiente = "pendiente";
+    public const string Empaquetando = "empaquetando";
+    public const string Cerrada = "cerrada";
+    public const string Fallida = "fallida";
+    public const string Purgada = "purgada";
+
+    /// <summary>
+    /// Parte que no llegó a cerrarse cuando se canceló el lote (#13307, D7). Terminal: no exige binario (a
+    /// diferencia de <see cref="Purgada"/>) ni arrastra el lote a <c>fallido</c> (a diferencia de <see cref="Fallida"/>).
+    /// </summary>
+    public const string Descartada = "descartada";
+
+    public static readonly IReadOnlyList<string> Todos = [Pendiente, Empaquetando, Cerrada, Fallida, Purgada, Descartada];
+}
+
+/// <summary>
+/// HU #13368 — estados de <c>tramites.consolidado_export_batch_items.status</c>. Deben coincidir con
+/// <c>ck_consolidado_export_batch_items_status</c> del DDL 134.
+/// </summary>
+public static class ConsolidadoExportItemStatus
+{
+    public const string Pendiente = "pendiente";
+    public const string Procesando = "procesando";
+    public const string Incluido = "incluido";
+    public const string Omitido = "omitido";
+
+    /// <summary>
+    /// Ítem vivo cuando se canceló el lote (#13307, D7). Terminal: sin código de omisión, sin parte ni modo de
+    /// entrega; el cierre en vuelo (<c>WHERE status = 'procesando'</c>) actualiza 0 filas.
+    /// </summary>
+    public const string Cancelado = "cancelado";
+
+    /// <summary>Estados en los que el ítem aún puede reclamarse o está en proceso (sin resultado ni parte).</summary>
+    public static readonly IReadOnlyList<string> Vivos = [Pendiente, Procesando];
+
+    public static readonly IReadOnlyList<string> Todos = [Pendiente, Procesando, Incluido, Omitido, Cancelado];
+}
+
+/// <summary>Cómo se obtuvo el PDF de un ítem incluido (<c>ck_consolidado_export_batch_items_delivery_mode</c>, v2).</summary>
+public static class ConsolidadoExportDeliveryMode
+{
+    /// <summary>Adjunto ya guardado en el trámite, tomado tal cual.</summary>
+    public const string Existente = "existente";
+
+    /// <summary>Primera generación hecha por el lote.</summary>
+    public const string Generado = "generado";
+
+    public static readonly IReadOnlyList<string> Todos = [Existente, Generado];
+}
+
+/// <summary>Eventos de <c>tramites.consolidado_export_audit.event</c> (<c>ck_consolidado_export_audit_event</c>, DDL 134).</summary>
+public static class ConsolidadoExportAuditEvent
+{
+    public const string LoteCreado = "lote_creado";
+    public const string LoteFinalizado = "lote_finalizado";
+    public const string ParteDescargada = "parte_descargada";
+
+    /// <summary>Exige total, incluidos, omitidos y generados (<c>ck_consolidado_export_audit_cancelled</c>, #13307).</summary>
+    public const string LoteCancelado = "lote_cancelado";
+
+    public const string LotePurgado = "lote_purgado";
+
+    public static readonly IReadOnlyList<string> Todos =
+        [LoteCreado, LoteFinalizado, ParteDescargada, LoteCancelado, LotePurgado];
+}

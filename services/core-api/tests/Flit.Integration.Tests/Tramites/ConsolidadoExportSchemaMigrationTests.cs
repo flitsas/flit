@@ -71,6 +71,14 @@ public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixtur
         return reader.ReadToEnd();
     }
 
+    private static string DownOf(string migracion)
+    {
+        var tipo = typeof(FlitDbContext).Assembly.GetType("Flit.Infrastructure.Migrations." + migracion);
+        tipo.Should().NotBeNull($"la migración {migracion} debe existir");
+        return ((Microsoft.EntityFrameworkCore.Migrations.Migration)Activator.CreateInstance(tipo!)!)
+            .DownOperations.OfType<SqlOperation>().Single().Sql;
+    }
+
     private async Task<NpgsqlConnection> SeedAsync()
     {
         await using (var ctx = NewContext())
@@ -214,6 +222,9 @@ public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixtur
         var down = new HU13367_ConsolidadoExportBatches().DownOperations.OfType<SqlOperation>().Single().Sql;
 
         await using var tx = await cn.BeginTransactionAsync(Ct);
+        // HU #13368: partes e ítems referencian el lote; las migraciones se revierten en orden inverso, así que el Down
+        // de #13368 va primero y la base de comparación es «cabeza menos #13368».
+        await ExecAsync(cn, DownOf("HU13368_ConsolidadoExportItems"));
         var antes = await ScalarAsync<string>(cn, huella);
         var restriccionesAntes = await ScalarAsync<long>(cn, restricciones);
         var restriccionesPropias = await ScalarAsync<long>(cn,
