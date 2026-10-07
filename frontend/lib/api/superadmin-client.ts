@@ -314,4 +314,29 @@ export const superadminClient = {
   // internamente: pedir sin `page`/`pageSize` caía al default del backend (20 por página) y el
   // picker se quedaba solo con las 20 compañías más recientes.
   listCompanies: async () => ({ data: await fetchAllCompanies() as CompanyItem[] }),
+
+  // Mensajes muertos de Notificaciones (Epic #13316, HU #13357/#13358): correos y webhooks que agotaron sus
+  // reintentos. Reintentar y descartar quedan en la auditoría administrativa.
+  listMensajesMuertos: (cola: ColaMensajesMuertos) =>
+    request<{ mensajes: MensajeMuerto[] }>(`/api/v1/superadmin/notificaciones/mensajes-muertos?cola=${cola}`),
+  retryMensajeMuerto: (cola: ColaMensajesMuertos, id: string) =>
+    request<void>(`/api/v1/superadmin/notificaciones/mensajes-muertos/${cola}/${id}/reintentar`, { method: 'POST' }),
+  discardMensajeMuerto: (cola: ColaMensajesMuertos, id: string) =>
+    request<void>(`/api/v1/superadmin/notificaciones/mensajes-muertos/${cola}/${id}/descartar`, { method: 'POST' }),
 };
+
+/** Cola de mensajes muertos de Notificaciones (HU #13358). */
+export type ColaMensajesMuertos = 'correos' | 'webhooks';
+
+/** Un correo o webhook que agotó sus reintentos (HU #13357). */
+export interface MensajeMuerto {
+  id: string;
+  tipo: string;
+  empresaId: string | null;
+  origen: string | null;
+  ocurridoEn: string | null;
+  muertoEn: string | null;
+  motivo: string | null;
+  ultimoError: string | null;
+  intentos: number;
+}
