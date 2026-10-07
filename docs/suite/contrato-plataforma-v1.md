@@ -91,6 +91,7 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 | `platform.identidad.read` | `plataforma` | Consultar usuarios de una empresa y productos habilitados (§6.1) |
 | `platform.consultas.admin` | `consultas` | Guardar la configuración de consultas de una empresa (cadena de proveedores, failover, comparendos, avalúos); lo usa core-api con lo que guarda el SuperAdmin |
 | `platform.notificaciones.send` | `notificaciones` | Encolar correos y otras notificaciones |
+| `platform.notificaciones.admin` | `notificaciones` | Administrar los mensajes muertos de Notificaciones (listar, reintentar, descartar); lo usa core-api para la consola del SuperAdmin |
 | `platform.tramites.ict` | `tramites` | Las llamadas de ICT a la orquestación de Trámites, que hoy usan un secreto compartido |
 
 - Cuando una llamada de servicio actúa por una empresa, envía la empresa en `X-Flit-Tenant-Id` (REST) o en la metadata `x-flit-tenant-id` (gRPC). El destino lo acepta **solo** con token de servicio válido y lo registra en la traza. Un token de usuario nunca puede usar esa cabecera.
@@ -159,6 +160,9 @@ Las llamadas síncronas de un servicio a otro usan gRPC en la red interna (ADR-0
 | `flit.consultas.v1.ConsultasService` | `core-consultas` | `platform.consultas` | `POST /consultas/{fuente}` de v1 (nunca se implementó) y, tras el corte, `IctConsultationService` de `core-api` |
 | `flit.consultas.v1.ConsultasAdminService` | `core-consultas` | `platform.consultas.admin` | — (nuevo: la configuración por empresa vive en el esquema de Consultas) |
 | `flit.identidad.v1.IdentidadService` | `core-identity` | `platform.identidad.read` | — (nuevo: usuarios de una empresa y productos habilitados, para que ningún servicio lea las tablas de Identidad) |
+| `flit.consultas.v1.ValidacionIdentidadService` | `core-consultas` | `platform.consultas` | Las llamadas de Trámites a Kyverum Verify (crear validación, estado, certificado): el secreto de los avisos queda en Consultas |
+| `flit.notificaciones.v1.NotificacionesService` | `core-notificaciones` | `platform.notificaciones.send` | — (nuevo: envío directo de un correo ya armado, para el buzón de pruebas; lo normal es el trabajo del bus) |
+| `flit.notificaciones.v1.MensajesMuertosService` | `core-notificaciones` | `platform.notificaciones.admin` | — (nuevo: mensajes muertos de correos y webhooks) |
 
 Los métodos se definen en los `.proto`; este contrato fija el servicio, quién lo atiende y su scope.
 
@@ -181,6 +185,7 @@ Los métodos se definen en los `.proto`; este contrato fija el servicio, quién 
 | `platform.roles.changed` | B | `{ userId, tenantId, productCode }` | Forzar renovación del token |
 
 - Todos los eventos se documentan en `contracts/asyncapi/<productor>-events.v1.yaml` (`plataforma-events.v1.yaml` para los de esta tabla) antes de publicarse.
+- **Trabajos (v1.3):** un servicio le deja un trabajo a otro en el exchange de quien lo atiende (`notificaciones.email.send` y `notificaciones.webhook.send` en `flit.notificaciones`), con el mismo sobre y su propio `producer`. Requiere permiso de escritura en ese exchange (`deploy/rabbitmq/usuario-de-servicio.sh <servicio> <clave> <destino>`). Correos y webhooks viajan ya armados (y firmados) por quien los pide; la llave de firma no sale de su dueño.
 - Los consumidores son idempotentes por `eventId`.
 
 ## 8. Paquetes frontend
@@ -293,4 +298,4 @@ El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 | v1 | 2026-09-24 | Resoluciones y Flotas fuera de v1; SuperAdmin con bypass en todos los productos (§2.1); ubicación de `IProductAccessResolver`; habilitación de producto encendido/apagado en lugar de suscripción (§4, §6, §7, §9, §10); `DomainContext` sin romper constructores; formato de slugs del manifiesto; `SessionUser`; puertos | Cerrado por Samuel Cardenas (en rol de líder técnico) |
 | v1.1 | 2026-09-24 | §4: la carpeta de la interfaz pasa de `ProductAccess/` a `Products/` (evita CS0118) | Samuel Cardenas (frente B) |
 | v1.2 | 2026-10-02 | §1: se retira el producto `demo` (y sus puertos 4050/4051); la plantilla se valida con Comparendos o Diagnóstico. Migración `20261002120000_Suite_RetirarProductoDemo` | Samuel Cardenas |
-| v1.3 | 2026-10-06 | Epic #13316 (ADR-0064, ADR-0065, ADR-0070). §3: `aud` por servicio destino y scopes `platform.identidad.read`, `platform.notificaciones.send` y `platform.tramites.ict`. §6: se retira `POST /consultas/{fuente}` (nunca implementado); consumo lo atiende `core-consultas`; nueva §6.1 de llamadas gRPC entre servicios. §7: exchanges `flit.<productor>`, JSON e inbox; un AsyncAPI por productor. §11: puertos gRPC internos. Las rutas REST existentes no cambian | Pendiente: Jorman (líder técnico) |
+| v1.3 | 2026-10-06 | Epic #13316 (ADR-0064, ADR-0065, ADR-0070). §3: `aud` por servicio destino y scopes `platform.identidad.read`, `platform.consultas.admin`, `platform.notificaciones.send`, `platform.notificaciones.admin` y `platform.tramites.ict`; §6.1 suma `ValidacionIdentidadService`, `NotificacionesService` y `MensajesMuertosService`; §7 suma los trabajos. §6: se retira `POST /consultas/{fuente}` (nunca implementado); consumo lo atiende `core-consultas`; nueva §6.1 de llamadas gRPC entre servicios. §7: exchanges `flit.<productor>`, JSON e inbox; un AsyncAPI por productor. §11: puertos gRPC internos. Las rutas REST existentes no cambian | Pendiente: Jorman (líder técnico) |
