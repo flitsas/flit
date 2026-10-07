@@ -18,9 +18,9 @@ internal sealed class ProcedureInstanceActorConfiguration : IEntityTypeConfigura
         builder.Property(x => x.ActorType).HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentType).HasMaxLength(10).IsRequired();
         builder.Property(x => x.DocumentNumber).HasMaxLength(20).IsRequired();
-        builder.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.FullName).HasMaxLength(320).IsRequired(); // Bug #13304: lo que admite ICT (DDL 132)
         builder.Property(x => x.Email).HasMaxLength(320);
-        builder.Property(x => x.Phone).HasMaxLength(20);
+        builder.Property(x => x.Phone).HasMaxLength(50); // Bug #13304: lo que admite ICT (DDL 132)
         builder.Property(x => x.PersonType).HasColumnName("person_type").HasMaxLength(10);
         builder.Property(x => x.EsRepresentanteLegal)
             .HasColumnName("es_representante_legal")

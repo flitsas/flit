@@ -258,8 +258,8 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         // directamente (la fuente de verdad sigue siendo FieldValues/Actors).
         builder.Property(x => x.Vin).HasColumnName("vin").HasMaxLength(20);
         builder.Property(x => x.Plate).HasColumnName("plate").HasMaxLength(20);
-        builder.Property(x => x.VendedorNombre).HasColumnName("vendedor_nombre").HasMaxLength(200);
-        builder.Property(x => x.CompradorNombre).HasColumnName("comprador_nombre").HasMaxLength(200);
+        builder.Property(x => x.VendedorNombre).HasColumnName("vendedor_nombre").HasMaxLength(320); // = actors.full_name (DDL 132)
+        builder.Property(x => x.CompradorNombre).HasColumnName("comprador_nombre").HasMaxLength(320);
 
         builder.HasIndex(x => new { x.TenantId, x.Vin })
             .HasDatabaseName("ix_procedure_instances_tenant_id_vin");

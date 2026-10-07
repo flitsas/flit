@@ -126,6 +126,15 @@ public sealed class SendToCoreApiJob(
             {
                 master.ProcedureInstanceId = instanceId;
                 master.ProcessStatusId = 5; // BORRADOR (terminal en ICT tras materializar)
+
+                // Bug #13304 (capa 3): el borrador existe, pero core-api no pudo guardar actores o datos
+                // comerciales. Se deja visible en los comentarios que muestran la bandeja y el GET de estado.
+                var novedad = MaterializacionNovedades.Mensaje(result.ErrorCode);
+                if (novedad is not null)
+                {
+                    MaterializacionNovedades.Aplicar(master, novedad);
+                }
+
                 await db.SaveChangesAsync(ct);
 
                 // starts_procedure_in_paused (contrato v1): el borrador nace pausado, con la
@@ -142,8 +151,12 @@ public sealed class SendToCoreApiJob(
                 await RecordStatusAsync(db, master, 3, "PROCESADO SATISFACTORIAMENTE", ct);
                 await RecordEventAsync(db, master, "procesado", "ok", null, ct);
                 await RecordStatusAsync(db, master, 5, "BORRADOR CREADO EN LA PLATAFORMA", ct);
-                await EnqueueWebhookAsync(db, master, 5, "borrador_creado", "BORRADOR CREADO", ct);
-                await RecordEventAsync(db, master, "borrador_creado", "ok", null, ct);
+                await EnqueueWebhookAsync(
+                    db, master, 5, "borrador_creado",
+                    novedad is null ? "BORRADOR CREADO" : "BORRADOR CREADO (" + novedad + ")", ct);
+                await RecordEventAsync(
+                    db, master, "borrador_creado",
+                    novedad is null ? "ok" : MaterializacionNovedades.OutcomeConNovedades, novedad, ct);
             }
             else
             {

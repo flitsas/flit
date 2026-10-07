@@ -23,7 +23,7 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.HasIndex(x => new { x.MandateSignerId, x.CreatedAt })
             .HasDatabaseName("ix_biometric_validations_mandate_signer")
             .HasFilter("mandate_signer_id IS NOT NULL");
-        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(320).IsRequired(); // Bug #13304: = actors.full_name (DDL 132)
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
         builder.Property(x => x.Email).HasColumnName("email").HasMaxLength(320).IsRequired();
