@@ -4,6 +4,7 @@ using System.Text.Json;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Validation;
 using Flit.Ict.Infrastructure.Persistence;
+using Flit.Ict.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -96,7 +97,11 @@ public sealed class OrchestratorJob(
             var warnings = ExternalSourceValidators.Warnings(result);
             var isValid = issues.Count == 0;
 
-            await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
+            // Bug #13304 — query_response sigue reducido (se ve tal cual en la trazabilidad); el resultado
+            // completo de VEHICLE/VIN va aparte en vehicle_snapshot (PII, se purga al materializar).
+            await InsertResponseAsync(
+                connection, q.Id, q.TenantId, QueryResponseJson(result),
+                VehicleSnapshotColumn.ForQuery(q.QueryType, q.Plate, q.Vin, result.Vehicle), ct);
             await MarkQueriedAsync(connection, q.Id, isValid, ct);
 
             // Traspaso: el organismo de matrícula lo fija el RUNT (paridad v1). Se captura de la
@@ -170,16 +175,32 @@ public sealed class OrchestratorJob(
         return list;
     }
 
-    private static async Task InsertResponseAsync(DbConnection connection, Guid queryId, Guid tenantId, string json, CancellationToken ct)
+    /// <summary>
+    /// JSON de <c>query_response</c>: los hechos normalizados SIN el resultado completo del vehículo
+    /// (Bug #13304). Esa columna la muestra la trazabilidad tal cual; el snapshot es PII.
+    /// </summary>
+    internal static string QueryResponseJson(ConsultationResult result) =>
+        JsonSerializer.Serialize(result with { Vehicle = null });
+
+    /// <summary>SQL del INSERT de la respuesta (incluye <c>vehicle_snapshot</c>, DDL 26).</summary>
+    internal const string InsertResponseSql = """
+        INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response, vehicle_snapshot)
+        VALUES (@id, @tenant, @json::jsonb, @vehicle::jsonb)
+        """;
+
+    private static async Task InsertResponseAsync(
+        DbConnection connection, Guid queryId, Guid tenantId, string json, string? vehicleSnapshot, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response)
-            VALUES (@id, @tenant, @json::jsonb)
-            """;
+        cmd.CommandText = InsertResponseSql;
         AddParam(cmd, "id", queryId);
         AddParam(cmd, "tenant", tenantId);
         AddParam(cmd, "json", json);
+        var vehicle = cmd.CreateParameter();
+        vehicle.ParameterName = "vehicle";
+        vehicle.DbType = DbType.String;
+        vehicle.Value = (object?)vehicleSnapshot ?? DBNull.Value;
+        cmd.Parameters.Add(vehicle);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
