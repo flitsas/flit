@@ -18,7 +18,7 @@ namespace Flit.Integration.Tests.Tramites;
 /// </summary>
 public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
-    private const string MigrationId = "20261007165951_HU13367_ConsolidadoExportBatches";
+    private const string MigrationId = "20261007223631_HU13367_ConsolidadoExportBatches";
 
     private static readonly Guid Company = new("b2000000-0000-7000-8000-0000000013a1");
     private static readonly Guid Office = new("0199c200-0000-7000-8000-0000000013a1");
@@ -147,6 +147,40 @@ public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixtur
                              item_timeout_seconds, item_lease_seconds, retention_hours, is_active::text)
               FROM tramites.consolidado_export_settings
             """)).Should().Be("500,250,2,30,300,600,24,true");
+    }
+
+    /// <summary>
+    /// M1 (épica #13216) — <c>max_items_per_batch</c>: NOT NULL, sembrado en 10.000 y acotado a 1–50.000 por
+    /// <c>ck_consolidado_export_settings_max_items</c> (los extremos se aceptan).
+    /// </summary>
+    [PostgresFact]
+    public async Task M1_ElTopeTotalNaceEn10000_EsNotNull_YLaBaseLoAcotaEntre1Y50000()
+    {
+        await using var cn = await SeedAsync();
+        await ExecAsync(cn, LoadDdl());
+
+        (await ScalarAsync<string>(cn,
+            """
+            SELECT concat_ws(',', data_type, is_nullable, column_default)
+              FROM information_schema.columns
+             WHERE table_schema = 'tramites' AND table_name = 'consolidado_export_settings'
+               AND column_name = 'max_items_per_batch'
+            """)).Should().Be("integer,NO,10000");
+        (await ScalarAsync<int>(cn, "SELECT max_items_per_batch FROM tramites.consolidado_export_settings")).Should().Be(10_000);
+
+        foreach (var fuera in new[] { 0, -1, 50_001 })
+        {
+            (await ConstraintOfViolationAsync(() => ExecAsync(cn,
+                    $"UPDATE tramites.consolidado_export_settings SET max_items_per_batch = {fuera}")))
+                .Should().Be("ck_consolidado_export_settings_max_items", $"{fuera} está fuera de rango");
+        }
+
+        foreach (var dentro in new[] { 1, 50_000 })
+        {
+            (await ConstraintOfViolationAsync(() => ExecAsync(cn,
+                    $"UPDATE tramites.consolidado_export_settings SET max_items_per_batch = {dentro}")))
+                .Should().BeNull($"{dentro} es un extremo válido");
+        }
     }
 
     [PostgresFact]
