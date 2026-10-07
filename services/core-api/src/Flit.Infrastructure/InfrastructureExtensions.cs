@@ -700,6 +700,10 @@ public static class InfrastructureExtensions
         services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue>(
             sp => sp.GetRequiredService<ChannelConsolidadoRegeneracionQueue>());
         services.AddHostedService<ConsolidadoRegeneracionProcessor>();
+        // Épica #13216 — HU13376: carril de ítems del lote de descarga masiva de consolidados (reclamo con lease, equidad
+        // entre lotes, reanudación). Sus parámetros y su interruptor viven en tramites.consolidado_export_settings: sin
+        // fila (base de pruebas recién reseteada) o con is_active = false no reclama nada.
+        services.AddHostedService<ConsolidadoLoteProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

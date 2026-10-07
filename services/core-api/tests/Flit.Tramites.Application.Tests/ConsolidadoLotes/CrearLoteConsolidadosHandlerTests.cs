@@ -344,6 +344,15 @@ public sealed class CrearLoteConsolidadosHandlerTests
 
         public Task<bool> PurgarAsync(Guid loteId, DateTimeOffset ahora, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        // HU #13376: el carril de ítems no participa en la creación del lote.
+        public Task<ItemLoteReclamado?> ReclamarSiguienteItemAsync(string reclamante, int leaseSegundos, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<int> IniciarLotesSinItemsAsync(CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<Guid>> ObtenerLotesConCarrilTerminadoAsync(int maximo, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeResolver(string origen) : ILoteSeleccionResolver

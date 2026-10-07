@@ -1,0 +1,319 @@
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
+using Flit.Tramites.Domain.Repositories;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace Flit.Infrastructure.Messaging;
+
+/// <summary>Ritmo del carril de ítems (los parámetros de negocio viven en <c>consolidado_export_settings</c>).</summary>
+/// <param name="Sondeo">Espera entre ciclos cuando no hay nada que reclamar o todos los slots están ocupados.</param>
+/// <param name="RetrasoInicial">Espera al arrancar el host (deja terminar migraciones y seeds).</param>
+internal sealed record ConsolidadoLoteProcessorOptions(TimeSpan Sondeo, TimeSpan RetrasoInicial)
+{
+    public static ConsolidadoLoteProcessorOptions Predeterminadas { get; } =
+        new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10));
+}
+
+/// <summary>
+/// HU #13376 (Épica #13216, ADR-0070 D2, CF-05/CF-20/CF-21) — carril de ítems del lote de descarga masiva de
+/// consolidados. En este PR solo el carril de ítems y la transición <c>en_cola → en_proceso</c>; el cierre del lote y el
+/// empaquetado son de #13377.
+/// <list type="bullet">
+///   <item><b>Parámetros en BD</b>: cada ciclo lee <c>consolidado_export_settings</c>. Sin fila o con
+///   <c>is_active = false</c> (decisión S4) no reclama nada y no toca ningún lote; al encenderse retoma los pendientes.
+///   Si <c>item_lease_seconds</c> no es mayor que <c>item_timeout_seconds</c> el carril no arranca y lo registra
+///   (una vez por cambio de estado, no en cada ciclo).</item>
+///   <item><b>Tope</b>: como mucho <c>item_slots</c> ítems en ejecución en esta instancia (AC1).</item>
+///   <item><b>Reclamo y equidad</b>: <see cref="IConsolidadoLoteRepository.ReclamarSiguienteItemAsync"/>, un ítem por
+///   turno de lote (AC2). Un reclamo nunca abre una transacción larga: la generación ocurre fuera de transacción.</item>
+///   <item><b>Timeout &lt; lease</b> (AC4): cada ítem corre con un token que vence a <c>item_timeout_seconds</c>;
+///   el lease vence después, así que cuando el ítem vuelve a ser reclamable la ejecución anterior ya se canceló o el
+///   proceso murió. El timeout cuenta como fallo técnico (<c>attempts + 1</c>: reintento u omisión
+///   <c>error_tecnico</c> al agotar <c>max_item_attempts</c>), con el mismo puerto de cierre del handler.</item>
+///   <item><b>Scope por ítem</b> (AC5): cada ítem resuelve <see cref="ProcesarItemLoteHandler"/> en un scope de DI
+///   nuevo; el tenant del ítem viaja en el comando (<see cref="LoteItemContexto.CompaniaTramiteId"/>), nunca en estado
+///   compartido.</item>
+///   <item><b>Reanudación</b> (AC3): una parada del host cancela los ítems en vuelo sin cerrarlos; el reclamo por lease
+///   vencido los retoma (y cuenta esa ejecución sin cierre). Un ítem que llega con <c>attempts</c> agotado se omite con
+///   <c>error_tecnico</c> sin volver a ejecutarse.</item>
+/// </list>
+/// Logs sin PII: ids de lote e ítem, códigos y conteos; nunca placa, radicado ni documento.
+/// </summary>
+/// <remarks>
+/// Uso de ejemplo: <c>services.AddHostedService&lt;ConsolidadoLoteProcessor&gt;();</c> (registro en
+/// <c>InfrastructureExtensions</c>).
+/// </remarks>
+internal sealed partial class ConsolidadoLoteProcessor : BackgroundService
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ConsolidadoLoteProcessor> _logger;
+    private readonly ConsolidadoLoteProcessorOptions _opciones;
+    private readonly TimeProvider _time;
+    private readonly string _instancia = $"{Environment.MachineName}/{Environment.ProcessId}";
+
+    /// <summary>Ítems en ejecución. Solo lo toca el bucle de <see cref="ExecuteAsync"/>.</summary>
+    private readonly List<Task> _enCurso = [];
+
+    private EstadoMotor _estado = EstadoMotor.Desconocido;
+
+    public ConsolidadoLoteProcessor(IServiceScopeFactory scopeFactory, ILogger<ConsolidadoLoteProcessor> logger)
+        : this(scopeFactory, logger, ConsolidadoLoteProcessorOptions.Predeterminadas, TimeProvider.System)
+    {
+    }
+
+    internal ConsolidadoLoteProcessor(
+        IServiceScopeFactory scopeFactory,
+        ILogger<ConsolidadoLoteProcessor> logger,
+        ConsolidadoLoteProcessorOptions opciones,
+        TimeProvider timeProvider)
+    {
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _opciones = opciones ?? throw new ArgumentNullException(nameof(opciones));
+        _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    }
+
+    private enum EstadoMotor
+    {
+        Desconocido,
+        Apagado,
+        ParametrosInvalidos,
+        Activo,
+    }
+
+    /// <summary>AC4 — invariante de no-solapamiento (D2) y mínimos del carril.</summary>
+    internal static bool ParametrosValidos(ConsolidadoExportSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return settings.ItemSlots >= 1
+            && settings.ItemTimeoutSeconds > 0
+            && settings.ItemLeaseSeconds > settings.ItemTimeoutSeconds
+            && settings.MaxItemAttempts >= 1;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            if (_opciones.RetrasoInicial > TimeSpan.Zero)
+                await Task.Delay(_opciones.RetrasoInicial, _time, stoppingToken).ConfigureAwait(false);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                _enCurso.RemoveAll(t => t.IsCompleted);
+                try
+                {
+                    await DespacharAsync(stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+#pragma warning disable CA1031 // El carril no puede morir por un ciclo: se registra y sigue.
+                catch (Exception ex)
+#pragma warning restore CA1031
+                {
+                    // Solo el tipo: el mensaje de una excepción de BD puede citar valores de la fila.
+                    LogCicloFallido(_logger, ex.GetType().Name);
+                }
+
+                // Despierta con el sondeo o en cuanto un slot se libera.
+                var sondeo = Task.Delay(_opciones.Sondeo, _time, stoppingToken);
+                if (_enCurso.Count > 0)
+                    await Task.WhenAny([.. _enCurso, sondeo]).ConfigureAwait(false);
+                else
+                    await sondeo.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Parada del host.
+        }
+        finally
+        {
+            // Los ítems en vuelo ven la cancelación por su token enlazado y no cierran: los retoma el reclamo por lease.
+            await Task.WhenAll(_enCurso).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Un ciclo: lee los parámetros, pasa los lotes vacíos a <c>en_proceso</c> y reclama ítems hasta llenar los slots
+    /// libres. Cada ítem reclamado se lanza en segundo plano.
+    /// </summary>
+    private async Task DespacharAsync(CancellationToken stoppingToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IConsolidadoLoteRepository>();
+        var settings = await repo.ObtenerSettingsAsync(stoppingToken).ConfigureAwait(false);
+        if (!Habilitado(settings))
+            return;
+
+        // Hallazgo de #13373: un lote sin ítems no tiene nada que reclamar; queda en en_proceso para el cierre (#13377).
+        await repo.IniciarLotesSinItemsAsync(stoppingToken).ConfigureAwait(false);
+
+        while (_enCurso.Count(t => !t.IsCompleted) < settings!.ItemSlots)
+        {
+            var reclamado = await repo
+                .ReclamarSiguienteItemAsync(_instancia, settings.ItemLeaseSeconds, stoppingToken)
+                .ConfigureAwait(false);
+            if (reclamado is null)
+                return;
+
+            LogReclamado(_logger, reclamado.Lote.Id, reclamado.Item.Id, reclamado.Item.Attempts);
+            _enCurso.Add(Task.Run(() => ProcesarAsync(reclamado, settings, stoppingToken), CancellationToken.None));
+        }
+    }
+
+    private bool Habilitado(ConsolidadoExportSettings? settings)
+    {
+        EstadoMotor nuevo;
+        if (settings is null || !settings.IsActive)
+            nuevo = EstadoMotor.Apagado;
+        else if (!ParametrosValidos(settings))
+            nuevo = EstadoMotor.ParametrosInvalidos;
+        else
+            nuevo = EstadoMotor.Activo;
+
+        if (nuevo != _estado)
+        {
+            _estado = nuevo;
+            switch (nuevo)
+            {
+                case EstadoMotor.Apagado:
+                    LogApagado(_logger);
+                    break;
+                case EstadoMotor.ParametrosInvalidos:
+                    LogParametrosInvalidos(_logger, settings!.ItemTimeoutSeconds, settings.ItemLeaseSeconds,
+                        settings.ItemSlots, settings.MaxItemAttempts);
+                    break;
+                default:
+                    LogActivo(_logger, settings!.ItemSlots, settings.ItemTimeoutSeconds, settings.ItemLeaseSeconds);
+                    break;
+            }
+        }
+
+        return nuevo == EstadoMotor.Activo;
+    }
+
+    /// <summary>Procesa un ítem reclamado. Nunca lanza: el carril sigue con el siguiente.</summary>
+    private async Task ProcesarAsync(ItemLoteReclamado reclamado, ConsolidadoExportSettings settings, CancellationToken stoppingToken)
+    {
+        var (lote, item) = (reclamado.Lote, reclamado.Item);
+        try
+        {
+            if (item.Attempts >= settings.MaxItemAttempts)
+            {
+                // Re-reclamado tras max_item_attempts ejecuciones sin cierre: no se vuelve a ejecutar.
+                await CerrarPorFalloAsync(lote, item, item.Attempts, settings, stoppingToken).ConfigureAwait(false);
+                return;
+            }
+
+            using var porTiempo = new CancellationTokenSource(TimeSpan.FromSeconds(settings.ItemTimeoutSeconds), _time);
+            using var enlazado = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, porTiempo.Token);
+            try
+            {
+                // AC5 — scope de DI nuevo por ítem; el tenant del ítem viaja en el comando.
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                var handler = scope.ServiceProvider.GetRequiredService<ProcesarItemLoteHandler>();
+                var resultado = await handler
+                    .HandleAsync(ProcesarItemLoteCommand.Con(lote, item, settings), enlazado.Token)
+                    .ConfigureAwait(false);
+                if (!resultado.Aplicado)
+                    LogCierreNoAplicado(_logger, lote.Id, item.Id, resultado.Desenlace);
+            }
+            catch (OperationCanceledException) when (porTiempo.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
+            {
+                LogTimeout(_logger, lote.Id, item.Id, settings.ItemTimeoutSeconds);
+                await CerrarPorFalloAsync(lote, item, (short)(item.Attempts + 1), settings, stoppingToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Solo propagan la cancelación y la falta de procesador para el origen (configuración).
+                LogItemFallido(_logger, lote.Id, item.Id, ex.GetType().Name);
+                await CerrarPorFalloAsync(lote, item, (short)(item.Attempts + 1), settings, stoppingToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            LogInterrumpido(_logger, lote.Id, item.Id);
+        }
+#pragma warning disable CA1031 // Un ítem fallido no tumba el carril: queda procesando y lo retoma el reclamo por lease.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            LogItemFallido(_logger, lote.Id, item.Id, ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Fallo sin desenlace del handler (timeout, excepción o intentos agotados por caídas): reintento con
+    /// <c>retry_delay_seconds</c> o, al llegar a <c>max_item_attempts</c>, omisión <c>error_tecnico</c>. Mismo puerto y
+    /// misma condición (<c>procesando</c> con lease vigente) que el cierre del handler.
+    /// </summary>
+    private async Task CerrarPorFalloAsync(
+        ConsolidadoExportBatch lote, ConsolidadoExportBatchItem item, short intentos, ConsolidadoExportSettings settings,
+        CancellationToken ct)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var proceso = scope.ServiceProvider.GetRequiredService<IConsolidadoLoteItemProceso>();
+        var ahora = _time.GetUtcNow();
+        bool aplicado;
+        if (intentos >= settings.MaxItemAttempts)
+        {
+            var codigo = ConsolidadoLoteOmisiones.ErrorTecnico;
+            aplicado = await proceso
+                .MarcarOmitidoAsync(new LoteItemOmitido(lote.Id, item.Id, codigo, ConsolidadoErrorTextos.ParaLote(codigo), intentos, ahora), ct)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            aplicado = await proceso
+                .ReprogramarAsync(new LoteItemReintento(lote.Id, item.Id, intentos, ahora.AddSeconds(settings.RetryDelaySeconds)), ct)
+                .ConfigureAwait(false);
+        }
+
+        LogFalloCerrado(_logger, lote.Id, item.Id, intentos, settings.MaxItemAttempts, aplicado);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Carril de ítems de lotes: motor apagado o sin parámetros; no se reclama ningún ítem.")]
+    private static partial void LogApagado(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "Carril de ítems de lotes NO arranca: parámetros incoherentes (item_timeout_seconds={Timeout}, item_lease_seconds={Lease}, item_slots={Slots}, max_item_attempts={MaxIntentos}); el lease debe ser mayor que el timeout.")]
+    private static partial void LogParametrosInvalidos(ILogger logger, int timeout, int lease, short slots, short maxIntentos);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Carril de ítems de lotes activo: item_slots={Slots}, item_timeout_seconds={Timeout}, item_lease_seconds={Lease}.")]
+    private static partial void LogActivo(ILogger logger, short slots, int timeout, int lease);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Lote {BatchId}: ítem {ItemId} reclamado (intentos previos {Intentos}).")]
+    private static partial void LogReclamado(ILogger logger, Guid batchId, Guid itemId, short intentos);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Lote {BatchId}: el cierre del ítem {ItemId} ({Desenlace}) no se aplicó (lote cancelado, ítem cerrado o reserva vencida).")]
+    private static partial void LogCierreNoAplicado(
+        ILogger logger, Guid batchId, Guid itemId, ProcesarItemLoteDesenlace desenlace);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Lote {BatchId}: ítem {ItemId} cancelado por timeout ({TimeoutSegundos} s).")]
+    private static partial void LogTimeout(ILogger logger, Guid batchId, Guid itemId, int timeoutSegundos);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Lote {BatchId}: el ítem {ItemId} lanzó {ExceptionType}.")]
+    private static partial void LogItemFallido(ILogger logger, Guid batchId, Guid itemId, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Lote {BatchId}: ítem {ItemId} cerrado por fallo técnico, intento {Intentos} de {MaxIntentos}; aplicado={Aplicado}.")]
+    private static partial void LogFalloCerrado(
+        ILogger logger, Guid batchId, Guid itemId, short intentos, short maxIntentos, bool aplicado);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Lote {BatchId}: ítem {ItemId} interrumpido por la parada del host; lo retoma el reclamo por lease.")]
+    private static partial void LogInterrumpido(ILogger logger, Guid batchId, Guid itemId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Carril de ítems de lotes: falló un ciclo ({ExceptionType}); se reintentará.")]
+    private static partial void LogCicloFallido(ILogger logger, string exceptionType);
+}

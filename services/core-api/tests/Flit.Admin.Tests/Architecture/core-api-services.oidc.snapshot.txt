@@ -1001,6 +1001,7 @@ Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.Rev
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.StandaloneDocumentBatchProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.BulkTramitesBatchProcessorService (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoRegeneracionProcessor (Singleton)
+Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoLoteProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Quipux.QuipuxRegisterProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Quipux.QuipuxStatusPollProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor (Singleton)
