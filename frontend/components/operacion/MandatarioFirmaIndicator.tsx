@@ -7,17 +7,27 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import type { MandateSignerPrevisto } from '@/lib/api/types/procedure-runtime';
 
 /**
- * HU #13146 (ADR-0066) — quién firmará el mandato, en solo lectura, en el paso de resumen (FUR).
+ * HU #13146 (ADR-0066) — quién firmará el contrato de mandato, en solo lectura, en el paso de resumen.
  *
  * El gestor ya no elige mandatario (lo define el organismo o el Super Admin): aquí solo se informa y
  * se avisa si falta. `estado` y `modo` los calcula el backend con el mismo evaluador que el gate de
  * radicación, así que pantalla y radicación no discrepan.
+ *
+ * La frase nombra a la persona y dice cómo firma, sin la jerga «Baúl de firmas» ni «Firmará:».
  */
 
 const FORMA_FIRMA: Record<string, string> = {
-  baul: 'Baúl de firmas',
-  biometria: 'Validación de identidad',
+  baul: 'con la firma que ya tiene guardada',
+  biometria: 'validando su identidad',
 };
+
+/** Frase del Resumen: «{nombre} firmará el contrato de mandato {cómo}.» */
+export function fraseQuienFirmara(nombre: string, formaFirma?: string | null): string {
+  const como = formaFirma ? FORMA_FIRMA[formaFirma] : null;
+  return como
+    ? `${nombre} firmará el contrato de mandato ${como}.`
+    : `${nombre} firmará el contrato de mandato.`;
+}
 
 const MOTIVO: Record<string, string> = {
   sin_mandatario_configurado: 'Este organismo no tiene un mandatario registrado para tu compañía.',
@@ -113,7 +123,6 @@ export function MandatarioFirmaIndicator({
   if (!data) return null;
 
   if (data.estado === 'valido' && data.nombre) {
-    const forma = data.formaFirma ? FORMA_FIRMA[data.formaFirma] : null;
     return (
       <div
         role="status"
@@ -127,15 +136,15 @@ export function MandatarioFirmaIndicator({
           aria-hidden="true"
         />
         <span>
-          <span className="font-semibold">Firmará:</span> {data.nombre}
-          {forma ? ` / ${forma}` : ''}
+          {fraseQuienFirmara(data.nombre, data.formaFirma)}
           {/* HU #13183 — solo el origen, nunca el nombre de la otra compañía ni su documento. */}
           {data.nivel === 'asociado_de_otra_compania' ? (
             <span
-              className="ml-2 opacity-70"
+              className="ml-1 opacity-70"
               data-testid="mandatario-firma-asociado"
             >
-              Mandatario asociado
+              {' '}
+              Es el mandatario asociado a tu compañía.
             </span>
           ) : null}
         </span>

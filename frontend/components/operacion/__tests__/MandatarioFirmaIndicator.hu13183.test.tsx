@@ -17,7 +17,7 @@ function previsto(over: Partial<MandateSignerPrevisto> = {}): MandateSignerPrevi
 }
 
 describe('HU #13183 AC1 — muestra al mandatario asociado', () => {
-  it('«Firmará: {nombre} / {forma}» de solo lectura con la nota «Mandatario asociado»', () => {
+  it('frase de quién firma, de solo lectura, con la nota de mandatario asociado', () => {
     render(
       <MandatarioFirmaIndicator
         data={previsto({ nivel: 'asociado_de_otra_compania' })}
@@ -25,8 +25,12 @@ describe('HU #13183 AC1 — muestra al mandatario asociado', () => {
       />,
     );
     const indicador = screen.getByTestId('mandatario-firma-valido');
-    expect(indicador).toHaveTextContent('Firmará: Ana Restrepo / Baúl de firmas');
-    expect(screen.getByTestId('mandatario-firma-asociado')).toHaveTextContent('Mandatario asociado');
+    expect(indicador).toHaveTextContent(
+      'Ana Restrepo firmará el contrato de mandato con la firma que ya tiene guardada.',
+    );
+    expect(screen.getByTestId('mandatario-firma-asociado')).toHaveTextContent(
+      'Es el mandatario asociado a tu compañía.',
+    );
     expect(indicador.querySelectorAll('button, input, select, a')).toHaveLength(0);
   });
 
@@ -38,7 +42,7 @@ describe('HU #13183 AC1 — muestra al mandatario asociado', () => {
       />,
     );
     expect(screen.getByTestId('mandatario-firma-valido')).toHaveTextContent(
-      'Firmará: Ana Restrepo / Validación de identidad',
+      'Ana Restrepo firmará el contrato de mandato validando su identidad.',
     );
   });
 });
@@ -67,7 +71,7 @@ describe('HU #13183 AC3 — otros niveles sin cambio', () => {
   ] as const)('nivel %s: sin nota de mandatario asociado', (nivel) => {
     render(<MandatarioFirmaIndicator data={previsto({ nivel })} loading={false} />);
     expect(screen.getByTestId('mandatario-firma-valido')).toHaveTextContent(
-      'Firmará: Ana Restrepo / Baúl de firmas',
+      'Ana Restrepo firmará el contrato de mandato con la firma que ya tiene guardada.',
     );
     expect(screen.queryByTestId('mandatario-firma-asociado')).not.toBeInTheDocument();
   });
