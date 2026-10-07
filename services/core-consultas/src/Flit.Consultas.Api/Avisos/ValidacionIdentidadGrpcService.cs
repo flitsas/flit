@@ -64,7 +64,7 @@ internal sealed class ValidacionIdentidadGrpcService(
         }
 
         fila.TenantId = caller.TenantId;
-        fila.Producto = ProductoDe(caller.ClientId);
+        fila.Producto = Grpc.ConsumoRecorder.Producto(caller.ClientId);
         fila.VerificationId = inicio.VerificationId;
         fila.SecretoCifrado = string.IsNullOrEmpty(inicio.WebhookSecret) ? null : AvisosKyverumEndpoints.Protector(protection).Protect(inicio.WebhookSecret);
         fila.CreadaEn = time.GetUtcNow();
@@ -140,7 +140,4 @@ internal sealed class ValidacionIdentidadGrpcService(
                 NombreArchivo = certificado.FileName,
             };
     }
-
-    private static string ProductoDe(string clientId) =>
-        clientId.StartsWith("svc-", StringComparison.Ordinal) ? clientId["svc-".Length..] : clientId;
 }

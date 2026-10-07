@@ -37,3 +37,21 @@ Ningún servicio necesita escribir en el exchange por defecto: los reintentos va
 
 Un productor nuevo se agrega a `definitions.json` (los consumidores no pueden crear el exchange de otro) y se recarga:
 `docker compose -f docker-compose.prod.yml exec rabbitmq rabbitmqctl import_definitions /etc/rabbitmq/definitions.json`.
+
+## Alerta de mensajes muertos (HU #13352)
+
+Un evento que falla en sus tres reintentos (10 s, 1 min, 10 min) termina en `<cola>.dlq` y suma a la métrica
+`flit.messaging.dead_lettered`. Además, `alerta-dlq.sh` revisa las colas `.dlq` cada 5 minutos y avisa al webhook de
+operaciones (el mismo `OPS_ALERT_WEBHOOK_URL` de la alerta de certificados) con la cola y la cantidad cuando llegan
+mensajes nuevos. Instalación en el VPS:
+
+```bash
+sudo mkdir -p /etc/flit-rabbitmq
+printf 'OPS_ALERT_WEBHOOK_URL=%s\nFLIT_AMBIENTE=%s\n' "<webhook>" "DEV" | sudo tee /etc/flit-rabbitmq/env >/dev/null
+sudo cp deploy/rabbitmq/systemd/flit-rabbitmq-dlq.service.example /etc/systemd/system/flit-rabbitmq-dlq.service
+sudo cp deploy/rabbitmq/systemd/flit-rabbitmq-dlq.timer.example /etc/systemd/system/flit-rabbitmq-dlq.timer
+sudo systemctl daemon-reload && sudo systemctl enable --now flit-rabbitmq-dlq.timer
+```
+
+Ajustar `WorkingDirectory` del servicio a la carpeta del repo en el VPS. Después de revisar y reprocesar (o descartar)
+los mensajes de una `.dlq`, la siguiente llegada vuelve a avisar.

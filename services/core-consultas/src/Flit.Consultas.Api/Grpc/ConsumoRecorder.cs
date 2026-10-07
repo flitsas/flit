@@ -3,15 +3,17 @@ using Flit.Api.Identity;
 using Flit.Consultas.Api.Persistence;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Platform.Sdk.Messaging;
 using Grpc.Core;
 
 namespace Flit.Consultas.Api.Grpc;
 
 /// <summary>
-/// Mide cada consulta (HU #13345): una fila en <c>consultas.consumo</c> al terminar, salga bien o mal. Si guardar la
-/// medición falla, la consulta no falla: se registra en el log y se devuelve la respuesta.
+/// Mide cada consulta (HU #13345): una fila en <c>consultas.consumo</c> al terminar, salga bien o mal, y el evento
+/// <see cref="EventoConsumo"/> en la misma transacción (HU #13352). Si guardar la medición falla, la consulta no
+/// falla: se registra en el log y se devuelve la respuesta.
 /// </summary>
-internal sealed class ConsumoRecorder(ConsultasDb db, TimeProvider time, ILogger<ConsumoRecorder> logger)
+internal sealed class ConsumoRecorder(ConsultasDb db, IPlatformOutbox outbox, TimeProvider time, ILogger<ConsumoRecorder> logger)
 {
     public async Task<T> MedirAsync<T>(ServerCallContext context, string fuente, Func<Task<T>> consulta, Func<T, (string Proveedor, string Resultado, bool DesdeCache)> resumen)
     {
@@ -32,6 +34,8 @@ internal sealed class ConsumoRecorder(ConsultasDb db, TimeProvider time, ILogger
             throw;
         }
     }
+
+    public const string EventoConsumo = "consultas.consulta.realizada";
 
     public static string Resultado(Semaforo semaforo) => semaforo switch
     {
@@ -61,6 +65,16 @@ internal sealed class ConsumoRecorder(ConsultasDb db, TimeProvider time, ILogger
                 DesdeCache = desdeCache,
                 LatenciaMs = (int)Math.Min(int.MaxValue, latencia.TotalMilliseconds),
                 OcurridoEn = time.GetUtcNow(),
+            });
+            var latenciaMs = (int)Math.Min(int.MaxValue, latencia.TotalMilliseconds);
+            outbox.Enqueue(EventoConsumo, 1, caller.TenantId, new
+            {
+                producto = Producto(caller.ClientId),
+                fuente,
+                proveedor,
+                resultado,
+                desdeCache,
+                latenciaMs,
             });
             await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         }

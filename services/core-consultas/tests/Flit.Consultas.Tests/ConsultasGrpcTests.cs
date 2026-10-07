@@ -6,6 +6,7 @@ using Flit.Consultas.Api;
 using Flit.Consultas.Api.Persistence;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Sdk.Authentication;
+using Flit.Platform.Sdk.Messaging;
 using Flit.Tramites.Application.UseCases.Consultations;
 using FluentAssertions;
 using Grpc.Core;
@@ -214,6 +215,32 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
         filas[0].Should().BeEquivalentTo(new { Producto = "tramites", Fuente = "vehiculo", Proveedor = "falso_rapido", Resultado = "verde", DesdeCache = false });
         filas[0].LatenciaMs.Should().BeGreaterThanOrEqualTo(0);
         filas[1].Should().BeEquivalentTo(new { Producto = "tramites", Fuente = "vehiculo", Proveedor = "", Resultado = "error" });
+    }
+
+    [Fact]
+    public async Task HU13352_AC1_CadaConsumo_QuedaComoEventoConsultaRealizada_EnLaOutbox()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = _empresaConLento;
+
+        await Cliente(Token("platform.consultas")).ConsultarVehiculoAsync(
+            new ConsultarVehiculoRequest { Placa = new Flit.Platform.Grpc.V1.Placa { Valor = "ABC123" } }, Empresa(empresa),
+            deadline: DateTime.UtcNow.AddSeconds(3), cancellationToken: ct);
+
+        await using var scope = _app!.Services.CreateAsyncScope();
+        var mensajes = await scope.ServiceProvider.GetRequiredService<ConsultasDb>().Set<OutboxMessage>().AsNoTracking()
+            .Where(m => m.RoutingKey == "consultas.consulta.realizada").ToListAsync(ct);
+        var sobre = mensajes.Select(m => EventEnvelope.FromJson(System.Text.Encoding.UTF8.GetBytes(m.Payload))).Should().ContainSingle(e => e.TenantId == empresa).Subject;
+        sobre.Producer.Should().Be("consultas");
+        var datos = sobre.Data;
+        datos.GetProperty("producto").GetString().Should().Be("tramites");
+        datos.GetProperty("fuente").GetString().Should().Be("vehiculo");
+        datos.GetProperty("proveedor").GetString().Should().Be("falso_rapido");
+        datos.GetProperty("resultado").GetString().Should().Be("verde");
+        datos.GetProperty("desdeCache").GetBoolean().Should().BeFalse();
+        datos.GetProperty("latenciaMs").GetInt32().Should().BeGreaterThanOrEqualTo(0);
+        datos.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("producto", "fuente", "proveedor", "resultado", "desdeCache", "latenciaMs");
     }
 
     [Fact]

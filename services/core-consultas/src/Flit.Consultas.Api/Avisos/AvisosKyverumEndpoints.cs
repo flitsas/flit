@@ -114,12 +114,12 @@ public sealed record AvisoKyverumVerify(Guid ValidacionId, string VerificationId
 
 internal static partial class AvisosLog
 {
-    [LoggerMessage(EventId = 7401, Level = LogLevel.Warning, Message = "Aviso de Kyverum con firma inválida para la validación {ValidacionId} (firma presente: {FirmaPresente}); no se publica")]
+    [LoggerMessage(EventId = 7421, Level = LogLevel.Warning, Message = "Aviso de Kyverum con firma inválida para la validación {ValidacionId} (firma presente: {FirmaPresente}); no se publica")]
     public static partial void FirmaInvalida(ILogger logger, Guid validacionId, bool firmaPresente);
 
-    [LoggerMessage(EventId = 7402, Level = LogLevel.Warning, Message = "Aviso de Kyverum para una validación desconocida {ValidacionId}")]
+    [LoggerMessage(EventId = 7422, Level = LogLevel.Warning, Message = "Aviso de Kyverum para una validación desconocida {ValidacionId}")]
     public static partial void ReferenciaDesconocida(ILogger logger, Guid validacionId);
 
-    [LoggerMessage(EventId = 7403, Level = LogLevel.Error, Message = "El secreto del aviso de la validación {ValidacionId} no se pudo descifrar (llaves de Data Protection)")]
+    [LoggerMessage(EventId = 7423, Level = LogLevel.Error, Message = "El secreto del aviso de la validación {ValidacionId} no se pudo descifrar (llaves de Data Protection)")]
     public static partial void SecretoIndescifrable(ILogger logger, Guid validacionId);
 }

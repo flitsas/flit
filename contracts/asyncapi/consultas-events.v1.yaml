@@ -53,7 +53,7 @@ components:
                   producto: { type: string, description: Producto que pidió la consulta (del token de servicio). }
                   fuente: { type: string, description: "Qué se consultó (vehículo por placa, por VIN, conductor, SIMIT, RNMC, RUES…)." }
                   proveedor: { type: string, description: Proveedor que respondió (clave del adaptador). }
-                  resultado: { type: string, enum: [ok, no_encontrado, error] }
+                  resultado: { type: string, enum: [verde, amarillo, rojo, sin_semaforo, error], description: Semáforo del resultado normalizado; error si el proveedor falló. }
                   desdeCache: { type: boolean }
                   latenciaMs: { type: integer, minimum: 0 }
     AvisoKyverumVerify:
