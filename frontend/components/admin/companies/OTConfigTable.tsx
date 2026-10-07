@@ -230,11 +230,11 @@ export function OTConfigTable({
               label={`${checked ? "Deshabilitar" : "Habilitar"} ${office.name}`}
             />
             {isPending ? (
-              <span className="text-[10px] opacity-60">Guardando…</span>
+              <span className="text-xs opacity-60">Guardando…</span>
             ) : justSaved.has(office.id) ? (
               <span
                 role="status"
-                className="flex items-center gap-1 text-[10px] font-semibold"
+                className="flex items-center gap-1 text-xs font-semibold"
                 style={{ color: "#0a8f8b" }}
               >
                 <Check className="h-3 w-3" /> Guardado
@@ -243,7 +243,7 @@ export function OTConfigTable({
             {reason && (
               <span
                 id={reasonId}
-                className="inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
                 style={{ color: "#b25a00", borderColor: "#f0c38e", background: "#fff7ed" }}
               >
                 {reason} en FLIT
@@ -271,7 +271,7 @@ export function OTConfigTable({
                     onChange={() => void handleToggleAgreement(office)}
                     label={`${checked ? "Quitar" : "Marcar"} convenio con ${office.name}`}
                   />
-                  {isPending && <span className="text-[10px] opacity-60">Guardando…</span>}
+                  {isPending && <span className="text-xs opacity-60">Guardando…</span>}
                 </div>
               );
             },
@@ -311,14 +311,14 @@ export function OTConfigTable({
     <section aria-label="Organismos de tránsito" className="space-y-3">
       <div>
         <h4 className="text-sm font-semibold">Organismos de Tránsito</h4>
-        <p className="mt-0.5 text-[11px] opacity-60">
+        <p className="mt-0.5 text-xs opacity-60">
           {readOnly
             ? "Organismos habilitados para esta compañía. Solo lectura."
             : "Habilita cada organismo y, desde «⋯ Acciones», configura sus bloqueos y restricciones de consulta. Los cambios se guardan al instante; no requieren «Guardar todo»."}
         </p>
       </div>
 
-      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 dark:bg-[#0B0F14]">
+      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-[#557EFF] dark:bg-[#0B0F14]">
         <Search className="h-4 w-4 opacity-60" />
         <label htmlFor="ot-config-search" className="sr-only">
           Buscar organismo de tránsito

@@ -231,3 +231,20 @@ describe("UsersTable — tabla semántica y paginación (Bug #13055)", () => {
     expect(screen.getByText(/Mostrando 1–10 de 10/)).toBeInTheDocument();
   });
 });
+
+describe("UsersTable — diseño", () => {
+  it("el chip de perfil Gestor usa el tono neutral tintado (no el cian de éxito) y lleva texto", () => {
+    renderTable();
+    const chip = screen.getByText("Gestor · Admin");
+    expect(chip.style.color).toBe("var(--badge-neutral-fg)");
+    expect(chip.style.background).toBe("var(--badge-neutral-bg)");
+    expect(chip.className).toContain("text-xs");
+  });
+
+  it("las acciones de fila son iconos con nombre accesible y tooltip", () => {
+    renderTable();
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    const boton = within(fila).getByRole("button", { name: "Editar usuario Ana Torres" });
+    expect(boton).toHaveAttribute("title", "Editar usuario Ana Torres");
+  });
+});

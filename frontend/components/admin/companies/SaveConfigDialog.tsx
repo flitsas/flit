@@ -127,7 +127,7 @@ function CompanyCallout({ company }: { company: { razonSocial: string; nit: stri
       style={{ borderColor: "#557EFF", background: "rgba(85,126,255,0.06)" }}
       data-testid="save-config-company"
     >
-      <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Compañía</p>
+      <p className="text-xs font-semibold uppercase tracking-wider opacity-60">Compañía</p>
       <p className="text-sm font-bold text-[#162744] dark:text-white">{company.razonSocial}</p>
       <p className="text-xs opacity-70">NIT {company.nit}</p>
     </div>
@@ -147,7 +147,7 @@ function ChangeList({ changes }: { changes: ConfigChangeGroup[] }) {
               <li key={item.label} className="flex items-center justify-between gap-3">
                 <span className="opacity-80">{item.label}</span>
                 <span
-                  className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                  className="shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold"
                   style={{ color: TONE_COLORS[item.tone], background: `${TONE_COLORS[item.tone]}1a` }}
                 >
                   {item.detail}

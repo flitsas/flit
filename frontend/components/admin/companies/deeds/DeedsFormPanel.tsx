@@ -200,7 +200,7 @@ export function DeedsFormPanel({
         {banner && (
           <p
             role="alert"
-            className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+            className="rounded-xl border px-3 py-2 text-xs font-medium"
             style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
           >
             {banner}
@@ -288,7 +288,7 @@ export function DeedsFormPanel({
             aria-describedby={missingFile ? "deed-file-error" : undefined}
           />
           {missingFile && (
-            <p id="deed-file-error" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p id="deed-file-error" role="alert" className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
               El documento PDF es obligatorio.
             </p>
           )}
@@ -373,7 +373,7 @@ function Field({
       {error && (
         <p
           id={`${id}-error`}
-          className="mt-1 text-[11px] font-medium"
+          className="mt-1 text-xs font-medium"
           style={{ color: "#FF4E00" }}
           role="alert"
         >

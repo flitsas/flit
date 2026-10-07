@@ -50,7 +50,7 @@ export function MandatarioVigenciaBadge({ signer }: { signer: Props }) {
           </span>
         }
       />
-      {hasta ? <span className="text-[11px] text-[#59677D] dark:text-white/55">Hasta {hasta}</span> : null}
+      {hasta ? <span className="text-xs text-[#59677D] dark:text-white/55">Hasta {hasta}</span> : null}
     </span>
   );
 }

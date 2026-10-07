@@ -121,7 +121,13 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     // identificar a la persona durante la operación.
     expect(screen.getByText(/1098765432/)).toBeInTheDocument();
     expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Sin firma ni identidad/i)).toBeInTheDocument();
+    // El estado va con texto (no solo color) y su nombre accesible; el resumen cuenta los pendientes.
+    expect(screen.getByRole("status", { name: /Estado: Sin firma ni identidad/i })).toHaveTextContent(
+      "Sin firma ni identidad",
+    );
+    expect(screen.getByTestId("representantes-resumen")).toHaveTextContent(
+      "1 representante · 1 sin firma ni identidad",
+    );
   });
 
   it("no muestra la columna Compañía en la tabla (razón social / NIT ocultos)", async () => {

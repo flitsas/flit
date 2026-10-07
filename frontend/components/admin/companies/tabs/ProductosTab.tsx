@@ -1,8 +1,9 @@
 "use client";
 
 import { createElement, useEffect, useState } from "react";
-import { FileText, Gauge, Ticket, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Gauge, MinusCircle, Ticket, type LucideIcon } from "lucide-react";
 import { listTenantProducts, setTenantProduct, type TenantProduct } from "@/lib/api/platform";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ToggleSwitch } from "../ToggleSwitch";
 
 // HU #12967 (Epic #13217) — productos de la FLIT Suite encendidos para la compañía. Lee el estado real
@@ -18,6 +19,40 @@ function lastChange(p: TenantProduct): string {
   const when = DATE.format(new Date(p.updatedAt));
   // La hora en es-CO ya termina en punto («a. m.»): no se agrega otro.
   return p.updatedByEmail ? `Último cambio: ${when}, por ${p.updatedByEmail}.` : `Último cambio: ${when}`;
+}
+
+/** Estado del producto como chip tintado con icono + texto (nunca solo color). */
+function ProductBadges({ product }: { product: TenantProduct }) {
+  return (
+    <>
+      <StatusBadge
+        tone={product.enabled ? "success" : "neutral"}
+        ariaLabel={`Estado de ${product.name}: ${product.enabled ? "Encendido" : "Apagado"}`}
+        label={
+          <span className="inline-flex items-center gap-1">
+            {product.enabled ? (
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <MinusCircle className="h-3.5 w-3.5" aria-hidden />
+            )}
+            {product.enabled ? "Encendido" : "Apagado"}
+          </span>
+        }
+      />
+      {product.comingSoon && (
+        <StatusBadge
+          tone="neutral"
+          ariaLabel={`${product.name}: próximamente`}
+          label={
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              Próximamente
+            </span>
+          }
+        />
+      )}
+    </>
+  );
 }
 
 export function ProductosTab({ tenantId }: { tenantId: string }) {
@@ -65,7 +100,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
     <div className="space-y-4">
       <div>
         <h3 className="text-xs font-semibold">Productos de la FLIT Suite</h3>
-        <p className="mt-0.5 max-w-2xl text-[11px] opacity-60">
+        <p className="mt-0.5 max-w-2xl text-xs opacity-70">
           Enciende los productos que puede usar esta compañía. El cambio se aplica al instante, sin «Guardar todo», y
           queda en el historial. Con el producto encendido, el Administrador de Compañía entra de una vez; él da acceso a
           los demás usuarios. Si la compañía pertenece a una red, el producto también debe estar encendido en la cabeza.
@@ -88,7 +123,8 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
                   <div className="flex-1">
                     <ToggleSwitch
                       id={`producto-${p.productCode}`}
-                      label={`${p.name} · ${p.enabled ? "Encendido" : "Apagado"}`}
+                      label={p.name}
+                      badge={<ProductBadges product={p} />}
                       description={
                         (p.comingSoon ? "Próximamente: todavía no está desplegado; sus usuarios verán la pantalla «Próximamente». " : "") +
                         lastChange(p)
@@ -135,7 +171,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
       )}
 
       {error && (
-        <p role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}
