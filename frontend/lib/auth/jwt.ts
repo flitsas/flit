@@ -184,6 +184,18 @@ export function canReadGeneracionDocumental(payload: JwtPayload | null): boolean
   return isSuperAdmin(payload) || hasPermission(payload, GENERACION_DOCUMENTAL_READ_PERMISSION);
 }
 
+/** Permiso de la descarga masiva de consolidados (épica #13216, HU #13380). */
+export const CONSOLIDADO_MASIVO_DOWNLOAD_PERMISSION = "consolidado-masivo.download";
+
+/**
+ * Puede seleccionar trámites para la descarga masiva de consolidados: permiso
+ * `consolidado-masivo.download` o SuperAdmin. Sin él no se pintan casillas ni barra de selección
+ * (HU #13380, AC6). Solo decide qué se muestra; la autorización real la hace la API.
+ */
+export function canDescargarConsolidadosMasivo(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, CONSOLIDADO_MASIVO_DOWNLOAD_PERMISSION);
+}
+
 /** Permiso para administrar la configuración global de Confirmación RUNT (Feature #12276, HU #12313). */
 export const RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION = "runt_confirmation.settings.manage";
 
