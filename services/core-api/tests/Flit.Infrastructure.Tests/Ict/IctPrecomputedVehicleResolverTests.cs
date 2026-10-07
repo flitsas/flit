@@ -99,4 +99,56 @@ public sealed class IctPrecomputedVehicleResolverTests
         IctOrchestrationService.ResolverPrecomputed(kindRara, "ABC123", null, 24, Ahora)
             .Motivo.Should().Be("vehicle_consultation_invalid");
     }
+
+    // ── Revisión de seguridad (L-1, M-1) ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void FechaMasDeCincoMinutosEnElFuturo_DevuelveInvalid()
+    {
+        var futura = Placa();
+        futura.ConsultedAt = Timestamp.FromDateTimeOffset(Ahora.AddMinutes(6));
+
+        IctOrchestrationService.ResolverPrecomputed(futura, "ABC123", null, 24, Ahora)
+            .Motivo.Should().Be("vehicle_consultation_invalid");
+    }
+
+    [Fact]
+    public void FechaDentroDelMargenDeRelojDeCincoMinutos_SeAcepta()
+    {
+        var casi = Placa();
+        casi.ConsultedAt = Timestamp.FromDateTimeOffset(Ahora.AddMinutes(4));
+
+        IctOrchestrationService.ResolverPrecomputed(casi, "ABC123", null, 24, Ahora)
+            .Motivo.Should().BeNull();
+    }
+
+    [Fact]
+    public void SnapshotConClavesAjenas_DescartaLasAjenasYConservaLasDeVehiculo()
+    {
+        // M-1 — un snapshot alterado en tránsito no puede sobrescribir OT, titular ni actores, ni inyectar
+        // checks que el preflight de vehículo no emite (bloqueo, duplicidad, SIMIT).
+        var pv = Placa();
+        pv.SnapshotJson = PreflightVehicleSnapshotJson.Serialize(new PreflightVehicleSnapshot(
+            [
+                new PreflightCheckDto("gravamenes", "Gravámenes", "warn", "kyverum_runt", null),
+                new PreflightCheckDto("soat", "SOAT", "ok", "kyverum_runt", null),
+                new PreflightCheckDto("duplicidad", "Duplicidad", "ok", "system", null),
+                new PreflightCheckDto("simit_vendedor", "SIMIT vendedor", "ok", "kyverum_runt", null),
+            ],
+            [
+                new HydratedField("runt_tiene_gravamenes", "SI", null),
+                new HydratedField("vehicle_brand", "MARCA", null),
+                new HydratedField("transit_office_id", "00000000-0000-0000-0000-000000000001", null),
+                new HydratedField("owner_document_number", "999", null),
+                new HydratedField("comprador_nombre", "OTRO", null),
+            ],
+            ["kyverum_runt"]));
+
+        var (snapshot, motivo) = IctOrchestrationService.ResolverPrecomputed(pv, "ABC123", null, 24, Ahora);
+
+        motivo.Should().BeNull();
+        snapshot!.HydratedFields.Select(f => f.FieldKey).Should().Equal("runt_tiene_gravamenes", "vehicle_brand");
+        snapshot.Checks.Select(c => c.Key).Should().Equal("gravamenes", "soat");
+        snapshot.Providers.Should().Equal("kyverum_runt");
+    }
 }

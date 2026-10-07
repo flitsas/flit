@@ -97,11 +97,17 @@ public sealed class IctConsultationService(
         var result = await chainResolver.ConsultAsync(kind, ctx, tenantOverride, ct);
 
         // Bug #13304 — resultado COMPLETO para que el borrador ICT lo reutilice sin re-consultar. JSON
-        // opaco para core-ict, con PII (titular, acreedor): nunca se loguea ni lleva RawPayload.
-        reply.VehicleSnapshotJson = PreflightVehicleSnapshotJson.Serialize(PreflightVehicleSnapshot.FromConsultation(result));
-        reply.ConsultedAt = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
-        reply.Provider = result.Provider ?? string.Empty;
-        reply.ConsultationKind = kind.ToString();
+        // opaco para core-ict, con PII (titular, acreedor): nunca se loguea ni lleva RawPayload. Solo claves
+        // de vehículo (M-1). Si la cadena no hidrató nada y todos los checks quedaron en unknown/error, NO se
+        // llena (MENOR-3): core-ict no guarda un snapshot vacío y el pretrámite cae en «sin consulta RUNT».
+        var snapshot = PreflightVehicleSnapshot.FromConsultation(result).SoloClavesDeVehiculo();
+        if (CadenaRespondio(snapshot))
+        {
+            reply.VehicleSnapshotJson = PreflightVehicleSnapshotJson.Serialize(snapshot);
+            reply.ConsultedAt = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+            reply.Provider = result.Provider ?? string.Empty;
+            reply.ConsultationKind = kind.ToString();
+        }
 
         reply.SoatStatus = MapVigencia(StatusOf(result, CheckSoat));
         reply.RtmStatus = MapVigencia(StatusOf(result, CheckRtm));
@@ -160,6 +166,14 @@ public sealed class IctConsultationService(
             reply.PazYSalvo = !string.Equals(pending, "true", StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    /// <summary>
+    /// Bug #13304 (MENOR-3) — hay consulta reutilizable si la cadena hidrató algún campo o algún check trae
+    /// un veredicto (ok/warn/fail). Solo unknown/error y sin campos ⇒ no respondió.
+    /// </summary>
+    private static bool CadenaRespondio(PreflightVehicleSnapshot snapshot) =>
+        snapshot.HydratedFields.Count > 0
+        || snapshot.Checks.Any(c => c.Status is not ("unknown" or "error"));
 
     private static string? StatusOf(ConsultationResult result, string checkKey)
     {

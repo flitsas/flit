@@ -121,6 +121,90 @@ public sealed class IctConsultationServiceVehicleTests
         reply.ConsultedAt.Should().BeNull();
     }
 
+    // ── Revisión CR/seguridad (MENOR-3, M-1) ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("error")]
+    public async Task Vehicle_CadenaSinHidratarNada_NoLlenaSnapshotNiMetadatos(string status)
+    {
+        // MENOR-3 — sin campos y con todos los checks en unknown/error no hay consulta reutilizable:
+        // core-ict no guarda un snapshot vacío y el pretrámite cae en «sin consulta RUNT».
+        var vacio = new ConsultationResult(
+            "chain", "yellow",
+            [
+                new ConsultationCheck("provider", "Consulta RUNT", status, "chain", "sin respuesta"),
+                new ConsultationCheck("soat", "SOAT", "unknown", "chain", null),
+            ],
+            []);
+        var service = new IctConsultationService(new CapturingChain(vacio), new EmptyRegistry(), new NullOverride());
+
+        var reply = await service.Query(new ConsultationRequest
+        {
+            TenantId = Tenant.ToString(),
+            QueryType = "VEHICLE",
+            Plate = "ABC123",
+            DocumentType = "CC",
+            DocumentNumber = "1013304001",
+        }, new TestCallContext(TestContext.Current.CancellationToken));
+
+        reply.VehicleSnapshotJson.Should().BeEmpty();
+        reply.ConsultedAt.Should().BeNull();
+        reply.Provider.Should().BeEmpty();
+        reply.ConsultationKind.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Vehicle_NoEncontradoEnRunt_SiLlenaElSnapshotPorqueElFailEsUnHecho()
+    {
+        // Un check en fail (vehículo no encontrado) sí es respuesta: el bloqueo viaja dentro del snapshot.
+        var noEncontrado = new ConsultationResult(
+            "kyverum_runt", "red",
+            [new ConsultationCheck("vehiculo", "Vehículo RUNT", "fail", "kyverum_runt", "Vehículo no encontrado en RUNT")],
+            []);
+        var service = new IctConsultationService(new CapturingChain(noEncontrado), new EmptyRegistry(), new NullOverride());
+
+        var reply = await service.Query(new ConsultationRequest
+        {
+            TenantId = Tenant.ToString(),
+            QueryType = "VIN",
+            Vin = "1HGCM82633A004352",
+        }, new TestCallContext(TestContext.Current.CancellationToken));
+
+        reply.VehicleSnapshotJson.Should().NotBeEmpty();
+        reply.ConsultationKind.Should().Be("VehicleVin");
+    }
+
+    [Fact]
+    public async Task Vehicle_ClavesAjenasDelResultado_NoSalenEnElSnapshot()
+    {
+        // M-1 — la lista blanca se aplica también al emitir: solo claves de vehículo salen hacia core-ict.
+        var conAjenas = new ConsultationResult(
+            "kyverum_runt", "yellow",
+            [
+                new ConsultationCheck("gravamenes", "Gravámenes", "warn", "kyverum_runt", "Prenda vigente"),
+                new ConsultationCheck("simit_comprador", "SIMIT", "fail", "kyverum_runt", null),
+            ],
+            [
+                new HydratedField("runt_tiene_gravamenes", "SI", null),
+                new HydratedField("transit_office_id", "00000000-0000-0000-0000-000000000001", null),
+            ]);
+        var service = new IctConsultationService(new CapturingChain(conAjenas), new EmptyRegistry(), new NullOverride());
+
+        var reply = await service.Query(new ConsultationRequest
+        {
+            TenantId = Tenant.ToString(),
+            QueryType = "VEHICLE",
+            Plate = "ABC123",
+            DocumentType = "CC",
+            DocumentNumber = "1013304001",
+        }, new TestCallContext(TestContext.Current.CancellationToken));
+
+        PreflightVehicleSnapshotJson.TryDeserialize(reply.VehicleSnapshotJson, out var snapshot).Should().BeTrue();
+        snapshot!.HydratedFields.Select(f => f.FieldKey).Should().Equal("runt_tiene_gravamenes");
+        snapshot.Checks.Select(c => c.Key).Should().Equal("gravamenes");
+    }
+
     private sealed class CapturingChain(ConsultationResult result) : IConsultationProviderChainResolver
     {
         public int Calls { get; private set; }
