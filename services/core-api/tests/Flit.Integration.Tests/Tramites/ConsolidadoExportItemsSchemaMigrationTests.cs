@@ -353,7 +353,7 @@ public sealed class ConsolidadoExportItemsSchemaMigrationTests(PostgresDatabaseF
             .Should().Be(0);
         (await ScalarAsync<long>(cn,
                 "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'tramites.consolidado_export_batches'::regclass AND NOT tgisinternal"))
-            .Should().Be(2, "los triggers de #13367 (row_version y audit) siguen en el lote");
+            .Should().Be(1, "el trigger de row_version de #13367 sigue en el lote (sin trg_audit_log: E6, H1)");
         (await ScalarAsync<string>(cn, huella, ("n", Tablas))).Should().Be(antes, "ninguna tabla preexistente cambia");
         (await ScalarAsync<string>(cn, tablas13367)).Should().Be(columnas13367, "las tablas de #13367 siguen intactas");
         (await ScalarAsync<long>(cn,

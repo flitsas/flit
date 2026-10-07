@@ -116,6 +116,30 @@ public sealed class ConsolidadoExportDdlParityTests
         ddl.Should().NotContain("BEGIN;").And.NotContain("COMMIT;");
     }
 
+    /// <summary>
+    /// H1 (security-agent, ADR-0070 adenda v6): <c>public.trg_audit_log()</c> copia <c>to_jsonb(NEW/OLD)</c> completo a
+    /// <c>audit.audit_logs</c>; sobre el lote copiaría <c>dek_wrapped</c> y anularía la purga criptográfica (Q5). El
+    /// lote no lleva ese trigger (su traza Ley 1581 es <c>consolidado_export_audit</c>); los parámetros sí lo conservan.
+    /// </summary>
+    [Fact]
+    public void H1_ElLoteNoLlevaLaAuditoriaGenerica_ParaQueLaDekEnvueltaNoSalgaDeLaTabla()
+    {
+        var ddl = LoadDdl();
+
+        var triggersDelLote = System.Text.RegularExpressions.Regex.Matches(
+                ddl, @"CREATE TRIGGER\s+(\w+)[^;]*?ON tramites\.consolidado_export_batches[^;]*;")
+            .Select(m => m.Value).ToList();
+        triggersDelLote.Should().ContainSingle("solo queda el de row_version")
+            .Which.Should().Contain("tr_consolidado_export_batches_row_version").And.NotContain("trg_audit_log");
+        ddl.Should().NotContain("tr_consolidado_export_batches_audit");
+        ddl.Should().Contain("CREATE TRIGGER tr_consolidado_export_settings_audit",
+            "el histórico de calibraciones sigue en audit.audit_logs (A3.4)");
+
+        var comentario = ddl[ddl.IndexOf("COMMENT ON COLUMN tramites.consolidado_export_batches.dek_wrapped", StringComparison.Ordinal)..];
+        comentario = comentario[..comentario.IndexOf("';", StringComparison.Ordinal)];
+        comentario.Should().ContainEquivalentOf("nunca sale a la auditoría genérica").And.Contain("audit.audit_logs");
+    }
+
     [Fact]
     public void LaMigracionCargaElDdlEmbebidoYElDownBorraSoloSusTablas()
     {

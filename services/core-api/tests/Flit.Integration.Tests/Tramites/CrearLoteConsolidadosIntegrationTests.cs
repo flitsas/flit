@@ -388,6 +388,48 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
                 ("l", activoUsuarioC2))).Should().Be(1);
     }
 
+    /// <summary>
+    /// H1 (security-agent, ADR-0070 adenda v6): ni al crear ni al purgar queda la DEK envuelta en
+    /// <c>audit.audit_logs</c>. Si quedara, cualquiera con lectura de la BD (donde también vive el keyring de Data
+    /// Protection) la desenvolvería y descifraría las partes de un lote ya purgado.
+    /// </summary>
+    [PostgresFact]
+    public async Task H1_LaDekEnvueltaNuncaLlegaAAuditLogs_NiAlCrearNiAlPurgar()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await SembrarSettingsAsync();
+
+        CrearLoteConsolidadosResultado r;
+        await using (var ctx = NewContext())
+            r = await Handler(ctx).HandleAsync(Gestor(new SeleccionPorIds(HierarchyScenario.ProceduresOf(C1).ToList())), Ct);
+        r.Creado.Should().BeTrue(r.Error);
+        var loteId = r.Lote!.Id;
+
+        // El worker lo termina (UPDATE con la DEK viva) y la retención lo purga con la operación de dominio.
+        await using (var cn = await Fixture.OpenConnectionAsync())
+        {
+            await ExecAsync(cn,
+                """
+                UPDATE tramites.consolidado_export_batches
+                   SET status = 'completado', finished_at = now() - interval '2 hours', expires_at = now() - interval '1 hour'
+                 WHERE id = @l;
+                """, ("l", loteId));
+        }
+
+        await using (var ctx = NewContext())
+            (await new ConsolidadoLoteRepository(ctx).PurgarAsync(loteId, DateTimeOffset.UtcNow, Ct)).Should().BeTrue();
+
+        (await ContarAsync(
+                "SELECT count(*) FROM tramites.consolidado_export_batches WHERE id = @l AND purged_at IS NOT NULL AND dek_wrapped IS NULL",
+                ("l", loteId))).Should().Be(1, "la purga destruyó la DEK de la tabla");
+        (await ContarAsync(
+                """
+                SELECT count(*) FROM audit.audit_logs
+                 WHERE schema_name = 'tramites' AND table_name = 'consolidado_export_batches'
+                   AND (coalesce(old_data ? 'dek_wrapped', false) OR coalesce(new_data ? 'dek_wrapped', false))
+                """)).Should().Be(0, "la DEK envuelta nunca se copia a la auditoría genérica (H1)");
+    }
+
     // ── AC6 ─────────────────────────────────────────────────────────────────────────────
 
     [PostgresFact]

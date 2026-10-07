@@ -13,6 +13,7 @@
 --   E1 settings global sin tenant_id/RLS/soft delete (A3.4, precedente DDL 67).
 --   E4 índices sin tenant_id a la cabeza: activo por usuario, por solicitante, reclamo, purga, FK (A3.3).
 --   E5 batches.tenant_id NULL si y solo si origin = 'superadmin' (A3.1, Q8).
+--   E6 batches sin trg_audit_log: dek_wrapped nunca se copia a audit.audit_logs (adenda v6, H1).
 -- Delta R-d (adenda v5, A5.5): ot_transit_office_id existe si y solo si origin = 'ot_bandeja'.
 --
 -- Idempotente y sin BEGIN/COMMIT: lo ejecuta la migración EF dentro de su transacción.
@@ -200,10 +201,10 @@ CREATE TRIGGER tr_consolidado_export_batches_row_version
     BEFORE UPDATE ON tramites.consolidado_export_batches
     FOR EACH ROW EXECUTE FUNCTION public.trg_row_version();
 
-DROP TRIGGER IF EXISTS tr_consolidado_export_batches_audit ON tramites.consolidado_export_batches;
-CREATE TRIGGER tr_consolidado_export_batches_audit
-    AFTER INSERT OR UPDATE OR DELETE ON tramites.consolidado_export_batches
-    FOR EACH ROW EXECUTE FUNCTION public.trg_audit_log();
+-- E6 (ADR-0070 adenda v6, hallazgo H1 del security-agent): el lote NO lleva tr_..._audit con trg_audit_log.
+-- Esa función copia to_jsonb(NEW/OLD) completo a audit.audit_logs, incluida dek_wrapped; con el keyring de Data
+-- Protection en la misma BD, quien lea la BD desenvolvería la DEK y la purga criptográfica (Q5) no serviría.
+-- La traza Ley 1581 del lote es tramites.consolidado_export_audit (lote_creado/finalizado/cancelado/purgado), como E3.
 
 COMMENT ON TABLE tramites.consolidado_export_batches IS
     'HU #13367 (Feature #13306, ADR-0070) — cabecera de un lote de descarga masiva de consolidados en ZIP. Máximo un lote activo por usuario (uq_consolidado_export_batches_active_per_user). RLS decorativa: el aislamiento es por requested_by_user_id = sub en el repositorio.';
@@ -213,7 +214,7 @@ COMMENT ON COLUMN tramites.consolidado_export_batches.scope_tenant_id IS 'Solo o
 COMMENT ON COLUMN tramites.consolidado_export_batches.requested_role_code IS 'Rol con el que se creó el lote (para revalidación CF-16 y auditoría).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.total_items IS 'Total congelado al crear (ítems insertados en la misma transacción).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.generated_count IS 'v2: incluidos con delivery_mode = generado (primera generación). <= included_count.';
-COMMENT ON COLUMN tramites.consolidado_export_batches.dek_wrapped IS 'Clave de datos del lote envuelta con Data Protection. NULL tras la purga o la cancelación = borrado criptográfico de las partes (Q5).';
+COMMENT ON COLUMN tramites.consolidado_export_batches.dek_wrapped IS 'Clave de datos del lote envuelta con Data Protection. NULL tras la purga o la cancelación = borrado criptográfico de las partes (Q5). Nunca sale a la auditoría genérica audit.audit_logs: la tabla no lleva trg_audit_log (E6, ADR-0070 adenda v6).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.effects_acknowledged_at IS 'Instante en que el usuario aceptó el texto de confirmación de CF-08 (Q1).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.last_claimed_at IS 'Último reclamo de un ítem del lote; base del round-robin entre lotes (CF-21).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.ot_transit_office_id IS 'Obligatorio si y solo si origin = ot_bandeja (#13308, ck_consolidado_export_batches_ot_origin): organismo fijado (transitOfficeIdOverride).';

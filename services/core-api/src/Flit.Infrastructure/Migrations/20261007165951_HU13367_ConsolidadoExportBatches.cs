@@ -20,8 +20,9 @@ namespace Flit.Infrastructure.Migrations
 
         /// <inheritdoc />
         /// <remarks>
-        /// Los índices, la política RLS y los triggers caen con su tabla. No toca tablas preexistentes; las filas que los
-        /// triggers <c>trg_audit_log</c> dejaron en <c>audit.audit_logs</c> se conservan. Revertir en QA/PDN pierde los
+        /// Los índices, la política RLS y los triggers caen con su tabla. No toca tablas preexistentes; las filas que el
+        /// trigger <c>trg_audit_log</c> de los parámetros dejó en <c>audit.audit_logs</c> se conservan (el lote no lo lleva:
+        /// E6, ADR-0070 adenda v6). Revertir en QA/PDN pierde los
         /// lotes y la calibración de parámetros (el infra-agent decide si exportarlos antes).
         /// </remarks>
         protected override void Down(MigrationBuilder migrationBuilder) =>
