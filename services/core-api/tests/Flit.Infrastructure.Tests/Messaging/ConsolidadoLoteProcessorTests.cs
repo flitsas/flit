@@ -240,6 +240,45 @@ public sealed class ConsolidadoLoteProcessorTests
         repo.Iniciados.Should().BeGreaterThan(0, "con el motor encendido también arranca los lotes sin ítems");
     }
 
+    // ── HU #13377: cierre del carril de ítems ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU13377_LotesConCarrilTerminado_SeCierranEnCadaCiclo_Y_UnFalloNoFrenaAlResto()
+    {
+        var (processor, repo, _, _, log) = Crear(Settings());
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        repo.CarrilTerminado[a] = true;
+        repo.CarrilTerminado[b] = true;
+        repo.FallaAlCerrar = a;
+
+        await processor.StartAsync(Ct);
+        await EsperarAsync(() => !repo.CarrilTerminado.ContainsKey(b), "el lote b se cierra aunque el a falle");
+        await EsperarAsync(() => repo.CierresPedidos.Count(id => id == a) >= 2, "el lote a se reintenta en el ciclo siguiente");
+        await processor.StopAsync(Ct);
+
+        log.Entradas.Should().Contain(e => e.Mensaje.Contains(b.ToString(), StringComparison.Ordinal)
+                                          && e.Mensaje.Contains("empaquetando", StringComparison.Ordinal));
+        log.Entradas.Should().Contain(e => e.Nivel == LogLevel.Error && e.Mensaje.Contains(a.ToString(), StringComparison.Ordinal)
+                                          && e.Mensaje.Contains(nameof(InvalidOperationException), StringComparison.Ordinal));
+        log.Entradas.Should().NotContain(e => e.Mensaje.Contains("fallo simulado", StringComparison.Ordinal),
+            "solo el tipo de la excepción, nunca su mensaje");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task HU13377_MotorApagado_NoCierraNingunLote(bool? activo)
+    {
+        var (processor, repo, _, _, _) = Crear(activo is null ? null : Settings(activo: activo.Value));
+        repo.CarrilTerminado[Guid.NewGuid()] = true;
+
+        await processor.StartAsync(Ct);
+        await EsperarAsync(() => repo.LecturasSettings >= 3, "sigue sondeando los parámetros");
+        await processor.StopAsync(Ct);
+
+        repo.CierresPedidos.Should().BeEmpty();
+    }
+
     // ── Reanudación ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -313,8 +352,26 @@ public sealed class ConsolidadoLoteProcessorTests
             return Task.FromResult(0);
         }
 
+        /// <summary>HU #13377 — lotes con el carril terminado que devuelve el sondeo (se vacía al cerrarlos).</summary>
+        public ConcurrentDictionary<Guid, bool> CarrilTerminado { get; } = new();
+
+        /// <summary>HU #13377 — lotes que el procesador pidió cerrar (en orden).</summary>
+        public ConcurrentQueue<Guid> CierresPedidos { get; } = new();
+
+        /// <summary>HU #13377 — si es <c>true</c>, <see cref="CerrarCarrilAsync"/> lanza (fallo de BD en un lote).</summary>
+        public Guid? FallaAlCerrar { get; set; }
+
         public Task<IReadOnlyList<Guid>> ObtenerLotesConCarrilTerminadoAsync(int maximo, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<Guid>>([]);
+            Task.FromResult<IReadOnlyList<Guid>>([.. CarrilTerminado.Keys.Take(maximo)]);
+
+        public Task<CierreCarrilResultado> CerrarCarrilAsync(Guid loteId, CancellationToken ct = default)
+        {
+            CierresPedidos.Enqueue(loteId);
+            if (loteId == FallaAlCerrar)
+                throw new InvalidOperationException("fallo simulado");
+            CarrilTerminado.TryRemove(loteId, out _);
+            return Task.FromResult(new CierreCarrilResultado(true, 1, 1));
+        }
 
         public Task<Guid?> ObtenerLoteActivoIdAsync(Guid usuarioId, CancellationToken ct = default) => throw new NotSupportedException();
 

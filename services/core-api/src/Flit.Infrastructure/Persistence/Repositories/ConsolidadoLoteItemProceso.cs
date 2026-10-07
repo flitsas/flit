@@ -15,6 +15,8 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 ///   <item>HU #13376 — la sentencia corre en una transacción corta que antes toma el lock del lote
 ///   (<c>SELECT … FOR UPDATE</c>): orden lote → ítem, el mismo del reclamo y de la cancelación (#13307), así un
 ///   cierre y una cancelación simultáneos se serializan sin interbloqueo. La generación del PDF queda fuera.</item>
+///   <item>HU #13377 — el cierre de un incluido asigna, en esa misma transacción, las partes ya llenas por N o M
+///   (<see cref="ConsolidadoLotePartesAsignacion"/>, modo parcial).</item>
 /// </list>
 /// Los CHECK del DDL 134 (snapshot del incluido, código del omitido, ítem vivo sin resultado) los garantiza la base.
 /// No escribe placa ni radicado: son el snapshot congelado al crear el lote.
@@ -29,27 +31,43 @@ public sealed class ConsolidadoLoteItemProceso(FlitDbContext db) : IConsolidadoL
     /// (la transacción manual lo exige); si ya hay una transacción en curso, se une a ella.
     /// </summary>
     private async Task<bool> CerrarConLockDelLoteAsync(
-        Guid batchId, Func<CancellationToken, Task<int>> sentencia, CancellationToken ct)
+        Guid batchId, Func<CancellationToken, Task<int>> sentencia, CancellationToken ct, bool asignarPartes = false)
     {
         if (db.Database.CurrentTransaction is not null)
         {
             await BloquearLoteAsync(batchId, ct).ConfigureAwait(false);
-            return await sentencia(ct).ConfigureAwait(false) == 1;
+            return await CerrarYAsignarAsync(batchId, sentencia, asignarPartes, ct).ConfigureAwait(false);
         }
 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(
-            (batchId, sentencia),
+            (batchId, sentencia, asignarPartes),
             async (_, estado, token) =>
             {
                 await using var tx = await db.Database.BeginTransactionAsync(token).ConfigureAwait(false);
                 await BloquearLoteAsync(estado.batchId, token).ConfigureAwait(false);
-                var filas = await estado.sentencia(token).ConfigureAwait(false);
+                var aplicado = await CerrarYAsignarAsync(estado.batchId, estado.sentencia, estado.asignarPartes, token)
+                    .ConfigureAwait(false);
                 await tx.CommitAsync(token).ConfigureAwait(false);
-                return filas == 1;
+                return aplicado;
             },
             verifySucceeded: null,
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #13377 — tras cerrar un ítem <c>incluido</c>, en la misma transacción y bajo el mismo lock del lote, saca las
+    /// partes que ya están llenas por N o M (<see cref="ModoAsignacion.Parcial"/>) para que el empaquetado (#13378) no
+    /// espere al final del lote. Un omitido no llena partes: espera a la siguiente parte o al cierre del carril.
+    /// </summary>
+    private async Task<bool> CerrarYAsignarAsync(
+        Guid batchId, Func<CancellationToken, Task<int>> sentencia, bool asignarPartes, CancellationToken ct)
+    {
+        if (await sentencia(ct).ConfigureAwait(false) != 1)
+            return false;
+        if (asignarPartes)
+            await ConsolidadoLotePartesAsignacion.AsignarAsync(db, batchId, ModoAsignacion.Parcial, ct).ConfigureAwait(false);
+        return true;
     }
 
     private Task<int> BloquearLoteAsync(Guid batchId, CancellationToken ct) =>
@@ -90,7 +108,8 @@ public sealed class ConsolidadoLoteItemProceso(FlitDbContext db) : IConsolidadoL
              WHERE b.id = cerrado.batch_id
             """,
             token),
-            ct).ConfigureAwait(false);
+            ct,
+            asignarPartes: true).ConfigureAwait(false);
     }
 
     public async Task<bool> MarcarOmitidoAsync(LoteItemOmitido cierre, CancellationToken ct = default)

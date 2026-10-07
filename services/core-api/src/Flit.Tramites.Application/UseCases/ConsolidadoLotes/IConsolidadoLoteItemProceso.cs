@@ -9,8 +9,9 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 /// misma sentencia que cierra el ítem.
 /// </summary>
 /// <remarks>
-/// El reclamo (<c>FOR UPDATE SKIP LOCKED</c>, <c>IConsolidadoLoteRepository</c>, #13376) y la asignación de partes
-/// (#13377) NO son de este puerto.
+/// El reclamo (<c>FOR UPDATE SKIP LOCKED</c>, <c>IConsolidadoLoteRepository</c>, #13376) NO es de este puerto. HU #13377:
+/// la implementación, al cerrar un <c>incluido</c>, asigna en la misma transacción las partes ya llenas por N o M
+/// (<see cref="AsignadorDePartes"/>, modo parcial); la última parte la asigna el cierre del carril.
 /// Uso de ejemplo: <c>var aplicado = await proceso.MarcarIncluidoAsync(new(loteId, itemId, adjunto, "existente", ahora), ct);</c>.
 /// </remarks>
 public interface IConsolidadoLoteItemProceso
