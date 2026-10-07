@@ -24,6 +24,8 @@ internal static class SuperAdminEndpointExtensions
         SecurityAuditEndpoints.Map(group);
         // Epic #13316 (HU #13345) — consumo de consultas por empresa, producto y fuente (vive en Consultas).
         ConsultasConsumoEndpoints.Map(group);
+        // Epic #13316 (HU #13357) — mensajes muertos de Notificaciones (correos y webhooks que no salieron).
+        MensajesMuertosEndpoints.Map(group);
 
         return app;
     }

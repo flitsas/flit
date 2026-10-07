@@ -185,7 +185,7 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
         catch (JsonException ex)
         {
             ConsumerLog.Poison(logger, consumer.Queue, ex);
-            await ForwardAsync(channel, delivery, DeadLetterQueue, attempt, "poison", ct).ConfigureAwait(false);
+            await ForwardAsync(channel, delivery, DeadLetterQueue, attempt, "poison", "El cuerpo no es un sobre JSON válido.", ct).ConfigureAwait(false);
             return;
         }
 
@@ -199,12 +199,12 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
             if (attempt < consumer.RetryDelays.Count)
             {
                 ConsumerLog.Retrying(logger, envelope.EventId, consumer.Queue, attempt + 1, consumer.RetryDelays[attempt], ex);
-                await ForwardAsync(channel, delivery, RetryQueue(attempt), attempt + 1, null, ct).ConfigureAwait(false);
+                await ForwardAsync(channel, delivery, RetryQueue(attempt), attempt + 1, null, null, ct).ConfigureAwait(false);
             }
             else
             {
                 ConsumerLog.DeadLettered(logger, envelope.EventId, consumer.Queue, attempt, ex);
-                await ForwardAsync(channel, delivery, DeadLetterQueue, attempt, ex.GetType().Name, ct).ConfigureAwait(false);
+                await ForwardAsync(channel, delivery, DeadLetterQueue, attempt, ex.GetType().Name, ex.Message, ct).ConfigureAwait(false);
                 PlatformMessagingMetrics.DeadLetteredCounter.Add(1,
                     new KeyValuePair<string, object?>("queue", consumer.Queue),
                     new KeyValuePair<string, object?>("type", envelope.Type));
@@ -266,10 +266,11 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
     }
 
     /// <summary>Republica el mensaje a otra cola de esta suscripción (por su exchange de reintentos) y confirma el original.</summary>
-    private Task ForwardAsync(IChannel channel, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, CancellationToken ct) =>
-        ForwardAsync(channel, RetryExchange, delivery, queue, attempt, reason, ct);
+    private Task ForwardAsync(IChannel channel, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, string? error, CancellationToken ct) =>
+        ForwardAsync(channel, RetryExchange, delivery, queue, attempt, reason, error, time.GetUtcNow(), ct);
 
-    private static async Task ForwardAsync(IChannel channel, string retryExchange, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, CancellationToken ct)
+    private static async Task ForwardAsync(
+        IChannel channel, string retryExchange, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, string? error, DateTimeOffset now, CancellationToken ct)
     {
         var properties = new BasicProperties(delivery.BasicProperties)
         {
@@ -280,7 +281,13 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
             },
         };
         if (reason is not null)
-            properties.Headers["x-flit-dead-letter-reason"] = reason;
+        {
+            // HU #13357: lo que la pantalla de mensajes muertos muestra (último error y cuándo murió).
+            properties.Headers[PlatformDeadLetters.ReasonHeader] = reason;
+            properties.Headers[PlatformDeadLetters.AtHeader] = now.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(error))
+                properties.Headers[PlatformDeadLetters.ErrorHeader] = error.Length <= 500 ? error : error[..500];
+        }
 
         await channel.BasicPublishAsync(retryExchange, queue, mandatory: false, properties, delivery.Body, ct).ConfigureAwait(false);
         await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct).ConfigureAwait(false);

@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package flit.notificaciones.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Flit.Notificaciones.Grpc.V1";
+
+// Mensajes muertos de Notificaciones (Epic #13316, HU #13357): los correos y webhooks que agotaron sus reintentos. Los
+// administra el SuperAdmin desde core-api.
+//
+// Autenticación: token de servicio con `aud=notificaciones` y scope `platform.notificaciones.admin`; la empresa en la
+// metadata `x-flit-tenant-id` (la de quien administra: los mensajes son de todas las empresas).
+service MensajesMuertosService {
+  // Hasta `limite` mensajes de la cola, del más antiguo al más reciente.
+  rpc ListarMensajesMuertos(ListarMensajesMuertosRequest) returns (ListarMensajesMuertosResponse);
+
+  // Devuelve el mensaje a su cola con los intentos en cero. NOT_FOUND si ya no está.
+  rpc ReintentarMensajeMuerto(ReintentarMensajeMuertoRequest) returns (ReintentarMensajeMuertoResponse);
+
+  // Saca el mensaje sin procesarlo. NOT_FOUND si ya no está.
+  rpc DescartarMensajeMuerto(DescartarMensajeMuertoRequest) returns (DescartarMensajeMuertoResponse);
+}
+
+enum ColaMuertos {
+  COLA_MUERTOS_UNSPECIFIED = 0;
+  // notificaciones.email.send.dlq
+  COLA_MUERTOS_CORREOS = 1;
+  // notificaciones.webhooks.salientes.dlq
+  COLA_MUERTOS_WEBHOOKS = 2;
+}
+
+message MensajeMuerto {
+  string id = 1;
+  string tipo = 2;
+  optional string tenant_id = 3;
+  optional string productor = 4;
+  google.protobuf.Timestamp ocurrido_en = 5;
+  google.protobuf.Timestamp muerto_en = 6;
+  optional string motivo = 7;
+  optional string ultimo_error = 8;
+  int32 intentos = 9;
+}
+
+message ListarMensajesMuertosRequest {
+  ColaMuertos cola = 1;
+  int32 limite = 2;
+}
+
+message ListarMensajesMuertosResponse {
+  repeated MensajeMuerto mensajes = 1;
+}
+
+message ReintentarMensajeMuertoRequest {
+  ColaMuertos cola = 1;
+  string id = 2;
+}
+
+message ReintentarMensajeMuertoResponse {}
+
+message DescartarMensajeMuertoRequest {
+  ColaMuertos cola = 1;
+  string id = 2;
+}
+
+message DescartarMensajeMuertoResponse {}

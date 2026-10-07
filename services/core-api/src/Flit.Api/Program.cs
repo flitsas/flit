@@ -4,6 +4,7 @@ using Flit.Analytics.Application;
 using Flit.Api.Authorization;
 using Flit.Api.Hosting;
 using Flit.Api.OpenApi;
+using Flit.Api.Notificaciones;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
 using Flit.Api.Consultas;
@@ -180,6 +181,7 @@ builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (S
 // === FLIT Suite: fin servicios ===
 builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13344 (solo con Consultas:Remoto:Habilitado)
+builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13357 (solo con Notificaciones:Remoto:Address)
 
 var app = builder.Build();
 

@@ -22,6 +22,8 @@ public static class OidcDefaults
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).
         ["platform.consultas.admin"] = ServiceAudiences.Consultas,
         ["platform.notificaciones.send"] = ServiceAudiences.Notificaciones,
+        // HU #13357: administración de mensajes muertos de Notificaciones (la usa la consola del SuperAdmin).
+        ["platform.notificaciones.admin"] = ServiceAudiences.Notificaciones,
         ["platform.tramites.ict"] = ServiceAudiences.Tramites,
     };
 

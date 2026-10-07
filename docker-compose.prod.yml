@@ -336,6 +336,8 @@ services:
       Notificaciones__Remoto__Habilitado: ${NOTIFICACIONES_REMOTO_HABILITADO:-false}
       # HU #13356: los webhooks del OT salen por Notificaciones (firmados aquí; filtro anti-SSRF, reintentos y .dlq allá).
       Notificaciones__Remoto__Webhooks: ${NOTIFICACIONES_REMOTO_WEBHOOKS:-false}
+      # HU #13357: mensajes muertos para la consola del SuperAdmin (gRPC a core-notificaciones). Vacío = sin consola.
+      Notificaciones__Remoto__Address: ${NOTIFICACIONES_REMOTO_ADDRESS:-}
       Platform__ServiceClient__ClientId: svc-tramites
       Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:-}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token

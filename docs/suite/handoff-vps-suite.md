@@ -369,6 +369,9 @@ envía en proceso. Por ambiente:
    firmando; Notificaciones los entrega (bloquea destinos internos, reintenta y deja lo que no salió en
    `notificaciones.webhooks.salientes.dlq`). Cada intento queda en `notificaciones.webhooks`. Los webhooks de ICT
    siguen saliendo de core-ict hasta que tengan su llave de firma (pendiente anotado en la HU).
+7. **Mensajes muertos (HU #13357):** `NOTIFICACIONES_REMOTO_ADDRESS=http://core-notificaciones:8085` y recrear core-api
+   (y core-identity, para que el cliente svc-tramites tenga el scope `platform.notificaciones.admin`). El SuperAdmin
+   lista, reintenta y descarta en `/api/v1/superadmin/notificaciones/mensajes-muertos?cola=correos|webhooks`.
 
 ---
 

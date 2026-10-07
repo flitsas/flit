@@ -52,7 +52,8 @@ public static class Program
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
         builder.Services.AddFlitGrpcServer()
-            .RequireServiceToken<NotificacionesGrpcService>(NotificacionesGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Notificaciones);
+            .RequireServiceToken<NotificacionesGrpcService>(NotificacionesGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Notificaciones)
+            .RequireServiceToken<MensajesMuertosGrpcService>(MensajesMuertosGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Notificaciones);
         builder.Services.AddFlitOutbox<NotificacionesDb>(builder.Configuration);
 
         // HU #13353: transportes de correo (los mismos de core-api, Flit.Modules.Notificaciones) y el envío con registro.
@@ -62,6 +63,8 @@ public static class Program
         // HU #13354: trabajos de correo desde el bus (notificaciones.email.send, con reintentos y .dlq).
         // HU #13356: webhooks salientes (notificaciones.webhook.send) con filtro de destinos internos, reintentos y .dlq.
         builder.Services.TryAddSingleton<IFiltroDestinosWebhook, FiltroDestinosPublicos>();
+        // HU #13357: administración de las .dlq de sus consumidores, con su propio usuario del broker.
+        builder.Services.AddSingleton(sp => new PlatformDeadLetters(sp.GetRequiredService<PlatformMessagingOptions>()));
         builder.Services.AddHttpClient(TrabajoWebhookConsumer.ClienteHttp, c => c.Timeout = TimeSpan.FromSeconds(30));
 
         // Las esperas entre reintentos son las del ADR (10 s, 1 min, 10 min) salvo Notificaciones:Correo:EsperasReintento.
@@ -117,6 +120,7 @@ public static class Program
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).
         var grpcHost = $"*:{grpcPort}";
         app.MapGrpcService<NotificacionesGrpcService>().RequireHost(grpcHost);
+        app.MapGrpcService<MensajesMuertosGrpcService>().RequireHost(grpcHost);
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;
     }

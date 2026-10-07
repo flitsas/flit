@@ -200,6 +200,9 @@ jobs:
             services/core-consultas/Directory.Packages.props
             services/core-consultas/src/Flit.Consultas.Grpc.Contracts
             services/core-consultas/src/Flit.Consultas.Grpc.Mapping
+            services/core-notificaciones/Directory.Build.props
+            services/core-notificaciones/Directory.Packages.props
+            services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
             contracts/proto
 
       - name: Extract metadata — core-api

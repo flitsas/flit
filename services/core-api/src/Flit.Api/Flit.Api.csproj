@@ -29,6 +29,8 @@
     <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
     <!-- HU #13346: el resultado vuelve a ConsultationResult con el mismo mapeo que usa core-consultas. -->
     <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Mapping\Flit.Consultas.Grpc.Mapping.csproj" />
+    <!-- HU #13357: cliente gRPC de core-notificaciones (mensajes muertos para el SuperAdmin). -->
+    <ProjectReference Include="..\..\..\core-notificaciones\src\Flit.Notificaciones.Grpc.Contracts\Flit.Notificaciones.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

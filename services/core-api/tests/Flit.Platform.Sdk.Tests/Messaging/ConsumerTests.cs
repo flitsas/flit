@@ -183,6 +183,51 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
     }
 
     [Fact]
+    public async Task HU13357_UnMensajeMuerto_SeListaConSuError_YAlReintentarlo_VuelveASuColaYSeProcesa()
+    {
+        fixture.SkipIfUnavailable();
+        var evento = Sobre();
+        _comportamiento.FallarSiempre(evento.EventId);
+        await PublicarAsync(evento);
+        await Eventually(async () => (await _channel!.MessageCountAsync($"{_cola}.dlq")) == 1, TimeSpan.FromSeconds(20));
+        await using var muertos = new PlatformDeadLetters(new PlatformMessagingOptions { Producer = Productor, ConnectionString = fixture.RabbitMq });
+
+        var lista = await muertos.ListAsync(_cola, 50, TestContext.Current.CancellationToken);
+
+        var muerto = lista.Should().ContainSingle().Subject;
+        muerto.MessageId.Should().Be(evento.EventId.ToString());
+        muerto.Type.Should().Be(Tipo);
+        muerto.TenantId.Should().Be(evento.TenantId);
+        muerto.Reason.Should().Be(nameof(InvalidOperationException));
+        muerto.Error.Should().Be("Efecto que falla a propósito.");
+        muerto.DeadLetteredAt.Should().NotBeNull();
+        (await _channel!.MessageCountAsync($"{_cola}.dlq", TestContext.Current.CancellationToken)).Should().Be(1u, "listar no saca el mensaje");
+
+        _comportamiento.FallarLasPrimeras(evento.EventId, 0);
+        (await muertos.RetryAsync(_cola, evento.EventId.ToString(), TestContext.Current.CancellationToken)).Should().BeTrue();
+
+        await Eventually(async () => await EfectosAsync(evento.EventId) == 1);
+        (await _channel!.MessageCountAsync($"{_cola}.dlq", TestContext.Current.CancellationToken)).Should().Be(0u);
+    }
+
+    [Fact]
+    public async Task HU13357_UnMensajeMuertoDescartado_SaleDeLaDlq_SinProcesarse()
+    {
+        fixture.SkipIfUnavailable();
+        var evento = Sobre();
+        _comportamiento.FallarSiempre(evento.EventId);
+        await PublicarAsync(evento);
+        await Eventually(async () => (await _channel!.MessageCountAsync($"{_cola}.dlq")) == 1, TimeSpan.FromSeconds(20));
+        await using var muertos = new PlatformDeadLetters(new PlatformMessagingOptions { Producer = Productor, ConnectionString = fixture.RabbitMq });
+
+        (await muertos.DiscardAsync(_cola, "otro-id", TestContext.Current.CancellationToken)).Should().BeFalse();
+        (await muertos.DiscardAsync(_cola, evento.EventId.ToString(), TestContext.Current.CancellationToken)).Should().BeTrue();
+
+        (await _channel!.MessageCountAsync($"{_cola}.dlq", TestContext.Current.CancellationToken)).Should().Be(0u);
+        (await EfectosAsync(evento.EventId)).Should().Be(0);
+    }
+
+    [Fact]
     public void LasEsperasPorDefecto_SonLasDelAdr()
     {
         new PlatformConsumerOptions().RetryDelays.Should().Equal(TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
