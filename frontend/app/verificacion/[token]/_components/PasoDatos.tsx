@@ -9,7 +9,6 @@ import {
   RENDERED_CONSENT_TEXT_VERSION,
   CONTACT_EMAIL,
   LEGAL_FOOTER_PREFIX,
-  LEGAL_FOOTER_SUFFIX,
 } from "@/lib/captura-manual/consent";
 import {
   ManualCaptureError,
@@ -163,7 +162,7 @@ export function PasoDatos({
         >
           {CONTACT_EMAIL}
         </a>
-        . {LEGAL_FOOTER_SUFFIX}
+        .
       </p>
     </section>
   );

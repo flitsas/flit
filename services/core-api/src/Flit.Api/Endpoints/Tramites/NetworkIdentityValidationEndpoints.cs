@@ -188,6 +188,10 @@ internal static class NetworkIdentityValidationEndpoints
                     [ownerTenant]));
             }
 
+            // El flujo manual es solo del Super Admin FLIT: quien consulta la red ve una bitácora biométrica normal.
+            if (result is not null && !CompanyTenantAccess.IsSuperAdmin(http.User))
+                result = result with { Events = IdentityAuditParaCliente.Aplicar(result.Events) };
+
             return error switch
             {
                 null => Results.Ok(result),

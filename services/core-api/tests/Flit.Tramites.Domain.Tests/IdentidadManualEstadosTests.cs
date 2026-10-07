@@ -71,14 +71,31 @@ public sealed class IdentidadManualEstadosTests
         v.Provider.Should().Be(BiometricProviders.Mock, "el default no cambia");
     }
 
-    [Fact]
-    public void Approve_NoCambiaDeComportamiento_NoEstampaOrigen()
+    [Theory]
+    [InlineData(BiometricProviders.Mock)]
+    [InlineData(BiometricProviders.Kyverum)]
+    public void Approve_automatica_estampa_origen_automatica(string provider)
     {
-        var v = new ProcedureInstanceBiometricValidation { Status = BiometricEstados.Enviado };
+        var v = new ProcedureInstanceBiometricValidation { Status = BiometricEstados.Enviado, Provider = provider };
 
         v.Approve(Now);
 
         v.Status.Should().Be(BiometricEstados.Aprobado);
-        v.ApprovalOrigin.Should().BeNull("el origen lo estampan las HU de los flujos, no Approve");
+        v.ApprovalOrigin.Should().Be(BiometricApprovalOrigins.Automatica, "HU #13303: la aprobación de Kyverum/mock es automática");
+    }
+
+    [Fact]
+    public void Approve_del_flujo_manual_no_estampa_origen_y_manual_lo_sella_despues()
+    {
+        var v = new ProcedureInstanceBiometricValidation
+        {
+            Status = BiometricEstados.PendienteRevisionManual, Provider = BiometricProviders.Manual,
+        };
+
+        v.Approve(Now);
+        v.ApprovalOrigin.Should().BeNull("la aprobación manual no se marca como automática: la sella SellarAprobacionManual");
+
+        v.SellarAprobacionManual(Guid.NewGuid(), Now);
+        v.ApprovalOrigin.Should().Be(BiometricApprovalOrigins.Manual);
     }
 }

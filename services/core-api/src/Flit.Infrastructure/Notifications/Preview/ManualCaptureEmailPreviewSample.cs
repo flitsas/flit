@@ -12,7 +12,7 @@ public static class ManualCaptureEmailPreviewSample
     public const string SampleRecipientName = "Ana María Pérez Gómez";
 
     /// <summary>Enlace de ejemplo (dominio reservado <c>.example</c>): no lleva a ninguna captura real.</summary>
-    public const string SampleLink = "https://app.flit.example/captura-manual/TOKEN-DE-EJEMPLO";
+    public const string SampleLink = "https://app.flit.example/verificacion/TOKEN-DE-EJEMPLO";
 
     public static (string Subject, string Html) Build(string? assetsBaseUrl = null, EmailTheme? theme = null) =>
         ManualCaptureEmailComposer.Compose(

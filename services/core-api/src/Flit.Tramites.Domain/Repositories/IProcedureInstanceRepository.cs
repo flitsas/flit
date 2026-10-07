@@ -444,7 +444,7 @@ public interface IProcedureInstanceRepository
     /// <summary>
     /// HU #13290 — persiste de forma ATÓMICA la captura manual ya aplicada en memoria con
     /// <c>RegistrarCapturaManual</c> (rutas, hash de firma y estado) con un <c>UPDATE</c> guardado por
-    /// <c>provider = 'manual'</c> y <c>status = 'manual_activo'</c>: dos envíos concurrentes con el mismo token no pueden ganar
+    /// <c>provider = 'manual'</c> y <c>status = 'manual_activo'</c> (o <c>'rechazado'</c> con motivo, HU #13299): dos envíos concurrentes con el mismo token no pueden ganar
     /// ambos (el segundo afecta 0 filas y no pisa las rutas del primero). Devuelve <c>false</c> si otro envío ya consumió el
     /// enlace; la entidad queda sin cambios pendientes en el change tracker (el UPDATE ya escribió sus valores).
     /// </summary>

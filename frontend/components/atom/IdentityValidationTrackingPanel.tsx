@@ -141,6 +141,7 @@ export function IdentityValidationTrackingPanel({
   defaultOpen = false,
   embebido = false,
   detailLayout = false,
+  compacto = false,
   network = false,
 }: {
   validationId: string;
@@ -169,6 +170,11 @@ export function IdentityValidationTrackingPanel({
   embebido?: boolean;
   /** Tabla del modal de Identidad: badges de resultado, «Detalle técnico», cifrado OK. */
   detailLayout?: boolean;
+  /**
+   * Columna angosta (detalle del trámite): cada evento va en su propia tarjeta (fecha · etapa · resultado ·
+   * detalle) en vez de la tabla de cinco columnas, que ahí se estrangulaba y cortaba el texto.
+   */
+  compacto?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen || embebido);
   const [events, setEvents] = useState<IdentityAuditEvent[] | null>(null);
@@ -251,7 +257,25 @@ export function IdentityValidationTrackingPanel({
           {!loading && !error && events && events.length === 0 && (
             <p className="text-xs opacity-60">Sin eventos registrados todavía.</p>
           )}
-          {events && events.length > 0 && (
+          {events && events.length > 0 && compacto && (
+            <ul className="space-y-2" aria-label="Bitácora de la validación">
+              {events.map((e, i) => (
+                <li key={i} className="rounded-xl border bg-white px-3 py-2.5 text-xs dark:bg-[#0B0F14]" style={{ borderColor: '#DFE5ED' }}>
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                    <span className="font-semibold">{auditStageLabel(e.stage, true)}</span>
+                    <StatusBadge
+                      label={auditOutcomeLabel(e)}
+                      tone={auditOutcomeTone(e)}
+                      ariaLabel={`Resultado: ${auditOutcomeLabel(e)}`}
+                    />
+                  </div>
+                  <p className="mt-1 opacity-70">{formatFecha(e.occurredAt)}</p>
+                  <p className="mt-1 break-words opacity-70">{auditDetailText(e)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {events && events.length > 0 && !compacto && (
             // La referencia del diseño reserva un ancho mínimo y deja que la tabla ruede en
             // horizontal: son cinco columnas y la última es texto largo. Sin el mínimo, «Detalle»
             // se estrangula hasta una palabra por línea en cuanto la tarjeta va a media pantalla.

@@ -120,6 +120,47 @@ public sealed class ManualCaptureSessionHandlersTests
         error.Should().Be(ManualCaptureErrors.EstadoInvalido);
     }
 
+    // ── HU #13299 — rechazada con enlace nuevo ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Get_rechazada_con_motivo_y_enlace_vigente_devuelve_la_sesion()
+    {
+        var v = Fila(BiometricEstados.Rechazado);
+        v.RejectionReasonCode = "rostro_no_coincide";
+
+        var (view, error) = await Get().HandleAsync(Token, Ct);
+
+        error.Should().BeNull();
+        view!.FullName.Should().Be("Ana Prueba");
+        view.ExpiresAt.Should().Be(v.ExpiresAt);
+    }
+
+    [Fact]
+    public async Task Get_rechazada_con_el_enlace_vencido_responde_expirada()
+    {
+        var v = Fila(BiometricEstados.Rechazado, expiresAt: Now.AddSeconds(-1));
+        v.RejectionReasonCode = "rostro_no_coincide";
+
+        (await Get().HandleAsync(Token, Ct)).Error.Should().Be(ManualCaptureErrors.Expirada);
+    }
+
+    [Fact]
+    public async Task Consent_estando_rechazada_con_enlace_vigente_guarda_la_constancia_nueva()
+    {
+        var v = Fila(BiometricEstados.Rechazado);
+        v.RejectionReasonCode = "rostro_no_coincide";
+        v.ConsentAt = Now.AddDays(-5);
+        v.ConsentIp = "198.51.100.9";
+
+        var error = await Consent().HandleAsync(
+            new RegistrarConsentimientoManualCommand(Token, true, ManualCaptureConsent.TextVersion, "203.0.113.7"), Ct);
+
+        error.Should().BeNull();
+        v.ConsentAt.Should().Be(Now);
+        v.ConsentIp.Should().Be("203.0.113.7");
+        v.Status.Should().Be(BiometricEstados.Rechazado, "el consentimiento no cambia el estado");
+    }
+
     [Fact]
     public async Task Get_tramite_anulado_responde_estado_invalido()
     {

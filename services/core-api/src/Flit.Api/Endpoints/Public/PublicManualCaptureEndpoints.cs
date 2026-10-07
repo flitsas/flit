@@ -10,7 +10,7 @@ namespace Flit.Api.Endpoints.Public;
 
 /// <summary>
 /// Endpoints PÚBLICOS de la captura manual de identidad (Feature #13281 B, Épica #13202): el cliente abre su enlace
-/// <c>/captura-manual/[token]</c>, ve sus datos, acepta el consentimiento y (HU #13290) envía rostro, documento y firma.
+/// <c>/verificacion/[token]</c>, ve sus datos, acepta el consentimiento y (HU #13290) envía rostro, documento y firma.
 /// Sin auth ni tenant header: el token (alta entropía, solo su hash en BD) es la credencial. Un token desconocido,
 /// regenerado o de otro proveedor responde 404 genérico (sin revelar si existió). Errores: <c>{ code, message }</c>
 /// (contrato §2). Limitado por IP con la policy <c>manual-capture</c>. Rutas independientes de <c>/public/biometric/{token}</c>

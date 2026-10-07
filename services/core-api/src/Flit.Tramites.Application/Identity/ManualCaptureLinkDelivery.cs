@@ -15,7 +15,8 @@ internal static class ManualCaptureLinkDelivery
         IIdentityValidationAuditLog audit,
         ProcedureInstanceBiometricValidation v,
         string token,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? rejectionReasonLabel = null)
     {
         var enviado = false;
         var causa = "sin_correo";
@@ -26,7 +27,7 @@ internal static class ManualCaptureLinkDelivery
             try
             {
                 enviado = await notifier
-                    .NotifyAsync(new ManualCaptureLink(v.Id, v.TenantId, token, v.ExpiresAt, v.Email, v.Name), ct)
+                    .NotifyAsync(new ManualCaptureLink(v.Id, v.TenantId, token, v.ExpiresAt, v.Email, v.Name, rejectionReasonLabel), ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

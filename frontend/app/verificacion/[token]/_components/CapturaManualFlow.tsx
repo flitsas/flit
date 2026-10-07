@@ -146,7 +146,6 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           captures={captures}
           onSignature={(png) => setCaptures((c) => ({ ...c, firma: png ?? undefined }))}
           onOutcome={onOutcome}
-          onBack={() => dispatch({ type: "back" })}
           onSendingChange={setSending}
         />
       ) : (
@@ -159,7 +158,6 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
             setCaptures((c) => ({ ...c, [step.id]: blob }));
             dispatch({ type: "next" });
           }}
-          onBack={() => dispatch({ type: "back" })}
         />
       )}
     </CaptureCard>
