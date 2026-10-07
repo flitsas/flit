@@ -35,6 +35,7 @@ public static class Program
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
         ServicioSettings.Validate(builder.Configuration);
+        ProveedoresSettings.Validate(builder.Configuration); // HU #13347: modo real sin su secreto no arranca
         var grpcPort = builder.Configuration.GetValue<int>(ServicioSettings.GrpcPortKey);
 
         builder.Host.UseDefaultServiceProvider(o =>

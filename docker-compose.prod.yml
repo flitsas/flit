@@ -444,6 +444,64 @@ services:
     oom_score_adj: ${CORE_IDENTITY_OOM_SCORE_ADJ:-0}
     logging: *default-logging
 
+  # ── core-consultas (Epic #13316, HU #13347) — CORE_CONSULTAS_PORT / CORE_CONSULTAS_GRPC_PORT, sin publicar ──
+  # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Perfil
+  # "consultas": no arranca si no se pide (COMPOSE_PROFILES=...,consultas). Sin `ports`: ni REST ni gRPC se publican.
+  # Si falta configuración o el secreto de un proveedor en modo real, no arranca y el log dice qué variable falta.
+  # Pasos en docs/suite/handoff-vps-suite.md §4.9.
+  core-consultas:
+    profiles: ["consultas"]
+    image: ghcr.io/flitsas/flitdev/core-consultas:${CORE_CONSULTAS_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:${CORE_CONSULTAS_PORT:-4026}
+      Servicio__GrpcPort: ${CORE_CONSULTAS_GRPC_PORT:-8084}
+      # Usuario de base dueño del esquema consultas (deploy/postgres/servicio-con-esquema-propio.sql).
+      ConnectionStrings__Servicio: ${CONNECTION_STRING_CONSULTAS:-}
+      Platform__ServiceClient__ClientSecret: ${SVC_CONSULTAS_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
+      Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
+      Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL:-amqp://flit:sin-broker@rabbitmq:5672/}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Proveedores: las MISMAS variables que hoy tiene core-api (hasta el corte, HU #13348, conviven en los dos).
+      VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
+      VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
+      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
+      VERIFIK_VEHICLE_MODE: ${VERIFIK_VEHICLE_MODE:-real}
+      VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
+      VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
+      VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
+      VERIFIK_RUES_MODE: ${VERIFIK_RUES_MODE:-mock}
+      INTEMPO_MODE: ${INTEMPO_MODE:-mock}
+      FASECOLDA_MODE: ${FASECOLDA_MODE:-mock}
+      FASECOLDA_API_USERNAME: ${FASECOLDA_API_USERNAME:-}
+      FASECOLDA_API_PASSWORD: ${FASECOLDA_API_PASSWORD:-}
+      FASECOLDA_BY_VIN_API_BASE_URL: ${FASECOLDA_BY_VIN_API_BASE_URL:-https://fasecoldaback.quantil.co}
+      FASECOLDA_BY_VIN_API_PATH: ${FASECOLDA_BY_VIN_API_PATH:-/api/busquedaVin}
+      FASECOLDA_API_BASE_URL: ${FASECOLDA_API_BASE_URL:-https://guiadevalores.fasecolda.com/apifasecolda}
+      FASECOLDA_AUTH_API_PATH: ${FASECOLDA_AUTH_API_PATH:-/token}
+      FASECOLDA_LIST_CODE_API_PATH: ${FASECOLDA_LIST_CODE_API_PATH:-/api/listacodigosid/consultabycodigo}
+      FASECOLDA_API_GRANT_TYPE: ${FASECOLDA_API_GRANT_TYPE:-password}
+      FASECOLDA_API_SECONDS_TIMEOUT: ${FASECOLDA_API_SECONDS_TIMEOUT:-55}
+      KYVERUM_RUNT_BASE_URL: ${KYVERUM_RUNT_BASE_URL:-https://runt.kyverum.com}
+      KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
+      KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
+      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
+    healthcheck:
+      # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${CORE_CONSULTAS_MEM_LIMIT:-0}
+    cpus: ${CORE_CONSULTAS_CPUS:-0}
+    logging: *default-logging
+
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
   core-ict:
     image: ghcr.io/flitsas/flitdev/core-ict:${CORE_ICT_TAG:-latest}

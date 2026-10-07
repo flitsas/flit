@@ -69,6 +69,8 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
                 ["Platform:Auth:JwksUri"] = "http://core-identity/.well-known/jwks.json",
                 ["Platform:Auth:Issuers:0"] = Issuer,
                 ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
+                ["Consultations:VerifikVehicleMode"] = "mock",
+                ["ImprontaRunt:ApiKey"] = "llave-de-prueba",
                 [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
             });
             b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_key));

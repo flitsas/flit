@@ -144,6 +144,8 @@ quedan también en el `.env`.
 | **Hub (`frontend-hub`)** | `HUB_PORT` | **4022** | **5022** | **6022** |
 | gRPC interno de core-api (no publicado) | `CORE_API_GRPC_PORT` | 8082 | 8082 | 8082 |
 | gRPC interno de core-identity (no publicado, Epic #13316) | `CORE_IDENTITY_GRPC_PORT` | vacío = apagado; propuesto 8083 | igual | igual |
+| core-consultas REST (no publicado, perfil `consultas`) | `CORE_CONSULTAS_PORT` | 4026 (propuesto) | igual | igual |
+| core-consultas gRPC (no publicado) | `CORE_CONSULTAS_GRPC_PORT` | 8084 (propuesto) | igual | igual |
 | Reservados, sin servicio todavía | — | Comparendos 4023; Diagnóstico 4024 | 5023; 5024 | 6023; 6024 |
 
 Notas:
@@ -281,6 +283,32 @@ y en este orden:
 
 Volver atrás: en orden inverso. El esquema HMAC se retira del código cuando el corte esté verificado en PDN. El
 reflejo de estado core-api → core-ict (`Ict:StateCallback`) sigue con el secreto HMAC: no es parte de esta HU.
+
+### 4.9 Consultas como servicio (Epic #13316, HUs #13343-#13347)
+
+core-consultas atiende las consultas a proveedores (RUNT, SIMIT, RNMC, RUES, avalúos) para Trámites e ICT por gRPC en
+la red interna. Sin tocar nada, todo sigue como hoy: core-api consulta en proceso. Por ambiente, en este orden:
+
+1. **Base:** usuario dueño del esquema `consultas` (`deploy/postgres/README.md`):
+   `psql "$ADMIN_URL" -v servicio=consultas -v conexiones=20 -v clave="$CLAVE" -f deploy/postgres/servicio-con-esquema-propio.sql`
+   y con eso `CONNECTION_STRING_CONSULTAS` (usuario `flit_consultas`) en el `.env`.
+2. **Secretos:** `SVC_CONSULTAS_CLIENT_SECRET` (su cliente de servicio) y `SVC_TRAMITES_CLIENT_SECRET` (con el que
+   core-api lo llama), uno distinto por ambiente; recrear core-api y core-identity para que registren los clientes.
+   Los secretos de proveedores son los mismos que ya tiene core-api (`VERIFIK_*`, `KYVERUM_RUNT_*`, `FASECOLDA_*`).
+   Si a uno en modo real le falta su secreto, core-consultas no arranca y lo dice en el log.
+3. **Arrancar:** sumar `consultas` a `COMPOSE_PROFILES` y desplegar (el CD lo construye en `build-core-consultas`).
+   No publica puertos: REST `CORE_CONSULTAS_PORT` (4026) y gRPC `CORE_CONSULTAS_GRPC_PORT` (8084) quedan en la red de
+   Docker. El CD revisa su `/health/ready` desde dentro del contenedor.
+4. **Configuración por empresa:** `psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-configuracion-consultas.sql`.
+5. **Trámites por Consultas:** `CONSULTAS_REMOTO_HABILITADO=true` y recrear core-api. Desde ahí las consultas de
+   Trámites van a core-consultas; si no responde, se hacen en proceso (`CONSULTAS_REMOTO_RESPALDO=true`, por defecto)
+   y queda en el log y en la métrica `flit.consultas.respaldo`. El SuperAdmin ve el consumo en
+   `GET /api/v1/superadmin/consultas/consumo`.
+6. **ICT por Consultas:** `ICT_CORE_CONSULTAS_ADDRESS=http://core-consultas:8084` y recrear core-ict (necesita
+   `ICT_SERVICE_TOKEN_USE_IDENTITY=true`, §4.8).
+
+Volver atrás: en orden inverso (apagar las banderas basta; core-consultas puede seguir corriendo). El corte, cuando
+todo esté verificado en PDN, es la HU #13348: quita los proveedores y sus secretos de core-api.
 
 ---
 

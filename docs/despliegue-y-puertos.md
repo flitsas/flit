@@ -170,6 +170,7 @@ su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto apart
 |----------|--------|----------|--------|
 | `core-api` (ICT) | `8082` | `CORE_API_GRPC_PORT` | En uso |
 | `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
+| `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
 
 ---
 
