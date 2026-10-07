@@ -48,9 +48,14 @@ public sealed record DraftProcedureType(
 /// </summary>
 public interface IProcedureDraftClient
 {
+    /// <param name="vehicle">
+    /// Bug #13304 — consulta RUNT de la validación ICT (vigente) que core-api reutiliza sin re-consultar
+    /// (campo 14 <c>precomputed_vehicle</c>). <c>null</c> si el pre-trámite no tiene consulta de vehículo.
+    /// </param>
     Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
+        VehicleConsultationSnapshot? vehicle,
         CancellationToken ct = default);
 
     /// <summary>Pausa o reanuda un borrador ya materializado (v1 pauseDraftProcess).</summary>
@@ -86,4 +91,24 @@ public interface IProcedureDraftClient
         Guid externalRef,
         decimal sellingPrice,
         CancellationToken ct = default);
+}
+
+/// <summary>
+/// Bug #13304 — qué sabe el pre-trámite de su consulta RUNT de vehículo. <see cref="RequiresVehicle"/> es
+/// true si el master tiene una source_query VEHICLE/VIN (traspaso/matrícula); <see cref="Snapshot"/> es la
+/// respuesta más reciente con resultado completo guardado (null si no hay).
+/// </summary>
+public sealed record VehicleSnapshotLookup(bool RequiresVehicle, VehicleConsultationSnapshot? Snapshot);
+
+/// <summary>
+/// Bug #13304 — lee y purga el resultado completo de la consulta RUNT guardado por el orquestador en
+/// <c>ict.external_integration_source_response.vehicle_snapshot</c> (PII: solo vive hasta materializar).
+/// </summary>
+public interface IIctVehicleSnapshotReader
+{
+    /// <summary>Última respuesta VEHICLE/VIN consultada del master que tenga resultado completo.</summary>
+    Task<VehicleSnapshotLookup> GetLatestAsync(Guid masterId, CancellationToken ct = default);
+
+    /// <summary>Vacía <c>vehicle_snapshot</c> de todas las respuestas del master (minimización de PII).</summary>
+    Task<int> PurgeAsync(Guid masterId, CancellationToken ct = default);
 }

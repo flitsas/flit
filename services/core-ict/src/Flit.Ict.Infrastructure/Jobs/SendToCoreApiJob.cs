@@ -98,6 +98,7 @@ public sealed class SendToCoreApiJob(
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
             var draftClient = scope.ServiceProvider.GetRequiredService<IProcedureDraftClient>();
+            var snapshots = scope.ServiceProvider.GetRequiredService<IIctVehicleSnapshotReader>();
 
             var master = await db.Masters
                 .Include(m => m.Actors)
@@ -114,7 +115,16 @@ public sealed class SendToCoreApiJob(
                 return;
             }
 
-            var result = await draftClient.CreateDraftAsync(master, mapping.Type, ct);
+            // Bug #13304 (opción a): sin consulta RUNT vigente no se llama a core-api; el master queda CON
+            // NOVEDADES para que el tercero re-registre (core-api no vuelve a consultar el RUNT).
+            var (sent, novedadRunt) = await EnviarConConsultaRuntAsync(
+                master, mapping.Type, draftClient, snapshots, DateTimeOffset.UtcNow,
+                Options.VehicleConsultationMaxAgeHours, ct);
+            if (sent is not { } result)
+            {
+                await PersistirNovedadAsync(db, master, novedadRunt ?? NovedadSinConsultaRunt, ct);
+                return;
+            }
 
             if (result.ErrorCode == "grpc_unavailable")
             {
@@ -157,6 +167,10 @@ public sealed class SendToCoreApiJob(
                 await RecordEventAsync(
                     db, master, "borrador_creado",
                     novedad is null ? "ok" : MaterializacionNovedades.OutcomeConNovedades, novedad, ct);
+
+                // Bug #13304 — minimización de PII: el resultado completo del RUNT ya está en core-api.
+                // Va al final para que un fallo aquí no deje sin histórico/webhook un borrador ya creado.
+                await snapshots.PurgeAsync(master.Id, ct);
             }
             else
             {
@@ -235,10 +249,80 @@ public sealed class SendToCoreApiJob(
         cmd.Parameters.Add(p);
     }
 
-    private static async Task FlagNoveltyAsync(IctDbContext db, ExternalIntegrationMaster master, string message, CancellationToken ct)
+    /// <summary>Novedad cuando el pre-trámite tiene consulta de vehículo pero no quedó resultado completo.</summary>
+    internal const string NovedadSinConsultaRunt = "sin consulta RUNT; re-registre el pretrámite";
+
+    /// <summary>Novedad cuando el resultado de la consulta RUNT superó la vigencia.</summary>
+    internal const string NovedadConsultaRuntVencida = "consulta RUNT vencida; re-registre el pretrámite";
+
+    private const int DefaultVehicleConsultationMaxAgeHours = 24;
+
+    /// <summary>
+    /// Bug #13304 — ¿se puede enviar con la consulta RUNT guardada? null = sí (vigente, o el tipo no consulta
+    /// vehículo). Si no, la novedad: ausente o más vieja que <paramref name="maxAgeHours"/> (≤ 0 ⇒ 24 h).
+    /// </summary>
+    internal static string? NovedadConsultaRunt(VehicleSnapshotLookup lookup, DateTimeOffset now, int maxAgeHours)
+    {
+        ArgumentNullException.ThrowIfNull(lookup);
+        if (!lookup.RequiresVehicle)
+        {
+            return null;
+        }
+
+        if (lookup.Snapshot is null)
+        {
+            return NovedadSinConsultaRunt;
+        }
+
+        var vigencia = TimeSpan.FromHours(maxAgeHours > 0 ? maxAgeHours : DefaultVehicleConsultationMaxAgeHours);
+        return lookup.Snapshot.ConsultedAt < now - vigencia ? NovedadConsultaRuntVencida : null;
+    }
+
+    /// <summary>
+    /// Bug #13304 (D4, opción a) — paso de envío: lee la consulta RUNT del master y, si está vigente, crea el
+    /// borrador con ella (campo 14). Si está vencida o no existe NO llama a core-api: deja el master en
+    /// ps=4 con la novedad (en memoria; el job la persiste con <see cref="PersistirNovedadAsync"/>).
+    /// </summary>
+    internal static async Task<(CreateDraftResult? Result, string? Novedad)> EnviarConConsultaRuntAsync(
+        ExternalIntegrationMaster master,
+        DraftProcedureType procedureType,
+        IProcedureDraftClient draftClient,
+        IIctVehicleSnapshotReader snapshots,
+        DateTimeOffset now,
+        int maxAgeHours,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(master);
+        ArgumentNullException.ThrowIfNull(draftClient);
+        ArgumentNullException.ThrowIfNull(snapshots);
+
+        var lookup = await snapshots.GetLatestAsync(master.Id, ct);
+        var novedad = NovedadConsultaRunt(lookup, now, maxAgeHours);
+        if (novedad is not null)
+        {
+            AplicarNovedad(master, novedad);
+            return (null, novedad);
+        }
+
+        return (await draftClient.CreateDraftAsync(master, procedureType, lookup.Snapshot, ct), null);
+    }
+
+    /// <summary>Deja el master CON NOVEDADES (ps=4) con el mensaje en los comentarios externos.</summary>
+    internal static void AplicarNovedad(ExternalIntegrationMaster master, string message)
     {
         master.ProcessStatusId = 4;
         master.ExternalCommentsValidation = (master.ExternalCommentsValidation + " " + message + ";").Trim();
+    }
+
+    private static async Task FlagNoveltyAsync(IctDbContext db, ExternalIntegrationMaster master, string message, CancellationToken ct)
+    {
+        AplicarNovedad(master, message);
+        await PersistirNovedadAsync(db, master, message, ct);
+    }
+
+    /// <summary>Persiste una novedad ya aplicada en memoria: estado, histórico, webhook y timeline.</summary>
+    private static async Task PersistirNovedadAsync(IctDbContext db, ExternalIntegrationMaster master, string message, CancellationToken ct)
+    {
         await db.SaveChangesAsync(ct);
         await RecordStatusAsync(db, master, 4, "CON NOVEDADES: " + message, ct);
         await EnqueueWebhookAsync(db, master, 4, "con_novedades", "CON NOVEDADES: " + message, ct);
