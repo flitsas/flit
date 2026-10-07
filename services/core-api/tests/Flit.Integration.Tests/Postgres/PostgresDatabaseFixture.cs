@@ -98,6 +98,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "audit.audit_logs",
         // HU #12958: tramites encendido para las compañías mock (backfill y disparador del DDL 119).
         "platform.tenant_products",
+        // HU #13367 (DDL 133): fila única de parámetros del motor de lotes de consolidados. Configuración, no
+        // catálogo (como runt_confirmation_settings): se trunca; la prueba que la necesite reaplica el DDL 133.
+        "tramites.consolidado_export_settings",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";
