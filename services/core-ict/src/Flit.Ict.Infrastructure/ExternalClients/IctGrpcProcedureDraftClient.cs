@@ -44,7 +44,11 @@ public sealed partial class IctGrpcProcedureDraftClient(
                     Log.MaterializedWithWarning(logger, reply.ErrorCode, master.Id);
                 }
 
-                return new CreateDraftResult(id, reply.ReferenceNumber, reply.Status, null);
+                // Bug #13304 — el warning viaja en el resultado (antes se descartaba): el job conserva el id
+                // (hay id ⇒ éxito) y puede registrar actors_warning/commercial_warning en el master.
+                return new CreateDraftResult(
+                    id, reply.ReferenceNumber, reply.Status,
+                    string.IsNullOrEmpty(reply.ErrorCode) ? null : reply.ErrorCode);
             }
 
             return new CreateDraftResult(
@@ -227,6 +231,41 @@ public sealed partial class IctGrpcProcedureDraftClient(
         {
             Log.GrpcFailed(logger, ex.StatusCode.ToString(), ex.Status.Detail, procedureInstanceId, ex);
             return new DraftActionResult(null, "grpc_unavailable");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13304 — edita el precio de venta del borrador en core-api (UpdateDraftCommercial). core-api
+    /// valida tenant + external_ref y que siga en borrador; su error_code se devuelve tal cual
+    /// (<c>not_draft</c>, <c>not_found</c>, <c>invalid_*</c>). Canal caído → <c>grpc_unavailable</c>.
+    /// </summary>
+    public async Task<(bool Ok, string? Error)> UpdateCommercialAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        Guid externalRef,
+        decimal sellingPrice,
+        CancellationToken ct = default)
+    {
+        var request = new UpdateDraftCommercialRequest
+        {
+            TenantId = tenantId.ToString(),
+            ProcedureInstanceId = procedureInstanceId.ToString(),
+            ExternalRef = externalRef.ToString(),
+            Commercial = new CommercialData
+            {
+                ValorVenta = sellingPrice.ToString(CultureInfo.InvariantCulture),
+            },
+        };
+
+        try
+        {
+            var reply = await client.UpdateDraftCommercialAsync(request, cancellationToken: ct);
+            return string.IsNullOrEmpty(reply.ErrorCode) ? (true, null) : (false, reply.ErrorCode);
+        }
+        catch (RpcException ex)
+        {
+            Log.GrpcFailed(logger, ex.StatusCode.ToString(), ex.Status.Detail, procedureInstanceId, ex);
+            return (false, "grpc_unavailable");
         }
     }
 

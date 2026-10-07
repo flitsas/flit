@@ -42,8 +42,15 @@ public static class IctPreTramiteEndpoints
                 return error switch
                 {
                     "not_found" => Results.Json(new { error }, statusCode: StatusCodes.Status404NotFound),
-                    "already_materialized" or "not_editable" or "stale" =>
+                    // Bug #13304: not_draft = materializado y ya fuera de borrador; mismo 409 que already_materialized.
+                    // core_api_not_found: el pre-trámite existe en ICT pero core-api no encuentra el trámite.
+                    "already_materialized" or "not_editable" or "stale" or EditPreTramiteHandler.NotDraft
+                        or EditPreTramiteHandler.CoreApiNotFound =>
                         Results.Json(new { error }, statusCode: StatusCodes.Status409Conflict),
+                    EditPreTramiteHandler.CoreApiUnavailable =>
+                        Results.Json(new { error }, statusCode: StatusCodes.Status503ServiceUnavailable),
+                    EditPreTramiteHandler.CoreApiError =>
+                        Results.Json(new { error }, statusCode: StatusCodes.Status502BadGateway),
                     "unauthenticated" => Results.Json(new { error }, statusCode: StatusCodes.Status401Unauthorized),
                     _ => Results.Json(new { error }, statusCode: StatusCodes.Status400BadRequest),
                 };
