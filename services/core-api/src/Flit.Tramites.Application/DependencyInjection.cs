@@ -409,6 +409,9 @@ public static class DependencyInjection
         services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.SuperAdminLoteItemOrigen>();
         services.AddScoped<UseCases.ConsolidadoLotes.LoteItemOrigenPorOrigen>();
         services.AddScoped<UseCases.ConsolidadoLotes.ProcesarItemLoteHandler>();
+        // Épica #13216 — HU13378: empaquetado de partes (ZIP + cifrado + subida) y plan B del snapshot (adjunto actual).
+        services.AddScoped<UseCases.ConsolidadoLotes.IConsolidadoLoteAdjuntoActual, UseCases.ConsolidadoLotes.ConsolidadoLoteAdjuntoActual>();
+        services.AddScoped<UseCases.ConsolidadoLotes.EmpaquetarParteHandler>();
 
         return services;
     }

@@ -331,6 +331,13 @@ public static class InfrastructureExtensions
         // la bandeja + transacción del tenant cliente + matriz del OT + guard de Quipux, sobre el entregador común.
         services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen,
             ConsolidadoLotes.Ot.OtConsolidadoLoteEntregador>();
+        // Épica #13216 — HU13378: carril de empaquetado (reclamo de partes, cierre condicionado, terminal + lote_finalizado).
+        // Temporales en {TMPDIR}/flit-consolidado-lotes salvo ConsolidadoLotes:DirectorioTemporal (volumen dedicado ≥ 2 × M).
+        services.AddScoped<IConsolidadoLoteEmpaquetado, Persistence.Repositories.ConsolidadoLoteEmpaquetado>();
+        services.AddSingleton(_ =>
+            configuration["ConsolidadoLotes:DirectorioTemporal"] is { Length: > 0 } dir
+                ? new ConsolidadoLoteTemporales(dir)
+                : ConsolidadoLoteTemporales.Predeterminado());
 
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
@@ -707,6 +714,8 @@ public static class InfrastructureExtensions
         // Épica #13216 — HU13376: carril de ítems del lote de descarga masiva de consolidados (reclamo con lease, equidad
         // entre lotes, reanudación). Sus parámetros y su interruptor viven en tramites.consolidado_export_settings: sin
         // fila (base de pruebas recién reseteada) o con is_active = false no reclama nada.
+        // HU13378 AC5: limpieza de temporales huérfanos del carril de empaquetado ANTES de arrancar el procesador.
+        services.AddHostedService<ConsolidadoLoteTemporalesLimpieza>();
         services.AddHostedService<ConsolidadoLoteProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
