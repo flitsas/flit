@@ -334,6 +334,8 @@ public static class InfrastructureExtensions
         // Épica #13216 — HU13378: carril de empaquetado (reclamo de partes, cierre condicionado, terminal + lote_finalizado).
         // Temporales en {TMPDIR}/flit-consolidado-lotes salvo ConsolidadoLotes:DirectorioTemporal (volumen dedicado ≥ 2 × M).
         services.AddScoped<IConsolidadoLoteEmpaquetado, Persistence.Repositories.ConsolidadoLoteEmpaquetado>();
+        // Épica #13216 — HU13379: lectura del lote para su dueño (sub), vencidos para la purga y auditoría parte_descargada.
+        services.AddScoped<IConsolidadoLoteLectura, Persistence.Repositories.ConsolidadoLoteLectura>();
         services.AddSingleton(_ =>
             configuration["ConsolidadoLotes:DirectorioTemporal"] is { Length: > 0 } dir
                 ? new ConsolidadoLoteTemporales(dir)
@@ -717,6 +719,9 @@ public static class InfrastructureExtensions
         // HU13378 AC5: limpieza de temporales huérfanos del carril de empaquetado ANTES de arrancar el procesador.
         services.AddHostedService<ConsolidadoLoteTemporalesLimpieza>();
         services.AddHostedService<ConsolidadoLoteProcessor>();
+        // HU13379: carril de purga a las 24 h (cada 10 min). Corre aunque el motor esté apagado (is_active = false): la
+        // retención de 24 h es una garantía de privacidad (CF-12, Ley 1581), no un trabajo del motor.
+        services.AddHostedService<ConsolidadoLotePurgaProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

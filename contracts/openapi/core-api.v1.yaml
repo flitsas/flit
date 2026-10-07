@@ -5323,7 +5323,11 @@ paths:
       operationId: ObtenerLoteConsolidadosActual
       tags: [Consolidados]
       summary: Lote activo del usuario o el último terminal aún retenido (polling del seguimiento global)
-      description: Feature #13306 / ADR-0070. Se implementa en #13379.
+      description: >
+        Feature #13306 / ADR-0070, HU #13379. Ruta neutra: el dueño es el `sub` del token (`requested_by_user_id`);
+        `X-Tenant-Id` se ignora y la ruta no exige compañía (el `ot_admin` consulta su lote OT). Devuelve el lote
+        activo o, si no hay, el último lote terminal todavía retenido (no purgado, aunque ya haya vencido), con
+        `expiraEn`. `partes` va vacío hasta que el lote es descargable (completado/completado_con_omitidos, no vencido).
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -5333,7 +5337,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoteConsolidados" }
-        "204": { description: "El usuario no tiene lote activo ni retenido" }
+        "204": { description: "El usuario no tiene lote activo ni retenido (o el último ya se purgó)" }
         "401": { description: "Sin token válido" }
         "403": { description: "Sin permiso consolidado-masivo.download" }
 
@@ -5342,7 +5346,9 @@ paths:
       operationId: ObtenerLoteConsolidados
       tags: [Consolidados]
       summary: Lote por id (solo del dueño)
-      description: Feature #13306 / ADR-0070. Se implementa en #13379.
+      description: >
+        Feature #13306 / ADR-0070, HU #13379. Solo el dueño (`sub`); `X-Tenant-Id` se ignora. Cualquier otro usuario,
+        incluido el Super Admin, recibe 404.
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -5363,7 +5369,14 @@ paths:
       operationId: DescargarParteLoteConsolidados
       tags: [Consolidados]
       summary: Descarga una parte del lote (descifrado en streaming; nunca genera PDF)
-      description: Feature #13306 / ADR-0070. Se implementa en #13379.
+      description: >
+        Feature #13306 / ADR-0070, HU #13379. Solo el dueño (`sub`; otro usuario o el Super Admin ⇒ 404). Descargable
+        si el lote está `completado` o `completado_con_omitidos`, no purgado, con `expiraEn` futuro y la parte
+        `cerrada`; un lote `fallido` o `cancelado` no tiene partes (404). La fila de auditoría `parte_descargada` se
+        registra antes del primer byte: si no se puede, 503 sin bytes. El cuerpo se descifra en streaming
+        (almacenamiento → descifrado → respuesta) con `Content-Length` fijado antes del primer byte; si la parte resulta
+        corrupta antes de enviar nada, 500 `parte_no_disponible` sin bytes, y si falla a mitad del cuerpo el servidor
+        aborta la conexión (el cliente recibe menos bytes que `Content-Length`, nunca un ZIP truncado como válido).
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -5376,15 +5389,37 @@ paths:
           headers:
             Content-Disposition:
               schema: { type: string, example: 'attachment; filename="consolidados_20261006_1430_parte-01-de-04.zip"' }
+            Content-Length:
+              description: Tamaño en claro de la parte (`plain_size_bytes`), fijado antes del primer byte.
+              schema: { type: integer, format: int64 }
+            Cache-Control:
+              schema: { type: string, example: no-store }
           content:
             application/zip:
               schema: { type: string, format: binary }
         "401": { description: "Sin token válido" }
         "403": { description: "Sin permiso consolidado-masivo.download" }
-        "404": { description: "No existe, no es del usuario o la parte no existe" }
-        "409": { description: "El lote todavía no terminó (`lote_no_terminado`)" }
-        "410": { description: "Descarga expirada (`descarga_expirada`, lote purgado)" }
-        "503": { description: "No se pudo registrar la auditoría de la descarga (`auditoria_no_registrada`); no se entregan bytes" }
+        "404": { description: "No existe, no es del usuario (incluido Super Admin), no tiene partes (fallido/cancelado) o la parte no existe" }
+        "409":
+          description: "El lote todavía no terminó (`lote_no_terminado`)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "410":
+          description: "Descarga expirada (`descarga_expirada`: lote purgado o vencido)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "500":
+          description: "La parte no se pudo leer o descifrar antes de enviar bytes (`parte_no_disponible`)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "503":
+          description: "No se pudo registrar la auditoría de la descarga (`auditoria_no_registrada`); no se entregan bytes"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
 
   /api/v1/consolidados/lotes/{loteId}/cancelacion:
     post:
@@ -16023,6 +16058,7 @@ components:
             - lote_terminado
             - descarga_expirada
             - auditoria_no_registrada
+            - parte_no_disponible
         total:
           type: integer
           description: >

@@ -12,9 +12,9 @@ using Microsoft.AspNetCore.Routing;
 namespace Flit.Api.Endpoints.Tramites;
 
 /// <summary>
-/// Épica #13216 (HU #13374, ADR-0070 D7) — motor de lotes de descarga masiva de consolidados. Esta HU publica
-/// solo el <c>POST</c> de creación; los <c>GET</c> (actual, por id, parte) los añade #13379 en este mismo archivo
-/// y la cancelación #13307. Contrato: <c>contracts/openapi/core-api.v1.yaml</c> (<c>CrearLoteConsolidados</c>).
+/// Épica #13216 (HU #13374, ADR-0070 D7) — motor de lotes de descarga masiva de consolidados. Este archivo publica
+/// el <c>POST</c> de creación; los <c>GET</c> (actual, por id, parte) los añade #13379 en
+/// <c>ConsolidadoLoteEndpoints.Consulta.cs</c> y la cancelación #13307. Contrato: <c>contracts/openapi/core-api.v1.yaml</c> (<c>CrearLoteConsolidados</c>).
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
@@ -63,6 +63,9 @@ internal static partial class ConsolidadoLoteEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+
+        // HU #13379: GET actual / por id / parte (rutas neutras, dueño = sub). Archivo ConsolidadoLoteEndpoints.Consulta.cs.
+        app.MapConsolidadoLoteConsultaEndpoints();
 
         return app;
     }

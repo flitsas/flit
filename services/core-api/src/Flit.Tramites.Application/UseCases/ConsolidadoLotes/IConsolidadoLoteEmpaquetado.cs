@@ -176,4 +176,16 @@ public static class ConsolidadoLoteErrores
 
     /// <summary>La DEK envuelta del lote no se pudo desenvolver (llave de Data Protection ausente o valor alterado).</summary>
     public const string DekInvalida = "dek_invalida";
+
+    /// <summary>HU #13379 — 409: el lote todavía no terminó (no hay partes que descargar).</summary>
+    public const string LoteNoTerminado = "lote_no_terminado";
+
+    /// <summary>HU #13379 — 410: el lote se purgó o venció su ventana de 24 h.</summary>
+    public const string DescargaExpirada = "descarga_expirada";
+
+    /// <summary>HU #13379 — 503: la fila <c>parte_descargada</c> no se pudo registrar; no se entrega ningún byte.</summary>
+    public const string AuditoriaNoRegistrada = "auditoria_no_registrada";
+
+    /// <summary>HU #13379 — 500: la parte no se pudo leer o descifrar (objeto ausente, corrupto o DEK inválida).</summary>
+    public const string ParteNoDisponible = "parte_no_disponible";
 }

@@ -41,6 +41,60 @@ internal static class FileManagerDownloader
         return new MemoryStream(data, writable: false);
     }
 
+    /// <summary>
+    /// HU #13379 (épica #13216, M2/L1) — como <see cref="OpenReadAsync"/>, pero <b>sin bufferizar</b>: devuelve el cuerpo
+    /// de S3 tal como llega (no seekable), atado a la respuesta HTTP, que se libera al disponer el stream. Es para objetos
+    /// grandes (partes de lote de hasta cientos de MB) que se reenvían en streaming; <see cref="OpenReadAsync"/> queda
+    /// igual para sus consumidores actuales (adjuntos, logos), que necesitan un stream seekable y pequeño.
+    /// <c>Position</c> informa los bytes leídos. <c>null</c> si el objeto no existe.
+    /// </summary>
+    public static async Task<Stream?> OpenReadStreamingAsync(
+        HttpClient http, FileManagerOptions options, string storagePath, CancellationToken ct)
+    {
+        var url = await PresignedDescargaAsync(http, options, storagePath, ct).ConfigureAwait(false);
+        if (url is null)
+            return null;
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, new Uri(url));
+        var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        try
+        {
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                resp.Dispose();
+                return null;
+            }
+
+            resp.EnsureSuccessStatusCode();
+            var cuerpo = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            return new RespuestaStream(resp, cuerpo, resp.Content.Headers.ContentLength);
+        }
+        catch
+        {
+            resp.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task<string?> PresignedDescargaAsync(
+        HttpClient http, FileManagerOptions options, string storagePath, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+            return null;
+
+        var path = $"{options.FilesPath}/{Uri.EscapeDataString(storagePath)}/presigned-url";
+        using var req = new HttpRequestMessage(HttpMethod.Get, path);
+        ApplyAuth(req, options);
+        using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        if (resp.StatusCode == HttpStatusCode.NotFound)
+            return null;
+        resp.EnsureSuccessStatusCode();
+
+        var body = await resp.Content.ReadFromJsonAsync<FilePresignedResponse>(JsonOptions, ct).ConfigureAwait(false);
+        var url = body?.PresignedUrl?.Url;
+        return string.IsNullOrWhiteSpace(url) ? null : url;
+    }
+
     public static void ApplyAuth(HttpRequestMessage req, FileManagerOptions options)
     {
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
@@ -79,4 +133,64 @@ internal static class FileManagerDownloader
         [property: JsonPropertyName("presignedUrl")] PresignedUrl? PresignedUrl);
 
     private sealed record PresignedUrl([property: JsonPropertyName("url")] string? Url);
+
+    /// <summary>Cuerpo de S3 de solo lectura y no seekable que libera la respuesta HTTP al disponerse.</summary>
+    private sealed class RespuestaStream(HttpResponseMessage respuesta, Stream cuerpo, long? longitud) : Stream
+    {
+        private long _leidos;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => longitud ?? throw new NotSupportedException();
+
+        /// <summary>Bytes leídos hasta ahora (no admite asignación).</summary>
+        public override long Position
+        {
+            get => _leidos;
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => Contar(cuerpo.Read(buffer, offset, count));
+
+        public override int Read(Span<byte> buffer) => Contar(cuerpo.Read(buffer));
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            Contar(await cuerpo.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false));
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            Contar(await cuerpo.ReadAsync(buffer, cancellationToken).ConfigureAwait(false));
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                cuerpo.Dispose();
+                respuesta.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await cuerpo.DisposeAsync().ConfigureAwait(false);
+            respuesta.Dispose();
+            await base.DisposeAsync().ConfigureAwait(false);
+        }
+
+        private int Contar(int n)
+        {
+            _leidos += n;
+            return n;
+        }
+    }
 }

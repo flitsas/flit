@@ -412,6 +412,10 @@ public static class DependencyInjection
         // Épica #13216 — HU13378: empaquetado de partes (ZIP + cifrado + subida) y plan B del snapshot (adjunto actual).
         services.AddScoped<UseCases.ConsolidadoLotes.IConsolidadoLoteAdjuntoActual, UseCases.ConsolidadoLotes.ConsolidadoLoteAdjuntoActual>();
         services.AddScoped<UseCases.ConsolidadoLotes.EmpaquetarParteHandler>();
+        // Épica #13216 — HU13379: consulta del lote (actual / por id), descarga de partes del dueño y purga a las 24 h.
+        services.AddScoped<UseCases.ConsolidadoLotes.ConsultarLoteConsolidadosHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.DescargarParteHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.PurgarLotesExpiradosHandler>();
 
         return services;
     }
