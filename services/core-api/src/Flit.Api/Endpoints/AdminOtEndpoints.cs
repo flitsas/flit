@@ -66,7 +66,17 @@ namespace Flit.Api.Endpoints;
 /// motor de reglas (HU #10221) y prelación/etiquetas documentales (HU #10222).
 /// El tenant se resuelve exclusivamente del claim JWT <c>tenant_id</c> (AC5).
 /// </summary>
-public static class AdminOtEndpoints
+/// <remarks>
+/// Épica #13216 (HU #13391) — patrón de autorización por PERMISO dentro del grupo: una ruta puede añadir
+/// <c>.RequirePermission(slug)</c>, que se COMBINA EN AND con la <see cref="AdminAuthorization.OtModulePolicy"/>
+/// del grupo (ambas se exigen; ninguna sustituye a la otra). El primero y único caso es
+/// <c>POST /consolidados/lotes</c> con <c>consolidado-masivo.download</c> (ADR-0070 adenda v4 A4.4, D-FB4): el
+/// <c>ot_admin</c> lo recibe por el seeder (#13369), los demás usuarios OT solo si RBAC se lo concede, y el Super
+/// Admin pasa por el bypass de <see cref="PermissionAuthorizationHandler"/>. El test de arquitectura
+/// <c>ConsolidadoLoteOtPermisoArchitectureTests</c> fija que ninguna otra ruta del grupo gane el requisito por
+/// accidente.
+/// </remarks>
+public static partial class AdminOtEndpoints
 {
     public static IEndpointRouteBuilder MapAdminOtEndpoints(this IEndpointRouteBuilder app)
     {
@@ -331,6 +341,22 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        // Épica #13216 (HU #13391) — lote de descarga masiva de consolidados MAESTROS desde la bandeja. Primer
+        // RequirePermission del archivo: AND con OtModulePolicy (ver <remarks> de la clase). Consulta, descarga y
+        // cancelación siguen en /api/v1/consolidados/lotes/* (sin rutas OT nuevas).
+        group.MapPost(RutaLotesOt, CrearLoteConsolidadosOtAsync)
+            .RequirePermission(Flit.Tramites.Application.UseCases.ConsolidadoLotes.ConsolidadoLotePermisos.Descargar)
+            .WithName("CrearLoteConsolidadosMaestrosOt")
+            .WithSummary("Crea un lote de descarga masiva de consolidados maestros desde la bandeja del OT")
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         group.MapGet("/client-procedures/{id:guid}/documents", ListClientProcedureDocumentsAsync)
             .WithName("AdminOtListClientProcedureDocuments")

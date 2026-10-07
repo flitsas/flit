@@ -154,7 +154,8 @@ internal static partial class ConsolidadoLoteEndpoints
         return Problema(status, r.Error ?? "error_desconocido", r.Mensaje, r.LoteActivoId);
     }
 
-    private static IResult Problema(int status, string error, string? detail, Guid? loteActivoId = null)
+    /// <summary>ProblemDetails del motor con el código estable en <c>error</c> (raíz). Compartido con la ruta OT (#13391).</summary>
+    internal static IResult Problema(int status, string error, string? detail, Guid? loteActivoId = null)
     {
         var extensions = new Dictionary<string, object?> { ["error"] = error };
         if (loteActivoId is { } id)
@@ -167,27 +168,46 @@ internal static partial class ConsolidadoLoteEndpoints
     /// las claves del modo y se ignoran las demás (sin rechazarlas). <c>null</c> se pasa tal cual: el caso de uso
     /// responde <c>seleccion_requerida</c>.
     /// </summary>
-    internal static bool TryMapearSeleccion(LoteSeleccionBody? body, out LoteSeleccion? seleccion)
+    internal static bool TryMapearSeleccion(LoteSeleccionBody? body, out LoteSeleccion? seleccion) =>
+        // Tenant y usuario del filtro los pone el resolver desde el token; skip/take se ignoran.
+        TryMapearSeleccion(body?.Modo, body?.Ids, body?.Excluidos, body?.Filtro,
+            f => new TramitesLoteFiltro(f.ToRequest(tenantId: null)), body is null, out seleccion);
+
+    /// <summary>
+    /// Mapeo común de la selección de cuatro claves a <see cref="LoteSeleccion"/>; cada ruta aporta cómo su filtro
+    /// se convierte en <see cref="LoteFiltro"/> (#13374 listado de trámites, #13391 bandeja OT).
+    /// <paramref name="sinSeleccion"/> = el cuerpo no trajo <c>seleccion</c>: se devuelve <c>null</c> y el caso de
+    /// uso responde <c>seleccion_requerida</c>.
+    /// </summary>
+    internal static bool TryMapearSeleccion<TFiltro>(
+        string? modo,
+        IReadOnlyList<Guid>? ids,
+        IReadOnlyList<Guid>? excluidos,
+        TFiltro? filtro,
+        Func<TFiltro, LoteFiltro> aFiltro,
+        bool sinSeleccion,
+        out LoteSeleccion? seleccion)
+        where TFiltro : class
     {
+        ArgumentNullException.ThrowIfNull(aFiltro);
         seleccion = null;
-        if (body is null)
+        if (sinSeleccion)
             return true;
 
-        switch (body.Modo?.Trim().ToLowerInvariant())
+        switch (modo?.Trim().ToLowerInvariant())
         {
             case ConsolidadoExportSelectionMode.Ids:
-                seleccion = new SeleccionPorIds(body.Ids ?? []);
+                seleccion = new SeleccionPorIds(ids ?? []);
                 return true;
-            case ConsolidadoExportSelectionMode.Filtro when body.Filtro is not null:
-                // Tenant y usuario del filtro los pone el resolver desde el token; skip/take se ignoran.
-                seleccion = new SeleccionPorFiltro(new TramitesLoteFiltro(body.Filtro.ToRequest(tenantId: null)), body.Excluidos ?? []);
+            case ConsolidadoExportSelectionMode.Filtro when filtro is not null:
+                seleccion = new SeleccionPorFiltro(aFiltro(filtro), excluidos ?? []);
                 return true;
             default:
                 return false;
         }
     }
 
-    private static Guid? UsuarioDelToken(ClaimsPrincipal user)
+    internal static Guid? UsuarioDelToken(ClaimsPrincipal user)
     {
         var raw = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
@@ -210,7 +230,7 @@ internal static partial class ConsolidadoLoteEndpoints
         return roles.Count == 0 ? "sin_rol" : string.Join(",", roles);
     }
 
-    private static string? UserAgent(HttpContext http)
+    internal static string? UserAgent(HttpContext http)
     {
         var ua = http.Request.Headers.UserAgent.ToString();
         if (string.IsNullOrWhiteSpace(ua))
