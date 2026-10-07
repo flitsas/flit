@@ -106,6 +106,109 @@ internal sealed partial class ConsolidadoLoteRepository(
             ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// HU #13376 — una sola sentencia (atómica sin transacción explícita, compatible con la estrategia de reintentos):
+    /// <c>lote</c> elige y bloquea el lote por turno, <c>item</c> bloquea su siguiente ítem reclamable y los dos
+    /// <c>UPDATE</c> sellan el reclamo. <c>SKIP LOCKED</c> en ambos: otro slot u otra réplica que esté reclamando del
+    /// mismo lote pasa al siguiente, nunca espera. Orden de locks lote → ítem, igual que el cierre y la cancelación.
+    /// </summary>
+    public async Task<ItemLoteReclamado?> ReclamarSiguienteItemAsync(
+        string reclamante, int leaseSegundos, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reclamante);
+        ArgumentOutOfRangeException.ThrowIfLessThan(leaseSegundos, 1);
+        var enCola = ConsolidadoExportStatus.EnCola;
+        var enProceso = ConsolidadoExportStatus.EnProceso;
+        var pendiente = ConsolidadoExportItemStatus.Pendiente;
+        var procesando = ConsolidadoExportItemStatus.Procesando;
+
+        var items = await db.ConsolidadoExportBatchItems
+            .FromSqlInterpolated($"""
+                WITH lote AS (
+                    SELECT b.id
+                      FROM tramites.consolidado_export_batches b
+                     WHERE b.status IN ({enCola}, {enProceso}) AND b.deleted_at IS NULL
+                       AND EXISTS (
+                           SELECT 1 FROM tramites.consolidado_export_batch_items r
+                            WHERE r.batch_id = b.id
+                              AND ((r.status = {pendiente} AND r.next_attempt_at <= now())
+                                OR (r.status = {procesando} AND r.lease_until < now())))
+                     ORDER BY b.last_claimed_at NULLS FIRST, b.created_at, b.id
+                     LIMIT 1
+                       FOR UPDATE OF b SKIP LOCKED),
+                item AS (
+                    SELECT i.id
+                      FROM tramites.consolidado_export_batch_items i
+                      JOIN lote ON i.batch_id = lote.id
+                     WHERE (i.status = {pendiente} AND i.next_attempt_at <= now())
+                        OR (i.status = {procesando} AND i.lease_until < now())
+                     ORDER BY i.position
+                     LIMIT 1
+                       FOR UPDATE OF i SKIP LOCKED),
+                reclamado AS (
+                    UPDATE tramites.consolidado_export_batch_items i
+                       SET attempts = CASE WHEN i.status = {procesando} THEN i.attempts + 1 ELSE i.attempts END,
+                           status = {procesando},
+                           lease_until = now() + make_interval(secs => {leaseSegundos}),
+                           claimed_by = {reclamante},
+                           updated_at = now()
+                      FROM item
+                     WHERE i.id = item.id
+                    RETURNING i.*),
+                sellado AS (
+                    UPDATE tramites.consolidado_export_batches b
+                       SET last_claimed_at = now(),
+                           status = CASE WHEN b.status = {enCola} THEN {enProceso} ELSE b.status END,
+                           started_at = COALESCE(b.started_at, now()),
+                           updated_at = now()
+                      FROM reclamado
+                     WHERE b.id = reclamado.batch_id
+                    RETURNING b.id)
+                SELECT reclamado.* FROM reclamado
+                """)
+            .AsNoTracking()
+            .ToListAsync(ct).ConfigureAwait(false);
+        if (items.Count == 0)
+            return null;
+
+        var reclamado = items[0];
+        var lote = await db.ConsolidadoExportBatches.AsNoTracking()
+            .FirstAsync(b => b.Id == reclamado.BatchId, ct).ConfigureAwait(false);
+        return new ItemLoteReclamado(lote, reclamado);
+    }
+
+    public async Task<int> IniciarLotesSinItemsAsync(CancellationToken ct = default)
+    {
+        var enCola = ConsolidadoExportStatus.EnCola;
+        var enProceso = ConsolidadoExportStatus.EnProceso;
+        var iniciados = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE tramites.consolidado_export_batches b
+               SET status = {enProceso},
+                   started_at = COALESCE(b.started_at, now()),
+                   updated_at = now()
+             WHERE b.status = {enCola} AND b.deleted_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM tramites.consolidado_export_batch_items i WHERE i.batch_id = b.id)
+            """,
+            ct).ConfigureAwait(false);
+        if (iniciados > 0)
+            LogSinItems(_logger, iniciados);
+        return iniciados;
+    }
+
+    public async Task<IReadOnlyList<Guid>> ObtenerLotesConCarrilTerminadoAsync(int maximo, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximo, 1);
+        string[] vivos = [.. ConsolidadoExportItemStatus.Vivos];
+        return await db.ConsolidadoExportBatches.AsNoTracking()
+            .Where(b => b.Status == ConsolidadoExportStatus.EnProceso && b.DeletedAt == null
+                        && !db.ConsolidadoExportBatchItems.Any(i => i.BatchId == b.Id && vivos.Contains(i.Status)))
+            .OrderBy(b => b.CreatedAt)
+            .Select(b => b.Id)
+            .Take(maximo)
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
     private async Task<CrearLoteResultado> CrearEnTransaccionAsync(NuevoLoteConsolidados nuevo, CancellationToken ct)
     {
         db.ChangeTracker.Clear();
@@ -263,6 +366,10 @@ internal sealed partial class ConsolidadoLoteRepository(
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Lote de consolidados no creado para el usuario {UsuarioId}: {Tipo} {SqlState}. Transacción revertida.")]
     private static partial void LogNoCreado(ILogger logger, Guid usuarioId, string tipo, string? sqlState);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Carril de ítems: {Lotes} lote(s) sin ítems pasan a en_proceso para su cierre.")]
+    private static partial void LogSinItems(ILogger logger, int lotes);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Lote de consolidados {LoteId} purgado (borrado criptográfico).")]
     private static partial void LogPurgado(ILogger logger, Guid loteId);

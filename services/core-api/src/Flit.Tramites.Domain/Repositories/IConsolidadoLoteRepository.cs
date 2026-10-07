@@ -5,8 +5,8 @@ namespace Flit.Tramites.Domain.Repositories;
 
 /// <summary>
 /// Épica #13216 (HU #13373, ADR-0070 D8) — persistencia del ciclo de vida «crear y retener» de un lote de descarga
-/// masiva de consolidados. Dueño: HU #13373. El proceso de ítems, el reclamo y el lease NO viven aquí (#13375/#13376
-/// tienen su propio puerto).
+/// masiva de consolidados. Dueño: HU #13373. El cierre de cada ítem NO vive aquí (#13375 tiene su propio puerto); el
+/// reclamo con lease del carril de ítems sí (HU #13376).
 /// <list type="bullet">
 ///   <item><see cref="CrearAsync"/>: en UNA transacción purga el lote retenido del usuario, inserta el lote con su
 ///   DEK envuelta, sus ítems (COPY binario) y la auditoría <c>lote_creado</c>. Si algo falla no queda nada.</item>
@@ -43,7 +43,43 @@ public interface IConsolidadoLoteRepository
     /// lote no existe, está activo o ya estaba purgado. No toca <c>items.plate</c> (decisión S2 = b).
     /// </summary>
     Task<bool> PurgarAsync(Guid loteId, DateTimeOffset ahora, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13376 (ADR-0070 D2, CF-20/CF-21) — reclama UN ítem del carril en una sola sentencia atómica:
+    /// <list type="bullet">
+    ///   <item>Elige el lote <c>en_cola</c>/<c>en_proceso</c> con <c>last_claimed_at</c> más antiguo (nulo primero) que
+    ///   tenga un ítem reclamable, y le toma <b>un</b> ítem por <c>position</c> (equidad entre lotes).</item>
+    ///   <item>Reclamable: <c>pendiente</c> con <c>next_attempt_at</c> vencido, o <c>procesando</c> con el lease
+    ///   vencido (la ejecución anterior murió sin cerrar).</item>
+    ///   <item>El ítem pasa a <c>procesando</c> con <c>lease_until = now() + leaseSegundos</c>; el lote sella
+    ///   <c>last_claimed_at</c> y pasa de <c>en_cola</c> a <c>en_proceso</c> (con <c>started_at</c>).</item>
+    /// </list>
+    /// <para><b>Intentos:</b> el reclamo de un <c>pendiente</c> no toca <c>attempts</c> (contrato de #13375). Solo el
+    /// re-reclamo de un <c>procesando</c> con lease vencido suma 1: esa ejecución terminó sin cierre (caída del proceso),
+    /// y sin contarla un trámite que tumba el proceso se reintentaría sin fin.</para>
+    /// Locks <c>FOR UPDATE SKIP LOCKED</c> en el orden lote → ítem (el mismo del cierre y de la cancelación).
+    /// </summary>
+    /// <returns>El lote (ya actualizado) y el ítem reclamado, o <c>null</c> si no hay nada reclamable.</returns>
+    Task<ItemLoteReclamado?> ReclamarSiguienteItemAsync(string reclamante, int leaseSegundos, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13376 — pasa a <c>en_proceso</c> los lotes <c>en_cola</c> sin ningún ítem (selección vacía): no tienen nada
+    /// que reclamar y sin esto quedarían colgados. A partir de ahí los recoge el cierre del lote (#13377) por
+    /// <see cref="ObtenerLotesConCarrilTerminadoAsync"/>. Devuelve cuántos lotes pasó.
+    /// </summary>
+    Task<int> IniciarLotesSinItemsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13376 — lotes <c>en_proceso</c> cuyo carril de ítems terminó: ningún ítem <c>pendiente</c> ni
+    /// <c>procesando</c> (incluye el lote sin ítems). Es la señal con la que #13377 pasa el lote a empaquetar.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ObtenerLotesConCarrilTerminadoAsync(int maximo, CancellationToken ct = default);
 }
+
+/// <summary>Resultado de <see cref="IConsolidadoLoteRepository.ReclamarSiguienteItemAsync"/>.</summary>
+/// <param name="Lote">Lote del ítem tras el reclamo (<c>en_proceso</c>).</param>
+/// <param name="Item">Ítem en <c>procesando</c> con su lease.</param>
+public sealed record ItemLoteReclamado(ConsolidadoExportBatch Lote, ConsolidadoExportBatchItem Item);
 
 /// <summary>
 /// Datos de un lote nuevo, ya validados y resueltos por el caso de uso. Las reglas de origen ↔ compañía ↔ organismo

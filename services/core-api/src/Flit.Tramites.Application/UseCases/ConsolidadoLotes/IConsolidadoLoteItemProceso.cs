@@ -2,13 +2,15 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 
 /// <summary>
 /// HU #13375 (Épica #13216) — persistencia del desenlace de UN ítem ya reclamado. Cada operación es una sola
-/// sentencia atómica <b>condicionada a que el ítem siga en <c>procesando</c></b>: si el lote se canceló o el
-/// ítem ya se cerró, no escribe nada y devuelve <c>false</c> (el cierre en vuelo no sobrescribe).
+/// sentencia atómica <b>condicionada a que el ítem siga en <c>procesando</c> con su reserva vigente</b>
+/// (<c>lease_until</c> futuro, HU #13376 AC6): si el lote se canceló, el ítem ya se cerró o el lease venció, no escribe
+/// nada y devuelve <c>false</c> (el cierre en vuelo no sobrescribe).
 /// Los contadores del lote (<c>included_count</c>, <c>omitted_count</c>, <c>generated_count</c>) suben en la
 /// misma sentencia que cierra el ítem.
 /// </summary>
 /// <remarks>
-/// El reclamo (<c>FOR UPDATE SKIP LOCKED</c>), el lease y la asignación de partes NO son de este puerto (#13376).
+/// El reclamo (<c>FOR UPDATE SKIP LOCKED</c>, <c>IConsolidadoLoteRepository</c>, #13376) y la asignación de partes
+/// (#13377) NO son de este puerto.
 /// Uso de ejemplo: <c>var aplicado = await proceso.MarcarIncluidoAsync(new(loteId, itemId, adjunto, "existente", ahora), ct);</c>.
 /// </remarks>
 public interface IConsolidadoLoteItemProceso
