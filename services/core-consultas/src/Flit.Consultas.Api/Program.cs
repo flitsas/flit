@@ -61,6 +61,7 @@ public static class Program
         builder.Services.AddScoped<IConsultationTenantOverrideProvider, ConsultasTenantOverrideProvider>();
         builder.Services.AddScoped<IAvaluoProviderPolicy, ConsultasAvaluoPolicy>();
         builder.Services.AddSingleton<IAvaluoMockValueSource, SinValoresMockDeAvaluo>();
+        builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
 
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.

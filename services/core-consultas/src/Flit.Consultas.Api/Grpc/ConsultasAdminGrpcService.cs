@@ -81,4 +81,42 @@ internal sealed class ConsultasAdminGrpcService(ConsultasDb db, TimeProvider tim
 
         return new ObtenerConfiguracionEmpresaResponse { Configuracion = config };
     }
+
+    public override async Task<ObtenerConsumoResponse> ObtenerConsumo(ObtenerConsumoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        if (request.Desde is null || request.Hasta is null || request.Hasta.ToDateTimeOffset() <= request.Desde.ToDateTimeOffset())
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Se necesita un rango de fechas válido (desde < hasta)."));
+
+        var tenantId = PlatformServiceCaller.From(context).TenantId;
+        var desde = request.Desde.ToDateTimeOffset();
+        var hasta = request.Hasta.ToDateTimeOffset();
+        var filas = await db.Consumos.AsNoTracking()
+            .Where(c => c.TenantId == tenantId && c.OcurridoEn >= desde && c.OcurridoEn < hasta)
+            .GroupBy(c => new { c.Producto, c.Fuente })
+            .Select(g => new
+            {
+                g.Key.Producto,
+                g.Key.Fuente,
+                Total = g.LongCount(),
+                DesdeCache = g.LongCount(c => c.DesdeCache),
+                Errores = g.LongCount(c => c.Resultado == "error"),
+                Latencia = g.Average(c => (double)c.LatenciaMs),
+            })
+            .OrderBy(x => x.Producto).ThenBy(x => x.Fuente)
+            .ToListAsync(context.CancellationToken).ConfigureAwait(false);
+
+        var response = new ObtenerConsumoResponse();
+        response.Consumos.AddRange(filas.Select(f => new ConsumoAgregado
+        {
+            Producto = f.Producto,
+            Fuente = f.Fuente,
+            Total = f.Total,
+            DesdeCache = f.DesdeCache,
+            Errores = f.Errores,
+            LatenciaPromedioMs = (long)Math.Round(f.Latencia),
+        }));
+        return response;
+    }
 }

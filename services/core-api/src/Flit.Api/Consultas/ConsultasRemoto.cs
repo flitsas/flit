@@ -27,6 +27,8 @@ internal static class ConsultasRemoto
         // HU #13344: la configuración por empresa que guarda el SuperAdmin también queda en Consultas.
         services.AddFlitGrpcClient<ConsultasAdminService.ConsultasAdminServiceClient>(configuration, uri, "platform.consultas.admin");
         services.AddScoped<IConsultasConfigSync, GrpcConsultasConfigSync>();
+        // HU #13345: consumo por empresa para el SuperAdmin.
+        services.AddScoped<IConsultasConsumo, GrpcConsultasConsumo>();
         return services;
     }
 }
@@ -75,3 +77,42 @@ internal sealed class GrpcConsultasConfigSync(ConsultasAdminService.ConsultasAdm
         return config;
     }
 }
+
+/// <summary>Consumo agregado de una empresa en Consultas (HU #13345).</summary>
+internal interface IConsultasConsumo
+{
+    /// <exception cref="ConsultasNoDisponibleException">Consultas no respondió.</exception>
+    Task<IReadOnlyList<ConsumoConsultasDto>> ObtenerAsync(Guid tenantId, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct);
+}
+
+internal sealed record ConsumoConsultasDto(string Producto, string Fuente, long Total, long DesdeCache, long Errores, long LatenciaPromedioMs);
+
+internal sealed class ConsultasNoDisponibleException(string message, Exception inner) : Exception(message, inner);
+
+internal sealed class GrpcConsultasConsumo(ConsultasAdminService.ConsultasAdminServiceClient client) : IConsultasConsumo
+{
+    public async Task<IReadOnlyList<ConsumoConsultasDto>> ObtenerAsync(Guid tenantId, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+    {
+        try
+        {
+            var respuesta = await client.ObtenerConsumoAsync(
+                new ObtenerConsumoRequest
+                {
+                    Desde = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(desde),
+                    Hasta = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(hasta),
+                },
+                new Metadata { { PlatformServiceCallInterceptor.TenantMetadata, tenantId.ToString() } },
+                cancellationToken: ct).ConfigureAwait(false);
+            return [.. respuesta.Consumos.Select(c => new ConsumoConsultasDto(c.Producto, c.Fuente, c.Total, c.DesdeCache, c.Errores, c.LatenciaPromedioMs))];
+        }
+        catch (RpcException ex)
+        {
+            throw new ConsultasNoDisponibleException($"Consultas respondió {ex.StatusCode}: {ex.Status.Detail}", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ConsultasNoDisponibleException(ex.Message, ex);
+        }
+    }
+}
+

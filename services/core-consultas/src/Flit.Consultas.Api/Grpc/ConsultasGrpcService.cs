@@ -21,6 +21,7 @@ internal sealed class ConsultasGrpcService(
     IAvaluoProviderRegistry avaluos,
     IAvaluoProviderPolicy avaluoPolicy,
     IOptions<ConsultationChainOptions> chainOptions,
+    ConsumoRecorder consumo,
     TimeProvider time) : ConsultasService.ConsultasServiceBase
 {
     public const string Scope = "platform.consultas";
@@ -28,7 +29,26 @@ internal sealed class ConsultasGrpcService(
     /// <summary>Del tiempo que queda de la llamada, lo que puede gastar el primero de la cadena antes del respaldo.</summary>
     internal const double PresupuestoPrimario = 0.6;
 
-    public override async Task<ConsultarVehiculoResponse> ConsultarVehiculo(ConsultarVehiculoRequest request, ServerCallContext context)
+    // HU #13345: cada método se mide (consultas.consumo) alrededor de su implementación.
+    public override Task<ConsultarVehiculoResponse> ConsultarVehiculo(ConsultarVehiculoRequest request, ServerCallContext context) =>
+        consumo.MedirAsync(context, "vehiculo", () => ConsultarVehiculoCore(request, context), r => Resumen(r.Resultado));
+
+    public override Task<ConsultarConductorResponse> ConsultarConductor(ConsultarConductorRequest request, ServerCallContext context) =>
+        consumo.MedirAsync(context, "conductor", () => ConsultarConductorCore(request, context), r => Resumen(r.Resultado));
+
+    public override Task<ConsultarMultasResponse> ConsultarMultas(ConsultarMultasRequest request, ServerCallContext context) =>
+        consumo.MedirAsync(context, "multas", () => ConsultarMultasCore(request, context), r => Resumen(r.Resultado));
+
+    public override Task<ConsultarRnmcResponse> ConsultarRnmc(ConsultarRnmcRequest request, ServerCallContext context) =>
+        consumo.MedirAsync(context, "rnmc", () => ConsultarRnmcCore(request, context), r => Resumen(r.Resultado));
+
+    public override Task<ConsultarRuesResponse> ConsultarRues(ConsultarRuesRequest request, ServerCallContext context) =>
+        consumo.MedirAsync(context, "rues", () => ConsultarRuesCore(request, context), r => Resumen(r.Resultado));
+
+    public override Task<ConsultarAvaluosResponse> ConsultarAvaluos(ConsultarAvaluosRequest request, ServerCallContext context) =>
+        consumo.MedirAsync(context, "avaluos", () => ConsultarAvaluosCore(request, context), r => (r.FuentePrincipal, r.ValorSugerido > 0 ? "verde" : "sin_datos", false));
+
+    private async Task<ConsultarVehiculoResponse> ConsultarVehiculoCore(ConsultarVehiculoRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         var vin = request.Vin?.Valor;
@@ -42,7 +62,7 @@ internal sealed class ConsultasGrpcService(
         return new ConsultarVehiculoResponse { Resultado = resultado };
     }
 
-    public override async Task<ConsultarConductorResponse> ConsultarConductor(ConsultarConductorRequest request, ServerCallContext context)
+    private async Task<ConsultarConductorResponse> ConsultarConductorCore(ConsultarConductorRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         var documento = Documento(request.Documento);
@@ -51,7 +71,7 @@ internal sealed class ConsultasGrpcService(
         return new ConsultarConductorResponse { Resultado = resultado };
     }
 
-    public override async Task<ConsultarMultasResponse> ConsultarMultas(ConsultarMultasRequest request, ServerCallContext context)
+    private async Task<ConsultarMultasResponse> ConsultarMultasCore(ConsultarMultasRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         var documento = Documento(request.Documento);
@@ -67,7 +87,7 @@ internal sealed class ConsultasGrpcService(
         return new ConsultarMultasResponse { Resultado = resultado };
     }
 
-    public override async Task<ConsultarRnmcResponse> ConsultarRnmc(ConsultarRnmcRequest request, ServerCallContext context)
+    private async Task<ConsultarRnmcResponse> ConsultarRnmcCore(ConsultarRnmcRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         var documento = Documento(request.Documento);
@@ -76,7 +96,7 @@ internal sealed class ConsultasGrpcService(
         return new ConsultarRnmcResponse { Resultado = resultado };
     }
 
-    public override async Task<ConsultarRuesResponse> ConsultarRues(ConsultarRuesRequest request, ServerCallContext context)
+    private async Task<ConsultarRuesResponse> ConsultarRuesCore(ConsultarRuesRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Nit))
@@ -86,7 +106,7 @@ internal sealed class ConsultasGrpcService(
         return new ConsultarRuesResponse { Resultado = resultado };
     }
 
-    public override async Task<ConsultarAvaluosResponse> ConsultarAvaluos(ConsultarAvaluosRequest request, ServerCallContext context)
+    private async Task<ConsultarAvaluosResponse> ConsultarAvaluosCore(ConsultarAvaluosRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
@@ -136,6 +156,9 @@ internal sealed class ConsultasGrpcService(
             .ConfigureAwait(false);
         return ResultadoMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
     }
+
+    private static (string Proveedor, string Resultado, bool DesdeCache) Resumen(ResultadoConsulta r) =>
+        (r.Proveedor, ConsumoRecorder.Resultado(r.Semaforo), r.DesdeCache);
 
     internal int Presupuesto(int configuradoMs, DateTime deadline)
     {

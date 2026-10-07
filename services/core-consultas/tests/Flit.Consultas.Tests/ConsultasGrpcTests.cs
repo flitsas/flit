@@ -193,6 +193,50 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
         (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
     }
 
+    [Fact]
+    public async Task HU13345_CadaConsultaDejaSuFila_TambienLasQueFallan()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var consultas = Cliente(Token("platform.consultas"));
+
+        await consultas.ConsultarVehiculoAsync(new ConsultarVehiculoRequest { Placa = new Flit.Platform.Grpc.V1.Placa { Valor = "ABC123" } }, Empresa(_empresaRapida), cancellationToken: ct);
+        var invalida = async () => await consultas.ConsultarVehiculoAsync(new ConsultarVehiculoRequest(), Empresa(_empresaRapida), cancellationToken: ct);
+        await invalida.Should().ThrowAsync<RpcException>();
+
+        await using var scope = _app!.Services.CreateAsyncScope();
+        var filas = await scope.ServiceProvider.GetRequiredService<ConsultasDb>().Consumos.AsNoTracking()
+            .Where(c => c.TenantId == _empresaRapida).OrderBy(c => c.OcurridoEn).ToListAsync(ct);
+
+        filas.Should().HaveCount(2);
+        filas[0].Should().BeEquivalentTo(new { Producto = "tramites", Fuente = "vehiculo", Proveedor = "falso_rapido", Resultado = "verde", DesdeCache = false });
+        filas[0].LatenciaMs.Should().BeGreaterThanOrEqualTo(0);
+        filas[1].Should().BeEquivalentTo(new { Producto = "tramites", Fuente = "vehiculo", Proveedor = "", Resultado = "error" });
+    }
+
+    [Fact]
+    public async Task HU13345_ElConsumoAgregadoTraeSoloLaEmpresaPedida_PorProductoYFuente()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var consultas = Cliente(Token("platform.consultas"));
+        var pedido = new ConsultarVehiculoRequest { Placa = new Flit.Platform.Grpc.V1.Placa { Valor = "ABC123" } };
+        await consultas.ConsultarVehiculoAsync(pedido, Empresa(_empresaRapida), cancellationToken: ct);
+        await consultas.ConsultarVehiculoAsync(pedido, Empresa(_empresaRapida), cancellationToken: ct);
+        await consultas.ConsultarVehiculoAsync(pedido, Empresa(_empresaConLento), deadline: DateTime.UtcNow.AddSeconds(3), cancellationToken: ct);
+
+        var admin = new ConsultasAdminService.ConsultasAdminServiceClient(Canal(Token("platform.consultas.admin")));
+        var consumo = await admin.ObtenerConsumoAsync(new ObtenerConsumoRequest
+        {
+            Desde = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow.AddHours(-1)),
+            Hasta = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow.AddHours(1)),
+        }, Empresa(_empresaRapida), cancellationToken: ct);
+
+        consumo.Consumos.Should().ContainSingle();
+        consumo.Consumos[0].Should().BeEquivalentTo(new { Producto = "tramites", Fuente = "vehiculo", Total = 2L, DesdeCache = 0L, Errores = 0L },
+            o => o.ExcludingMissingMembers());
+    }
+
     private static GuardarConfiguracionEmpresaRequest Guardar(string principal)
     {
         var config = new Flit.Consultas.Grpc.V1.ConfiguracionEmpresa { FuenteMultas = "internal", AvaluoPrincipal = "base_gravable" };

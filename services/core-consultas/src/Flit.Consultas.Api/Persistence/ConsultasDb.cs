@@ -30,7 +30,25 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
             e.Property(c => c.AvaluosJson).HasColumnName("avaluos").HasColumnType("jsonb");
             e.Property(c => c.ActualizadoEn).HasColumnName("actualizado_en");
         });
+
+        modelBuilder.Entity<ConsumoConsulta>(e =>
+        {
+            e.ToTable("consumo");
+            e.HasKey(c => c.Id).HasName("pk_consumo");
+            e.Property(c => c.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(c => c.TenantId).HasColumnName("tenant_id");
+            e.Property(c => c.Producto).HasColumnName("producto").HasMaxLength(40).IsRequired();
+            e.Property(c => c.Fuente).HasColumnName("fuente").HasMaxLength(20).IsRequired();
+            e.Property(c => c.Proveedor).HasColumnName("proveedor").HasMaxLength(60).IsRequired();
+            e.Property(c => c.Resultado).HasColumnName("resultado").HasMaxLength(20).IsRequired();
+            e.Property(c => c.DesdeCache).HasColumnName("desde_cache");
+            e.Property(c => c.LatenciaMs).HasColumnName("latencia_ms");
+            e.Property(c => c.OcurridoEn).HasColumnName("ocurrido_en");
+            e.HasIndex(c => new { c.TenantId, c.OcurridoEn }).HasDatabaseName("ix_consumo_empresa_fecha");
+        });
     }
+
+    public DbSet<ConsumoConsulta> Consumos => Set<ConsumoConsulta>();
 
     public DbSet<ConfiguracionEmpresa> ConfiguracionEmpresas => Set<ConfiguracionEmpresa>();
 
