@@ -74,6 +74,8 @@ public static class IctInfrastructureExtensions
         services.AddScoped<ITiposTramiteQuery, DbTiposTramiteRepository>();
         services.AddScoped<IRecorridoTramiteQuery, DbRecorridoTramiteRepository>();
         services.AddScoped<IConsultasFuenteQuery, DbConsultasFuenteRepository>();
+        // Bug #13304 — consulta RUNT guardada por el orquestador (lectura + purga al materializar).
+        services.AddScoped<IIctVehicleSnapshotReader, DbVehicleSnapshotReader>();
         services.AddScoped<DbDetalleTramiteRepository>();
         services.AddScoped<IDatosTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
         services.AddScoped<ILogTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());

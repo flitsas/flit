@@ -24,7 +24,19 @@ public sealed class StubConsultationClient : IConsultationClient
             RtmStatus: "VIGENTE",
             VehicleModelYear: null,
             HasActiveSanctions: false,
-            PazYSalvo: true));
+            PazYSalvo: true,
+            Vehicle: StubVehicle(queryType)));
+
+    /// <summary>
+    /// Bug #13304 — en dev la consulta de vehículo también deja un resultado vigente, para que el envío no
+    /// marque «sin consulta RUNT» (el borrador igual espera: el draft client pendiente no llama a core-api).
+    /// </summary>
+    private static VehicleConsultationSnapshot? StubVehicle(string queryType) => queryType?.ToUpperInvariant() switch
+    {
+        "VEHICLE" => new VehicleConsultationSnapshot("{}", DateTimeOffset.UtcNow, "stub", VehicleConsultationSnapshot.KindPlate),
+        "VIN" => new VehicleConsultationSnapshot("{}", DateTimeOffset.UtcNow, "stub", VehicleConsultationSnapshot.KindVin),
+        _ => null,
+    };
 }
 
 /// <summary>
@@ -36,6 +48,7 @@ public sealed class PendingProcedureDraftClient : IProcedureDraftClient
     public Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
+        VehicleConsultationSnapshot? vehicle,
         CancellationToken ct = default) =>
         Task.FromResult(new CreateDraftResult(null, null, null, "grpc_unavailable"));
 
