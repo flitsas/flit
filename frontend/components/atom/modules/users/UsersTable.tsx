@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Search } from "lucide-react";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
+import { SearchInput } from "@/components/atom/SearchInput";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -216,24 +216,21 @@ export function UsersTable({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-xl border bg-white px-3 py-1.5 dark:bg-[#0B0F14]">
-          <Search className="h-4 w-4 opacity-60" aria-hidden />
-          <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Buscar por nombre o correo…"
-            aria-label="Buscar usuarios"
-            className="flex-1 bg-transparent text-xs outline-none"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => { setSearch(v); setPage(1); }}
+          placeholder="Buscar por nombre o correo…"
+          label="Buscar usuarios"
+          className="flex-1"
+        />
 
-        <label className="flex items-center gap-1.5 text-[11px]">
+        <label className="flex items-center gap-1.5 text-xs">
           <span className="font-semibold opacity-60">Perfil</span>
           <select
             value={profileFilter}
             onChange={(e) => { setProfileFilter(e.target.value as "" | UserProfileKind); setPage(1); }}
             aria-label="Filtrar por perfil"
-            className="rounded-lg border bg-transparent px-2 py-1.5 text-[11px] outline-none"
+            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
           >
             <option value="">Todos</option>
             {USER_PROFILE_ORDER.map((p) => (
@@ -244,13 +241,13 @@ export function UsersTable({
           </select>
         </label>
 
-        <label className="flex items-center gap-1.5 text-[11px]">
+        <label className="flex items-center gap-1.5 text-xs">
           <span className="font-semibold opacity-60">Rol</span>
           <select
             value={roleFilter}
             onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
             aria-label="Filtrar por rol"
-            className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-[11px] outline-none"
+            className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
           >
             <option value="">Todos</option>
             {roleOptions.map((r) => (
@@ -261,13 +258,13 @@ export function UsersTable({
           </select>
         </label>
 
-        <label className="flex items-center gap-1.5 text-[11px]">
+        <label className="flex items-center gap-1.5 text-xs">
           <span className="font-semibold opacity-60">Estado</span>
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value as UserStatusFilter); setPage(1); }}
             aria-label="Filtrar por estado"
-            className="rounded-lg border bg-transparent px-2 py-1.5 text-[11px] outline-none"
+            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
           >
             <option value="">Todos</option>
             {STATUS_OPTIONS.map((s) => (
@@ -282,7 +279,7 @@ export function UsersTable({
           <button
             type="button"
             onClick={clearFilters}
-            className="text-[11px] font-semibold"
+            className="rounded text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
             style={{ color: "#557EFF" }}
           >
             Limpiar filtros
@@ -362,7 +359,7 @@ export function UsersTable({
                   <tr key={row.rowKey} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                     <td className={`${CELDA} rounded-l-xl border-l`} style={CELDA_STYLE}>
                       <p className="truncate font-semibold">{row.fullName}</p>
-                      <p className="truncate text-[10px] opacity-60">{row.email}</p>
+                      <p className="truncate text-xs opacity-60">{row.email}</p>
                     </td>
                     {showTenantColumn && (
                       <td className={CELDA} style={CELDA_STYLE}>

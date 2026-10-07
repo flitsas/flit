@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
+  CheckCircle2,
   Loader2,
   MailCheck,
   Pencil,
@@ -18,6 +19,7 @@ import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { RowActions } from "@/components/atom/RowActions";
+import { SearchInput } from "@/components/atom/SearchInput";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   TABLA_HEADER_BG,
@@ -56,6 +58,17 @@ import {
   rlPrimaryCtaStyle,
 } from "./rl-flit-styles";
 
+const LOAD_PAGE_SIZE = 100;
+const MAX_PAGES = 50;
+
+/** Minúsculas, sin tildes, puntos, guiones ni espacios: «1.098-765» coincide con «1098765». */
+const normaliza = (v: string) =>
+  v
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[\s.\-]/g, "");
+
 /**
  * Directorio de representantes legales.
  * Acciones por fila (iconos lineales FLIT): Editar, Empresas, Eliminar.
@@ -71,11 +84,13 @@ export function LegalRepresentativesTab({
   networkHeadId?: string | null;
 }) {
   const { show } = useToast();
-  // Bug #13055 — filas por página elegibles; la paginación sigue siendo de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  // Bug #13055 — filas por página elegibles. El directorio de una compañía es corto: se carga completo
+  // (páginas de 100 contra la misma API) y se busca y pagina en cliente, de modo que el resumen y la
+  // búsqueda cubren a TODOS los representantes y no solo la página visible.
+  const { page, pageSize, setPage, setPageSize, paginar } = usePaginacion();
+  const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
   const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -90,22 +105,26 @@ export function LegalRepresentativesTab({
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const result = await fetchLegalRepresentatives(
-          tenantId,
-          page,
-          pageSize,
-          signal,
-          networkHeadId,
-        );
-        if (signal?.aborted) return;
-        setItems(result.data);
-        setTotalCount(result.totalCount);
-        setStatus(result.data.length === 0 ? "empty" : "ready");
+        const all: LegalRepresentativeItem[] = [];
+        for (let p = 1; p <= MAX_PAGES; p++) {
+          const result = await fetchLegalRepresentatives(
+            tenantId,
+            p,
+            LOAD_PAGE_SIZE,
+            signal,
+            networkHeadId,
+          );
+          if (signal?.aborted) return;
+          all.push(...result.data);
+          if (result.data.length === 0 || all.length >= result.totalCount) break;
+        }
+        setItems(all);
+        setStatus(all.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, page, pageSize, networkHeadId],
+    [tenantId, networkHeadId],
   );
 
   useEffect(() => {
@@ -201,6 +220,15 @@ export function LegalRepresentativesTab({
     }
   };
 
+  const filtered = useMemo(() => {
+    const q = normaliza(search.trim());
+    if (!q) return items;
+    return items.filter(
+      (i) => normaliza(fullName(i)).includes(q) || normaliza(i.documentNumber).includes(q),
+    );
+  }, [items, search]);
+  const sinFirma = items.filter((i) => !i.hasSignatureOrIdentity).length;
+
   const pendingItem = pendingSignatureId
     ? items.find((i) => i.id === pendingSignatureId) ?? null
     : null;
@@ -219,7 +247,7 @@ export function LegalRepresentativesTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="max-w-xl text-[11px]" style={{ color: RL_COLOR.secondary }}>
+        <p className="max-w-xl text-xs" style={{ color: RL_COLOR.secondary }}>
           Gestiona los representantes legales de las compañías que la gestora representa, con sus
           datos, los tipos de trámite que pueden firmar y su estado de firma o validación de identidad.
         </p>
@@ -242,7 +270,7 @@ export function LegalRepresentativesTab({
             background: RL_COLOR.pendingBg,
           }}
         >
-          <p className="text-[11px] font-medium" style={{ color: RL_COLOR.pendingText }}>
+          <p className="text-xs font-medium" style={{ color: RL_COLOR.pendingText }}>
             <strong>{fullName(pendingItem)}</strong> quedó guardado sin firma ni validación de
             identidad vigente. Valida su identidad desde el módulo Identidad o vincula una firma
             para que pueda firmar sus trámites.
@@ -276,7 +304,30 @@ export function LegalRepresentativesTab({
         onRetry={() => void load()}
         skeletonRows={4}
       >
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+              label="Buscar representantes"
+              placeholder="Buscar por nombre o documento…"
+              className="max-w-md flex-1"
+            />
+            <p className="text-xs" style={{ color: RL_COLOR.secondary }} data-testid="representantes-resumen">
+              {items.length} {items.length === 1 ? "representante" : "representantes"}
+              {sinFirma > 0 ? ` · ${sinFirma} sin firma ni identidad` : ""}
+            </p>
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm opacity-60" role="status">
+              Ningún representante coincide con la búsqueda.
+            </p>
+          ) : (
+          <>
           <div className="overflow-x-auto">
             <table
               className="min-w-[820px] text-xs"
@@ -323,7 +374,7 @@ export function LegalRepresentativesTab({
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
+                {paginar(filtered).map((item) => {
                   const st = signatureStatus(item.hasSignatureOrIdentity);
                   const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
                   return (
@@ -352,7 +403,20 @@ export function LegalRepresentativesTab({
                         </div>
                       </td>
                       <td className="border-y px-4 py-3" style={{ borderColor: RL_COLOR.border }}>
-                        <StatusBadge tone={st.tone} label={st.label} />
+                        <StatusBadge
+                          tone={st.tone}
+                          ariaLabel={`Estado: ${st.label}`}
+                          label={
+                            <span className="inline-flex items-center gap-1">
+                              {item.hasSignatureOrIdentity ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              ) : (
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              )}
+                              {st.label}
+                            </span>
+                          }
+                        />
                       </td>
                       <td
                         className="rounded-r-xl border-y border-r px-4 py-3 text-right"
@@ -390,10 +454,13 @@ export function LegalRepresentativesTab({
           <Pagination
             page={page}
             pageSize={pageSize}
-            totalCount={totalCount}
+            totalCount={filtered.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
+            noun="representantes"
           />
+          </>
+          )}
         </div>
       </UiStateBoundary>
       )}
