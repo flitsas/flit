@@ -200,7 +200,7 @@ export function TransitBlocksPanel({
           <Ban className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
           <div>
             <h4 className="text-sm font-semibold">Organismos bloqueados (Marca Blanca)</h4>
-            <p className="mt-0.5 text-[11px] opacity-60">
+            <p className="mt-0.5 text-xs opacity-60">
               Excluye organismos de la red: la cabeza y sus clientes hijos dejan de verlos al radicar.
               Solo aplica a compañías Marca Blanca.
             </p>
@@ -217,7 +217,7 @@ export function TransitBlocksPanel({
           errorMessage="No se pudieron cargar los bloqueos de organismos."
           skeletonRows={3}
         >
-          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 dark:bg-[#0B0F14]">
+          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-[#557EFF] dark:bg-[#0B0F14]">
             <Search className="h-4 w-4 opacity-60" aria-hidden />
             <label htmlFor="ot-blocks-search" className="sr-only">
               Buscar organismo de tránsito

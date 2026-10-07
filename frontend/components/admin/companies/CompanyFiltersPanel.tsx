@@ -145,7 +145,7 @@ function Field({
 }) {
   return (
     <div className={className}>
-      <label htmlFor={htmlFor} className="mb-1 block text-[11px] font-semibold opacity-70">
+      <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold opacity-70">
         {label}
       </label>
       {children}
