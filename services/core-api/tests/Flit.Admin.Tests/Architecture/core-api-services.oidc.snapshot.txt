@@ -1152,6 +1152,7 @@ Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.Star
 Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
+Microsoft.Extensions.Options.IConfigureOptions<Microsoft.Extensions.Options.StartupValidatorOptions> => factory (Transient)
 Microsoft.Extensions.Options.IConfigureOptions<OpenIddict.Core.OpenIddictCoreOptions> => instance:Microsoft.Extensions.Options.ConfigureNamedOptions<OpenIddict.Core.OpenIddictCoreOptions> (Singleton)
 Microsoft.Extensions.Options.IConfigureOptions<OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreOptions> => instance:Microsoft.Extensions.Options.ConfigureNamedOptions<OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreOptions> (Singleton)
 Microsoft.Extensions.Options.IConfigureOptions<OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreOptions> => instance:Microsoft.Extensions.Options.ConfigureNamedOptions<OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreOptions> (Singleton)
