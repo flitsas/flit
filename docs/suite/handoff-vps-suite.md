@@ -418,7 +418,10 @@ de rama.
 
 1. Respaldo de la base (`pg_dump`).
 2. **Broker** (§4.9, paso 1): `RABBITMQ_ADMIN_USER` y `RABBITMQ_ADMIN_PASSWORD`; levantar solo `rabbitmq`
-   (`docker compose up -d rabbitmq`), que importa el vhost `flit` y los exchanges al arrancar.
+   (`docker compose up -d rabbitmq`), que importa el vhost `flit` y los exchanges al arrancar. **Esperar a que
+   `docker compose ps rabbitmq` diga `healthy` antes del paso 3:** un `rabbitmqctl` lanzado mientras el broker arranca
+   crea la cookie de Erlang como root y el broker ya no puede leerla (se cae con `.erlang.cookie: eacces`; arreglo:
+   borrar el contenedor y su volumen `rabbitmq-datos`, y volver a levantarlo).
 3. **Usuarios del broker** (§4.9, paso 6 y §4.10, paso 3), cada uno con su clave:
    - `tramites` (con destino `notificaciones`) → `RABBITMQ_URL_TRAMITES`;
    - `consultas` → `RABBITMQ_URL_CONSULTAS`;

@@ -13,6 +13,13 @@ public interface IEventConsumer<TData>
     Task HandleAsync(EventEnvelope envelope, TData data, CancellationToken ct);
 }
 
+/// <summary>
+/// Una falla que reintentar no arregla, pero que alguien puede resolver después (configuración, credenciales): el
+/// mensaje va directo a <c>&lt;cola&gt;.dlq</c>, sin los reintentos automáticos, y desde ahí se reintenta a mano una vez
+/// corregida la causa (HU #13359).
+/// </summary>
+public class SinReintentoAutomaticoException(string message) : Exception(message);
+
 /// <summary>Una suscripción: la cola del consumidor y los eventos que recibe.</summary>
 public sealed class PlatformConsumerOptions
 {
@@ -196,7 +203,7 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            if (attempt < consumer.RetryDelays.Count)
+            if (ex is not SinReintentoAutomaticoException && attempt < consumer.RetryDelays.Count)
             {
                 ConsumerLog.Retrying(logger, envelope.EventId, consumer.Queue, attempt + 1, consumer.RetryDelays[attempt], ex);
                 await ForwardAsync(channel, delivery, RetryQueue(attempt), attempt + 1, null, null, ct).ConfigureAwait(false);

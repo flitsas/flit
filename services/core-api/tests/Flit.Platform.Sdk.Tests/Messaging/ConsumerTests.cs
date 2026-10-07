@@ -172,6 +172,28 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
     }
 
     [Fact]
+    public async Task HU13359_UnaFallaSinReintentoAutomatico_VaDirectoALaDlq_ConSuMotivo_YSePuedeReintentar()
+    {
+        fixture.SkipIfUnavailable();
+        var evento = Sobre();
+        _comportamiento.FallarSinReintento(evento.EventId);
+
+        await PublicarAsync(evento);
+        await Eventually(async () => (await _channel!.MessageCountAsync($"{_cola}.dlq")) == 1);
+
+        _comportamiento.Intentos(evento.EventId).Should().Be(1, "no pasa por las esperas de reintento");
+        var muerto = await _channel!.BasicGetAsync($"{_cola}.dlq", autoAck: false, TestContext.Current.CancellationToken);
+        Encoding.UTF8.GetString(muerto!.BasicProperties.Headers!["x-flit-dead-letter-reason"] as byte[] ?? []).Should().Be(nameof(SinReintentoAutomaticoException));
+        await _channel.BasicNackAsync(muerto.DeliveryTag, multiple: false, requeue: true, TestContext.Current.CancellationToken);
+
+        // Corregida la causa, el reintento manual lo procesa.
+        _comportamiento.FallarLasPrimeras(evento.EventId, 0);
+        await using var muertos = new PlatformDeadLetters(new PlatformMessagingOptions { ConnectionString = fixture.RabbitMq });
+        (await muertos.RetryAsync(_cola, evento.EventId.ToString(), TestContext.Current.CancellationToken)).Should().BeTrue();
+        await Eventually(async () => await EfectosAsync(evento.EventId) == 1);
+    }
+
+    [Fact]
     public async Task UnMensajeQueNoEsUnSobre_VaDirectoALaDlq()
     {
         fixture.SkipIfUnavailable();
@@ -288,6 +310,13 @@ public sealed class Comportamiento
 
     public void FallarLasPrimeras(Guid eventId, int n) => _fallos[eventId] = n;
 
+    /// <summary>Falla con <see cref="SinReintentoAutomaticoException"/> hasta que se cambie el comportamiento.</summary>
+    public void FallarSinReintento(Guid eventId) => _fallos[eventId] = SinReintento;
+
+    internal const int SinReintento = int.MinValue;
+
+    internal bool SinReintentoPara(Guid eventId) => _fallos.TryGetValue(eventId, out var r) && r == SinReintento;
+
     public int Intentos(Guid eventId) => _momentos.TryGetValue(eventId, out var q) ? q.Count : 0;
 
     public IReadOnlyList<DateTimeOffset> Momentos(Guid eventId) => _momentos.TryGetValue(eventId, out var q) ? [.. q] : [];
@@ -298,7 +327,7 @@ public sealed class Comportamiento
         _momentos.GetOrAdd(eventId, _ => new ConcurrentQueue<DateTimeOffset>()).Enqueue(DateTimeOffset.UtcNow);
         if (!_fallos.TryGetValue(eventId, out var restantes) || restantes == 0)
             return true;
-        if (restantes != int.MaxValue)
+        if (restantes is not (int.MaxValue or Comportamiento.SinReintento))
             _fallos[eventId] = restantes - 1;
         return false;
     }
@@ -309,8 +338,13 @@ public sealed class EfectoDePrueba(PruebaDb db, Comportamiento comportamiento) :
 {
     public Task HandleAsync(EventEnvelope envelope, PedidoCreado data, CancellationToken ct)
     {
+        var sinReintento = comportamiento.SinReintentoPara(envelope.EventId);
         if (!comportamiento.Intentar(envelope.EventId))
+        {
+            if (sinReintento)
+                throw new SinReintentoAutomaticoException("Falla que reintentar no arregla.");
             throw new InvalidOperationException("Efecto que falla a propósito.");
+        }
 
         db.Set<Efecto>().Add(new Efecto { Id = Guid.NewGuid(), EventId = envelope.EventId, Cola = envelope.Type });
         return Task.CompletedTask;

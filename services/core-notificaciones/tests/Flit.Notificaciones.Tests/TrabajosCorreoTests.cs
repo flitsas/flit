@@ -146,18 +146,19 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
         _renting.Pedidos.Should().HaveCount(4);
     }
 
-    [Fact]
-    public async Task UnRechazoDefinitivo_NoSeReintenta()
+    [Theory]
+    [InlineData(EmailSendOutcome.RecipientRejected)]
+    [InlineData(EmailSendOutcome.ContentRejected)]
+    public async Task HU13359_UnRechazoDelProveedor_NoSeReintentaSolo_YQuedaEnLaDlqParaReintentarloAMano(EmailSendOutcome rechazo)
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
-        _renting.Respuesta = EmailSendResult.Failed(EmailSendOutcome.RecipientRejected);
+        _renting.Respuesta = EmailSendResult.Failed(rechazo);
         var trabajo = await PublicarAsync(Trabajo(CanalCorreo.EmpresaApi));
 
-        await EsperarAsync(async () => await Entregas().AnyAsync(e => e.TrabajoId == trabajo.EventId));
-        await Task.Delay(1500, TestContext.Current.CancellationToken);
+        await EsperarAsync(async () => await MensajesAsync($"{Cola}.dlq") == 1, TimeSpan.FromSeconds(10));
 
-        (await Entregas().CountAsync(e => e.TrabajoId == trabajo.EventId, TestContext.Current.CancellationToken)).Should().Be(1);
-        (await MensajesAsync($"{Cola}.dlq")).Should().Be(0);
+        (await Entregas().CountAsync(e => e.TrabajoId == trabajo.EventId, TestContext.Current.CancellationToken))
+            .Should().Be(1, "sin las esperas de reintento: el buzón remitente lleno o la contraseña vencida no se arreglan solos");
     }
 
     [Fact]
