@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
@@ -14,8 +15,8 @@ public sealed class TramitesSeleccionResolver(
     ListProcedureInstancesFilteredHandler listado,
     IProcedureInstanceRepository repo) : ILoteSeleccionResolver
 {
-    /// <summary>Mismo valor que <c>ConsolidadoExportOrigin.Tramites</c> (DDL 133, #13367).</summary>
-    public const string OrigenTramites = "tramites";
+    /// <summary>Clave del origen: <see cref="ConsolidadoExportOrigin.Tramites"/> (DDL 133, #13367); un solo literal.</summary>
+    public const string OrigenTramites = ConsolidadoExportOrigin.Tramites;
 
     public string Origen => OrigenTramites;
 

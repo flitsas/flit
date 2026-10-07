@@ -442,6 +442,11 @@ public static class InfrastructureExtensions
         services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
             OtClientProcedures.OtClientProcedureConsolidadoContext>();
 
+        // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
+        // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            ConsolidadoLotes.Ot.OtBandejaSeleccionResolver>();
+
         return services;
     }
 

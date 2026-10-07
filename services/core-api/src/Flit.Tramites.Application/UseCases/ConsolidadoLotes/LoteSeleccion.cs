@@ -32,8 +32,11 @@ public sealed record SeleccionPorFiltro(LoteFiltro Filtro, IReadOnlyList<Guid>? 
 /// Quién resuelve. Sale SIEMPRE del token / middleware, nunca del cuerpo de la petición.
 /// <c>TenantId</c> <c>null</c> = todas las compañías: solo el Super Admin (#13383); el guard que falla
 /// cerrado para el resto vive en el caso de uso que crea el lote.
+/// <para>HU #13390 — <c>OtTransitOfficeId</c>: solo el origen <c>ot_bandeja</c>. Organismo que el Super
+/// Admin eligió con <c>?transitOfficeId</c> (el <c>ot_transit_office_id</c> del lote); <c>null</c> = el del
+/// perfil del tenant OT. Los demás orígenes lo ignoran.</para>
 /// </summary>
-public sealed record LoteSeleccionContexto(Guid? TenantId, Guid? UsuarioActualId);
+public sealed record LoteSeleccionContexto(Guid? TenantId, Guid? UsuarioActualId, Guid? OtTransitOfficeId = null);
 
 /// <summary>Topes de la selección (ADR-0070, Q7). El modo filtro no tiene tope de resultados.</summary>
 public static class LoteSeleccionTopes
