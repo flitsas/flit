@@ -300,7 +300,7 @@ describe("MandatoOtConfigForm", () => {
         />,
       );
 
-    it("muestra Persona natural, Persona jurídica y Mandato abierto por compañía", async () => {
+    it("muestra Mandatario de la compañía, Institucional (organismo) y Abierto (sin mandatario) por compañía", async () => {
       listCompanyOtMandateRules.mockResolvedValue([
         regla({ companyTenantId: "a", companyName: "Alfa", assignmentMode: "signer" }),
         regla({ companyTenantId: "b", companyName: "Beta", assignmentMode: "institutional" }),
@@ -308,27 +308,27 @@ describe("MandatoOtConfigForm", () => {
       ]);
       abrir();
       expect(await screen.findByRole("columnheader", { name: /tipo de mandato/i })).toBeInTheDocument();
-      expect(screen.getByTestId("mandato-company-tipo-a")).toHaveTextContent("Persona natural");
-      expect(screen.getByTestId("mandato-company-tipo-b")).toHaveTextContent("Persona jurídica");
-      expect(screen.getByTestId("mandato-company-tipo-c")).toHaveTextContent("Mandato abierto");
+      expect(screen.getByTestId("mandato-company-tipo-a")).toHaveTextContent("Mandatario de la compañía");
+      expect(screen.getByTestId("mandato-company-tipo-b")).toHaveTextContent("Institucional (organismo)");
+      expect(screen.getByTestId("mandato-company-tipo-c")).toHaveTextContent("Abierto (sin mandatario)");
     });
 
-    it("compañía sin regla propia: Persona natural con marca Default y ayuda", async () => {
+    it("compañía sin regla propia: Mandatario de la compañía con marca Default y ayuda", async () => {
       listCompanyOtMandateRules.mockResolvedValue([
         regla({ companyTenantId: "a", companyName: "Alfa", hasExplicitRule: false, rowVersion: null }),
       ]);
       abrir();
-      expect(await screen.findByTestId("mandato-company-tipo-a")).toHaveTextContent("Persona natural");
+      expect(await screen.findByTestId("mandato-company-tipo-a")).toHaveTextContent("Mandatario de la compañía");
       expect(screen.getByText("Default")).toBeInTheDocument();
       expect(screen.getByText(/sin configuración propia: usa el del organismo/i)).toBeInTheDocument();
     });
 
-    it("no muestra etiquetas antiguas y un modo desconocido cae en Persona natural", async () => {
+    it("no muestra etiquetas antiguas y un modo desconocido cae en Mandatario de la compañía", async () => {
       listCompanyOtMandateRules.mockResolvedValue([
         regla({ companyTenantId: "z", companyName: "Zeta", assignmentMode: "otra_cosa" }),
       ]);
       const { container } = abrir();
-      expect(await screen.findByTestId("mandato-company-tipo-z")).toHaveTextContent("Persona natural");
+      expect(await screen.findByTestId("mandato-company-tipo-z")).toHaveTextContent("Mandatario de la compañía");
       expect(container.ownerDocument.body.textContent).not.toMatch(
         /Persona o RL|Persona\/RL|Institucional OT|Abierto \(sin asumir\)/,
       );
@@ -387,7 +387,7 @@ describe("MandatoOtConfigForm", () => {
       listCompanyOtMandateRules.mockResolvedValue([base]);
     });
 
-    it("cambia a Persona jurídica: PUT institutional con la entidad y rowVersion", async () => {
+    it("cambia a Institucional (organismo): PUT institutional con la entidad y rowVersion", async () => {
       const user = userEvent.setup();
       upsertCompanyOtMandateRule.mockResolvedValue({
         ...base,
@@ -416,10 +416,10 @@ describe("MandatoOtConfigForm", () => {
           rowVersion: 3,
         }),
       );
-      expect(await screen.findByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Persona jurídica");
+      expect(await screen.findByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Institucional (organismo)");
     });
 
-    it("con Persona natural o Mandato abierto no muestra ni envía datos de la entidad", async () => {
+    it("con Mandatario de la compañía o Abierto (sin mandatario) no muestra ni envía datos de la entidad", async () => {
       const user = userEvent.setup();
       upsertCompanyOtMandateRule.mockResolvedValue({ ...base, rowVersion: 4 });
       listCompanyOtMandateRules.mockResolvedValue([
@@ -449,7 +449,7 @@ describe("MandatoOtConfigForm", () => {
       expect(screen.getByTestId("mandato-company-default-signer-cia-1")).toBeInTheDocument();
     });
 
-    it("Mandato abierto pide confirmación y solo al confirmar envía", async () => {
+    it("Abierto (sin mandatario) pide confirmación y solo al confirmar envía", async () => {
       const user = userEvent.setup();
       upsertCompanyOtMandateRule.mockResolvedValue({ ...base, assignmentMode: "open", rowVersion: 4 });
       abrir();
@@ -474,7 +474,7 @@ describe("MandatoOtConfigForm", () => {
       await user.click(screen.getByRole("button", { name: /cancelar/i }));
       expect(upsertCompanyOtMandateRule).not.toHaveBeenCalled();
       await user.click(screen.getByRole("button", { name: /cancelar/i }));
-      expect(screen.getByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Persona natural");
+      expect(screen.getByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Mandatario de la compañía");
     });
 
     it("nombre de entidad vacío no envía; el código del API muestra el mismo mensaje", async () => {
@@ -510,7 +510,7 @@ describe("MandatoOtConfigForm", () => {
       expect(await screen.findByTestId("mandato-tipo-error")).toHaveTextContent(/otra persona modificó la regla/i);
       await waitFor(() => expect(listCompanyOtMandateRules).toHaveBeenCalledTimes(2));
       expect(screen.getByLabelText(/nombre de la entidad/i)).toHaveValue("Mi entidad");
-      expect(await screen.findByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Mandato abierto");
+      expect(await screen.findByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Abierto (sin mandatario)");
       expect(screen.getByRole("button", { name: /recargar el tipo actual/i })).toBeInTheDocument();
     });
 

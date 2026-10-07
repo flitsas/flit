@@ -54,7 +54,7 @@ describe("mandato-templates tipos de negocio", () => {
     expect(assignmentModeFromFormat(FORMATOS, "generico")).toBe("signer");
     expect(assignmentModeFromFormat(FORMATOS, "bello")).toBe("signer");
     expect(assignmentModeFromFormat(FORMATOS, "auto")).toBe("signer");
-    // Un código que ya no está en el catálogo cae en Persona natural.
+    // Un código que ya no está en el catálogo cae en Mandatario de la compañía.
     expect(assignmentModeFromFormat(FORMATOS, "retirado")).toBe("signer");
     // Si el backend cambia el tipo de un formato, se sigue el catálogo y no una constante.
     expect(assignmentModeFromFormat([fmt("bello", "Bello", "institutional")], "bello")).toBe(
@@ -63,11 +63,12 @@ describe("mandato-templates tipos de negocio", () => {
   });
 
   it("expone labels de producto", () => {
-    expect(MANDATO_TIPOS.map((t) => t.label).join(" ")).not.toMatch(/persona o rl|institucional|sin asumir/i);
+    // Los tipos no reutilizan los nombres del modelo del mandatario (Persona natural / Persona jurídica): se confundían.
+    expect(MANDATO_TIPOS.map((t) => t.label).join(" ")).not.toMatch(/persona o rl|sin asumir|persona natural|persona jur[ií]dica/i);
     expect(MANDATO_TIPOS.find((t) => t.value === "abierto")?.summary).not.toMatch(/default de modo/i);
-    expect(tipoNegocioLabel("persona_rl")).toBe("Persona natural");
-    expect(tipoNegocioLabel("institucional")).toBe("Persona jurídica");
-    expect(tipoNegocioLabel("abierto")).toBe("Mandato abierto");
+    expect(tipoNegocioLabel("persona_rl")).toBe("Mandatario de la compañía");
+    expect(tipoNegocioLabel("institucional")).toBe("Institucional (organismo)");
+    expect(tipoNegocioLabel("abierto")).toBe("Abierto (sin mandatario)");
   });
 
   it("muestra el nombre vigente del catálogo y, si el código ya no existe, el código guardado", () => {
@@ -78,9 +79,9 @@ describe("mandato-templates tipos de negocio", () => {
     expect(mandatoFormatName(FORMATOS, null)).toBe("");
   });
 
-  it("resume los tipos por compañía: Persona natural siempre, y las excepciones con su cantidad", () => {
-    expect(resumenTiposPorCompania(0, 0)).toBe("Persona natural");
-    expect(resumenTiposPorCompania(2, 1)).toBe("Persona natural · Persona jurídica (2) · Mandato abierto (1)");
+  it("resume los tipos por compañía: Mandatario de la compañía siempre, y las excepciones con su cantidad", () => {
+    expect(resumenTiposPorCompania(0, 0)).toBe("Mandatario de la compañía");
+    expect(resumenTiposPorCompania(2, 1)).toBe("Mandatario de la compañía · Institucional (organismo) (2) · Abierto (sin mandatario) (1)");
   });
 });
 
