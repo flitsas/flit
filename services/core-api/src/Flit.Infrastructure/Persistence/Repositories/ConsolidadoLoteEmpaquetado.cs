@@ -293,7 +293,7 @@ public sealed class ConsolidadoLoteEmpaquetado(FlitDbContext db) : IConsolidadoL
 
     /// <summary>
     /// Transición terminal de un lote ya bloqueado y cargado con seguimiento: estado, <c>finished_at</c>,
-    /// <c>expires_at</c> y la fila <c>lote_finalizado</c> con los conteos finales, en un solo <c>SaveChanges</c>.
+    /// <c>expires_at</c> y la fila <c>lote_finalizado</c> con los conteos finales y las partes, en un solo <c>SaveChanges</c>.
     /// </summary>
     private async Task<LoteFinalizado> TerminarAsync(
         ConsolidadoExportBatch lote, string estado, string? codigoError, bool destruirDek, CancellationToken ct)
@@ -331,6 +331,10 @@ public sealed class ConsolidadoLoteEmpaquetado(FlitDbContext db) : IConsolidadoL
             IncludedCount = lote.IncludedCount,
             OmittedCount = lote.OmittedCount,
             GeneratedCount = lote.GeneratedCount,
+            // AC2: «y partes» — las partes en que se dividió el lote (batches.parts_count). En un fallido (AC3) cuenta
+            // también las descartadas/fallidas (0 si falló antes de crear ninguna): que no son descargables lo dicen el
+            // estado y la DEK destruida, no este conteo.
+            PartsCount = lote.PartsCount,
         });
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return new LoteFinalizado(lote.Id, estado, ahora, lote.ExpiresAt.Value);

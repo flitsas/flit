@@ -493,4 +493,53 @@ public sealed class ConsolidadoLoteEmpaquetadoIntegrationTests(PostgresDatabaseF
             ("l", lote), ("h", RetencionHoras))).Should().Be($"fallido|{codigo}|true|true");
         (await AuditoriasAsync(lote, "lote_finalizado")).Should().Be(1, "lote_finalizado en la misma transacción");
     }
+
+    // ── AC2 — partes en lote_finalizado ─────────────────────────────────────────────────────
+
+    private Task<short> PartesAuditadasAsync(Guid lote) => ScalarAsync<short>(
+        """
+        SELECT a.parts_count FROM tramites.consolidado_export_audit a
+         WHERE a.batch_id = @l AND a.event = 'lote_finalizado'
+        """,
+        ("l", lote));
+
+    private Task<short> PartesDelLoteAsync(Guid lote) => ScalarAsync<short>(
+        "SELECT parts_count FROM tramites.consolidado_export_batches WHERE id = @l", ("l", lote));
+
+    /// <summary>
+    /// HU #13378 AC2 — la auditoría <c>lote_finalizado</c> registra «partes» = <c>batches.parts_count</c> (partes en
+    /// que se dividió el lote) en la misma transacción, en los tres desenlaces: <c>completado</c>,
+    /// <c>completado_con_omitidos</c> y <c>fallido</c> (AC3: cuenta también las partes descartadas o fallidas; que no
+    /// sean descargables lo dicen el estado y la DEK destruida; 0 si falló antes de crear ninguna).
+    /// </summary>
+    [PostgresFact]
+    public async Task AC2_LoteFinalizadoRegistraLasPartes_EnCompletadoConOmitidosYFallido()
+    {
+        await SembrarAsync();
+        var (completado, _, _) = await SembrarLoteAsync("p-ok", "empaquetando", [(1, "cerrada")], [new(1, "incluido")]);
+        var (conOmitidos, _, _) = await SembrarLoteAsync("p-om", "empaquetando", [(1, "cerrada"), (2, "cerrada")],
+            [new(1, "incluido"), new(2, "omitido")]);
+        var (agotado, _, _) = await SembrarLoteAsync("p-agota", "empaquetando", [(1, "cerrada"), (2, "empaquetando"), (3, "pendiente")],
+            [new(1, "incluido"), new(2, "incluido"), new(3, "omitido")]);
+        var (sinPartes, _, _) = await SembrarLoteAsync("p-dek", "en_proceso", [], [], vivos: 1);
+
+        (await ConPuertoAsync(p => p.FinalizarLoteAsync(completado, Ct)))!.Estado.Should().Be(ConsolidadoExportStatus.Completado);
+        (await ConPuertoAsync(p => p.FinalizarLoteAsync(conOmitidos, Ct)))!.Estado.Should().Be(ConsolidadoExportStatus.CompletadoConOmitidos);
+        (await ConPuertoAsync(p => p.RegistrarFalloParteAsync(new FalloParteLote(agotado, 2, 0, 3, 3), Ct)))
+            .Should().Be(FalloParteDesenlace.LoteFallido);
+        (await ConPuertoAsync(p => p.FallarLoteAsync(sinPartes, ConsolidadoLoteErrores.DekInvalida, Ct))).Should().BeTrue();
+
+        (await PartesAuditadasAsync(completado)).Should().Be(1);
+        (await PartesAuditadasAsync(conOmitidos)).Should().Be(2);
+        (await PartesAuditadasAsync(agotado)).Should().Be(3, "fallido: cerrada + fallida + descartada");
+        (await PartesAuditadasAsync(sinPartes)).Should().Be(0, "fallido antes de crear partes");
+        foreach (var lote in new[] { completado, conOmitidos, agotado, sinPartes })
+        {
+            (await PartesAuditadasAsync(lote)).Should().Be(await PartesDelLoteAsync(lote), "coincide con batches.parts_count");
+            (await AuditoriasAsync(lote, "lote_finalizado")).Should().Be(1);
+        }
+
+        (await EstadoLoteAsync(agotado)).Should().Be(ConsolidadoExportStatus.Fallido);
+        (await EstadoLoteAsync(sinPartes)).Should().Be(ConsolidadoExportStatus.Fallido);
+    }
 }
