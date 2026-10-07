@@ -16,7 +16,7 @@ namespace Flit.Platform.Sdk.Tests.Messaging;
 /// <summary>
 /// HU #13338 (Epic #13316) — outbox del SDK contra Postgres y RabbitMQ reales: el evento sale solo si el cambio se
 /// guardó (AC1), una transacción revertida no deja nada (AC2) y con el broker caído los eventos esperan y salen todos,
-/// en orden, cuando vuelve (AC3).
+/// en orden, cuando vuelve (AC3), espaciando los intentos mientras siga caído.
 /// </summary>
 public sealed class OutboxTests(MessagingFixture fixture) : IClassFixture<MessagingFixture>, IAsyncLifetime
 {
@@ -136,7 +136,7 @@ public sealed class OutboxTests(MessagingFixture fixture) : IClassFixture<Messag
 
         // Broker caído: un puerto donde no escucha nadie.
         await using (var caido = new RabbitMqEventPublisher(Options("amqp://flit:flit-prueba@127.0.0.1:1/")))
-            (await Publisher(caido).PublishPendingAsync(ct)).Should().Be(0);
+            (await Publisher(caido).PublicarAsync(ct)).Should().Be(new CicloOutbox(0, Fallo: true), "el ciclo avisa el fallo para espaciar el siguiente");
 
         await using (var check = fixture.NewDb())
         {
@@ -156,6 +156,34 @@ public sealed class OutboxTests(MessagingFixture fixture) : IClassFixture<Messag
         }
 
         recibidos.Should().Equal(ids);
+    }
+
+    // ── Broker caído: la espera entre ciclos crece (1 s, 2 s, 4 s…) hasta el tope y vuelve al poll al recuperarse ──
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 4)]
+    [InlineData(6, 32)]
+    [InlineData(7, 60)]
+    [InlineData(500, 60)]
+    public void BrokerCaido_LaEsperaSeDuplicaConCadaFalloSeguido_HastaElTope(int fallosSeguidos, int segundos) =>
+        OutboxPublisherService<PruebaDb>.Espera(fallosSeguidos, TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(1))
+            .Should().Be(TimeSpan.FromSeconds(segundos));
+
+    [Fact]
+    public void ElTopeDeEsperaMenorQueElPoll_NoArranca()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Platform:Messaging:Producer"] = "consultas",
+            ["Platform:Messaging:ConnectionString"] = "amqp://h/",
+            ["Platform:Messaging:PollInterval"] = "00:00:05",
+            ["Platform:Messaging:MaxRetryDelay"] = "00:00:01",
+        }).Build();
+        var act = () => new ServiceCollection().AddFlitOutbox<PruebaDb>(config);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*MaxRetryDelay*");
     }
 
     [Fact]

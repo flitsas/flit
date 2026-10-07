@@ -18,6 +18,12 @@ public sealed partial class PlatformMessagingOptions
 
     public int BatchSize { get; set; } = 50;
 
+    /// <summary>
+    /// Tope de la espera del publicador con el broker caído: la espera parte de <see cref="PollInterval"/> y se duplica
+    /// en cada fallo seguido hasta este valor.
+    /// </summary>
+    public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
+
     internal void Validate()
     {
         if (!ProducerPattern().IsMatch(Producer))
@@ -26,6 +32,8 @@ public sealed partial class PlatformMessagingOptions
             throw new InvalidOperationException($"{SectionName}:ConnectionString debe ser una URI amqp:// o amqps://.");
         if (BatchSize < 1 || PollInterval <= TimeSpan.Zero)
             throw new InvalidOperationException($"{SectionName}: BatchSize y PollInterval deben ser positivos.");
+        if (MaxRetryDelay < PollInterval)
+            throw new InvalidOperationException($"{SectionName}:MaxRetryDelay no puede ser menor que PollInterval.");
     }
 
     [GeneratedRegex("^[a-z][a-z0-9-]{1,40}$")]

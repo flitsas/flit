@@ -8,7 +8,9 @@ namespace Flit.Platform.Sdk.Messaging;
 /// (<c>ProcedureStateChangeOutboxProcessor</c>): reclamo con <c>FOR NO KEY UPDATE SKIP LOCKED</c> dentro de una
 /// transacción, seguro con varias réplicas. Se sella <c>published_at</c> solo cuando el broker confirmó; si el broker
 /// no responde, el evento queda pendiente (sube <c>attempts</c>) y el lote se corta: sale en el siguiente ciclo, en
-/// orden, cuando el broker vuelva (AC3).
+/// orden, cuando el broker vuelva (AC3). Con el broker (o la base) caído, la espera entre ciclos se duplica en cada
+/// fallo seguido hasta <see cref="PlatformMessagingOptions.MaxRetryDelay"/>, y vuelve a <c>PollInterval</c> al primer
+/// ciclo sano: una caída larga no llena la base ni el log con un intento por segundo.
 /// </summary>
 internal sealed class OutboxPublisherService<TContext>(
     IServiceScopeFactory scopes,
@@ -20,12 +22,13 @@ internal sealed class OutboxPublisherService<TContext>(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var fallosSeguidos = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
-            int published;
+            CicloOutbox ciclo;
             try
             {
-                published = await PublishPendingAsync(stoppingToken).ConfigureAwait(false);
+                ciclo = await PublicarAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -34,15 +37,17 @@ internal sealed class OutboxPublisherService<TContext>(
             catch (Exception ex)
             {
                 OutboxLog.CycleError(logger, ex);
-                published = 0;
+                ciclo = new CicloOutbox(0, Fallo: true);
             }
 
-            // Lote lleno: puede haber más, se sigue sin esperar.
-            if (published >= options.BatchSize)
+            fallosSeguidos = ciclo.Fallo ? fallosSeguidos + 1 : 0;
+
+            // Lote lleno y sano: puede haber más, se sigue sin esperar.
+            if (!ciclo.Fallo && ciclo.Publicados >= options.BatchSize)
                 continue;
             try
             {
-                await Task.Delay(options.PollInterval, time, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(Espera(fallosSeguidos, options.PollInterval, options.MaxRetryDelay), time, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -51,8 +56,24 @@ internal sealed class OutboxPublisherService<TContext>(
         }
     }
 
+    /// <summary>
+    /// Espera antes del siguiente ciclo: <paramref name="poll"/> si el último salió bien; con fallos seguidos,
+    /// <paramref name="poll"/> × 2^(fallos−1) con tope en <paramref name="max"/> (1 s, 2 s, 4 s… 1 min).
+    /// </summary>
+    internal static TimeSpan Espera(int fallosSeguidos, TimeSpan poll, TimeSpan max)
+    {
+        if (fallosSeguidos <= 0)
+            return poll;
+        var exponente = Math.Min(fallosSeguidos - 1, 30);
+        var espera = poll * Math.Pow(2, exponente);
+        return espera > max ? max : espera;
+    }
+
     /// <summary>Publica un lote. Devuelve cuántos eventos quedaron confirmados.</summary>
-    internal async Task<int> PublishPendingAsync(CancellationToken ct)
+    internal async Task<int> PublishPendingAsync(CancellationToken ct) => (await PublicarAsync(ct).ConfigureAwait(false)).Publicados;
+
+    /// <summary>Publica un lote. Devuelve cuántos eventos quedaron confirmados y si el broker falló.</summary>
+    internal async Task<CicloOutbox> PublicarAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TContext>();
@@ -66,6 +87,7 @@ internal sealed class OutboxPublisherService<TContext>(
             var batch = await db.Set<OutboxMessage>().FromSqlRaw(sql, options.BatchSize).ToListAsync(ct).ConfigureAwait(false);
 
             var published = 0;
+            var fallo = false;
             foreach (var message in batch)
             {
                 try
@@ -80,13 +102,14 @@ internal sealed class OutboxPublisherService<TContext>(
                     message.Attempts++;
                     message.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                     OutboxLog.PublishFailed(logger, message.Id, message.RoutingKey, message.Attempts, ex);
+                    fallo = true;
                     break; // el broker no responde: el resto del lote espera, en orden
                 }
             }
 
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             await tx.CommitAsync(ct).ConfigureAwait(false);
-            return published;
+            return new CicloOutbox(published, fallo);
         }).ConfigureAwait(false);
     }
 
@@ -99,6 +122,9 @@ internal sealed class OutboxPublisherService<TContext>(
         return schema is null ? $"\"{table}\"" : $"\"{schema}\".\"{table}\"";
     }
 }
+
+/// <summary>Resultado de un ciclo del publicador.</summary>
+internal readonly record struct CicloOutbox(int Publicados, bool Fallo);
 
 internal static partial class OutboxLog
 {
