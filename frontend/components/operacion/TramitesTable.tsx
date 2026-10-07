@@ -29,6 +29,8 @@ import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '
 import { useSeleccionLote } from '@/hooks/useSeleccionLote';
 import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
 import { BotonDescargaMasivaZip } from './DescargaMasivaConfirmModal';
+import { useMostrarLoteDescarga } from '@/components/shared/LoteDescargaTracker';
+import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   ETIQUETA_CLIENTE_HIJO,
@@ -799,6 +801,16 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     return { ...criterios, alcanceRed: networkActive ? (childTenantId ?? 'red') : null };
   }, [buildListQuery, networkActive, childTenantId]);
   const lote = useSeleccionLote({ filtro: filtroLote, total });
+  // HU #13382 — el seguimiento global (Shell) muestra el lote recién creado o el que ya corre (409).
+  const { mostrarLote } = useMostrarLoteDescarga();
+  const limpiarSeleccionLote = lote.limpiar;
+  const alCrearLote = useCallback(
+    (creado: LoteConsolidados) => {
+      limpiarSeleccionLote();
+      mostrarLote(creado);
+    },
+    [limpiarSeleccionLote, mostrarLote],
+  );
   const estadoTablaLote = loading ? 'cargando' : error ? 'error' : total === 0 ? 'vacio' : 'lleno';
   const contarEstados = useCallback(
     (query: ListInstancesParams) =>
@@ -1563,12 +1575,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             onLimpiar={lote.limpiar}
             mensajeTope={lote.mensajeTope}
           >
-            {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). El 409
-                `lote_activo` expone `onLoteActivo(loteId)`: ahí se engancha el seguimiento (#13382). */}
+            {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). HU #13382 — el
+                lote creado y el del 409 `lote_activo` pasan al seguimiento global del Shell. */}
             <BotonDescargaMasivaZip
               seleccion={lote.modelo}
               contador={lote.contador}
-              onCreado={lote.limpiar}
+              onCreado={alCrearLote}
+              onLoteActivo={mostrarLote}
             />
           </BarraSeleccionLote>
         ) : null}

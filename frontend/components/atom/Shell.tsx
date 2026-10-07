@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
 import { useSuiteTheme } from "@flit/shell/theme";
 import {
+  canDescargarConsolidadosMasivo,
   decodeJwtPayload,
   isAdminCompany,
   isGroupParent,
@@ -17,6 +18,7 @@ import { apiFetch } from "@/lib/api/client";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import { DrFlitAssistant } from "@/components/dr-flit";
+import { LoteDescargaTracker, LoteDescargaTrackerProvider } from "@/components/shared/LoteDescargaTracker";
 import { tramitesNav } from "./dock/tramitesNav";
 
 export type ModuleId =
@@ -73,6 +75,8 @@ function useCurrentUser() {
       // Cualquier rol de un tenant OT (no solo ot_admin) opera la superficie del organismo.
       isOtUser: isOtUser(payload),
       tenantId: (payload.tenant_id as string) ?? null,
+      // HU #13382 — el seguimiento del lote de descarga masiva solo se monta con el permiso (sin polling inútil).
+      puedeDescargaMasiva: canDescargarConsolidadosMasivo(payload),
     };
   });
   return user;
@@ -150,41 +154,51 @@ export function Shell({
   const hasModule = (code: string) => (visibleModuleCodes ? visibleModuleCodes.includes(code) : true);
 
   return (
-    <SuiteShell
-      productCode="tramites"
-      productName="Trámites"
-      nav={nav}
-      user={user}
-      loadApps={loadApps}
-      homeHref="/"
-      search={search}
-      onLogout={onLogout}
-      layout="app"
-      overlay={
-        // DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance).
-        <DrFlitAssistant
-          displayName={currentUser?.displayName ?? currentUser?.email ?? null}
-          routeScope={`${pathname}|${activeModule}`}
-          historialPlacaEnabled={hasModule("historial-placa")}
-          canSearchValidaciones={hasModule("validaciones")}
-          // Épica #12718 — al caso de soporte solo va un nombre real: `displayName` es null si el token no lo trae
-          // (no cae al correo); sin nombre, la persona lo escribe.
-          supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email || null }}
-        />
-      }
-      footer={
-        <footer
-          className="shrink-0 px-4 md:px-6 py-2 border-t text-[10px] text-center"
-          style={{
-            borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)",
-            color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
-          }}
-        >
-          Políticas de Privacidad y Términos de Uso · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
-        </footer>
-      }
-    >
-      {children}
-    </SuiteShell>
+    // HU #13382 — seguimiento global del lote de descarga masiva: el provider envuelve todo para que
+    // cualquier página (p. ej. el listado al crear el lote o ante 409 `lote_activo`) pueda pedir que se
+    // muestre un lote con `useMostrarLoteDescarga`.
+    <LoteDescargaTrackerProvider habilitado={Boolean(currentUser?.puedeDescargaMasiva)}>
+      <SuiteShell
+        productCode="tramites"
+        productName="Trámites"
+        nav={nav}
+        user={user}
+        loadApps={loadApps}
+        homeHref="/"
+        search={search}
+        onLogout={onLogout}
+        layout="app"
+        overlay={
+          <>
+            {/* DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance). */}
+            <DrFlitAssistant
+              displayName={currentUser?.displayName ?? currentUser?.email ?? null}
+              routeScope={`${pathname}|${activeModule}`}
+              historialPlacaEnabled={hasModule("historial-placa")}
+              canSearchValidaciones={hasModule("validaciones")}
+              // Épica #12718 — al caso de soporte solo va un nombre real: `displayName` es null si el token no lo trae
+              // (no cae al correo); sin nombre, la persona lo escribe.
+              supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email || null }}
+            />
+            {/* HU #13382 — aviso del lote arriba a la derecha del contenido: fuera de la barra de marca (#12237),
+                del dock y del botón de Dr. FLIT. */}
+            <LoteDescargaTracker />
+          </>
+        }
+        footer={
+          <footer
+            className="shrink-0 px-4 md:px-6 py-2 border-t text-[10px] text-center"
+            style={{
+              borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)",
+              color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
+            }}
+          >
+            Políticas de Privacidad y Términos de Uso · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
+          </footer>
+        }
+      >
+        {children}
+      </SuiteShell>
+    </LoteDescargaTrackerProvider>
   );
 }

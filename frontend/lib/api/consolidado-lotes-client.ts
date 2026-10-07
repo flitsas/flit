@@ -1,10 +1,13 @@
 import { apiUrl, tenantHeader } from './tramites-client';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { TOPE_SELECCION_LOTE } from '@/hooks/useSeleccionLote';
+import { downloadFile } from './download';
+import { ApiError } from './types';
 import type {
   CodigoErrorLote,
   CrearLoteConsolidadosRequest,
   LoteConsolidados,
+  ParteLoteConsolidados,
 } from './types-consolidado-lotes';
 
 /**
@@ -54,22 +57,27 @@ export class ConsolidadoLotesApiError extends Error {
 function leerProblema(texto: string): { codigo: string | null; loteActivoId: string | null } {
   if (!texto) return { codigo: null, loteActivoId: null };
   try {
-    const raw = JSON.parse(texto) as Record<string, unknown> | null;
-    if (!raw || typeof raw !== 'object') return { codigo: null, loteActivoId: null };
-    const ext =
-      raw.extensions && typeof raw.extensions === 'object'
-        ? (raw.extensions as Record<string, unknown>)
-        : {};
-    const codigo = raw.error ?? ext.error;
-    const lote = raw.loteActivoId ?? ext.loteActivoId;
-    return {
-      codigo: typeof codigo === 'string' ? codigo : null,
-      loteActivoId: typeof lote === 'string' ? lote : null,
-    };
+    return leerProblemaObjeto(JSON.parse(texto));
   } catch {
     // Cuerpo no JSON (HTML de un gateway ante 502/503/504): nunca se vuelca al usuario.
     return { codigo: null, loteActivoId: null };
   }
+}
+
+/** Igual que {@link leerProblema}, sobre un cuerpo ya parseado (p. ej. `ApiError.body` de `downloadFile`). */
+function leerProblemaObjeto(cuerpo: unknown): { codigo: string | null; loteActivoId: string | null } {
+  if (!cuerpo || typeof cuerpo !== 'object') return { codigo: null, loteActivoId: null };
+  const raw = cuerpo as Record<string, unknown>;
+  const ext =
+    raw.extensions && typeof raw.extensions === 'object'
+      ? (raw.extensions as Record<string, unknown>)
+      : {};
+  const codigo = raw.error ?? ext.error;
+  const lote = raw.loteActivoId ?? ext.loteActivoId;
+  return {
+    codigo: typeof codigo === 'string' ? codigo : null,
+    loteActivoId: typeof lote === 'string' ? lote : null,
+  };
 }
 
 async function llamar(path: string, init: RequestInit = {}): Promise<Response> {
@@ -141,5 +149,26 @@ export const consolidadoLotesClient = {
     const res = await llamar(`${RUTA_LOTES}/actual`);
     if (res.status === 204) return null;
     return (await res.json()) as LoteConsolidados;
+  },
+
+  /**
+   * HU #13382 — descarga una parte del lote terminado (`GET …/{loteId}/partes/{numero}`, ZIP en
+   * streaming; el nombre real llega en `Content-Disposition`). Lanza {@link ConsolidadoLotesApiError}:
+   * 410 `descarga_expirada`, 409 `lote_no_terminado`, 404, 503 `auditoria_no_registrada` o 0 (red).
+   */
+  descargarParte: async (
+    loteId: string,
+    parte: Pick<ParteLoteConsolidados, 'numero' | 'nombreArchivo'>,
+  ): Promise<void> => {
+    try {
+      await downloadFile(`${RUTA_LOTES}/${encodeURIComponent(loteId)}/partes/${parte.numero}`, {
+        fallbackFilename: parte.nombreArchivo,
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw new ConsolidadoLotesApiError(err.status, leerProblemaObjeto(err.body).codigo);
+      }
+      throw new ConsolidadoLotesApiError(0, null);
+    }
   },
 };
