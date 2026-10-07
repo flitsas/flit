@@ -6,7 +6,7 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 /// HU #13375 (Épica #13216, ADR-0070 D3) — punto de extensión por origen del lote para procesar UN ítem:
 /// cómo se revalida el acceso del solicitante (CF-16) y con qué contexto se entrega el PDF. Los orígenes
 /// <c>tramites</c> y <c>superadmin</c> los atiende <see cref="LoteItemOrigenEstandar"/>; la bandeja del OT
-/// (<c>ot_bandeja</c>) registra el suyo en la HU #13392.
+/// (<c>ot_bandeja</c>) registra el suyo en la HU #13392 (<c>OtConsolidadoLoteEntregador</c>, en Infrastructure).
 /// </summary>
 /// <remarks>
 /// Uso de ejemplo:

@@ -327,6 +327,10 @@ public static class InfrastructureExtensions
         // Épica #13216 — HU13375: revalidación de acceso por ítem (caché 60 s por lote) y cierre del ítem.
         services.AddScoped<IConsolidadoLoteAccessChecker, Security.ConsolidadoLoteAccessChecker>();
         services.AddScoped<IConsolidadoLoteItemProceso, Persistence.Repositories.ConsolidadoLoteItemProceso>();
+        // Épica #13216 — HU13392: procesamiento por ítem del lote de maestros de la bandeja OT (origen ot_bandeja): acceso de
+        // la bandeja + transacción del tenant cliente + matriz del OT + guard de Quipux, sobre el entregador común.
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen,
+            ConsolidadoLotes.Ot.OtConsolidadoLoteEntregador>();
 
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo

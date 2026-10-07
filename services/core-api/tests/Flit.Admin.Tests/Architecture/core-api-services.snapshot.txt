@@ -591,6 +591,7 @@ Flit.Tramites.Application.UseCases.ConsolidadoLotes.IConsolidadoLoteCipher => Fl
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.IConsolidadoLoteItemProceso => Flit.Infrastructure.Persistence.Repositories.ConsolidadoLoteItemProceso (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.IConsolidadoLoteParteStorage => factory (Transient)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemEntregador => Flit.Tramites.Application.UseCases.ConsolidadoLotes.ConsolidadoLoteEntregador (Scoped)
+Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen => Flit.Infrastructure.ConsolidadoLotes.Ot.OtConsolidadoLoteEntregador (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen => Flit.Tramites.Application.UseCases.ConsolidadoLotes.TramitesLoteItemOrigen (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen => Flit.Tramites.Application.UseCases.ConsolidadoLotes.SuperAdminLoteItemOrigen (Scoped)
 Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver => Flit.Infrastructure.ConsolidadoLotes.Ot.OtBandejaSeleccionResolver (Scoped)

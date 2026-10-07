@@ -290,14 +290,102 @@ public sealed class ConsolidadoLoteAccessCheckerTests : IDisposable
         ConsolidadoLoteAccessChecker.DuracionCache.Should().Be(TimeSpan.FromSeconds(60));
     }
 
+    // ── HU #13392: origen ot_bandeja (lote de la bandeja del OT) ─────────────────────────────
+
+    private static readonly Guid TenantOt = Guid.NewGuid();
+    private static readonly Guid RolOtAdmin = Guid.NewGuid();
+
+    /// <summary>Rol <c>ot_admin</c> del tenant OT con el permiso (grant directo, #13369).</summary>
+    private static async Task SembrarRolOtAsync(FlitDbContext db)
+    {
+        db.Roles.Add(new Role { Id = RolOtAdmin, Code = "ot_admin", Name = "Admin OT", IsActive = true });
+        db.RoleGrants.Add(new RoleGrant { Id = Guid.NewGuid(), RoleId = RolOtAdmin, PermissionId = Permiso });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Ítem de un lote ot_bandeja: compañía del lote = tenant OT; la del trámite, la del cliente.</summary>
+    private static LoteItemContexto CtxOt(ProcedureInstance tramite, string rol = "ot_admin", Guid? companiaLote = null, Guid? lote = null) =>
+        new(lote ?? Guid.NewGuid(), Guid.NewGuid(), ConsolidadoExportOrigin.OtBandeja, companiaLote ?? TenantOt, tramite.TenantId,
+            Guid.NewGuid(), Usuario, rol, tramite.Id, ConsolidadoExportDocumentType.ConsolidadoMaestro);
+
     [Fact]
-    public async Task Contrato_OrigenOtBandeja_NoLoAtiendeEsteChecker()
+    public async Task OtBandeja_AC6_OtAdminConRolYMembresiaEnElTenantOt_TieneAcceso_AunqueElTramiteSeaDelCliente()
+    {
+        await using var db = await SeedAsync();
+        await SembrarRolOtAsync(db);
+        var t = Tramite(CompaniaC); // la compañía cliente: el OT no tiene membresía en ella
+        db.ProcedureInstances.Add(t);
+        db.UserRoleAssignments.Add(Asignacion(RolOtAdmin, TenantOt));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        (await CheckAsync(db, CtxOt(t))).Should().BeTrue("el acceso al trámite lo decide la bandeja en el procesador OT");
+    }
+
+    [Fact]
+    public async Task OtBandeja_AC6_RolRetirado_OMembresiaSoloEnElCliente_PierdeAcceso()
+    {
+        await using var db = await SeedAsync();
+        await SembrarRolOtAsync(db);
+        var t = Tramite(CompaniaC);
+        db.ProcedureInstances.Add(t);
+        var asignacion = Asignacion(RolOtAdmin, TenantOt);
+        db.UserRoleAssignments.AddRange(asignacion, Asignacion(RolRadicador, CompaniaC));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        (await CheckAsync(db, CtxOt(t))).Should().BeTrue();
+
+        asignacion.DeletedAt = DateTimeOffset.UtcNow; // se le retira el rol (o la membresía) en el tenant OT
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        (await CheckAsync(db, CtxOt(t))).Should().BeFalse("la membresía con permiso en la compañía cliente no cuenta");
+    }
+
+    [Fact]
+    public async Task OtBandeja_AC6_LoteDeSuperAdmin_SoloExigeElRolSuperAdminActivo_SinMembresiaEnElOt()
     {
         await using var db = await SeedAsync();
         var t = Tramite(CompaniaC);
+        db.ProcedureInstances.Add(t);
+        var asignacion = Asignacion(RolSuperAdmin, CompaniaD);
+        db.UserRoleAssignments.Add(asignacion);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var act = () => CheckAsync(db, Ctx(t, CompaniaC, ConsolidadoExportOrigin.OtBandeja));
+        (await CheckAsync(db, CtxOt(t, rol: "SuperAdmin"))).Should().BeTrue();
 
-        await act.Should().ThrowAsync<NotSupportedException>();
+        asignacion.DeletedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        (await CheckAsync(db, CtxOt(t, rol: "SuperAdmin"))).Should().BeFalse("perdió el rol SuperAdmin (otro lote, sin caché)");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OtBandeja_AC6_SuspensionTemporalVigenteEnElTenantOt_EsAccesoRevocado_YVencidaNo(bool vigente)
+    {
+        await using var db = await SeedAsync();
+        await SembrarRolOtAsync(db);
+        var t = Tramite(CompaniaC);
+        db.ProcedureInstances.Add(t);
+        db.UserRoleAssignments.Add(Asignacion(RolOtAdmin, TenantOt));
+        db.UserTempSuspensions.Add(vigente
+            ? Suspension(TenantOt, DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddDays(1))
+            : Suspension(TenantOt, DateTimeOffset.UtcNow.AddDays(-3), DateTimeOffset.UtcNow.AddDays(-1)));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        (await CheckAsync(db, CtxOt(t))).Should().Be(!vigente, "UserTempSuspension.VigenteEn, la misma regla del login");
+    }
+
+    [Fact]
+    public async Task OtBandeja_SinTenantOtEnElLote_NoTieneAcceso()
+    {
+        await using var db = await SeedAsync();
+        await SembrarRolOtAsync(db);
+        var t = Tramite(CompaniaC);
+        db.ProcedureInstances.Add(t);
+        db.UserRoleAssignments.Add(Asignacion(RolOtAdmin, TenantOt));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var ctx = CtxOt(t) with { CompaniaLoteId = null };
+
+        (await CheckAsync(db, ctx)).Should().BeFalse();
     }
 }
