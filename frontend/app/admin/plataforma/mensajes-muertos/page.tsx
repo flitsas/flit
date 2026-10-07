@@ -8,7 +8,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 
 /**
  * SuperAdmin — Plataforma → Mensajes muertos (Epic #13316, HU #13358). Correos y webhooks de Notificaciones que agotaron
- * sus reintentos: reintentar o descartar sin entrar al broker. Solo SuperAdmin.
+ * sus reintentos o que el proveedor rechazó (HU #13359): reintentar o descartar sin entrar al broker. Solo SuperAdmin.
  */
 export default function AdminMensajesMuertosPage() {
   const router = useRouter();
@@ -28,7 +28,7 @@ export default function AdminMensajesMuertosPage() {
 
         <ModuleTitle
           title="Mensajes muertos"
-          subtitle="Correos y webhooks que no salieron tras sus reintentos. Reintentar los devuelve a su cola; descartar queda en la auditoría. Solo SuperAdmin."
+          subtitle="Correos y webhooks que no salieron: los que agotaron sus reintentos y los que el proveedor rechazó (esos no se reintentan solos; corrige la causa del detalle antes). Reintentar los devuelve a su cola; descartar queda en la auditoría. Solo SuperAdmin."
         />
 
         <MensajesMuertosPanel />

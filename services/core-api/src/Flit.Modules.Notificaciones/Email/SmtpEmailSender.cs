@@ -87,7 +87,7 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
         {
             var outcome = MapCommandException(ex);
             LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
-            return EmailSendResult.Failed(outcome);
+            return EmailSendResult.Failed(outcome) with { Detalle = DetalleSmtp(ex) };
         }
         catch (SmtpProtocolException ex)
         {
@@ -152,6 +152,29 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
         SmtpErrorCode.MessageNotAccepted => EmailSendOutcome.ContentRejected,
         _ => MapByStatusCode(ex.StatusCode),
     };
+
+    /// <summary>
+    /// HU #13359 — qué respondió el servidor, para quien decide qué hacer con un correo en mensajes muertos: el código
+    /// SMTP y el extendido (p. ej. <c>SMTP 554 5.2.2 · buzón lleno</c>), con una lectura en español de los conocidos. Solo códigos: el texto crudo del servidor no sale de aquí (misma frontera que <see cref="EmailSendResult"/>).
+    /// </summary>
+    internal static string DetalleSmtp(SmtpCommandException ex)
+    {
+        var extendido = CodigoExtendido().Match(ex.Message);
+        var codigo = extendido.Success ? $"SMTP {(int)ex.StatusCode} {extendido.Value}" : $"SMTP {(int)ex.StatusCode}";
+        var lectura = (extendido.Success ? extendido.Value : null) switch
+        {
+            "5.2.2" or "4.2.2" => "buzón lleno",
+            "5.1.1" or "5.1.10" => "el destinatario no existe",
+            "5.1.8" or "5.7.1" => "rechazado por política del servidor",
+            "5.2.3" or "5.3.4" => "mensaje demasiado grande",
+            "5.7.708" or "5.7.705" or "5.7.750" => "cuenta remitente bloqueada por el proveedor",
+            _ => null,
+        };
+        return lectura is null ? codigo : $"{codigo} · {lectura}";
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b[245]\.\d{1,3}\.\d{1,3}\b")]
+    private static partial System.Text.RegularExpressions.Regex CodigoExtendido();
 
     private static EmailSendOutcome MapByStatusCode(SmtpStatusCode statusCode) => statusCode switch
     {

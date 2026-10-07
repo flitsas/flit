@@ -53,6 +53,26 @@ describe("MensajesMuertosPanel (HU #13358)", () => {
     expect(listMensajesMuertos).toHaveBeenCalledWith("correos");
   });
 
+  it("HU #13359 — distingue un rechazo del proveedor de un mensaje que agotó sus reintentos", async () => {
+    listMensajesMuertos.mockResolvedValue({
+      mensajes: [
+        muerto,
+        {
+          ...muerto,
+          id: "0193-bbbb",
+          motivo: "CorreoRechazadoException",
+          ultimoError: "El proveedor rechazó el mensaje (SMTP 554 5.2.2 · buzón lleno). Entrega e-9.",
+          intentos: 0,
+        },
+      ],
+    });
+    pintar();
+
+    expect(await screen.findByText("Rechazado por el proveedor")).toBeInTheDocument();
+    expect(screen.getByText("Agotó los reintentos")).toBeInTheDocument();
+    expect(screen.getByText(/buzón lleno/)).toBeInTheDocument();
+  });
+
   it("cambia de cola a webhooks", async () => {
     pintar();
     await screen.findByText("El correo no salió (ProviderUnavailable).");

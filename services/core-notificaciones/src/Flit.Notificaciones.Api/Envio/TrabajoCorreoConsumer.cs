@@ -32,10 +32,10 @@ internal sealed partial class TrabajoCorreoConsumer(IServiceScopeFactory scopes,
         if (resultado.Success)
             return;
         if (SeReintenta(resultado.Outcome))
-            throw new CorreoNoEnviadoException(resultado.Outcome, entregaId);
+            throw new CorreoNoEnviadoException(resultado.Outcome, entregaId, resultado.Detalle);
 
         LogRechazado(logger, envelope.EventId, data.Plantilla, resultado.Outcome, entregaId);
-        throw new CorreoRechazadoException(resultado.Outcome, entregaId, resultado.Message);
+        throw new CorreoRechazadoException(resultado.Outcome, entregaId, resultado.Detalle);
     }
 
     internal static bool SeReintenta(EmailSendOutcome outcome) => outcome is not (EmailSendOutcome.RecipientRejected or EmailSendOutcome.ContentRejected);
@@ -45,16 +45,39 @@ internal sealed partial class TrabajoCorreoConsumer(IServiceScopeFactory scopes,
     private static partial void LogRechazado(ILogger logger, Guid eventId, string plantilla, EmailSendOutcome desenlace, Guid entregaId);
 }
 
-/// <summary>El transporte no pudo enviar por una causa que puede pasar: el consumidor del SDK lo reintenta.</summary>
-internal sealed class CorreoNoEnviadoException(EmailSendOutcome desenlace, Guid entregaId)
-    : Exception($"El correo no salió ({desenlace}); entrega {entregaId}. Se reintenta.")
+/// <summary>
+/// El transporte no pudo enviar por una causa que puede pasar: el consumidor del SDK lo reintenta. El mensaje es lo que
+/// ve el SuperAdmin si agota los reintentos (HU #13359): la causa y, si la hay, la respuesta del proveedor en códigos.
+/// </summary>
+internal sealed class CorreoNoEnviadoException(EmailSendOutcome desenlace, Guid entregaId, string? detalle = null)
+    : Exception($"{CausaDeCorreo.Texto(desenlace)}{CausaDeCorreo.ConDetalle(detalle)}. Entrega {entregaId}.")
 {
     public EmailSendOutcome Desenlace { get; } = desenlace;
 }
 
-/// <summary>El proveedor rechazó el correo: no se reintenta solo, queda en mensajes muertos para reintentarlo a mano.</summary>
-internal sealed class CorreoRechazadoException(EmailSendOutcome desenlace, Guid entregaId, string? motivo)
-    : SinReintentoAutomaticoException($"El proveedor rechazó el correo ({desenlace}): {motivo}; entrega {entregaId}.")
+/// <summary>
+/// El proveedor rechazó el correo: no se reintenta solo, queda en mensajes muertos para reintentarlo a mano. El mensaje
+/// es lo que ve el SuperAdmin (HU #13359): la causa y la respuesta del proveedor en códigos (p. ej. buzón lleno).
+/// </summary>
+internal sealed class CorreoRechazadoException(EmailSendOutcome desenlace, Guid entregaId, string? detalle = null)
+    : SinReintentoAutomaticoException($"{CausaDeCorreo.Texto(desenlace)}{CausaDeCorreo.ConDetalle(detalle)}. Entrega {entregaId}.")
 {
     public EmailSendOutcome Desenlace { get; } = desenlace;
+}
+
+/// <summary>Textos de la causa de un correo que no salió, para el registro de entregas y los mensajes muertos.</summary>
+internal static class CausaDeCorreo
+{
+    public static string Texto(EmailSendOutcome desenlace) => desenlace switch
+    {
+        EmailSendOutcome.AuthenticationFailed => "El proveedor rechazó las credenciales del remitente",
+        EmailSendOutcome.RecipientRejected => "El proveedor rechazó al destinatario",
+        EmailSendOutcome.ContentRejected => "El proveedor rechazó el mensaje",
+        EmailSendOutcome.RateLimited => "Se alcanzó el límite de envíos del proveedor",
+        EmailSendOutcome.TimedOut => "El proveedor no respondió a tiempo",
+        EmailSendOutcome.ConfigurationIncomplete => "El canal de correo no está configurado",
+        _ => "El proveedor de correo no está disponible",
+    };
+
+    public static string ConDetalle(string? detalle) => string.IsNullOrWhiteSpace(detalle) ? string.Empty : $" ({detalle})";
 }

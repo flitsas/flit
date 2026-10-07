@@ -41,7 +41,7 @@ internal sealed partial class CorreoPorBusEmailSender(
                 .EnqueueJob(TrabajoCorreo.Tipo, 1, tenantId, TrabajoCorreo.De(message, canal));
             await scope.ServiceProvider.GetRequiredService<IIdentityDb>().SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             LogEncolado(logger, message.TemplateKey, trabajo.EventId);
-            return new EmailSendResult(true, EmailSendOutcome.Sent, "Encolado en Notificaciones.") { Channel = CanalCorreoCodigos.De(canal) };
+            return EmailSendResult.Queued with { Channel = CanalCorreoCodigos.De(canal) };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -86,6 +86,12 @@ public enum EmailSendOutcome
 
     /// <summary>La configuración del transporte (host, credenciales, remitente) está incompleta.</summary>
     ConfigurationIncomplete,
+
+    /// <summary>
+    /// Éxito parcial (HU #13359): el correo quedó como trabajo para Notificaciones, que es quien lo entrega. Si llegó
+    /// o no lo dice el registro de entregas de Notificaciones, no quien lo encoló.
+    /// </summary>
+    Queued,
 }
 
 /// <summary>
@@ -112,6 +118,13 @@ public sealed record EmailSendResult(bool Success, EmailSendOutcome Outcome, str
     public bool RecipientDiverted { get; init; }
 
     /// <summary>
+    /// HU #13359 — qué respondió el proveedor, en códigos (p. ej. <c>SMTP 554 5.2.2 · buzón lleno</c>),
+    /// para decidir qué hacer con un correo en mensajes muertos. Nunca el texto crudo del proveedor ni datos del
+    /// despliegue; <c>null</c> cuando el transporte no tiene nada más que la causa.
+    /// </summary>
+    public string? Detalle { get; init; }
+
+    /// <summary>
     /// HU #11362/#11363 — canal REALMENTE usado para este intento
     /// (<c>Flit.Admin.Domain.Companies.Settings.TenantSettingsCodes.ChannelFlitSmtp</c> /
     /// <c>ChannelTenantApi</c>), o <c>null</c> cuando quien construyó el resultado no participa del
@@ -126,22 +139,25 @@ public sealed record EmailSendResult(bool Success, EmailSendOutcome Outcome, str
     /// </summary>
     public string? Channel { get; init; }
 
-    /// <summary>Único resultado de éxito posible.</summary>
+    /// <summary>Éxito: el proveedor aceptó el mensaje.</summary>
     public static readonly EmailSendResult Sent = new(true, EmailSendOutcome.Sent, "Correo enviado.");
+
+    /// <summary>Éxito parcial: el correo quedó en cola para Notificaciones (HU #13359).</summary>
+    public static readonly EmailSendResult Queued = new(true, EmailSendOutcome.Queued, "Encolado en Notificaciones.");
 
     /// <summary>
     /// Construye un resultado de fallo con el mensaje genérico de <paramref name="outcome"/>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Si <paramref name="outcome"/> es <see cref="EmailSendOutcome.Sent"/> — esa causa solo es
-    /// válida a través de <see cref="Sent"/>.
+    /// Si <paramref name="outcome"/> es <see cref="EmailSendOutcome.Sent"/> o <see cref="EmailSendOutcome.Queued"/> —
+    /// no son causas de fallo.
     /// </exception>
     public static EmailSendResult Failed(EmailSendOutcome outcome)
     {
         if (!GenericMessages.TryGetValue(outcome, out var message))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(outcome), outcome, "Sent no es una causa de fallo; usa EmailSendResult.Sent.");
+                nameof(outcome), outcome, "Sent y Queued no son causas de fallo.");
         }
 
         return new EmailSendResult(false, outcome, message);

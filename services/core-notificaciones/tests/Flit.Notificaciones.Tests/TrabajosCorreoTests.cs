@@ -162,6 +162,24 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task HU13359_UnRechazo_MuestraEnMensajesMuertosYEnElRegistro_LaRespuestaDelProveedor()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        _renting.Respuesta = EmailSendResult.Failed(EmailSendOutcome.ContentRejected) with { Detalle = "SMTP 554 5.2.2 · buzón lleno" };
+        var trabajo = await PublicarAsync(Trabajo(CanalCorreo.EmpresaApi));
+        await EsperarAsync(async () => await MensajesAsync($"{Cola}.dlq") == 1, TimeSpan.FromSeconds(10));
+
+        var lista = await Admin(Token("platform.notificaciones.admin"))
+            .ListarMensajesMuertosAsync(new ListarMensajesMuertosRequest { Cola = ColaMuertos.Correos }, Empresa(Guid.NewGuid()), cancellationToken: ct);
+
+        var muerto = lista.Mensajes.Should().ContainSingle().Subject;
+        muerto.Motivo.Should().Be("CorreoRechazadoException", "la pantalla lo muestra como «Rechazado por el proveedor»");
+        muerto.UltimoError.Should().Be($"El proveedor rechazó el mensaje (SMTP 554 5.2.2 · buzón lleno). Entrega {(await Entregas().SingleAsync(e => e.TrabajoId == trabajo.EventId, ct)).Id}.");
+        (await Entregas().SingleAsync(e => e.TrabajoId == trabajo.EventId, ct)).MotivoFallo.Should().EndWith("(SMTP 554 5.2.2 · buzón lleno)");
+    }
+
+    [Fact]
     public async Task HU13357_UnCorreoMuerto_SeLista_YAlReintentarlo_VuelveASuColaYSale()
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
@@ -178,7 +196,7 @@ public sealed class TrabajosCorreoTests : IAsyncLifetime
         muerto.Tipo.Should().Be(TrabajoCorreo.Tipo);
         muerto.TenantId.Should().Be(_empresa.ToString());
         muerto.Productor.Should().Be("tramites");
-        muerto.UltimoError.Should().Contain("ProviderUnavailable");
+        muerto.UltimoError.Should().StartWith("El proveedor de correo no está disponible");
         muerto.MuertoEn.Should().NotBeNull();
 
         _renting.Respuesta = EmailSendResult.Sent;

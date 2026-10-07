@@ -151,8 +151,20 @@ export function MensajesMuertosPanel() {
       },
       { key: "origen", header: "Origen", render: (m) => m.origen ?? "—" },
       {
+        key: "causa",
+        header: "Causa",
+        render: (m) => {
+          const c = causa(m.motivo);
+          return (
+            <span className="whitespace-nowrap text-xs font-semibold" style={{ color: c.color }} title={c.ayuda}>
+              {c.texto}
+            </span>
+          );
+        },
+      },
+      {
         key: "error",
-        header: "Último error",
+        header: "Detalle",
         render: (m) => (
           <span className="line-clamp-2 max-w-[360px] text-xs" title={m.ultimoError ?? m.motivo ?? ""}>
             {m.ultimoError ?? m.motivo ?? "—"}
@@ -281,4 +293,31 @@ export function MensajesMuertosPanel() {
       ) : null}
     </div>
   );
+}
+
+/**
+ * HU #13359 — por qué está aquí, a partir del motivo que deja el consumidor (el tipo de la última falla). Un rechazo del
+ * proveedor no se arregla reintentando solo: hay que corregir la causa (buzón lleno, destinatario) antes de reintentar.
+ */
+function causa(motivo: string | null): { texto: string; color: string; ayuda: string } {
+  switch (motivo) {
+    case "CorreoRechazadoException":
+      return {
+        texto: "Rechazado por el proveedor",
+        color: "#C62828",
+        ayuda: "No se reintenta solo. Corrige la causa del detalle y reintenta, o descarta.",
+      };
+    case "poison":
+      return {
+        texto: "Mensaje inválido",
+        color: "#B45309",
+        ayuda: "El mensaje no se pudo leer: reintentarlo no lo arregla. Descártalo.",
+      };
+    default:
+      return {
+        texto: "Agotó los reintentos",
+        color: "#475569",
+        ayuda: "Falló en todos sus reintentos automáticos. Si la causa ya pasó, reintenta.",
+      };
+  }
 }

@@ -49,7 +49,7 @@ internal sealed partial class EnvioDeCorreo(CorreoPorCanal porCanal, Notificacio
             Destinatario = Recortar(pedido.Mensaje.ToEmail, 320),
             Resultado = resultado.Success ? "enviado" : "fallido",
             Desenlace = resultado.Outcome.ToString(),
-            MotivoFallo = resultado.Success ? null : Recortar(resultado.Message, 1000),
+            MotivoFallo = resultado.Success ? null : Recortar(resultado.Message + CausaDeCorreo.ConDetalle(resultado.Detalle), 1000),
             DuracionMs = (int)Math.Min(int.MaxValue, reloj.ElapsedMilliseconds),
             Desviado = resultado.RecipientDiverted,
             Tema = pedido.Mensaje.ThemeKind,

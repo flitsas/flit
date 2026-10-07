@@ -89,6 +89,7 @@ public sealed class CorreoPorBusEmailSenderTests
         var r = await sender.SendAsync(Mensaje("admin.mandato-simulacion", null), Ct);
 
         r.Success.Should().BeTrue();
+        r.Outcome.Should().Be(EmailSendOutcome.Queued, "encolar no es entregar: eso lo hace Notificaciones");
         var sobre = EventEnvelope.FromJson(System.Text.Encoding.UTF8.GetBytes((await TrabajoAsync(dbName)).Payload));
         sobre.TenantId.Should().Be(Flit.Platform.Sdk.PlatformTenants.Plataforma);
         sobre.DataAs<TrabajoCorreo>().Canal.Should().Be("flit_smtp");

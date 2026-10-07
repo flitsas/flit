@@ -28,7 +28,8 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
     private const int MaxAttempts = PlateAssignmentEmailDispatch.MaxDeliveryAttempts;
 
     public const string StatusPendiente = "pendiente";
-    public const string StatusEnviado = "enviado";
+    public const string StatusEnviado = EstadoDespachoCorreo.Enviado;
+    public const string StatusEncolado = EstadoDespachoCorreo.Encolado;
     public const string StatusFallido = "fallido";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -236,7 +237,7 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
             var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
             if (result.Success)
             {
-                row.Status = StatusEnviado;
+                row.Status = EstadoDespachoCorreo.De(result);
                 row.FailureReason = null;
                 row.ProcessedAt = DateTimeOffset.UtcNow;
                 PlateAssignmentEmailDispatchLog.Sent(
