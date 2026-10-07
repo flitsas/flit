@@ -41,6 +41,7 @@ using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtRequirements;
+using Flit.Infrastructure.OtClientProcedures;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
@@ -1907,6 +1908,9 @@ public static class AdminOtEndpoints
     /// <summary>
     /// Resuelve el acceso del OT (o SuperAdmin vía <paramref name="transitOfficeId"/>) al
     /// trámite de un cliente. Devuelve el trámite accesible o el IResult de error.
+    /// <para>HU #13389 — envoltorio HTTP: el tenant del JWT y el organismo del Super Admin se resuelven
+    /// aquí; el acceso de dominio es <see cref="OtClientProcedureConsolidadoContext.ResolverAccesoAsync"/>,
+    /// el mismo que usa el lote de la bandeja.</para>
     /// </summary>
     private static async Task<(Flit.Admin.Domain.OtClientProcedures.OtClientProcedure? Access, Guid TenantId, IResult? Error)> ResolveClientProcedureAccessAsync(
         Guid id,
@@ -1933,8 +1937,12 @@ public static class AdminOtEndpoints
             return (null, tenantId, officeError);
         }
 
-        var access = await repository
-            .GetByIdAsync(tenantId, id, scopedOfficeId, cancellationToken)
+        // La firma conserva `repository` para no tocar a los 8 llamadores (RFB-2); el servicio usa el
+        // mismo repositorio scoped del request.
+        _ = repository;
+        var access = await httpContext.RequestServices
+            .GetRequiredService<IOtClientProcedureConsolidadoContext>()
+            .ResolverAccesoAsync(tenantId, id, scopedOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
         return access is null
@@ -2100,7 +2108,7 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
         Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
         ITransitOfficeCatalog transitOfficeCatalog,
-        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        IOtClientProcedureConsolidadoContext consolidadoContext,
         Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
         [FromQuery] Guid? transitOfficeId,
         // NULLABLE a propósito, por lo mismo que documenta ConsolidadoEndpoints (Bug #11139): un
@@ -2121,19 +2129,14 @@ public static class AdminOtEndpoints
         if (!guardResult.IsAllowed)
             return Results.Json(new { error = "QUIPUX_READONLY" }, statusCode: StatusCodes.Status403Forbidden);
 
-        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
-            access!.ClientTenantId,
-            async () =>
-            {
-                var precedencia = await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken)
-                    .ConfigureAwait(false);
-
-                // HU #12787 (AC2) — radicado ante Quipux ⇒ el maestro radicado tal cual (modo
-                // radicado_fijo), ni con `force` se regenera.
-                return await handler
-                    .HandleRespetandoRadicacionAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
-                    .ConfigureAwait(false);
-            },
+        // HU #13389 — scope del tenant cliente + precedencia de la matriz resuelta dentro de él, en el
+        // servicio que comparte con el lote de la bandeja.
+        var (result, error) = await consolidadoContext.EjecutarEnContextoClienteAsync(
+            access!,
+            // HU #12787 (AC2) — radicado ante Quipux ⇒ el maestro radicado tal cual (modo
+            // radicado_fijo), ni con `force` se regenera.
+            precedencia => handler
+                .HandleRespetandoRadicacionAsync(id, access!.ClientTenantId, precedencia, force ?? false, cancellationToken),
             cancellationToken).ConfigureAwait(false);
 
         return error switch
@@ -2148,30 +2151,6 @@ public static class AdminOtEndpoints
         };
     }
 
-    /// <summary>
-    /// Orden de la matriz documental resuelta del trámite con la precedencia del OT (HU #10706 AC1). Se
-    /// llama DENTRO del scope RLS del tenant cliente (los requisitos base viven en tramites del
-    /// cliente). Si el resolver falla o no hay matriz configurada, la lista vacía hace que el handler
-    /// caiga al orden por modalidad.
-    /// </summary>
-    private static async Task<IReadOnlyList<string>> ResolverPrecedenciaMatrizAsync(
-        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
-        Flit.Admin.Domain.OtClientProcedures.OtClientProcedure access,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var matriz = await matrixResolver
-                .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
-                .ConfigureAwait(false);
-            return matriz.Select(m => m.Codigo).ToList();
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
     // ── Entrega del consolidado vigente (HU #12785, épica #12760) ────────────────────────────────
 
     private static async Task<IResult> DeliverClientProcedureConsolidadoAsync(
@@ -2180,7 +2159,7 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
         Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
         ITransitOfficeCatalog transitOfficeCatalog,
-        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        IOtClientProcedureConsolidadoContext consolidadoContext,
         Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler handler,
         [FromQuery] Guid? transitOfficeId,
         // `consolidado_maestro` (default) | `consolidado`.
@@ -2223,19 +2202,17 @@ public static class AdminOtEndpoints
             .ConfigureAwait(false);
         var sinGenerar = (soloLectura ?? false) || !guardResult.IsAllowed;
 
-        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
-            access!.ClientTenantId,
-            async () =>
+        // HU #13389 — la matriz solo se resuelve si es el maestro y se va a generar (sin cambio).
+        var (result, error) = await consolidadoContext.EjecutarEnContextoClienteAsync(
+            access!,
+            resolverPrecedencia: esMaestro && !sinGenerar,
+            async precedencia =>
             {
-                IReadOnlyList<string>? precedencia = esMaestro && !sinGenerar
-                    ? await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken).ConfigureAwait(false)
-                    : null;
-
                 return await handler
                     .HandleAsync(
                         new Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoRequest(
                             id,
-                            access.ClientTenantId,
+                            access!.ClientTenantId,
                             tipoEntrega,
                             ResolveUserId(httpContext.User),
                             Force: false,

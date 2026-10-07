@@ -418,6 +418,7 @@ Flit.Infrastructure.Ocr.AnthropicDocumentBatchClassifier => Flit.Infrastructure.
 Flit.Infrastructure.Ocr.AnthropicDocumentOcrAnalyzer => Flit.Infrastructure.Ocr.AnthropicDocumentOcrAnalyzer (Scoped)
 Flit.Infrastructure.Ocr.AnthropicMessagesClient => factory (Transient)
 Flit.Infrastructure.Ocr.AnthropicOrientationProbe => Flit.Infrastructure.Ocr.AnthropicOrientationProbe (Scoped)
+Flit.Infrastructure.OtClientProcedures.IOtClientProcedureConsolidadoContext => Flit.Infrastructure.OtClientProcedures.OtClientProcedureConsolidadoContext (Scoped)
 Flit.Infrastructure.OtWebhooks.OtWebhookProcedureStateChangeNotifier => Flit.Infrastructure.OtWebhooks.OtWebhookProcedureStateChangeNotifier (Scoped)
 Flit.Infrastructure.Persistence.FlitDbContext => Flit.Infrastructure.Persistence.FlitDbContext (Scoped)
 Flit.Infrastructure.Persistence.IIdentityDb => factory (Scoped)

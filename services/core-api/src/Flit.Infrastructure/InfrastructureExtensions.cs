@@ -311,6 +311,11 @@ public static class InfrastructureExtensions
 
         services.AddSecurityApplication();
 
+        // Épica #13216 — HU13389: acceso del OT + scope del tenant cliente + precedencia de la matriz del
+        // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
+        services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
+            OtClientProcedures.OtClientProcedureConsolidadoContext>();
+
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
         // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).
