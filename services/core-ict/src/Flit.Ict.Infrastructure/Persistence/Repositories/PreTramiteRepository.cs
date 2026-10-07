@@ -4,7 +4,9 @@ using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 using Flit.Ict.Infrastructure.Jobs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 
@@ -14,7 +16,10 @@ namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 /// tiene EnableRetryOnFailure, la transacción va DENTRO de la execution strategy de EF (requisito para
 /// combinar reintentos + transacciones iniciadas por el usuario).
 /// </summary>
-public sealed class PreTramiteRepository(IctDbContext db, IOptions<IctIngestOptions> ingestOptions)
+public sealed class PreTramiteRepository(
+    IctDbContext db,
+    IOptions<IctIngestOptions> ingestOptions,
+    ILogger<PreTramiteRepository> logger)
     : IPreTramiteRepository
 {
     // Lever B (default OFF): relajar la durabilidad del commit SOLO en el camino de ingesta del registro.
@@ -136,6 +141,25 @@ public sealed class PreTramiteRepository(IctDbContext db, IOptions<IctIngestOpti
         string mail,
         string company,
         CancellationToken ct = default) =>
+        // Bug #13304 (H-1): anulado (ps=6) ⇒ el snapshot RUNT ya no se enviará. La purga va en su propia
+        // transacción DESPUÉS del commit del estado y es best-effort (no revierte ni rompe la anulación).
+        VehicleSnapshotPurge.DespuesDeAsync(
+            c => MarkAbortedStateAsync(masterId, tenantId, observation, user, mail, company, c),
+            c => InTenantTransactionAsync(
+                tenantId,
+                () => db.Database.ExecuteSqlRawAsync(
+                    DbVehicleSnapshotReader.PurgeSql, [new NpgsqlParameter("master", masterId)], c),
+                c),
+            masterId, VehicleSnapshotPurge.CaminoAnulado, logger, ct);
+
+    private Task<int> MarkAbortedStateAsync(
+        Guid masterId,
+        Guid tenantId,
+        string observation,
+        string user,
+        string mail,
+        string company,
+        CancellationToken ct) =>
         InTenantTransactionAsync(tenantId, async () =>
         {
             // El trámite ya fue anulado en core-api (autoridad). Aquí solo se refleja en el pre-trámite

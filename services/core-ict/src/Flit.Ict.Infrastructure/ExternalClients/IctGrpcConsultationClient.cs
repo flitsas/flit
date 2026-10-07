@@ -46,6 +46,27 @@ public sealed class IctGrpcConsultationClient(IctConsultation.IctConsultationCli
             VehicleModelYear: reply.VehicleModelYear > 0 ? reply.VehicleModelYear : null,
             HasActiveSanctions: reply.HasActiveSanctions,
             PazYSalvo: reply.PazYSalvoKnown ? reply.PazYSalvo : null,
-            TransitOfficeName: string.IsNullOrEmpty(reply.TransitOfficeName) ? null : reply.TransitOfficeName);
+            TransitOfficeName: string.IsNullOrEmpty(reply.TransitOfficeName) ? null : reply.TransitOfficeName,
+            Vehicle: MapVehicle(reply));
+    }
+
+    /// <summary>
+    /// Bug #13304 — campos 9-12: resultado COMPLETO de la consulta de vehículo. Solo viene en VEHICLE/VIN
+    /// cuando la cadena respondió; sin JSON o sin fecha no hay nada reutilizable (null). El JSON es opaco:
+    /// se transporta tal cual. Placa/VIN consultados los fija el orquestador.
+    /// </summary>
+    internal static VehicleConsultationSnapshot? MapVehicle(ConsultationReply reply)
+    {
+        ArgumentNullException.ThrowIfNull(reply);
+        if (string.IsNullOrWhiteSpace(reply.VehicleSnapshotJson) || reply.ConsultedAt is null)
+        {
+            return null;
+        }
+
+        return new VehicleConsultationSnapshot(
+            reply.VehicleSnapshotJson,
+            reply.ConsultedAt.ToDateTimeOffset(),
+            reply.Provider ?? string.Empty,
+            reply.ConsultationKind ?? string.Empty);
     }
 }
