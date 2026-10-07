@@ -94,6 +94,33 @@ public sealed class ConsolidadoLoteContratoOpenApiTests
         Path(yaml, "/api/v1/admin/ot/consolidados/lotes").Should().Contain("max_items_per_batch");
     }
 
+    /// <summary>
+    /// HU #13379 — las tres GET están implementadas y su contrato documenta el dueño por <c>sub</c>, el 204, la
+    /// descarga en streaming con <c>Content-Length</c> y los códigos estables con <c>LoteProblem</c>.
+    /// </summary>
+    [Fact]
+    public void HU13379_LasGetDelLoteDocumentanDuenoStreamingYCodigos()
+    {
+        var yaml = Yaml();
+
+        var actual = Path(yaml, "/api/v1/consolidados/lotes/actual");
+        actual.Should().NotContain("Se implementa en #13379").And.Contain("\"204\"").And.Contain("expiraEn")
+            .And.Contain("X-Tenant-Id");
+        Path(yaml, "/api/v1/consolidados/lotes/{loteId}").Should().NotContain("Se implementa en #13379")
+            .And.Contain("\"404\"").And.Contain("Super Admin");
+
+        var parte = Path(yaml, "/api/v1/consolidados/lotes/{loteId}/partes/{numero}");
+        parte.Should().NotContain("Se implementa en #13379");
+        foreach (var status in new[] { "\"200\"", "\"403\"", "\"404\"", "\"409\"", "\"410\"", "\"500\"", "\"503\"" })
+            parte.Should().Contain(status);
+        foreach (var codigo in new[] { "lote_no_terminado", "descarga_expirada", "auditoria_no_registrada", "parte_no_disponible" })
+            parte.Should().Contain(codigo);
+        parte.Should().Contain("Content-Length").And.Contain("Content-Disposition").And.Contain("application/zip")
+            .And.Contain("#/components/schemas/LoteProblem");
+
+        Schema(yaml, "LoteProblem").Should().Contain("- parte_no_disponible");
+    }
+
     [Fact]
     public void AC4_DocumentaElSearchDeTramites_YTramitesSearchFilterReutilizado()
     {

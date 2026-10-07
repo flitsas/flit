@@ -177,6 +177,53 @@ public sealed class ConsolidadoLoteParteStorageTests : IDisposable
         storage.TiempoSubida((long)mib * MiB).Should().Be(TimeSpan.FromSeconds(segundos));
     }
 
+    /// <summary>
+    /// HU #13379 (M2/L1) — la lectura de la parte para la descarga va en streaming de punta a punta: una parte de
+    /// 250 MiB no se carga entera en memoria (antes <c>FileManagerDownloader.OpenReadAsync</c> la bajaba a un
+    /// <see cref="MemoryStream"/>), y el contenido leído es idéntico.
+    /// </summary>
+    [Fact]
+    public async Task HU13379_M2_OpenReadAsync_LeeLaParteEnStreaming_SinCargarlaEnMemoria()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const int mib = 250;
+        var ruta = ArchivoGrande(mib);
+        var storage = Storage(new StubFileManager(_dir, "PUT"));
+        var stored = await storage.SubirAsync(Lote, 1, ruta, ct);
+
+        var antes = GC.GetTotalAllocatedBytes(precise: true);
+        await using var leido = await storage.OpenReadAsync(stored.StoragePath, ct);
+        var (tamano, sha) = await MedirAsync(leido!, ct);
+        var asignado = GC.GetTotalAllocatedBytes(precise: true) - antes;
+
+        leido!.CanSeek.Should().BeFalse("el cuerpo de S3 se reenvía tal cual llega, sin búfer intermedio");
+        tamano.Should().Be((long)mib * MiB);
+        sha.Should().Be(stored.Sha256);
+        asignado.Should().BeLessThan(16L * MiB, "la parte de {0} MiB no se carga en memoria al leerla", mib);
+    }
+
+    [Fact]
+    public async Task HU13379_M2_Borde_DisponerElStream_LiberaLaRespuesta_YElDescargadorBufferizadoNoCambia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ruta = ArchivoGrande(1);
+        var stub = new StubFileManager(_dir, "PUT");
+        var storage = Storage(stub);
+        var stored = await storage.SubirAsync(Lote, 1, ruta, ct);
+
+        var streaming = await storage.OpenReadAsync(stored.StoragePath, ct);
+        await streaming!.DisposeAsync();
+        var act = () => streaming.ReadAsync(new byte[1], ct).AsTask();
+        await act.Should().ThrowAsync<ObjectDisposedException>();
+
+        // Consumidores actuales (adjuntos, logos): siguen recibiendo un stream seekable en memoria.
+        using var http = new HttpClient(stub) { BaseAddress = new Uri(Base) };
+        await using var buferizado = await FileManagerDownloader.OpenReadAsync(
+            http, new FileManagerOptions { BaseUrl = Base, FilesPath = "api/v1/files" }, stored.StoragePath, ct);
+        buferizado!.CanSeek.Should().BeTrue();
+        buferizado.Length.Should().Be(MiB);
+    }
+
     /// <summary>File-manager + storage en proceso: guarda cada objeto subido en un archivo y lo sirve en streaming.</summary>
     private sealed class StubFileManager(string dir, string? metodo) : HttpMessageHandler
     {
