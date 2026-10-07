@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.ExternalSync;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,11 @@ internal static class AttachmentEndpoints
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
         })
@@ -79,6 +85,11 @@ internal static class AttachmentEndpoints
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Ok(result),
             };
         }).WithName("PresignProcedureInstanceAttachment");
@@ -115,6 +126,11 @@ internal static class AttachmentEndpoints
                 "missing_sha256" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta sha256."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
         }).WithName("RegisterProcedureInstanceAttachment");

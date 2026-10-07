@@ -9507,7 +9507,14 @@ paths:
               schema: { $ref: "#/components/schemas/AttachmentDto" }
         "400": { description: "tipo/MIME/tamaño inválido o archivo faltante." }
         "404": { description: "Trámite no encontrado." }
-        "409": { description: "El trámite no está en borrador." }
+        "409":
+          description: >
+            El trámite no está en borrador (`not_draft`, solo detail), o el trámite ya tiene un
+            `liquidacion_impuesto` vigente cargado por FLITO (`adjunto_bloqueado_flito`, HU #13265): gana quien carga
+            primero y el gestor no puede reemplazarlo; solo FLITO lo corrige reenviando. Se rechaza antes de guardar el binario.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/AdjuntoBloqueadoFlitoProblem" }
     get:
       tags: [Trámites · Documentos]
       summary: Listar adjuntos del trámite
@@ -9563,7 +9570,14 @@ paths:
                     additionalProperties: { type: string }
         "400": { description: "tipo/MIME/tamaño inválido." }
         "404": { description: "Trámite no encontrado." }
-        "409": { description: "El trámite no está en borrador." }
+        "409":
+          description: >
+            El trámite no está en borrador (`not_draft`, solo detail), o el trámite ya tiene un
+            `liquidacion_impuesto` vigente cargado por FLITO (`adjunto_bloqueado_flito`, HU #13265): gana quien carga
+            primero y el gestor no puede reemplazarlo; solo FLITO lo corrige reenviando. Se rechaza ANTES de emitir la política presigned.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/AdjuntoBloqueadoFlitoProblem" }
 
   /api/v1/tramites/instances/{id}/attachments/register:
     parameters:
@@ -9591,7 +9605,14 @@ paths:
               schema: { $ref: "#/components/schemas/AttachmentDto" }
         "400": { description: "tipo/MIME/tamaño/storagePath/sha256 inválido." }
         "404": { description: "Trámite no encontrado." }
-        "409": { description: "El trámite no está en borrador." }
+        "409":
+          description: >
+            El trámite no está en borrador (`not_draft`, solo detail), o el trámite ya tiene un
+            `liquidacion_impuesto` vigente cargado por FLITO (`adjunto_bloqueado_flito`, HU #13265): gana quien carga
+            primero y el gestor no puede reemplazarlo; solo FLITO lo corrige reenviando. El adjunto de FLITO no se retira.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/AdjuntoBloqueadoFlitoProblem" }
 
   /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download:
     parameters:
@@ -9675,7 +9696,8 @@ paths:
       description: >
         Los consolidados (tipos `consolidado` y `consolidado_maestro`) son documentos del sistema y no se
         borran por esta ruta, igual que cualquier adjunto referenciado por una radicación ante Quipux
-        (re-review Épica #12760, M-N1): 409 con `error = adjunto_protegido`.
+        (re-review Épica #12760, M-N1): 409 con `error = adjunto_protegido`. HU #13265: tampoco se borra un
+        adjunto cargado por FLITO (`provider = flito`): mismo 409 `adjunto_protegido`; solo FLITO lo corrige reenviando.
       operationId: deleteProcedureInstanceAttachment
       security:
         - bearerAuth: []
@@ -9685,7 +9707,7 @@ paths:
         "409":
           description: >
             El trámite no está en borrador ni con subsanación activa (`not_draft`, solo detail), o el
-            adjunto es un documento del sistema (`adjunto_protegido`).
+            adjunto es un documento del sistema o lo cargó FLITO (`adjunto_protegido`).
           content:
             application/problem+json:
               schema:
@@ -9697,7 +9719,7 @@ paths:
                   error:
                     type: string
                     enum: [adjunto_protegido]
-                    description: Solo presente cuando el adjunto es un documento del sistema.
+                    description: Solo presente cuando el adjunto es un documento del sistema o lo cargó FLITO.
 
   /api/v1/tramites/instances/{id}/checklist:
     parameters:
@@ -13117,6 +13139,20 @@ components:
             radicado_fijo (el adjunto radicado, sin regenerar) o solo_lectura (el adjunto radicado ya no
             existe y se sirve el maestro existente). radicado_fijo (HU #12787, aditivo): radicación vigente
             (registrado/aprobado); un rechazo de Quipux deja de fijar el maestro.
+    AdjuntoBloqueadoFlitoProblem:
+      type: object
+      description: >
+        HU #13265 — 409 cuando el gestor intenta subir, pedir presign o registrar un adjunto de un tipo que FLITO ya
+        cargó (`provider = flito`). Mismo formato de error que `adjunto_protegido`.
+      properties:
+        title: { type: string, example: Conflict }
+        status: { type: integer, example: 409 }
+        detail: { type: string, example: "Este documento ya fue cargado y no se puede reemplazar." }
+        error:
+          type: string
+          enum: [adjunto_bloqueado_flito]
+          description: Solo presente cuando el bloqueo es por el adjunto de FLITO (con `not_draft` solo viene detail).
+
     AttachmentDto:
       type: object
       properties:

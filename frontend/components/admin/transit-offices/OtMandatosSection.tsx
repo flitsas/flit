@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { Eye, FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
 import { MandatarioGeneralCard } from "@/components/admin/transit-offices/MandatarioGeneralCard";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
@@ -67,7 +67,48 @@ import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "@/components/admin/compani
 import { mandatoFormatName } from "@/lib/plataforma/mandato-templates";
 
 
-export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string }) {
+/** Formato de contrato del organismo tal como se muestra: nombre del catálogo o, si no cargó, el código. */
+export interface OtFormatoVista {
+  nombre: string;
+  /** El catálogo no cargó: `nombre` es el código guardado. */
+  fallo: boolean;
+}
+
+/** Tarjeta compacta «Formato de contrato: {nombre}». Vive en el encabezado del hub (`titleRight`). */
+export function OtFormatoContratoChip({ formato }: { formato: OtFormatoVista | null }) {
+  if (!formato) return null;
+  return (
+    <div className="flex flex-col items-start gap-1 md:items-end">
+      <p
+        className="inline-flex items-center gap-2 rounded-full border border-[#D6E2FF] bg-[#EFF4FF] px-3 py-1.5 text-xs text-[#59677D] dark:border-white/15 dark:bg-white/5 dark:text-white/70"
+        data-testid="ot-formato-contrato"
+      >
+        <FileText className="h-3.5 w-3.5 shrink-0 text-[#557EFF]" aria-hidden />
+        <span>
+          Formato de contrato:{" "}
+          <span className="font-semibold text-[#162244] dark:text-white">{formato.nombre}</span>
+        </span>
+      </p>
+      {formato.fallo ? (
+        <span className="text-[11px] text-[#59677D] dark:text-white/60">
+          No se pudo cargar el nombre del catálogo
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+export function OtMandatosSection({
+  transitOfficeId,
+  onFormatoChange,
+}: {
+  transitOfficeId: string;
+  /**
+   * Si se pasa, la sección NO pinta la tarjeta del formato: se la avisa a quien la pase para que la
+   * ponga en el encabezado de la página (`OtFormatoContratoChip`). Sin él la pinta arriba de las pestañas.
+   */
+  onFormatoChange?: (formato: OtFormatoVista | null) => void;
+}) {
   const { show } = useToast();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +179,22 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch al montar / cambiar id
     void load();
   }, [load]);
+
+  const formatoVista = useMemo<OtFormatoVista | null>(
+    () =>
+      office
+        ? {
+            nombre: formatosError
+              ? office.templateCode
+              : mandatoFormatName(formatos, office.templateCode) || office.templateCode,
+            fallo: formatosError,
+          }
+        : null,
+    [office, formatos, formatosError],
+  );
+  useEffect(() => {
+    onFormatoChange?.(formatoVista);
+  }, [onFormatoChange, formatoVista]);
 
   // Mandatario por defecto ya configurado por compañía (reglas del OT); las compañías sin regla
   // (p. ej. que nunca radicaron) quedan «Sin definir».
@@ -353,17 +410,9 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     },
   ];
 
-  const nombreFormato = mandatoFormatName(formatos, office.templateCode) || office.templateCode;
-
   return (
     <div className="flex flex-col gap-4" data-testid="ot-mandatos-section">
-      <p className="text-sm text-[#59677D] dark:text-white/70" data-testid="ot-formato-contrato">
-        Formato de contrato:{" "}
-        <span className="font-medium text-[#162244] dark:text-white">
-          {formatosError ? office.templateCode : nombreFormato}
-        </span>
-        {formatosError ? " (no se pudo cargar el nombre del catálogo)" : null}
-      </p>
+      {!onFormatoChange && <OtFormatoContratoChip formato={formatoVista} />}
       <SectionTabs
         ariaLabel="Secciones de mandatos del organismo"
         active={seccion}

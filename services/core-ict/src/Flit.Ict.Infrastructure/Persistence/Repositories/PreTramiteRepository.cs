@@ -117,6 +117,13 @@ public sealed class PreTramiteRepository(IctDbContext db, IOptions<IctIngestOpti
         }
         catch (DbUpdateConcurrencyException ex)
         {
+            // Se sueltan las entidades en conflicto: así un GetAsync posterior (reintento del llamador, p. ej.
+            // el precio ya aceptado por core-api) lee la fila vigente en vez de la copia rastreada y obsoleta.
+            foreach (var entry in ex.Entries)
+            {
+                entry.State = EntityState.Detached;
+            }
+
             throw new IctConcurrencyException("Conflicto de row_version al editar el pre-trámite.", ex);
         }
     }

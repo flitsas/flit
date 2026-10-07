@@ -13,6 +13,8 @@ const HUB_PREFIXES = [
   "/.well-known/",
   "/api/",
   "/healthz",
+  // Tarjetas de los productos que aún no existen (me/apps las enlaza aquí): sin esto iban a Trámites y daban 404.
+  "/proximamente/",
   "/email-assets/",
   "/_next/",
   "/assets/",

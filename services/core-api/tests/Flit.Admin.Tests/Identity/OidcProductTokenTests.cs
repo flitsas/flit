@@ -5,17 +5,22 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Web;
+using Flit.Api.Identity;
 using Flit.Infrastructure.Persistence;
+using Flit.Modules.Platform.Application.Hosts;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
+using OpenIddict.Abstractions;
 using Xunit;
 
 namespace Flit.Admin.Tests.Identity;
@@ -82,8 +87,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         payload.GetProperty("is_group_parent").ValueKind.Should().Be(JsonValueKind.False);
         payload.GetProperty("dom").GetString().Should().Be("flit");
 
-        // Primero el rol del producto; luego, mientras la administración de plataforma viva en Trámites (hasta B-12),
-        // el de plataforma, para que el administrador de la empresa conserve esas pantallas con la sesión nueva.
         payload.GetProperty("roles").ValueKind.Should().Be(JsonValueKind.Array);
         payload.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("code").GetString())
             .Should().Equal($"OidcTram-{_suffix}", $"OidcPlat-{_suffix}");
@@ -126,7 +129,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         (await AuthorizeErrorAsync(client, "tramites", ct)).Should().Be(("access_denied", "PRODUCT_ROLE_REQUIRED"));
 
         await RemoveAssignmentAsync(_platformRoleId);
-        // Sin ningún rol de plataforma, el hub igual emite su token: todo usuario entra a ver sus productos.
         var hub = await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "plataforma", ct, PlatformCallback);
         hub.GetProperty("access_token").GetString().Should().NotBeNullOrEmpty();
     }
@@ -164,7 +166,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task CerrarSesion_RevocaLosRefreshDeEsteNavegador_NoLosDeOtroDispositivo()
     {
-        // HU #13004 (A-13): salir de un producto cierra la sesión del hub y revoca las autorizaciones de esta sesión.
         var ct = TestContext.Current.CancellationToken;
         var browser = await LoggedInAsync(ct);
         var otherDevice = await LoggedInAsync(ct);
@@ -174,7 +175,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         var logout = await browser.GetAsync(
             $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
 
-        // Front-channel logout: una página que avisa a Trámites (borra su cookie) y sigue al post_logout_redirect_uri.
         logout.StatusCode.Should().Be(HttpStatusCode.OK);
         var page = await logout.Content.ReadAsStringAsync(ct);
         page.Should().Contain("https://dev.tramites.flitsas.online/auth/frontchannel-logout");
@@ -190,7 +190,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task CerrarSesion_SinProductosConSesion_RedirigeComoSiempre()
     {
-        // HU #13004: si desde esta sesión del hub no se abrió ningún producto, no hay a quién avisar.
         var ct = TestContext.Current.CancellationToken;
         var browser = await LoggedInAsync(ct);
 
@@ -264,8 +263,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task CerrarSesion_ElTokenDeAccesoYaEmitidoDejaDeServir_EnOtroDispositivoSigue()
     {
-        // Cierre de sesión en toda la suite: un producto abierto en este navegador pierde la sesión en su siguiente
-        // llamada, sin esperar a que venza su token de 15 minutos.
         var ct = TestContext.Current.CancellationToken;
         var browser = await LoggedInAsync(ct);
         var otherDevice = await LoggedInAsync(ct);
@@ -278,7 +275,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
             api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             return await api.GetAsync("/api/v1/auth/me", ct);
         }
-        // Sin consultar antes con este token: la validez de la sesión se guarda 15 segundos por autorización.
         await browser.GetAsync($"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
 
         var after = await MeAsync(tokenHere);
@@ -297,7 +293,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         return (query["error"], query["error_description"]);
     }
 
-    /// <summary>Un claim repetido sale como arreglo; con un solo valor, como texto (igual que el JWT de siempre).</summary>
     private static IEnumerable<string?> Values(JsonElement claim) =>
         claim.ValueKind == JsonValueKind.Array ? claim.EnumerateArray().Select(v => v.GetString()) : [claim.GetString()];
 
@@ -334,7 +329,6 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
             await db.SaveChangesAsync();
         }
 
-        // Un rol por producto: el usuario queda solo con SuperAdmin, sin ningún rol de Trámites.
         await db.UserRoleAssignments.Where(a => a.UserId == _userId).ExecuteDeleteAsync();
         var assignment = new UserRoleAssignment { Id = Guid.CreateVersion7(), TenantId = _tenantId, UserId = _userId, RoleId = role.Id, AssignedAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow };
         db.UserRoleAssignments.Add(assignment);
@@ -369,6 +363,40 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         db.UserRoleAssignments.Add(new UserRoleAssignment { Id = Guid.CreateVersion7(), TenantId = _tenantId, UserId = _userId, RoleId = _tramitesRoleId, AssignedAt = now, CreatedAt = now });
         db.UserRoleAssignments.Add(new UserRoleAssignment { Id = Guid.CreateVersion7(), TenantId = _tenantId, UserId = _userId, RoleId = _platformRoleId, AssignedAt = now, CreatedAt = now });
         await db.SaveChangesAsync();
+
+        // Garantiza clientes OIDC en el store/caché de ESTA fábrica (carrera con OidcClientSync en suite paralela).
+        await EnsureOidcClientsAsync(scope.ServiceProvider);
+    }
+
+    private static async Task EnsureOidcClientsAsync(IServiceProvider sp)
+    {
+        var hosts = sp.GetRequiredService<IProductHosts>();
+        var options = sp.GetRequiredService<IOptions<OidcOptions>>().Value;
+        var manager = sp.GetRequiredService<IOpenIddictApplicationManager>();
+
+        foreach (var productCode in ProductCodes.All)
+        {
+            var descriptor = OidcClientSync.ProductClient(productCode, hosts, options);
+
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    var existing = await manager.FindByClientIdAsync(descriptor.ClientId!);
+                    if (existing is null)
+                        await manager.CreateAsync(descriptor);
+                    else
+                        await manager.UpdateAsync(existing, descriptor);
+                    break;
+                }
+                catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException
+                                               or Microsoft.EntityFrameworkCore.DbUpdateException
+                                               or System.Data.Common.DbException)
+                {
+                    if (attempt >= 3) break;
+                }
+            }
+        }
     }
 
     public void Dispose()

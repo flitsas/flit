@@ -216,6 +216,8 @@ public static class InfrastructureExtensions
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
         // HU #13076 (Épica #12737) — lectura entre compañías del feed de sincronización externa (ámbito exclusivo).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IProcedureSyncReadRepository, ProcedureSyncReadRepository>();
+        // HU #13263 (Épica #12741) — escritura del envío de adjuntos del cliente externo (fila del trámite bloqueada).
+        services.AddScoped<Flit.Tramites.Domain.ExternalSync.IExternalAttachmentRepository, ExternalAttachmentRepository>();
         services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813

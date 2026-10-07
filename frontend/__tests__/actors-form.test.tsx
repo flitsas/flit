@@ -33,6 +33,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
 }));
 
 import {
+  ACTOR_NOMBRE_MAX_LENGTH,
+  ACTOR_TELEFONO_MAX_LENGTH,
   ActorsForm,
   isIdentityConsultationReady,
   validateActors,
@@ -1080,6 +1082,46 @@ describe('validateActors — unidad', () => {
   it('rechaza nombre con caracteres especiales', () => {
     const v = validateActors([{ ...base, nombreCompleto: '<script>' }], 'matricula_inicial');
     expect(v.valid).toBe(false);
+  });
+
+  // Bug #13304 — topes alineados con core-api: nombre completo 320, teléfono 50.
+  // Uso de ejemplo: validateActors([{ ...actor, telefono: '3'.repeat(51) }], m).byActor[0].telefono
+  it('Bug #13304 — los topes del actor son 320 (nombre) y 50 (teléfono)', () => {
+    expect(ACTOR_NOMBRE_MAX_LENGTH).toBe(320);
+    expect(ACTOR_TELEFONO_MAX_LENGTH).toBe(50);
+  });
+
+  it('Bug #13304 — acepta un nombre de exactamente 320 caracteres', () => {
+    const v = validateActors([{ ...base, nombreCompleto: 'A'.repeat(320) }], 'matricula_inicial');
+    expect(v.byActor[0].nombreCompleto).toBeUndefined();
+    expect(v.valid).toBe(true);
+  });
+
+  it('Bug #13304 — rechaza un nombre de 321 caracteres con el tope en el mensaje', () => {
+    const v = validateActors([{ ...base, nombreCompleto: 'A'.repeat(321) }], 'matricula_inicial');
+    expect(v.valid).toBe(false);
+    expect(v.byActor[0].nombreCompleto).toBe('El nombre admite máximo 320 caracteres.');
+  });
+
+  it('Bug #13304 — acepta un teléfono de exactamente 50 caracteres', () => {
+    const v = validateActors([{ ...base, telefono: '3'.repeat(50) }], 'matricula_inicial');
+    expect(v.byActor[0].telefono).toBeUndefined();
+    expect(v.valid).toBe(true);
+  });
+
+  it('Bug #13304 — rechaza un teléfono de 51 caracteres con el tope en el mensaje', () => {
+    const v = validateActors([{ ...base, telefono: '3'.repeat(51) }], 'matricula_inicial');
+    expect(v.valid).toBe(false);
+    expect(v.byActor[0].telefono).toBe('El teléfono admite máximo 50 caracteres.');
+  });
+
+  it('Bug #13304 — persona jurídica: mide la razón social corta que se persiste, no la cláusula RUES', () => {
+    const razon = `${'B'.repeat(300)}, ${'C'.repeat(100)}`;
+    const v = validateActors(
+      [{ ...base, tipoDocumento: 'NIT', personType: 'juridical', numeroDocumento: '900123456', nombreCompleto: razon, representanteLegal: { email: 'rl@y.com' } } as ProcedureActor],
+      'matricula_inicial',
+    );
+    expect(v.byActor[0].nombreCompleto).toBeUndefined();
   });
 });
 

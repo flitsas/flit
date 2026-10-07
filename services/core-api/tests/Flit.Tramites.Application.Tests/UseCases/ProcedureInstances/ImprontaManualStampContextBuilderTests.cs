@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
@@ -172,6 +173,106 @@ public sealed class ImprontaManualStampContextBuilderTests
 
         ctx.Signers.Should().ContainSingle();
         ctx.Signers[0].FullName.Should().Be("Pedro Natural");
+    }
+
+    // Bug #13304 — paridad con FurCommand: con extractor disponible, una rúbrica persistida que no
+    // pasa IsUsableInk (p. ej. el logo «Verify» opaco) no se estampa; queda el sello de texto.
+
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaNoUtilizable_NoSeEstampaYQuedaElSelloDeTexto()
+    {
+        var (instance, sigBytes) = JuridicaConRubricaDeIdentidad();
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(false);
+
+        var ctx = await ImprontaManualStampContextBuilder.BuildAsync(
+            instance, Impronta(instance.TenantId, instance.Id), _storage, _vault,
+            ct: TestContext.Current.CancellationToken, signatureExtractor: extractor);
+
+        ctx.Signers.Should().ContainSingle();
+        ctx.Signers[0].SignatureImage.Should().BeNull("el logo persistido no debe estamparse en la impronta");
+        ctx.Signers[0].ImageSidecarText.Should().BeNull();
+        ctx.Signers[0].SealText.Should().Contain("Validación biométrica");
+        extractor.Received(1).IsUsableInk(Arg.Is<byte[]>(b => b.SequenceEqual(sigBytes)));
+    }
+
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaUtilizable_SeEstampa()
+    {
+        var (instance, sigBytes) = JuridicaConRubricaDeIdentidad();
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(true);
+
+        var ctx = await ImprontaManualStampContextBuilder.BuildAsync(
+            instance, Impronta(instance.TenantId, instance.Id), _storage, _vault,
+            ct: TestContext.Current.CancellationToken, signatureExtractor: extractor);
+
+        ctx.Signers[0].SignatureImage.Should().Equal(sigBytes);
+        ctx.Signers[0].ImageSidecarText.Should().Contain("Validación biométrica");
+        ctx.Signers[0].SealText.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Bug13304_RubricaPersistidaPorEncimaDelTope_NoSeEstampaYQuedaElSelloDeTexto()
+    {
+        var (instance, _) = JuridicaConRubricaDeIdentidad();
+        var enorme = new byte[IdentitySignatureImageFormat.MaxArtifactBytes + 1];
+        MinimalPng().CopyTo(enorme, 0);
+        _storage.OpenReadAsync("bio/logo.png", Arg.Any<CancellationToken>())
+            .Returns(_ => new MemoryStream(enorme));
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(true);
+
+        var ctx = await ImprontaManualStampContextBuilder.BuildAsync(
+            instance, Impronta(instance.TenantId, instance.Id), _storage, _vault,
+            ct: TestContext.Current.CancellationToken, signatureExtractor: extractor);
+
+        ctx.Signers[0].SignatureImage.Should().BeNull("un artefacto por encima del tope no se decodifica ni se pinta");
+        ctx.Signers[0].ImageSidecarText.Should().BeNull();
+        ctx.Signers[0].SealText.Should().Contain("Validación biométrica");
+        extractor.DidNotReceive().IsUsableInk(Arg.Any<byte[]>());
+    }
+
+    private (ProcedureInstance Instance, byte[] SigBytes) JuridicaConRubricaDeIdentidad()
+    {
+        var instance = BaseInstance();
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "vendedor",
+            DocumentType = "NIT",
+            DocumentNumber = "900123456",
+            FullName = "EMPRESA SAS",
+            PersonType = ActorPersonTypes.Juridical,
+            Ordinal = 1,
+            Metadata = """{"representanteLegal":{"tipoDocumento":"CC","numeroDocumento":"1090123456","nombreCompleto":"Ana Presentante","email":"a@e.com","mecanismoFirma":"identidad"}}""",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        var sigBytes = MinimalPng();
+        instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            PartyRole = "vendedor",
+            DocumentType = "CC",
+            DocumentNumber = "1090123456",
+            Name = "Ana Presentante",
+            Status = BiometricEstados.Aprobado,
+            CertificateHash = "cert-hash-rl",
+            SignatureImagePath = "bio/logo.png",
+            CreatedAt = DateTimeOffset.UtcNow,
+            ValidatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+        });
+
+        _storage.OpenReadAsync("bio/logo.png", Arg.Any<CancellationToken>())
+            .Returns(_ => new MemoryStream(sigBytes));
+        return (instance, sigBytes);
     }
 
     /// <summary>PNG 1×1 válido (cabecera) para pasar <see cref="IdentitySignatureImageFormat.IsSupported"/>.</summary>

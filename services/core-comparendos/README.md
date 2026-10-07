@@ -5,8 +5,8 @@ v1 (§1). Por ahora la carpeta solo reserva el lugar; todavía no tiene código.
 
 | | DEV y local | QA | PDN |
 |---|---|---|---|
-| Puerto | 4060 | 5060 | 6060 |
-| Su app web | `frontend-comparendos` (4061) | 5061 | 6061 |
+| Puerto | interno, detrás del gateway (sin puerto publicado) | | |
+| Su app web | `frontend-comparendos` (4023) | 5023 | 6023 |
 
 Valida los tokens de la suite sin llamar a otro servicio (como `core-api`, ver
 [identidad-frontera.md](../../docs/suite/identidad-frontera.md) §7) y guarda sus datos en su propio schema `comparendos`.
