@@ -815,6 +815,10 @@ export function TramiteWizard(props: Props) {
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
+  // Bug #13304 — expediente cuyo snapshot ya se hidrató, y expediente cuya consulta se corrió en esta
+  // sesión (su resultado no se pisa con el GET de hidratación).
+  const preflightHydratedForRef = useRef<string | null>(null);
+  const preflightRanForRef = useRef<string | null>(null);
 
   // Familia vigente. El campo `modalidad` del estado transporta `procedure_types.family` desde
   // ADR-0050; el nombre es heredado y solo sobrevive en el contrato.
@@ -1201,6 +1205,7 @@ export function TramiteWizard(props: Props) {
     setPreflightLoading(true);
     try {
       const snap = await tramitesClient.runPreflight(instanceId);
+      preflightRanForRef.current = instanceId;
       setPreflight(snap);
       await refresh();
     } finally {
@@ -1208,17 +1213,27 @@ export function TramiteWizard(props: Props) {
     }
   };
 
-  // Trae el último preflight al entrar a un paso que lo muestra.
+  // Bug #13304 — hidrata el último preflight PERSISTIDO (GET /instances/{id}/preflight) una vez por
+  // expediente, sin depender del paso activo: un borrador creado por ICT abre en la frontera (paso
+  // posterior a la consulta) y aun así Requisitos necesita el check `gravamenes` para el aviso de
+  // prenda del RUNT. Solo lee el snapshot: NUNCA re-ejecuta la consulta a proveedores. Un 404 (null)
+  // o un error se ignoran en silencio. Si el gestor corrió la consulta en esta sesión, su resultado
+  // prima sobre un GET que resuelva después; al cambiar de expediente se descarta el del anterior.
   useEffect(() => {
-    const key = activeStep?.key;
-    if (!instanceId || !key) return;
-    if (key === 'consulta' || key === 'consulta_vin') {
-      tramitesClient
-        .getPreflight(instanceId)
-        .then((snap) => snap && setPreflight(snap))
-        .catch(() => {});
-    }
-  }, [instanceId, activeStep?.key]);
+    if (!instanceId || preflightHydratedForRef.current === instanceId) return;
+    const anterior = preflightHydratedForRef.current;
+    preflightHydratedForRef.current = instanceId;
+    if (anterior !== null) setPreflight(null);
+    tramitesClient
+      .getPreflight(instanceId)
+      .then((snap) => {
+        if (!snap) return;
+        if (preflightHydratedForRef.current !== instanceId) return;
+        if (preflightRanForRef.current === instanceId) return;
+        setPreflight(snap);
+      })
+      .catch(() => {});
+  }, [instanceId]);
 
   // Feature #11066 — genera FUR/impronta/consolidado sin bloquear la UI de negocio.
   // Reintenta ante fallos transitorios o consolidado incompleto (p.ej. FUR aún en vuelo).

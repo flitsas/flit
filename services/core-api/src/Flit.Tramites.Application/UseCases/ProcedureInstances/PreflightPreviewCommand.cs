@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Entities;
@@ -72,7 +73,170 @@ public sealed record PreflightPreviewTransitOfficeDto(Guid Id, string Code, stri
 public sealed record PreflightVehicleSnapshot(
     IReadOnlyList<PreflightCheckDto> Checks,
     IReadOnlyList<HydratedField> HydratedFields,
-    IReadOnlyList<string> Providers);
+    IReadOnlyList<string> Providers)
+{
+    /// <summary>
+    /// Bug #13304 — única fuente del mapeo <c>ConsultationResult → snapshot</c>: la usan el preflight
+    /// (consulta fresca) y la fachada gRPC de ICT, para que la consulta reutilizada sea idéntica a la
+    /// que habría hecho el preflight. Deja fuera <c>RawPayload</c> y <c>Certifications</c>.
+    /// </summary>
+    public static PreflightVehicleSnapshot FromConsultation(ConsultationResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return new PreflightVehicleSnapshot(
+            result.Checks
+                .Select(c => new PreflightCheckDto(c.Key, c.Label, c.Status, c.Source, c.Message, c.Details, c.Datos))
+                .ToList(),
+            result.HydratedFields.ToList(),
+            [result.Provider]);
+    }
+
+    /// <summary>
+    /// Bug #13304 (M-1) — copia con solo los <see cref="PreflightVehicleSnapshotAllowList.FieldKeys"/> y los
+    /// <see cref="PreflightVehicleSnapshotAllowList.CheckKeys"/> que puede producir la consulta de vehículo;
+    /// el resto se descarta en silencio. La aplica el camino ICT al emitir y al recibir el snapshot, para que
+    /// un JSON alterado no pueda sobrescribir OT, titular ni actores, ni inyectar checks del preflight. El
+    /// wizard (precomputed del preview) no la usa.
+    /// </summary>
+    public PreflightVehicleSnapshot SoloClavesDeVehiculo() => new(
+        Checks
+            .Where(c => c?.Key is not null && PreflightVehicleSnapshotAllowList.CheckKeys.Contains(c.Key))
+            .ToList(),
+        HydratedFields
+            .Where(f => f?.FieldKey is not null && PreflightVehicleSnapshotAllowList.FieldKeys.Contains(f.FieldKey))
+            .ToList(),
+        Providers);
+}
+
+/// <summary>
+/// Bug #13304 (M-1) — fuente única de lo que una consulta de vehículo puede traer: unión literal de lo que
+/// emiten los mappers de vehículo (<see cref="KyverumRuntVehicleResultMapper"/>, <see cref="VerifikResultMapper"/>,
+/// <see cref="IntempoVehicleResultMapper"/>) más los checks de
+/// «no encontrado», error y entrada de sus proveedores y de la cadena. Si un mapper añade una clave, se añade
+/// aquí: el test de deriva <c>PreflightVehicleSnapshotAllowListTests</c> falla si no.
+/// </summary>
+public static class PreflightVehicleSnapshotAllowList
+{
+    /// <summary>Claves de <c>HydratedField</c> que los mappers de vehículo pueden hidratar.</summary>
+    public static readonly IReadOnlySet<string> FieldKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        // Kyverum siembra el tipo de documento del propietario (HU #10478) y los tres el organismo del RUNT.
+        "owner_document_type",
+        "transit_office_name",
+        VehicleFieldKeys.Plate,
+        VehicleFieldKeys.Vin,
+        VehicleFieldKeys.Year,
+        VehicleFieldKeys.Brand,
+        VehicleFieldKeys.Line,
+        VehicleFieldKeys.Color,
+        VehicleFieldKeys.Class,
+        VehicleFieldKeys.Fuel,
+        VehicleFieldKeys.EngineDisplacement,
+        VehicleFieldKeys.State,
+        VehicleFieldKeys.Service,
+        VehicleFieldKeys.BodyType,
+        VehicleFieldKeys.Chassis,
+        VehicleFieldKeys.EngineNumber,
+        VehicleFieldKeys.Series,
+        VehicleFieldKeys.Passengers,
+        VehicleFieldKeys.Axles,
+        "vehicle_weight",
+        "vehicle_height",
+        "vehicle_width",
+        "vehicle_length",
+        "vehicle_tires",
+        "vehicle_traction",
+        "vehicle_registration_date",
+        // En release no existen RuntGravamenSignal ni RuntGarantiasMobiliarias (Bug #13203): mismas claves en literal.
+        "runt_tiene_gravamenes",
+        "runt_tiene_prendas",
+        "runt_gravamenes",
+        "runt_nombre_acreedor",
+        "runt_prendario",
+        "soat_vencimiento",
+        "soat_aseguradora",
+        "soat_poliza",
+        "soat_expedicion",
+        "soat_vigencia",
+        SoatGate.FieldKey,
+        "rtm_vencimiento",
+        "rtm_estado",
+        "rtm_numero",
+        "rtm_expedicion",
+        "rtm_entidad",
+    };
+
+    /// <summary>Claves de <c>ConsultationCheck</c> que emite la consulta de vehículo (mappers, proveedores y cadena).</summary>
+    public static readonly IReadOnlySet<string> CheckKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "estado_vehiculo",
+        "soat",
+        "tecnomecanica",
+        VehiclePrendaPolicy.GravamenCheckKey,
+        KyverumRuntVehicleResultMapper.CheckMatriculaPreviaRunt,
+        // «No encontrado» de los proveedores y salidas de error/entrada de proveedor, cadena y gateway.
+        "vehiculo",
+        "provider",
+        "input",
+        "gateway",
+    };
+}
+
+/// <summary>
+/// Bug #13304 — formato del snapshot de vehículo que viaja opaco por ICT
+/// (<c>ConsultationReply.vehicle_snapshot_json</c> → <c>PrecomputedVehicleConsultation.snapshot_json</c>).
+/// core-api lo produce y lo consume con las MISMAS opciones; core-ict nunca lo interpreta. Contiene PII
+/// (titular, acreedor): no se loguea.
+/// </summary>
+public static class PreflightVehicleSnapshotJson
+{
+    /// <summary>Bug #13304 (L-2) — tope del texto recibido, en bytes UTF-8, antes de deserializar.</summary>
+    public const int MaxSnapshotBytes = 256 * 1024;
+
+    /// <summary>Bug #13304 (L-2) — profundidad máxima explícita (un snapshot real no pasa de 5 niveles).</summary>
+    public const int MaxDepth = 16;
+
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { MaxDepth = MaxDepth };
+
+    public static string Serialize(PreflightVehicleSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return JsonSerializer.Serialize(snapshot, Options);
+    }
+
+    /// <summary>
+    /// <c>false</c> si el texto está vacío, supera <see cref="MaxSnapshotBytes"/>, no es JSON, anida más de
+    /// <see cref="MaxDepth"/> niveles o no trae checks/campos/proveedores.
+    /// </summary>
+    public static bool TryDeserialize(string? json, out PreflightVehicleSnapshot? snapshot)
+    {
+        snapshot = null;
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        // Cota barata primero (cada carácter ocupa al menos 1 byte UTF-8); conteo exacto solo si hace falta.
+        if (json.Length > MaxSnapshotBytes || System.Text.Encoding.UTF8.GetByteCount(json) > MaxSnapshotBytes)
+            return false;
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<PreflightVehicleSnapshot>(json, Options);
+            if (parsed?.Checks is null || parsed.HydratedFields is null || parsed.Providers is null)
+                return false;
+
+            snapshot = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
+}
 
 /// <summary>
 /// Custodia server-side de las consultas del paso 1 mientras el trámite aún no existe. El payload

@@ -37,7 +37,7 @@ public sealed class IctGrpcProcedureDraftClientBug13304Tests
             .Returns(Call(new DraftReply { ProcedureInstanceId = id.ToString(), Status = "borrador", ErrorCode = "actors_warning:persist_failed" }));
         var master = new ExternalIntegrationMaster { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), TransactionType = 3 };
 
-        var result = await Client().CreateDraftAsync(master, new DraftProcedureType("TRASPASO_STANDARD", "TRASPASO", true, true), TestContext.Current.CancellationToken);
+        var result = await Client().CreateDraftAsync(master, new DraftProcedureType("TRASPASO_STANDARD", "TRASPASO", true, true), vehicle: null, TestContext.Current.CancellationToken);
 
         result.ProcedureInstanceId.Should().Be(id);
         result.ErrorCode.Should().Be("actors_warning:persist_failed");

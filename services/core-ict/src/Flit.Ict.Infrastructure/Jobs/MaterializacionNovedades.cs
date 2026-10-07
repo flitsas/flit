@@ -11,13 +11,15 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// </summary>
 /// <remarks>
 /// El reply concatena varias advertencias con <c>;</c> (<c>IctOrchestrationService.AppendWarning</c>):
-/// <c>"seed_warning:x;actors_warning:invalid_document_type"</c>. Solo se publican las de actores y
-/// comerciales: las demás (seed/identity/attachments/preflight) no dejan el trámite sin datos que ICT
-/// haya recibido. Los códigos no llevan PII (son códigos de error y, como mucho, el rol del actor).
+/// <c>"seed_warning:x;actors_warning:invalid_document_type"</c>. Se publican las de actores, comerciales y,
+/// desde el numeral 3, las del preflight (<c>preflight_warning:*</c>: consulta RUNT ausente/vencida/de otro
+/// vehículo o bloqueo del preflight; sin ellas el borrador nace sin prenda/gravamen y nadie en ICT lo sabe).
+/// Las demás (seed/identity/attachments) no dejan el trámite sin datos que ICT haya recibido. Los códigos no
+/// llevan PII (son códigos de error y, como mucho, el rol del actor).
 /// </remarks>
 internal static class MaterializacionNovedades
 {
-    private static readonly string[] PrefijosVisibles = ["actors_warning:", "commercial_warning:"];
+    private static readonly string[] PrefijosVisibles = ["actors_warning:", "commercial_warning:", "preflight_warning:"];
 
     /// <summary>Prefijo del texto que se agrega a los comentarios del master.</summary>
     internal const string Prefijo = "borrador creado en FLIT con novedades: ";

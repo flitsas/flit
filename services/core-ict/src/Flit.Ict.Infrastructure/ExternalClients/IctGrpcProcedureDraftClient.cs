@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
+using Flit.Ict.Domain.Validation;
 using Flit.Ict.Grpc.Contracts;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -22,11 +23,12 @@ public sealed partial class IctGrpcProcedureDraftClient(
     public async Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
+        VehicleConsultationSnapshot? vehicle,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(master);
 
-        var request = await BuildRequestAsync(master, procedureType, docTypeResolver, logger, ct);
+        var request = await BuildRequestAsync(master, procedureType, docTypeResolver, vehicle, logger, ct);
 
         try
         {
@@ -68,12 +70,26 @@ public sealed partial class IctGrpcProcedureDraftClient(
     /// lleva datos comerciales. Todas las declara <c>ict.procedure_type_mapping</c>; ninguna se
     /// deduce ya del texto del código ni del número de transacción.
     /// </summary>
-    internal static async Task<CreateDraftFromIctRequest> BuildRequestAsync(
+    internal static Task<CreateDraftFromIctRequest> BuildRequestAsync(
         ExternalIntegrationMaster master,
         DraftProcedureType procedureType,
         IAttachmentDocTypeResolver docTypeResolver,
         ILogger? log = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        BuildRequestAsync(master, procedureType, docTypeResolver, vehicle: null, log, ct);
+
+    /// <summary>
+    /// Igual que la sobrecarga sin consulta, y además (Bug #13304) adjunta en el campo 14
+    /// <c>precomputed_vehicle</c> la consulta RUNT de la validación ICT para que core-api no re-consulte.
+    /// El JSON viaja opaco, sin tocar. <paramref name="vehicle"/> null ⇒ el campo queda ausente.
+    /// </summary>
+    internal static async Task<CreateDraftFromIctRequest> BuildRequestAsync(
+        ExternalIntegrationMaster master,
+        DraftProcedureType procedureType,
+        IAttachmentDocTypeResolver docTypeResolver,
+        VehicleConsultationSnapshot? vehicle,
+        ILogger? log,
+        CancellationToken ct)
     {
         var request = new CreateDraftFromIctRequest
         {
@@ -166,6 +182,18 @@ public sealed partial class IctGrpcProcedureDraftClient(
             });
         }
 
+        if (vehicle is not null && !string.IsNullOrWhiteSpace(vehicle.SnapshotJson))
+        {
+            request.PrecomputedVehicle = new PrecomputedVehicleConsultation
+            {
+                SnapshotJson = vehicle.SnapshotJson,
+                ConsultedAt = Timestamp.FromDateTimeOffset(vehicle.ConsultedAt),
+                Provider = vehicle.Provider ?? string.Empty,
+                Kind = vehicle.Kind ?? string.Empty,
+                QueriedPlate = vehicle.Plate ?? string.Empty,
+                QueriedVin = vehicle.Vin ?? string.Empty,
+            };
+        }
 
         return request;
     }
