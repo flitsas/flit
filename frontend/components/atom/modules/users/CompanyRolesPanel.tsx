@@ -29,7 +29,11 @@ export function isOwnRole(role: TenantRole): boolean {
   return role.tenantId != null;
 }
 
-export function CompanyRolesPanel() {
+/**
+ * `onChanged`: se invoca tras crear, editar o eliminar un rol, para que quien aloja el panel (Usuarios) refresque
+ * su propio listado de roles asignables sin recargar la página.
+ */
+export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}) {
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [form, setForm] = useState<CompanyRoleFormMode | null>(null);
@@ -152,6 +156,7 @@ export function CompanyRolesPanel() {
           onSaved={() => {
             setForm(null);
             void load();
+            onChanged?.();
           }}
         />
       )}
@@ -163,6 +168,7 @@ export function CompanyRolesPanel() {
           onDeleted={() => {
             setDeleteTarget(null);
             void load();
+            onChanged?.();
           }}
         />
       )}

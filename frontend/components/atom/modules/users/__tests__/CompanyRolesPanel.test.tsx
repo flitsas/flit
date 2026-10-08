@@ -281,6 +281,27 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     expect(setTenantRolePermissions).toHaveBeenCalledWith("o1", expect.arrayContaining(["p1", "p2"]));
   });
 
+  it("avisa al contenedor (onChanged) tras crear o eliminar, para que Usuarios refresque sus roles asignables", async () => {
+    vi.mocked(createTenantRole).mockResolvedValue({ id: "o2" });
+    vi.mocked(deleteTenantRole).mockResolvedValue(undefined);
+    const onChanged = vi.fn();
+    const ue = userEvent.setup();
+    render(<CompanyRolesPanel onChanged={onChanged} />);
+    await screen.findByText("Contador");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    let dialog = await screen.findByRole("dialog");
+    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
+    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+
+    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    dialog = await screen.findByRole("dialog");
+    await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
+  });
+
   it("elimina un rol propio y recarga la lista", async () => {
     vi.mocked(deleteTenantRole).mockResolvedValue(undefined);
     const ue = userEvent.setup();

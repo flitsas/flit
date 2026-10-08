@@ -552,7 +552,7 @@ export function Usuarios() {
         </div>
       )}
 
-      {tab === "roles" && !isSuperAdmin && isAdminCompany && <CompanyRolesPanel />}
+      {tab === "roles" && !isSuperAdmin && isAdminCompany && <CompanyRolesPanel onChanged={() => void loadRoles()} />}
 
       {open && (
         <InviteUserModal
