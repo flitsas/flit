@@ -139,6 +139,13 @@ internal static class IctDraftFieldValuesMapper
                 master.LimitationsOperationType.Value.ToString(CultureInfo.InvariantCulture));
         }
 
+        // Minimización (Ley 1581): con «omitir» (3) la decisión no usa el acreedor ni la fecha, y en
+        // core-api los field_values son inmutables; no se envían datos que no sirven a la finalidad.
+        if (master.LimitationsOperationType == 3)
+        {
+            return;
+        }
+
         AddIfPresent(values, "ict_prenda_acreedor_nombre", master.LimitationsCreditor);
         AddIfPresent(values, "ict_prenda_acreedor_documento_tipo", master.LimitationsCreditorDocumentType);
         AddIfPresent(values, "ict_prenda_acreedor_documento", master.LimitationsCreditorDocumentNumber);

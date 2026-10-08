@@ -11,19 +11,22 @@
 --   * da de alta 6 y 7 (PK interna = siguiente libre; en una base sembrada por 12-… quedan 4 y 5);
 --   * renombra 5 y 9 y asegura 5/6/7/9 activos;
 --   * desactiva 17 (is_active=false). NO se borra: masters existentes pueden referenciarlo por FK.
--- Idempotente (corre en cada arranque vía IctSchemaBootstrapper): INSERT … WHERE NOT EXISTS y
+-- Idempotente (corre en cada arranque vía IctSchemaBootstrapper): INSERT … WHERE NOT EXISTS
+-- (+ ON CONFLICT DO NOTHING: dos arranques simultáneos que calculen el mismo MAX(id)+1 no fallan) y
 -- UPDATE solo de filas que difieren (updated_at no se toca si ya está al día).
 -- =============================================================================
 
 INSERT INTO ict.external_integration_transformation_type (id, id_transformation_type, name)
 SELECT (SELECT COALESCE(MAX(id), 0) + 1 FROM ict.external_integration_transformation_type), 6, 'Cambio de Carrocería'
 WHERE NOT EXISTS (
-    SELECT 1 FROM ict.external_integration_transformation_type WHERE id_transformation_type = 6);
+    SELECT 1 FROM ict.external_integration_transformation_type WHERE id_transformation_type = 6)
+ON CONFLICT DO NOTHING;
 
 INSERT INTO ict.external_integration_transformation_type (id, id_transformation_type, name)
 SELECT (SELECT COALESCE(MAX(id), 0) + 1 FROM ict.external_integration_transformation_type), 7, 'Cambio de Color'
 WHERE NOT EXISTS (
-    SELECT 1 FROM ict.external_integration_transformation_type WHERE id_transformation_type = 7);
+    SELECT 1 FROM ict.external_integration_transformation_type WHERE id_transformation_type = 7)
+ON CONFLICT DO NOTHING;
 
 UPDATE ict.external_integration_transformation_type AS t
 SET name = v.name, is_active = true, deleted_at = NULL, updated_at = now()
