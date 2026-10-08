@@ -16,6 +16,11 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 /// columna del master traiga un id con equivalencia exacta, venga o no la transformación (cubre el
 /// trámite principal 5/9 sin <c>more_transaction</c>). Sin equivalencia exacta no se envía valor y el
 /// gestor lo elige en el wizard.</para>
+/// <para><b>El valor implica su bandera:</b> si se envía <c>vehicle_fuel</c> se envía también
+/// <c>cambio_combustible="true"</c>, y si se envía <c>blindaje_nivel</c> también <c>blindaje="true"</c>
+/// (una sola vez, aunque el código 5/9 también la produzca). Motivo: el preflight de core-api
+/// (<c>PreflightCommand.UpsertTransformationAwareField</c>) pisa <c>vehicle_fuel</c> con el valor RUNT
+/// salvo que <c>cambio_combustible="true"</c>, y en la primera consulta no hay snapshot que lo salve.</para>
 /// <para><b>PII:</b> el nombre y el documento del acreedor solo viajan en el request; esta clase no
 /// registra nada.</para>
 /// </summary>
@@ -85,12 +90,21 @@ internal static class IctDraftFieldValuesMapper
     {
         var codigos = master.Transformations.Select(t => t.IdTransformationType).ToHashSet();
 
-        if (codigos.Contains(TransformacionBlindaje))
+        // El valor declara la transformación: con valor exacto la bandera va aunque no venga el código.
+        var nivelWeb = master.ArmorLevelNumberId is { } nivel && NivelBlindaje.TryGetValue(nivel, out var n)
+            ? n
+            : null;
+        var combustibleWeb = master.NewVehicleFuelType is { } combustible
+            && CombustibleWeb.TryGetValue(combustible, out var c)
+            ? c
+            : null;
+
+        if (codigos.Contains(TransformacionBlindaje) || nivelWeb is not null)
         {
             Add(values, "blindaje", True);
         }
 
-        if (master.ArmorLevelNumberId is { } nivel && NivelBlindaje.TryGetValue(nivel, out var nivelWeb))
+        if (nivelWeb is not null)
         {
             Add(values, "blindaje_nivel", nivelWeb);
         }
@@ -105,12 +119,12 @@ internal static class IctDraftFieldValuesMapper
             Add(values, "cambio_color", True);
         }
 
-        if (codigos.Contains(TransformacionCombustible))
+        if (codigos.Contains(TransformacionCombustible) || combustibleWeb is not null)
         {
             Add(values, "cambio_combustible", True);
         }
 
-        if (master.NewVehicleFuelType is { } combustible && CombustibleWeb.TryGetValue(combustible, out var combustibleWeb))
+        if (combustibleWeb is not null)
         {
             Add(values, "vehicle_fuel", combustibleWeb);
         }

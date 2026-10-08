@@ -196,10 +196,6 @@ public sealed class IctOrchestrationService(
             SembrarAtributosManualesTraspaso(fieldItems, request);
         }
 
-        // Bug #13445 (D4) — transformación código 9 sin subtipo: core-ict no marca ningún flag y lo señala
-        // con este marcador; el gestor la declara en el wizard.
-        AvisarTransformacionSinSubtipo(reply, request);
-
         if (fieldItems.Count > 0)
         {
             var (_, patchError) = await patchHandler.HandleAsync(
@@ -358,18 +354,6 @@ public sealed class IctOrchestrationService(
             {
                 fieldItems.Add(new FieldValueInput(null, clave, "false", null));
             }
-        }
-    }
-
-    /// <summary>Clave del marcador que core-ict envía para la transformación 9 sin subtipo (Bug #13445, D4).</summary>
-    internal const string TransformacionSinSubtipoKey = "ict_transformacion_sin_subtipo";
-
-    /// <summary>Bug #13445 (D4) — <c>ict_transformacion_sin_subtipo="true"</c> → aviso <c>transformacion_sin_subtipo</c>.</summary>
-    internal static void AvisarTransformacionSinSubtipo(DraftReply reply, CreateDraftFromIctRequest request)
-    {
-        if (string.Equals(FieldValueOf(request, TransformacionSinSubtipoKey)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            AppendWarning(reply, "transformacion_sin_subtipo");
         }
     }
 
