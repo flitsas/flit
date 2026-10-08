@@ -5668,6 +5668,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue("COMPANY")
                         .HasColumnName("target_entity_type");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

@@ -38,6 +38,8 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(x => x.RowVersion).IsConcurrencyToken();
         // HU #12964: FK a platform.products y backfill en el DDL 120.
         builder.Property(x => x.ProductCode).HasMaxLength(40).IsRequired().HasDefaultValue("tramites");
+        // HU #13440: NULL = global; FK fk_roles_tenants y unicidad por tenant viven en el DDL 134.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id");
     }
 }
 
