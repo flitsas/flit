@@ -1,5 +1,6 @@
 import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
+import { apiBaseForPageRoot } from './base-url';
 import { uploadFileToPresignedUrl } from './presigned-upload';
 import type {
   AceptarConsentimientoResult,
@@ -218,8 +219,9 @@ export function fetchNetworkChildren(signal?: AbortSignal): Promise<NetworkChild
 // NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
 // en dev local, las peticiones van al origen del frontend (localhost:3000) y Next.js
 // las reescribe a core-api (:4003) vía next.config.ts — no hace falta levantar el gateway.
+// Con la raíz de la página: en app.flitsas.com la API es api.flitsas.com (ver apiBaseForPageRoot).
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
+  apiBaseForPageRoot(process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '');
 
 // Único constructor de URLs del cliente. El path absoluto (/api/v1/...) toma solo el
 // ORIGEN de la base e ignora su path, así un BASE_URL con sufijo /api/v1 (el que inyecta

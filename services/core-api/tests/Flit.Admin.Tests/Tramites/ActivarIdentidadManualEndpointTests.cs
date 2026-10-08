@@ -363,6 +363,14 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebAppli
             v.ValidUntil = vigente ? now.AddDays(29) : now.AddDays(-30);
         }
 
+        // Bug #13444: un rechazo de Kyverum solo es definitivo con los intentos agotados. Con intentos disponibles el worker
+        // lo sigue consultando (y audita 'reconcile'), así que el rechazo sembrado es el definitivo real.
+        if (kyverum && status == BiometricEstados.Rechazado)
+        {
+            v.MaxAttempts = BiometricRules.KyverumMaxIntentos;
+            v.Attempts = BiometricRules.KyverumMaxIntentos;
+        }
+
         db.ProcedureInstanceBiometricValidations.Add(v);
         await db.SaveChangesAsync(Ct);
         _validaciones.Add(v.Id);
