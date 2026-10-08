@@ -18,7 +18,7 @@ import type { SessionUser } from "./types";
 
 export { claimsToken, createAuthRoutes, safeReturnTo, type AuthRoutesOptions, type RouteHandler } from "./routes";
 export { createApiProxy, type ApiProxyOptions } from "./proxy";
-export { authConfig, type AuthConfig } from "./config";
+export { authConfig, forRequest, hubUrlFor, type AuthConfig } from "./config";
 export type { SessionUser } from "./types";
 
 /**

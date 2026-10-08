@@ -70,7 +70,8 @@ internal sealed class OidcIssuerRegistry(IServiceProvider services, IMemoryCache
 
     public static async Task<IReadOnlyList<string>> ListAsync(IProductHosts hosts, ITenantDomainRepository domains, string scheme, CancellationToken ct)
     {
-        var issuers = new List<string> { hosts.UrlFor(ProductCodes.Plataforma).TrimEnd('/') + "/" };
+        // El hub de la raíz principal y el de cada raíz alternativa (Suite:Hosts:AlternateRoots): cada uno es emisor.
+        var issuers = hosts.AllUrlsFor(ProductCodes.Plataforma).Select(url => url.TrimEnd('/') + "/").ToList();
         foreach (var host in await domains.ListActiveHostsAsync(ct).ConfigureAwait(false))
             issuers.Add($"{scheme}://{host.Trim().ToLowerInvariant()}/");
         return issuers.Distinct(StringComparer.Ordinal).ToArray();

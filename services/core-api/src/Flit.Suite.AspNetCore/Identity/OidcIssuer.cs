@@ -11,8 +11,11 @@ namespace Flit.Api.Identity;
 /// <item>el host de la plataforma en este ambiente (p. ej. <c>qa.flitsas.online</c>) o el dominio de una red ⇒ ese host;</item>
 /// <item>en local, un host de loopback con reemplazo de <c>plataforma</c> en <c>Suite:Hosts:Overrides</c> ⇒ ese reemplazo;</item>
 /// <item>cualquier otro caso (un servicio que llama por la red interna, un host de producto, sin sello) ⇒ el hub del
-/// ambiente, para que el token de servicio lleve un emisor conocido.</item>
+/// ambiente, para que el token de servicio lleve un emisor conocido. Un host de producto de una raíz alternativa
+/// (<c>Suite:Hosts:AlternateRoots</c>, p. ej. <c>tramites.flitsas.com</c>) da el hub de ESA raíz (<c>app.flitsas.com</c>).</item>
 /// </list>
+/// El hub de una raíz alternativa (<c>app.flitsas.com</c>) es plataforma para <see cref="IProductHosts.ProductForHost"/>,
+/// así que es su propio emisor: quien entra por ahí no sale de esa raíz durante el login.
 /// </summary>
 public static class OidcIssuer
 {
@@ -28,7 +31,7 @@ public static class OidcIssuer
                 return local;
         }
 
-        return TryAbsolute(hosts.UrlFor(ProductCodes.Plataforma), out var hub)
+        return TryAbsolute(hosts.UrlFor(ProductCodes.Plataforma, host), out var hub)
             ? hub
             : throw new InvalidOperationException("Suite:Hosts no produce una URL válida para la plataforma.");
     }

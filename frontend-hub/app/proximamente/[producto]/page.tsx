@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Check, Mail } from "lucide-react";
@@ -65,7 +66,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
   if (!user) return <main className="min-h-full bg-[var(--color-flit-bg)] px-4 text-flit-primary dark:bg-[#05060A] dark:text-white">{content}</main>;
 
   return (
-    <HubShell tramitesUrl={hubConfig().tramitesUrl} user={toHubUser(user)}>
+    <HubShell tramitesUrl={hubConfig(process.env, (await headers()).get("host")).tramitesUrl} user={toHubUser(user)}>
       {content}
     </HubShell>
   );

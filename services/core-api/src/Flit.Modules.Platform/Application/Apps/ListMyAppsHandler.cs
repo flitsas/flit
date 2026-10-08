@@ -50,7 +50,8 @@ public sealed class ListMyAppsHandler
                     continue;
             }
 
-            result.Add(new MyAppView(product.Code, product.Name, product.Icon, _hosts.LinkFor(product.Code), product.Code == current, _hosts.IsComingSoon(product.Code)));
+            // En la raíz de la petición: desde app.flitsas.com el menú lleva a tramites.flitsas.com (Suite:Hosts:AlternateRoots).
+            result.Add(new MyAppView(product.Code, product.Name, product.Icon, _hosts.LinkFor(product.Code, currentHost), product.Code == current, _hosts.IsComingSoon(product.Code)));
         }
 
         return result;

@@ -23,13 +23,14 @@ export const dynamic = "force-dynamic";
 
 export default async function HubRoot({ searchParams }: { searchParams: Promise<{ inicio?: string; sso?: string }> }) {
   const [brand, user, { inicio, sso }] = await Promise.all([resolveBrand(), getSession(HUB_PRODUCT), searchParams]);
-  const config = hubConfig();
+  const host = (await headers()).get("host");
+  const config = hubConfig(process.env, host);
 
   const silentLogin = `/auth/login?prompt=none&returnTo=${encodeURIComponent(inicio === "1" ? "/?inicio=1" : "/")}`;
   if (!user && sso !== "0") redirect(silentLogin);
 
   if (user) {
-    const fetched = await fetchMyAppsOnServer(config, (await headers()).get("host"));
+    const fetched = await fetchMyAppsOnServer(config, host);
     // La API rechazó el token: la sesión se cerró en otro producto. El intento silencioso la renueva si el servidor de
     // login sigue con sesión o, si no, la borra y vuelve a la portada (sin bucle: sin cookie ya no hay `user`).
     if (fetched === "unauthorized") redirect(silentLogin);

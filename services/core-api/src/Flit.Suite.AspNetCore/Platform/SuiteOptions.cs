@@ -27,6 +27,24 @@ public sealed class SuiteHostsOptions
     /// un host que no responde. Al desplegar el producto en un ambiente, se quita de la lista de ese ambiente.
     /// </summary>
     public List<string> ComingSoon { get; set; } = [];
+
+    /// <summary>
+    /// Raíces alternativas del ambiente, servidas a la vez que la principal (PDN: el hub en <c>app.flitsas.com</c> y
+    /// cada producto en <c>&lt;producto&gt;.flitsas.com</c>, además de <c>flitsas.online</c>). Quien entra por una
+    /// raíz se queda en ella: emisor OIDC, retornos del login, enlaces del menú y correos salen del host de la
+    /// petición. Lista cerrada: un host que no esté aquí nunca se usa como emisor. Vacía en DEV y QA.
+    /// </summary>
+    public List<SuiteAlternateRoot> AlternateRoots { get; set; } = [];
+}
+
+/// <summary>Una raíz alternativa de <see cref="SuiteHostsOptions.AlternateRoots"/>.</summary>
+public sealed class SuiteAlternateRoot
+{
+    /// <summary>Host del hub en esta raíz: <c>app.flitsas.com</c>.</summary>
+    public string Hub { get; set; } = string.Empty;
+
+    /// <summary>Host de cada producto, con <c>{product}</c> en lugar del código: <c>{product}.flitsas.com</c>.</summary>
+    public string Products { get; set; } = string.Empty;
 }
 
 /// <summary>Bandera <c>Suite:ProductAccess:Enforce</c> del contrato §9. HU #12966 (B-06).</summary>
