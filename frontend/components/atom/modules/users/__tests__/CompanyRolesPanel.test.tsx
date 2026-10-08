@@ -194,6 +194,57 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     expect(within(dialog).getByLabelText(/^nombre/i)).toHaveValue("Auditor externo");
   });
 
+  it("el producto plataforma no es delegable: sus permisos no se ofrecen aunque la API los devuelva", async () => {
+    vi.mocked(getGrantablePermissions).mockResolvedValue([
+      ...permisos,
+      { id: "p9", slug: "usuarios.invite", name: "Invitar usuarios", moduleCode: "usuarios", productCode: "plataforma" },
+    ]);
+    const ue = userEvent.setup();
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    await within(dialog).findByRole("checkbox", { name: /ver trámites/i });
+    expect(within(dialog).queryByRole("checkbox", { name: /invitar usuarios/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: /plataforma/i })).not.toBeInTheDocument();
+  });
+
+  it("un 403 de permisos de plataforma muestra un mensaje claro", async () => {
+    vi.mocked(createTenantRole).mockRejectedValue(
+      new ApiError(403, "forbidden", { code: "PERMISSION_PLATFORM_ONLY", permissions: ["usuarios.invite"] }),
+    );
+    const ue = userEvent.setup();
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    const dialog = await screen.findByRole("dialog");
+    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
+    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/permisos de plataforma, que solo gestiona FLIT/i);
+  });
+
+  it("un 403 sin código conocido usa un mensaje neutro, sin afirmar quién puede gestionar roles", async () => {
+    vi.mocked(createTenantRole).mockRejectedValue(new ApiError(403, "forbidden"));
+    const ue = userEvent.setup();
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    const dialog = await screen.findByRole("dialog");
+    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
+    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent(/no tienes permiso para esta acción/i);
+    expect(alert).not.toHaveTextContent(/administrador de la compañía/i);
+  });
+
   it("valida el código antes de llamar a la API", async () => {
     const ue = userEvent.setup();
     render(<CompanyRolesPanel />);

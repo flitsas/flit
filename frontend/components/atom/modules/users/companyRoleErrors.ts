@@ -34,6 +34,7 @@ export function companyRoleErrorMessage(err: unknown): string {
     return slugs.length > 0 ? `${base} (${slugs.join(", ")})` : base;
   }
   if (err.status === 404) return "El rol ya no existe. Recarga el listado.";
-  if (err.status === 403) return "Solo el Administrador de la compañía puede gestionar roles.";
+  // 403 sin un código conocido: no se afirma quién puede gestionar roles (puede ser sesión vencida o permisos).
+  if (err.status === 403) return "No tienes permiso para esta acción.";
   return GENERIC;
 }
