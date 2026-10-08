@@ -11,7 +11,8 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 
 /// <summary>
 /// Materializa el borrador en core-api vía gRPC (IctOrchestration.CreateDraftFromIct), reutilizando
-/// los casos de uso de core-api. Mapea el pre-trámite (field_values vin/plate, actores, comercial).
+/// los casos de uso de core-api. Mapea el pre-trámite (field_values vin/plate + transformaciones y prenda
+/// vía IctDraftFieldValuesMapper, actores, comercial).
 /// Ante indisponibilidad del canal devuelve grpc_unavailable para que el job reintente.
 /// </summary>
 public sealed partial class IctGrpcProcedureDraftClient(
@@ -129,6 +130,9 @@ public sealed partial class IctGrpcProcedureDraftClient(
         {
             request.FieldValues.Add(new FieldValue { FieldKey = "plate", ValueText = master.Plate });
         }
+
+        // Bug #13445 — transformaciones (5/9/17) y prenda viajan como field_values del borrador.
+        request.FieldValues.Add(IctDraftFieldValuesMapper.Map(master));
 
         foreach (var actor in master.Actors)
         {
