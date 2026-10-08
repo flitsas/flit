@@ -1345,7 +1345,7 @@ public static class DevelopmentAuthSeeder
     /// <summary>
     /// Bug #13445, punto 4 (decisión D10) — permisos propios de Trazabilidad ICT (<c>ict.trazabilidad.read</c>)
     /// y Reportes ICT (<c>ict.reportes.read</c>), en el módulo <c>ict-logs</c>, concedidos a SuperAdmin y a
-    /// <c>admin_tramites</c> (el rol de Trámites que acompaña a AdminCompany).
+    /// AdminCompany (en staging no hay multi-producto; en develop el grant va a <c>admin_tramites</c>).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1355,9 +1355,7 @@ public static class DevelopmentAuthSeeder
     /// </para>
     /// <para>
     /// Paso propio e idempotente, como <see cref="SeedIctLogsPermissionsAsync"/>: corre en cada arranque con
-    /// <c>Seed:RbacCatalog</c> encendido, también sobre bases ya sembradas, y solo agrega lo que falta. El
-    /// módulo <c>ict-logs</c> es del producto <c>tramites</c> (DDL 120), por eso el grant va a
-    /// <c>admin_tramites</c> y no a AdminCompany (<c>tr_role_permissions_same_product</c> lo rechazaría).
+    /// <c>Seed:RbacCatalog</c> encendido, también sobre bases ya sembradas, y solo agrega lo que falta.
     /// </para>
     /// </remarks>
     private static async Task SeedIctTrazabilidadYReportesPermissionsAsync(FlitDbContext db, CancellationToken ct)
@@ -1378,7 +1376,8 @@ public static class DevelopmentAuthSeeder
             ("ict.reportes.read", "Ver reportes ICT", "/api/v1/analytics/ict-reports"),
         ];
 
-        string[] targetRoleCodes = ["SuperAdmin", "admin_tramites"]; // staging no tiene ProductRoleCodes (multi-producto); mismo valor que la constante en develop
+        // staging: sin multi-producto el Admin de Compañía es AdminCompany; en develop es admin_tramites (DDL 120).
+        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);

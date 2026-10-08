@@ -10,7 +10,7 @@ namespace Flit.Infrastructure.Tests.Security;
 
 /// <summary>
 /// Bug #13445, punto 4 (decisiones D10/D11) — permisos <c>ict.trazabilidad.read</c> e
-/// <c>ict.reportes.read</c> en el módulo <c>ict-logs</c>, concedidos a SuperAdmin y a <c>admin_tramites</c>.
+/// <c>ict.reportes.read</c> en el módulo <c>ict-logs</c>, concedidos a SuperAdmin y a AdminCompany (staging: sin multi-producto).
 /// </summary>
 /// <remarks>
 /// Uso de ejemplo (producción): <c>DevelopmentAuthSeeder.SeedAsync(db, hasher, settings, ct)</c> corre
@@ -24,7 +24,7 @@ public sealed class IctTrazabilidadReportesPermissionSeedTests
     private const string Reportes = "ict.reportes.read";
 
     [Fact]
-    public async Task Seed_CreaLosDosPermisosEnIctLogsYLosConcedeASuperAdminYAdminTramites()
+    public async Task Seed_CreaLosDosPermisosEnIctLogsYLosConcedeASuperAdminYAdminCompany()
     {
         var ct = TestContext.Current.CancellationToken;
         var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "admin_tramites", "AdminCompany", "Radicador");
@@ -43,16 +43,16 @@ public sealed class IctTrazabilidadReportesPermissionSeedTests
             action.ModuleId.Should().Be(module.Id, "el permiso cuelga de ict-logs (producto tramites)");
             action.IsActive.Should().BeTrue();
             (await GrantedRoleCodesAsync(check, action.Id, ct))
-                .Should().BeEquivalentTo(["SuperAdmin", "admin_tramites"],
-                    "AdminCompany es de plataforma y el trigger same_product lo rechazaría; Radicador no entra en D10");
+                .Should().BeEquivalentTo(["SuperAdmin", "AdminCompany"],
+                    "en staging el Admin de Compañía es AdminCompany; admin_tramites y Radicador no entran en D10");
         }
     }
 
     [Fact]
-    public async Task Seed_NoConcedeIctLogsReadNiIctPiiRevealAAdminTramites()
+    public async Task Seed_NoConcedeIctLogsReadNiIctPiiRevealAAdminCompany()
     {
         var ct = TestContext.Current.CancellationToken;
-        var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "admin_tramites");
+        var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "AdminCompany");
 
         await using (var db = NewContext(dbName))
         {
@@ -62,11 +62,11 @@ public sealed class IctTrazabilidadReportesPermissionSeedTests
         }
 
         await using var check = NewContext(dbName);
-        var adminTramites = await check.Roles.SingleAsync(r => r.Code == "admin_tramites", ct);
+        var adminCompany = await check.Roles.SingleAsync(r => r.Code == "AdminCompany", ct);
         var slugs = await (
             from g in check.RoleGrants
             join a in check.RbacActions on g.PermissionId equals a.Id
-            where g.RoleId == adminTramites.Id
+            where g.RoleId == adminCompany.Id
             select a.Slug).ToListAsync(ct);
 
         slugs.Should().BeEquivalentTo([Trazabilidad, Reportes],
@@ -77,7 +77,7 @@ public sealed class IctTrazabilidadReportesPermissionSeedTests
     public async Task Seed_EjecutadoDosVecesSobreBaseYaSembrada_NoDuplicaNada()
     {
         var ct = TestContext.Current.CancellationToken;
-        var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "admin_tramites");
+        var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "AdminCompany");
 
         await using (var first = NewContext(dbName))
         {
@@ -104,7 +104,7 @@ public sealed class IctTrazabilidadReportesPermissionSeedTests
     public async Task Seed_SinModuloIctLogs_NoCreaPermisosHuerfanos()
     {
         var ct = TestContext.Current.CancellationToken;
-        var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "admin_tramites");
+        var dbName = await NewDbWithRolesAsync(ct, "SuperAdmin", "AdminCompany");
 
         await using (var db = NewContext(dbName))
         {
@@ -116,14 +116,14 @@ public sealed class IctTrazabilidadReportesPermissionSeedTests
     }
 
     [Fact]
-    public async Task Seed_ConAdminTramitesBorrado_SoloConcedeASuperAdmin()
+    public async Task Seed_ConAdminCompanyBorrado_SoloConcedeASuperAdmin()
     {
         var ct = TestContext.Current.CancellationToken;
         var dbName = Guid.NewGuid().ToString();
         await using (var seed = NewContext(dbName))
         {
             AddRole(seed, "SuperAdmin");
-            AddRole(seed, "admin_tramites", deleted: true);
+            AddRole(seed, "AdminCompany", deleted: true);
             await seed.SaveChangesAsync(ct);
         }
 
