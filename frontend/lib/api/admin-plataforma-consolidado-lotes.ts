@@ -104,6 +104,14 @@ export function describirLimite(limite: ParametroMotorLoteLimite | undefined): s
 }
 
 /**
+ * Rango de `int` (int32) del servidor: los campos con `maximo: null` (o `minimo: null`) se validan
+ * contra estos topes; si no, un valor como 3.000.000.000 llegaría al PUT y el 400 no traería `errors`
+ * por campo (code review Obs2).
+ */
+const INT32_MAX = 2147483647;
+const INT32_MIN = -2147483648;
+
+/**
  * AC3 — valida el borrador (texto de los inputs) contra `limites`. Devuelve un mensaje por campo
  * inválido; `{}` = se puede enviar el PUT.
  */
@@ -130,13 +138,15 @@ export function validarParametrosMotor(
     const n = numeros[campo];
     if (n === undefined) continue;
     const { minimo, maximo, mayorQue } = limite;
-    if ((minimo !== null && n < minimo) || (maximo !== null && n > maximo)) {
+    const piso = minimo ?? INT32_MIN;
+    const tope = maximo ?? INT32_MAX;
+    if (n < piso || n > tope) {
       errores[campo] =
         minimo !== null && maximo !== null
           ? `Debe estar entre ${miles(minimo)} y ${miles(maximo)}.`
-          : minimo !== null
-            ? `Debe ser al menos ${miles(minimo)}.`
-            : `No puede superar ${miles(maximo as number)}.`;
+          : n < piso
+            ? `Debe ser al menos ${miles(piso)}.`
+            : `No puede superar ${miles(tope)}.`;
       continue;
     }
     if (mayorQue && esCampo(mayorQue)) {
