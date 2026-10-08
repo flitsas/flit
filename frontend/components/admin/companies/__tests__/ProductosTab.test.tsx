@@ -25,7 +25,7 @@ const product = (code: string, name: string, enabled: boolean, extra: Partial<Te
   ...extra,
 });
 
-const switchOf = (name: string) => screen.getByRole("switch", { name: new RegExp(`^${name} ·`) });
+const switchOf = (name: string) => screen.getByRole("switch", { name: new RegExp(`^${name}$`) });
 
 describe("ProductosTab", () => {
   beforeEach(() => {
@@ -41,7 +41,11 @@ describe("ProductosTab", () => {
     ]);
     render(<ProductosTab tenantId="t1" />);
 
-    expect(await screen.findByRole("switch", { name: /^Trámites · Encendido/ })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: /^Trámites$/ })).toBeChecked();
+    // El estado es un chip con icono + texto, no parte del título.
+    expect(screen.getAllByText("Encendido")).toHaveLength(2);
+    expect(screen.getAllByText("Apagado")).toHaveLength(1);
+    expect(screen.getAllByText("Próximamente")).toHaveLength(2);
     expect(switchOf("Comparendos")).toBeChecked();
     expect(switchOf("Diagnóstico")).not.toBeChecked();
     expect(screen.getByText(/por demo@flit\.local/)).toBeInTheDocument();
@@ -56,10 +60,10 @@ describe("ProductosTab", () => {
       .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { updatedAt: "2026-10-02T17:00:00Z", updatedByEmail: "demo@flit.local" })]);
     render(<ProductosTab tenantId="t1" />);
 
-    await user.click(await screen.findByRole("switch", { name: /^Diagnóstico ·/ }));
+    await user.click(await screen.findByRole("switch", { name: /^Diagnóstico$/ }));
 
     expect(setTenantProduct).toHaveBeenCalledWith("t1", "diagnostico", true);
-    expect(await screen.findByRole("switch", { name: /^Diagnóstico · Encendido/ })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: /^Diagnóstico$/ })).toBeChecked();
     expect(listTenantProducts).toHaveBeenCalledTimes(2);
   });
 
@@ -68,7 +72,7 @@ describe("ProductosTab", () => {
     listTenantProducts.mockResolvedValue([product("tramites", "Trámites", true)]);
     render(<ProductosTab tenantId="t1" />);
 
-    await user.click(await screen.findByRole("switch", { name: /^Trámites ·/ }));
+    await user.click(await screen.findByRole("switch", { name: /^Trámites$/ }));
     const confirm = screen.getByRole("alertdialog");
     expect(within(confirm).getByText("¿Apagar Trámites para esta compañía?")).toBeInTheDocument();
     expect(setTenantProduct).not.toHaveBeenCalled();
@@ -88,7 +92,7 @@ describe("ProductosTab", () => {
     setTenantProduct.mockRejectedValue(new Error("La empresa no existe."));
     render(<ProductosTab tenantId="t1" />);
 
-    await user.click(await screen.findByRole("switch", { name: /^Comparendos ·/ }));
+    await user.click(await screen.findByRole("switch", { name: /^Comparendos$/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("La empresa no existe.");
     expect(switchOf("Comparendos")).not.toBeChecked();

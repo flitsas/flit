@@ -504,6 +504,91 @@ describe('DocumentChecklist — generar impronta en el slot', () => {
   });
 });
 
+// ── HU #13403 — generación de improntas deshabilitada: carga manual ─────────
+
+describe('DocumentChecklist — impronta con generación deshabilitada (HU #13403)', () => {
+  const impronta = (obligatorio: boolean): ChecklistView => ({
+    items: [
+      { key: 'impronta', label: 'Improntas', obligatorio, docTipo: 'impronta', satisfied: false },
+    ],
+    faltanObligatorios: obligatorio ? 1 : 0,
+    completo: !obligatorio,
+  });
+  const TEXTO = /Cargue la impronta; no se genera automáticamente/;
+
+  it('AC2 — muestra la carga manual con el texto corto y sin «Generar impronta» ni opción diferida', async () => {
+    mocks.getChecklist.mockResolvedValue(impronta(false));
+    render(<DocumentChecklist instanceId={INSTANCE} improntaGeneracionHabilitada={false} />);
+
+    expect(await screen.findByText(TEXTO)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Adjuntar archivo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Generar impronta' })).toBeNull();
+    expect(screen.queryByText(/se generará automáticamente/i)).toBeNull();
+    expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    expect(mocks.setImprontaDiferida).not.toHaveBeenCalled();
+  });
+
+  it('AC3 — impronta obligatoria sin adjunto: "Por cargar", conteo de faltantes y aviso de que debe cargarla', async () => {
+    mocks.getChecklist.mockResolvedValue(impronta(true));
+    render(<DocumentChecklist instanceId={INSTANCE} improntaGeneracionHabilitada={false} />);
+
+    expect(await screen.findByText('Por cargar')).toBeInTheDocument();
+    expect(screen.getByText(/Faltan 1 obligatorio/)).toBeInTheDocument();
+    expect(screen.getByText(/Debe cargarla para radicar/)).toBeInTheDocument();
+  });
+
+  it('con la impronta ya cargada no repite el aviso', async () => {
+    mocks.getChecklist.mockResolvedValue({
+      ...impronta(true),
+      items: [{ ...impronta(true).items[0], satisfied: true }],
+      faltanObligatorios: 0,
+      completo: true,
+    });
+    mocks.getAttachments.mockResolvedValue([
+      {
+        id: 'imp-9',
+        tipo: 'impronta',
+        filename: 'impronta.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 10,
+        sha256: 'a',
+        source: 'upload',
+        uploadedAt: '2026-08-26T00:00:00Z',
+      },
+    ]);
+    render(<DocumentChecklist instanceId={INSTANCE} improntaGeneracionHabilitada={false} />);
+    await screen.findByText(/impronta\.pdf/);
+    expect(screen.queryByText(TEXTO)).toBeNull();
+  });
+
+  it('AC4 — con el flag en true (o ausente) sigue ofreciendo «Generar impronta»', async () => {
+    mocks.getChecklist.mockResolvedValue(impronta(false));
+    const { unmount } = render(
+      <DocumentChecklist instanceId={INSTANCE} improntaGeneracionHabilitada />,
+    );
+    expect(await screen.findByRole('button', { name: 'Generar impronta' })).toBeInTheDocument();
+    expect(screen.queryByText(TEXTO)).toBeNull();
+    unmount();
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+    expect(await screen.findByRole('button', { name: 'Generar impronta' })).toBeInTheDocument();
+  });
+
+  it('un 409 generacion_improntas_deshabilitada se muestra como «no se genera automáticamente»', async () => {
+    const user = userEvent.setup();
+    mocks.getChecklist.mockResolvedValue(impronta(false));
+    mocks.generarImpronta.mockRejectedValue(
+      Object.assign(new Error('409 Conflict: {"error":"generacion_improntas_deshabilitada"}'), {
+        status: 409,
+        problem: { error: 'generacion_improntas_deshabilitada' },
+      }),
+    );
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+    await user.click(await screen.findByRole('button', { name: 'Generar impronta' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(TEXTO);
+    expect(screen.queryByText(/409 Conflict/)).toBeNull();
+  });
+});
+
 // ── HU #12067 — instrucción de cargue y límites reales en la tarjeta ─────────
 
 describe('DocumentChecklist — instrucción de cargue (HU #12067)', () => {

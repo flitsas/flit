@@ -74,6 +74,11 @@ export interface PersonIdentityDetailDrawerProps {
    * trámites de la hija, bitácora por la ruta de red). Ausente = la vista propia de siempre.
    */
   networkTenantId?: string;
+  /**
+   * Historial de la validación PROPIA de un mandatario (fila «Mandatario»): se pide aparte y es solo consulta;
+   * se gestiona desde la ficha del mandatario.
+   */
+  mandatario?: boolean;
   /** Super Admin: abre el detalle de una validación manual en su pestaña (el detalle actual se cierra aparte). */
   onVerEnManuales?: (validationId: string) => void;
 }
@@ -84,9 +89,11 @@ export function PersonIdentityDetailDrawer({
   onClose,
   onStatusChanged,
   networkTenantId,
+  mandatario = false,
   onVerEnManuales,
 }: PersonIdentityDetailDrawerProps) {
-  const soloConsulta = Boolean(networkTenantId);
+  const esRed = Boolean(networkTenantId);
+  const soloConsulta = esRed || mandatario;
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,10 +109,12 @@ export function PersonIdentityDetailDrawer({
         ? await tramitesClient.listNetworkPersonIdentityValidations(networkTenantId, documentType, documentNumber, {
             page: 1,
             pageSize: 50,
+            mandatario,
           })
         : await tramitesClient.listPersonBiometricValidations(documentType, documentNumber, {
             page: 1,
             pageSize: 50,
+            mandatario,
           });
       failedRef.current = false;
       setError(null);
@@ -124,7 +133,7 @@ export function PersonIdentityDetailDrawer({
     } finally {
       setLoading(false);
     }
-  }, [documentType, documentNumber, onStatusChanged, networkTenantId]);
+  }, [documentType, documentNumber, onStatusChanged, networkTenantId, mandatario]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al cambiar documento + fetch async
@@ -205,6 +214,9 @@ export function PersonIdentityDetailDrawer({
           >
             Historial y tracking de identidad
           </h2>
+          {mandatario ? (
+            <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+          ) : null}
           {soloConsulta ? (
             <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
           ) : null}
@@ -309,6 +321,7 @@ export function PersonIdentityDetailDrawer({
                     defaultOpen={idx === 0}
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
+                    red={esRed}
                     onManualChanged={() => {
                       void load();
                       // La lista de abajo y el contador de «Validaciones manuales» se actualizan al instante.
@@ -332,6 +345,7 @@ function ValidationAccordionItem({
   defaultOpen,
   trackingTick,
   soloConsulta = false,
+  red = false,
   onManualChanged,
   onVerEnManuales,
 }: {
@@ -341,6 +355,8 @@ function ValidationAccordionItem({
   onVerEnManuales?: (validationId: string) => void;
   /** HU #12709 — persona de una compañía hija vista por la cabeza: sin captura ni enlaces a trámites. */
   soloConsulta?: boolean;
+  /** Persona de una compañía hija: la bitácora se lee por la ruta de red (el mandatario es solo consulta, no red). */
+  red?: boolean;
   index: number;
   total: number;
   defaultOpen: boolean;
@@ -473,7 +489,7 @@ function ValidationAccordionItem({
               defaultOpen
               embebido
               detailLayout
-              network={soloConsulta}
+              network={red}
             />
           </div>
         </div>

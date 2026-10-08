@@ -49,13 +49,16 @@ export function AuditLogPanel({
     return () => controller.abort();
   }, [load]);
 
-  if (status === "loading") {
+  // Primera carga: solo el loader. Al paginar se conserva la tabla montada para no perder los filtros.
+  if (status === "loading" && !result) {
     return <CarLoaderModal label="Cargando historial de cambios…" />;
   }
 
   return (
+    <>
+    {status === "loading" ? <CarLoaderModal label="Cargando historial de cambios…" /> : null}
     <UiStateBoundary
-      status={status}
+      status={status === "loading" ? "ready" : status}
       onRetry={() => void load()}
       emptyMessage="Aún no hay cambios registrados para esta compañía."
       errorMessage="No se pudo cargar el historial de auditoría."
@@ -71,5 +74,6 @@ export function AuditLogPanel({
         />
       )}
     </UiStateBoundary>
+    </>
   );
 }

@@ -2095,7 +2095,7 @@ export const tramitesClient = {
     childTenantId: string,
     documentType: string,
     documentNumber: string,
-    opts: { page?: number; pageSize?: number } = {},
+    opts: { page?: number; pageSize?: number; mandatario?: boolean } = {},
   ): Promise<PersonBiometricValidationsResponse> => {
     const params = new URLSearchParams();
     params.set('childTenantId', childTenantId);
@@ -2103,6 +2103,7 @@ export const tramitesClient = {
     params.set('documentNumber', documentNumber);
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    if (opts.mandatario) params.set('mandatario', 'true');
     const res = await request<PersonBiometricValidationsResponse>(
       `/api/v1/tramites/network/identity-validations/by-person/detail?${params.toString()}`,
       { headers: authOnlyHeader() },
@@ -2153,7 +2154,8 @@ export const tramitesClient = {
   listPersonBiometricValidations: async (
     documentType: string,
     documentNumber: string,
-    opts: { page?: number; pageSize?: number } = {},
+    // mandatario: historial de la fila «Mandatario» (validación propia del mandatario, aparte).
+    opts: { page?: number; pageSize?: number; mandatario?: boolean } = {},
     tenantId?: string,
   ): Promise<PersonBiometricValidationsResponse> => {
     const params = new URLSearchParams();
@@ -2161,6 +2163,7 @@ export const tramitesClient = {
     params.set('documentNumber', documentNumber);
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    if (opts.mandatario) params.set('mandatario', 'true');
     const res = await request<PersonBiometricValidationsResponse>(
       `/api/v1/tramites/biometric-validations/by-person/detail?${params.toString()}`,
       { headers: tenantHeader(tenantId) },

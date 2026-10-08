@@ -262,7 +262,7 @@ export function EditCompanyDialog({
                 ))}
               </select>
               {typeChangeBlocked && (
-                <p id="ec-type-blocked" className="mt-1 text-[10px] opacity-70">
+                <p id="ec-type-blocked" className="mt-1 text-xs opacity-70">
                   Desvincula o da de baja a los clientes hijos antes de cambiar el tipo de cabeza (
                   {activeChildrenCount} vigente{activeChildrenCount === 1 ? "" : "s"}).
                 </p>
@@ -282,13 +282,13 @@ export function EditCompanyDialog({
                   className="w-full cursor-not-allowed rounded-lg border px-3 py-2 text-xs opacity-60"
                   aria-describedby="ec-domain-hint"
                 />
-                <p id="ec-domain-hint" className="text-[10px] opacity-60">
+                <p id="ec-domain-hint" className="text-xs opacity-60">
                   Opera en todos los organismos habilitados por la plataforma salvo los bloqueados.
                 </p>
               </div>
             )}
 
-            <p className="text-[10px] opacity-60">
+            <p className="text-xs opacity-60">
               Tipo actual en ficha: <strong>{tenantTypeLabel(company.tenantType)}</strong>
             </p>
 
@@ -314,7 +314,7 @@ export function EditCompanyDialog({
         {formError && (
           <p
             role="alert"
-            className="rounded-lg px-3 py-2 text-[11px] font-medium"
+            className="rounded-lg px-3 py-2 text-xs font-medium"
             style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}
           >
             {formError}
@@ -375,9 +375,9 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-[10px] opacity-60">{hint}</p>}
+      {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}

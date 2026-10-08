@@ -3152,6 +3152,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue("external")
                         .HasColumnName("fines_query_source");
 
+                    b.Property<bool>("GenerateImprontas")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("generate_improntas");
+
                     b.Property<string>("NotificationChannel")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -9227,6 +9233,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("external_ref");
+
+                    b.Property<bool>("ImprontaGeneracionHabilitada")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("impronta_generacion_habilitada");
 
                     b.Property<bool>("IsMigrated")
                         .ValueGeneratedOnAdd()

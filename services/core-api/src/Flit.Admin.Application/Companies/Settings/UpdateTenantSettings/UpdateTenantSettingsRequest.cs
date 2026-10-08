@@ -37,4 +37,7 @@ public sealed record UpdateTenantSettingsRequest(
     // así un cliente viejo que no los envía nunca los apaga por omisión.
     bool? TramitesModuleEnabled = null,
     bool? ComparendosModuleEnabled = null,
-    bool? ResolucionesModuleEnabled = null);
+    bool? ResolucionesModuleEnabled = null,
+    // HU #13400 (Feature #13398) — generación automática de improntas por compañía. Opcional: null
+    // conserva el valor previo (un cliente que no lo envía nunca lo apaga por omisión).
+    bool? GeneracionImprontas = null);

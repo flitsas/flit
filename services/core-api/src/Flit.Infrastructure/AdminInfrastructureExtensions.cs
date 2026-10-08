@@ -160,6 +160,7 @@ public static class AdminInfrastructureExtensions
         // HU #13246 (Feature #13245) — lanza la validación de identidad PROPIA del mandatario por el flujo del trámite
         // (Kyverum; mock en local). Sustituye al lector de aprobación por documento de la HU #13123.
         services.AddScoped<IMandateSignerIdentityLauncher, Persistence.Repositories.MandateSignerIdentityLauncher>();
+        services.AddScoped<IMandateSignerIdentityReconciler, Persistence.Repositories.MandateSignerIdentityReconciler>();
         // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
         services.AddScoped<IPhysicalSignatureMigrationReader, DbPhysicalSignatureMigrationReader>();
         services.AddScoped<IMandateSignerLinkCollapseReader, DbMandateSignerLinkCollapseReader>();

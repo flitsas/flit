@@ -307,7 +307,11 @@ public sealed class GenerarConsolidadoHandler(
 
         // HU #11017 — impronta en cascada. Best-effort y solo con usuario conocido: depende del RUNT
         // (Kyverum) y de que el trámite esté en borrador, así que su fallo NO impide el consolidado.
-        if (improntaGenerator is not null && userId is { } operador && !TieneImpronta(instance))
+        // HU #13402 — con la generación deshabilitada al crear el trámite no hay nada que generar: ni
+        // se invoca el generador ni se recarga, y el consolidado sigue (la impronta, si la matriz la
+        // exige, llegará por carga manual y aparecerá como faltante como cualquier otro documento).
+        if (improntaGenerator is not null && userId is { } operador
+            && instance.ImprontaGeneracionHabilitada && !TieneImpronta(instance))
         {
             await improntaGenerator.TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
             instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);

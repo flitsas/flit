@@ -33,6 +33,13 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// (~N·2 min) y luego calla en vez de pegarle a Kyverum cada 2 min durante horas.
     /// </summary>
     private const int MaxReconcilePolls = BiometricRules.KyverumMaxReconcilePolls;
+    /// <summary>
+    /// Validación PROPIA del mandatario: agotado el presupuesto de sondeos rápidos, se sigue consultando cada tanto hasta
+    /// que venza el enlace. El trámite tiene una pantalla de espera que consulta mientras el gestor la mira; la ficha del
+    /// mandatario no (el mandatario se valida desde su celular, sin nadie mirando), así que sin esto un intento aprobado
+    /// cuyo webhook se perdió quedaba «pendiente» para siempre.
+    /// </summary>
+    internal static readonly TimeSpan MandatarioSlowPollInterval = TimeSpan.FromMinutes(10);
     private const int BatchSize = 10;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -111,7 +118,7 @@ internal sealed class IdentityValidationReconcileProcessor(
             return true;
         }
 
-        var claimedId = await ClaimNextIdAsync(db, now - Staleness, ct);
+        var claimedId = await ClaimNextIdAsync(db, now - Staleness, ct, now - MandatarioSlowPollInterval);
         if (claimedId is null)
         {
             await tx.CommitAsync(ct);
@@ -200,7 +207,12 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// (<c>updated_at</c> o <c>created_at</c>) sea anterior a <paramref name="cutoff"/>, con
     /// <c>FOR UPDATE SKIP LOCKED</c>. Devuelve null si no hay ninguna reclamable.
     /// </summary>
-    internal static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, DateTimeOffset cutoff, CancellationToken ct)
+    /// <param name="slowCutoff">
+    /// Corte del sondeo lento de las validaciones de mandatario que ya agotaron el presupuesto rápido. Nulo ⇒
+    /// <paramref name="cutoff"/> menos <see cref="MandatarioSlowPollInterval"/> (relativo al corte rápido).
+    /// </param>
+    internal static async Task<Guid?> ClaimNextIdAsync(
+        FlitDbContext db, DateTimeOffset cutoff, CancellationToken ct, DateTimeOffset? slowCutoff = null)
     {
         var connection = db.Database.GetDbConnection();
         var transaction = db.Database.CurrentTransaction!.GetDbTransaction();
@@ -214,8 +226,9 @@ internal sealed class IdentityValidationReconcileProcessor(
               AND provider = @provider
               AND kyverum_verification_id IS NOT NULL
               AND expires_at > now()
-              AND reconcile_poll_count < @maxPolls
               AND COALESCE(updated_at, created_at) < @cutoff
+              AND (reconcile_poll_count < @maxPolls
+                   OR (mandate_signer_id IS NOT NULL AND COALESCE(updated_at, created_at) < @slowCutoff))
               AND NOT EXISTS (
                   SELECT 1 FROM tramites.procedure_instances pi
                   WHERE pi.id = v.procedure_instance_id AND pi.status IN ('anulado', 'revocado'))
@@ -227,6 +240,7 @@ internal sealed class IdentityValidationReconcileProcessor(
         AddParam(cmd, "provider", BiometricProviders.Kyverum);
         AddParam(cmd, "maxPolls", MaxReconcilePolls);
         AddParam(cmd, "cutoff", cutoff);
+        AddParam(cmd, "slowCutoff", slowCutoff ?? cutoff - MandatarioSlowPollInterval);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? reader.GetGuid(0) : null;

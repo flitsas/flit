@@ -92,6 +92,7 @@ describe("CompanyConfigTabs (AC2)", () => {
       // HU #12252 (Feature #12249) — default sin config: los 3 módulos apagados.
       // HU #12967 (B-07): Trámites y Comparendos ya no viajan en el PUT de configuración.
       resolucionesModuleEnabled: false,
+      generacionImprontas: true,
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.

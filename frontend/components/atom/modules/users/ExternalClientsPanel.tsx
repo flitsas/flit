@@ -13,6 +13,7 @@ import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { formatFechaHora } from "@/lib/format/date";
 import {
+  EXTERNAL_SCOPE_ATTACHMENTS,
   EXTERNAL_SCOPE_PII,
   createExternalClient,
   fetchExternalClients,
@@ -231,6 +232,9 @@ export function ExternalClientsPanel() {
                           <StatusBadge label="Datos personales" tone="info" ariaLabel="Permiso: datos personales sin enmascarar" />
                         ) : (
                           <StatusBadge label="Enmascarado" tone="neutral" ariaLabel="Sin permiso de datos personales: llegan enmascarados" />
+                        )}
+                        {c.scopes.includes(EXTERNAL_SCOPE_ATTACHMENTS) && (
+                          <StatusBadge label="Adjuntos" tone="info" ariaLabel="Permiso: envío de adjuntos" />
                         )}
                       </div>
                     </td>

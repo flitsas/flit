@@ -93,7 +93,7 @@ export function FechaCalendario({
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14] ${
+        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 dark:bg-[#0B0F14] ${
           invalid ? "border-[#E5484D]" : "border-[#DFE5ED] dark:border-white/15"
         } ${value ? "text-[#162744] dark:text-white" : "text-[#59677D]"}`}
       >

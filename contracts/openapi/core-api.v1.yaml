@@ -10198,6 +10198,85 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/AdjuntoBloqueadoFlitoProblem" }
 
+  /api/v1/tramites/instances/{id}/attachments/generate-impronta:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Genera la impronta del trámite (Kyverum RUNT) y la adjunta
+      description: >
+        HU #13402 (Feature #13399) — la generación respeta el parámetro «generar improntas» de la
+        compañía CONGELADO al crear el trámite (`improntaGeneracionHabilitada`). Con `false` responde 409
+        `generacion_improntas_deshabilitada` sin llamar a Kyverum y sin crear adjunto; la impronta se sube
+        a mano (su exigencia sigue gobernada por la matriz/checklist).
+      operationId: generateProcedureInstanceImpronta
+      security:
+        - bearerAuth: []
+      responses:
+        "201": { description: "Impronta generada y adjuntada." }
+        "401": { description: "Usuario no resuelto o Kyverum RUNT rechazó la autenticación." }
+        "404": { description: "Trámite no encontrado." }
+        "409":
+          description: >
+            `generacion_improntas_deshabilitada` (HU #13402, el trámite nació con la generación
+            deshabilitada; el cuerpo trae `error`), `not_draft`, `impronta_ya_existe`,
+            `organismo_requerido`, `identificador_vehiculo_requerido`, `documento_propietario_requerido`
+            u `operador_no_resuelto`.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  error:
+                    type: string
+                    example: generacion_improntas_deshabilitada
+        "422": { description: "Kyverum RUNT rechazó los datos de la impronta." }
+        "502": { description: "Kyverum RUNT no disponible." }
+
+  /api/v1/tramites/instances/{id}/checklist/impronta-diferida:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Trámites · Documentos]
+      summary: Marca o desmarca la impronta como «se generará automáticamente»
+      description: >
+        Con `diferida = true` y un trámite creado con la generación de improntas deshabilitada
+        (`improntaGeneracionHabilitada = false`, HU #13402) responde 409 `generacion_improntas_deshabilitada`.
+        Desmarcar (`diferida = false`) sigue permitido.
+      operationId: setProcedureInstanceImprontaDiferida
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                diferida: { type: boolean }
+      responses:
+        "204": { description: "Marca actualizada." }
+        "404": { description: "Trámite no encontrado." }
+        "409":
+          description: >
+            `generacion_improntas_deshabilitada` (HU #13402), `not_draft` o `impronta_no_aplica`.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  error: { type: string }
+
   /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download:
     parameters:
       - $ref: "#/components/parameters/TenantIdHeader"
@@ -14698,8 +14777,13 @@ components:
         resolucionesModuleEnabled:
           type: boolean
           description: Muestra el módulo Resoluciones del dashboard (HU #12250). Default false.
+        generacionImprontas:
+          type: boolean
+          description: >-
+            Generación automática de improntas habilitada para la compañía (HU #13400). Default true.
+            Solo la sirve este endpoint, reservado al SuperAdmin FLIT.
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled, generacionImprontas]
 
     ActiveModulesResponse:
       type: object
@@ -14782,6 +14866,13 @@ components:
           description: >-
             Opcional (HU #12250). Muestra el módulo Resoluciones del dashboard. Si se omite (null), se
             conserva el valor previo.
+        generacionImprontas:
+          type: boolean
+          nullable: true
+          description: >-
+            Opcional (HU #13400). Habilita o deshabilita la generación automática de improntas de la
+            compañía. Si se omite (null), se conserva el valor previo. Cada cambio real queda en la
+            auditoría de configuración (campo generate_improntas).
       required:
         [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, metodosRecaudo]
 
@@ -16766,6 +16857,12 @@ components:
         la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
       additionalProperties: true
       properties:
+        improntaGeneracionHabilitada:
+          type: boolean
+          description: >
+            HU #13402 (Feature #13399) — parámetro «generar improntas» de la compañía congelado al crear
+            el trámite. `false` = la generación automática no aplica (el usuario sube la impronta a mano).
+            Trámites anteriores a la migración: `true`. Aditivo.
         consolidadoWizard:
           description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
           type: object
