@@ -25,7 +25,41 @@ export function resolveApiBase(configuredBase: string): string {
   // A-10 (HU #13001): con la sesión de @flit/auth el token vive en el servidor de esta app, así que la API se llama
   // SIEMPRE por el mismo origen (/api/v1 → BFF), nunca directo a api.<env>.flitsas.online.
   if (isOidcSession()) return "";
-  return isFlitHost(window.location.host) ? configuredBase : "";
+  return isFlitHost(window.location.host) ? apiBaseForPageRoot(configuredBase) : "";
+}
+
+/**
+ * La base horneada en build con la raíz de la página (dominio alternativo de PDN): en `app.flitsas.com` la API es
+ * `api.flitsas.com`, no la `api.flitsas.online` horneada; en `flitsas.online` (y en DEV/QA, donde las raíces ya
+ * coinciden) no cambia nada. Solo cambia la raíz (los dos últimos nombres): el resto del host, el puerto y el path se
+ * conservan, así `api.dev.flitsas.online` nunca puede volverse la API de otro ambiente. Solo en un host FLIT
+ * (`NEXT_PUBLIC_FLIT_HOSTS`); en SSR, sin base absoluta o en un host de red, la base tal cual.
+ */
+export function apiBaseForPageRoot(configuredBase: string): string {
+  if (typeof window === "undefined" || !configuredBase || !isFlitHost(window.location.host)) {
+    return configuredBase;
+  }
+  let api: URL;
+  try {
+    api = new URL(configuredBase);
+  } catch {
+    return configuredBase;
+  }
+  const apiRoot = rootOf(api.hostname);
+  const pageRoot = rootOf(window.location.hostname);
+  if (!apiRoot || !pageRoot || apiRoot === pageRoot || !isFlitHost(api.host)) return configuredBase;
+  const aligned = new URL(api.toString());
+  aligned.hostname = api.hostname.slice(0, api.hostname.length - apiRoot.length) + pageRoot;
+  // Solo entre raíces FLIT (api.flitsas.online ↔ api.flitsas.com): una API ajena nunca se reescribe.
+  if (!isFlitHost(aligned.host)) return configuredBase;
+  return aligned.toString().replace(/\/+$/, "");
+}
+
+/** Los dos últimos nombres del host (`flitsas.online`, `flitsas.com`); vacío para IPs y hosts de una sola etiqueta. */
+function rootOf(hostname: string): string {
+  const labels = hostname.toLowerCase().replace(/\.$/, "").split(".");
+  if (labels.length < 2 || labels.every((l) => /^\d+$/.test(l))) return "";
+  return labels.slice(-2).join(".");
 }
 
 /**
