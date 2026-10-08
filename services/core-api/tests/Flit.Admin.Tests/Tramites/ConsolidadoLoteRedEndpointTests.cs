@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Flit.Api.Endpoints.Tramites;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
@@ -65,6 +66,7 @@ public sealed class ConsolidadoLoteRedEndpointTests : IClassFixture<ConsolidadoL
         response.StatusCode.Should().Be(HttpStatusCode.Accepted, body);
         using var json = JsonDocument.Parse(body);
         json.RootElement.GetProperty("alcanceRed").GetString().Should().Be("red");
+        json.RootElement.TryGetProperty("alcanceHijaId", out _).Should().BeFalse("toda la red no acota hija (#13419 AC6)");
         json.RootElement.GetProperty("total").GetInt32().Should().Be(3);
 
         var nuevo = _factory.UltimoNuevo!;
@@ -90,8 +92,11 @@ public sealed class ConsolidadoLoteRedEndpointTests : IClassFixture<ConsolidadoL
 
         var body = await response.Content.ReadAsStringAsync(Ct);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted, body);
-        JsonDocument.Parse(body).RootElement.GetProperty("alcanceRed").GetString().Should().Be("hija");
-        body.Should().NotContain(C1.ToString(), "la respuesta no expone la hija");
+        var raiz = JsonDocument.Parse(body).RootElement;
+        raiz.GetProperty("alcanceRed").GetString().Should().Be("hija");
+        // Ajuste #13419 AC6 (decisión del usuario «a»): el aviso global rotula «Red · nombre de la hija» tras recargar,
+        // así que la respuesta trae el id de la hija (solo lectura); el resumen del filtro sigue sin él.
+        raiz.GetProperty("alcanceHijaId").GetGuid().Should().Be(C1);
         _factory.UltimoNuevo!.ScopeTenantId.Should().Be(C1);
         _factory.UltimoNuevo.ResumenFiltroJson.Should().Contain("\"alcanceRed\":\"hija\"").And.NotContain(C1.ToString());
         await _factory.Instancias.Received(1).ListIdsFilteredInScopeAsync(
@@ -231,6 +236,7 @@ public sealed class ConsolidadoLoteRedEndpointTests : IClassFixture<ConsolidadoL
         var body = await response.Content.ReadAsStringAsync(Ct);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted, body);
         JsonDocument.Parse(body).RootElement.TryGetProperty("alcanceRed", out _).Should().BeFalse();
+        JsonDocument.Parse(body).RootElement.TryGetProperty("alcanceHijaId", out _).Should().BeFalse("el lote propio no es de red (#13419 AC6)");
         _factory.UltimoNuevo!.NetworkScope.Should().BeFalse();
         await _factory.Instancias.DidNotReceiveWithAnyArgs().ListIdsFilteredInScopeAsync(default!, default!, default, default, default, default);
     }
@@ -248,6 +254,30 @@ public sealed class ConsolidadoLoteRedEndpointTests : IClassFixture<ConsolidadoL
         _factory.UltimoNuevo!.NetworkScope.Should().BeFalse();
         _factory.UltimoNuevo.ScopeTenantId.Should().BeNull();
     }
+
+    // ── Ajuste #13419 AC6 — alcanceHijaId en todos los mapeos de LoteConsolidados (GET, cancelación, bandeja OT) ──
+
+    [Fact]
+    public void Ajuste13419_AlcanceHijaId_SoloEnElLoteDeRedAcotado_NuloEnRedPropioSuperAdminYBandejaOt()
+    {
+        LoteConsolidadosDto.Desde(Lote(ConsolidadoExportOrigin.Tramites, red: true, scope: C1)).AlcanceHijaId.Should().Be(C1);
+        LoteConsolidadosDto.Desde(Lote(ConsolidadoExportOrigin.Tramites, red: true, scope: null)).AlcanceHijaId.Should().BeNull();
+        LoteConsolidadosDto.Desde(Lote(ConsolidadoExportOrigin.Tramites, red: false, scope: null)).AlcanceHijaId.Should().BeNull();
+        LoteConsolidadosDto.Desde(Lote(ConsolidadoExportOrigin.Superadmin, red: false, scope: C1)).AlcanceHijaId.Should().BeNull();
+        LoteConsolidadosDto.Desde(Lote(ConsolidadoExportOrigin.OtBandeja, red: false, scope: null)).AlcanceHijaId.Should().BeNull();
+    }
+
+    private static ConsolidadoExportBatch Lote(string origen, bool red, Guid? scope) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = origen == ConsolidadoExportOrigin.Tramites ? P : null,
+        Origin = origen,
+        NetworkScope = red,
+        ScopeTenantId = scope,
+        Status = ConsolidadoExportStatus.EnCola,
+        DocumentType = ConsolidadoExportDocumentType.Consolidado,
+        CreatedAt = DateTimeOffset.UtcNow,
+    };
 
     // ── AC11 — el tope total aplica a la red ──────────────────────────────────────────────
 

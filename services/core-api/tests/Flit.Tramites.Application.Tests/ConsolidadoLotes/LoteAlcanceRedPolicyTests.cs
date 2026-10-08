@@ -207,6 +207,43 @@ public sealed class LoteAlcanceRedPolicyTests
         }).Should().BeNull("el scope del Super Admin no es vista de red");
     }
 
+    // ── Ajuste #13419 AC6 — LoteConsolidados.alcanceHijaId (solo lectura) ─────────────────
+
+    [Fact]
+    public void HijaIdDe_ElAcotadoDevuelveLaHija_LaRedYElPropioNulo()
+    {
+        LoteAlcanceRed.HijaIdDe(new ConsolidadoExportBatch { NetworkScope = true, ScopeTenantId = C1 }).Should().Be(C1);
+        LoteAlcanceRed.HijaIdDe(new ConsolidadoExportBatch { NetworkScope = true }).Should().BeNull("toda la red no acota hija");
+        LoteAlcanceRed.HijaIdDe(new ConsolidadoExportBatch()).Should().BeNull("el lote propio no es de red");
+        LoteAlcanceRed.HijaIdDe(new ConsolidadoExportBatch
+        {
+            Origin = ConsolidadoExportOrigin.Superadmin,
+            ScopeTenantId = C1,
+        }).Should().BeNull("el scope del Super Admin no es una hija de la vista de red");
+        LoteAlcanceRed.HijaIdDe(new ConsolidadoExportBatch { Origin = ConsolidadoExportOrigin.OtBandeja })
+            .Should().BeNull("la bandeja OT no es vista de red");
+    }
+
+    // ── Ajuste #13419 AC5 — disponibilidad de documentos de red (GET /network/documentos) ──
+
+    [Fact]
+    public async Task DocumentosRed_CabezaMarcaBlanca_Disponibles_SinLeerElInterruptor()
+    {
+        (await NetworkDocumentsPolicy.IsAvailableAsync(Red(GroupKind.MarcaBlanca), _switches, Ct)).Should().BeTrue();
+
+        await _switches.DidNotReceive().IsNetworkDocumentsConcesionEnabledAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DocumentosRed_CabezaConcesion_SigueAlInterruptor(bool encendido)
+    {
+        _switches.IsNetworkDocumentsConcesionEnabledAsync(Arg.Any<CancellationToken>()).Returns(encendido);
+
+        (await NetworkDocumentsPolicy.IsAvailableAsync(Red(GroupKind.Concesion), _switches, Ct)).Should().Be(encendido);
+    }
+
     [Fact]
     public void ElAlcanceDeRedNoAdmiteElAlcanceTotalNiUnaHijaQueNoEsLaDelAlcance()
     {

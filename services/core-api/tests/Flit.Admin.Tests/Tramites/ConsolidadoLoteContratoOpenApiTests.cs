@@ -177,6 +177,31 @@ public sealed class ConsolidadoLoteContratoOpenApiTests
         lote.Should().Contain("        alcanceRed:").And.Contain("enum: [red, hija]").And.Contain("readOnly: true");
     }
 
+    /// <summary>
+    /// Ajuste #13419 AC5/AC6 (HU #13417) — <c>GET /api/v1/tramites/network/documentos</c>
+    /// (<c>TramitesNetworkGetDocumentos</c> → <c>NetworkDocumentosDisponibilidad { documentosRed }</c>) con las puertas de
+    /// <c>/network/**</c>, y <c>LoteConsolidados.alcanceHijaId</c> (uuid, nullable, solo lectura).
+    /// </summary>
+    [Fact]
+    public void Ajuste13419_ElContratoPublicaLaDisponibilidadDeDocumentosDeRed_YElAlcanceHijaIdDelLote()
+    {
+        var yaml = Yaml();
+
+        var documentos = Path(yaml, "/api/v1/tramites/network/documentos");
+        documentos.Should().Contain("    get:\n").And.Contain("operationId: TramitesNetworkGetDocumentos")
+            .And.Contain("#/components/schemas/NetworkDocumentosDisponibilidad")
+            .And.Contain("network_scope_required").And.Contain("network_role_required")
+            .And.Contain("\"401\"").And.Contain("\"403\"");
+
+        var disponibilidad = Schema(yaml, "NetworkDocumentosDisponibilidad");
+        disponibilidad.Should().Contain("required: [documentosRed]").And.Contain("documentosRed:").And.Contain("type: boolean");
+
+        var lote = Schema(yaml, "LoteConsolidados");
+        lote.Should().Contain("        alcanceHijaId:").And.Contain("format: uuid");
+        var hija = lote[lote.IndexOf("        alcanceHijaId:", StringComparison.Ordinal)..];
+        hija.Should().Contain("nullable: true").And.Contain("readOnly: true");
+    }
+
     [Fact]
     public void AC4_DocumentaElSearchDeTramites_YTramitesSearchFilterReutilizado()
     {

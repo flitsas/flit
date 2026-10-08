@@ -350,7 +350,9 @@ internal sealed record LoteConsolidadosDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NombreBase,
     IReadOnlyList<ParteLoteConsolidadosDto> Partes,
     // HU #13417 — solo lectura: «red» | «hija» en un lote desde la vista de red; ausente en el lote propio.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AlcanceRed = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AlcanceRed = null,
+    // Ajuste #13419 AC6 — solo lectura: la hija acotada (`scope_tenant_id`) cuando alcanceRed = «hija»; ausente si no.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? AlcanceHijaId = null)
 {
     /// <summary>Proyección del lote. <paramref name="partes"/> vacío hasta que el lote termina (CF-09).</summary>
     public static LoteConsolidadosDto Desde(
@@ -371,7 +373,8 @@ internal sealed record LoteConsolidadosDto(
             lote.ExpiresAt,
             nombreBase,
             partes ?? [],
-            LoteAlcanceRed.ResumenDe(lote));
+            LoteAlcanceRed.ResumenDe(lote),
+            LoteAlcanceRed.HijaIdDe(lote));
     }
 }
 

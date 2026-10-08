@@ -61,6 +61,17 @@ public sealed record LoteAlcanceRed
             return null;
         return lote.ScopeTenantId is null ? ResumenRed : ResumenHija;
     }
+
+    /// <summary>
+    /// Ajuste #13419 AC6 — <c>LoteConsolidados.alcanceHijaId</c>: la hija acotada (<c>scope_tenant_id</c>) de un lote
+    /// de red, para que el aviso global rotule «Red · nombre de la hija» tras recargar. <c>null</c> en toda la red, en
+    /// el lote propio, en el del Super Admin y en la bandeja OT (no son vista de red).
+    /// </summary>
+    public static Guid? HijaIdDe(ConsolidadoExportBatch lote)
+    {
+        ArgumentNullException.ThrowIfNull(lote);
+        return lote.NetworkScope ? lote.ScopeTenantId : null;
+    }
 }
 
 /// <summary>Lo que pidió el cuerpo: toda la red (<see cref="HijaId"/> <c>null</c>) o una hija concreta.</summary>
@@ -130,9 +141,7 @@ public static class LoteAlcanceRedPolicy
         if (pedido.HijaId is { } hija && hija == scope!.WriteTenantId)
             return (null, null);
 
-        var concesionHabilitada = scope!.GroupKind == GroupKind.Concesion
-            && await switches.IsNetworkDocumentsConcesionEnabledAsync(ct).ConfigureAwait(false);
-        if (NetworkDocumentsPolicy.ValidateKind(scope, concesionHabilitada) is { } kindError)
+        if (await NetworkDocumentsPolicy.ValidateAsync(scope!, switches, ct).ConfigureAwait(false) is { } kindError)
             return (null, kindError);
 
         return (new LoteAlcanceRed(efectivo!, pedido.HijaId), null);
