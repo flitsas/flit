@@ -702,7 +702,7 @@ public sealed class GetWizardStateHandler(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
             DocumentRequirements = documentRequirements,
             PrendaVigente = prendaVigente,
-            RuntReportaGravamen = RuntReportaGravamen(fv),
+            RuntReportaGravamen = RuntReportaGravamen(instance),
             TypeCode = instance.ProcedureType?.Code,
             FamilyCode = instance.ProcedureType?.Family,
             AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
@@ -882,22 +882,13 @@ public sealed class GetWizardStateHandler(
     /// (Kyverum, Verifik, Intempo) en <c>field_values</c>, que es también de donde el asistente saca
     /// la alerta amarilla y el detalle del acreedor: pantalla y gate leen el MISMO dato.
     ///
-    /// <para>El RUNT contesta «SI»/«NO» en texto. Se acepta cualquier variante afirmativa razonable y
-    /// se ignora el resto: un dato ausente o ilegible NO inventa un gravamen —eso convertiría cada
-    /// consulta fallida en un bloqueo— pero tampoco lo oculta cuando sí vino.</para>
+    /// <para>Bug #13203 — la regla vive en <see cref="RuntGravamenSignal"/>: banderas afirmativas O
+    /// <c>runt_gravamenes</c> con al menos una garantía (el RUNT puede decir «NO»/«NO» y traer una
+    /// garantía mobiliaria del RNGM). Se evalúa sobre la instancia y no sobre el diccionario de
+    /// <c>ValueText</c>, porque el detalle vive en <c>ValueJson</c>.</para>
     /// </summary>
-    private static bool RuntReportaGravamen(Dictionary<string, string?> fv) =>
-        EsAfirmativo(Get(fv, "runt_tiene_prendas")) || EsAfirmativo(Get(fv, "runt_tiene_gravamenes"));
-
-    /// <inheritdoc cref="RuntReportaGravamen(Dictionary{string, string})"/>
     private static bool RuntReportaGravamen(ProcedureInstance instance) =>
-        instance.FieldValues.Any(f =>
-            (string.Equals(f.FieldKey, "runt_tiene_prendas", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(f.FieldKey, "runt_tiene_gravamenes", StringComparison.OrdinalIgnoreCase))
-            && EsAfirmativo(f.ValueText));
-
-    private static bool EsAfirmativo(string? valor) =>
-        valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
+        RuntGravamenSignal.Reporta(instance.FieldValues);
 
     private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
         string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);

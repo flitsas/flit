@@ -207,18 +207,33 @@ export function parseRuntGravamenesJson(raw: string | null | undefined): RuntGra
       };
       return {
         idPrenda: str('idPrenda') ?? str('IdPrenda'),
-        // Intempo: nombreAcreedor · Kyverum crudo: acreedor
+        // Intempo / normalizado: nombreAcreedor · Kyverum crudo: acreedor · garantía mobiliaria
+        // RUNT cruda (Kyverum/Verifik, Bug #13203): entidad, numeroDocumentoEntidad,
+        // tipoDocumentoEntidad, fechaRegistro — último recurso, para trámites ya guardados sin
+        // normalizar.
         acreedor:
           str('nombreAcreedor') ??
           str('NombreAcreedor') ??
           str('acreedor') ??
-          str('Acreedor'),
+          str('Acreedor') ??
+          str('entidad') ??
+          str('Entidad'),
         documentoAcreedor:
           str('numeroDocumentoAcreedor') ??
           str('NumeroDocumentoAcreedor') ??
-          str('documentoAcreedor'),
-        tipoDocumentoAcreedor: str('tipoDocumentoAcreedor') ?? str('TipoDocumentoAcreedor'),
-        fechaInscripcion: str('fechaInscripcion') ?? str('FechaInscripcion'),
+          str('documentoAcreedor') ??
+          str('numeroDocumentoEntidad') ??
+          str('NumeroDocumentoEntidad'),
+        tipoDocumentoAcreedor:
+          str('tipoDocumentoAcreedor') ??
+          str('TipoDocumentoAcreedor') ??
+          str('tipoDocumentoEntidad') ??
+          str('TipoDocumentoEntidad'),
+        fechaInscripcion:
+          str('fechaInscripcion') ??
+          str('FechaInscripcion') ??
+          str('fechaRegistro') ??
+          str('FechaRegistro'),
         estado: str('estadoPrenda') ?? str('EstadoPrenda') ?? str('estado'),
       };
     });
