@@ -3,9 +3,11 @@ using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -31,6 +33,7 @@ public sealed class IctOrchestrationService(
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
     RunPreflightHandler preflightHandler,
+    RegistrarPrendaHandler prendaHandler,
     EnsureIdentityAndNotifyHandler identityNotifier,
     RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
@@ -182,19 +185,20 @@ public sealed class IctOrchestrationService(
             fieldItems.Add(new FieldValueInput(null, "owner_document_number", titular.DocumentNumber.Trim(), null));
         }
 
-        // Atributos "manuales" del traspaso que el frontend le pediría al gestor y que el contrato ICT v1
-        // NO trae (el master solo modela selling_price/vin/selling_date): se siembran con el default del
-        // caso estándar (no leasing, sin cambio de carrocería) para que el wizard no vuelva a solicitarlos.
-        // El gestor puede cambiarlos. accion_prenda se OMITE a propósito: es una decisión de negocio que
-        // depende de si el vehículo tiene gravamen (levantar/mantener) y no es derivable del payload ICT.
-        // TODO(ICT-MANUAL-ATTRS): derivar es_leasing/cambio_carroceria del tenant/transformaciones del
-        // master cuando ICT los capture (external_integration_master_transformation_type).
+        // Atributos "manuales" del traspaso que el frontend le pediría al gestor: se siembran con el default
+        // del caso estándar (no leasing, sin cambio de carrocería) para que el wizard no vuelva a
+        // solicitarlos, SOLO si core-ict no los mandó (Bug #13445: cambio_carroceria ya llega de las
+        // transformaciones del master, código 17). La prenda no se siembra aquí: la resuelve
+        // IctPrendaResolver después del preflight, con la señal RUNT ya hidratada.
         var esTraspasoDraft = request.ProcedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
         if (esTraspasoDraft)
         {
-            fieldItems.Add(new FieldValueInput(null, "es_leasing", "false", null));
-            fieldItems.Add(new FieldValueInput(null, "cambio_carroceria", "false", null));
+            SembrarAtributosManualesTraspaso(fieldItems, request);
         }
+
+        // Bug #13445 (D4) — transformación código 9 sin subtipo: core-ict no marca ningún flag y lo señala
+        // con este marcador; el gestor la declara en el wizard.
+        AvisarTransformacionSinSubtipo(reply, request);
 
         if (fieldItems.Count > 0)
         {
@@ -261,6 +265,10 @@ public sealed class IctOrchestrationService(
             await CorrerPreflightIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
         }
 
+        // Bug #13445 (D1/D3) — prenda: DESPUÉS del preflight, que es quien deja la señal runt_* en los
+        // field_values. Automática solo en los casos de la matriz conservadora; el resto, aviso al gestor.
+        await ResolverPrendaIctAsync(reply, summary.Id, tenantId, context.CancellationToken);
+
         // Identidad auto-iniciada — PARIDAD con el wizard manual (ensure → biométrica, TramiteWizard) y con
         // v1 (identityValidationService.validateIdentities). ICT no pasa por el wizard, así que se replica
         // aquí, DESPUÉS de materializar los actores: comprador siempre; vendedor solo en traspaso.
@@ -322,6 +330,140 @@ public sealed class IctOrchestrationService(
             {
                 await CorrerPreflightIctAsync(reply, instanceId, tenantId, request, ct);
             }
+        }
+
+        // Bug #13445 — si el intento previo se cayó antes de la prenda, se resuelve ahora. Con cualquier
+        // fila de prenda (vigente o no) no se toca: la pudo haber decidido el gestor.
+        var tienePrenda = await db.Set<ProcedureInstancePrenda>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(p => p.ProcedureInstanceId == instanceId && p.TenantId == tenantId, ct);
+        if (!tienePrenda)
+        {
+            await ResolverPrendaIctAsync(reply, instanceId, tenantId, ct);
+        }
+    }
+
+    /// <summary>
+    /// Bug #13445 — siembra <c>es_leasing</c>/<c>cambio_carroceria</c> = <c>"false"</c> del traspaso SOLO
+    /// para las claves que core-ict no mandó: si vino <c>cambio_carroceria="true"</c> (transformación 17),
+    /// el default no la pisa.
+    /// </summary>
+    internal static void SembrarAtributosManualesTraspaso(List<FieldValueInput> fieldItems, CreateDraftFromIctRequest request)
+    {
+        foreach (var clave in new[] { "es_leasing", "cambio_carroceria" })
+        {
+            var vino = request.FieldValues.Any(f => string.Equals(f.FieldKey?.Trim(), clave, StringComparison.OrdinalIgnoreCase));
+            if (!vino)
+            {
+                fieldItems.Add(new FieldValueInput(null, clave, "false", null));
+            }
+        }
+    }
+
+    /// <summary>Clave del marcador que core-ict envía para la transformación 9 sin subtipo (Bug #13445, D4).</summary>
+    internal const string TransformacionSinSubtipoKey = "ict_transformacion_sin_subtipo";
+
+    /// <summary>Bug #13445 (D4) — <c>ict_transformacion_sin_subtipo="true"</c> → aviso <c>transformacion_sin_subtipo</c>.</summary>
+    internal static void AvisarTransformacionSinSubtipo(DraftReply reply, CreateDraftFromIctRequest request)
+    {
+        if (string.Equals(FieldValueOf(request, TransformacionSinSubtipoKey)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            AppendWarning(reply, "transformacion_sin_subtipo");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13445 — lee los field_values de la instancia (ya con la señal RUNT del preflight) y la familia del
+    /// tipo, resuelve con <see cref="IctPrendaResolver"/> y aplica. Best-effort: nada de esto tumba la
+    /// materialización.
+    /// </summary>
+    private async Task ResolverPrendaIctAsync(DraftReply reply, Guid instanceId, Guid tenantId, CancellationToken ct)
+    {
+        IctPrendaResolucion resolucion;
+        try
+        {
+            RefrescarRastreo();
+            var familia = await db.Set<ProcedureInstance>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(p => p.Id == instanceId && p.TenantId == tenantId)
+                .Select(p => p.ProcedureType != null ? p.ProcedureType.Family : null)
+                .FirstOrDefaultAsync(ct);
+            var fieldValues = await db.Set<ProcedureInstanceFieldValue>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId)
+                .ToListAsync(ct);
+            resolucion = IctPrendaResolver.Resolver(fieldValues, ProcedureFamilyCodes.FromCodeOrOtros(familia));
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            var code = CodigoDeFallo(ex);
+            IctOrchestrationLog.StepFailed(logger, "prenda", code, ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "prenda_auto_error:" + code);
+            return;
+        }
+
+        await AplicarResolucionPrendaAsync(
+            reply,
+            resolucion,
+            input =>
+            {
+                RefrescarRastreo();
+                return prendaHandler.HandleAsync(instanceId, tenantId, input, userId: null, ct);
+            },
+            ex =>
+            {
+                RefrescarRastreo();
+                IctOrchestrationLog.StepFailed(logger, "prenda", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// Bug #13445 — aplica la resolución de prenda: <c>Auto</c> → <paramref name="registrar"/> (el
+    /// <see cref="RegistrarPrendaHandler"/>, sin usuario: lo decide el sistema); su error →
+    /// <c>prenda_auto_error:&lt;código&gt;</c>; <c>PendienteGestor</c> → <c>prenda_pendiente_gestor:&lt;motivo&gt;</c>;
+    /// discrepancia con el RUNT → <c>prenda_discrepancia_runt:&lt;motivo&gt;</c>. Los avisos llevan solo
+    /// códigos estables: el acreedor (PII) nunca sale en el reply ni en el log.
+    /// </summary>
+    internal static async Task AplicarResolucionPrendaAsync(
+        DraftReply reply,
+        IctPrendaResolucion resolucion,
+        Func<RegistrarPrendaInput, Task<(PrendaDto? Result, string? Error)>> registrar,
+        Action<Exception> alFallar,
+        CancellationToken ct)
+    {
+        switch (resolucion.Tipo)
+        {
+            case IctPrendaResolucionTipo.Auto:
+                try
+                {
+                    var (_, error) = await registrar(new RegistrarPrendaInput(
+                        resolucion.Decision!, resolucion.AcreedorNombre, resolucion.AcreedorDocumento));
+                    if (error is not null)
+                    {
+                        AppendWarning(reply, "prenda_auto_error:" + error);
+                    }
+                }
+                catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+                {
+                    alFallar(ex);
+                    AppendWarning(reply, "prenda_auto_error:" + CodigoDeFallo(ex));
+                }
+
+                break;
+
+            case IctPrendaResolucionTipo.PendienteGestor:
+                AppendWarning(reply, "prenda_pendiente_gestor:" + resolucion.Motivo);
+                break;
+        }
+
+        if (resolucion.Discrepancia is not null)
+        {
+            AppendWarning(reply, "prenda_discrepancia_runt:" + resolucion.Discrepancia);
         }
     }
 

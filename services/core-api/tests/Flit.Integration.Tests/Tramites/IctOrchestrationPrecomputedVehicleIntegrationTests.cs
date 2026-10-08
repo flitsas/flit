@@ -9,6 +9,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -81,6 +82,41 @@ public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresD
         chain.Calls.Should().Be(0);
         (await CountSnapshotsAsync(SeededInstanceId)).Should().Be(1, "el reintento completa el preflight faltante");
         (await FieldValueAsync(SeededInstanceId, "runt_tiene_gravamenes")).Should().Be("SI");
+    }
+
+    [PostgresFact]
+    public async Task CreateDraftFromIct_TraspasoQueLevantaConPrendaEnElRunt_RegistraLevantarConElAcreedorDelRunt()
+    {
+        // Bug #13445 (D3) — traspaso + cuerpo «levantar» + garantía en el RUNT: la decisión se registra sola
+        // DESPUÉS del preflight (que es quien deja runt_gravamenes), con el acreedor del RUNT y sin usuario.
+        await SeedTenantAsync();
+        var precomputed = Precomputed(horasAtras: 1);
+        precomputed.SnapshotJson = PreflightVehicleSnapshotJson.Serialize(new PreflightVehicleSnapshot(
+            [new PreflightCheckDto("gravamenes", "Gravámenes", "warn", "kyverum_runt", "Prenda vigente")],
+            [
+                new HydratedField("runt_tiene_gravamenes", "SI", null),
+                new HydratedField("runt_tiene_prendas", "SI", null),
+                new HydratedField("runt_gravamenes", null,
+                    """[{"nombreAcreedor":"BANCO IT 13445","numeroDocumentoAcreedor":"900013445"}]"""),
+            ],
+            ["kyverum_runt"]));
+        var request = Request("ict-b13445-levantar", precomputed);
+        request.FieldValues.Add(new FieldValue { FieldKey = "ict_prenda_operacion", ValueText = "1" });
+        request.FieldValues.Add(new FieldValue { FieldKey = "cambio_carroceria", ValueText = "true" });
+
+        var reply = await InvokeCreateAsync(request, new CountingChain());
+
+        var instanceId = Guid.Parse(reply.ProcedureInstanceId);
+        (reply.ErrorCode ?? string.Empty).Should().NotContain("prenda_");
+        await using var ctx = NewContext();
+        var prenda = await ctx.Set<ProcedureInstancePrenda>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleAsync(p => p.ProcedureInstanceId == instanceId && p.Estado == PrendaEstado.Vigente);
+        prenda.Decision.Should().Be(PrendaDecision.Levantar);
+        prenda.AcreedorDocumento.Should().Be("900013445");
+        prenda.CreatedBy.Should().BeNull();
+        (await FieldValueAsync(instanceId, "cambio_carroceria")).Should().Be("true", "la siembra no pisa lo que vino de ICT");
     }
 
     // ── invocación ───────────────────────────────────────────────────────────
