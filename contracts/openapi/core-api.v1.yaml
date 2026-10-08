@@ -5425,10 +5425,19 @@ paths:
     post:
       operationId: CancelarLoteConsolidados
       tags: [Consolidados]
-      summary: Cancela el lote en curso del usuario
+      summary: Cancela el lote en curso del usuario (cualquier origen)
       description: >
-        Ruta reservada por #13374; se implementa en la Feature #13307 (FA2). Solo el solicitante; idempotente.
-        Descarta las partes y libera el cupo; los consolidados ya generados quedan como oficiales.
+        HU #13385 (Feature #13307, ADR-0070). Un clic, sin cuerpo ni confirmación. Solo el solicitante (dueño = `sub`;
+        se ignora `X-Tenant-Id`): sirve a los orígenes `tramites`, `superadmin` y `ot_bandeja` (el `ot_admin`, con tenant
+        OT, cancela su lote OT). Pasa el lote a `cancelado` desde en_cola|en_proceso|empaquetando en una sola transacción:
+        los trámites pendientes o en proceso quedan `cancelado` y no se procesan más; las partes cerradas se purgan y las
+        que no llegaron a cerrarse se descartan (borrado criptográfico de la clave del lote); `terminadoEn`, `expiraEn` y
+        la purga quedan en el instante de la cancelación; se libera el cupo de lote activo y se audita `lote_cancelado`
+        (si la auditoría falla, 503 y el lote sigue activo). Los consolidados que el lote ya generó en los trámites quedan
+        como oficiales y no se revierten; un trámite que se estaba generando al cancelar termina su generación, pero no
+        entra a ninguna parte. Idempotente: un lote ya cancelado responde 202 tal cual, sin nueva auditoría. Tras la
+        cancelación el lote ya está purgado: `GET …/actual` responde 204 hasta #13386 y `GET …/{loteId}` lo devuelve
+        `cancelado` con `partes` vacío.
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -5436,15 +5445,23 @@ paths:
         - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
       responses:
         "202":
-          description: Cancelado (o ya lo estaba); partes descartadas; cupo liberado.
+          description: Lote cancelado (o ya lo estaba); contadores congelados; `partes` vacío.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoteConsolidados" }
         "401": { description: "Sin token válido" }
-        "403": { description: "Sin permiso consolidado-masivo.download" }
-        "404": { description: "No existe o no es del usuario" }
-        "409": { description: "El lote ya terminó (`lote_terminado`)" }
-        "503": { description: "No se pudo registrar la auditoría de la cancelación (`auditoria_no_registrada`)" }
+        "403": { description: "Sin permiso consolidado-masivo.download; el lote no cambia" }
+        "404": { description: "No existe o no es del usuario (incluido un Super Admin con un lote ajeno)" }
+        "409":
+          description: El lote ya terminó (`lote_terminado`) en completado, completado_con_omitidos, fallido o expirado; no cambia.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteTerminadoConflict" }
+        "503":
+          description: No se pudo registrar la auditoría de la cancelación (`auditoria_no_registrada`); el lote no se canceló.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
 
   /api/v1/tramites/network/instances/search:
     post:
@@ -16068,6 +16085,19 @@ components:
           type: integer
           description: Solo junto a `total`; `max_items_per_batch` vigente (1–50.000, por defecto 10.000).
 
+    LoteTerminadoConflict:
+      type: object
+      description: 409 de la cancelación (ProblemDetails, HU #13385) con el estado terminal en que quedó el lote.
+      required: [error, estado]
+      properties:
+        error: { type: string, enum: [lote_terminado] }
+        estado:
+          type: string
+          enum: [completado, completado_con_omitidos, fallido, expirado]
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
     LoteActivoConflict:
       type: object
       description: 409 de la creación (ProblemDetails) con el lote activo que lo impidió.
@@ -16087,6 +16117,9 @@ components:
         estado:
           type: string
           enum: [en_cola, en_proceso, empaquetando, completado, completado_con_omitidos, fallido, cancelado, expirado]
+          description: >
+            `cancelado` (#13385): terminal y neutro («Descarga cancelada»); `partes` vacío; los contadores quedan
+            como estaban al cancelar.
         tipoDocumento: { type: string, enum: [consolidado, consolidado_maestro] }
         total: { type: integer, description: Congelado al crear (CF-06) }
         procesados: { type: integer, description: incluidos + omitidos }
@@ -16094,7 +16127,7 @@ components:
         omitidos: { type: integer }
         generados: { type: integer, description: "De los incluidos, cuántos no tenían consolidado y se generaron" }
         creadoEn: { type: string, format: date-time }
-        terminadoEn: { type: string, format: date-time, nullable: true }
+        terminadoEn: { type: string, format: date-time, nullable: true, description: "En `cancelado`, instante de la cancelación." }
         expiraEn: { type: string, format: date-time, nullable: true, description: terminadoEn + 24 h }
         nombreBase: { type: string, example: consolidados_20261006_1430, description: Ausente hasta que el motor lo fija. }
         partes:

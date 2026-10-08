@@ -416,6 +416,8 @@ public static class DependencyInjection
         services.AddScoped<UseCases.ConsolidadoLotes.ConsultarLoteConsolidadosHandler>();
         services.AddScoped<UseCases.ConsolidadoLotes.DescargarParteHandler>();
         services.AddScoped<UseCases.ConsolidadoLotes.PurgarLotesExpiradosHandler>();
+        // Épica #13216 — HU13385: cancelación del lote por su dueño (lote_cancelado en la misma transacción).
+        services.AddScoped<UseCases.ConsolidadoLotes.CancelarLoteConsolidadosHandler>();
 
         return services;
     }

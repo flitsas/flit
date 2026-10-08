@@ -221,6 +221,9 @@ public sealed class ConsolidadoLoteProcessorEmpaquetadoTests : IDisposable
         public Task<CierreCarrilResultado> CerrarCarrilAsync(Guid loteId, CancellationToken ct = default) =>
             Task.FromResult(CierreCarrilResultado.NoAplicado);
 
+        public Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<Guid?> ObtenerLoteActivoIdAsync(Guid usuarioId, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<CrearLoteResultado> CrearAsync(NuevoLoteConsolidados nuevo, CancellationToken ct = default) => throw new NotSupportedException();

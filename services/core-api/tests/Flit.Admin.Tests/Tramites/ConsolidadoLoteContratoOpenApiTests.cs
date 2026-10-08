@@ -121,6 +121,31 @@ public sealed class ConsolidadoLoteContratoOpenApiTests
         Schema(yaml, "LoteProblem").Should().Contain("- parte_no_disponible");
     }
 
+    /// <summary>
+    /// HU #13385 — la cancelación está implementada: <c>CancelarLoteConsolidados</c> con 202/403/404/409/503, el 409 con
+    /// <c>LoteTerminadoConflict</c> (<c>error</c> + <c>estado</c> terminal) y el 503 <c>auditoria_no_registrada</c>.
+    /// </summary>
+    [Fact]
+    public void HU13385_LaCancelacionDocumenta202_403_404_409_503_YLoteTerminadoConflict()
+    {
+        var yaml = Yaml();
+
+        var cancelacion = Path(yaml, "/api/v1/consolidados/lotes/{loteId}/cancelacion");
+        cancelacion.Should().NotContain("Ruta reservada").And.Contain("HU #13385");
+        foreach (var status in new[] { "\"202\"", "\"403\"", "\"404\"", "\"409\"", "\"503\"" })
+            cancelacion.Should().Contain(status);
+        cancelacion.Should().Contain("#/components/schemas/LoteConsolidados")
+            .And.Contain("#/components/schemas/LoteTerminadoConflict")
+            .And.Contain("lote_terminado")
+            .And.Contain("auditoria_no_registrada")
+            .And.Contain("Super Admin");
+
+        var conflicto = Schema(yaml, "LoteTerminadoConflict");
+        conflicto.Should().Contain("required: [error, estado]").And.Contain("enum: [lote_terminado]")
+            .And.Contain("enum: [completado, completado_con_omitidos, fallido, expirado]");
+        Schema(yaml, "LoteProblem").Should().Contain("- lote_terminado").And.Contain("- auditoria_no_registrada");
+    }
+
     [Fact]
     public void AC4_DocumentaElSearchDeTramites_YTramitesSearchFilterReutilizado()
     {

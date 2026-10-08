@@ -180,6 +180,9 @@ public static class ConsolidadoLoteErrores
     /// <summary>HU #13379 — 409: el lote todavía no terminó (no hay partes que descargar).</summary>
     public const string LoteNoTerminado = "lote_no_terminado";
 
+    /// <summary>HU #13385 — 409: el lote ya terminó (completado, completado_con_omitidos, fallido o expirado) y no se cancela.</summary>
+    public const string LoteTerminado = "lote_terminado";
+
     /// <summary>HU #13379 — 410: el lote se purgó o venció su ventana de 24 h.</summary>
     public const string DescargaExpirada = "descarga_expirada";
 

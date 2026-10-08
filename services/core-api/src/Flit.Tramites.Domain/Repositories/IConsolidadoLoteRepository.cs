@@ -91,7 +91,63 @@ public interface IConsolidadoLoteRepository
     /// Sin fila de parámetros no hace nada (motor apagado).
     /// </summary>
     Task<CierreCarrilResultado> CerrarCarrilAsync(Guid loteId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13385 (diseño 09 §2.4 pasos 1–5, CF-09/CF-10) — cancela el lote del dueño en UNA transacción (estrategia de
+    /// reintentos del contexto) con <c>SELECT … FOR UPDATE</c> del lote filtrado por <c>requested_by_user_id</c> (orden de
+    /// locks lote → ítem/parte, el mismo del reclamo, los cierres, el empaquetado y la purga):
+    /// <list type="bullet">
+    ///   <item>No existe, borrado o de otro usuario (incluido un Super Admin con un lote ajeno) →
+    ///   <see cref="CancelarLoteEstado.NoEncontrado"/>.</item>
+    ///   <item>Ya <c>cancelado</c> → <see cref="CancelarLoteEstado.YaCancelado"/> con el lote tal cual (sin auditoría).</item>
+    ///   <item>Otro terminal → <see cref="CancelarLoteEstado.Terminado"/> con el lote (no cambia nada).</item>
+    ///   <item>Activo → ítems <c>pendiente</c>/<c>procesando</c> a <c>cancelado</c> (por bloques), partes y lote según
+    ///   <see cref="ConsolidadoLoteCancelacion"/> y la fila <c>lote_cancelado</c>; si cualquier escritura falla, la
+    ///   transacción se revierte entera → <see cref="CancelarLoteEstado.NoRegistrado"/>.</item>
+    /// </list>
+    /// Nunca expone <c>PostgresException</c>. No borra binarios: devuelve sus rutas para el borrado best-effort.
+    /// </summary>
+    Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default);
 }
+
+/// <summary>Petición de cancelación (HU #13385). El dueño sale del token (<c>sub</c>), nunca del cliente.</summary>
+/// <param name="LoteId">Lote a cancelar.</param>
+/// <param name="UsuarioId">Solicitante (<c>sub</c>).</param>
+/// <param name="RolCodigo">Rol con el que se pide (auditoría).</param>
+/// <param name="ClientIp">IP del cliente (auditoría).</param>
+/// <param name="UserAgent">Navegador, ya truncado (auditoría).</param>
+public sealed record CancelacionLote(Guid LoteId, Guid UsuarioId, string RolCodigo, IPAddress? ClientIp = null, string? UserAgent = null);
+
+/// <summary>Resultado de <see cref="IConsolidadoLoteRepository.CancelarAsync"/>.</summary>
+public enum CancelarLoteEstado
+{
+    /// <summary>Lote, ítems, partes y <c>lote_cancelado</c> confirmados (202).</summary>
+    Cancelado,
+
+    /// <summary>Ya estaba cancelado: idempotente, sin nueva auditoría (202).</summary>
+    YaCancelado,
+
+    /// <summary>No existe o no es del usuario (404).</summary>
+    NoEncontrado,
+
+    /// <summary>Ya terminó en <c>completado</c>, <c>completado_con_omitidos</c>, <c>fallido</c> o <c>expirado</c> (409).</summary>
+    Terminado,
+
+    /// <summary>La transacción falló (p. ej. la auditoría): no cambió nada y el lote sigue activo (503).</summary>
+    NoRegistrado,
+}
+
+/// <param name="Estado">Qué pasó.</param>
+/// <param name="Lote">El lote tras la operación (o tal cual en <see cref="CancelarLoteEstado.YaCancelado"/> y
+/// <see cref="CancelarLoteEstado.Terminado"/>); <c>null</c> en <see cref="CancelarLoteEstado.NoEncontrado"/> y
+/// <see cref="CancelarLoteEstado.NoRegistrado"/>.</param>
+/// <param name="ItemsCancelados">Ítems vivos que pasaron a <c>cancelado</c>.</param>
+/// <param name="RutasPartesPurgadas"><c>storage_path</c> de las partes que pasaron a <c>purgada</c>.</param>
+public sealed record CancelarLoteResultado(
+    CancelarLoteEstado Estado,
+    ConsolidadoExportBatch? Lote = null,
+    int ItemsCancelados = 0,
+    IReadOnlyList<string>? RutasPartesPurgadas = null);
 
 /// <summary>Resultado de <see cref="IConsolidadoLoteRepository.CerrarCarrilAsync"/>.</summary>
 /// <param name="Aplicado"><c>true</c> si el lote pasó a <c>empaquetando</c>.</param>

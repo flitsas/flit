@@ -13,9 +13,11 @@ namespace Flit.Infrastructure.Tests.ConsolidadoLotes.Ot;
 /// <summary>
 /// HU #13392 (arrastre de #13391, D-FB5) — las rutas neutras del motor <c>/api/v1/consolidados/lotes/*</c> (consulta,
 /// descarga y cancelación, dueño = <c>sub</c>) deben aceptar al <c>ot_admin</c>, cuyo tenant del token es el del OT y no
-/// una compañía. En esta rama esas rutas aún no están publicadas (#13379 y #13307): se cubre lo que ya existe y que
-/// decide si pasaría — el middleware de tenant no las intercepta (no exige compañía) y el requisito de permiso
-/// <c>consolidado-masivo.download</c> admite el token del <c>ot_admin</c>.
+/// una compañía. Las rutas ya están publicadas (#13379 consulta y descarga; #13385 cancelación en
+/// <c>{loteId}/cancelacion</c>, la ruta del contrato): aquí se cubre lo que decide si el <c>ot_admin</c> pasa — el
+/// middleware de tenant no las intercepta (no exige compañía) y el requisito de permiso
+/// <c>consolidado-masivo.download</c> admite su token. El caso positivo de punta a punta (202 de la cancelación de su lote
+/// OT) está en <c>Flit.Admin.Tests.Tramites.CancelarLoteEndpointTests.HU13392_OtAdminConTenantOt_CancelaSuLoteOt_202</c>.
 /// <para>Uso de ejemplo:
 /// <c>TenantEnforcementMiddleware.IsRuntimeScoped("/api/v1/consolidados/lotes/actual")</c> ⇒ <c>false</c>.</para>
 /// </summary>
@@ -29,7 +31,7 @@ public sealed class ConsolidadoLoteRutasNeutrasOtAdminTests
         $"{ConsolidadoLoteEndpoints.RutaLotes}/actual",
         $"{ConsolidadoLoteEndpoints.RutaLotes}/{Guid.NewGuid()}",
         $"{ConsolidadoLoteEndpoints.RutaLotes}/{Guid.NewGuid()}/partes/1",
-        $"{ConsolidadoLoteEndpoints.RutaLotes}/{Guid.NewGuid()}/cancelar",
+        $"{ConsolidadoLoteEndpoints.RutaLotes}/{Guid.NewGuid()}/{ConsolidadoLoteEndpoints.SufijoCancelacion}",
     ];
 
     private static ClaimsPrincipal OtAdmin(bool conPermiso = true)
@@ -64,6 +66,16 @@ public sealed class ConsolidadoLoteRutasNeutrasOtAdminTests
 
         siguiente.Should().BeTrue();
         http.Response.StatusCode.Should().Be(StatusCodes.Status200OK, "sin 401/403 del middleware");
+    }
+
+    /// <summary>HU #13385 — la ruta de cancelación es la del contrato (<c>/cancelacion</c>), no <c>/cancelar</c>.</summary>
+    [Fact]
+    public void HU13385_LaRutaDeCancelacionEsLaDelContrato_YElOtAdminLaAtraviesaSinCompania()
+    {
+        ConsolidadoLoteEndpoints.SufijoCancelacion.Should().Be("cancelacion");
+        var ruta = $"{ConsolidadoLoteEndpoints.RutaLotes}/{Guid.NewGuid()}/{ConsolidadoLoteEndpoints.SufijoCancelacion}";
+        ruta.Should().StartWith("/api/v1/consolidados/lotes/").And.EndWith("/cancelacion");
+        TenantEnforcementMiddleware.IsRuntimeScoped(new PathString(ruta)).Should().BeFalse();
     }
 
     [Fact]
