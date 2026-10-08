@@ -4,11 +4,14 @@
 // el identificador (no editable después: la bitácora lo referencia y no se reutiliza); en la edición solo
 // nombre, finalidad y permisos. El permiso de lectura de trámites es obligatorio; el de datos personales es
 // opcional y define si el cliente recibe los compradores sin enmascarar.
+// Feature #13261: permiso opcional de envío de adjuntos (comprobante de impuesto). El PATCH reemplaza la lista
+// completa, así que al editar se conservan los permisos que este formulario no administra.
 import { useState } from "react";
 import { Loader2, PlugZap } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import {
   EXTERNAL_CLIENT_ID_PATTERN,
+  EXTERNAL_SCOPE_ATTACHMENTS,
   EXTERNAL_SCOPE_PII,
   EXTERNAL_SCOPE_READ,
   type ExternalClient,
@@ -23,6 +26,10 @@ const INPUT_CLS =
   "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-[#162744] dark:text-white";
 const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-[#162744] dark:text-white";
 const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
+const OPTIONAL_SCOPE_CLS =
+  "flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-white p-3 text-sm text-[#162744] " +
+  "focus-within:ring-2 focus-within:ring-[#557EFF] focus-within:ring-offset-2 dark:border-white/15 dark:bg-[#162744] dark:text-white";
+const MANAGED_SCOPES = [EXTERNAL_SCOPE_READ, EXTERNAL_SCOPE_PII, EXTERNAL_SCOPE_ATTACHMENTS];
 
 export interface ExternalClientFormModalProps {
   /** Sin `client`: alta. Con `client`: edición de nombre, finalidad y permisos. */
@@ -38,6 +45,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
   const [displayName, setDisplayName] = useState(client?.displayName ?? "");
   const [purpose, setPurpose] = useState(client?.purpose ?? "");
   const [pii, setPii] = useState(client?.scopes.includes(EXTERNAL_SCOPE_PII) ?? false);
+  const [attachments, setAttachments] = useState(client?.scopes.includes(EXTERNAL_SCOPE_ATTACHMENTS) ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +61,12 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
       return;
     }
 
-    const scopes = pii ? [EXTERNAL_SCOPE_READ, EXTERNAL_SCOPE_PII] : [EXTERNAL_SCOPE_READ];
+    const scopes = [
+      EXTERNAL_SCOPE_READ,
+      ...(pii ? [EXTERNAL_SCOPE_PII] : []),
+      ...(attachments ? [EXTERNAL_SCOPE_ATTACHMENTS] : []),
+      ...(client?.scopes.filter((s) => !MANAGED_SCOPES.includes(s)) ?? []),
+    ];
     setBusy(true);
     try {
       if (editing) {
@@ -155,7 +168,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
               <span className={`block ${HINT_CLS}`}>Obligatorio: feed de sincronización y URL de la factura.</span>
             </span>
           </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-white p-3 text-sm text-[#162744] focus-within:ring-2 focus-within:ring-[#557EFF] focus-within:ring-offset-2 dark:border-white/15 dark:bg-[#162744] dark:text-white">
+          <label className={OPTIONAL_SCOPE_CLS}>
             <input
               type="checkbox"
               checked={pii}
@@ -166,6 +179,20 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
               <span className="font-semibold">Datos personales sin enmascarar</span>
               <span className={`block ${HINT_CLS}`}>
                 Sin este permiso, documento, nombre, dirección, celular y correo de los compradores llegan enmascarados.
+              </span>
+            </span>
+          </label>
+          <label className={OPTIONAL_SCOPE_CLS}>
+            <input
+              type="checkbox"
+              checked={attachments}
+              onChange={(e) => setAttachments(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#557EFF] focus-visible:outline-none"
+            />
+            <span>
+              <span className="font-semibold">Envío de adjuntos</span>
+              <span className={`block ${HINT_CLS}`}>
+                Permite cargar el comprobante de pago del impuesto en los trámites (solo liquidación de impuesto).
               </span>
             </span>
           </label>
