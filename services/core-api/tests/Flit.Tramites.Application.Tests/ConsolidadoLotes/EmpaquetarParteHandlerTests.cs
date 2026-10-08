@@ -19,7 +19,7 @@ namespace Flit.Tramites.Application.Tests.ConsolidadoLotes;
 /// <remarks>
 /// Uso de ejemplo:
 /// <code>
-/// var h = new EmpaquetarParteHandler(empaquetado, cipher, partes, adjuntos, actual, temporales, logger);
+/// var h = new EmpaquetarParteHandler(empaquetado, cipher, partes, adjuntos, actual, temporales, logger, lotes);
 /// var desenlace = await h.HandleAsync(new ParteLoteReclamada(lote, parte), maxIntentos: 3, ct);
 /// </code>
 /// </remarks>
@@ -48,7 +48,8 @@ public sealed class EmpaquetarParteHandlerTests : IDisposable
     }
 
     private EmpaquetarParteHandler Handler() =>
-        new(_empaquetado, _cipher, _partes, _adjuntos, _actual, _temporales, NullLogger<EmpaquetarParteHandler>.Instance);
+        new(_empaquetado, _cipher, _partes, _adjuntos, _actual, _temporales, NullLogger<EmpaquetarParteHandler>.Instance,
+            LotesEnEstado.Con(ConsolidadoExportStatus.Empaquetando));
 
     private static ParteLoteReclamada Reclamada(short parte = 1, short intentos = 0, string tipo = "consolidado")
     {

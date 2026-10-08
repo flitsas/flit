@@ -44,6 +44,7 @@ public sealed class ProcesarItemLoteHandlerTests
             new LoteItemOrigenPorOrigen([new TramitesLoteItemOrigen(_acceso, e), new SuperAdminLoteItemOrigen(_acceso, e)]),
             _proceso,
             NullLogger<ProcesarItemLoteHandler>.Instance,
+            LotesEnEstado.Con(ConsolidadoExportStatus.EnProceso),
             new RelojFijo(Ahora));
     }
 

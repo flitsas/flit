@@ -108,6 +108,14 @@ public interface IConsolidadoLoteRepository
     /// Nunca expone <c>PostgresException</c>. No borra binarios: devuelve sus rutas para el borrado best-effort.
     /// </summary>
     Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13386 (diseño 09 §2.4, CF-09) — estado del lote para los checkpoints cooperativos de los carriles: lectura de
+    /// UNA fila por clave primaria, sin lock y sin transacción (no compite con la cancelación ni con los cierres). Devuelve
+    /// <c>null</c> si el lote no existe o tiene borrado lógico. Es una foto: la decisión firme la toman los cierres
+    /// condicionados bajo el lock del lote; el checkpoint solo evita trabajo inútil (entregar, empaquetar, subir).
+    /// </summary>
+    Task<string?> GetStatusAsync(Guid batchId, CancellationToken ct = default);
 }
 
 /// <summary>Petición de cancelación (HU #13385). El dueño sale del token (<c>sub</c>), nunca del cliente.</summary>

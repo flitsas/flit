@@ -320,6 +320,57 @@ public sealed class ConsolidadoLoteConsultaDescargaEndpointTests : IClassFixture
         await _factory.Lectura.DidNotReceiveWithAnyArgs().RegistrarDescargaAsync(default!, default);
     }
 
+    // ── HU #13386 AC6 — lote cancelado ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU13386_AC6_Actual_LoteCancelado_200_CanceladoConTerminadoEnContadoresYPartesVacio()
+    {
+        var lote = LoteCancelado();
+        _factory.Lectura.ObtenerActualDelDuenoAsync(Dueno, Arg.Any<CancellationToken>()).Returns(lote);
+
+        var response = await Cliente(Token(Dueno, TenantC, "Radicador")).GetAsync($"{Rutas}/actual", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, "el último lote cancelado se informa; ya no es 204");
+        var raiz = await Raiz(response);
+        raiz.GetProperty("id").GetGuid().Should().Be(lote.Id);
+        raiz.GetProperty("estado").GetString().Should().Be("cancelado");
+        raiz.GetProperty("terminadoEn").GetDateTimeOffset().Should().Be(lote.FinishedAt!.Value);
+        raiz.GetProperty("total").GetInt32().Should().Be(10);
+        raiz.GetProperty("incluidos").GetInt32().Should().Be(7);
+        raiz.GetProperty("omitidos").GetInt32().Should().Be(2);
+        raiz.GetProperty("generados").GetInt32().Should().Be(3);
+        raiz.GetProperty("partes").GetArrayLength().Should().Be(0);
+        await _factory.Lectura.DidNotReceiveWithAnyArgs().ObtenerPartesAsync(default, Ct);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task HU13386_AC6_DescargaDeCualquierParteDeUnLoteCancelado_410_DescargaExpirada(int numero)
+    {
+        var lote = LoteCancelado();
+        _factory.Lectura.ObtenerDelDuenoAsync(lote.Id, Dueno, Arg.Any<CancellationToken>()).Returns(lote);
+
+        var response = await Cliente(Token(Dueno, TenantC, "Radicador")).GetAsync($"{Rutas}/{lote.Id}/partes/{numero}", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Gone);
+        (await Raiz(response)).GetProperty("error").GetString().Should().Be("descarga_expirada");
+        await _factory.Storage.DidNotReceiveWithAnyArgs().OpenReadAsync(default!, Ct);
+        await _factory.Lectura.DidNotReceiveWithAnyArgs().RegistrarDescargaAsync(default!, Ct);
+    }
+
+    /// <summary>Lote como lo deja la cancelación (#13385): DEK NULL y finished/expires/purged = instante de la cancelación.</summary>
+    private static ConsolidadoExportBatch LoteCancelado()
+    {
+        var lote = Lote(ConsolidadoExportStatus.Cancelado, partes: 2);
+        var instante = new DateTimeOffset(2026, 10, 7, 21, 15, 0, TimeSpan.Zero);
+        lote.FinishedAt = instante;
+        lote.ExpiresAt = instante;
+        lote.PurgedAt = instante;
+        lote.DekWrapped = null;
+        return lote;
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────────────
 
     private (ConsolidadoExportBatch Lote, byte[] Cifrado) LoteDescargable(

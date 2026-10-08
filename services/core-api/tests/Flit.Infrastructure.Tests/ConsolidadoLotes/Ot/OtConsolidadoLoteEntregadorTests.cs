@@ -109,6 +109,7 @@ public sealed class OtConsolidadoLoteEntregadorTests
             new LoteItemOrigenPorOrigen([origen]),
             _proceso,
             NullLogger<ProcesarItemLoteHandler>.Instance,
+            LoteActivo(),
             new RelojFijo(Ahora));
     }
 
@@ -544,5 +545,13 @@ public sealed class OtConsolidadoLoteEntregadorTests
     private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    /// <summary>HU #13386 — el checkpoint previo al entregador ve el lote activo.</summary>
+    private static IConsolidadoLoteRepository LoteActivo()
+    {
+        var lotes = Substitute.For<IConsolidadoLoteRepository>();
+        lotes.GetStatusAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(ConsolidadoExportStatus.EnProceso);
+        return lotes;
     }
 }

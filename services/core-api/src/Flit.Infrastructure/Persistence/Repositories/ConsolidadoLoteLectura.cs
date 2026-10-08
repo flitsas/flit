@@ -26,14 +26,21 @@ internal sealed partial class ConsolidadoLoteLectura(
             .Where(b => b.Id == loteId && b.RequestedByUserId == usuarioId && b.DeletedAt == null)
             .FirstOrDefaultAsync(ct);
 
-    public Task<ConsolidadoExportBatch?> ObtenerActualDelDuenoAsync(Guid usuarioId, CancellationToken ct = default) =>
-        // Activo primero (índice único parcial: como mucho uno); si no, el último terminal aún retenido.
-        db.ConsolidadoExportBatches.AsNoTracking()
-            .Where(b => b.RequestedByUserId == usuarioId && b.DeletedAt == null && b.PurgedAt == null)
+    public async Task<ConsolidadoExportBatch?> ObtenerActualDelDuenoAsync(Guid usuarioId, CancellationToken ct = default)
+    {
+        // Activo primero (índice único parcial: como mucho uno); si no, el ÚLTIMO lote del usuario.
+        var lote = await db.ConsolidadoExportBatches.AsNoTracking()
+            .Where(b => b.RequestedByUserId == usuarioId && b.DeletedAt == null)
             .OrderByDescending(b => EstadosActivos.Contains(b.Status))
             .ThenByDescending(b => b.CreatedAt)
             .ThenByDescending(b => b.Id)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+
+        // HU #13386 AC6: el último lote cancelado se informa aunque ya esté purgado (CF-11), hasta que el usuario crea
+        // otro lote (el nuevo es más reciente o activo y gana). Uno purgado por la retención normal no se devuelve (204);
+        // como el último manda, un cancelado anterior tampoco «reaparece» cuando el lote nuevo se purga.
+        return lote is null || lote.PurgedAt is null || lote.Status == ConsolidadoExportStatus.Cancelado ? lote : null;
+    }
 
     public async Task<IReadOnlyList<ConsolidadoExportBatchPart>> ObtenerPartesAsync(Guid loteId, CancellationToken ct = default) =>
         await db.ConsolidadoExportBatchParts.AsNoTracking()

@@ -27,8 +27,10 @@ public interface IConsolidadoLoteLectura
     Task<ConsolidadoExportBatch?> ObtenerDelDuenoAsync(Guid loteId, Guid usuarioId, CancellationToken ct = default);
 
     /// <summary>
-    /// El lote activo del usuario o, si no tiene, el último lote terminal todavía retenido (<c>purged_at IS NULL</c>,
-    /// incluido el que ya venció y espera la purga). <c>null</c> si no tiene ninguno (204 en la API).
+    /// El lote activo del usuario o, si no tiene, su ÚLTIMO lote cuando todavía está retenido (<c>purged_at IS NULL</c>,
+    /// incluido el que ya venció y espera la purga) o está <c>cancelado</c> (HU #13386 AC6: se informa con su
+    /// <c>finished_at</c> y sus contadores hasta que el usuario crea otro lote). <c>null</c> si no tiene ninguno o si el
+    /// último ya se purgó por retención (204 en la API).
     /// </summary>
     Task<ConsolidadoExportBatch?> ObtenerActualDelDuenoAsync(Guid usuarioId, CancellationToken ct = default);
 
@@ -73,16 +75,18 @@ public enum ConsolidadoLoteDescargable
     /// <summary>El lote sigue activo (409 <c>lote_no_terminado</c>).</summary>
     NoTerminado,
 
-    /// <summary>Purgado, vencido o sin DEK (410 <c>descarga_expirada</c>).</summary>
+    /// <summary>Purgado, vencido, sin DEK o <c>cancelado</c> (410 <c>descarga_expirada</c>; HU #13386 AC6).</summary>
     Expirado,
 
-    /// <summary><c>fallido</c> o <c>cancelado</c>: nunca tuvo partes descargables (404).</summary>
+    /// <summary><c>fallido</c>: nunca tuvo partes descargables (404).</summary>
     SinPartes,
 }
 
 /// <summary>
 /// HU #13379 — regla única de «parte descargable» (la usan la consulta, para listar partes, y la descarga). Un lote
-/// <c>fallido</c> nunca es descargable: su DEK es <c>NULL</c> (#13378).
+/// <c>fallido</c> nunca es descargable: su DEK es <c>NULL</c> (#13378). HU #13386 AC6: un lote <c>cancelado</c> ya está
+/// purgado (la cancelación destruye la DEK y descarta las partes), así que pedir cualquiera de sus partes es 410
+/// <c>descarga_expirada</c>, como un lote vencido.
 /// </summary>
 /// <remarks>Uso de ejemplo: <c>ConsolidadoLoteDescargabilidad.Evaluar(lote, ahora) == ConsolidadoLoteDescargable.Si</c>.</remarks>
 public static class ConsolidadoLoteDescargabilidad
@@ -92,7 +96,7 @@ public static class ConsolidadoLoteDescargabilidad
         ArgumentNullException.ThrowIfNull(lote);
         if (ConsolidadoExportStatus.EsActivo(lote.Status))
             return ConsolidadoLoteDescargable.NoTerminado;
-        if (lote.Status is ConsolidadoExportStatus.Fallido or ConsolidadoExportStatus.Cancelado)
+        if (lote.Status is ConsolidadoExportStatus.Fallido)
             return ConsolidadoLoteDescargable.SinPartes;
         if (lote.Status is not (ConsolidadoExportStatus.Completado or ConsolidadoExportStatus.CompletadoConOmitidos)
             || lote.PurgedAt is not null

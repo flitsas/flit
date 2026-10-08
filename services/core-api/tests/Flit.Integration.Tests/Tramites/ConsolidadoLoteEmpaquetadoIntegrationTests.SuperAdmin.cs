@@ -161,7 +161,8 @@ public sealed partial class ConsolidadoLoteEmpaquetadoIntegrationTests
                 var handler = new ProcesarItemLoteHandler(
                     new LoteItemOrigenPorOrigen([new SuperAdminLoteItemOrigen(acceso, entregador)]),
                     new ConsolidadoLoteItemProceso(ctx),
-                    NullLogger<ProcesarItemLoteHandler>.Instance);
+                    NullLogger<ProcesarItemLoteHandler>.Instance,
+                    repo);
                 await handler.HandleAsync(ProcesarItemLoteCommand.Con(reclamado.Lote, reclamado.Item, settings), Ct);
                 procesados++;
             }
@@ -186,7 +187,7 @@ public sealed partial class ConsolidadoLoteEmpaquetadoIntegrationTests
                     break;
                 var handler = new EmpaquetarParteHandler(
                     empaquetado, cipher, partesStorage, adjuntos, adjuntoActual, new ConsolidadoLoteTemporales(dirTemporal),
-                    NullLogger<EmpaquetarParteHandler>.Instance);
+                    NullLogger<EmpaquetarParteHandler>.Instance, new ConsolidadoLoteRepository(ctx));
                 desenlaces.Add(await handler.HandleAsync(reclamada, 3, Ct));
             }
 

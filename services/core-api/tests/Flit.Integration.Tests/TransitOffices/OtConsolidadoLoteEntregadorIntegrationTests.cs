@@ -196,7 +196,8 @@ public sealed class OtConsolidadoLoteEntregadorIntegrationTests(PostgresDatabase
         services.AddScoped(sp => new ProcesarItemLoteHandler(
             sp.GetRequiredService<LoteItemOrigenPorOrigen>(),
             sp.GetRequiredService<IConsolidadoLoteItemProceso>(),
-            sp.GetRequiredService<ILogger<ProcesarItemLoteHandler>>()));
+            sp.GetRequiredService<ILogger<ProcesarItemLoteHandler>>(),
+            sp.GetRequiredService<IConsolidadoLoteRepository>()));
         if (empaquetado is not null)
         {
             services.AddScoped<IConsolidadoLoteEmpaquetado>(sp => new ConsolidadoLoteEmpaquetado(sp.GetRequiredService<FlitDbContext>()));
