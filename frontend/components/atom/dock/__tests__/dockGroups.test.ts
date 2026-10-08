@@ -108,10 +108,10 @@ describe("catálogo de Trámites", () => {
     ]);
   });
 
-  it("Banners por permiso: un AdminCompany con banners.manage ve Plataforma solo con Banners", () => {
+  it("HU #13439 — Banners es solo SuperAdmin: un AdminCompany con banners.manage no ve Banners", () => {
     const groups = dock({ isAdminCompany: true }, { roles: ["AdminCompany"], permissions: ["banners.manage"] });
     const plataforma = groups.find((g) => g.id === "administradores")?.items.find((i) => i.key === "admin-plataforma");
-    expect(plataforma?.children?.map((c) => c.label)).toEqual(["Banners"]);
+    expect(plataforma?.children?.map((c) => c.label) ?? []).not.toContain("Banners");
   });
 
   it("HU #12723 — cada agrupador declara lado izquierdo o derecho del inicio", () => {
