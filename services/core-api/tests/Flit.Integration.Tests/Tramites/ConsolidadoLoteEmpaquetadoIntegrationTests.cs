@@ -22,7 +22,7 @@ namespace Flit.Integration.Tests.Tramites;
 /// var reclamada = await new ConsolidadoLoteEmpaquetado(ctx).ReclamarSiguienteParteAsync(900, ct);
 /// </code>
 /// </remarks>
-public sealed class ConsolidadoLoteEmpaquetadoIntegrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed partial class ConsolidadoLoteEmpaquetadoIntegrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
     private static readonly Guid Company = new("b3000000-0000-7000-8000-000000013378");
     private const int RetencionHoras = 6;
