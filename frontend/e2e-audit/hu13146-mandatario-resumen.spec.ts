@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * HU #13146 — Resumen (FUR): «Firmará: {nombre} / {forma}» y alerta cuando no hay mandatario.
+ * HU #13146 — Resumen: frase de quién firmará el contrato de mandato, y alerta cuando no hay mandatario.
  *
  * Como `hu12126-wizard-copy-tipo-tramite.spec.ts`, es un script de auditoría contra
  * `playwright.audit.config.ts` (no corre en CI). Requiere un backend con un trámite en borrador con
@@ -22,7 +22,7 @@ async function abrirResumen(page: Page) {
 test.describe('HU13146 — Quién firmará el mandato en el Resumen', () => {
   test.skip(!TRAMITE_ID, 'Defina E2E_TRAMITE_ID con un trámite en borrador completo.');
 
-  test('AC1/AC6: con mandatario válido muestra «Firmará» sin controles', async ({ page }) => {
+  test('AC1/AC6: con mandatario válido dice quién firmará el mandato, sin controles', async ({ page }) => {
     await page.route('**/mandate-signer', (route) =>
       route.fulfill({
         json: { estado: 'valido', nombre: 'Ana Restrepo', formaFirma: 'baul', modo: 'block' },
@@ -30,7 +30,9 @@ test.describe('HU13146 — Quién firmará el mandato en el Resumen', () => {
     );
     await abrirResumen(page);
     const indicador = page.getByTestId('mandatario-firma-valido');
-    await expect(indicador).toContainText('Firmará: Ana Restrepo / Baúl de firmas');
+    await expect(indicador).toContainText(
+      'Ana Restrepo firmará el contrato de mandato con la firma que ya tiene guardada.',
+    );
     await expect(indicador.getByRole('button')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Finalizar y enviar trámite' })).toBeEnabled();
   });

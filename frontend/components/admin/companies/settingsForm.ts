@@ -10,6 +10,8 @@ import type {
 // FEATURE 02 — fuente de comparendos. Default 'external' (SIMIT en línea).
 export const DEFAULT_FINES_QUERY_SOURCE: FinesQuerySource = "external";
 
+export const IMPRONTAS_MODULE = "Improntas";
+
 // ── HU #10478: proveedores de consulta RUNT ─────────────────────────────────
 export const CONSULTA_MODULE = "Proveedores de consulta RUNT";
 export const DEFAULT_VEHICLE_PROVIDER = "kyverum_runt";
@@ -154,6 +156,8 @@ export interface SettingsForm {
   tramitesModuleEnabled: boolean;
   comparendosModuleEnabled: boolean;
   resolucionesModuleEnabled: boolean;
+  // Feature #13398 (HU #13401) — el wizard genera la impronta automáticamente (solo SuperAdmin).
+  generacionImprontas: boolean;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -195,6 +199,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     tramitesModuleEnabled: settings.tramitesModuleEnabled ?? false,
     comparendosModuleEnabled: settings.comparendosModuleEnabled ?? false,
     resolucionesModuleEnabled: settings.resolucionesModuleEnabled ?? false,
+    generacionImprontas: settings.generacionImprontas ?? true,
   };
 }
 
@@ -256,6 +261,7 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
     // HU #12967 (B-07): Trámites y Comparendos ya no viajan en el PUT de configuración; son la
     // habilitación de productos y el SuperAdmin los cambia al instante en la plataforma.
     resolucionesModuleEnabled: form.resolucionesModuleEnabled,
+    generacionImprontas: form.generacionImprontas,
   };
 }
 
@@ -406,6 +412,15 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     describe: (_i, c) => onOff(c.resolucionesModuleEnabled),
   },
   {
+    key: "generacionImprontas",
+    module: IMPRONTAS_MODULE,
+    label: "Generación de improntas",
+    describe: (_i, c) => ({
+      detail: c.generacionImprontas ? "Habilitar" : "Deshabilitar",
+      tone: c.generacionImprontas ? "on" : "off",
+    }),
+  },
+  {
     key: "metodosRecaudo",
     module: "Configuración Empresa",
     label: "Métodos de recaudo",
@@ -485,6 +500,7 @@ const MODULE_ORDER = [
   "Traspaso",
   "Otros trámites",
   "Configuración Empresa",
+  IMPRONTAS_MODULE,
   CONSULTA_MODULE,
   AVALUO_MODULE,
 ];

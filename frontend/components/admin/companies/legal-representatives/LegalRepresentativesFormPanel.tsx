@@ -515,7 +515,7 @@ export function LegalRepresentativesFormPanel({
       return (
         <p
           role="alert"
-          className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+          className="rounded-xl border px-3 py-2 text-xs font-medium"
           style={{ borderColor: RL_COLOR.danger, color: RL_COLOR.danger }}
         >
           No se pudo cargar la información del representante. Cierra e inténtalo de nuevo.
@@ -530,7 +530,7 @@ export function LegalRepresentativesFormPanel({
       <div className="space-y-5">
         {/* 1. Persona */}
         <section aria-label="Datos del representante">
-          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-60">
             Representante legal
           </h3>
           <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
@@ -550,11 +550,11 @@ export function LegalRepresentativesFormPanel({
 
         {/* Tipos de trámite */}
         <section aria-label="Tipos de trámite">
-          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-60">
             Tipos de trámite que puede firmar
           </h3>
           {tramites.length === 0 ? (
-            <p className="text-[11px] opacity-60">Ninguno asignado.</p>
+            <p className="text-xs opacity-60">Ninguno asignado.</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {tramites.map((t, i) => (
@@ -571,12 +571,12 @@ export function LegalRepresentativesFormPanel({
             style={{ borderColor: RL_COLOR.border }}
             data-testid="rl-firma-baul"
           >
-            <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+            <p className="text-xs font-bold uppercase tracking-wide opacity-60">
               Firma del baúl
             </p>
             <div className="mt-1.5">
               <span
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold"
                 style={
                   detail.firmaBaulVigente
                     ? { background: RL_COLOR.successBg, color: RL_COLOR.successText }
@@ -590,7 +590,7 @@ export function LegalRepresentativesFormPanel({
                     : "Sin firma registrada"}
               </span>
               {detail.firmaBaulVigente && detail.firmaBaulVigenteHasta && (
-                <p className="mt-1 text-[10px] opacity-60">
+                <p className="mt-1 text-xs opacity-60">
                   Válida hasta {formatFechaCalendario(detail.firmaBaulVigenteHasta)}
                 </p>
               )}
@@ -611,11 +611,11 @@ export function LegalRepresentativesFormPanel({
 
         {/* Empresas + escrituras */}
         <section aria-label="Empresas representadas">
-          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-60">
             Empresas y escrituras
           </h3>
           {detail.companies.length === 0 ? (
-            <p className="text-[11px] opacity-60">Sin empresas asociadas todavía.</p>
+            <p className="text-xs opacity-60">Sin empresas asociadas todavía.</p>
           ) : (
             <RepresentativeCompaniesAccordion
               mode="view"
@@ -646,7 +646,7 @@ export function LegalRepresentativesFormPanel({
       return (
         <p
           role="alert"
-          className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+          className="rounded-xl border px-3 py-2 text-xs font-medium"
           style={{ borderColor: RL_COLOR.danger, color: RL_COLOR.danger }}
         >
           No se pudo cargar la información del representante. Cierra el panel e inténtalo de nuevo.
@@ -659,7 +659,7 @@ export function LegalRepresentativesFormPanel({
         {banner && (
           <p
             role="alert"
-            className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+            className="rounded-xl border px-3 py-2 text-xs font-medium"
             style={{ borderColor: RL_COLOR.danger, color: RL_COLOR.danger }}
           >
             {banner}
@@ -667,7 +667,7 @@ export function LegalRepresentativesFormPanel({
         )}
 
         {mode === "create" && (
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             Registra a la persona, los tipos de trámite y, si quieres, su firma o validación de
             identidad. Las empresas y escrituras se asocian después desde el listado.
           </p>
@@ -675,7 +675,7 @@ export function LegalRepresentativesFormPanel({
 
         {/* 1. Persona */}
         <section className="space-y-3">
-          <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+          <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">
             Representante legal
           </h3>
 
@@ -804,12 +804,12 @@ export function LegalRepresentativesFormPanel({
 
         {/* Tipos de trámite — junto a la persona en el alta/edición */}
         <fieldset className="space-y-2">
-          <legend className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+          <legend className="text-xs font-bold uppercase tracking-wide opacity-60">
             Tipos de trámite que puede firmar
           </legend>
           {fieldErrors.procedureTypeIds && (
             <p
-              className="text-[11px] font-medium"
+              className="text-xs font-medium"
               style={{ color: RL_COLOR.danger }}
               role="alert"
             >
@@ -817,7 +817,7 @@ export function LegalRepresentativesFormPanel({
             </p>
           )}
           {procedureTypes.length === 0 ? (
-            <p className="text-[11px] opacity-60">
+            <p className="text-xs opacity-60">
               No hay tipos de trámite habilitados en el módulo de trámites. Publica al menos un tipo
               (activo y publicado) para poder asignarlo al representante.
             </p>
@@ -848,7 +848,7 @@ export function LegalRepresentativesFormPanel({
         {/* Firma + identidad */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <section className="space-y-2">
-            <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+            <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">
               Firma del baúl (opcional)
             </h3>
             <SignatureVaultSelector
@@ -867,7 +867,7 @@ export function LegalRepresentativesFormPanel({
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+            <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">
               Validación de identidad (opcional)
             </h3>
             {mode === "edit" ? (
@@ -896,7 +896,7 @@ export function LegalRepresentativesFormPanel({
       return (
         <p
           role="alert"
-          className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+          className="rounded-xl border px-3 py-2 text-xs font-medium"
           style={{ borderColor: RL_COLOR.danger, color: RL_COLOR.danger }}
         >
           No se pudo cargar la información del representante. Cierra el panel e inténtalo de nuevo.
@@ -909,13 +909,13 @@ export function LegalRepresentativesFormPanel({
         {banner && (
           <p
             role="alert"
-            className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+            className="rounded-xl border px-3 py-2 text-xs font-medium"
             style={{ borderColor: RL_COLOR.danger, color: RL_COLOR.danger }}
           >
             {banner}
           </p>
         )}
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-60">
           Asocia los NIT que representa esta persona y, en cada uno, su escritura vigente si aplica.
         </p>
         <RepresentativeCompaniesAccordion
@@ -958,7 +958,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p className="mt-1 text-[11px] font-medium" style={{ color: RL_COLOR.danger }} role="alert">
+        <p className="mt-1 text-xs font-medium" style={{ color: RL_COLOR.danger }} role="alert">
           {error}
         </p>
       )}
@@ -1009,7 +1009,7 @@ function FullScreenShell({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/40 backdrop-blur-sm">
       <button
         type="button"
         className="absolute inset-0"

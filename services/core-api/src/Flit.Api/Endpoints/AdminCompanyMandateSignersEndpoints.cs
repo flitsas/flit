@@ -91,6 +91,17 @@ public static class AdminCompanyMandateSignersEndpoints
 
         // HU #13246 — «Reenviar validación» de la identidad propia del mandatario (ruta NUEVA; identity/send|resend|link
         // siguen en 410). Mismo candado por origen que editar: la compañía no reenvía lo que configuró el organismo.
+        // «Consultar estado» de la validación propia: pregunta a Kyverum y aplica el resultado si el webhook no llegó, como la
+        // pantalla de espera del trámite. Sin candado por origen (no cambia la ficha).
+        group.MapPost("/{mandateSignerId:guid}/identity-validation/reconcile", ReconcileIdentityAsync)
+            .WithName("AdminCompanyMandateSignersIdentityValidationReconcile")
+            .WithSummary("Consulta al proveedor el estado de la validación de identidad propia del mandatario")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status503ServiceUnavailable);
+
         group.MapPost("/{mandateSignerId:guid}/identity-validation/resend", ResendIdentityAsync)
             .WithName("AdminCompanyMandateSignersIdentityValidationResend")
             .WithSummary("Reenvía la validación de identidad propia del mandatario (Persona natural con biometría)")
@@ -237,6 +248,26 @@ public static class AdminCompanyMandateSignersEndpoints
                 Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId}." }),
             _ => ValidationProblem(result.Errors),
         };
+    }
+
+    private static async Task<IResult> ReconcileIdentityAsync(
+        Guid tenantId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
+        [FromServices] ReconcileMandateSignerIdentityHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var denied = await MandateSignerActors
+            .CheckCompanyConsultAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
+        var result = await handler.HandleAsync(mandateSignerId, null, cancellationToken).ConfigureAwait(false);
+        return MandateSignerIdentityHttp.ToResult(result, mandateSignerId);
     }
 
     private static async Task<IResult> ResendIdentityAsync(

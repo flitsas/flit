@@ -150,6 +150,56 @@ public sealed class GenerarImprontaAttachmentHandlerTests
     }
 
     [Fact]
+    public async Task Generar_ConGeneracionDeshabilitada_Devuelve409SinLlamarAKyverumNiCrearAdjunto()
+    {
+        // HU #13402 AC2 — el trámite nació con generación deshabilitada (aunque tenga todos los datos).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var requestedBy = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ImprontaGeneracionHabilitada = false;
+        WithOrganismo(instance);
+        WithOrganismoNombre(instance, "SDM Bogotá");
+        WithVin(instance, "1HGCM82633A004352");
+        instance.Actors.Add(Actor(tenant, id, "comprador", "123456789"));
+        SetupRepoGraphs(instance);
+        _repo.GetUserDisplayNameAsync(requestedBy, ct).Returns("Ana Operadora");
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, requestedBy, ct);
+
+        result.Should().BeNull();
+        error.Should().Be("generacion_improntas_deshabilitada");
+        _client.LastRequest.Should().BeNull();
+        instance.Attachments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Generar_ConGeneracionHabilitada_FuncionaComoSiempre()
+    {
+        // HU #13402 AC1/AC3 — el valor por defecto (true) conserva el comportamiento histórico.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var requestedBy = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ImprontaGeneracionHabilitada.Should().BeTrue();
+        WithOrganismo(instance);
+        WithOrganismoNombre(instance, "SDM Bogotá");
+        WithVin(instance, "1HGCM82633A004352");
+        instance.Actors.Add(Actor(tenant, id, "comprador", "123456789"));
+        SetupRepoGraphs(instance);
+        _repo.GetUserDisplayNameAsync(requestedBy, ct).Returns("Ana Operadora");
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, requestedBy, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        _client.LastRequest.Should().NotBeNull();
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == "impronta");
+    }
+
+    [Fact]
     public async Task Generar_MatriculaInicial_ConVin_UsaCompradorYVin()
     {
         var ct = TestContext.Current.CancellationToken;

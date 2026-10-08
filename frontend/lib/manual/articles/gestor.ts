@@ -164,8 +164,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "firmante-mandato",
         title: "4. Quién firmará el mandato",
         paragraphs: [
-          "En el último paso del asistente (Resumen) ves, en solo lectura, quién firmará el contrato de mandato: «Firmará: nombre / forma de firma» (Baúl de firmas o Validación de identidad). Tú no eliges al mandatario: lo define el organismo de tránsito, o el Administrador de tu compañía desde su pestaña «Mandatarios».",
-          "Si tu compañía no tiene mandatario propio pero hay uno asociado a ella desde otra compañía, verás «Firmará: nombre / forma de firma» con la nota «Mandatario asociado». Solo se muestra quién firma: nunca el nombre de la otra compañía ni su documento de identidad.",
+          "En el último paso del asistente (Resumen) ves, en solo lectura, una frase con quién firmará el contrato de mandato y cómo: «María López firmará el contrato de mandato con la firma que ya tiene guardada» o «María López firmará el contrato de mandato validando su identidad». Tú no eliges al mandatario: lo define el organismo de tránsito, o el Administrador de tu compañía desde su pestaña «Mandatarios».",
+          "Si tu compañía no tiene mandatario propio pero hay uno asociado a ella desde otra compañía, la misma frase añade «Es el mandatario asociado a tu compañía». Solo se muestra quién firma: nunca el nombre de la otra compañía ni su documento de identidad.",
           "Si no hay un mandatario válido, el Resumen te lo avisa con el motivo (por ejemplo, sin mandatario registrado, fuera de vigencia o con la firma o la validación de identidad vencida) y a quién pedirle que lo configure.",
         ],
         bullets: [
@@ -229,6 +229,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
           "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
+          "Impronta: si tu compañía tiene deshabilitada la generación de improntas, el sistema no la genera ni ofrece «Generar impronta». En la casilla de la impronta verás «Cargue la impronta; no se genera automáticamente» y debes adjuntarla tú. Si es obligatoria, no podrás radicar hasta cargarla.",
         ],
         callouts: [
           {

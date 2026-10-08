@@ -222,7 +222,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}

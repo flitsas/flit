@@ -234,7 +234,7 @@ export function MandatosCatalogPanel() {
           </h2>
           <p className="text-xs text-[#59677D] dark:text-white/65">
             Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo. El tipo
-            por defecto de un organismo nuevo es Persona natural. Persona jurídica y Mandato abierto solo aplican si la
+            por defecto de un organismo nuevo es Mandatario de la compañía. Institucional y Abierto solo aplican si la
             plantilla del organismo lo implica (p. ej. Sabaneta). Esta pantalla convive con el hub
             del organismo → Mandatos: es la misma configuración.
           </p>

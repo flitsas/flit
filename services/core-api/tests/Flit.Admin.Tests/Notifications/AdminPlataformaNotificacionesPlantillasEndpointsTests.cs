@@ -71,7 +71,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     // ── AC1 — listado del catálogo ──────────────────────────────────────────
 
     [Fact]
-    public async Task AC1_List_Returns200With13TemplatesIdModuleAndTriggers()
+    public async Task AC1_List_Returns200With14TemplatesIdModuleAndTriggers()
     {
         var client = SuperAdminClient();
 
@@ -80,7 +80,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ListDto>(TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
-        body!.Items.Should().HaveCount(13);
+        body!.Items.Should().HaveCount(14);
         body.Items.Select(i => i.Id).Should().OnlyHaveUniqueItems();
         body.Items.Should().Contain(i =>
             i.Id == "security.invitation"
@@ -124,6 +124,12 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
             && i.Name == "Identidad: enlace de captura manual"
             && i.Module == "Identidad"
             && i.Triggers.Contains("ManualCaptureLinkIssued"));
+        // HU13299 (Feature #13282) — correo de rechazo de la captura manual.
+        body.Items.Should().Contain(i =>
+            i.Id == "identidad.captura-manual-rechazo"
+            && i.Name == "Identidad: correo de rechazo de captura manual"
+            && i.Module == "Identidad"
+            && i.Triggers.Contains("ManualCaptureRejected"));
     }
 
     [Theory]
@@ -220,6 +226,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     [InlineData("analytics.scheduled-report", "[ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO]")]
     [InlineData("analytics.alert", "[ACÁ VA EL NOMBRE DE LA REGLA DE ALERTA]")]
     [InlineData("identidad.captura-manual", "Verifica tu identidad")]
+    [InlineData("identidad.captura-manual-rechazo", "Repite tu verificación")]
     public async Task AC2_GetSample_WithValidId_Returns200WithSubjectAndVisibleMarker(
         string templateId, string expectedMarker)
     {
@@ -378,6 +385,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     [InlineData("analytics.scheduled-report")]
     [InlineData("analytics.alert")]
     [InlineData("identidad.captura-manual")]
+    [InlineData("identidad.captura-manual-rechazo")]
     public async Task AC6_GetSample_AnyTemplate_Returns200_NeverSendsEmailNorWritesAudit(string templateId)
     {
         var client = SuperAdminClient();

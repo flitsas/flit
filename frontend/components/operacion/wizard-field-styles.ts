@@ -107,3 +107,9 @@ export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 
  * porque avanzar no es cerrar.
  */
 export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, #00DBD5 0%, #8CC63F 100%)';
+
+/**
+ * Degradado del CTA de acción destructiva o de rechazo: token FLIT `gradient.danger` (naranja de alerta → rojo),
+ * en pastilla con texto blanco. Sustituye al rojo plano `#C1272D`, que no es un token de la línea base.
+ */
+export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)';

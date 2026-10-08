@@ -30,7 +30,10 @@ public sealed record TenantSettingsResponse(
     // HU #12250 (Feature #12249) — flags de módulos del dashboard.
     bool TramitesModuleEnabled,
     bool ComparendosModuleEnabled,
-    bool ResolucionesModuleEnabled);
+    bool ResolucionesModuleEnabled,
+    // HU #13400 (Feature #13398) — generación automática de improntas por compañía. Solo la sirven
+    // los endpoints de settings, reservados al SuperAdmin; ningún otro rol recibe este campo.
+    bool GeneracionImprontas = true);
 
 /// <summary>Checkboxes + correo extra de avisos de estado.</summary>
 public sealed record DestinatariosNotificacionDto(

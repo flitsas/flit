@@ -189,7 +189,7 @@ export function OTConfigModal({
           <h3 id="ot-config-blocking-heading" className="mb-1 text-xs font-semibold">
             Bloqueos
           </h3>
-          <p className="mb-2 text-[11px] opacity-60">
+          <p className="mb-2 text-xs opacity-60">
             Activado = bloquea el trámite (el gestor debe subsanar o aceptar el riesgo);
             desactivado = solo advierte y el usuario decide continuar. Ningún criterio impide crear
             el trámite. Los cambios se guardan al instante.
@@ -219,7 +219,7 @@ export function OTConfigModal({
           <h3 id="ot-config-restrictions-heading" className="mb-1 text-xs font-semibold">
             Restricciones de consulta
           </h3>
-          <p className="mb-2 text-[11px] opacity-60">
+          <p className="mb-2 text-xs opacity-60">
             <strong>RNMC</strong> se consulta solo si lo activas aquí; <strong>Comparendos</strong>{" "}
             se consulta por defecto salvo que lo desactives. Nada de esto impide crear el trámite.
           </p>
@@ -248,7 +248,7 @@ export function OTConfigModal({
           <h3 id="ot-config-prenda-heading" className="mb-1 text-xs font-semibold">
             Documento de prenda
           </h3>
-          <p className="mb-2 text-[11px] opacity-60">
+          <p className="mb-2 text-xs opacity-60">
             Por defecto el documento de inscripción/registro de prenda es <strong>obligatorio</strong>.
             Activa el check para que deje de serlo (opcional) en esta compañía y organismo.
           </p>

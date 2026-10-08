@@ -49,7 +49,7 @@ export function DocumentAssociationList({
             </p>
           </div>
 
-          <label className="flex items-center gap-1.5 text-[10px] font-semibold">
+          <label className="flex items-center gap-1.5 text-xs font-semibold">
             <input
               type="checkbox"
               checked={item.obligatorio}

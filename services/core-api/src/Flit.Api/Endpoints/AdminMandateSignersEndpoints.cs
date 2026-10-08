@@ -119,6 +119,19 @@ public static class AdminMandateSignersEndpoints
 
         // HU #13246 — «Reenviar validación» de la identidad propia del mandatario (ruta NUEVA; identity/send|resend|link
         // siguen en 410). Mismo permiso de gestión que editar: ot_admin o Super Admin.
+        // «Consultar estado» de la validación propia: pregunta a Kyverum y aplica el resultado si el webhook no llegó, como la
+        // pantalla de espera del trámite.
+        group.MapPost("/{mandateSignerId:guid}/identity-validation/reconcile", ReconcileIdentityAsync)
+            .WithName("AdminMandateSignersIdentityValidationReconcile")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .WithSummary("Consulta al proveedor el estado de la validación de identidad propia del mandatario")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status503ServiceUnavailable);
+
         group.MapPost("/{mandateSignerId:guid}/identity-validation/resend", ResendIdentityAsync)
             .WithName("AdminMandateSignersIdentityValidationResend")
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
@@ -261,6 +274,18 @@ public static class AdminMandateSignersEndpoints
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    private static async Task<IResult> ReconcileIdentityAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        [FromServices] ReconcileMandateSignerIdentityHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(mandateSignerId, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        return MandateSignerIdentityHttp.ToResult(result, mandateSignerId);
     }
 
     private static async Task<IResult> ResendIdentityAsync(

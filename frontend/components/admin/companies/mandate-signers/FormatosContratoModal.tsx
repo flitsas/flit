@@ -39,7 +39,7 @@ export function FormatosContratoModal({
               >
                 <span className="font-medium text-[#162744] dark:text-white">{o.name}</span>
                 <span
-                  className="w-fit rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  className="w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold"
                   style={{ background: "rgba(85,126,255,0.10)", color: "#3F5FD0" }}
                 >
                   {o.formatName}

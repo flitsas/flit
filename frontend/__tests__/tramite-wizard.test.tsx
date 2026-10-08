@@ -892,6 +892,77 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(onExit).not.toHaveBeenCalled();
   });
 
+  // HU #13403 — generación de improntas deshabilitada: la impronta se carga a mano.
+  describe('impronta con generación deshabilitada (HU #13403)', () => {
+    const preparado = (extra: Record<string, unknown>) => {
+      const PREPARADO: WizardState = {
+        ...TRASPASO_WIZARD,
+        canSubmit: true,
+        blockers: [],
+        status: 'preparado',
+        allowedTransitions: ['entregado'],
+        steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+      };
+      mocks.getWizardState.mockResolvedValue(PREPARADO);
+      mocks.getInstance.mockResolvedValue({
+        id: 'inst-1',
+        status: 'preparado',
+        draftFinalizedAt: null,
+        fieldValues: [],
+        actors: [],
+        ...extra,
+      });
+      mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
+    };
+
+    async function radicar() {
+      const user = userEvent.setup();
+      render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+      await user.click(await screen.findByRole('button', { name: /Finalizar y enviar trámite/ }));
+      await screen.findByText('Confirmar radicación');
+      await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+    }
+
+    it('AC1 — con improntaGeneracionHabilitada=false al radicar NO llama a generarImpronta', async () => {
+      preparado({ improntaGeneracionHabilitada: false });
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarFur).toHaveBeenCalled();
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    });
+
+    it('AC4 — con el flag en true conserva la generación al radicar', async () => {
+      preparado({ improntaGeneracionHabilitada: true });
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
+    });
+
+    it('AC4 — sin el campo en el detalle (trámites previos) se trata como habilitada', async () => {
+      preparado({});
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
+    });
+
+    it('AC3 — impronta obligatoria sin cargar: radicar queda bloqueado y el mensaje nombra la impronta', async () => {
+      preparado({ improntaGeneracionHabilitada: false });
+      mocks.generarConsolidado.mockResolvedValue({
+        document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
+        regenerado: true,
+        incompleto: true,
+        documentosFaltantes: ['impronta'],
+      });
+      await radicar();
+      expect(
+        await screen.findByText(/No se puede radicar: Expediente incompleto: faltan impronta/i),
+      ).toBeInTheDocument();
+      expect(mocks.submitInstance).not.toHaveBeenCalled();
+      expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    });
+  });
+
   it('N 03 dos pasos — el error del gate al preparar se muestra y el wizard sigue en borrador', async () => {
     const BORRADOR_COMPLETO: WizardState = {
       ...TRASPASO_WIZARD,
@@ -1899,7 +1970,7 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
     return user;
   }
 
-  it('AC1: con mandatario válido muestra «Firmará: nombre / forma» sin controles para cambiarlo', async () => {
+  it('AC1: con mandatario válido dice en una frase quién firmará el mandato, sin controles para cambiarlo', async () => {
     mocks.getMandateSigner.mockResolvedValue({
       estado: 'valido',
       nombre: 'Ana Restrepo',
@@ -1908,7 +1979,9 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
     });
     await abrirResumen();
     const ind = await screen.findByTestId('mandatario-firma-valido');
-    expect(ind).toHaveTextContent('Firmará: Ana Restrepo / Baúl de firmas');
+    expect(ind).toHaveTextContent(
+      'Ana Restrepo firmará el contrato de mandato con la firma que ya tiene guardada.',
+    );
     expect(within(ind).queryByRole('button')).not.toBeInTheDocument();
     expect(within(ind).queryByRole('combobox')).not.toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();

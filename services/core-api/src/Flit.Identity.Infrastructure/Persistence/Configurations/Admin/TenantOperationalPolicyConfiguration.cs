@@ -76,6 +76,13 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.ComparendosModuleEnabled).HasDefaultValue(false);
         builder.Property(x => x.ResolucionesModuleEnabled).HasDefaultValue(false);
 
+        // HU #13400 (Feature #13398) — generación automática de improntas: nace encendida. El
+        // sentinel false evita que EF omita un false explícito en el INSERT y caiga al DEFAULT true.
+        builder.Property(x => x.GenerateImprontas)
+            .HasColumnName("generate_improntas")
+            .HasDefaultValue(true)
+            .HasSentinel(true);
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
     }

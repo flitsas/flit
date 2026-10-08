@@ -945,6 +945,30 @@ public sealed class ConsolidadoHandlerTests
         impronta.Calls.Should().Be(0);
     }
 
+    [Fact]
+    public async Task HandleAsync_SinImpronta_ConGeneracionDeshabilitada_NoIntentaGenerarlaYNoFalla()
+    {
+        // HU #13402 AC5 — el trámite nació con la generación de improntas deshabilitada: la
+        // pre-generación del consolidado se salta (ni invoca al generador) y el flujo no falla.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ImprontaGeneracionHabilitada = false;
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "impronta"));
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var impronta = new FakeImprontaGenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, impronta);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, Guid.NewGuid(), CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        impronta.Calls.Should().Be(0);
+    }
+
     // ── HU #11035 — el consolidado NO se duplica al regenerar ───────────────────────────────────
 
     [Fact]

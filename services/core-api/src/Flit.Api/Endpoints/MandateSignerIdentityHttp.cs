@@ -55,4 +55,36 @@ internal static class MandateSignerIdentityHttp
                 new { code = "proveedor_error", error = "El proveedor de identidad no pudo enviar la validación." },
                 statusCode: StatusCodes.Status502BadGateway),
         };
+
+    /// <summary>
+    /// «Consultar estado»: 200 <c>{ status, updated }</c>; 404 sin ficha; 409 <c>mandatario_no_requiere_validacion</c> o
+    /// <c>mandatario_sin_validacion</c> (aún no se envió); 503 <c>proveedor_no_disponible</c> (el worker sigue intentando).
+    /// </summary>
+    public static IResult ToResult(ReconcileMandateSignerIdentityResult result, Guid mandateSignerId) =>
+        result.Outcome switch
+        {
+            ReconcileMandateSignerIdentityOutcome.Ok =>
+                Results.Ok(new { status = result.Status, updated = result.Updated }),
+            ReconcileMandateSignerIdentityOutcome.NotFound =>
+                Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId}." }),
+            ReconcileMandateSignerIdentityOutcome.NoRequiereValidacion =>
+                Results.Json(
+                    new
+                    {
+                        code = NoRequiereValidacionCode,
+                        error = "Solo la Persona natural con forma de firma validación de identidad requiere validación.",
+                    },
+                    statusCode: StatusCodes.Status409Conflict),
+            ReconcileMandateSignerIdentityOutcome.SinValidacion =>
+                Results.Json(
+                    new
+                    {
+                        code = "mandatario_sin_validacion",
+                        error = "El mandatario aún no tiene validación de identidad. Envíala con «Reenviar validación».",
+                    },
+                    statusCode: StatusCodes.Status409Conflict),
+            _ => Results.Json(
+                new { code = "proveedor_no_disponible", error = "El proveedor de identidad no respondió. Intenta de nuevo en unos minutos." },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+        };
 }

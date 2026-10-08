@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Rect } from "./documentDetection";
 
 export type CameraStatus = "opening" | "ready" | "denied" | "no-camera" | "unsupported" | "error";
 export type CameraFacing = "user" | "environment";
@@ -93,17 +94,21 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
   /** Reabre la cámara (reintentar tras denegar, o «Repetir» tras una captura). */
   const restart = useCallback(() => setAttempt((n) => n + 1), []);
 
-  /** Captura el fotograma actual como Blob JPEG (lado mayor ≤ MAX_CAPTURE_SIDE). */
-  const capture = useCallback(async (): Promise<Blob | null> => {
+  /**
+   * Captura el fotograma actual como Blob JPEG (lado mayor ≤ MAX_CAPTURE_SIDE). Con `crop(videoW, videoH)` solo
+   * se guarda esa región (en píxeles del video), p. ej. el marco guía del documento.
+   */
+  const capture = useCallback(async (crop?: (videoW: number, videoH: number) => Rect): Promise<Blob | null> => {
     const video = videoRef.current;
     if (!video || !video.videoWidth || !video.videoHeight) return null;
-    const scale = Math.min(1, MAX_CAPTURE_SIDE / Math.max(video.videoWidth, video.videoHeight));
+    const src = crop ? crop(video.videoWidth, video.videoHeight) : { x: 0, y: 0, w: video.videoWidth, h: video.videoHeight };
+    const scale = Math.min(1, MAX_CAPTURE_SIDE / Math.max(src.w, src.h));
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(video.videoWidth * scale);
-    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.width = Math.round(src.w * scale);
+    canvas.height = Math.round(src.h * scale);
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, src.x, src.y, src.w, src.h, 0, 0, canvas.width, canvas.height);
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", JPEG_QUALITY));
   }, []);
 

@@ -72,16 +72,16 @@ export function MandatarioIdentidadBlock({
           </button>
         )}
       </div>
-      <p className="mt-1 text-[11px] leading-tight opacity-70" data-testid="mandatario-validacion-detalle">
+      <p className="mt-1 text-xs leading-tight opacity-70" data-testid="mandatario-validacion-detalle">
         {vista.detalle}
       </p>
       {mensaje && (
-        <p className="mt-1 text-[11px] leading-tight" style={{ color: "#3f7a15" }} role="status" data-testid="mandatario-validacion-mensaje">
+        <p className="mt-1 text-xs leading-tight" style={{ color: "#3f7a15" }} role="status" data-testid="mandatario-validacion-mensaje">
           {mensaje}
         </p>
       )}
       {error && (
-        <p className="mt-1 text-[11px] leading-tight" style={{ color: "#E5484D" }} role="alert">
+        <p className="mt-1 text-xs leading-tight" style={{ color: "#E5484D" }} role="alert">
           {error}
         </p>
       )}

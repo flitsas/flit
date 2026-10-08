@@ -551,6 +551,11 @@ export interface ProcedureInstanceDetail {
   /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
   draftFinalizedAt?: string | null;
   /**
+   * HU #13403 — false ⇒ la compañía tiene deshabilitada la generación automática de improntas: el
+   * radicador la carga a mano. Ausente/undefined ⇒ true (comportamiento histórico).
+   */
+  improntaGeneracionHabilitada?: boolean;
+  /**
    * HU #10879/#10883 — paso actual PERSISTIDO del wizard (autosave por paso). `null`/ausente ⇒ el
    * frontend cae al paso derivado de los gates (comportamiento previo).
    */
@@ -1625,6 +1630,9 @@ export interface BiometricValidation {
   captureUrl: string | null;
   // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
   rejectionReason?: string | null;
+  // Épica #13202: código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL.
+  // Solo con status 'rechazado' y provider 'manual'; null/ausente en los demás casos (Kyverum/mock usan rejectionReason).
+  rejectionReasonCode?: string | null;
   // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
   // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
   ultimoIntentoMotivo?: string | null;
@@ -1650,6 +1658,12 @@ export interface BiometricValidation {
    * `null`/ausente en filas anteriores a este campo — el consumidor cae a `email`.
    */
   registeredEmail?: string | null;
+  /**
+   * Épica #13202 (HU-C8) — cómo se aprobó la validación: `automatica` (Kyverum) o `manual` (revisión del
+   * Super Admin). `null`/ausente = no aprobada o respuesta anterior a este campo: la UI no muestra la fila.
+   * Nunca trae el nombre del revisor.
+   */
+  approvalOrigin?: 'automatica' | 'manual' | null;
 }
 
 /**
@@ -1818,6 +1832,11 @@ export interface LinkedProcedureRef {
  */
 export interface TenantBiometricValidation {
   /**
+   * Validación PROPIA de un mandatario: se lista aparte y solo se consulta (no se apalanca con el trámite ni
+   * la prevalidación del mismo documento; se gestiona desde la ficha del mandatario).
+   */
+  esMandatario?: boolean;
+  /**
    * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
    * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
    */
@@ -1943,6 +1962,8 @@ export interface TenantBiometricValidationFilters {
  * peor alerta. Espejo de TenantBiometricPersonDto.
  */
 export interface TenantBiometricPerson {
+  /** Fila de la validación PROPIA de un mandatario (persona aparte; ver `TenantBiometricValidation.esMandatario`). */
+  esMandatario?: boolean;
   /**
    * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
    * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.

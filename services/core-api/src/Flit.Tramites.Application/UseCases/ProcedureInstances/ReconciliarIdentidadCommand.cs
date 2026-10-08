@@ -26,6 +26,37 @@ public sealed class ReconciliarIdentidadHandler(
         if (v is null || v.TenantId != tenantId || v.ProcedureInstanceId != instanceId)
             return (null, "not_found");
 
+        return await ReconcileAsync(v, ct);
+    }
+
+    /// <summary>
+    /// Misma reconciliación on-demand para la validación PROPIA de un mandatario (sin trámite): consulta la más
+    /// reciente de su ficha, que es la única que decide su firma (HU #13247). La ficha no tiene pantalla de espera
+    /// que pollee como el trámite, así que la consulta al abrirla (y el botón «Consultar estado») cumplen ese papel.
+    /// <c>not_found</c> cuando la ficha no tiene ninguna validación propia.
+    /// </summary>
+    public async Task<(ReconciliarIdentidadResult? Result, string? Error)> HandleMandatarioAsync(
+        Guid mandateSignerId, CancellationToken ct = default)
+    {
+        var propias = await repo.ListMandatarioValidationsAsync([mandateSignerId], ct);
+        if (propias.Count == 0)
+            return (null, "not_found");
+
+        var v = await repo.GetBiometricByIdAsync(propias[0].Id, ct);
+        if (v is null)
+            return (null, "not_found");
+
+        // Mock o flujo manual: no hay proveedor que consultar; el estado de la fila es el vigente.
+        if (!string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(v.KyverumVerificationId))
+            return (new ReconciliarIdentidadResult(v.Status, false), null);
+
+        return await ReconcileAsync(v, ct);
+    }
+
+    private async Task<(ReconciliarIdentidadResult? Result, string? Error)> ReconcileAsync(
+        ProcedureInstanceBiometricValidation v, CancellationToken ct)
+    {
         if (!string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrWhiteSpace(v.KyverumVerificationId))
             return (null, "no_kyverum");

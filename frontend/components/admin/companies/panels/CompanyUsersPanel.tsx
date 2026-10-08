@@ -181,14 +181,14 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-bold">Usuarios de la compañía</h3>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-70">
             Invita usuarios de perfil Gestor y elige el rol con el que entran.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setInviteOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white"
+          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40 focus-visible:ring-offset-2"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
           <UserPlus className="h-3.5 w-3.5" aria-hidden />

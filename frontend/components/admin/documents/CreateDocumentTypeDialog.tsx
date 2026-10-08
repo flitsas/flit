@@ -184,7 +184,7 @@ export function CreateDocumentTypeDialog({
           )}
 
           {errors.form && (
-            <p className="text-[10px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
               {errors.form}
             </p>
           )}
@@ -287,7 +287,7 @@ export function CreateDocumentTypeDialog({
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-[10px] opacity-60">
+            <p className="mt-1 text-xs opacity-60">
               Sin marcar ninguno ⇒ se aplican los formatos globales por defecto (PDF, JPG, PNG, WEBP).
             </p>
           </div>
@@ -348,9 +348,9 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-[10px] opacity-60">{hint}</p>}
+      {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p id={`${htmlFor}-error`} className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p id={`${htmlFor}-error`} className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}

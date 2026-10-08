@@ -510,6 +510,9 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #13403 — la compañía puede tener la generación automática de improntas deshabilitada. El flag
+  // viene en el detalle del trámite; ausente/undefined ⇒ true (comportamiento histórico).
+  const [improntaGenInstancia, setImprontaGeneracionHabilitada] = useState(true);
   // HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (badge secundario en la franja
   // de identidad), ORTOGONAL a `estadoTramite` (que sigue 'aprobado', ADR-0022). Se lee con el resto
   // del detalle inicial. (El botón "Solicitar revocatoria"/AC1-AC3, HU #12573-#12574, ya no vive en
@@ -544,6 +547,7 @@ export function TramiteWizard(props: Props) {
         if (!active) return;
         setInstanceStatus(d.status ?? null);
         setDraftFinalizedAt(d.draftFinalizedAt ?? null);
+        setImprontaGeneracionHabilitada(d.improntaGeneracionHabilitada !== false);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
         setActiveRevocationRequest(d.activeRevocationRequest ?? null);
@@ -597,6 +601,15 @@ export function TramiteWizard(props: Props) {
     error: wizardError,
     refresh,
   } = useWizard(instanceId, undefined, deferredCreation ? entryProcedureTypeCode : undefined);
+
+  // HU #13403 — deshabilitada si CUALQUIERA de las dos lecturas del detalle lo dice (la inicial de la
+  // instancia existente o la del reducer, que cubre también el trámite recién creado en esta sesión).
+  const improntaGeneracionHabilitada =
+    improntaGenInstancia && state.detail?.improntaGeneracionHabilitada !== false;
+  const improntaGeneracionRef = useRef(true);
+  useEffect(() => {
+    improntaGeneracionRef.current = improntaGeneracionHabilitada;
+  }, [improntaGeneracionHabilitada]);
 
   // N 03 — estado de negocio del trámite: manda el del wizard (se refresca tras cada acción);
   // fallback al fetch inicial de la instancia existente mientras el wizard carga.
@@ -1277,10 +1290,13 @@ export function TramiteWizard(props: Props) {
         } catch {
           // Puede existir ya; el consolidado fallará si realmente falta.
         }
-        try {
-          await tramitesClient.generarImpronta(id);
-        } catch {
-          // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+        // HU #13403 — con la generación deshabilitada la impronta se carga a mano: no se genera.
+        if (improntaGeneracionRef.current) {
+          try {
+            await tramitesClient.generarImpronta(id);
+          } catch {
+            // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+          }
         }
         const result = await tramitesClient.generarConsolidado(id, undefined, true);
         if (!result.incompleto) {
@@ -1989,6 +2005,7 @@ export function TramiteWizard(props: Props) {
                 tipoCodigo={tipoCodigo}
                 instanceId={instanceId}
                 instanceStatus={estadoTramite}
+                improntaGeneracionHabilitada={improntaGeneracionHabilitada}
                 preflight={preflight}
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
@@ -2063,8 +2080,8 @@ export function TramiteWizard(props: Props) {
               </InlineAlert>
             )}
 
-          {/* HU #13146 — «Firmará: {nombre} / {forma}» de solo lectura, o la alerta de falta de
-              mandatario (error en block, aviso en warn). */}
+          {/* HU #13146 — frase de solo lectura de quién firmará el contrato de mandato, o la alerta
+              de falta de mandatario (error en block, aviso en warn). */}
           {isDecisionStep && (
             <MandatarioFirmaIndicator
               data={mandatarioPrevisto}
@@ -4645,6 +4662,7 @@ function StepBody({
   tipoCodigo,
   instanceId,
   instanceStatus,
+  improntaGeneracionHabilitada = true,
   preflight,
   preflightLoading,
   onRunPreflight,
@@ -4690,6 +4708,8 @@ function StepBody({
   instanceId: string | null;
   /** Para remount del paso FUR tras Preparar y mostrar adjuntos generados. */
   instanceStatus?: InstanceStatus | null;
+  /** HU #13403 — false ⇒ la impronta no se genera automáticamente; se carga a mano. */
+  improntaGeneracionHabilitada?: boolean;
   /** CF-02 — modalidad en curso cuando el trámite AÚN no existe (paso 1 desacoplado). */
   deferredFamily?: ProcedureFamily | WizardModalidad;
   seedVin?: string;
@@ -5033,7 +5053,10 @@ function StepBody({
               uploadMode={docUploadMode}
               onUploadModeChange={setDocUploadMode}
               modalidad={modalidadUi}
-              permiteGenerarImprontaAutomatica={caps.permiteGenerarImprontaAutomatica}
+              permiteGenerarImprontaAutomatica={
+                caps.permiteGenerarImprontaAutomatica && improntaGeneracionHabilitada
+              }
+              improntaGeneracionHabilitada={improntaGeneracionHabilitada}
             />
           </WizardAccordion>
 

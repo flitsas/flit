@@ -305,7 +305,7 @@ export function CompanyMandatarioForm({
   };
 
   const inputClass =
-    "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]";
+    "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 dark:bg-[#0B0F14]";
 
   // Pasos visibles, numerados de corrido (con Persona jurídica o Formato en blanco hay menos).
   let numero = 0;

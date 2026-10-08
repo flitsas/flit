@@ -34,6 +34,7 @@ public sealed class ListPersonBiometricValidationsHandler(IProcedureInstanceRepo
         string? documentNumber,
         int page = 1,
         int pageSize = DefaultPageSize,
+        bool mandatario = false,
         CancellationToken ct = default)
     {
         var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
@@ -44,13 +45,17 @@ public sealed class ListPersonBiometricValidationsHandler(IProcedureInstanceRepo
         pageSize = Math.Clamp(pageSize, MinPageSize, MaxPageSize);
         var now = DateTimeOffset.UtcNow;
 
-        var (rows, total, anyNonTerminal) = await repo.ListBiometricValidationsByPersonAsync(
-            tenantId, tipo, numero, (page - 1) * pageSize, pageSize, ct);
+        // mandatario = la fila «Mandatario» del módulo Validaciones: su historial propio, que no cuelga de trámites.
+        var (rows, total, anyNonTerminal) = mandatario
+            ? await repo.ListMandatarioValidationsByPersonAsync(tenantId, tipo, numero, (page - 1) * pageSize, pageSize, ct)
+            : await repo.ListBiometricValidationsByPersonAsync(tenantId, tipo, numero, (page - 1) * pageSize, pageSize, ct);
 
         if (total == 0)
             return (null, "not_found");
 
-        var linked = await LoadLinkedAsync(tenantId, rows, ct);
+        var linked = mandatario
+            ? new Dictionary<string, IReadOnlyList<LinkedProcedureDto>>()
+            : await LoadLinkedAsync(tenantId, rows, ct);
         var dtos = rows.Select(v => Enrich(v, now, linked)).ToList();
         var name = rows.Count > 0 ? rows[0].Name : null;
 

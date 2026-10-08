@@ -64,7 +64,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
 
       {scope === "CLIENTE" && (
         <p
-          className="mb-3 flex items-start gap-1.5 rounded-xl border px-3 py-2 text-[10px] font-medium"
+          className="mb-3 flex items-start gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium"
           style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
           role="note"
         >
@@ -114,7 +114,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
       </div>
 
       {error && (
-        <p className="mt-2 text-[10px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="mt-2 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
           {error}
         </p>
       )}

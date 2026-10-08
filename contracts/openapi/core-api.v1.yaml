@@ -6181,6 +6181,78 @@ paths:
         "404":
           description: Sin validaciones para ese documento.
 
+  /api/v1/tramites/biometric-validations/manual:
+    get:
+      operationId: listManualIdentityValidations
+      tags: [Tramites, Identidad]
+      summary: Validaciones de identidad manuales de todas las compañías (HU #13296, Épica #13202)
+      description: >
+        Solo Super Admin (403 al resto, 401 anónimo). Lista las validaciones con proveedor `manual`
+        (estados manual_activo, pendiente_revision_manual, aprobado con origen manual, rechazado, expirado)
+        de todas las compañías. Orden: pendientes de revisión primero, los más antiguos arriba.
+        `waitingMinutes` mide SOLO la revisión (desde que el cliente envió la captura) y es null en cualquier
+        otro estado. `origin`: tramite, prevalidacion, mandatario o
+        representante_legal (este último aún no lo produce ninguna fila).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
+        - name: origin
+          in: query
+          schema:
+            type: string
+            enum: [tramite, prevalidacion, mandatario, representante_legal]
+        - name: q
+          in: query
+          description: Texto en nombre o número de documento (máx. 100 caracteres).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Página de validaciones manuales.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, pageSize]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, fullName, documentNumber, tenantName, origin, status]
+                      properties:
+                        id: { type: string, format: uuid }
+                        fullName: { type: string }
+                        documentNumber: { type: string }
+                        tenantName: { type: string }
+                        origin:
+                          type: string
+                          enum: [tramite, prevalidacion, mandatario, representante_legal]
+                        status:
+                          type: string
+                          enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
+                        activatedAt: { type: string, format: date-time, nullable: true }
+                        waitingMinutes: { type: integer, nullable: true, description: Minutos en revisión; solo con estado pendiente_revision_manual (null en los demás). }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+        "400":
+          description: Estado u origen inválido.
+        "401":
+          description: Sin autenticación.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+
   /api/v1/tramites/biometric-validations/{id}:
     get:
       operationId: getPrevalidacionDetail
@@ -6370,8 +6442,8 @@ paths:
       tags: [Tramites, Identidad]
       summary: Regenerar el enlace de captura manual (solo Super Admin) — HU #13287, Épica #13202
       description: >
-        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación en
-        `manual_activo`; el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
+        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación que espera
+        captura: `manual_activo`, o `rechazado` tras una revisión manual (HU #13299; sigue `rechazado`); el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
         público recibe 404; no se distingue «reemplazado» de «inválido» y el front lo cubre con «enlace inválido o
         reemplazado»). Envía el correo al titular y audita `manual_enlace_regenerado`. Si el correo no sale la
         regeneración NO se revierte: `emailEnviado` es false y se audita `manual_correo_fallido`. Solo Super Admin;
@@ -6397,7 +6469,191 @@ paths:
         "404":
           description: Validación de identidad no encontrada.
         "409":
-          description: flujo_manual_no_activo (la validación no está en manual_activo).
+          description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
+  /api/v1/tramites/biometric-validations/{id}/manual-detail:
+    get:
+      operationId: getManualIdentityValidationDetail
+      tags: [Tramites, Identidad]
+      summary: Detalle de una validación manual (solo Super Admin) — HU #13297, Épica #13202
+      description: >
+        Detalle de una validación del flujo manual de CUALQUIER compañía (el tenant sale de la fila). Solo Super Admin
+        (403 al resto, 401 anónimo). Trae el `ManualListItem` más la constancia de consentimiento (solo la del ciclo actual),
+        el estado de las 4 imágenes (`images[].available`, solo con captura del ciclo ACTUAL: pendiente de revisión o
+        aprobada manualmente), la revisión (`reviewedAt`, `reviewedBy` con el nombre visible del revisor,
+        `rejectionReasonCode`) y `linkExpiresAt` (solo cuando se espera captura: `manual_activo` o `rechazado` con motivo). Tras un rechazo (HU #13299)
+        el estado es `rechazado` con `rejectionReasonCode`, las imágenes rechazadas siguen disponibles hasta que llegue la
+        captura nueva y `linkExpiresAt` es el vencimiento del enlace nuevo; con `manual_activo` (activación del Super Admin)
+        las imágenes de un ciclo anterior no se muestran (todas `available: false`). Sin captura aún tampoco hay imágenes. Nunca expone rutas de storage ni la
+        IP del consentimiento. Cada consulta queda auditada (`manual_imagenes_consultadas`, `recurso=detalle`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Detalle de la validación manual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualDetail"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Validación inexistente o que no es del flujo manual (code not_found).
+
+  /api/v1/tramites/biometric-validations/{id}/manual-images/{kind}:
+    get:
+      operationId: getManualIdentityValidationImage
+      tags: [Tramites, Identidad]
+      summary: Imagen de la captura manual (solo Super Admin) — HU #13297, Épica #13202
+      description: >
+        Entrega los bytes de una imagen del ciclo ACTUAL desde el almacenamiento, con su Content-Type real (detectado por
+        el contenido) y `Cache-Control: no-store`. Es el único acceso: no hay URL pública ni firmada ni ruta de storage.
+        Solo Super Admin (403 al resto, 401 anónimo); el JWT viaja en la cabecera Authorization. `kind` ∈ `rostro`,
+        `anverso`, `reverso`, `firma`; 404 si el kind es otro, la validación no existe o no es manual, o esa imagen no
+        existe en el ciclo actual (p. ej. `manual_activo` tras una reactivación del Super Admin). Cada entrega queda auditada
+        (`manual_imagenes_consultadas`, `recurso=imagen:<kind>`, sin rutas ni PII).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [rostro, anverso, reverso, firma]
+      responses:
+        "200":
+          description: Contenido de la imagen.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Kind inválido, validación inexistente o sin esa imagen en el ciclo actual (code not_found).
+
+  /api/v1/tramites/biometric-validations/{id}/manual-approve:
+    post:
+      operationId: approveManualIdentityValidation
+      tags: [Tramites, Identidad]
+      summary: Aprobar una validación manual (solo Super Admin) — HU #13298, Épica #13202
+      description: >
+        Aprueba una validación en `pendiente_revision_manual` por el MISMO camino que una aprobación de Kyverum: llama a
+        `Approve` (validatedAt = ahora, validUntil = +30 días, siempre) y encola el evento de completado de identidad, que
+        encadena firma/FUR/sello de los trámites pendientes de esa persona. El gate de radicación y el reuso por
+        tenant+documento no cambian: leen la validación aprobada y vigente. Deja `approval_origin = manual`, `reviewed_by` y
+        `reviewed_at`, y audita `manual_aprobado` (sin PII ni rutas). Solo Super Admin (401 anónimo, 403 al resto); el tenant sale
+        de la fila (NO se usa X-Tenant-Id).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Validación aprobada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AprobarValidacionManualResult"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Validación inexistente (code not_found).
+        "409":
+          description: "`estado_invalido` (no está en pendiente_revision_manual) o `tramite_inactivo` (trámite anulado o revocado)."
+  /api/v1/tramites/biometric-validations/manual-rejection-reasons:
+    get:
+      operationId: listManualRejectionReasons
+      tags: [Tramites, Identidad]
+      summary: Catálogo de motivos de rechazo manual (solo Super Admin) — HU #13299, Épica #13202
+      description: >
+        Lista cerrada de motivos homologados con su etiqueta en español (la misma que lleva el correo al cliente). Una sola
+        constante en código; el front la usa para el selector del rechazo. Solo Super Admin (401 anónimo, 403 al resto).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Motivos de rechazo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ManualRejectionReason"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+  /api/v1/tramites/biometric-validations/{id}/manual-reject:
+    post:
+      operationId: rejectManualIdentityValidation
+      tags: [Tramites, Identidad]
+      summary: Rechazar una validación manual con motivo homologado (solo Super Admin) — HU #13299, Épica #13202
+      description: >
+        Rechaza una validación en `pendiente_revision_manual` con un `reasonCode` de la lista cerrada: registra
+        `rejection_reason_code`, `reviewed_by` y `reviewed_at`, y en la misma operación emite un enlace nuevo de 24 h (solo su hash
+        SHA-256 se guarda) y envía al cliente un correo con el motivo en texto legible y el enlace nuevo (sin datos sensibles).
+        **Tras rechazar la fila queda en `rechazado`** (visible como Rechazada; NO vuelve a `manual_activo`) con
+        `rejectionReasonCode` no nulo; con el enlace nuevo el cliente repite la captura estando `rechazado` y la captura nueva pasa
+        a `pendiente_revision_manual` limpiando el motivo y la revisión (que se conservan hasta entonces). Sin tope de intentos. Audita `manual_rechazado` (usuario y código, sin texto libre). Si
+        el correo no sale el rechazo NO se revierte: `emailEnviado` es false y se audita `manual_correo_fallido`. Un motivo ausente o
+        fuera de la lista responde 400 `motivo_invalido` y no cambia nada (el contrato de la Épica fija 400; la HU decía 422).
+        Solo Super Admin (401 anónimo, 403 al resto).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RechazarValidacionManualRequest"
+      responses:
+        "200":
+          description: Rechazo registrado; la captura queda reactivada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechazarValidacionManualResult"
+        "400":
+          description: "`motivo_invalido` — motivo ausente o fuera de la lista."
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (code super_admin_required).
+        "404":
+          description: Validación inexistente (code not_found).
+        "409":
+          description: "`estado_invalido` (no está en pendiente_revision_manual) o `tramite_inactivo` (trámite anulado o revocado)."
+
   /api/v1/public/manual-capture/{token}:
     get:
       operationId: getPublicManualCapture
@@ -6406,7 +6662,7 @@ paths:
       description: >
         Datos para la pantalla de captura del cliente. Público: el token (256 bits; en BD solo su hash SHA-256) es
         la credencial; sin Authorization ni X-Tenant-Id. Solo si la validación es del proveedor `manual` y está en
-        `manual_activo`. Un token vacío, desconocido, regenerado o de otro proveedor responde 404 sin revelar si
+        `manual_activo` o `rechazado` con motivo (repetición tras un rechazo, HU #13299). Un token vacío, desconocido, regenerado o de otro proveedor responde 404 sin revelar si
         existió. Solo lectura. Límite de tasa por IP (policy manual-capture, 429 sin cuerpo). Errores `{ code, message }`.
       security: []
       parameters:
@@ -6426,7 +6682,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
         "409":
-          description: "`estado_invalido` — ya enviada, aprobada, rechazada o expirada (o trámite anulado/revocado)."
+          description: "`estado_invalido` — ya enviada, aprobada o fuera de espera de captura; una rechazada con enlace vigente SÍ admite captura (o trámite anulado/revocado)."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
@@ -6538,7 +6794,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
         "409":
-          description: "`estado_invalido` (ya enviada, aprobada, rechazada o expirada) o `consentimiento_requerido`."
+          description: "`estado_invalido` (ya enviada, aprobada o fuera de espera de captura; una rechazada con enlace vigente SÍ admite captura) o `consentimiento_requerido`."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManualCaptureError" }
@@ -9613,6 +9869,85 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/AdjuntoBloqueadoFlitoProblem" }
+
+  /api/v1/tramites/instances/{id}/attachments/generate-impronta:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Genera la impronta del trámite (Kyverum RUNT) y la adjunta
+      description: >
+        HU #13402 (Feature #13399) — la generación respeta el parámetro «generar improntas» de la
+        compañía CONGELADO al crear el trámite (`improntaGeneracionHabilitada`). Con `false` responde 409
+        `generacion_improntas_deshabilitada` sin llamar a Kyverum y sin crear adjunto; la impronta se sube
+        a mano (su exigencia sigue gobernada por la matriz/checklist).
+      operationId: generateProcedureInstanceImpronta
+      security:
+        - bearerAuth: []
+      responses:
+        "201": { description: "Impronta generada y adjuntada." }
+        "401": { description: "Usuario no resuelto o Kyverum RUNT rechazó la autenticación." }
+        "404": { description: "Trámite no encontrado." }
+        "409":
+          description: >
+            `generacion_improntas_deshabilitada` (HU #13402, el trámite nació con la generación
+            deshabilitada; el cuerpo trae `error`), `not_draft`, `impronta_ya_existe`,
+            `organismo_requerido`, `identificador_vehiculo_requerido`, `documento_propietario_requerido`
+            u `operador_no_resuelto`.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  error:
+                    type: string
+                    example: generacion_improntas_deshabilitada
+        "422": { description: "Kyverum RUNT rechazó los datos de la impronta." }
+        "502": { description: "Kyverum RUNT no disponible." }
+
+  /api/v1/tramites/instances/{id}/checklist/impronta-diferida:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Trámites · Documentos]
+      summary: Marca o desmarca la impronta como «se generará automáticamente»
+      description: >
+        Con `diferida = true` y un trámite creado con la generación de improntas deshabilitada
+        (`improntaGeneracionHabilitada = false`, HU #13402) responde 409 `generacion_improntas_deshabilitada`.
+        Desmarcar (`diferida = false`) sigue permitido.
+      operationId: setProcedureInstanceImprontaDiferida
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                diferida: { type: boolean }
+      responses:
+        "204": { description: "Marca actualizada." }
+        "404": { description: "Trámite no encontrado." }
+        "409":
+          description: >
+            `generacion_improntas_deshabilitada` (HU #13402), `not_draft` o `impronta_no_aplica`.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  error: { type: string }
 
   /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download:
     parameters:
@@ -13733,8 +14068,13 @@ components:
         resolucionesModuleEnabled:
           type: boolean
           description: Muestra el módulo Resoluciones del dashboard (HU #12250). Default false.
+        generacionImprontas:
+          type: boolean
+          description: >-
+            Generación automática de improntas habilitada para la compañía (HU #13400). Default true.
+            Solo la sirve este endpoint, reservado al SuperAdmin FLIT.
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled, generacionImprontas]
 
     ActiveModulesResponse:
       type: object
@@ -13817,6 +14157,13 @@ components:
           description: >-
             Opcional (HU #12250). Muestra el módulo Resoluciones del dashboard. Si se omite (null), se
             conserva el valor previo.
+        generacionImprontas:
+          type: boolean
+          nullable: true
+          description: >-
+            Opcional (HU #13400). Habilita o deshabilita la generación automática de improntas de la
+            compañía. Si se omite (null), se conserva el valor previo. Cada cambio real queda en la
+            auditoría de configuración (campo generate_improntas).
       required:
         [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, metodosRecaudo]
 
@@ -15471,6 +15818,12 @@ components:
         la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
       additionalProperties: true
       properties:
+        improntaGeneracionHabilitada:
+          type: boolean
+          description: >
+            HU #13402 (Feature #13399) — parámetro «generar improntas» de la compañía congelado al crear
+            el trámite. `false` = la generación automática no aplica (el usuario sube la impronta a mano).
+            Trámites anteriores a la migración: `true`. Aditivo.
         consolidadoWizard:
           description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
           type: object
@@ -15881,6 +16234,22 @@ components:
             pestaña del actor sin comparar documentos. `null` cuando no se pudo atribuir a un actor
             concreto (validación histórica/huérfana). Con 1 solo actor por lado (caso mayoritario)
             siempre trae `1`.
+        approvalOrigin:
+          type: string
+          nullable: true
+          enum: [automatica, manual]
+          description: >
+            HU #13303 (Épica #13202) — cómo se aprobó la validación: `automatica` (Kyverum/mock) o `manual` (revisión del
+            Super Admin). Solo con status=aprobado; `null` en cualquier otro estado y en aprobaciones anteriores al campo.
+            Nunca trae el nombre del revisor.
+        rejectionReasonCode:
+          type: string
+          nullable: true
+          enum: [imagen_borrosa, rostro_no_coincide, documento_ilegible_o_incompleto, documento_no_corresponde, firma_ilegible_o_no_corresponde, captura_fuera_de_encuadre]
+          description: >
+            Épica #13202 — código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL. Solo con
+            status=rechazado y provider=manual; `null` en cualquier otro caso (las rechazadas de Kyverum/mock siguen con
+            `rejectionReason`). Sin texto libre ni PII.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]
@@ -16371,10 +16740,91 @@ components:
         tenantId: { type: string, format: uuid }
         procedureInstanceId: { type: string, format: uuid, nullable: true }
         provider: { type: string, enum: [manual] }
-        status: { type: string, enum: [manual_activo] }
+        status: { type: string, enum: [manual_activo, rechazado] }
         expiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
         activatedAt: { type: string, format: date-time, nullable: true, description: Cuándo se activó el flujo manual. }
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió; se puede volver a regenerar. }
+    AprobarValidacionManualResult:
+      type: object
+      description: Estado resultante de aprobar una validación manual (HU #13298).
+      properties:
+        validationId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [aprobado] }
+        approvalOrigin: { type: string, enum: [manual] }
+        validatedAt: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time, description: Fin de vigencia (30 días desde la aprobación). }
+        reviewedAt: { type: string, format: date-time }
+    ManualRejectionReason:
+      type: object
+      required: [code, label]
+      description: Motivo homologado de rechazo de una validación manual (HU #13299).
+      properties:
+        code:
+          type: string
+          enum: [imagen_borrosa, rostro_no_coincide, documento_ilegible_o_incompleto, documento_no_corresponde, firma_ilegible_o_no_corresponde, captura_fuera_de_encuadre]
+        label: { type: string, description: Etiqueta en español legible (la del correo al cliente). }
+    RechazarValidacionManualRequest:
+      type: object
+      required: [reasonCode]
+      properties:
+        reasonCode:
+          type: string
+          description: Código de la lista cerrada (`GET .../manual-rejection-reasons`).
+    RechazarValidacionManualResult:
+      type: object
+      description: >
+        Estado resultante de rechazar una validación manual (HU #13299). Tras rechazar la fila queda en `rechazado` con
+        `rejectionReasonCode` no nulo y un enlace nuevo vigente hasta `linkExpiresAt`. No incluye el token del enlace.
+      properties:
+        validationId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [rechazado] }
+        rejectionReasonCode: { type: string }
+        reviewedAt: { type: string, format: date-time }
+        linkExpiresAt: { type: string, format: date-time, description: Vencimiento del enlace NUEVO (24 h desde ahora). }
+        emailEnviado: { type: boolean, description: false si el correo con el motivo y el enlace no salió; el Super Admin puede regenerar el enlace. }
+    ManualDetail:
+      type: object
+      required: [id, fullName, documentNumber, tenantName, origin, status, images]
+      description: >
+        Detalle de una validación manual (HU #13297): `ManualListItem` + consentimiento del ciclo actual, estado de las 4
+        imágenes, revisión y vencimiento del enlace. Sin rutas de storage ni IP.
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        documentNumber: { type: string }
+        tenantName: { type: string }
+        origin:
+          type: string
+          enum: [tramite, prevalidacion, mandatario, representante_legal]
+        status:
+          type: string
+          enum: [manual_activo, pendiente_revision_manual, aprobado, rechazado, expirado]
+        activatedAt: { type: string, format: date-time, nullable: true }
+        waitingMinutes: { type: integer, nullable: true, description: Minutos en revisión; solo con estado pendiente_revision_manual (null en los demás). }
+        consentAt: { type: string, format: date-time, nullable: true, description: Solo la constancia del ciclo actual. }
+        consentTextVersion: { type: string, nullable: true }
+        images:
+          type: array
+          description: Siempre las 4, en orden rostro, anverso, reverso, firma. `available` solo con captura del ciclo actual.
+          items:
+            type: object
+            required: [kind, available]
+            properties:
+              kind: { type: string, enum: [rostro, anverso, reverso, firma] }
+              available: { type: boolean }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+        reviewedBy: { type: string, nullable: true, description: Nombre visible del revisor (su id si ya no se resuelve). }
+        rejectionReasonCode:
+          type: string
+          nullable: true
+          description: >
+            Código del último rechazo. Tras rechazar (HU #13299) el estado es `rechazado` con este campo no nulo hasta que el
+            cliente envíe la captura nueva (que lo limpia).
+        linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo cuando se espera captura (manual_activo o rechazado con motivo). }
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]

@@ -154,17 +154,17 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
             type="button"
             onClick={clearCanvas}
             disabled={disabled}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
             <Eraser className="h-3.5 w-3.5" /> Limpiar
           </button>
           {value && mode === "draw" && (
-            <span className="text-[11px] font-semibold" style={{ color: "#0a8f8b" }}>
+            <span className="text-xs font-semibold" style={{ color: "#0a8f8b" }}>
               ✓ Firma capturada
             </span>
           )}
         </div>
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-60">
           Dibuja la firma con el mouse o el dedo. Al soltar se guarda automáticamente como PNG.
         </p>
       </div>
@@ -188,7 +188,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
         </label>
         {value && mode === "upload" && (
           <div className="rounded-xl border p-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase opacity-60">Vista previa</p>
+            <p className="mb-1 text-xs font-semibold uppercase opacity-60">Vista previa</p>
             {/* Vista previa del PNG cargado; no se sube ningún binario al listar. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={value} alt="Vista previa de la firma cargada" className="max-h-32 w-auto" />
@@ -197,7 +197,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
       </div>
 
       {(uploadError || error) && (
-        <p role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
           {uploadError ?? error}
         </p>
       )}
@@ -223,7 +223,7 @@ function ModeButton({
       aria-checked={active}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
       style={active ? { background: "#557EFF", borderColor: "#557EFF", color: "#fff" } : { borderColor: "#DFE5ED" }}
     >
       {children}

@@ -1,5 +1,6 @@
 import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
+import { apiBaseForPageRoot } from './base-url';
 import { uploadFileToPresignedUrl } from './presigned-upload';
 import type {
   AceptarConsentimientoResult,
@@ -156,7 +157,8 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { esFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { resolveApiBase } from './base-url';
-import { decodeJwtPayload } from '@/lib/auth/jwt';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { ocultarManualAlCliente } from '@/lib/identity/ocultar-manual';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 import type {
   NetworkChildFilter,
@@ -217,8 +219,9 @@ export function fetchNetworkChildren(signal?: AbortSignal): Promise<NetworkChild
 // NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
 // en dev local, las peticiones van al origen del frontend (localhost:3000) y Next.js
 // las reescribe a core-api (:4003) vía next.config.ts — no hace falta levantar el gateway.
+// Con la raíz de la página: en app.flitsas.com la API es api.flitsas.com (ver apiBaseForPageRoot).
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
+  apiBaseForPageRoot(process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '');
 
 // Único constructor de URLs del cliente. El path absoluto (/api/v1/...) toma solo el
 // ORIGEN de la base e ignora su path, así un BASE_URL con sufijo /api/v1 (el que inyecta
@@ -551,7 +554,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
 
-  return JSON.parse(text) as T;
+  // Lo «manual» del flujo de identidad solo lo ve el Super Admin FLIT: para el resto es una validación biométrica normal.
+  return ocultarManualAlCliente(JSON.parse(text) as T, isSuperAdmin(decodeJwtPayload(token)));
 }
 
 /**
@@ -2079,7 +2083,7 @@ export const tramitesClient = {
     childTenantId: string,
     documentType: string,
     documentNumber: string,
-    opts: { page?: number; pageSize?: number } = {},
+    opts: { page?: number; pageSize?: number; mandatario?: boolean } = {},
   ): Promise<PersonBiometricValidationsResponse> => {
     const params = new URLSearchParams();
     params.set('childTenantId', childTenantId);
@@ -2087,6 +2091,7 @@ export const tramitesClient = {
     params.set('documentNumber', documentNumber);
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    if (opts.mandatario) params.set('mandatario', 'true');
     const res = await request<PersonBiometricValidationsResponse>(
       `/api/v1/tramites/network/identity-validations/by-person/detail?${params.toString()}`,
       { headers: authOnlyHeader() },
@@ -2137,7 +2142,8 @@ export const tramitesClient = {
   listPersonBiometricValidations: async (
     documentType: string,
     documentNumber: string,
-    opts: { page?: number; pageSize?: number } = {},
+    // mandatario: historial de la fila «Mandatario» (validación propia del mandatario, aparte).
+    opts: { page?: number; pageSize?: number; mandatario?: boolean } = {},
     tenantId?: string,
   ): Promise<PersonBiometricValidationsResponse> => {
     const params = new URLSearchParams();
@@ -2145,6 +2151,7 @@ export const tramitesClient = {
     params.set('documentNumber', documentNumber);
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    if (opts.mandatario) params.set('mandatario', 'true');
     const res = await request<PersonBiometricValidationsResponse>(
       `/api/v1/tramites/biometric-validations/by-person/detail?${params.toString()}`,
       { headers: tenantHeader(tenantId) },

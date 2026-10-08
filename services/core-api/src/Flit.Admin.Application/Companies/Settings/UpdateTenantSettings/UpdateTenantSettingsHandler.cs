@@ -182,6 +182,9 @@ public sealed class UpdateTenantSettingsHandler
             TramitesModuleEnabled = previous.TramitesModuleEnabled,
             ComparendosModuleEnabled = previous.ComparendosModuleEnabled,
             ResolucionesModuleEnabled = request.ResolucionesModuleEnabled ?? previous.ResolucionesModuleEnabled,
+            // HU #13400 (Feature #13398) — opcional: si el request lo omite se conserva el valor previo.
+            // El endpoint ya es SuperAdmin-only, así que solo el SuperAdmin FLIT llega a este punto.
+            GenerateImprontas = request.GeneracionImprontas ?? previous.GenerateImprontas,
         };
 
         var changes = SettingsDiff.Compute(previous, updated);

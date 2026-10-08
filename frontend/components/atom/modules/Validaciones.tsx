@@ -29,6 +29,9 @@ import {
 } from 'lucide-react';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
+import { SectionTabs } from '@/components/atom/SectionTabs';
+import { ValidacionesManuales } from './ValidacionesManuales';
+import { getManualReviewClient } from '@/lib/api/manual-review-client';
 import { COPY } from '@/lib/copy/copy-catalog';
 
 /** H1 canónico del módulo Identidad (HU #12699 / A17). El id SPA permanece `validaciones`. */
@@ -65,7 +68,8 @@ import {
   isScopeRejection,
 } from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
-import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import { MANUAL_ESTADO_META, enlaceDetalleManual } from '@/lib/identity/manual-flow';
+import { useSearchParams } from 'next/navigation';
 import {
   PrevalidacionForm,
   PrevalidacionSuccessPanel,
@@ -313,7 +317,126 @@ interface ResendResultState {
   notice?: string;
 }
 
+/**
+ * Módulo Validaciones. Para el Super Admin añade la pestaña «Validaciones manuales» (Épica #13202, HU-C5) con el
+ * contador de pendientes de revisión, junto a la lista actual, que no cambia; el resto de roles ve exactamente la
+ * lista de siempre, sin pestañas y sin ninguna llamada al listado manual.
+ */
 export function Validaciones() {
+  const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  if (!esSuperAdmin) return <ValidacionesLista />;
+  return <ValidacionesSuperAdmin />;
+}
+
+/** Tamaño mínimo que acepta el backend (10): basta para leer `total` sin traer filas de más. */
+const PENDIENTES_PAGE_SIZE = 10;
+
+function ValidacionesSuperAdmin() {
+  // Enlace profundo (`?m=validaciones&tab=manuales&manual=<id>`): `useSearchParams` también refleja los
+  // `history.pushState/replaceState` de la propia app, así que el acceso desde el detalle de Identidad no recarga.
+  const params = useSearchParams();
+  const manualParam = params?.get('manual') || null;
+  const tabParam = params?.get('tab') || null;
+  const quiereManuales = tabParam === 'manuales' || manualParam !== null;
+  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>(quiereManuales ? 'manuales' : 'validaciones');
+  const enlaceKey = `${tabParam ?? ''}|${manualParam ?? ''}`;
+  const [enlaceVisto, setEnlaceVisto] = useState(enlaceKey);
+  // Ajuste durante el render: un enlace profundo nuevo activa la pestaña manual (no se vuelve a forzar sin cambio).
+  if (enlaceKey !== enlaceVisto) {
+    setEnlaceVisto(enlaceKey);
+    if (quiereManuales) setPestana('manuales');
+  }
+  const limpiarManual = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('manual')) return;
+    url.searchParams.delete('manual');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+  const [pendientes, setPendientes] = useState<number | undefined>(undefined);
+  const [refreshSignal, setRefreshSignal] = useState(0);
+
+  const cargarPendientes = useCallback((signal?: AbortSignal) => {
+    getManualReviewClient()
+      .listManual({ page: 1, pageSize: PENDIENTES_PAGE_SIZE, status: 'pendiente_revision_manual' }, signal)
+      .then((res) => {
+        if (!signal?.aborted) setPendientes(res.total);
+      })
+      .catch(() => {
+        if (!signal?.aborted) setPendientes(undefined); // sin cifra antes que una cifra falsa
+      });
+  }, []);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    cargarPendientes(ctrl.signal);
+    return () => ctrl.abort();
+  }, [cargarPendientes]);
+
+  // El contador de pendientes se mantiene al día solo (llegan capturas de clientes sin que nadie toque nada).
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === 'visible') cargarPendientes();
+    };
+    const id = window.setInterval(tick, AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [cargarPendientes]);
+
+  /** Algo cambió (aprobar, rechazar, activar, regenerar): contador y grilla de «Validaciones» se refrescan ya. */
+  const refrescarTodo = useCallback(() => {
+    cargarPendientes();
+    setRefreshSignal((n) => n + 1);
+  }, [cargarPendientes]);
+
+  return (
+    <ValidacionesLista
+      refreshSignal={refreshSignal}
+      onListChanged={cargarPendientes}
+      renderTabs={(lista) => (
+        <SectionTabs
+          ariaLabel="Secciones de validaciones"
+          active={pestana}
+          onChange={(id) => {
+            setPestana(id);
+            refrescarTodo(); // al cambiar de pestaña se ve siempre el dato actual
+          }}
+          tabs={[
+            { id: 'validaciones', label: 'Validaciones', content: <div className="flex flex-col gap-4">{lista}</div> },
+            {
+              id: 'manuales',
+              label: 'Validaciones manuales',
+              count: pendientes,
+              countLabel: 'por revisar',
+              title: 'Por revisar: capturas del cliente que esperan aprobación o rechazo',
+              content: (
+                <ValidacionesManuales
+                  onChanged={refrescarTodo}
+                  openId={manualParam}
+                  onDetailClose={limpiarManual}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
+    />
+  );
+}
+
+function ValidacionesLista({
+  renderTabs,
+  refreshSignal = 0,
+  onListChanged,
+}: {
+  renderTabs?: (lista: ReactNode) => ReactNode;
+  /** Sube cuando algo cambió fuera de la lista (p. ej. se aprobó una validación manual): la lista se refresca ya. */
+  refreshSignal?: number;
+  /** La lista cambió por una acción del detalle (activar/regenerar el flujo manual): quien monta refresca el contador. */
+  onListChanged?: () => void;
+} = {}) {
   // HU #12706/#12707 — el admin FLIT ve por defecto TODAS las compañías («Todas») y puede acotar a una.
   // El alcance del listado y de las incidencias viaja EXPLÍCITO en cada llamada (`listTenant`): ya no se
   // fija global con `setActiveTramitesTenant`, porque en «Todas» cada fila es de una compañía distinta.
@@ -386,6 +509,8 @@ export function Validaciones() {
     tenantId?: string;
     /** HU #12709 — persona de una hija vista por la cabeza: detalle por la ruta de red, en lectura. */
     soloConsulta?: boolean;
+    /** Fila «Mandatario»: historial de la validación propia del mandatario, aparte y en lectura. */
+    mandatario?: boolean;
   } | null>(null);
 
   // Gestión de prevalidaciones, absorbida de la pantalla retirada /tramites/prevalidaciones.
@@ -607,6 +732,15 @@ export function Validaciones() {
   useEffect(() => {
     void refreshStuck();
   }, [applied, refreshStuck]);
+
+  // Cambio externo (aprobación/rechazo en la pestaña manual, cambio de pestaña): refresca la grilla en segundo plano.
+  const refreshSignalVisto = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignalVisto.current === refreshSignal) return;
+    refreshSignalVisto.current = refreshSignal;
+    void load(appliedRef.current, { background: true });
+    void refreshStuck({ background: true });
+  }, [refreshSignal, load, refreshStuck]);
 
   // Auto-refresco en vivo (fase 2 — "suscripción"): tras la primera carga, refresca la grilla cada
   // AUTO_REFRESH_MS con los filtros vigentes para reflejar los cambios que el backend persiste vía
@@ -1019,6 +1153,7 @@ export function Validaciones() {
         }
       />
 
+      {(renderTabs ?? ((c: ReactNode) => c))(<>
       {stuckLoading ? (
         <div className="sr-only" role="status" aria-label="Cargando validaciones atascadas">
           Cargando validaciones atascadas
@@ -1185,13 +1320,14 @@ export function Validaciones() {
             companyLabel={companyLabel}
             now={nowTick}
             resendMeta={resendMeta}
-            onOpenPerson={(docType, docNumber, tenantId) => {
+            onOpenPerson={(docType, docNumber, tenantId, mandatario) => {
               openForTenant(tenantId);
               setPersonDetail({
                 documentType: docType,
                 documentNumber: docNumber,
                 tenantId,
                 soloConsulta: esSoloConsulta(tenantId),
+                mandatario,
               });
             }}
             onEdit={(row) => {
@@ -1234,11 +1370,25 @@ export function Validaciones() {
           documentType={personDetail.documentType}
           documentNumber={personDetail.documentNumber}
           networkTenantId={personDetail.soloConsulta ? personDetail.tenantId : undefined}
+          mandatario={personDetail.mandatario}
           onClose={() => {
             setPersonDetail(null);
             closeTenantScope();
           }}
-          onStatusChanged={() => void load(appliedRef.current, { background: true })}
+          onStatusChanged={() => {
+            void load(appliedRef.current, { background: true });
+            onListChanged?.();
+          }}
+          onVerEnManuales={
+            isFlitAdmin
+              ? (id) => {
+                  // Cierra el detalle y navega por enlace profundo: Validaciones activa la pestaña y abre el detalle.
+                  setPersonDetail(null);
+                  closeTenantScope();
+                  window.history.pushState(null, '', enlaceDetalleManual(id));
+                }
+              : undefined
+          }
         />
       )}
 
@@ -1373,6 +1523,7 @@ export function Validaciones() {
           onError={handleAdminReenviarError}
         />
       )}
+      </>)}
     </div>
   );
 }
@@ -1953,7 +2104,12 @@ function PersonasTable({
   now: number;
   resendMeta: Record<string, ResendMeta>;
   /** HU #12707 (AC6) — con la compañía de la fila: la misma cédula puede estar en dos compañías. */
-  onOpenPerson: (documentType: string, documentNumber: string, tenantId: string | undefined) => void;
+  onOpenPerson: (
+    documentType: string,
+    documentNumber: string,
+    tenantId: string | undefined,
+    mandatario: boolean,
+  ) => void;
   onEdit: (row: TenantBiometricValidation) => void;
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
@@ -1989,6 +2145,7 @@ function PersonasTable({
     // HU #11505 — opcionales: el backend de esta vista aún no los envía (AC4, ver tipo en procedure-runtime.ts).
     intentos: p.intentos,
     maxIntentos: p.maxIntentos,
+    esMandatario: p.esMandatario,
   }));
 
   const counts = new Map(rows.map((r) => [r.latestValidationId, r.validationCount]));
@@ -2004,7 +2161,9 @@ function PersonasTable({
       validationCounts={counts}
       onViewProcess={(latestValidationId) => {
         const person = byLatestId.get(latestValidationId);
-        if (person) onOpenPerson(person.documentType, person.documentNumber, person.tenantId);
+        if (person) {
+          onOpenPerson(person.documentType, person.documentNumber, person.tenantId, person.esMandatario === true);
+        }
       }}
       onEdit={onEdit}
       onResendClick={onResendClick}
@@ -2180,9 +2339,13 @@ function ValidacionRow({
       badgeTone = 'warning';
     }
   }
-  const modalidad = r.modalidad
-    ? (familiaLabel(r.modalidad))
-    : 'Prevalidación';
+  // Validación PROPIA del mandatario: se lista aparte y solo se consulta (se gestiona desde su ficha).
+  const esMandatario = r.esMandatario === true;
+  const modalidad = esMandatario
+    ? 'Mandatario'
+    : r.modalidad
+      ? (familiaLabel(r.modalidad))
+      : 'Prevalidación';
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.partyRole ? ` (${r.partyRole})` : '';
   const vigencia = vigenciaBadge(r.daysRemaining);
@@ -2210,7 +2373,7 @@ function ValidacionRow({
               : `vigencia: ${vigencia.label}`
         }`
       : '') +
-    (r.instanceId ? '.' : '. Prevalidación standalone.') +
+    (r.instanceId ? '.' : esMandatario ? '. Validación propia del mandatario.' : '. Prevalidación standalone.') +
     (validationCount > 1 ? ` ${validationCount} validaciones en el historial de la persona.` : '');
 
   const copiarEnlace = async () => {
@@ -2353,7 +2516,7 @@ function ValidacionRow({
             className="inline-block max-w-full rounded-full px-2 py-0.5 text-center text-[10px] font-semibold leading-tight"
             style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
           >
-            Prevalidación
+            {esMandatario ? 'Mandatario' : 'Prevalidación'}
           </span>
         )}
       </div>
@@ -2433,7 +2596,8 @@ function ValidacionRow({
   };
 
   // AC3 — fila de una hija: ni reenviar, ni editar, ni simular, ni iniciar, ni reintentar. Solo verla.
-  const menuItems = soloConsulta ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
+  // La fila del mandatario tampoco: reenviar o editar su validación se hace desde la ficha del mandatario.
+  const menuItems = soloConsulta || esMandatario ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
 
   const celdaCls = 'border-y px-4 py-3 align-middle';
   const celdaStyle = { borderColor: '#DFE5ED' };
@@ -2460,7 +2624,7 @@ function ValidacionRow({
             items={menuItems}
             className="bg-white dark:bg-[#0B0F14]"
           />
-          {!isTramite && admiteReenvio && resendDisabledReason && (
+          {!isTramite && !esMandatario && admiteReenvio && resendDisabledReason && (
             <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
           )}
           {copied && (

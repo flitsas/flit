@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, AlertTriangle, Link2, RefreshCw, Send } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ExternalLink, Link2, RefreshCw, Send } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -13,6 +13,7 @@ import {
   puedeActivarFlujoManual,
   hayKyverumEnCurso,
   mensajeErrorFlujoManual,
+  tieneDetalleManual,
   type AccionManual,
 } from '@/lib/identity/manual-flow';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -46,9 +47,14 @@ export interface IdentityManualFlowActionsProps {
   validation: BiometricValidation;
   /** Se llama tras una acción exitosa para que el detalle recargue su estado en sitio. */
   onChanged: () => void;
+  /**
+   * Acceso directo al detalle de ESTA validación en la pestaña «Validaciones manuales» (solo Super Admin y solo
+   * si la validación es manual). Quien lo provee cierra el detalle y navega por enlace profundo.
+   */
+  onVerEnManuales?: (validationId: string) => void;
 }
 
-export function IdentityManualFlowActions({ validation: v, onChanged }: IdentityManualFlowActionsProps) {
+export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnManuales }: IdentityManualFlowActionsProps) {
   const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
   const [dialog, setDialog] = useState<AccionManual | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,7 +105,8 @@ export function IdentityManualFlowActions({ validation: v, onChanged }: Identity
   if (esperaCaptura) {
     items.push({ key: 'regenerar', label: 'Regenerar enlace', icon: RefreshCw, onSelect: () => openDialog('regenerar') });
   }
-  if (items.length === 0 && !correoFallo) return null;
+  const verEnManuales = onVerEnManuales && tieneDetalleManual(v) ? onVerEnManuales : undefined;
+  if (items.length === 0 && !correoFallo && !verEnManuales) return null;
 
   return (
     <div ref={regionRef} tabIndex={-1} className="space-y-2 outline-none" data-testid="identity-manual-flow">
@@ -127,7 +134,13 @@ export function IdentityManualFlowActions({ validation: v, onChanged }: Identity
             )}
           </>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {verEnManuales && (
+            <button type="button" className={GHOST_BTN} onClick={() => verEnManuales(v.id)}>
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              Ver en validaciones manuales
+            </button>
+          )}
           {items.length > 1 ? (
             <ActionsMenu items={items} ariaLabel="Acciones del flujo manual de identidad" />
           ) : items.length === 1 ? (
