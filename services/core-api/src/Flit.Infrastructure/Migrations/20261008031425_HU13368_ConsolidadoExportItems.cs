@@ -8,7 +8,7 @@ namespace Flit.Infrastructure.Migrations
     /// <summary>
     /// HU #13368 (Feature #13306, épica #13216, ADR-0070 adendas v3 y v4) — crea <c>tramites.consolidado_export_batch_parts</c>
     /// (partes ZIP cifradas, tenant heredado del lote por trigger), <c>tramites.consolidado_export_batch_items</c> (un
-    /// trámite por fila, coherencia por estado y los diez códigos de omisión) y <c>tramites.consolidado_export_audit</c>
+    /// trámite por fila, coherencia por estado y los once códigos de omisión) y <c>tramites.consolidado_export_audit</c>
     /// (auditoría append-only Ley 1581), con los estados de cancelación de #13307 (parte <c>descartada</c>, ítem
     /// <c>cancelado</c>, <c>lote_cancelado</c> con conteos). DDL: <c>134-HU13368-consolidado-export-items.sql</c>.
     /// Descubrible al arrancar por el Designer.cs.
