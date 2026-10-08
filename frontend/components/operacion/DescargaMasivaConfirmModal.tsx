@@ -10,9 +10,11 @@ import {
   interpretarErrorCrearLote,
   MENSAJE_LOTE_ACTIVO,
   MENSAJE_REINTENTAR_DESCARGA,
+  type CodigoRechazoRed,
 } from '@/lib/api/consolidado-lotes-client';
 import {
   ETIQUETA_ESTADO_LOTE,
+  type AlcanceRedSolicitado,
   type LoteConsolidados,
   type TipoDocumentoLote,
 } from '@/lib/api/types-consolidado-lotes';
@@ -34,6 +36,11 @@ import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
  * <p>Accesibilidad (WCAG 2.1 AA): `Modal` da `role="dialog"`, `aria-modal` y el título; aquí se
  * atrapa el foco (Tab/Shift+Tab) con la trampa compartida de los diálogos del módulo y el foco
  * inicial va a «Cancelar», la opción que no tiene efectos.</p>
+ *
+ * <p>HU #13419 — vista de red: `alcanceRed` viaja en la raíz del cuerpo (modos `ids` y `filtro`),
+ * `etiquetaAlcance` dice en el modal qué alcance se descarga y los 403 de red
+ * (`network_*`) muestran su mensaje propio, sin reintento, sin crear el aviso del lote; el dueño
+ * se entera por `onRechazoRed`.</p>
  */
 
 /** AC1 — texto aprobado, exacto. */
@@ -98,6 +105,15 @@ export interface DescargaMasivaConfirmModalProps<TFiltro> {
    * cualquier fallo reintentable (AC6).
    */
   selectorTipo?: boolean;
+  /**
+   * HU #13419 — alcance de la vista de red (`'red'`, uuid de la hija o `null` = propio) que se envía
+   * en la raíz con la creación por defecto. `undefined` = no se envía (bandeja OT, Super Admin).
+   */
+  alcanceRed?: AlcanceRedSolicitado;
+  /** HU #13419 — rótulo visible del alcance («Red» / «Red · {hija}»); `null` = sin rótulo. */
+  etiquetaAlcance?: string | null;
+  /** HU #13419 AC4/AC5 — el servidor rechazó el lote de red con un 403 `network_*`. */
+  onRechazoRed?: (codigo: CodigoRechazoRed) => void;
 }
 
 type Fase =
@@ -121,6 +137,9 @@ export function DescargaMasivaConfirmModal<TFiltro>({
   variante = 'consolidado',
   crear,
   selectorTipo = false,
+  alcanceRed,
+  etiquetaAlcance = null,
+  onRechazoRed,
 }: DescargaMasivaConfirmModalProps<TFiltro>) {
   const [fase, setFase] = useState<Fase>({ tipo: 'lista' });
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoLote>('consolidado');
@@ -167,13 +186,19 @@ export function DescargaMasivaConfirmModal<TFiltro>({
       const tipo = selectorTipo ? tipoDocumento : undefined;
       const lote = crear
         ? await (tipo ? crear(seleccion, tipo) : crear(seleccion))
-        : await consolidadoLotesClient.crearLote({ seleccion, tipoDocumento: tipo });
+        : await consolidadoLotesClient.crearLote({ seleccion, tipoDocumento: tipo, alcanceRed });
       if (!vivoRef.current) return;
       setFase({ tipo: 'lista' });
       onCreado(lote);
     } catch (err) {
       if (!vivoRef.current) return;
       const r = interpretarErrorCrearLote(err);
+      if (r.tipo === 'red') {
+        // HU #13419 AC4 — rechazo de red: mensaje propio, sin reintento y sin aviso de lote.
+        setFase({ tipo: 'error', mensaje: r.mensaje, reintentable: false });
+        onRechazoRed?.(r.codigo);
+        return;
+      }
       if (r.tipo === 'permiso' && selectorTipo) {
         // HU #13387 AC6 — el Super Admin no depende del claim: un 403 es un fallo transitorio.
         setFase({ tipo: 'error', mensaje: MENSAJE_REINTENTAR_DESCARGA, reintentable: true });
@@ -195,7 +220,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
         /* sin resumen: queda el aviso */
       }
     }
-  }, [contador, creando, seleccion, onCreado, onLoteActivo, crear, selectorTipo, tipoDocumento]);
+  }, [contador, creando, seleccion, onCreado, onLoteActivo, crear, selectorTipo, tipoDocumento, alcanceRed, onRechazoRed]);
 
   const vacio = contador < 1;
   const sinReintento = fase.tipo === 'error' && !fase.reintentable;
@@ -275,6 +300,11 @@ export function DescargaMasivaConfirmModal<TFiltro>({
               </div>
             ) : null}
             <p>{textoConfirmacion}</p>
+            {etiquetaAlcance ? (
+              <p className="text-xs text-flit-primary dark:text-white">
+                Alcance: <span className="font-semibold">{etiquetaAlcance}</span>
+              </p>
+            ) : null}
             <p className="text-xs font-semibold text-flit-primary dark:text-white">
               {textoTramites(contador)}
             </p>
@@ -313,6 +343,18 @@ export interface BotonDescargaMasivaZipProps<TFiltro> {
   crear?: CrearLoteDescargaMasiva<TFiltro>;
   /** HU #13387 — selector de tipo del Super Admin (ver el modal). */
   selectorTipo?: boolean;
+  /** HU #13419 — alcance de la vista de red (ver el modal). */
+  alcanceRed?: AlcanceRedSolicitado;
+  /** HU #13419 — rótulo del alcance (ver el modal). */
+  etiquetaAlcance?: string | null;
+  /** HU #13419 — 403 de red (ver el modal). */
+  onRechazoRed?: (codigo: CodigoRechazoRed) => void;
+  /**
+   * HU #13419 AC5 — la descarga no se ofrece en este alcance: en lugar del botón se pinta este texto.
+   * Si el modal está abierto (el rechazo acaba de llegar) sigue montado hasta que se cierre, para
+   * que el usuario lea el mensaje.
+   */
+  noDisponible?: string | null;
 }
 
 /**
@@ -327,6 +369,10 @@ export function BotonDescargaMasivaZip<TFiltro>({
   variante,
   crear,
   selectorTipo,
+  alcanceRed,
+  etiquetaAlcance,
+  onRechazoRed,
+  noDisponible = null,
 }: BotonDescargaMasivaZipProps<TFiltro>) {
   const [abierto, setAbierto] = useState(false);
   const cerrar = useCallback(() => setAbierto(false), []);
@@ -339,6 +385,13 @@ export function BotonDescargaMasivaZip<TFiltro>({
   );
 
   if (contador < 1 && !abierto) return null;
+  if (noDisponible && !abierto) {
+    return (
+      <span data-testid="descarga-red-no-disponible" className="text-flit-primary/70 dark:text-white/70">
+        {noDisponible}
+      </span>
+    );
+  }
 
   return (
     <>
@@ -359,6 +412,9 @@ export function BotonDescargaMasivaZip<TFiltro>({
         variante={variante}
         crear={crear}
         selectorTipo={selectorTipo}
+        alcanceRed={alcanceRed}
+        etiquetaAlcance={etiquetaAlcance}
+        onRechazoRed={onRechazoRed}
       />
     </>
   );

@@ -791,26 +791,46 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   );
   /**
    * HU #13380 — selección para la descarga masiva. El filtro es el de `buildListQuery` sin el orden
-   * (reordenar no cambia el universo) más el alcance de red; la página no entra, así que cambiar de
-   * página conserva la selección (AC3) y cambiar un criterio la reinicia (AC4). `total` sale de
-   * `searchInstances`, que siempre va por la ruta filtrada con `take`: es el total real (V-d).
+   * (reordenar no cambia el universo); la página no entra, así que cambiar de página conserva la
+   * selección (AC3) y cambiar un criterio la reinicia (AC4). `total` sale de la búsqueda del alcance
+   * vigente (`searchInstances` o `searchNetworkInstances`): es el total real de la vista (V-d).
+   *
+   * HU #13419 — el alcance de red NO va en el filtro: entra en la clave de la selección (cambiarlo
+   * la reinicia, AC3) y viaja en la RAÍZ del cuerpo (`alcanceRed`) en los dos modos (AC1/AC2).
    */
   const filtroLote = useMemo(() => {
     const criterios = buildListQuery();
     delete criterios.sortBy;
     delete criterios.sortDir;
-    return { ...criterios, alcanceRed: networkActive ? (childTenantId ?? 'red') : null };
-  }, [buildListQuery, networkActive, childTenantId]);
-  const lote = useSeleccionLote({ filtro: filtroLote, total });
+    return criterios;
+  }, [buildListQuery]);
+  const alcanceLote = networkActive ? (childTenantId ?? 'red') : null;
+  const lote = useSeleccionLote({ filtro: filtroLote, total, alcance: alcanceLote });
+  /** HU #13419 AC6 — nombre de la hija del alcance vigente (de la lista del selector), si hay. */
+  const nombreHijaLote = useMemo(
+    () => (childTenantId ? (red.children.find((c) => c.id === childTenantId)?.nombre ?? null) : null),
+    [childTenantId, red.children],
+  );
+  const etiquetaAlcanceLote = networkActive ? (nombreHijaLote ? `Red · ${nombreHijaLote}` : 'Red') : null;
+  /**
+   * HU #13419 AC5 — el frontend no conoce el interruptor `network_documents_concesion` (solo lo
+   * expone la ruta del Super Admin): cuando el servidor responde 403 `network_documents_disabled`,
+   * la vista de red deja de ofrecer «Descargar ZIP» durante la sesión de la página.
+   */
+  const [descargaRedApagada, setDescargaRedApagada] = useState(false);
+  const alRechazoRed = useCallback((codigo: string) => {
+    if (codigo === 'network_documents_disabled') setDescargaRedApagada(true);
+  }, []);
   // HU #13382 — el seguimiento global (Shell) muestra el lote recién creado o el que ya corre (409).
   const { mostrarLote } = useMostrarLoteDescarga();
   const limpiarSeleccionLote = lote.limpiar;
   const alCrearLote = useCallback(
     (creado: LoteConsolidados) => {
       limpiarSeleccionLote();
-      mostrarLote(creado);
+      // HU #13419 AC6 — el contrato no trae el nombre de la hija: lo pasa quien creó el lote.
+      mostrarLote(creado, { nombreHija: creado.alcanceRed === 'hija' ? nombreHijaLote : null });
     },
-    [limpiarSeleccionLote, mostrarLote],
+    [limpiarSeleccionLote, mostrarLote, nombreHijaLote],
   );
   /**
    * HU #13387 (W-f) — el Super Admin crea el lote con las MISMAS cabeceras que el listado. El
@@ -1597,6 +1617,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               onLoteActivo={mostrarLote}
               selectorTipo={isAdmin}
               crear={isAdmin ? crearLoteSuperAdmin : undefined}
+              alcanceRed={isAdmin ? undefined : lote.alcance}
+              etiquetaAlcance={etiquetaAlcanceLote}
+              onRechazoRed={alRechazoRed}
+              noDisponible={
+                networkActive && descargaRedApagada
+                  ? 'La descarga en ZIP no está habilitada para la vista de red.'
+                  : null
+              }
             />
           </BarraSeleccionLote>
         ) : null}

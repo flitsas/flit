@@ -46,6 +46,12 @@ export interface UseSeleccionLoteOptions<TFiltro> {
   claveFiltro?: (filtro: TFiltro) => string;
   /** Tope de ids / exclusiones. Por defecto {@link TOPE_SELECCION_LOTE}. */
   tope?: number;
+  /**
+   * HU #13419 — alcance de la vista de red (`'red'`, el uuid de una hija, o `null` = propio). Entra
+   * en la clave de la selección: cambiarlo la reinicia (AC3). NO va dentro del filtro: viaja en la
+   * raíz del cuerpo (`alcanceRed`), en los dos modos.
+   */
+  alcance?: string | null;
 }
 
 export interface SeleccionLote<TFiltro> {
@@ -67,6 +73,8 @@ export interface SeleccionLote<TFiltro> {
   /** Acción de la casilla de cabecera: si está «todo», limpia; si no, selecciona todos. */
   alternarTodos: () => void;
   modelo: ModeloSeleccionLote<TFiltro>;
+  /** HU #13419 — alcance bajo el que se armó la selección; es el `alcanceRed` del cuerpo. */
+  alcance: string | null;
 }
 
 interface EstadoInterno<TFiltro> {
@@ -103,10 +111,13 @@ export function useSeleccionLote<TFiltro>({
   total,
   claveFiltro,
   tope = TOPE_SELECCION_LOTE,
+  alcance = null,
 }: UseSeleccionLoteOptions<TFiltro>): SeleccionLote<TFiltro> {
+  // HU #13419 — el alcance de red forma parte de la clave: «todos los de la red» no significa nada
+  // bajo una hija ni bajo «Mi compañía», y unas casillas marcadas en la red tampoco (AC3).
   const clave = useMemo(
-    () => (claveFiltro ? claveFiltro(filtro) : claveEstable(filtro)),
-    [claveFiltro, filtro],
+    () => claveEstable([alcance, claveFiltro ? claveFiltro(filtro) : claveEstable(filtro)]),
+    [claveFiltro, filtro, alcance],
   );
   const [interno, setInterno] = useState<EstadoInterno<TFiltro>>(() => vacio(clave));
 
@@ -196,5 +207,6 @@ export function useSeleccionLote<TFiltro>({
     limpiar,
     alternarTodos,
     modelo,
+    alcance,
   };
 }

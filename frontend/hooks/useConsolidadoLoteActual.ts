@@ -115,6 +115,18 @@ function purgarCandadosViejos(ahora: number): void {
  */
 const vistosActivosEnPestana = new Set<string>();
 
+/**
+ * HU #13419 AC6 — nombre de la hija de cada lote de red acotado creado en esta pestaña (el contrato
+ * no lo trae). Sobrevive a que el Shell se vuelva a montar, no a una recarga: ahí el aviso dice «Red».
+ */
+const nombresHijaEnPestana = new Map<string, string>();
+
+/** HU #13419 — datos que solo conoce quien crea el lote. */
+export interface OpcionesMostrarLote {
+  /** Nombre de la compañía hija de un lote de red acotado («Red · {nombre}»). */
+  nombreHija?: string | null;
+}
+
 interface MensajeCanal {
   tipo: 'autodescarga';
   loteId: string;
@@ -137,8 +149,10 @@ export interface UseConsolidadoLoteActual {
   expirado: boolean;
   /** HU #13388 — el aviso del lote cancelado ya cumplió su tiempo visible: no se pinta. */
   oculto: boolean;
-  /** Sigue un lote concreto (objeto ya leído, o su id). */
-  mostrarLote: (lote: LoteConsolidados | string) => void;
+  /** Sigue un lote concreto (objeto ya leído, o su id). HU #13419: con el nombre de la hija. */
+  mostrarLote: (lote: LoteConsolidados | string, opciones?: OpcionesMostrarLote) => void;
+  /** HU #13419 AC6 — nombre de la hija del lote mostrado, si se conoce. */
+  nombreHija: string | null;
   descargarParte: (numero: number) => Promise<void>;
   /** Número de la parte que se está descargando, o `null`. */
   descargandoParte: number | null;
@@ -357,8 +371,10 @@ export function useConsolidadoLoteActual({
   }, [ocultarCanceladoEn]);
 
   const mostrarLote = useCallback(
-    (objetivo: LoteConsolidados | string) => {
+    (objetivo: LoteConsolidados | string, opciones?: OpcionesMostrarLote) => {
       const id = typeof objetivo === 'string' ? objetivo : objetivo.id;
+      const nombreHija = opciones?.nombreHija?.trim();
+      if (nombreHija) nombresHijaEnPestana.set(id, nombreHija);
       if (typeof objetivo !== 'string') aplicar(objetivo);
       setFijado((f) => ({ id, version: f.version + 1 }));
     },
@@ -419,6 +435,7 @@ export function useConsolidadoLoteActual({
     expirado,
     oculto: lote !== null && canceladoVencido,
     mostrarLote,
+    nombreHija: lote ? (nombresHijaEnPestana.get(lote.id) ?? null) : null,
     descargarParte,
     descargandoParte,
     errorDescarga,

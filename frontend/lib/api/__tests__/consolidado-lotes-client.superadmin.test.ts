@@ -32,7 +32,7 @@ const SELECCION: ModeloSeleccionLote<Record<string, unknown>> = {
   modo: 'filtro',
   ids: [],
   excluidos: ['inst-0002', 'inst-0005'],
-  filtro: { condiciones: [{ field: 'compania', operator: 'in', value: ['tenant-b'] }], alcanceRed: null },
+  filtro: { condiciones: [{ field: 'compania', operator: 'in', value: ['tenant-b'] }] },
 };
 const TENANT_INTERNO_SA = '22222222-2222-2222-2222-222222222222';
 const TENANT_ACTIVO = '33333333-3333-3333-3333-333333333333';
