@@ -822,6 +822,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    */
   const documentosRed = useDocumentosRed(networkActive && puedeLote && !isAdmin);
   const [descargaRedApagada, setDescargaRedApagada] = useState(false);
+  // Code review Obs3 — el 403 vale solo para la consulta en curso: al cambiar `networkActive` o al
+  // volver `documentosRed` a «consultando» (nueva activación) se olvida, para que el botón reaparezca
+  // si el Super Admin encendió el interruptor. Patrón «ajustar estado al cambiar una prop».
+  const consultandoRed = documentosRed === 'consultando';
+  const [redPrevia, setRedPrevia] = useState({ networkActive, consultandoRed });
+  if (redPrevia.networkActive !== networkActive || redPrevia.consultandoRed !== consultandoRed) {
+    setRedPrevia({ networkActive, consultandoRed });
+    if (redPrevia.networkActive !== networkActive || consultandoRed) setDescargaRedApagada(false);
+  }
   const descargaRedNoDisponible: string | null = !networkActive
     ? null
     : descargaRedApagada || documentosRed === 'apagado'
