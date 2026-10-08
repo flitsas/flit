@@ -66,3 +66,45 @@ public sealed class InvalidTargetEntityTypeException : Exception
     {
     }
 }
+
+/// <summary>
+/// HU #13441: el rol es global o de otro tenant, así que el Admin de Compañía no puede cambiarlo ni eliminarlo.
+/// Se responde como 404 para no revelar que existe.
+/// </summary>
+public sealed class RoleNotOwnedException : Exception
+{
+    public RoleNotOwnedException()
+        : base("The role does not belong to the caller's tenant.")
+    {
+    }
+}
+
+/// <summary>Códigos de error del tope de privilegios (HU #13441 AC3).</summary>
+public static class PrivilegeCeilingCodes
+{
+    public const string NotHeld = "PERMISSION_NOT_HELD";
+    public const string ModuleNotEnabled = "PERMISSION_MODULE_NOT_ENABLED";
+    public const string PlatformOnly = "PERMISSION_PLATFORM_ONLY";
+    public const string Unknown = "PERMISSION_NOT_FOUND";
+}
+
+/// <summary>
+/// HU #13441 AC3: el Admin de Compañía intentó otorgar un permiso que no posee, de un módulo no habilitado para su
+/// tenant o de plataforma. <see cref="Code"/> es el código explícito que ve el cliente.
+/// </summary>
+public sealed class PrivilegeCeilingException(string code, IReadOnlyList<string> slugs)
+    : Exception($"Cannot grant permissions ({code}): {string.Join(", ", slugs)}")
+{
+    public string Code { get; } = code;
+
+    public IReadOnlyList<string> Slugs { get; } = slugs;
+}
+
+/// <summary>HU #13441: code o nombre del rol vacío o fuera de formato (code 2-50: letras, números, punto, guion, guion bajo).</summary>
+public sealed class InvalidRoleInputException : Exception
+{
+    public InvalidRoleInputException()
+        : base("Role code or name is invalid.")
+    {
+    }
+}

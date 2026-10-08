@@ -155,7 +155,8 @@ public static class SecurityEndpoints
                         // AssignRoleHandler rechazaría después (RoleTargetEntityTypeMismatch).
                         var selectedRoles = await db.Roles
                             .AsNoTracking()
-                            .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                            .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null
+                                && (r.TenantId == null || r.TenantId == targetTenantId))
                             .ToListAsync(cancellationToken);
 
                         if (selectedRoles.Count != requestedRoleIds.Count)
@@ -478,7 +479,8 @@ public static class SecurityEndpoints
             // método lo usa la pantalla RBAC de SuperAdmin, que sí necesita ver TODOS los roles.
             // HU #12964/#12967: el admin de cada producto (admin_tramites, admin_comparendos…) no se ofrece;
             // lo crea y lo quita el espejo de AdminCompany hasta que el hub asigne un rol por producto (B-12).
-            var roles = (await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken))
+            // HU #13441: globales + propios del tenant del caller; nunca los de otra compañía.
+            var roles = (await roleRepo.ListVisibleToTenantAsync(tenantId, targetEntityType, cancellationToken))
                 .Where(r => r.IsActive
                     && !string.Equals(r.Code, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase)
                     && !ProductRoleCodes.IsProductAdmin(r.Code))
@@ -1210,6 +1212,9 @@ public static class SecurityEndpoints
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.DeleteUser, "user", "USER", "userId"));
+
+        // HU #13441: gestión de roles propios de la compañía (AdminCompanyPolicy por endpoint).
+        SecurityTenantRolesEndpoints.Map(group);
 
         return app;
     }

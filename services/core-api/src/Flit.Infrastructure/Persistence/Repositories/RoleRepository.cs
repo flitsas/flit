@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,8 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// Catálogo GLOBAL de roles por tipo de entidad (HU #10505 / ADR-0023): ya no filtra por
 /// <c>tenant_id</c> (la columna fue eliminada de <c>security.roles</c>/<c>security.role_permissions</c>).
 /// La unicidad de negocio es <c>(code, target_entity_type)</c>.
+/// HU #13440/#13441: <c>tenant_id</c> NULL = rol global; con valor = rol propio de una compañía. Las consultas del
+/// Admin de Compañía (<c>*ForTenant*</c>, <c>*VisibleToTenant*</c>) filtran por tenant — la RLS de la tabla es nominal.
 /// </summary>
 public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
 {
@@ -26,6 +29,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             Name = data.Name,
             Description = data.Description,
             ProductCode = data.ProductCode,
+            TenantId = data.TenantId,
             IsSystem = false,
             IsActive = true,
             RowVersion = 0,
@@ -63,7 +67,8 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             role.IsSystem,
             role.IsActive && role.DeletedAt == null,
             permissions,
-            role.ProductCode);
+            role.ProductCode,
+            role.TenantId);
     }
 
     public async Task<bool> HasActiveUsersAsync(Guid id, CancellationToken ct)
@@ -98,10 +103,80 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
                 r.IsActive,
                 permCount,
                 r.CreatedAt,
-                r.ProductCode)
+                r.ProductCode,
+                r.TenantId)
         ).ToListAsync(ct);
 
         return rows;
+    }
+
+    public async Task<IReadOnlyList<RoleSummary>> ListVisibleToTenantAsync(Guid tenantId, string targetEntityType, CancellationToken ct)
+    {
+        return await (
+            from r in db.Roles.AsNoTracking()
+            where r.TargetEntityType == targetEntityType && r.DeletedAt == null
+                && (r.TenantId == null || r.TenantId == tenantId)
+            let permCount = db.RoleGrants.Count(rg => rg.RoleId == r.Id)
+            orderby r.Name
+            select new RoleSummary(
+                r.Id, r.TargetEntityType, r.Code, r.Name, r.Description, r.IsSystem, r.IsActive,
+                permCount, r.CreatedAt, r.ProductCode, r.TenantId)
+        ).ToListAsync(ct);
+    }
+
+    public async Task<RoleDetail?> GetVisibleToTenantAsync(Guid tenantId, Guid roleId, CancellationToken ct)
+    {
+        var visible = await db.Roles.AsNoTracking()
+            .AnyAsync(r => r.Id == roleId && r.DeletedAt == null && (r.TenantId == null || r.TenantId == tenantId), ct);
+        return visible ? await GetByIdAsync(roleId, ct) : null;
+    }
+
+    public async Task<bool> CodeTakenForTenantAsync(Guid tenantId, string code, CancellationToken ct)
+    {
+        return await db.Roles.AnyAsync(
+            r => r.DeletedAt == null && r.Code == code && (r.TenantId == null || r.TenantId == tenantId), ct);
+    }
+
+    public async Task UpdateDetailsAsync(Guid roleId, string name, string? description, CancellationToken ct)
+    {
+        await db.Roles
+            .Where(r => r.Id == roleId && r.DeletedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Name, name)
+                .SetProperty(r => r.Description, description)
+                .SetProperty(r => r.UpdatedAt, DateTimeOffset.UtcNow),
+                ct);
+    }
+
+    public async Task<IReadOnlyList<PermissionInfo>> GetPermissionInfosAsync(IReadOnlyList<Guid> permissionIds, CancellationToken ct)
+    {
+        return await (
+            from p in db.RbacActions.AsNoTracking()
+            join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
+            where permissionIds.Contains(p.Id) && p.IsActive && p.DeletedAt == null
+            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
+        ).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlySet<string>> GetEnabledProductCodesAsync(Guid tenantId, CancellationToken ct)
+    {
+        var enabled = await db.Set<TenantProductEntity>().AsNoTracking()
+            .Where(t => t.TenantId == tenantId && t.Enabled)
+            .Select(t => t.ProductCode)
+            .ToListAsync(ct);
+        // El hub (plataforma) no se enciende ni se apaga por empresa.
+        return new HashSet<string>(enabled, StringComparer.Ordinal) { "plataforma" };
+    }
+
+    public async Task<IReadOnlyList<PermissionInfo>> ListGrantablePermissionsAsync(IReadOnlyCollection<string> productCodes, CancellationToken ct)
+    {
+        return await (
+            from p in db.RbacActions.AsNoTracking()
+            join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
+            where p.IsActive && p.DeletedAt == null && m.DeletedAt == null && productCodes.Contains(m.ProductCode)
+            orderby m.Code, p.Slug
+            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
+        ).ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<string>> GetPermissionProductCodesAsync(IReadOnlyList<Guid> permissionIds, CancellationToken ct)
