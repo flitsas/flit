@@ -33,8 +33,8 @@ PdfSharpCore). Es una decisión de seguridad que no toma este despliegue.
 
 - La suite encendida en el ambiente (fases 0 a 3 de [handoff-vps-suite.md](handoff-vps-suite.md)), con el bloque «Lo
   que exporta el CD» en el `.env`.
-- El PR de la Epic aprobado. El contrato v1.3 va en su propio PR (`feature/AB-13316-contrato-plataforma-v1-3`), que
-  también espera tu aprobación.
+- El PR de la Epic aprobado. Trae también el contrato de plataforma v1.3 (`docs/suite/contrato-plataforma-v1.md`), que
+  espera tu aprobación en esa misma revisión.
 - Acceso a la carpeta del despliegue (`$HOSTINGER_DEPLOY_PATH`), a su `.env` y a una conexión de administrador de
   Postgres (`$ADMIN_URL`).
 
