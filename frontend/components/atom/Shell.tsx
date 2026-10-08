@@ -6,6 +6,8 @@ import {
   canAccessRuntConfirmation,
   canManageBanners,
   canReadIctLogs,
+  canReadIctReportes,
+  canReadIctTrazabilidad,
   canReadLogQx,
   decodeJwtPayload,
   isAdminCompany,
@@ -171,6 +173,8 @@ function useCurrentUser() {
       tenantId: (payload.tenant_id as string) ?? null,
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
+      canReadIctTrazabilidad: canReadIctTrazabilidad(payload),
+      canReadIctReportes: canReadIctReportes(payload),
       canManageBanners: canManageBanners(payload),
       canAccessRuntConfirmation: canAccessRuntConfirmation(payload),
     };
@@ -529,15 +533,41 @@ export function Shell({
     });
   }
 
-  // ICT (Integración con Terceros, HU10893) — gate por el permiso `ict.logs.read` (o SuperAdmin).
-  // Vive en el agrupador "Integraciones" junto a LOG QX.
+  // ICT (Integración con Terceros, HU10893) — vive en el agrupador "Integraciones" junto a LOG QX.
   //
-  // Es contenedor, no destino (mismo patrón que Tránsito y Plataforma): cuelga "Log ICT" —los logs
-  // técnicos y sus alertas— y "Reportes ICT" —informes en vivo, consultas y programación (HU
-  // #11619)—. Separarlos en dos píldoras hermanas dejaba dos entradas sueltas sin decir que hablan
-  // del mismo sistema; anidarlas bajo "ICT" nombra primero el sistema y luego qué se quiere de él.
-  // Ambas hojas comparten gate: es el mismo público.
+  // Es contenedor, no destino (mismo patrón que Tránsito y Plataforma): cuelga "Log ICT", "Trazabilidad
+  // ICT" y "Reportes ICT". Bug #13445: cada hoja tiene su propio gate —Log ICT solo SuperAdmin,
+  // Trazabilidad con `ict.trazabilidad.read`, Reportes con `ict.reportes.read`— y el contenedor se
+  // arma si el usuario ve al menos una.
+  const ictChildren: DockEntry[] = [];
   if (currentUser?.canReadIctLogs) {
+    ictChildren.push({
+      key: "ict-logs",
+      label: "Log ICT",
+      icon: Network,
+      active: !onAdminRoute && active === "ict-logs",
+      onClick: () => onNav("ict-logs"),
+    });
+  }
+  if (currentUser?.canReadIctTrazabilidad) {
+    ictChildren.push({
+      key: "ict-trazabilidad",
+      label: "Trazabilidad ICT",
+      icon: Route,
+      active: !onAdminRoute && active === "ict-trazabilidad",
+      onClick: () => onNav("ict-trazabilidad"),
+    });
+  }
+  if (currentUser?.canReadIctReportes) {
+    ictChildren.push({
+      key: "ict-reportes",
+      label: "Reportes ICT",
+      icon: BarChart3,
+      active: !onAdminRoute && active === "ict-reportes",
+      onClick: () => onNav("ict-reportes"),
+    });
+  }
+  if (ictChildren.length > 0) {
     entries.push({
       key: "ict",
       label: "ICT",
@@ -545,29 +575,7 @@ export function Shell({
       active: !onAdminRoute
         && (active === "ict-logs" || active === "ict-reportes" || active === "ict-trazabilidad"),
       onClick: () => undefined,
-      children: [
-        {
-          key: "ict-logs",
-          label: "Log ICT",
-          icon: Network,
-          active: !onAdminRoute && active === "ict-logs",
-          onClick: () => onNav("ict-logs"),
-        },
-        {
-          key: "ict-trazabilidad",
-          label: "Trazabilidad ICT",
-          icon: Route,
-          active: !onAdminRoute && active === "ict-trazabilidad",
-          onClick: () => onNav("ict-trazabilidad"),
-        },
-        {
-          key: "ict-reportes",
-          label: "Reportes ICT",
-          icon: BarChart3,
-          active: !onAdminRoute && active === "ict-reportes",
-          onClick: () => onNav("ict-reportes"),
-        },
-      ],
+      children: ictChildren,
     });
   }
 

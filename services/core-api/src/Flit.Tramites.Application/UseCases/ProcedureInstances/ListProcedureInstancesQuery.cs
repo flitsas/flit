@@ -284,7 +284,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             pasoActual >= 1 && pasoActual <= state.Steps.Count
                 ? state.Steps[pasoActual - 1].Label
                 : null,
-            TramiteMarcas.TienePrenda(prendaVigente, e.TypeCode),
+            TramiteMarcas.TienePrenda(prendaVigente, e.TypeCode, e.FieldValues),
             TramiteMarcas.TieneTransformacion(fv, e.TypeCode),
             Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag),
             revocationRequestStatus,

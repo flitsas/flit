@@ -5,6 +5,11 @@
 import { describe, expect, it } from "vitest";
 import {
   canAdminResetPassword,
+  canReadIctLogs,
+  canReadIctReportes,
+  canReadIctTrazabilidad,
+  ICT_REPORTES_READ_PERMISSION,
+  ICT_TRAZABILIDAD_READ_PERMISSION,
   isAdminCompany,
   isGroupParent,
   isOtAdmin,
@@ -127,5 +132,48 @@ describe("canAdminResetPassword (HU-B auth-parity)", () => {
 
   it("niega a un operador sin rol ni permiso", () => {
     expect(canAdminResetPassword({ role_code: "Radicador", permissions: [] })).toBe(false);
+  });
+});
+
+// Uso de ejemplo: canReadIctTrazabilidad({ permissions: ["ict.trazabilidad.read"] }) === true;
+// canReadIctLogs({ permissions: ["ict.logs.read"] }) === false (Log ICT es solo del SuperAdmin).
+describe("Bug #13445 — gates de los espacios ICT", () => {
+  const sa: JwtPayload = { roles: [{ id: "r1", code: "SuperAdmin" }] };
+  const adminCompany: JwtPayload = {
+    roles: [{ id: "r2", code: "AdminCompany" }],
+    permissions: ["ict.trazabilidad.read", "ict.reportes.read"],
+  };
+  const soloLogs: JwtPayload = { roles: [{ id: "r2", code: "AdminCompany" }], permissions: ["ict.logs.read"] };
+  const sinSlugs: JwtPayload = { roles: [{ id: "r2", code: "AdminCompany" }], permissions: [] };
+
+  it("los slugs nuevos son los del contrato backend", () => {
+    expect(ICT_TRAZABILIDAD_READ_PERMISSION).toBe("ict.trazabilidad.read");
+    expect(ICT_REPORTES_READ_PERMISSION).toBe("ict.reportes.read");
+  });
+
+  it("SuperAdmin ve los tres espacios", () => {
+    expect(canReadIctLogs(sa)).toBe(true);
+    expect(canReadIctTrazabilidad(sa)).toBe(true);
+    expect(canReadIctReportes(sa)).toBe(true);
+  });
+
+  it("Admin Company con los slugs nuevos ve Trazabilidad y Reportes, no Log", () => {
+    expect(canReadIctTrazabilidad(adminCompany)).toBe(true);
+    expect(canReadIctReportes(adminCompany)).toBe(true);
+    expect(canReadIctLogs(adminCompany)).toBe(false);
+  });
+
+  it("ict.logs.read sin SuperAdmin ya no abre Log ICT ni los otros espacios", () => {
+    expect(canReadIctLogs(soloLogs)).toBe(false);
+    expect(canReadIctTrazabilidad(soloLogs)).toBe(false);
+    expect(canReadIctReportes(soloLogs)).toBe(false);
+  });
+
+  it("sin slugs ni token no ve nada (y no lanza con null)", () => {
+    for (const p of [sinSlugs, null]) {
+      expect(canReadIctLogs(p)).toBe(false);
+      expect(canReadIctTrazabilidad(p)).toBe(false);
+      expect(canReadIctReportes(p)).toBe(false);
+    }
   });
 });
