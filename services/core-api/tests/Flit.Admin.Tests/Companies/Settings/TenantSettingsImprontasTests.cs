@@ -37,7 +37,7 @@ public sealed class TenantSettingsImprontasTests
         await Seed(db, tenantId);
 
         await using var ctx = NewContext(db);
-        var get = new GetTenantSettingsHandler(Repo(ctx), new StubTenantProductFlags());
+        var get = new GetTenantSettingsHandler(Repo(ctx));
         var response = await get.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
         response!.GeneracionImprontas.Should().BeTrue();
@@ -155,7 +155,7 @@ public sealed class TenantSettingsImprontasTests
         new(ctx, NullAuditContextAccessor.Instance);
 
     private static Task<UpdateTenantSettingsResult> Update(FlitDbContext ctx, Guid tenantId, bool? generacionImprontas) =>
-        new UpdateTenantSettingsHandler(Repo(ctx), new StubTenantProductFlags()).HandleAsync(
+        new UpdateTenantSettingsHandler(Repo(ctx)).HandleAsync(
             new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
