@@ -319,6 +319,44 @@ describe('TramitesTable — descarga masiva desde la vista de red (HU #13419)', 
     expect(screen.getByRole('button', { name: /Descargar ZIP/ })).toBeInTheDocument();
   });
 
+  it('code review Obs3 — el rechazo de red no queda pegado: tras el 403 sigue oculto en esa consulta y reaparece al reactivar la red con documentosRed=true', async () => {
+    // Uso de ejemplo: el Super Admin enciende el interruptor después del 403; la cabeza sale a «Mi
+    // compañía» y vuelve a «Toda la red» → nueva consulta `documentosRed=true` → «Descargar ZIP» otra vez.
+    const user = userEvent.setup();
+    prefScope({ mode: 'network' });
+    servidor(() => json(403, { error: 'network_documents_disabled', detail: 'apagado' }));
+    montar();
+    await screen.findByText('BBB222');
+    await user.click(casilla('TR-HIJA'));
+    await user.click(screen.getByRole('button', { name: /Descargar ZIP/ }));
+    await user.click(within(dialogo()).getByRole('button', { name: /Confirmar descarga/ }));
+    expect(await within(dialogo()).findByText(MENSAJES_RECHAZO_RED.network_documents_disabled)).toBeInTheDocument();
+    await user.click(within(dialogo()).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Descargar ZIP/ })).not.toBeInTheDocument();
+
+    // Misma activación (pasar a una hija no repite la consulta): la defensa se conserva.
+    await user.selectOptions(screen.getByTestId('network-scope-select'), scopeToOptionValue({ mode: 'network', childTenantId: HIJO }));
+    await waitFor(() =>
+      expect(mocks.searchNetworkInstances).toHaveBeenCalledWith(expect.objectContaining({ childTenantId: HIJO })),
+    );
+    await user.click(casilla('TR-HIJA'));
+    expect(screen.queryByRole('button', { name: /Descargar ZIP/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId('descarga-red-no-disponible')).toBeInTheDocument();
+    expect(fetchNetworkDocumentos).toHaveBeenCalledTimes(1);
+
+    // Desactivar y reactivar la vista de red: nueva consulta con documentosRed=true → el botón vuelve.
+    servidor(() => json(202, LOTE));
+    await user.selectOptions(screen.getByTestId('network-scope-select'), 'own');
+    await screen.findByText('AAA111');
+    await user.selectOptions(screen.getByTestId('network-scope-select'), scopeToOptionValue({ mode: 'network' }));
+    await screen.findByText('BBB222');
+    await waitFor(() => expect(fetchNetworkDocumentos).toHaveBeenCalledTimes(2));
+    await user.click(casilla('TR-HIJA'));
+    expect(await screen.findByRole('button', { name: /Descargar ZIP/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('descarga-red-no-disponible')).not.toBeInTheDocument();
+  });
+
   it('borde — alcance propio (no cabeza activa en red): el cuerpo lleva alcanceRed null y el aviso no dice «Red»', async () => {
     const user = userEvent.setup();
     prefScope({});
