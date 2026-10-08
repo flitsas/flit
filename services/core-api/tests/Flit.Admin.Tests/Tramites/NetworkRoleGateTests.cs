@@ -93,6 +93,8 @@ public sealed class NetworkRoleGateTests : IClassFixture<NetworkRoleGateTests.Ga
         { "GET", $"{Prefix}/instances/{{id:guid}}/attachments" },
         { "GET", $"{Prefix}/instances/{{id:guid}}/attachments/{{attachmentId:guid}}/download" },
         { "GET", $"{Prefix}/children" },
+        // Ajuste #13419 AC5 (HU #13417) — disponibilidad de documentos de red para la vista de red.
+        { "GET", $"{Prefix}/documentos" },
         // HU #12708 — Validación de Identidad de la red (solo lectura).
         { "GET", $"{Prefix}/identity-validations/by-person" },
         { "GET", $"{Prefix}/identity-validations/by-person/detail" },

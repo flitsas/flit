@@ -5704,6 +5704,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/network/documentos:
+    get:
+      operationId: TramitesNetworkGetDocumentos
+      tags: [Tramites, Red]
+      summary: "¿La cabeza de grupo puede leer documentos de su red? (habilita «Descargar ZIP» en la vista de red)"
+      description: >
+        Ajuste #13419 AC5 (HU #13417, épica #13216) — la vista de red decide si ofrece «Descargar ZIP» sin el
+        endpoint de interruptores del Super Admin. `documentosRed` es la misma regla que aplica el alta del lote de red
+        (`POST /api/v1/tramites/consolidados/lotes` con `alcanceRed`) y los documentos de un trámite de la red: `true`
+        si la cabeza no es CONCESION (MARCA_BLANCA) o si es CONCESION con el interruptor
+        `network_documents_concesion` encendido; `false` con el interruptor apagado (valor por defecto). Mismas
+        puertas que `GET /api/v1/tramites/network/children`: el alcance sale del servidor (BD), nunca de
+        `X-Tenant-Id` ni de la query. No deja registro en la auditoría de acceso consolidado (es configuración de la
+        propia cabeza, no un acceso a datos de una hija).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Disponibilidad de los documentos de la red para la cabeza.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkDocumentosDisponibilidad"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            `network_scope_required` (sin alcance de grupo: hija, cliente sin jerarquía, SuperAdmin o interruptor
+            `group_read_scope` apagado) o `network_role_required` (cabeza sin rol AdminCompany — HU #12652).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network/stats/overview:
     get:
       operationId: tramitesNetworkStatsOverview
@@ -16408,6 +16442,15 @@ components:
           description: >
             HU #13417 — lote creado desde la vista de red: `red` (toda la red) o `hija` (acotado a una compañía; sin
             su id). Ausente en el lote propio. Para el aviso global del lote.
+        alcanceHijaId:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: >
+            Ajuste #13419 AC6 — id de la compañía hija (`scope_tenant_id`) cuando `alcanceRed` = `hija`, para que el
+            aviso global rotule «Red · nombre de la hija» tras recargar. Ausente (o null) en `red`, en el lote propio,
+            en el del Super Admin y en la bandeja OT.
         partes:
           type: array
           description: Vacío hasta que el lote termina (las partes solo se descargan al terminar, CF-09/H4a).
@@ -16420,6 +16463,17 @@ components:
               pdfs: { type: integer }
               omitidos: { type: integer }
               bytes: { type: integer, format: int64 }
+
+    NetworkDocumentosDisponibilidad:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/tramites/network/documentos` (ajuste #13419 AC5): si la cabeza de grupo puede leer
+        documentos de su red y, por tanto, la vista de red ofrece «Descargar ZIP».
+      required: [documentosRed]
+      properties:
+        documentosRed:
+          type: boolean
+          description: "`true` en MARCA_BLANCA o CONCESION con `network_documents_concesion` encendido; `false` si no."
 
     NetworkTramitesSearchRequest:
       description: >
