@@ -30,7 +30,7 @@ public sealed class OtBandejaLoteFiltroResumenTests
         {
             Busqueda = "Juan Gomez 79123456",
             Placa = "QWE12",
-            Status = "radicado",
+            Status = "entregado",
             Familia = "TRASPASO",
             ProcedureTypeId = tipo,
             HasActiveRevocationRequest = true,
@@ -54,7 +54,9 @@ public sealed class OtBandejaLoteFiltroResumenTests
         f.GetProperty("busqueda").GetProperty("presente").GetBoolean().Should().BeTrue();
         f.GetProperty("busqueda").GetProperty("longitud").GetInt32().Should().Be("Juan Gomez 79123456".Length);
         f.GetProperty("placa").GetProperty("longitud").GetInt32().Should().Be(5);
-        f.GetProperty("status").GetString().Should().Be("radicado");
+        // HU #13390 (L3) — status es lista: se separa por coma y cada estado se valida contra TramiteEstado
+        // («radicado» no es un estado del trámite y ahora se minimiza).
+        f.GetProperty("status")[0].GetString().Should().Be("entregado");
         f.GetProperty("familia").GetString().Should().Be("TRASPASO");
         f.GetProperty("procedureTypeId").GetString().Should().Be(tipo.ToString("D"));
         f.GetProperty("hasActiveRevocationRequest").GetBoolean().Should().BeTrue();
