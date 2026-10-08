@@ -2,7 +2,6 @@ using Flit.Tramites.Application.Identity;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.Advanced;
 using PdfSharpCore.Pdf.IO;
-using SixLabors.ImageSharp;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -131,13 +130,14 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
                && subtype.Contains(token, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool TryMeasure(byte[] png, out int width, out int height)
+    internal static bool TryMeasure(byte[] png, out int width, out int height)
     {
         width = 0;
         height = 0;
         try
         {
-            var info = Image.Identify(png);
+            // HU #13371 — solo PNG/JPEG llegan a ImageSharp (códecs TIFF de 2.1.11 con avisos abiertos).
+            var info = PngJpegImageDecoding.Identify(png);
             if (info is null || info.Width < 8 || info.Height < 8)
                 return false;
             width = info.Width;

@@ -398,19 +398,10 @@ internal static class PdfXObjectPngDecoder
     /// no tiene <c>DecoderOptions.MaxFrames</c> ni límite de asignación del allocator; el equivalente
     /// explícito es: solo PNG/JPEG (formatos de un frame) y dimensiones leídas de la cabecera con
     /// <c>Image.Identify</c> ANTES de reservar píxeles. Devuelve null si no cumple.
+    /// HU #13371 — delega en <see cref="PngJpegImageDecoding"/> (configuración solo PNG/JPEG).
     /// </summary>
-    private static Image<Rgba32>? LoadBounded(byte[]? bytes)
-    {
-        if (!IdentitySignatureImageFormat.IsSupported(bytes))
-            return null;
-
-        var info = Image.Identify(bytes);
-        if (info is null || info.Width <= 0 || info.Height <= 0
-            || (long)info.Width * info.Height > MaxDecodePixels)
-            return null;
-
-        return Image.Load<Rgba32>(bytes);
-    }
+    private static Image<Rgba32>? LoadBounded(byte[]? bytes) =>
+        PngJpegImageDecoding.LoadBounded(bytes, MaxDecodePixels);
 
     /// <summary>
     /// Bug #13304 — tinta oscura sobre fondo claro: el fondo casi blanco pasa a transparente para que
