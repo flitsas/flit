@@ -194,6 +194,24 @@ public sealed class ParametrosMotorLoteEndpointTests : IClassFixture<ParametrosM
         (await _factory.CreateClient().GetAsync(Ruta, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    /// Code review épica #13216 (Obs6) — un token SuperAdmin sin <c>sub</c> ni <c>NameIdentifier</c> no puede guardar
+    /// <c>updated_by = NULL</c>: 401 ProblemDetails <c>usuario_no_identificado</c> y la fila no se toca.
+    /// </summary>
+    [Fact]
+    public async Task Obs6_Put_TokenSuperAdminSinSub_401_UsuarioNoIdentificado_SinEscribir()
+    {
+        var response = await Cliente(Token("SuperAdmin", conSub: false))
+            .PutAsync(Ruta, Cuerpo(new() { ["maxItemsPerBatch"] = 5000 }), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized, await response.Content.ReadAsStringAsync(Ct));
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var raiz = await Raiz(response);
+        raiz.GetProperty("error").GetString().Should().Be("usuario_no_identificado");
+        raiz.GetProperty("status").GetInt32().Should().Be(401);
+        await _factory.Repo.DidNotReceiveWithAnyArgs().ActualizarAsync(default!, default, default, default, Ct);
+    }
+
     // ── Contrato OpenAPI ───────────────────────────────────────────────────────────────
 
     [Fact]
@@ -210,6 +228,10 @@ public sealed class ParametrosMotorLoteEndpointTests : IClassFixture<ParametrosM
             bloque.Should().Contain(status);
         foreach (var codigo in new[] { "parametros_invalidos", "row_version_conflict", "parametros_no_encontrados", "SuperAdmin" })
             bloque.Should().Contain(codigo);
+        // Obs6 — el 401 del PUT por token sin usuario lleva su código estable en el contrato.
+        var put = bloque[bloque.IndexOf("    put:\n", StringComparison.Ordinal)..];
+        put.Should().Contain("usuario_no_identificado");
+        Schema(yaml, "ParametrosMotorLoteProblem").Should().Contain("usuario_no_identificado");
 
         var dto = Schema(yaml, "ParametrosMotorLote");
         foreach (var campo in new[]
@@ -279,12 +301,14 @@ public sealed class ParametrosMotorLoteEndpointTests : IClassFixture<ParametrosM
     private static async Task<JsonElement> Raiz(HttpResponseMessage response) =>
         JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.Clone();
 
-    private static string Token(string role)
+    private static string Token(string role, bool conSub = true)
     {
         var claims = new List<Claim>
         {
-            new("sub", UsuarioId.ToString()), new("role", role), new("role_code", role), new("tenant_id", TenantId.ToString()),
+            new("role", role), new("role_code", role), new("tenant_id", TenantId.ToString()),
         };
+        if (conSub)
+            claims.Add(new Claim("sub", UsuarioId.ToString()));
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = "https://api.flit.co",

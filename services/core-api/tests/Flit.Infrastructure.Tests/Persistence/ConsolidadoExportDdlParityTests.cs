@@ -315,4 +315,18 @@ public sealed class ConsolidadoExportDdlParityTests
         ddl.Should().Contain("BETWEEN 1 AND 32766").And.NotContain("50000").And.NotContain("50.000");
         ddl.Should().Contain("1–32.766");
     }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs4) — desde la HU #13420 los parámetros se editan en Super Admin → Plataforma →
+    /// Descarga masiva: el comentario de la tabla ya no dice «Configurable sin UI».
+    /// </summary>
+    [Fact]
+    public void Obs4_ElComentarioDeLosParametrosDiceQueLosEditaElSuperAdmin()
+    {
+        var ddl = LoadDdl();
+        var comentario = ddl[ddl.IndexOf("COMMENT ON TABLE tramites.consolidado_export_settings", StringComparison.Ordinal)..];
+        comentario = comentario[..comentario.IndexOf("';", StringComparison.Ordinal)];
+
+        comentario.Should().Contain("Editable por el Super Admin (HU #13420)").And.NotContain("Configurable sin UI");
+    }
 }
