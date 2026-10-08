@@ -53,6 +53,7 @@ internal static class ApiEndpoints
         app.MapAdminPlataformaFurEndpoints();
         app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
         app.MapAdminPlataformaNotificacionesEndpoints();
+        app.MapAdminPlataformaConsolidadoLotesEndpoints(); // Épica #13216 — HU13420: parámetros del motor de descarga masiva
         app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
         app.MapAdminRuntConfirmationEndpoints();
         app.MapAdminLogQxEndpoints();

@@ -11958,6 +11958,80 @@ paths:
         "403": { description: Sin permiso (requiere SuperAdmin). }
         "404": { description: Plantilla inexistente. Sin cuerpo. }
 
+  /api/v1/admin/plataforma/consolidados/lotes/parametros:
+    get:
+      tags: [Admin · Plataforma · Descarga masiva]
+      operationId: AdminPlataformaConsolidadoLotesGetParametros
+      summary: Parámetros vigentes del motor de descarga masiva de consolidados (HU #13420 AC1)
+      description: >
+        Solo SuperAdmin (rol activo en el token; cualquier otro rol recibe 403). Devuelve todos los campos de
+        `tramites.consolidado_export_settings` (fila única global de plataforma), quién y cuándo los cambió por última
+        vez (`updatedBy` + `updatedByName`, el nombre visible del usuario; ambos null si nunca se editó) y el
+        `rowVersion` que el PUT debe devolver. `limites` publica los rangos de los CHECK del DDL 133 para que la
+        pantalla no repita los literales. Sin la fila (la siembra la migración) responde 404
+        `parametros_no_encontrados`: no se inventan valores, y sin fila el alta de lotes ya responde 503
+        `motor_inactivo`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Parámetros vigentes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLote" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin el rol SuperAdmin activo. }
+        "404":
+          description: No existe la fila de parámetros (`parametros_no_encontrados`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+    put:
+      tags: [Admin · Plataforma · Descarga masiva]
+      operationId: AdminPlataformaConsolidadoLotesPutParametros
+      summary: Actualiza los parámetros del motor de descarga masiva (HU #13420 AC2-AC6)
+      description: >
+        Solo SuperAdmin. Todos los campos son obligatorios (un nulo o ausente es 400 en su campo). Rangos idénticos a
+        los CHECK del DDL 133 (ver `ParametrosMotorLote.limites`); además `itemLeaseSeconds > itemTimeoutSeconds` y
+        `partLeaseSeconds > partTimeoutSeconds`. Concurrencia optimista: `rowVersion` es el leído en el GET; si otro
+        Super Admin guardó después, 409 `row_version_conflict` y no se escribe nada. Guarda `updated_by`/`updated_at`
+        y el trigger `trg_audit_log` deja en `audit.audit_logs` los valores anterior y nuevo. El alta de lotes y el
+        motor leen la fila en cada uso: el cambio aplica sin reiniciar y no altera los lotes ya creados. Con
+        `isActive = false` el alta responde 503 `motor_inactivo` y los lotes en curso quedan en pausa.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActualizarParametrosMotorLoteRequest" }
+      responses:
+        "200":
+          description: Parámetros guardados (fila releída, con el nuevo `rowVersion`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLote" }
+        "400":
+          description: >
+            `parametros_invalidos`: ValidationProblem con `errors` por campo (camelCase, el mismo nombre del cuerpo);
+            p. ej. `{"errors": {"maxItemsPerBatch": ["Debe estar entre 1 y 32766."]}}`. Un cuerpo vacío lleva
+            `errors.body`; un JSON mal formado o un tipo incorrecto es 400 sin `errors` por campo.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteValidationProblem" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin el rol SuperAdmin activo. }
+        "404":
+          description: No existe la fila de parámetros (`parametros_no_encontrados`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+        "409":
+          description: rowVersion desactualizado (`row_version_conflict`); la pantalla pide recargar.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+
   /api/v1/dr-flit/chat:
     post:
       tags: [DR. FLIT]
@@ -12457,6 +12531,168 @@ components:
         message: { type: string, nullable: true }
         retryAfterSeconds: { type: integer, nullable: true }
         allowed: { type: string, nullable: true, example: "FLIT_SMTP, TENANT_API" }
+    ParametrosMotorLote:
+      type: object
+      description: >
+        HU #13420 — parámetros del motor de descarga masiva (`tramites.consolidado_export_settings`). Rangos = CHECK
+        del DDL 133 (`minimum`/`maximum` inclusivos; sin `maximum` = sin tope propio, máximo del entero de 32 bits).
+      required: [maxItemsPerBatch, maxPdfsPerPart, maxMbPerPart, itemSlots, itemTimeoutSeconds, itemLeaseSeconds, maxItemAttempts, retryDelaySeconds, partTimeoutSeconds, partLeaseSeconds, maxPartAttempts, retentionHours, isActive, rowVersion, limites]
+      properties:
+        maxItemsPerBatch:
+          type: integer
+          minimum: 1
+          maximum: 32766
+          description: "Tope total de trámites por lote (M1); superarlo en el alta es 422 `seleccion_excede_tope`."
+        maxPdfsPerPart:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          description: "N: PDF por parte ZIP."
+        maxMbPerPart:
+          type: integer
+          minimum: 10
+          maximum: 2048
+          description: "M: MB de PDF en claro por parte."
+        itemSlots:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: "K: carriles (ítems concurrentes del motor por instancia)."
+        itemTimeoutSeconds:
+          type: integer
+          minimum: 1
+          description: "Tiempo máximo por trámite, en segundos."
+        itemLeaseSeconds:
+          type: integer
+          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds`."
+        maxItemAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por trámite."
+        retryDelaySeconds:
+          type: integer
+          minimum: 5
+          description: "Espera entre reintentos de un trámite, en segundos."
+        partTimeoutSeconds:
+          type: integer
+          minimum: 1
+          description: "Tiempo máximo por parte, en segundos."
+        partLeaseSeconds:
+          type: integer
+          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds`."
+        maxPartAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por parte."
+        retentionHours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          description: "Horas de retención de las partes tras terminar el lote."
+        isActive: { type: boolean, description: "Motor encendido. false = no se crean lotes (503 `motor_inactivo`) y los lotes en curso quedan en pausa." }
+        updatedAt: { type: string, format: date-time, nullable: true, description: Última modificación. }
+        updatedBy: { type: string, format: uuid, nullable: true, description: Usuario de la última modificación. }
+        updatedByName: { type: string, nullable: true, description: "Nombre visible de `updatedBy` (null si nunca se editó o el usuario ya no existe)." }
+        rowVersion: { type: integer, format: int64, description: Token de concurrencia optimista; se devuelve en el PUT. }
+        limites:
+          type: array
+          description: Rangos de cada campo según el DDL 133 (fuente única; la pantalla no debe repetir los literales).
+          items: { $ref: "#/components/schemas/ParametroMotorLoteLimite" }
+    ParametroMotorLoteLimite:
+      type: object
+      required: [campo]
+      properties:
+        campo: { type: string, example: maxItemsPerBatch }
+        minimo: { type: integer, nullable: true, description: Mínimo inclusivo; null si el campo no tiene rango propio. }
+        maximo: { type: integer, nullable: true, description: Máximo inclusivo; null si el CHECK solo pone mínimo. }
+        mayorQue: { type: string, nullable: true, description: "Campo cuyo valor debe superar (solo en los leases), p. ej. `itemTimeoutSeconds`." }
+    ActualizarParametrosMotorLoteRequest:
+      type: object
+      description: HU #13420 — cuerpo del PUT. Todos obligatorios; mismos rangos que `ParametrosMotorLote`.
+      required: [maxItemsPerBatch, maxPdfsPerPart, maxMbPerPart, itemSlots, itemTimeoutSeconds, itemLeaseSeconds, maxItemAttempts, retryDelaySeconds, partTimeoutSeconds, partLeaseSeconds, maxPartAttempts, retentionHours, isActive, rowVersion]
+      properties:
+        maxItemsPerBatch:
+          type: integer
+          minimum: 1
+          maximum: 32766
+          description: "Tope total de trámites por lote (M1); superarlo en el alta es 422 `seleccion_excede_tope`."
+        maxPdfsPerPart:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          description: "N: PDF por parte ZIP."
+        maxMbPerPart:
+          type: integer
+          minimum: 10
+          maximum: 2048
+          description: "M: MB de PDF en claro por parte."
+        itemSlots:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: "K: carriles (ítems concurrentes del motor por instancia)."
+        itemTimeoutSeconds:
+          type: integer
+          minimum: 1
+          description: "Tiempo máximo por trámite, en segundos."
+        itemLeaseSeconds:
+          type: integer
+          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds`."
+        maxItemAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por trámite."
+        retryDelaySeconds:
+          type: integer
+          minimum: 5
+          description: "Espera entre reintentos de un trámite, en segundos."
+        partTimeoutSeconds:
+          type: integer
+          minimum: 1
+          description: "Tiempo máximo por parte, en segundos."
+        partLeaseSeconds:
+          type: integer
+          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds`."
+        maxPartAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por parte."
+        retentionHours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          description: "Horas de retención de las partes tras terminar el lote."
+        isActive: { type: boolean }
+        rowVersion: { type: integer, format: int64, description: El leído en el GET. }
+    ParametrosMotorLoteProblem:
+      type: object
+      description: ProblemDetails de los parámetros del motor con el código estable en `error`.
+      required: [error]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        error: { type: string, enum: [parametros_no_encontrados, row_version_conflict] }
+    ParametrosMotorLoteValidationProblem:
+      type: object
+      description: ValidationProblem (400) con `errors` por campo del cuerpo.
+      required: [error, errors]
+      properties:
+        type: { type: string }
+        title: { type: string, example: parametros_invalidos }
+        status: { type: integer, example: 400 }
+        detail: { type: string }
+        error: { type: string, enum: [parametros_invalidos] }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
     NotificationTestMailboxResponse:
       type: object
       required: [isConfigured, rowVersion]

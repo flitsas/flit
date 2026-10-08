@@ -324,6 +324,8 @@ public static class InfrastructureExtensions
         // Épica #13216 — HU13373: persistencia de la creación del lote (lote + ítems + auditoría en una transacción)
         // y de su purga (borrado criptográfico), reutilizada por #13379.
         services.AddScoped<IConsolidadoLoteRepository, ConsolidadoLoteRepository>();
+        // Épica #13216 — HU13420: lectura y edición de los parámetros del motor por el Super Admin (row_version).
+        services.AddScoped<IConsolidadoExportSettingsRepository, ConsolidadoExportSettingsRepository>();
         // Épica #13216 — HU13375: revalidación de acceso por ítem (caché 60 s por lote) y cierre del ítem.
         services.AddScoped<IConsolidadoLoteAccessChecker, Security.ConsolidadoLoteAccessChecker>();
         services.AddScoped<IConsolidadoLoteItemProceso, Persistence.Repositories.ConsolidadoLoteItemProceso>();
