@@ -55,4 +55,47 @@ describe("resolveApiBase — HU #12419", () => {
 
     expect(resolveApiBase("https://api.example.com")).toBe("https://api.example.com");
   });
+
+  // Dominio alternativo de PDN: la imagen trae horneada api.flitsas.online; en app.flitsas.com la API es api.flitsas.com.
+  describe("apiBaseForPageRoot — raíz de la página", () => {
+    const PDN = "https://api.flitsas.online/api/v1";
+
+    it.each([
+      ["app.flitsas.com", PDN, "https://api.flitsas.com/api/v1"],
+      ["flitsas.online", PDN, PDN],
+      ["dev.flitsas.online", "https://api.dev.flitsas.online/api/v1", "https://api.dev.flitsas.online/api/v1"],
+      ["app.movilidadandina.com", PDN, PDN],
+      ["localhost:3000", PDN, PDN],
+      ["127.0.0.1:3000", PDN, PDN],
+    ])("en %s, %s → %s", async (host, base, expected) => {
+      setHost(host);
+      const { apiBaseForPageRoot } = await import("../base-url");
+      expect(apiBaseForPageRoot(base)).toBe(expected);
+    });
+
+    it("resolveApiBase también la aplica en un host FLIT de otra raíz", async () => {
+      setHost("app.flitsas.com");
+      const { resolveApiBase } = await import("../base-url");
+      expect(resolveApiBase(PDN)).toBe("https://api.flitsas.com/api/v1");
+    });
+
+    it("conserva el prefijo de ambiente: nunca salta a la API de otro ambiente", async () => {
+      setHost("qa.flitsas.com");
+      const { apiBaseForPageRoot } = await import("../base-url");
+      expect(apiBaseForPageRoot("https://api.qa.flitsas.online/api/v1")).toBe("https://api.qa.flitsas.com/api/v1");
+    });
+
+    it("una API ajena a FLIT no se reescribe", async () => {
+      vi.stubEnv("NEXT_PUBLIC_FLIT_HOSTS", "miplataforma.com,*.flitsas.com");
+      setHost("miplataforma.com");
+      const { apiBaseForPageRoot } = await import("../base-url");
+      expect(apiBaseForPageRoot("https://api.example.com/api/v1")).toBe("https://api.example.com/api/v1");
+    });
+
+    it("sin base (dev local) sigue vacía", async () => {
+      setHost("app.flitsas.com");
+      const { apiBaseForPageRoot } = await import("../base-url");
+      expect(apiBaseForPageRoot("")).toBe("");
+    });
+  });
 });
