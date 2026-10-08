@@ -115,6 +115,25 @@ server {
         proxy_pass http://127.0.0.1:${GATEWAY_PORT}/ml/;
     }
 
+    # HU #13379 — partes del lote de consolidados en streaming (hasta ~250 MB,
+    # Content-Length fijo). Sin buffering de nginx: con el default
+    # (proxy_buffering on) nginx volcaría la parte a su temp file del VPS
+    # (hasta proxy_max_temp_file_size, 1 GB por defecto) antes de entregarla.
+    # Location por EXPRESIÓN REGULAR: nginx la evalúa después de elegir el
+    # prefijo más largo y, si calza, gana sobre `location /api/v1/` (que no
+    # lleva ^~). proxy_pass SIN URI: en una location regex no se permite.
+    # No declara proxy_set_header propios a propósito: así hereda los del
+    # server{} (Host, X-Forwarded-*); declarar uno solo anularía la herencia.
+    # proxy_read_timeout cuenta entre dos lecturas, no la descarga completa.
+    location ~ ^/api/v1/consolidados/lotes/[^/]+/partes/[0-9]+$ {
+        proxy_pass http://127.0.0.1:${GATEWAY_PORT};
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 300s;
+    }
+
     # API pública (auth, public/*, company/*, admin/*, webhooks, migracion,
     # etc. — TODO lo que YARP expone bajo /api/v1). Prefijo EXACTO /api/v1/,
     # no /api/: el BFF propio de Next.js vive en /api/migracion (route handler
