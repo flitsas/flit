@@ -2,11 +2,12 @@
 // adjunta el header Authorization y normaliza errores 422 a ApiValidationError.
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { clearToken, emitSessionExpired } from "@/lib/auth/session";
-import { resolveApiBase } from "./base-url";
+import { apiBaseForPageRoot, resolveApiBase } from "./base-url";
 import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
 
+// Con la raíz de la página: en app.flitsas.com la API es api.flitsas.com (ver apiBaseForPageRoot).
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+  apiBaseForPageRoot(process.env.NEXT_PUBLIC_API_BASE_URL ?? "");
 
 /**
  * Arma una URL absoluta contra el API a partir de un `path` que ya trae el prefijo completo
