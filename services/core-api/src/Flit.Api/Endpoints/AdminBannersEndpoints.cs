@@ -18,28 +18,26 @@ public static class AdminBannersEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/banners")
-            .WithTags("Admin Banners");
+            .WithTags("Admin Banners")
+            // HU #13438 (Épica #12750): la gestión es exclusiva del Super Admin FLIT. Se exige el ROL, no el
+            // permiso `banners.manage`, para que ningún rol personalizado pueda tenerla aunque se le asigne.
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
 
         group.MapPost("/", CreateAsync)
-            .RequirePermission("banners.manage")
             .WithName("AdminBannerCreate")
             .DisableAntiforgery();
 
         group.MapGet("/", ListAsync)
-            .RequirePermission("banners.manage")
             .WithName("AdminBannerList");
 
         group.MapPut("/{id:guid}", UpdateAsync)
-            .RequirePermission("banners.manage")
             .WithName("AdminBannerUpdate")
             .DisableAntiforgery();
 
         group.MapPatch("/{id:guid}/active", SetActiveAsync)
-            .RequirePermission("banners.manage")
             .WithName("AdminBannerSetActive");
 
         group.MapDelete("/{id:guid}", DeleteAsync)
-            .RequirePermission("banners.manage")
             .WithName("AdminBannerDelete");
 
         return app;
