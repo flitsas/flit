@@ -108,6 +108,29 @@ public sealed class IdentidadManualAislamientoDeWorkersTests(PostgresDatabaseFix
     }
 
     [PostgresFact]
+    public async Task Reconcile_ClaimNextId_ReclamaElRechazoAntesDeAgotarIntentos_PeroNoElDefinitivo()
+    {
+        // Un rechazo aplicado con intentos disponibles se sigue consultando (la persona pudo aprobar después en el mismo
+        // enlace); con los intentos agotados o rechazado por la revisión humana, no.
+        await using var cn = await SeedAsync();
+        var corte = DateTimeOffset.UtcNow;
+
+        var prematuro = await SembrarFilaAsync(cn, BiometricProviders.Kyverum, BiometricEstados.Rechazado, TimeSpan.FromHours(23));
+        await ExecAsync(cn, "UPDATE tramites.procedure_instance_biometric_validations SET attempts = 1, reconcile_poll_count = 3");
+        (await ReclamarAsync(ctx => IdentityValidationReconcileProcessor.ClaimNextIdAsync(ctx, corte, Ct)))
+            .Should().Be(prematuro, "con 1 de 3 intentos el rechazo no es definitivo; el sondeo lento la sigue consultando");
+
+        await ExecAsync(cn, "UPDATE tramites.procedure_instance_biometric_validations SET attempts = 3");
+        (await ReclamarAsync(ctx => IdentityValidationReconcileProcessor.ClaimNextIdAsync(ctx, corte, Ct)))
+            .Should().BeNull("con los intentos agotados el rechazo es definitivo");
+
+        await ExecAsync(cn,
+            "UPDATE tramites.procedure_instance_biometric_validations SET attempts = 1, rejection_reason_code = 'documento_ilegible'");
+        (await ReclamarAsync(ctx => IdentityValidationReconcileProcessor.ClaimNextIdAsync(ctx, corte, Ct)))
+            .Should().BeNull("el rechazo de la revisión humana no lo reabre Kyverum");
+    }
+
+    [PostgresFact]
     public async Task Reconcile_ClaimNextExpiredId_NoTerminalizaFilasManualesVencidas_PeroSiLaKyverum()
     {
         await using var cn = await SeedAsync();
