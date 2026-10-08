@@ -277,6 +277,10 @@ public sealed class IctDraftFieldValuesBug13445Tests
             .And.Contain("(9, 'Conversiones de Combustible')")
             .And.Contain("SET is_active = false")
             .And.Contain("WHERE NOT EXISTS");
+        // Revisión DB H2: dos arranques simultáneos no chocan por la PK calculada con MAX(id)+1.
+        System.Text.RegularExpressions.Regex.Count(
+                sql, "^ON CONFLICT DO NOTHING;", System.Text.RegularExpressions.RegexOptions.Multiline)
+            .Should().Be(2, "los dos INSERT llevan ON CONFLICT DO NOTHING (el comentario de cabecera no cuenta)");
         sql.Should().NotContainEquivalentOf("DELETE FROM");
     }
 
@@ -285,7 +289,6 @@ public sealed class IctDraftFieldValuesBug13445Tests
     [Theory]
     [InlineData((short)1)]
     [InlineData((short)2)]
-    [InlineData((short)3)]
     public async Task PrendaCompleta_EnviaLasCincoClaves(short operacion)
     {
         var master = Master();
@@ -302,6 +305,24 @@ public sealed class IctDraftFieldValuesBug13445Tests
             .And.Contain("ict_prenda_acreedor_documento_tipo", "NIT")
             .And.Contain("ict_prenda_acreedor_documento", "900000001")
             .And.Contain("ict_prenda_fecha_inscripcion", "2025-01-31");
+    }
+
+    [Fact]
+    public async Task PrendaOmitir_SoloEnviaLaOperacion_SinAcreedorNiFecha()
+    {
+        // Revisión SEC m2 / CR m2 (Ley 1581, minimización): con «omitir» el acreedor no se usa.
+        var master = Master();
+        master.LimitationsOperationType = 3;
+        master.LimitationsCreditor = "BANCO DE PRUEBA S.A.";
+        master.LimitationsCreditorDocumentType = "NIT";
+        master.LimitationsCreditorDocumentNumber = "900000001";
+        master.LimitationsInscriptionDate = "2025-01-31";
+
+        var fv = await FieldValuesAsync(master);
+
+        fv.Should().Contain("ict_prenda_operacion", "3");
+        fv.Keys.Where(k => k.StartsWith("ict_prenda_", StringComparison.Ordinal))
+            .Should().BeEquivalentTo(["ict_prenda_operacion"]);
     }
 
     [Theory]

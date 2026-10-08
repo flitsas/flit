@@ -131,7 +131,7 @@ public sealed partial class IctGrpcProcedureDraftClient(
             request.FieldValues.Add(new FieldValue { FieldKey = "plate", ValueText = master.Plate });
         }
 
-        // Bug #13445 — transformaciones (5/9/17) y prenda viajan como field_values del borrador.
+        // Bug #13445 — transformaciones (5/6/7/9, catálogo Tipo Trámite) y prenda viajan como field_values del borrador.
         request.FieldValues.Add(IctDraftFieldValuesMapper.Map(master));
 
         foreach (var actor in master.Actors)
