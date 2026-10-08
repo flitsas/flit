@@ -88,7 +88,7 @@ public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresD
     public async Task CreateDraftFromIct_TraspasoQueLevantaConPrendaEnElRunt_RegistraLevantarConElAcreedorDelRunt()
     {
         // Bug #13445 (D3) — traspaso + cuerpo «levantar» + garantía en el RUNT: la decisión se registra sola
-        // DESPUÉS del preflight (que es quien deja runt_gravamenes), con el acreedor del RUNT y sin usuario.
+        // DESPUÉS del preflight (que es quien deja runt_gravamenes), con el acreedor del RUNT, a nombre del usuario de servicio ICT y con metadata ict_auto.
         await SeedTenantAsync();
         var precomputed = Precomputed(horasAtras: 1);
         precomputed.SnapshotJson = PreflightVehicleSnapshotJson.Serialize(new PreflightVehicleSnapshot(
@@ -115,7 +115,8 @@ public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresD
             .SingleAsync(p => p.ProcedureInstanceId == instanceId && p.Estado == PrendaEstado.Vigente);
         prenda.Decision.Should().Be(PrendaDecision.Levantar);
         prenda.AcreedorDocumento.Should().Be("900013445");
-        prenda.CreatedBy.Should().BeNull();
+        prenda.CreatedBy.Should().NotBeNull("la decisión automática queda a nombre del usuario de servicio ICT");
+        prenda.Metadata.Should().Contain("ict_auto");
         (await FieldValueAsync(instanceId, "cambio_carroceria")).Should().Be("true", "la siembra no pisa lo que vino de ICT");
     }
 
