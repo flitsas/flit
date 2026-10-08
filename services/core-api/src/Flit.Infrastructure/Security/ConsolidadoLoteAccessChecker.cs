@@ -4,6 +4,7 @@ using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -131,7 +132,7 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
     {
         var redVigente = await CacheadoAsync(
             $"consolidado-lote-acceso:{contexto.BatchId:N}:red",
-            c => RolYRedVigentesAsync(contexto.SolicitanteId, cabeza, c),
+            c => RolYRedVigentesAsync(contexto.SolicitanteId, cabeza, contexto.CompaniaTramiteId, c),
             ct).ConfigureAwait(false);
         if (!redVigente)
             return false;
@@ -145,10 +146,12 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
 
     /// <summary>
     /// Rol <c>AdminCompany</c> activo del solicitante en la cabeza (BD) y red encendida: <c>group_read_scope</c>, la cabeza
-    /// sigue marcada como tal con un tipo de cabeza válido y, si es CONCESIÓN, <c>network_documents_concesion</c> (P2 = a).
+    /// sigue marcada como tal con un tipo de cabeza válido y la clase puede leer documentos de su red según
+    /// <see cref="NetworkDocumentsPolicy.ValidateKind"/> (CONCESIÓN solo con <c>network_documents_concesion</c>, P2 = a).
     /// Una fila de interruptor ausente es «apagado» (como en <c>DbHierarchySwitches</c>); un error de BD se propaga.
+    /// <paramref name="hija"/> solo sirve para armar el alcance de grupo (no cambia la decisión, cacheada por lote).
     /// </summary>
-    private async Task<bool> RolYRedVigentesAsync(Guid userId, Guid cabeza, CancellationToken ct)
+    private async Task<bool> RolYRedVigentesAsync(Guid userId, Guid cabeza, Guid hija, CancellationToken ct)
     {
         var esAdminDeLaCabeza = await RolesActivos(userId)
             .AnyAsync(r => r.TenantId == cabeza && r.Code == NetworkScopePolicy.HeadAdminRole, ct)
@@ -165,8 +168,12 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
         if (!GroupKindCodes.TryParse(tipoCabeza, out var clase))
             return false;
 
-        return clase != GroupKind.Concesion
-            || await InterruptorAsync(HierarchySwitch.NetworkDocumentsConcesionKey, ct).ConfigureAwait(false);
+        // Code review Obs1 — regla única de documentos de red: la decide NetworkDocumentsPolicy (fail-closed ante una
+        // clase nueva), no una copia de su condición. El interruptor se sigue leyendo aquí directamente, no con
+        // DbHierarchySwitches (que se traga los errores), para que un error de BD se propague (AC8). El grupo lleva a la
+        // hija: sin hijos TenantScope.Group degrada a Single, sin clase, y la política lo trataría como «sin documentos».
+        var documentosConcesion = await InterruptorAsync(HierarchySwitch.NetworkDocumentsConcesionKey, ct).ConfigureAwait(false);
+        return NetworkDocumentsPolicy.ValidateKind(TenantScope.Group(cabeza, [hija], clase), documentosConcesion) is null;
     }
 
     private async Task<bool> InterruptorAsync(string clave, CancellationToken ct) =>
