@@ -494,6 +494,9 @@ public static class SecurityEndpoints
         // existentes a sus usuarios). Antes de esta HU existían aquí POST/PUT-permissions/DELETE
         // restringidos a AdminCompanyPolicy — se eliminaron junto con
         // SetTenantRolePermissionsHandler e InsufficientPermissionsForDelegationException.
+        // HU #13441/#13442: solo AdminCompany (y SuperAdmin) gestionan roles, y únicamente los propios del tenant,
+        // vía SecurityTenantRolesEndpoints. ot_admin y el resto de roles reciben 403; el GET de arriba y la
+        // asignación de roles a usuarios (UserAdminPolicy) no cambian.
 
         // HU #10506 AC1/AC2 — PUT /users/{userId}/role — asigna un rol ADICIONAL (ya no
         // reemplaza los demás roles activos del usuario, a diferencia de HU #10164).
