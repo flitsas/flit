@@ -18,7 +18,11 @@ public sealed class TenantRoleHandlersTests
     private static readonly PermissionInfo PermBanners = new(Guid.NewGuid(), "banners.manage", "Gestionar banners", "banners", "plataforma");
     private static readonly PermissionInfo PermComparendos = new(Guid.NewGuid(), "comparendos.read", "Ver comparendos", "comparendos", "comparendos");
 
-    private static readonly string[] Held = ["security.users.read", "tramites.read", "banners.manage", "comparendos.read"];
+    // Producto plataforma con un slug que NO está en el denylist (banners.*/superadmin.*): decisión del usuario,
+    // todo el producto plataforma es no delegable.
+    private static readonly PermissionInfo PermHub = new(Guid.NewGuid(), "usuarios.invite", "Invitar usuarios", "usuarios", "plataforma");
+
+    private static readonly string[] Held = ["security.users.read", "tramites.read", "banners.manage", "comparendos.read", "usuarios.invite"];
 
     private readonly IRoleRepository _repo = Substitute.For<IRoleRepository>();
 
@@ -30,7 +34,7 @@ public sealed class TenantRoleHandlersTests
             .Returns(ci =>
             {
                 var ids = ci.Arg<IReadOnlyList<Guid>>();
-                return (IReadOnlyList<PermissionInfo>)new[] { PermUsers, PermTramites, PermBanners, PermComparendos }
+                return (IReadOnlyList<PermissionInfo>)new[] { PermUsers, PermTramites, PermBanners, PermComparendos, PermHub }
                     .Where(p => ids.Contains(p.Id)).ToList();
             });
         _repo.CreateAsync(Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>()).Returns(RoleId);
@@ -68,6 +72,52 @@ public sealed class TenantRoleHandlersTests
         var act = () => new CreateTenantRoleHandler(_repo).HandleAsync(Create(perms: [PermBanners.Id]), CancellationToken.None);
 
         (await act.Should().ThrowAsync<PrivilegeCeilingException>()).Which.Code.Should().Be(PrivilegeCeilingCodes.PlatformOnly);
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(default!, Arg.Any<CancellationToken>());
+    }
+
+    // Decisión del usuario: TODO el producto plataforma es no delegable, aunque el slug no sea banners.*
+    [Fact]
+    public async Task Crear_ConCualquierPermisoDelProductoPlataforma_Responde_PLATFORM_ONLY()
+    {
+        var act = () => new CreateTenantRoleHandler(_repo).HandleAsync(Create(perms: [PermHub.Id]), CancellationToken.None);
+
+        var ex = (await act.Should().ThrowAsync<PrivilegeCeilingException>()).Which;
+        ex.Code.Should().Be(PrivilegeCeilingCodes.PlatformOnly);
+        ex.Slugs.Should().Equal("usuarios.invite");
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(default!, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Crear_ConProductCodePlataforma_Responde_PLATFORM_ONLY()
+    {
+        var act = () => new CreateTenantRoleHandler(_repo).HandleAsync(Create(product: "plataforma", perms: []), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<PrivilegeCeilingException>()).Which.Code.Should().Be(PrivilegeCeilingCodes.PlatformOnly);
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(default!, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CambiarPermisos_ConPermisoDelProductoPlataforma_NoGuarda()
+    {
+        _repo.GetVisibleToTenantAsync(TenantId, RoleId, Arg.Any<CancellationToken>()).Returns(Role(TenantId));
+
+        var act = () => new SetTenantRolePermissionsHandler(_repo).HandleAsync(
+            new SetTenantRolePermissionsCommand(TenantId, RoleId, [PermHub.Id], Held), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<PrivilegeCeilingException>()).Which.Code.Should().Be(PrivilegeCeilingCodes.PlatformOnly);
+        await _repo.DidNotReceiveWithAnyArgs().SetPermissionsAsync(default, default!, Arg.Any<CancellationToken>());
+    }
+
+    // HU #13440 (c): admin_<producto> está reservado aunque no haya fila global, sin importar mayúsculas
+    [Theory]
+    [InlineData("admin_tramites")]
+    [InlineData("Admin_Comparendos")]
+    [InlineData("ADMIN_DIAGNOSTICO")]
+    public async Task Crear_ConCodeReservadoDeAdminDeProducto_LanzaRoleCodeDuplicate(string code)
+    {
+        var act = () => new CreateTenantRoleHandler(_repo).HandleAsync(Create(code: code), CancellationToken.None);
+
+        await act.Should().ThrowAsync<RoleCodeDuplicateException>();
         await _repo.DidNotReceiveWithAnyArgs().CreateAsync(default!, Arg.Any<CancellationToken>());
     }
 
@@ -230,10 +280,10 @@ public sealed class TenantRoleHandlersTests
     public async Task PermisosOtorgables_ExcluyenPlataformaYLosQueNoPosee()
     {
         _repo.ListGrantablePermissionsAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
-            .Returns(new[] { PermUsers, PermTramites, PermBanners });
+            .Returns(new[] { PermUsers, PermTramites, PermBanners, PermHub });
 
         var result = await new ListGrantablePermissionsHandler(_repo)
-            .HandleAsync(TenantId, ["tramites.read", "banners.manage"], CancellationToken.None);
+            .HandleAsync(TenantId, ["tramites.read", "banners.manage", "usuarios.invite"], CancellationToken.None);
 
         result.Select(p => p.Slug).Should().Equal("tramites.read");
     }

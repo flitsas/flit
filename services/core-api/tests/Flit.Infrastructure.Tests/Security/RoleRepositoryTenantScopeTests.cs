@@ -9,6 +9,8 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Security;
@@ -112,6 +114,126 @@ public sealed class RoleRepositoryTenantScopeTests
         var enabled = await repo.GetEnabledProductCodesAsync(TenantA, TestContext.Current.CancellationToken);
 
         enabled.Should().BeEquivalentTo("plataforma", "tramites");
+    }
+
+    // ── Correcciones de revisión (HU #13441) ───────────────────────────────────────────────────────
+
+    private static DbUpdateException Violation23505(string? constraint, string message = "duplicate key") =>
+        new("save", new PostgresException(message, "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation, constraintName: constraint));
+
+    [Theory]
+    [InlineData("uq_roles_tenant_code")]
+    [InlineData("uq_roles_code_target_entity_type")]
+    public void IsRoleCodeViolation_ReconoceLosIndicesUnicosDeCode(string constraint)
+    {
+        RoleRepository.IsRoleCodeViolation(Violation23505(constraint)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsRoleCodeViolation_ReconoceElTriggerDeCodeGlobal()
+    {
+        RoleRepository.IsRoleCodeViolation(Violation23505(null, "ROLE_CODE_DUPLICATE: el code x ya existe como rol global"))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsRoleCodeViolation_IgnoraOtrosErrores()
+    {
+        RoleRepository.IsRoleCodeViolation(new DbUpdateException("x", new PostgresException("boom", "ERROR", "ERROR", "22001")))
+            .Should().BeFalse();
+        RoleRepository.IsRoleCodeViolation(new DbUpdateException("x")).Should().BeFalse();
+    }
+
+    private sealed class ThrowOnSave(Exception ex) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            throw ex;
+    }
+
+    // Carrera, o SuperAdmin creando un rol global con el code de un rol de tenant: el 23505 llega como excepción de dominio
+    [Fact]
+    public async Task CreateAsync_Con23505_LanzaRoleCodeDuplicateYNoDejaLaFilaPendiente()
+    {
+        var db = new FlitDbContext(new DbContextOptionsBuilder<FlitDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new ThrowOnSave(Violation23505("uq_roles_tenant_code")))
+            .Options);
+        var repo = new RoleRepository(db);
+
+        var act = () => repo.CreateAsync(
+            new CreateRoleData("COMPANY", "contador", "Contador", null, "tramites", TenantA), TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<RoleCodeDuplicateException>();
+        db.ChangeTracker.Entries<Role>().Should().BeEmpty("la entidad rechazada se desprende del contexto");
+    }
+
+    [Fact]
+    public async Task CodeTakenForTenant_EsCaseInsensitive()
+    {
+        var (db, repo) = Build();
+        db.Roles.AddRange(NewRole("AdminCompany", null), NewRole("Contador", TenantA));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var ct = TestContext.Current.CancellationToken;
+
+        (await repo.CodeTakenForTenantAsync(TenantB, "admincompany", ct)).Should().BeTrue();
+        (await repo.CodeTakenForTenantAsync(TenantA, "CONTADOR", ct)).Should().BeTrue();
+        (await repo.CodeTakenForTenantAsync(TenantB, "contador", ct)).Should().BeFalse();
+    }
+
+    private static UserInvitation Invitation(Guid? roleId, string status, bool deleted = false) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantA,
+        Email = "a@b.c",
+        FullName = "A",
+        RoleId = roleId,
+        TokenHash = Guid.NewGuid().ToString("N"),
+        Status = status,
+        InvitedBy = Guid.NewGuid(),
+        DeletedAt = deleted ? DateTimeOffset.UtcNow : null,
+    };
+
+    // Un rol con invitación pendiente no se puede eliminar (409)
+    [Fact]
+    public async Task HasActiveUsers_CuentaInvitacionesPendientesPrimariasYSecundarias()
+    {
+        var (db, repo) = Build();
+        var primario = NewRole("p", TenantA);
+        var secundario = NewRole("s", TenantA);
+        var libre = NewRole("l", TenantA);
+        var aceptado = NewRole("a", TenantA);
+        var pendiente = Invitation(primario.Id, "pending");
+        var otra = Invitation(null, "pending");
+        var aceptada = Invitation(aceptado.Id, "accepted");
+        db.Roles.AddRange(primario, secundario, libre, aceptado);
+        db.UserInvitations.AddRange(pendiente, otra, aceptada);
+        db.InvitationRoles.Add(new InvitationRole { Id = Guid.NewGuid(), TenantId = TenantA, InvitationId = otra.Id, RoleId = secundario.Id });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var ct = TestContext.Current.CancellationToken;
+
+        (await repo.HasActiveUsersAsync(primario.Id, ct)).Should().BeTrue("invitación pendiente con rol primario");
+        (await repo.HasActiveUsersAsync(secundario.Id, ct)).Should().BeTrue("invitación pendiente con el rol en invitation_roles");
+        (await repo.HasActiveUsersAsync(aceptado.Id, ct)).Should().BeFalse("la invitación ya fue aceptada");
+        (await repo.HasActiveUsersAsync(libre.Id, ct)).Should().BeFalse();
+    }
+
+    // GetPermissionInfos no devuelve permisos de módulos borrados (igual que ListGrantable)
+    [Fact]
+    public async Task GetPermissionInfos_ExcluyePermisosDeModulosBorrados()
+    {
+        var (db, repo) = Build();
+        var vivo = new SecurityModule { Id = Guid.NewGuid(), Code = "vivo", Name = "v", ProductCode = "tramites", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        var borrado = new SecurityModule { Id = Guid.NewGuid(), Code = "muerto", Name = "m", ProductCode = "tramites", IsActive = true, CreatedAt = DateTimeOffset.UtcNow, DeletedAt = DateTimeOffset.UtcNow };
+        var a = new RbacAction { Id = Guid.NewGuid(), ModuleId = vivo.Id, Slug = "vivo.read", Name = "r", HttpMethod = "GET", RoutePattern = "/x", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        var b = new RbacAction { Id = Guid.NewGuid(), ModuleId = borrado.Id, Slug = "muerto.read", Name = "r", HttpMethod = "GET", RoutePattern = "/y", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        db.SecurityModules.AddRange(vivo, borrado);
+        db.RbacActions.AddRange(a, b);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var infos = await repo.GetPermissionInfosAsync([a.Id, b.Id], TestContext.Current.CancellationToken);
+
+        infos.Select(i => i.Slug).Should().Equal("vivo.read");
     }
 
     [Theory]

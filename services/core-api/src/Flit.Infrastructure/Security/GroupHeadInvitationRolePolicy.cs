@@ -14,7 +14,8 @@ internal sealed class GroupHeadInvitationRolePolicy(FlitDbContext db) : IGroupHe
 
         var ids = await db.Roles
             .AsNoTracking()
-            .Where(r => r.IsActive && r.DeletedAt == null && r.TargetEntityType == "COMPANY")
+            // Son roles de sistema: solo el catálogo global (HU #13440), nunca un rol propio de una compañía con el mismo code.
+            .Where(r => r.IsActive && r.DeletedAt == null && r.TargetEntityType == "COMPANY" && r.TenantId == null)
             .Where(r => allowedCodes.Contains(r.Code))
             .Where(r => !forbidden.Contains(r.Code))
             .Select(r => r.Id)

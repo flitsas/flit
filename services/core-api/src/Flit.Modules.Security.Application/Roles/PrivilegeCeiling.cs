@@ -4,11 +4,15 @@ namespace Flit.Modules.Security.Application.Roles;
 
 /// <summary>
 /// HU #13441 AC3 — tope de escalada: el Admin de Compañía solo otorga permisos que él mismo posee, de módulos de
-/// productos habilitados para su tenant, y nunca permisos de plataforma (p. ej. <c>banners.manage</c>).
+/// productos habilitados para su tenant, y nunca permisos de plataforma. Decisión del usuario: TODO el producto
+/// <c>plataforma</c> es no delegable (no solo <c>banners.*</c>).
 /// Orden de reporte: desconocido, plataforma, módulo no habilitado, no poseído (el primero que aplique decide el código).
 /// </summary>
 public static class PrivilegeCeiling
 {
+    /// <summary>Producto cuyos permisos no son delegables a una compañía.</summary>
+    public const string PlatformProduct = "plataforma";
+
     /// <summary>Permisos que solo gestiona FLIT: ninguna compañía puede ponerlos en un rol propio.</summary>
     public static bool IsPlatformOnly(string slug) =>
         slug.StartsWith("banners.", StringComparison.OrdinalIgnoreCase)
@@ -26,7 +30,11 @@ public static class PrivilegeCeiling
         if (unknown.Count > 0)
             throw new PrivilegeCeilingException(PrivilegeCeilingCodes.Unknown, unknown);
 
-        var platform = infos.Where(i => IsPlatformOnly(i.Slug)).Select(i => i.Slug).ToList();
+        var platform = infos
+            .Where(i => IsPlatformOnly(i.Slug)
+                || string.Equals(i.ProductCode, PlatformProduct, StringComparison.Ordinal))
+            .Select(i => i.Slug)
+            .ToList();
         if (platform.Count > 0)
             throw new PrivilegeCeilingException(PrivilegeCeilingCodes.PlatformOnly, platform);
 

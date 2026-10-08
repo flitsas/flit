@@ -84,7 +84,8 @@ public static class SecurityEndpoints
                 var superAdminRole = await db.Roles
                     .AsNoTracking()
                     .FirstOrDefaultAsync(
-                        r => r.Code == AdminAuthorization.SuperAdminRole && r.IsActive && r.DeletedAt == null,
+                        r => r.Code == AdminAuthorization.SuperAdminRole && r.IsActive && r.DeletedAt == null
+                            && r.TenantId == null,
                         cancellationToken);
 
                 var isFlitInvite = superAdminRole is not null && requestedRoleIds.Contains(superAdminRole.Id);
@@ -135,7 +136,10 @@ public static class SecurityEndpoints
                         // (code, target_entity_type) en todo el sistema).
                         var adminRole = await db.Roles
                             .AsNoTracking()
-                            .FirstOrDefaultAsync(r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null, cancellationToken);
+                            .FirstOrDefaultAsync(
+                                r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null
+                                    && (r.TenantId == null || r.TenantId == targetTenantId),
+                                cancellationToken);
 
                         if (adminRole is null)
                             return Results.Json(
@@ -1291,7 +1295,7 @@ public static class SecurityEndpoints
         roleIds.Count > 0
         && await db.Roles
             .AsNoTracking()
-            .AnyAsync(r => roleIds.Contains(r.Id) && r.Code == AdminAuthorization.SuperAdminRole, ct);
+            .AnyAsync(r => roleIds.Contains(r.Id) && r.Code == AdminAuthorization.SuperAdminRole && r.TenantId == null, ct);
 
     private static IResult SuperAdminRoleNotAssignable() =>
         Results.Json(

@@ -29,7 +29,10 @@ public sealed class ListGrantablePermissionsHandler(IRoleRepository repository)
         var enabled = await repository.GetEnabledProductCodesAsync(tenantId, ct);
         var all = await repository.ListGrantablePermissionsAsync([.. enabled], ct);
         var held = callerPermissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return [.. all.Where(p => !PrivilegeCeiling.IsPlatformOnly(p.Slug) && held.Contains(p.Slug))];
+        // Decisión del usuario: todo el producto plataforma es no delegable (la API lo rechaza igual).
+        return [.. all.Where(p => !PrivilegeCeiling.IsPlatformOnly(p.Slug)
+            && !string.Equals(p.ProductCode, PrivilegeCeiling.PlatformProduct, StringComparison.Ordinal)
+            && held.Contains(p.Slug))];
     }
 }
 
@@ -52,6 +55,14 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
 
         if (!ProductCodes.All.Contains(command.ProductCode, StringComparer.Ordinal))
             throw new InvalidRoleProductException();
+
+        // Un rol de producto «plataforma» llevaría permisos de plataforma: no es delegable a una compañía.
+        if (string.Equals(command.ProductCode, PrivilegeCeiling.PlatformProduct, StringComparison.Ordinal))
+            throw new PrivilegeCeilingException(PrivilegeCeilingCodes.PlatformOnly, [command.ProductCode]);
+
+        // admin_<producto> es de sistema aunque todavía no exista la fila global (el espejo de AdminCompany lo crea).
+        if (ProductCodes.All.Any(p => string.Equals(code, "admin_" + p, StringComparison.OrdinalIgnoreCase)))
+            throw new RoleCodeDuplicateException();
 
         var enabled = await repository.GetEnabledProductCodesAsync(command.TenantId, ct);
         if (!enabled.Contains(command.ProductCode))

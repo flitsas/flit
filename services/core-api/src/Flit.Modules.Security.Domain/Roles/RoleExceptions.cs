@@ -68,8 +68,9 @@ public sealed class InvalidTargetEntityTypeException : Exception
 }
 
 /// <summary>
-/// HU #13441: el rol es global o de otro tenant, así que el Admin de Compañía no puede cambiarlo ni eliminarlo.
-/// Se responde como 404 para no revelar que existe.
+/// HU #13441: el rol es global (visible, de solo lectura) o de otro tenant, así que el Admin de Compañía no puede
+/// cambiarlo ni eliminarlo. Se responde 403 <c>ROLE_READ_ONLY</c>; los roles de otro tenant ya no llegan aquí porque
+/// el repositorio no los muestra (404 <c>RoleNotFoundException</c>).
 /// </summary>
 public sealed class RoleNotOwnedException : Exception
 {

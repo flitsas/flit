@@ -2,6 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -37,9 +38,28 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
         };
 
         db.Roles.Add(entity);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsRoleCodeViolation(ex))
+        {
+            // Red de la carrera entre CodeExists/CodeTaken y el INSERT, y del caso en que un SuperAdmin crea un rol
+            // global con el code de un rol de tenant (CodeExistsAsync solo compara el mismo target_entity_type): el índice
+            // uq_roles_tenant_code o el trigger tr_roles_tenant_code_not_global (DDL 134) revientan con 23505.
+            db.Entry(entity).State = EntityState.Detached;
+            throw new RoleCodeDuplicateException();
+        }
+
         return entity.Id;
     }
+
+    /// <summary>23505 sobre los índices únicos de code o el trigger de codes reservados (DDL 134).</summary>
+    public static bool IsRoleCodeViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+        && (pg.ConstraintName is "uq_roles_tenant_code" or "uq_roles_code_target_entity_type"
+            || pg.TableName == "roles"
+            || pg.MessageText.StartsWith("ROLE_CODE_DUPLICATE", StringComparison.Ordinal));
 
     public async Task<RoleDetail?> GetByIdAsync(Guid id, CancellationToken ct)
     {
@@ -73,8 +93,15 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
 
     public async Task<bool> HasActiveUsersAsync(Guid id, CancellationToken ct)
     {
-        return await db.UserRoleAssignments
-            .AnyAsync(x => x.RoleId == id && x.DeletedAt == null, ct);
+        // HU #13441: una invitación pendiente con este rol cuenta como uso — al aceptarla crearía una asignación
+        // a un rol borrado. El rol primario vive en user_invitations.role_id y el resto en invitation_roles.
+        return await db.UserRoleAssignments.AnyAsync(x => x.RoleId == id && x.DeletedAt == null, ct)
+            || await db.UserInvitations.AnyAsync(
+                i => i.Status == "pending" && i.DeletedAt == null && i.RoleId == id, ct)
+            || await db.InvitationRoles.AnyAsync(
+                r => r.RoleId == id && r.DeletedAt == null
+                    && db.UserInvitations.Any(i => i.Id == r.InvitationId && i.Status == "pending" && i.DeletedAt == null),
+                ct);
     }
 
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct)
@@ -134,7 +161,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
     public async Task<bool> CodeTakenForTenantAsync(Guid tenantId, string code, CancellationToken ct)
     {
         return await db.Roles.AnyAsync(
-            r => r.DeletedAt == null && r.Code == code && (r.TenantId == null || r.TenantId == tenantId), ct);
+            r => r.DeletedAt == null && r.Code.ToLower() == code.ToLower() && (r.TenantId == null || r.TenantId == tenantId), ct);
     }
 
     public async Task UpdateDetailsAsync(Guid roleId, string name, string? description, CancellationToken ct)
@@ -153,7 +180,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
         return await (
             from p in db.RbacActions.AsNoTracking()
             join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
-            where permissionIds.Contains(p.Id) && p.IsActive && p.DeletedAt == null
+            where permissionIds.Contains(p.Id) && p.IsActive && p.DeletedAt == null && m.DeletedAt == null
             select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
         ).ToListAsync(ct);
     }
@@ -194,6 +221,11 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
         IReadOnlyList<Guid> permissionIds,
         CancellationToken ct)
     {
+        // HU #13441: borrar + insertar va en una transacción; un fallo en el insert (permiso inexistente, producto
+        // distinto) no puede dejar el rol sin permisos. Si ya hay una transacción abierta se reutiliza.
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(ct) : null;
+
         // Hard delete de role_permissions existentes para este rol
         await db.RoleGrants
             .Where(rg => rg.RoleId == roleId)
@@ -214,6 +246,9 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             db.RoleGrants.AddRange(newGrants);
             await db.SaveChangesAsync(ct);
         }
+
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
     }
 
     public async Task SetActiveAsync(Guid roleId, bool isActive, CancellationToken ct)
