@@ -393,6 +393,35 @@ public static class DependencyInjection
         services.AddScoped<GetImprintSignaturePreviewUrlHandler>();
         services.AddScoped<ListImprintSignatureValidationsHandler>();
 
+        // Épica #13216 — HU13370: resolución de la selección del lote por origen (la bandeja OT añade el suyo).
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            UseCases.ConsolidadoLotes.TramitesSeleccionResolver>();
+        // Épica #13216 — HU13383: selección del Super Admin (origen superadmin) sobre el mismo listado, sin compañía.
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            UseCases.ConsolidadoLotes.SuperAdminSeleccionResolver>();
+        services.AddScoped<UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen>();
+
+        // Épica #13216 — HU13373: crear el lote (selección congelada + auditoría lote_creado en una transacción).
+        services.AddScoped<UseCases.ConsolidadoLotes.CrearLoteConsolidadosHandler>();
+        // Épica #13216 — HU13420: ver y editar los parámetros del motor desde el Super Admin.
+        services.AddScoped<UseCases.ConsolidadoLotes.ObtenerParametrosMotorLoteHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ActualizarParametrosMotorLoteHandler>();
+        // Épica #13216 — HU13375: procesamiento por ítem del lote (entregador común, procesadores por origen y handler).
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemEntregador, UseCases.ConsolidadoLotes.ConsolidadoLoteEntregador>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.TramitesLoteItemOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.SuperAdminLoteItemOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.LoteItemOrigenPorOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ProcesarItemLoteHandler>();
+        // Épica #13216 — HU13378: empaquetado de partes (ZIP + cifrado + subida) y plan B del snapshot (adjunto actual).
+        services.AddScoped<UseCases.ConsolidadoLotes.IConsolidadoLoteAdjuntoActual, UseCases.ConsolidadoLotes.ConsolidadoLoteAdjuntoActual>();
+        services.AddScoped<UseCases.ConsolidadoLotes.EmpaquetarParteHandler>();
+        // Épica #13216 — HU13379: consulta del lote (actual / por id), descarga de partes del dueño y purga a las 24 h.
+        services.AddScoped<UseCases.ConsolidadoLotes.ConsultarLoteConsolidadosHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.DescargarParteHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.PurgarLotesExpiradosHandler>();
+        // Épica #13216 — HU13385: cancelación del lote por su dueño (lote_cancelado en la misma transacción).
+        services.AddScoped<UseCases.ConsolidadoLotes.CancelarLoteConsolidadosHandler>();
+
         return services;
     }
 }

@@ -60,11 +60,24 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// propósito: tras un rechazo de Quipux la nueva radicación necesita un maestro nuevo (el anterior se
     /// conserva igualmente: <see cref="ConsolidadoReemplazoSeguro.RetirarFilas"/> lo protege).</para>
     /// </summary>
-    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<string>? matrizPrecedencia = null,
         bool force = false,
+        CancellationToken ct = default) =>
+        HandleRespetandoRadicacionAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste: false, ct);
+
+    /// <param name="soloSiNoExiste">
+    /// HU #13371 — se propaga a <see cref="HandleAsync(Guid, Guid, IReadOnlyList{string}?, bool, bool, CancellationToken)"/>
+    /// después de la precedencia del maestro radicado, que no cambia. Solo lo pasa el lote.
+    /// </param>
+    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia,
+        bool force,
+        bool soloSiNoExiste,
         CancellationToken ct = default)
     {
         var radicadoId = await _maestroRadicado.AttachmentRadicadoAsync(tenantId, id, ct).ConfigureAwait(false);
@@ -78,7 +91,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
             return fijo.Error is null ? (fijo.Result, null) : (null, fijo.Error);
         }
 
-        return await HandleAsync(id, tenantId, matrizPrecedencia, force, ct).ConfigureAwait(false);
+        return await HandleAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste, ct).ConfigureAwait(false);
     }
 
     /// <param name="matrizPrecedencia">
@@ -93,11 +106,26 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// una vía de invalidación falla o el operador simplemente duda de lo que está viendo, tiene una
     /// salida en la interfaz en vez de depender de que el servidor haya adivinado bien.
     /// </param>
-    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<string>? matrizPrecedencia = null,
         bool force = false,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste: false, ct);
+
+    /// <param name="soloSiNoExiste">
+    /// HU #13371 (Épica #13216) — guarda del lote de descarga masiva: si ya hay un adjunto
+    /// <c>consolidado_maestro</c>, se devuelve ese tal cual (el más reciente) con <c>Regenerado=false</c>,
+    /// antes del atajo de caché y de la regeneración del FUR. Con <c>false</c> (la otra sobrecarga) el
+    /// comportamiento es el de siempre.
+    /// </param>
+    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia,
+        bool force,
+        bool soloSiNoExiste,
         CancellationToken ct = default)
     {
         // Graph con FieldValues (HU #10857): necesarios para los datos de la portada (placa, secretaría).
@@ -112,6 +140,14 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // El más reciente: un maestro radicado ante Quipux se conserva al regenerar (HU #12787), así que
         // puede haber más de una fila de este tipo.
         var vigente = ConsolidadoEntregaModos.Existente(instance, "consolidado_maestro");
+
+        // HU #13371 — el lote nunca regenera: con un maestro ya guardado se entrega ese, sin mirar la
+        // bandera ni el FUR. Mismo read que decidiría generar (cubre la carrera con otra generación).
+        if (soloSiNoExiste && vigente is not null)
+        {
+            var existenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
+            return (new GenerarConsolidadoResult(existenteDto, Regenerado: false), null);
+        }
 
         // Bug #11612 — el atajo de caché queda EXACTAMENTE como estaba: la compañía radicadora ya no
         // deja marcador persistido (ver CompaniaRadicadoraResolver) y condicionar el atajo a "falta la

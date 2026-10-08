@@ -366,7 +366,11 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         {
             try
             {
-                var payload = FlattenAlphaOntoWhite(signer.SignatureImage);
+                // HU #13371 — imagen subida por el usuario: solo PNG/JPEG llegan a ImageSharp (también
+                // vía XImage.FromStream, que autodetecta el formato). Otro formato, o una imagen fuera del
+                // tope de píxeles, cae al sello de texto. XImage recibe un PNG recodificado sin ICC ni
+                // metadatos, nunca los bytes originales.
+                var payload = FlattenAlphaOntoWhite(PngJpegImageDecoding.RequireCleanPng(signer.SignatureImage));
                 using var img = XImage.FromStream(() => new MemoryStream(payload));
                 img.Interpolate = true;
 
@@ -444,7 +448,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
     {
         try
         {
-            using var image = Image.Load<Rgba32>(imageBytes);
+            using var image = PngJpegImageDecoding.Load(imageBytes);
             var hasAlpha = false;
             for (var row = 0; row < image.Height && !hasAlpha; row++)
             {

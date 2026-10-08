@@ -125,6 +125,17 @@ internal static class CoveredQueries
         new("Q47", "ProcedureInstanceRepository.ListBiometricValidationsByTenantAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
         new("Q48", "ProcedureInstanceRepository.CountBiometricValidationsByEstadoAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
         new("Q49", "IdentityValidationOutboxRepository.ListStuckAsync (TenantScope)", "TenantScope", 1, SupportsGlobal: true),
+        // HU #13390 (Épica #13216) — selección del lote desde la bandeja OT, mismo universo que Q24 sin paginar (OtBandejaSeleccionResolverIntegrationTests).
+        new("Q50", "OtClientProcedureRepository.ListAccessibleRefsAsync (selección del lote, bandeja OT sin paginar)", "Guid otTenantId", 1, SupportsGlobal: false),
+        // Code review épica #13216 (Obs2) — selección del lote de /tramites y Super Admin con límite, y los COUNT del 422
+        // (CrearLoteConsolidadosIntegrationTests: AC6, M1, Obs2; OtBandejaSeleccionResolverIntegrationTests: Obs2).
+        new("Q51", "ProcedureInstanceRepository.ListIdsFilteredAsync (selección del lote, sin paginar, con límite)", "Guid? tenantId", 2, SupportsGlobal: true),
+        new("Q52", "ProcedureInstanceRepository.CountIdsFilteredAsync (total del 422 seleccion_excede_tope)", "Guid? tenantId", 2, SupportsGlobal: true),
+        new("Q53", "OtClientProcedureRepository.CountAccessibleRefsAsync (total del 422 desde la bandeja OT)", "Guid otTenantId", 1, SupportsGlobal: false),
+        // HU #13417 (Épica #13216, ADR-0070 v7) — selección del lote desde la vista de red con TenantScope y su COUNT del 422
+        // (CrearLoteRedIntegrationTests: AC1 total = búsqueda de red, AC2 hija, AC5 ids de compañía ajena y de hija de otra cabeza).
+        new("Q54", "ProcedureInstanceRepository.ListIdsFilteredInScopeAsync (TenantScope, selección del lote de red con límite)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q55", "ProcedureInstanceRepository.CountIdsFilteredInScopeAsync (TenantScope, total del 422 de la red)", "TenantScope", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

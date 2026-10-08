@@ -28,6 +28,7 @@ import {
 import { COPY } from "@/lib/copy/copy-catalog";
 import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
+import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
@@ -94,6 +95,17 @@ export interface ClientProceduresTableProps {
   sortBy?: string;
   sortDir?: "asc" | "desc";
   onSortChange?: (sortBy: string, sortDir: "asc" | "desc") => void;
+  /**
+   * HU #13393 — la bandeja permite seleccionar trámites para la descarga masiva (permiso
+   * `consolidado-masivo.download`). Sin él no hay columna ni casillas (AC5). «Seleccionar todos» y
+   * el contador NO van aquí sino en la barra sobre la tabla (`BarraSeleccionLote`), que sigue
+   * visible y deshabilitada cuando la tabla no se pinta por estar cargando, vacía o en error (AC7).
+   */
+  seleccionable?: boolean;
+  /** HU #13393 — selección vigente (de `useSeleccionLote`): marca cada casilla. */
+  seleccion?: { estaSeleccionado: (id: string) => boolean } | null;
+  /** HU #13393 — alterna la fila en la selección; `false` si el tope de 10.000 lo impidió. */
+  onToggle?: (id: string) => boolean;
 }
 
 /**
@@ -395,7 +407,12 @@ export function ClientProceduresTable({
   sortBy,
   sortDir,
   onSortChange,
+  seleccionable = false,
+  seleccion = null,
+  onToggle,
 }: ClientProceduresTableProps) {
+  // HU #13393 — con casillas, la columna de selección abre la fila y se lleva el borde redondeado.
+  const conCasillas = seleccionable && Boolean(onToggle);
   // Sin preferencia (o con una que dejara la tabla vacía) se pintan todas: una tabla sin columnas
   // no es una tabla, y eso NO puede depender de que una llamada de preferencias haya respondido.
   const columnasVisibles =
@@ -526,6 +543,14 @@ export function ClientProceduresTable({
       <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr>
+            {conCasillas ? (
+              <th
+                className={`${TABLA_HEADER_CELL_CLS} w-10 rounded-l-xl`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                <span className="sr-only">Selección para la descarga masiva</span>
+              </th>
+            ) : null}
             {columnasVisibles.map((columna, indice) => (
               <SortableTh
                 key={columna.key}
@@ -535,7 +560,7 @@ export function ClientProceduresTable({
                 sortBy={sortBy}
                 sortDir={sortDir}
                 onSortChange={columna.sortable ? onSortChange : undefined}
-                className={indice === 0 ? "rounded-l-xl" : ""}
+                className={indice === 0 && !conCasillas ? "rounded-l-xl" : ""}
               />
             ))}
             <th
@@ -570,10 +595,20 @@ export function ClientProceduresTable({
                   : undefined
               }
             >
+              {conCasillas && onToggle ? (
+                // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
+                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-white/10">
+                  <CasillaFilaLote
+                    radicado={row.referenceNumber}
+                    seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}
+                    onAlternar={() => onToggle(row.id)}
+                  />
+                </td>
+              ) : null}
               {columnasVisibles.map((columna, indice) => (
                 <td
                   key={columna.key}
-                  className={`${indice === 0 ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
+                  className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
                   style={{ borderColor: "#DFE5ED" }}
                 >
                   {renderCelda(columna.key, row)}

@@ -101,6 +101,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // HU #12964: la migración de la B-04 crea el rol admin_tramites. Se trunca como el resto de roles
         // que siembran las pruebas; la que lo necesite lo crea (PlatformRbacTests).
         "security.roles",
+        // HU #13367 (DDL 133): fila única de parámetros del motor de lotes de consolidados. Configuración, no
+        // catálogo (como runt_confirmation_settings): se trunca; la prueba que la necesite reaplica el DDL 133.
+        "tramites.consolidado_export_settings",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

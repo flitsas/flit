@@ -25,7 +25,13 @@ import {
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { COPY } from '@/lib/copy/copy-catalog';
-import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { useSeleccionLote, type ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
+import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
+import { BotonDescargaMasivaZip } from './DescargaMasivaConfirmModal';
+import { useMostrarLoteDescarga } from '@/components/shared/LoteDescargaTracker';
+import type { LoteConsolidados, TipoDocumentoLote } from '@/lib/api/types-consolidado-lotes';
+import { consolidadoLotesClient } from '@/lib/api/consolidado-lotes-client';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   ETIQUETA_CLIENTE_HIJO,
@@ -87,6 +93,7 @@ import {
 } from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { useNetworkScope } from '@/hooks/useNetworkScope';
+import { useDocumentosRed } from '@/hooks/useDocumentosRed';
 import { NetworkScopeSelector } from './NetworkScopeSelector';
 import { useNavigableModules } from '@/hooks/useNavigableModules';
 import { controlCls } from './tramites-control-styles';
@@ -430,9 +437,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   });
   // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
   // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
+  // HU #13380 — con el permiso de descarga masiva la pista existe siempre: cada fila lleva casilla.
+  const [puedeLote, setPuedeLote] = useState(false);
   const includeSelectColumn = useMemo(
-    () => items.some((it) => it.origin === 'ict' && it.estado === 'borrador'),
-    [items],
+    () => puedeLote || items.some((it) => it.origin === 'ict' && it.estado === 'borrador'),
+    [items, puedeLote],
   );
   /**
    * Columnas realmente pintadas = preferencia del usuario menos las que no aplican al tipo de
@@ -481,8 +490,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // JWT en cliente tras montar (getToken lee la cookie), por eso vive en estado, no en el render SSR.
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
+    const payload = decodeJwtPayload(getToken());
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+    setIsAdmin(isSuperAdmin(payload));
+    setPuedeLote(canDescargarConsolidadosMasivo(payload));
   }, []);
   /**
    * HU #12362 — tenant del usuario, con el que `isNetworkReadOnly` decide si una fila es de un
@@ -779,6 +790,80 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         : tramitesClient.searchInstances(query),
     [networkActive, childTenantId],
   );
+  /**
+   * HU #13380 — selección para la descarga masiva. El filtro es el de `buildListQuery` sin el orden
+   * (reordenar no cambia el universo); la página no entra, así que cambiar de página conserva la
+   * selección (AC3) y cambiar un criterio la reinicia (AC4). `total` sale de la búsqueda del alcance
+   * vigente (`searchInstances` o `searchNetworkInstances`): es el total real de la vista (V-d).
+   *
+   * HU #13419 — el alcance de red NO va en el filtro: entra en la clave de la selección (cambiarlo
+   * la reinicia, AC3) y viaja en la RAÍZ del cuerpo (`alcanceRed`) en los dos modos (AC1/AC2).
+   */
+  const filtroLote = useMemo(() => {
+    const criterios = buildListQuery();
+    delete criterios.sortBy;
+    delete criterios.sortDir;
+    return criterios;
+  }, [buildListQuery]);
+  const alcanceLote = networkActive ? (childTenantId ?? 'red') : null;
+  const lote = useSeleccionLote({ filtro: filtroLote, total, alcance: alcanceLote });
+  /** HU #13419 AC6 — nombre de la hija del alcance vigente (de la lista del selector), si hay. */
+  const nombreHijaLote = useMemo(
+    () => (childTenantId ? (red.children.find((c) => c.id === childTenantId)?.nombre ?? null) : null),
+    [childTenantId, red.children],
+  );
+  const etiquetaAlcanceLote = networkActive ? (nombreHijaLote ? `Red · ${nombreHijaLote}` : 'Red') : null;
+  /**
+   * HU #13419 AC5 — con la vista de red activa se pregunta `GET /network/documentos` (una vez por
+   * activación, con `AbortSignal`) y «Descargar ZIP» solo se ofrece con `documentosRed=true`: ni
+   * mientras se consulta, ni si está apagado, ni si la consulta falla o da 403 (fail-closed). Con
+   * «Mi compañía» no se consulta y el botón sigue igual. Defensa: si aun así el servidor responde 403
+   * `network_documents_disabled` al crear el lote, la vista de red deja de ofrecerlo en la página.
+   */
+  const documentosRed = useDocumentosRed(networkActive && puedeLote && !isAdmin);
+  const [descargaRedApagada, setDescargaRedApagada] = useState(false);
+  // Code review Obs3 — el 403 vale solo para la consulta en curso: al cambiar `networkActive` o al
+  // volver `documentosRed` a «consultando» (nueva activación) se olvida, para que el botón reaparezca
+  // si el Super Admin encendió el interruptor. Patrón «ajustar estado al cambiar una prop».
+  const consultandoRed = documentosRed === 'consultando';
+  const [redPrevia, setRedPrevia] = useState({ networkActive, consultandoRed });
+  if (redPrevia.networkActive !== networkActive || redPrevia.consultandoRed !== consultandoRed) {
+    setRedPrevia({ networkActive, consultandoRed });
+    if (redPrevia.networkActive !== networkActive || consultandoRed) setDescargaRedApagada(false);
+  }
+  const descargaRedNoDisponible: string | null = !networkActive
+    ? null
+    : descargaRedApagada || documentosRed === 'apagado'
+      ? 'La descarga en ZIP no está habilitada para la vista de red.'
+      : documentosRed === 'no_disponible'
+        ? 'No se pudo comprobar si la descarga en ZIP está habilitada para la vista de red.'
+        : null;
+  const alRechazoRed = useCallback((codigo: string) => {
+    if (codigo === 'network_documents_disabled') setDescargaRedApagada(true);
+  }, []);
+  // HU #13382 — el seguimiento global (Shell) muestra el lote recién creado o el que ya corre (409).
+  const { mostrarLote } = useMostrarLoteDescarga();
+  const limpiarSeleccionLote = lote.limpiar;
+  const alCrearLote = useCallback(
+    (creado: LoteConsolidados) => {
+      limpiarSeleccionLote();
+      // HU #13419 AC6 — el aviso resuelve el nombre de la hija por `alcanceHijaId` (useNombreHijaLote).
+      mostrarLote(creado);
+    },
+    [limpiarSeleccionLote, mostrarLote],
+  );
+  /**
+   * HU #13387 (W-f) — el Super Admin crea el lote con las MISMAS cabeceras que el listado. El
+   * listado sale sin `filterTenantId` (buildListQuery no lo pone; la red usa solo Bearer), así que
+   * la creación tampoco lleva X-Tenant-Id: nunca el tenant activo ni el interno del JWT. La compañía
+   * se acota con la condición `compania` del filtro. El Gestor sigue con la creación por defecto.
+   */
+  const crearLoteSuperAdmin = useCallback(
+    (seleccion: ModeloSeleccionLote<unknown>, tipoDocumento?: TipoDocumentoLote) =>
+      consolidadoLotesClient.crearLote({ seleccion, tipoDocumento, cabecerasDelListado: {} }),
+    [],
+  );
+  const estadoTablaLote = loading ? 'cargando' : error ? 'error' : total === 0 ? 'vacio' : 'lleno';
   const contarEstados = useCallback(
     (query: ListInstancesParams) =>
       networkActive
@@ -1531,6 +1616,38 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           </div>
         ) : null}
 
+        {/* HU #13380 — sin el permiso no hay barra ni casillas (AC6). */}
+        {puedeLote ? (
+          <BarraSeleccionLote
+            estadoTabla={estadoTablaLote}
+            estadoCabecera={lote.estadoCabecera}
+            contador={lote.contador}
+            todosDelFiltro={lote.modo === 'filtro'}
+            onAlternarTodos={lote.alternarTodos}
+            onLimpiar={lote.limpiar}
+            mensajeTope={lote.mensajeTope}
+          >
+            {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). HU #13382 — el
+                lote creado y el del 409 `lote_activo` pasan al seguimiento global del Shell. HU #13387 —
+                el Super Admin elige el tipo y crea con las cabeceras del listado. */}
+            {/* HU #13419 AC5 — en la vista de red, mientras `documentosRed` no responde, no hay botón. */}
+            {networkActive && documentosRed === 'consultando' && !descargaRedNoDisponible ? null : (
+              <BotonDescargaMasivaZip
+                seleccion={lote.modelo}
+                contador={lote.contador}
+                onCreado={alCrearLote}
+                onLoteActivo={mostrarLote}
+                selectorTipo={isAdmin}
+                crear={isAdmin ? crearLoteSuperAdmin : undefined}
+                alcanceRed={isAdmin ? undefined : lote.alcance}
+                etiquetaAlcance={etiquetaAlcanceLote}
+                onRechazoRed={alRechazoRed}
+                noDisponible={descargaRedNoDisponible}
+              />
+            )}
+          </BarraSeleccionLote>
+        ) : null}
+
         <TableBody
           loading={loading}
           error={error}
@@ -1556,6 +1673,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onTogglePause={handleTogglePause}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          seleccionLote={puedeLote ? lote : null}
           onProcesar={openProcesar}
           onOpen={abrirAsistente}
           onVerDocumentos={setDocsTramite}
@@ -1893,6 +2011,12 @@ function SortableHeaderCell({
   );
 }
 
+/** HU #13380 — lo que las filas necesitan de la selección de descarga masiva. */
+interface SeleccionLoteFilas {
+  estaSeleccionado: (id: string) => boolean;
+  alternar: (id: string) => boolean;
+}
+
 /** Cuerpo de la tabla: maneja los 4 estados (cargando/error/vacío/datos). */
 function TableBody({
   loading,
@@ -1919,6 +2043,7 @@ function TableBody({
   onTogglePause,
   selectedIds,
   onToggleSelect,
+  seleccionLote,
   onProcesar,
   onOpen,
   onVerDocumentos,
@@ -1960,6 +2085,8 @@ function TableBody({
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  /** HU #13380 — selección de descarga masiva; `null` sin el permiso (sin casillas, AC6). */
+  seleccionLote: SeleccionLoteFilas | null;
   onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
@@ -2154,6 +2281,8 @@ function TableBody({
                 onTogglePause={onTogglePause}
                 selected={selectedIds.has(item.id)}
                 onToggleSelect={onToggleSelect}
+                seleccionadoLote={seleccionLote?.estaSeleccionado(item.id) ?? false}
+                onAlternarLote={seleccionLote ? seleccionLote.alternar : null}
                 onProcesar={onProcesar}
                 onOpen={onOpen}
                 onVerDocumentos={onVerDocumentos}
@@ -2296,6 +2425,8 @@ function TramiteRow({
   onTogglePause,
   selected,
   onToggleSelect,
+  seleccionadoLote,
+  onAlternarLote,
   onProcesar,
   onOpen,
   onVerDocumentos,
@@ -2321,6 +2452,10 @@ function TramiteRow({
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
   selected: boolean;
   onToggleSelect: (id: string) => void;
+  /** HU #13380 — la fila va en la selección de descarga masiva. */
+  seleccionadoLote: boolean;
+  /** HU #13380 — alterna la fila en la selección; `null` sin el permiso (sin casilla). */
+  onAlternarLote: ((id: string) => boolean) | null;
   onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
@@ -3028,6 +3163,15 @@ function TramiteRow({
           className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle dark:border-white/10"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* HU #13380 — casilla de descarga masiva; si la fila es además un borrador ICT, la de
+              pausa va debajo (son selecciones distintas, cada una con su etiqueta). */}
+          {onAlternarLote ? (
+            <CasillaFilaLote
+              radicado={item.referenceNumber}
+              seleccionado={seleccionadoLote}
+              onAlternar={() => onAlternarLote(item.id)}
+            />
+          ) : null}
           {isIctDraft ? (
             <input
               type="checkbox"

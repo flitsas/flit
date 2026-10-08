@@ -14,6 +14,42 @@ public interface IOtClientProcedureRepository
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Épica #13216 (HU #13390) — referencias de TODOS los trámites de la bandeja del OT que cumplen
+    /// <paramref name="filter"/>, en el orden de la bandeja y sin paginar: la selección «Seleccionar todos»
+    /// del lote de consolidados. Mismo universo que <see cref="ListAsync"/> (organismo, recibido y vivo; el
+    /// grant no lo gobierna, HU #12350).
+    /// <list type="bullet">
+    ///   <item>Modo filtro: <paramref name="filter"/> con los criterios de la bandeja (se ignoran
+    ///   <c>Page</c> y <c>PageSize</c>).</item>
+    ///   <item>Modo ids: <paramref name="filter"/> <c>null</c> y <paramref name="ids"/> = las casillas
+    ///   marcadas; se devuelven solo las que están en la bandeja, con el orden por defecto.</item>
+    /// </list>
+    /// <para>Lista vacía cuando el tenant no resuelve ningún organismo de tránsito.</para>
+    /// <para>Code review épica #13216 (Obs2): <paramref name="limite"/> corta la lectura en SQL (<c>LIMIT</c>, después
+    /// del orden de la bandeja) para que el tope M1 no obligue a cargar toda la selección; <c>null</c> = sin límite.
+    /// Con <paramref name="filter"/> e <paramref name="ids"/> a la vez se aplican los dos (intersección).</para>
+    /// </summary>
+    Task<IReadOnlyList<OtClientProcedureRef>> ListAccessibleRefsAsync(
+        Guid otTenantId,
+        OtClientProcedureFilter? filter,
+        IReadOnlyCollection<Guid>? ids,
+        Guid? transitOfficeIdOverride = null,
+        int? limite = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántas referencias devolvería <see cref="ListAccessibleRefsAsync"/> sin
+    /// límite: mismo universo, mismos filtros y mismos <paramref name="ids"/>, contados en SQL. 0 cuando el tenant no
+    /// resuelve ningún organismo de tránsito.
+    /// </summary>
+    Task<int> CountAccessibleRefsAsync(
+        Guid otTenantId,
+        OtClientProcedureFilter? filter,
+        IReadOnlyCollection<Guid>? ids,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
     Task<OtClientProcedure?> GetByIdAsync(
         Guid otTenantId,
         Guid procedureInstanceId,

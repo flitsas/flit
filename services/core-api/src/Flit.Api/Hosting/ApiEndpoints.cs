@@ -53,6 +53,7 @@ internal static class ApiEndpoints
         app.MapAdminPlataformaFurEndpoints();
         app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
         app.MapAdminPlataformaNotificacionesEndpoints();
+        app.MapAdminPlataformaConsolidadoLotesEndpoints(); // Épica #13216 — HU13420: parámetros del motor de descarga masiva
         app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
         app.MapAdminRuntConfirmationEndpoints();
         app.MapAdminLogQxEndpoints();
@@ -116,6 +117,7 @@ internal static class ApiEndpoints
         app.MapTramitesFirmaEndpoints();
         app.MapTramitesFurEndpoints();
         app.MapTramitesConsolidadoEndpoints();
+        app.MapConsolidadoLoteEndpoints(); // Épica #13216 — HU13374: POST /api/v1/tramites/consolidados/lotes (descarga masiva)
         app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
         app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
         app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado

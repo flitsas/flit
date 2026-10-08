@@ -5187,6 +5187,300 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/search:
+    post:
+      operationId: SearchProcedureInstances
+      tags: [Tramites]
+      summary: Listado de trámites filtrado con la gramática de consultas
+      description: >
+        HU #12106 (documentado por HU #13374, épica #13216). El MISMO listado que `GET /api/v1/tramites/instances`
+        pero por POST, para aceptar condiciones del catálogo y listas largas (placa, VIN o radicado pegados desde
+        Excel). El tenant sale del JWT (TenantEnforcementMiddleware); el SuperAdmin acota con X-Tenant-Id o lista
+        todas las compañías sin él. Su filtro (`TramitesSearchFilter`) es el que reutiliza el lote de descarga
+        masiva (`POST /api/v1/tramites/consolidados/lotes`, modo `filtro`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: false
+          description: Solo SuperAdmin; para el resto lo impone el JWT.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TramitesSearchRequest"
+      responses:
+        "200":
+          description: Página del listado (máximo 200 ítems) y el total que cumple el filtro.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  total: { type: integer }
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones, o atajo de búsqueda rápida desconocido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Usuario de compañía sin compañía asignada.
+        "422":
+          description: La búsqueda rápida abarca más borradores de los que se evalúan; hay que acotarla.
+
+  /api/v1/tramites/consolidados/lotes:
+    post:
+      operationId: CrearLoteConsolidados
+      tags: [Tramites, Consolidados]
+      summary: Crea un lote de descarga masiva de consolidados (Gestor/Radicador; Super Admin en FA2)
+      description: >
+        Feature #13306 / #13307, ADR-0070 (HU #13374, #13383). Resuelve la selección EN SERVIDOR con la misma
+        visibilidad y filtros del listado (sin el tope de 200) y congela el total. Exige `confirmaEfectos=true`
+        (CF-08). El origen lo decide el servidor por el rol del JWT (TenantEnforcementMiddleware), NUNCA el
+        cuerpo: usuario de compañía → origen `tramites`, tenant del JWT; SuperAdmin → origen `superadmin`,
+        lote SIN compañía (Q8). El Super Admin puede acotar con X-Tenant-Id (queda en `scope_tenant_id`) o,
+        como hace /tramites, con la condición `compania` del filtro; un trámite fuera del scope no entra ni
+        cuenta en el total. Cada trámite conserva su compañía y se procesa en ella (CF-05).
+        `consolidado_maestro` solo se admite en origen `superadmin` (los demás → 400 `tipo_no_permitido`).
+        La auditoría `lote_creado` se escribe en la misma transacción y registra las compañías alcanzadas
+        (`reached_tenant_ids`, DISTINCT de los trámites congelados; `actor_tenant_id` nulo para el Super
+        Admin); la condición `compania` queda en `filter_summary` solo como conteo. Si la auditoría no se
+        puede registrar, el lote no se crea (503). Un solo lote activo por usuario. Los errores son ProblemDetails con el código estable en `error` (raíz del cuerpo).
+        Códigos estables: 400 `confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`,
+        `seleccion_invalida`, `filtro_invalido` (campo, operador o atajo fuera de catálogo: 400, igual que
+        `POST /api/v1/tramites/instances/search`); 403 `sin_compania`; 409 `lote_activo`; 422
+        `seleccion_excede_tope` (más de 10.000 ids o excluidos, o la selección resuelta supera el tope total
+        `max_items_per_batch` de los parámetros del motor, por defecto 10.000: entonces el cuerpo trae `total` y
+        `tope` y no se crea nada) y `busqueda_demasiado_amplia` (el atajo de
+        búsqueda rápida abarca demasiados borradores, igual que el listado); 503 `motor_inactivo` (motor
+        apagado u origen sin resolver) y `lote_no_creado` (la transacción o la
+        auditoría falló).
+        Vista de red (HU #13417, ADR-0070 adenda v7): `alcanceRed` en la raíz del cuerpo pide el lote con el alcance
+        de la tabla de red (`red` = cabeza + hijas, uuid = una hija; el de la propia cabeza = lote propio). El
+        alcance NO sale del cuerpo: es el TenantScope que el middleware resuelve desde la BD, con las mismas puertas
+        y en el mismo orden que `/api/v1/tramites/network/**`. 403 `network_scope_required` (Super Admin, compañía
+        hija o cliente sin red), `network_role_required` (la red es solo del rol AdminCompany de la cabeza),
+        `network_child_out_of_scope` (la compañía pedida no es de la red; no se consulta nada) y
+        `network_documents_disabled` (cabeza CONCESIÓN con `network_documents_concesion` apagado). Ninguno crea
+        lote, ítems ni auditoría. El lote de red es de la cabeza (`tenant_id`), cada ítem conserva la compañía de
+        su trámite y el total coincide con el de `POST /api/v1/tramites/network/instances/search` con el mismo
+        filtro; el tope `max_items_per_batch` aplica a la selección de red. La traza es `consolidado_export_audit`
+        (`reached_tenant_ids` y `filter_summary.alcanceRed` = `red` | `hija`, sin el id ni el nombre de la hija);
+        no se escribe en `network_access_audit`.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: false
+          description: >
+            Solo SuperAdmin; acota la selección a una compañía (`scope_tenant_id`); sin él, todas. Para el resto
+            lo impone el JWT: el middleware reemplaza el valor del cliente por el tenant del token.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrearLoteConsolidadosRequest" }
+      responses:
+        "202":
+          description: Lote creado y en cola (`Location` = `/api/v1/consolidados/lotes/{loteId}`).
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "400":
+          description: "Selección inválida (`seleccion_requerida`, `seleccion_invalida`; también un `alcanceRed` que no es `red` ni un uuid, o distinto en la raíz y en el filtro), condición fuera de catálogo (`filtro_invalido`), `confirmacion_requerida` o `tipo_no_permitido` (consolidado_maestro fuera de origen superadmin)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "Sin permiso consolidado-masivo.download (el SuperAdmin pasa por bypass aunque su token no traiga el claim), `sin_compania` (usuario sin compañía que no es SuperAdmin) o, con `alcanceRed` (HU #13417), `network_scope_required`, `network_role_required`, `network_child_out_of_scope` o `network_documents_disabled`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "409":
+          description: "`lote_activo`: ya existe un lote activo del usuario."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteActivoConflict" }
+        "422":
+          description: "`seleccion_excede_tope` (más de 10.000 ids o excluidos, o selección resuelta por encima del tope total `max_items_per_batch`, con `total` y `tope` en la raíz) o `busqueda_demasiado_amplia`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "503":
+          description: "`motor_inactivo` o `lote_no_creado` (no se pudo registrar la auditoría; el lote no se creó)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+
+  /api/v1/consolidados/lotes/actual:
+    get:
+      operationId: ObtenerLoteConsolidadosActual
+      tags: [Consolidados]
+      summary: Lote activo del usuario o el último terminal aún retenido (polling del seguimiento global)
+      description: >
+        Feature #13306 / ADR-0070, HU #13379. Ruta neutra: el dueño es el `sub` del token (`requested_by_user_id`);
+        `X-Tenant-Id` se ignora y la ruta no exige compañía (el `ot_admin` consulta su lote OT). Devuelve el lote
+        activo o, si no hay, el último lote terminal todavía retenido (no purgado, aunque ya haya vencido), con
+        `expiraEn`. `partes` va vacío hasta que el lote es descargable (completado/completado_con_omitidos, no vencido).
+        HU #13386: si el último lote del usuario está `cancelado` se devuelve aunque ya esté purgado, con `terminadoEn` =
+        instante de la cancelación, los contadores congelados y `partes` vacío, hasta que el usuario crea otro lote (el
+        activo siempre gana a un retenido o cancelado). Un lote purgado por la retención de 24 h no se devuelve.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lote activo o retenido.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "204": { description: "El usuario no tiene lote activo, retenido ni cancelado como último lote (o el último se purgó por retención)" }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+
+  /api/v1/consolidados/lotes/{loteId}:
+    get:
+      operationId: ObtenerLoteConsolidados
+      tags: [Consolidados]
+      summary: Lote por id (solo del dueño)
+      description: >
+        Feature #13306 / ADR-0070, HU #13379. Solo el dueño (`sub`); `X-Tenant-Id` se ignora. Cualquier otro usuario,
+        incluido el Super Admin, recibe 404.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: El lote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+        "404": { description: "No existe o no es del usuario (incluido Super Admin)" }
+
+  /api/v1/consolidados/lotes/{loteId}/partes/{numero}:
+    get:
+      operationId: DescargarParteLoteConsolidados
+      tags: [Consolidados]
+      summary: Descarga una parte del lote (descifrado en streaming; nunca genera PDF)
+      description: >
+        Feature #13306 / ADR-0070, HU #13379. Solo el dueño (`sub`; otro usuario o el Super Admin ⇒ 404). Descargable
+        si el lote está `completado` o `completado_con_omitidos`, no purgado, con `expiraEn` futuro y la parte
+        `cerrada`; un lote `fallido` no tiene partes (404) y uno `cancelado` ya está purgado (410 `descarga_expirada`,
+        HU #13386) para cualquier número de parte. La fila de auditoría `parte_descargada` se
+        registra antes del primer byte: si no se puede, 503 sin bytes. El cuerpo se descifra en streaming
+        (almacenamiento → descifrado → respuesta) con `Content-Length` fijado antes del primer byte; si la parte resulta
+        corrupta antes de enviar nada, 500 `parte_no_disponible` sin bytes, y si falla a mitad del cuerpo el servidor
+        aborta la conexión (el cliente recibe menos bytes que `Content-Length`, nunca un ZIP truncado como válido).
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: numero, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: ZIP de la parte.
+          headers:
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="consolidados_20261006_1430_parte-01-de-04.zip"' }
+            Content-Length:
+              description: Tamaño en claro de la parte (`plain_size_bytes`), fijado antes del primer byte.
+              schema: { type: integer, format: int64 }
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download" }
+        "404": { description: "No existe, no es del usuario (incluido Super Admin), no tiene partes (fallido) o la parte no existe" }
+        "409":
+          description: "El lote todavía no terminó (`lote_no_terminado`)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "410":
+          description: "Descarga expirada (`descarga_expirada`: lote purgado, vencido o cancelado)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "500":
+          description: "La parte no se pudo leer o descifrar antes de enviar bytes (`parte_no_disponible`)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "503":
+          description: "No se pudo registrar la auditoría de la descarga (`auditoria_no_registrada`); no se entregan bytes"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+
+  /api/v1/consolidados/lotes/{loteId}/cancelacion:
+    post:
+      operationId: CancelarLoteConsolidados
+      tags: [Consolidados]
+      summary: Cancela el lote en curso del usuario (cualquier origen)
+      description: >
+        HU #13385 (Feature #13307, ADR-0070). Un clic, sin cuerpo ni confirmación. Solo el solicitante (dueño = `sub`;
+        se ignora `X-Tenant-Id`): sirve a los orígenes `tramites`, `superadmin` y `ot_bandeja` (el `ot_admin`, con tenant
+        OT, cancela su lote OT). Pasa el lote a `cancelado` desde en_cola|en_proceso|empaquetando en una sola transacción:
+        los trámites pendientes o en proceso quedan `cancelado` y no se procesan más; las partes cerradas se purgan y las
+        que no llegaron a cerrarse se descartan (borrado criptográfico de la clave del lote); `terminadoEn`, `expiraEn` y
+        la purga quedan en el instante de la cancelación; se libera el cupo de lote activo y se audita `lote_cancelado`
+        (si la auditoría falla, 503 y el lote sigue activo). Los consolidados que el lote ya generó en los trámites quedan
+        como oficiales y no se revierten; un trámite que se estaba generando al cancelar termina su generación, pero no
+        entra a ninguna parte. Idempotente: un lote ya cancelado responde 202 tal cual, sin nueva auditoría. Tras la
+        cancelación el lote ya está purgado: `GET …/actual` (HU #13386) y `GET …/{loteId}` lo devuelven `cancelado` con
+        `partes` vacío, y la descarga de cualquiera de sus partes responde 410 `descarga_expirada`. Los procesos en curso
+        se detienen en checkpoints (HU #13386): ningún trámite se entrega después del checkpoint previo al generador y
+        ninguna parte se sube; si la finalización tomó el lote primero, la cancelación responde 409 `lote_terminado`.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - { in: path, name: loteId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "202":
+          description: Lote cancelado (o ya lo estaba); contadores congelados; `partes` vacío.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "401": { description: "Sin token válido" }
+        "403": { description: "Sin permiso consolidado-masivo.download; el lote no cambia" }
+        "404": { description: "No existe o no es del usuario (incluido un Super Admin con un lote ajeno)" }
+        "409":
+          description: El lote ya terminó (`lote_terminado`) en completado, completado_con_omitidos, fallido o expirado; no cambia.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteTerminadoConflict" }
+        "503":
+          description: No se pudo registrar la auditoría de la cancelación (`auditoria_no_registrada`); el lote no se canceló.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+
   /api/v1/tramites/network/instances/search:
     post:
       operationId: tramitesNetworkSearchInstances
@@ -5405,6 +5699,40 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: "`{ \"error\": \"audit_unavailable\" }` — no se pudo registrar el acceso; el documento no se entrega (fail-closed)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/documentos:
+    get:
+      operationId: TramitesNetworkGetDocumentos
+      tags: [Tramites, Red]
+      summary: "¿La cabeza de grupo puede leer documentos de su red? (habilita «Descargar ZIP» en la vista de red)"
+      description: >
+        Ajuste #13419 AC5 (HU #13417, épica #13216) — la vista de red decide si ofrece «Descargar ZIP» sin el
+        endpoint de interruptores del Super Admin. `documentosRed` es la misma regla que aplica el alta del lote de red
+        (`POST /api/v1/tramites/consolidados/lotes` con `alcanceRed`) y los documentos de un trámite de la red: `true`
+        si la cabeza no es CONCESION (MARCA_BLANCA) o si es CONCESION con el interruptor
+        `network_documents_concesion` encendido; `false` con el interruptor apagado (valor por defecto). Mismas
+        puertas que `GET /api/v1/tramites/network/children`: el alcance sale del servidor (BD), nunca de
+        `X-Tenant-Id` ni de la query. No deja registro en la auditoría de acceso consolidado (es configuración de la
+        propia cabeza, no un acceso a datos de una hija).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Disponibilidad de los documentos de la red para la cabeza.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkDocumentosDisponibilidad"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            `network_scope_required` (sin alcance de grupo: hija, cliente sin jerarquía, SuperAdmin o interruptor
+            `group_read_scope` apagado) o `network_role_required` (cabeza sin rol AdminCompany — HU #12652).
           content:
             application/json:
               schema:
@@ -10719,6 +11047,134 @@ paths:
         "404": { description: "Trámite no encontrado, o radicado ante Quipux sin consolidado maestro disponible (consolidado_no_generado)." }
         "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
+  # ── Admin · OT · Bandeja y lote de consolidados maestros (Épica #13216, HU #13391) ──
+
+  /api/v1/admin/ot/client-procedures/search:
+    post:
+      operationId: AdminOtSearchClientProcedures
+      tags: [Admin · OT]
+      summary: Bandeja del OT filtrada con la gramática de consultas
+      description: >
+        HU #12217 (documentado por HU #13391, deriva FB-l). La MISMA bandeja que
+        `GET /api/v1/admin/ot/client-procedures`, por POST para aceptar condiciones del catálogo y listas
+        pegadas. El tenant OT sale del JWT; el SuperAdmin acota con `?transitOfficeId`. Su filtro
+        (`OtBandejaSearchFilter`) es el que reutiliza el lote de maestros (`POST /api/v1/admin/ot/consolidados/lotes`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: transitOfficeId
+          required: false
+          description: Solo SuperAdmin (organismo cuya bandeja consulta); se ignora para el resto.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OtBandejaSearchRequest" }
+      responses:
+        "200":
+          description: Página de la bandeja y el total que cumple el filtro.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, totalCount, page, pageSize]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  totalCount: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones, familia no válida, o `transitOfficeId` fuera del catálogo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin OtModulePolicy.
+
+  /api/v1/admin/ot/consolidados/lotes:
+    post:
+      operationId: CrearLoteConsolidadosMaestrosOt
+      tags: [Admin · OT]
+      summary: Crea un lote de descarga masiva de consolidados maestros desde la bandeja del OT
+      description: >
+        Feature #13308 / ADR-0070 adenda v4 (HU #13391). Resuelve la selección EN SERVIDOR con el mismo universo,
+        filtros y orden de la bandeja (`POST /api/v1/admin/ot/client-procedures/search`) sin paginar y congela el
+        total; un id fuera de la bandeja (otro organismo, borrador) no entra (CF-06). Siempre
+        `consolidado_maestro`. Exige OtModulePolicy Y el permiso consolidado-masivo.download (AND). El tenant OT
+        sale del JWT; el SuperAdmin debe indicar `?transitOfficeId` y el lote queda con el tenant OT dueño de ese
+        organismo. Cada ítem queda con la compañía cliente de su trámite. La auditoría `lote_creado` se escribe
+        en la misma transacción (`filter_summary` con el organismo, condiciones como {campo, operador, cantidad}
+        y la búsqueda libre como {presente, longitud}); si no se puede registrar, el lote no se crea (503). La
+        consulta, descarga y cancelación usan `/api/v1/consolidados/lotes/*`. Errores: ProblemDetails con el
+        código estable en `error` (raíz). Códigos: 400 `transit_office_requerido` (SuperAdmin sin
+        `?transitOfficeId`), `transit_office_invalido` (organismo fuera del catálogo), `confirmacion_requerida`,
+        `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida`, `filtro_invalido` (condición o familia
+        fuera de catálogo, igual que la búsqueda de la bandeja); 403 `sin_organismo` (tenant OT sin organismo
+        resoluble); 404 (SuperAdmin: organismo sin tenant OT vinculado); 409 `lote_activo`; 422
+        `seleccion_excede_tope` (más de 10.000 ids o excluidos, o la selección resuelta supera el tope total
+        `max_items_per_batch`, con `total` y `tope`); 503 `motor_inactivo` y `lote_no_creado`.
+      x-required-permission: consolidado-masivo.download
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: transitOfficeId
+          required: false
+          description: Solo SuperAdmin (obligatorio para él); se ignora para ot_admin.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrearLoteConsolidadosOtRequest" }
+      responses:
+        "202":
+          description: Lote creado y en cola (`Location` = `/api/v1/consolidados/lotes/{loteId}`).
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoteConsolidados" }
+        "400":
+          description: "`transit_office_requerido`, `transit_office_invalido`, `confirmacion_requerida`, `tipo_no_permitido`, `seleccion_requerida`, `seleccion_invalida` o `filtro_invalido`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "Sin OtModulePolicy, sin consolidado-masivo.download, o `sin_organismo`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "404":
+          description: SuperAdmin con un `transitOfficeId` sin tenant OT vinculado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: "`lote_activo`: ya existe un lote activo del usuario (de cualquier origen)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteActivoConflict" }
+        "422":
+          description: "`seleccion_excede_tope`: más de 10.000 ids o excluidos, o selección resuelta por encima del tope total `max_items_per_batch` (con `total` y `tope` en la raíz)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+        "503":
+          description: "`motor_inactivo` o `lote_no_creado` (no se pudo registrar la auditoría; el lote no se creó)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/LoteProblem" }
+
   # ── Admin · Baúl de Firmas (HU #10643, #11175) ──────────────────────────────
 
   /api/v1/admin/companies/{tenantId}/signature-vault:
@@ -11627,6 +12083,87 @@ paths:
         "403": { description: Sin permiso (requiere SuperAdmin). }
         "404": { description: Plantilla inexistente. Sin cuerpo. }
 
+  /api/v1/admin/plataforma/consolidados/lotes/parametros:
+    get:
+      tags: [Admin · Plataforma · Descarga masiva]
+      operationId: AdminPlataformaConsolidadoLotesGetParametros
+      summary: Parámetros vigentes del motor de descarga masiva de consolidados (HU #13420 AC1)
+      description: >
+        Solo SuperAdmin (rol activo en el token; cualquier otro rol recibe 403). Devuelve todos los campos de
+        `tramites.consolidado_export_settings` (fila única global de plataforma), quién y cuándo los cambió por última
+        vez (`updatedBy` + `updatedByName`, el nombre visible del usuario; ambos null si nunca se editó) y el
+        `rowVersion` que el PUT debe devolver. `limites` publica los rangos de los CHECK del DDL 133 para que la
+        pantalla no repita los literales. Sin la fila (la siembra la migración) responde 404
+        `parametros_no_encontrados`: no se inventan valores, y sin fila el alta de lotes ya responde 503
+        `motor_inactivo`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Parámetros vigentes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLote" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin el rol SuperAdmin activo. }
+        "404":
+          description: No existe la fila de parámetros (`parametros_no_encontrados`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+    put:
+      tags: [Admin · Plataforma · Descarga masiva]
+      operationId: AdminPlataformaConsolidadoLotesPutParametros
+      summary: Actualiza los parámetros del motor de descarga masiva (HU #13420 AC2-AC6)
+      description: >
+        Solo SuperAdmin. Todos los campos son obligatorios (un nulo o ausente es 400 en su campo). Rangos idénticos a
+        los CHECK del DDL 133 (ver `ParametrosMotorLote.limites`); además `itemLeaseSeconds > itemTimeoutSeconds` y
+        `partLeaseSeconds > partTimeoutSeconds`. Todos los tiempos tienen tope (Security L1): `itemTimeoutSeconds` y
+        `retryDelaySeconds` ≤ 3600, `partTimeoutSeconds` ≤ 7200, `itemLeaseSeconds` ≤ 7200 y `partLeaseSeconds` ≤ 14400. Concurrencia optimista: `rowVersion` es el leído en el GET; si otro
+        Super Admin guardó después, 409 `row_version_conflict` y no se escribe nada. Guarda `updated_by`/`updated_at`
+        y el trigger `trg_audit_log` deja en `audit.audit_logs` los valores anterior y nuevo. El alta de lotes y el
+        motor leen la fila en cada uso: el cambio aplica sin reiniciar y no altera los lotes ya creados. Con
+        `isActive = false` el alta responde 503 `motor_inactivo` y los lotes en curso quedan en pausa.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActualizarParametrosMotorLoteRequest" }
+      responses:
+        "200":
+          description: Parámetros guardados (fila releída, con el nuevo `rowVersion`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLote" }
+        "400":
+          description: >
+            `parametros_invalidos`: ValidationProblem con `errors` por campo (camelCase, el mismo nombre del cuerpo);
+            p. ej. `{"errors": {"maxItemsPerBatch": ["Debe estar entre 1 y 32766."]}}`. Un cuerpo vacío lleva
+            `errors.body`; un JSON mal formado o un tipo incorrecto es 400 sin `errors` por campo.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteValidationProblem" }
+        "401":
+          description: >
+            Sin token o token inválido (sin cuerpo). Si el token es válido pero no identifica al usuario (sin `sub` ni
+            `NameIdentifier`), ProblemDetails `usuario_no_identificado` y no se escribe nada (nunca `updated_by` nulo).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+        "403": { description: Sin el rol SuperAdmin activo. }
+        "404":
+          description: No existe la fila de parámetros (`parametros_no_encontrados`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+        "409":
+          description: rowVersion desactualizado (`row_version_conflict`); la pantalla pide recargar.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
+
   /api/v1/dr-flit/chat:
     post:
       tags: [DR. FLIT]
@@ -12126,6 +12663,178 @@ components:
         message: { type: string, nullable: true }
         retryAfterSeconds: { type: integer, nullable: true }
         allowed: { type: string, nullable: true, example: "FLIT_SMTP, TENANT_API" }
+    ParametrosMotorLote:
+      type: object
+      description: >
+        HU #13420 — parámetros del motor de descarga masiva (`tramites.consolidado_export_settings`). Rangos = CHECK
+        del DDL 133 (`minimum`/`maximum` inclusivos; sin `maximum` = sin tope propio, máximo del entero de 32 bits).
+      required: [maxItemsPerBatch, maxPdfsPerPart, maxMbPerPart, itemSlots, itemTimeoutSeconds, itemLeaseSeconds, maxItemAttempts, retryDelaySeconds, partTimeoutSeconds, partLeaseSeconds, maxPartAttempts, retentionHours, isActive, rowVersion, limites]
+      properties:
+        maxItemsPerBatch:
+          type: integer
+          minimum: 1
+          maximum: 32766
+          description: "Tope total de trámites por lote (M1); superarlo en el alta es 422 `seleccion_excede_tope`."
+        maxPdfsPerPart:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          description: "N: PDF por parte ZIP."
+        maxMbPerPart:
+          type: integer
+          minimum: 10
+          maximum: 2048
+          description: "M: MB de PDF en claro por parte."
+        itemSlots:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: "K: carriles (ítems concurrentes del motor por instancia)."
+        itemTimeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+          description: "Tiempo máximo por trámite, en segundos."
+        itemLeaseSeconds:
+          type: integer
+          maximum: 7200
+          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds` y como mucho 7200."
+        maxItemAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por trámite."
+        retryDelaySeconds:
+          type: integer
+          minimum: 5
+          maximum: 3600
+          description: "Espera entre reintentos de un trámite, en segundos."
+        partTimeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 7200
+          description: "Tiempo máximo por parte, en segundos."
+        partLeaseSeconds:
+          type: integer
+          maximum: 14400
+          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds` y como mucho 14400."
+        maxPartAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por parte."
+        retentionHours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          description: "Horas de retención de las partes tras terminar el lote."
+        isActive: { type: boolean, description: "Motor encendido. false = no se crean lotes (503 `motor_inactivo`) y los lotes en curso quedan en pausa." }
+        updatedAt: { type: string, format: date-time, nullable: true, description: Última modificación. }
+        updatedBy: { type: string, format: uuid, nullable: true, description: Usuario de la última modificación. }
+        updatedByName: { type: string, nullable: true, description: "Nombre visible de `updatedBy` (null si nunca se editó o el usuario ya no existe)." }
+        rowVersion: { type: integer, format: int64, description: Token de concurrencia optimista; se devuelve en el PUT. }
+        limites:
+          type: array
+          description: Rangos de cada campo según el DDL 133 (fuente única; la pantalla no debe repetir los literales).
+          items: { $ref: "#/components/schemas/ParametroMotorLoteLimite" }
+    ParametroMotorLoteLimite:
+      type: object
+      required: [campo]
+      properties:
+        campo: { type: string, example: maxItemsPerBatch }
+        minimo: { type: integer, nullable: true, description: Mínimo inclusivo; null si el campo no tiene rango propio. }
+        maximo: { type: integer, nullable: true, description: Máximo inclusivo; null si el CHECK solo pone mínimo. }
+        mayorQue: { type: string, nullable: true, description: "Campo cuyo valor debe superar (solo en los leases), p. ej. `itemTimeoutSeconds`." }
+    ActualizarParametrosMotorLoteRequest:
+      type: object
+      description: HU #13420 — cuerpo del PUT. Todos obligatorios; mismos rangos que `ParametrosMotorLote`.
+      required: [maxItemsPerBatch, maxPdfsPerPart, maxMbPerPart, itemSlots, itemTimeoutSeconds, itemLeaseSeconds, maxItemAttempts, retryDelaySeconds, partTimeoutSeconds, partLeaseSeconds, maxPartAttempts, retentionHours, isActive, rowVersion]
+      properties:
+        maxItemsPerBatch:
+          type: integer
+          minimum: 1
+          maximum: 32766
+          description: "Tope total de trámites por lote (M1); superarlo en el alta es 422 `seleccion_excede_tope`."
+        maxPdfsPerPart:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          description: "N: PDF por parte ZIP."
+        maxMbPerPart:
+          type: integer
+          minimum: 10
+          maximum: 2048
+          description: "M: MB de PDF en claro por parte."
+        itemSlots:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: "K: carriles (ítems concurrentes del motor por instancia)."
+        itemTimeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+          description: "Tiempo máximo por trámite, en segundos."
+        itemLeaseSeconds:
+          type: integer
+          maximum: 7200
+          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds` y como mucho 7200."
+        maxItemAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por trámite."
+        retryDelaySeconds:
+          type: integer
+          minimum: 5
+          maximum: 3600
+          description: "Espera entre reintentos de un trámite, en segundos."
+        partTimeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 7200
+          description: "Tiempo máximo por parte, en segundos."
+        partLeaseSeconds:
+          type: integer
+          maximum: 14400
+          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds` y como mucho 14400."
+        maxPartAttempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "Reintentos por parte."
+        retentionHours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          description: "Horas de retención de las partes tras terminar el lote."
+        isActive: { type: boolean }
+        rowVersion: { type: integer, format: int64, description: El leído en el GET. }
+    ParametrosMotorLoteProblem:
+      type: object
+      description: ProblemDetails de los parámetros del motor con el código estable en `error`.
+      required: [error]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        error: { type: string, enum: [parametros_no_encontrados, row_version_conflict, usuario_no_identificado] }
+    ParametrosMotorLoteValidationProblem:
+      type: object
+      description: ValidationProblem (400) con `errors` por campo del cuerpo.
+      required: [error, errors]
+      properties:
+        type: { type: string }
+        title: { type: string, example: parametros_invalidos }
+        status: { type: integer, example: 400 }
+        detail: { type: string }
+        error: { type: string, enum: [parametros_invalidos] }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
     NotificationTestMailboxResponse:
       type: object
       required: [isConfigured, rowVersion]
@@ -15519,52 +16228,382 @@ components:
             - $ref: "#/components/schemas/ProcedureInstanceDetail"
       required: [tenantId, instance]
 
-    NetworkTramitesSearchRequest:
+    TramitesSearchFilter:
       type: object
       description: >
-        Cuerpo de `POST /api/v1/tramites/network/instances/search` y `/estado-counts` (HU #12358):
-        el mismo de `POST /api/v1/tramites/instances/search` más `childTenantId`.
+        Filtro del listado de trámites (HU #12106; documentado por HU #13374): el cuerpo de
+        `POST /api/v1/tramites/instances/search` SIN paginación. Lo reutilizan `TramitesSearchRequest`,
+        `NetworkTramitesSearchRequest` y el lote de descarga masiva (`LoteFiltroTramites`). `sortBy`/`sortDir`
+        fijan el orden (en el lote, el orden de proceso).
       properties:
-        childTenantId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
         condiciones:
           type: array
           nullable: true
-          description: Condiciones con la gramática de Consultas (campo, operador, valor). Fuera del catálogo ⇒ 400.
+          description: Condiciones con la gramática de Consultas (campo, operador, valores). Fuera del catálogo ⇒ 400.
           items:
             type: object
             additionalProperties: true
+            properties:
+              fieldId: { type: string }
+              operator: { type: string }
+              values:
+                type: array
+                items: { type: string }
         vin: { type: string, nullable: true }
         placa: { type: string, nullable: true }
         vendedor: { type: string, nullable: true }
         comprador: { type: string, nullable: true }
         gestor: { type: string, nullable: true }
         firmado: { type: boolean, nullable: true }
-        estado:
-          type: string
-          nullable: true
-          description: Estados separados por coma. Se ignora en `estado-counts`.
+        estado: { type: string, nullable: true, description: Estados separados por coma }
         modalidad: { type: string, nullable: true }
         organismoTransito: { type: string, nullable: true }
         tipoCodigo: { type: string, nullable: true }
         busqueda: { type: string, nullable: true }
         prioritario: { type: boolean, nullable: true }
+        busquedaRapida:
+          type: string
+          nullable: true
+          description: "Atajo de búsqueda rápida: mas_de_5_dias, mas_de_10_dias, sin_firmas, sin_documento, pausados, mis_tramites. Otro valor ⇒ 400."
         createdFrom: { type: string, format: date-time, nullable: true }
         createdTo: { type: string, format: date-time, nullable: true }
         updatedFrom: { type: string, format: date-time, nullable: true }
         updatedTo: { type: string, format: date-time, nullable: true }
         sortBy: { type: string, nullable: true }
         sortDir: { type: string, nullable: true, enum: [asc, desc] }
-        skip: { type: integer, nullable: true, minimum: 0 }
-        take:
-          type: integer
+
+    TramitesSearchRequest:
+      description: Cuerpo de `POST /api/v1/tramites/instances/search` y `/estado-counts`. `TramitesSearchFilter` más la página.
+      allOf:
+        - $ref: "#/components/schemas/TramitesSearchFilter"
+        - type: object
+          properties:
+            skip: { type: integer, nullable: true, minimum: 0 }
+            take:
+              type: integer
+              nullable: true
+              minimum: 1
+              maximum: 200
+              description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
+
+    CrearLoteConsolidadosRequest:
+      type: object
+      description: >
+        Cuerpo de `POST /api/v1/tramites/consolidados/lotes` (HU #13374). No lleva origen ni compañía: los decide
+        el servidor por el JWT; un campo `origen`/`origin` en el cuerpo se ignora.
+      required: [tipoDocumento, seleccion, confirmaEfectos]
+      properties:
+        tipoDocumento:
+          type: string
+          enum: [consolidado, consolidado_maestro]
+          description: Origen `tramites` solo `consolidado`; `consolidado_maestro` solo origen `superadmin` (si no ⇒ 400 tipo_no_permitido).
+        confirmaEfectos:
+          type: boolean
+          description: >
+            El usuario vio y aceptó el efecto declarado (se descarga el consolidado guardado tal cual; solo se
+            genera el de los trámites que no tienen). Debe ser true (si no ⇒ 400 confirmacion_requerida).
+        seleccion:
+          $ref: "#/components/schemas/LoteSeleccionRequest"
+        alcanceRed:
+          type: string
           nullable: true
-          minimum: 1
-          maximum: 200
-          description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
+          description: >
+            HU #13417 — alcance de la tabla, para los modos `ids` y `filtro`: null = propio; `red` = toda la red de la
+            cabeza; un uuid = una compañía hija (el de la propia cabeza = propio). Solo pide: el alcance lo resuelve el
+            servidor desde la BD. Un valor que no es `red` ni un uuid, o distinto del `seleccion.filtro.alcanceRed`
+            (transición), ⇒ 400 seleccion_invalida.
+          example: red
+
+    LoteSeleccionRequest:
+      type: object
+      description: >
+        Selección del listado tal como la arma el frontend: llega SIEMPRE con las cuatro claves. Modo `ids`: se
+        usa `ids` y se ignoran `excluidos`/`filtro` (llegan `[]`/`null`). Modo `filtro`: se usan `filtro` y
+        `excluidos` y se ignora `ids` (llega `[]`). Modo desconocido o `filtro` nulo en modo filtro ⇒ 400
+        seleccion_invalida. Más de 10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope. La selección resuelta
+        (exclusiones e intersección de seguridad aplicadas) por encima del tope total `max_items_per_batch` ⇒ 422
+        seleccion_excede_tope con `total` y `tope`.
+      required: [modo]
+      properties:
+        modo: { type: string, enum: [ids, filtro] }
+        ids:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        excluidos:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        filtro:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/LoteFiltroTramites"
+
+    LoteFiltroTramites:
+      description: >
+        Filtro del lote en modo `filtro`: `TramitesSearchFilter` (mismas validaciones que el listado) más
+        `alcanceRed`. `skip`/`take` se aceptan y se ignoran (la selección no tiene página).
+      allOf:
+        - $ref: "#/components/schemas/TramitesSearchFilter"
+        - type: object
+          properties:
+            skip: { type: integer, nullable: true }
+            take: { type: integer, nullable: true }
+            alcanceRed:
+              type: string
+              nullable: true
+              deprecated: true
+              description: >
+                Transición (HU #13417): el alcance va en `CrearLoteConsolidadosRequest.alcanceRed` (raíz del
+                cuerpo). Aquí se sigue aceptando con la misma semántica; si llegan los dos y difieren ⇒ 400
+                seleccion_invalida.
+
+    CrearLoteConsolidadosOtRequest:
+      type: object
+      description: >
+        Cuerpo de `POST /api/v1/admin/ot/consolidados/lotes` (HU #13391). No lleva origen, tenant ni organismo:
+        los decide el servidor.
+      required: [seleccion, confirmaEfectos]
+      properties:
+        tipoDocumento:
+          type: string
+          enum: [consolidado_maestro]
+          default: consolidado_maestro
+          description: Solo `consolidado_maestro`; otro valor ⇒ 400 tipo_no_permitido.
+        confirmaEfectos:
+          type: boolean
+          description: Debe ser true (texto de confirmación variante maestro); si no ⇒ 400 confirmacion_requerida.
+        seleccion:
+          $ref: "#/components/schemas/LoteSeleccionOtRequest"
+
+    LoteSeleccionOtRequest:
+      type: object
+      description: >
+        Selección de la bandeja OT tal como la arma el frontend (#13394): llega SIEMPRE con las cuatro claves.
+        Modo `ids`: se usa `ids` y se ignoran `excluidos`/`filtro`. Modo `filtro`: se usan `filtro` y `excluidos`
+        y se ignora `ids`. Modo desconocido o `filtro` nulo en modo filtro ⇒ 400 seleccion_invalida. Más de
+        10.000 `ids` o `excluidos` ⇒ 422 seleccion_excede_tope. La selección resuelta por encima del tope total
+        `max_items_per_batch` ⇒ 422 seleccion_excede_tope con `total` y `tope`.
+      required: [modo]
+      properties:
+        modo: { type: string, enum: [ids, filtro] }
+        ids:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        excluidos:
+          type: array
+          maxItems: 10000
+          items: { type: string, format: uuid }
+        filtro:
+          type: object
+          nullable: true
+          description: El cuerpo de la búsqueda de la bandeja; `page`/`pageSize` se aceptan y se ignoran.
+          allOf:
+            - $ref: "#/components/schemas/OtBandejaSearchFilter"
+
+    OtBandejaSearchFilter:
+      type: object
+      description: >
+        Filtro de la bandeja del OT (HU #12217; documentado por HU #13391): el cuerpo de
+        `POST /api/v1/admin/ot/client-procedures/search` SIN paginación. Lo reutilizan `OtBandejaSearchRequest`
+        y el lote de maestros (`LoteSeleccionOtRequest.filtro`). `sortBy`/`sortDir` fijan el orden.
+      properties:
+        condiciones:
+          type: array
+          nullable: true
+          description: Condiciones con la gramática de Consultas (campo, operador, valores). Fuera del catálogo ⇒ 400.
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              fieldId: { type: string }
+              operator: { type: string }
+              values:
+                type: array
+                items: { type: string }
+        busqueda: { type: string, nullable: true, description: Texto libre de la barra de búsqueda. }
+        status: { type: string, nullable: true, description: Estados separados por coma }
+        hasActiveRevocationRequest: { type: boolean, nullable: true }
+        procedureTypeId: { type: string, format: uuid, nullable: true }
+        familia:
+          type: string
+          nullable: true
+          enum: [MATRICULAS, TRASPASO, OTROS, null]
+          description: Otro valor ⇒ 400.
+        vin: { type: string, nullable: true }
+        placa: { type: string, nullable: true }
+        vendedor: { type: string, nullable: true }
+        comprador: { type: string, nullable: true }
+        gestor: { type: string, nullable: true }
+        createdFrom: { type: string, format: date-time, nullable: true }
+        createdTo: { type: string, format: date-time, nullable: true }
+        updatedFrom: { type: string, format: date-time, nullable: true }
+        updatedTo: { type: string, format: date-time, nullable: true }
+        sortBy: { type: string, nullable: true }
+        sortDir: { type: string, nullable: true, enum: [asc, desc] }
+
+    OtBandejaSearchRequest:
+      description: Cuerpo de `POST /api/v1/admin/ot/client-procedures/search` y `/counters`. `OtBandejaSearchFilter` más la página.
+      allOf:
+        - $ref: "#/components/schemas/OtBandejaSearchFilter"
+        - type: object
+          properties:
+            page: { type: integer, nullable: true, minimum: 1 }
+            pageSize: { type: integer, nullable: true, minimum: 1 }
+
+    LoteProblem:
+      type: object
+      description: ProblemDetails del motor de lotes con el código estable en `error` (raíz del cuerpo).
+      required: [error]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string, description: "Texto para el usuario, sin datos personales." }
+        error:
+          type: string
+          enum:
+            - confirmacion_requerida
+            - tipo_no_permitido
+            - seleccion_requerida
+            - seleccion_invalida
+            - filtro_invalido
+            - sin_compania
+            - seleccion_excede_tope
+            - busqueda_demasiado_amplia
+            - motor_inactivo
+            - lote_no_creado
+            - transit_office_requerido
+            - transit_office_invalido
+            - sin_organismo
+            - lote_no_terminado
+            - lote_terminado
+            - descarga_expirada
+            - auditoria_no_registrada
+            - parte_no_disponible
+            - network_scope_required
+            - network_role_required
+            - network_child_out_of_scope
+            - network_documents_disabled
+        total:
+          type: integer
+          description: >
+            Solo en `seleccion_excede_tope` por tope total (M1): trámites de la selección resuelta, exacto. El
+            servidor no carga la selección entera para responder: lee hasta `tope + 1` y cuenta el total en SQL con
+            el mismo filtro y sin los excluidos. Ausente en el tope de las listas `ids`/`excluidos`.
+        tope:
+          type: integer
+          description: Solo junto a `total`; `max_items_per_batch` vigente (1–32.766, por defecto 10.000).
+
+    LoteTerminadoConflict:
+      type: object
+      description: 409 de la cancelación (ProblemDetails, HU #13385) con el estado terminal en que quedó el lote.
+      required: [error, estado]
+      properties:
+        error: { type: string, enum: [lote_terminado] }
+        estado:
+          type: string
+          enum: [completado, completado_con_omitidos, fallido, expirado]
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    LoteActivoConflict:
+      type: object
+      description: 409 de la creación (ProblemDetails) con el lote activo que lo impidió.
+      required: [error, loteActivoId]
+      properties:
+        error: { type: string, enum: [lote_activo] }
+        loteActivoId: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    LoteConsolidados:
+      type: object
+      required: [id, estado, tipoDocumento, total, procesados, incluidos, omitidos, creadoEn, partes]
+      properties:
+        id: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [en_cola, en_proceso, empaquetando, completado, completado_con_omitidos, fallido, cancelado, expirado]
+          description: >
+            `cancelado` (#13385): terminal y neutro («Descarga cancelada»); `partes` vacío; los contadores quedan
+            como estaban al cancelar.
+        tipoDocumento: { type: string, enum: [consolidado, consolidado_maestro] }
+        total: { type: integer, description: Congelado al crear (CF-06) }
+        procesados: { type: integer, description: incluidos + omitidos }
+        incluidos: { type: integer }
+        omitidos: { type: integer }
+        generados: { type: integer, description: "De los incluidos, cuántos no tenían consolidado y se generaron" }
+        creadoEn: { type: string, format: date-time }
+        terminadoEn: { type: string, format: date-time, nullable: true, description: "En `cancelado`, instante de la cancelación." }
+        expiraEn: { type: string, format: date-time, nullable: true, description: terminadoEn + 24 h }
+        nombreBase: { type: string, example: consolidados_20261006_1430, description: Ausente hasta que el motor lo fija. }
+        alcanceRed:
+          type: string
+          nullable: true
+          readOnly: true
+          enum: [red, hija]
+          description: >
+            HU #13417 — lote creado desde la vista de red: `red` (toda la red) o `hija` (acotado a una compañía; sin
+            su id). Ausente en el lote propio. Para el aviso global del lote.
+        alcanceHijaId:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: >
+            Ajuste #13419 AC6 — id de la compañía hija (`scope_tenant_id`) cuando `alcanceRed` = `hija`, para que el
+            aviso global rotule «Red · nombre de la hija» tras recargar. Ausente (o null) en `red`, en el lote propio,
+            en el del Super Admin y en la bandeja OT.
+        partes:
+          type: array
+          description: Vacío hasta que el lote termina (las partes solo se descargan al terminar, CF-09/H4a).
+          items:
+            type: object
+            required: [numero, nombreArchivo, pdfs, omitidos, bytes]
+            properties:
+              numero: { type: integer }
+              nombreArchivo: { type: string }
+              pdfs: { type: integer }
+              omitidos: { type: integer }
+              bytes: { type: integer, format: int64 }
+
+    NetworkDocumentosDisponibilidad:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/tramites/network/documentos` (ajuste #13419 AC5): si la cabeza de grupo puede leer
+        documentos de su red y, por tanto, la vista de red ofrece «Descargar ZIP».
+      required: [documentosRed]
+      properties:
+        documentosRed:
+          type: boolean
+          description: "`true` en MARCA_BLANCA o CONCESION con `network_documents_concesion` encendido; `false` si no."
+
+    NetworkTramitesSearchRequest:
+      description: >
+        Cuerpo de `POST /api/v1/tramites/network/instances/search` y `/estado-counts` (HU #12358):
+        el mismo de `POST /api/v1/tramites/instances/search` (`TramitesSearchFilter` + página) más
+        `childTenantId`. `estado` se ignora en `estado-counts`.
+      allOf:
+        - $ref: "#/components/schemas/TramitesSearchFilter"
+        - type: object
+          properties:
+            childTenantId:
+              type: string
+              format: uuid
+              nullable: true
+              description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
+            skip: { type: integer, nullable: true, minimum: 0 }
+            take:
+              type: integer
+              nullable: true
+              minimum: 1
+              maximum: 200
+              description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
 
     NetworkScope:
       type: object

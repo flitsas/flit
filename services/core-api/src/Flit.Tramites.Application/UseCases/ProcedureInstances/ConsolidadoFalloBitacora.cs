@@ -54,6 +54,9 @@ public sealed partial class ConsolidadoFalloBitacora(
 
         /// <summary>Cola de regeneración anticipada (HU #12795).</summary>
         public const string RegeneracionAnticipada = "regeneracion_anticipada";
+
+        /// <summary>Primera generación desde el lote de descarga masiva (<c>ConsolidadoLoteEntregador</c>, HU #13371).</summary>
+        public const string LoteDescargaMasiva = "lote_descarga_masiva";
     }
 
     /// <summary>Errores del generador que NO son un fallo de regeneración (AC5: sin ruido).</summary>

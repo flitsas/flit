@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.EntityFrameworkCore;
@@ -80,13 +81,8 @@ public sealed class AuthUserRepository(IIdentityDb db, IUserRoleAssignmentReposi
         // login igual que una suspensión temporal vigente, hasta que alguien la levante.
         var isSuspended = await db.UserTempSuspensions
             .AsNoTracking()
-            .AnyAsync(
-                s => s.UserId == user.Id
-                     && s.TenantId == tenantId
-                     && s.DeletedAt == null
-                     && s.StartsAt <= now
-                     && (s.EndsAt == null || s.EndsAt >= now),
-                cancellationToken);
+            .Where(UserTempSuspension.VigenteEn(now))
+            .AnyAsync(s => s.UserId == user.Id && s.TenantId == tenantId, cancellationToken);
 
         // permissionSlugs = UNIÓN distinct de permisos de TODOS los roles activos (antes solo
         // del primero) — HU #10506: multi-rol implica que los permisos efectivos son la unión.

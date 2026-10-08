@@ -116,6 +116,13 @@ public static class ProcedureInstanceSortFields
         };
 
     /// <summary>
+    /// Épica #13216 (L3) — ¿<paramref name="sortBy"/> está en la lista blanca? Lo usa la auditoría del lote para
+    /// guardar el literal solo si es un campo ordenable conocido.
+    /// </summary>
+    public static bool EsConocido(string? sortBy) =>
+        !string.IsNullOrWhiteSpace(sortBy) && Whitelist.ContainsKey(sortBy.Trim());
+
+    /// <summary>
     /// Resuelve <paramref name="sortBy"/> contra la lista blanca; <see cref="ProcedureInstanceSortBy.Default"/>
     /// para null/vacío o cualquier valor no reconocido (incluidos intentos de inyección: nunca se usa el
     /// string crudo para construir SQL, así que lo peor que puede pasar es caer al orden por defecto).
@@ -152,6 +159,59 @@ public sealed class ListProcedureInstancesFilteredHandler(
 
         var items = await ToSummariesAsync(repo, instances, ct);
         return (items, total);
+    }
+
+    /// <summary>
+    /// Épica #13216 (HU #13370) — todos los trámites que el listado devolvería para
+    /// <paramref name="request"/>, sin el tope de página y en el mismo orden. Mismo
+    /// <see cref="BuildFilter"/>, misma búsqueda rápida (propaga
+    /// <see cref="BusquedaRapidaDemasiadoAmpliaException"/>) y mismo orden que <see cref="HandleAsync"/>;
+    /// <c>Skip</c>/<c>Take</c> se ignoran. Code review #13216 (Obs2): <paramref name="limite"/> corta la lectura en SQL
+    /// (<c>LIMIT</c> tras el mismo orden); <c>null</c> = sin límite.
+    /// </summary>
+    public async Task<IReadOnlyList<ProcedureInstanceRef>> ResolveIdsAsync(
+        ProcedureInstanceListRequest request, int? limite = null, CancellationToken ct = default)
+    {
+        var sortBy = ProcedureInstanceSortFields.Resolve(request.SortBy);
+        var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
+        var filter = BuildFilter(request);
+        filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
+
+        return await repo.ListIdsFilteredAsync(request.TenantId, filter, sortBy, direction, limite, ct);
+    }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántos trámites devolvería <see cref="ResolveIdsAsync"/> sin límite: mismo
+    /// <see cref="BuildFilter"/> y misma búsqueda rápida, contados en SQL. Con <paramref name="soloIds"/> cuenta solo los
+    /// de esa lista que cumplen el filtro (se intersecan con los ids que ya fije el atajo, si los fija); una
+    /// intersección vacía es 0 sin consultar.
+    /// </summary>
+    public async Task<int> CountIdsAsync(
+        ProcedureInstanceListRequest request, IReadOnlyCollection<Guid>? soloIds = null, CancellationToken ct = default)
+    {
+        var filter = BuildFilter(request);
+        filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
+
+        if (AcotarAIds(filter, soloIds) is not { } acotado)
+            return 0;
+
+        return await repo.CountIdsFilteredAsync(request.TenantId, acotado, ct);
+    }
+
+    /// <summary>
+    /// Filtro del conteo con <paramref name="soloIds"/>: sin lista, el filtro intacto; con lista, sus ids intersecados con
+    /// los que ya fije el atajo. <c>null</c> = intersección vacía (el conteo es 0 sin consultar). Compartido con el
+    /// conteo de red (HU #13417).
+    /// </summary>
+    internal static ProcedureInstanceListFilter? AcotarAIds(ProcedureInstanceListFilter filter, IReadOnlyCollection<Guid>? soloIds)
+    {
+        if (soloIds is null)
+            return filter;
+
+        var ids = filter.IdsIncluidos is { } yaAcotados
+            ? soloIds.Where(yaAcotados.ToHashSet().Contains).Distinct().ToList()
+            : soloIds.Distinct().ToList();
+        return ids.Count == 0 ? null : filter with { IdsIncluidos = ids };
     }
 
     /// <summary>

@@ -207,6 +207,85 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             },
             cancellationToken);
 
+    /// <summary>
+    /// Épica #13216 (HU #13390) — ver XML doc de la interfaz. Misma cadena que <see cref="ListAsync"/>
+    /// (<see cref="ExecuteOtScopedAsync{T}(Guid,Guid?,Func{Guid,Task{T}},CancellationToken)"/> →
+    /// <see cref="ExecuteCrossTenantReadAsync{T}"/> → <see cref="BuildAccessibleQuery"/> →
+    /// <see cref="ApplyListFilters"/> → <see cref="ApplyListSort"/>), sin <c>Skip</c>/<c>Take</c> ni
+    /// <c>Include</c>: la selección del lote es exactamente lo que la bandeja mostraría con el mismo filtro.
+    /// Code review #13216 (Obs2): <paramref name="limite"/> es un <c>LIMIT</c> en SQL después del orden de la bandeja.
+    /// </summary>
+    public async Task<IReadOnlyList<OtClientProcedureRef>> ListAccessibleRefsAsync(
+        Guid otTenantId,
+        OtClientProcedureFilter? filter,
+        IReadOnlyCollection<Guid>? ids,
+        Guid? transitOfficeIdOverride = null,
+        int? limite = null,
+        CancellationToken cancellationToken = default)
+    {
+        var refs = await ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId => await ExecuteCrossTenantReadAsync(
+                async () =>
+                {
+                    // Modo ids: orden por defecto de la bandeja (prioritario, fecha desc, id desc).
+                    var query = ApplyListSort(AccessibleRefsQuery(transitOfficeId, filter, ids), filter ?? new OtClientProcedureFilter())
+                        .Select(p => new OtClientProcedureRef(p.Id, p.TenantId, p.ReferenceNumber, p.Plate));
+                    if (limite is { } max)
+                    {
+                        query = query.Take(Math.Max(0, max));
+                    }
+
+                    return (IReadOnlyList<OtClientProcedureRef>)await query
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+
+        // Sin organismo resoluble ExecuteOtScopedAsync devuelve default (null) sin leer nada: lista vacía.
+        return refs ?? [];
+    }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — ver XML doc de la interfaz. La misma cadena que
+    /// <see cref="ListAccessibleRefsAsync"/> (organismo resuelto, lectura cross-tenant, <see cref="AccessibleRefsQuery"/>),
+    /// contada en SQL. Sin organismo resoluble, <c>default(int)</c> = 0 sin leer nada.
+    /// </summary>
+    public Task<int> CountAccessibleRefsAsync(
+        Guid otTenantId,
+        OtClientProcedureFilter? filter,
+        IReadOnlyCollection<Guid>? ids,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            transitOfficeId => ExecuteCrossTenantReadAsync(
+                () => AccessibleRefsQuery(transitOfficeId, filter, ids).CountAsync(cancellationToken),
+                cancellationToken),
+            cancellationToken);
+
+    /// <summary>Universo, filtros e ids compartidos por la selección del lote y su conteo (#13390, Obs2).</summary>
+    private IQueryable<ProcedureInstance> AccessibleRefsQuery(
+        Guid transitOfficeId, OtClientProcedureFilter? filter, IReadOnlyCollection<Guid>? ids)
+    {
+        var query = BuildAccessibleQuery(transitOfficeId);
+        if (filter is not null)
+        {
+            query = ApplyListFilters(query, filter);
+        }
+
+        if (ids is not null)
+        {
+            var idList = ids as List<Guid> ?? ids.ToList();
+            query = query.Where(p => idList.Contains(p.Id));
+        }
+
+        return query;
+    }
+
     public Task<OtClientProcedure?> GetByIdAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -2024,29 +2103,29 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         IQueryable<ProcedureInstance> query,
         OtClientProcedureFilter filter)
     {
-        var asc = string.Equals(filter.SortDir, "asc", StringComparison.OrdinalIgnoreCase);
-        var sortBy = (filter.SortBy ?? string.Empty).Trim().ToLowerInvariant();
+        var asc = string.Equals(filter.SortDir, OtClientProcedureListSort.Asc, StringComparison.OrdinalIgnoreCase);
+        var sortBy = OtClientProcedureListSort.Normalizar(filter.SortBy);
 
         // Prioritario primero siempre; el resto es ThenBy según la columna elegida.
         var ordered = query.OrderByDescending(p => p.Prioritario);
 
         return (sortBy, asc) switch
         {
-            ("vin", true) => ordered.ThenBy(p => p.Vin).ThenByDescending(p => p.Id),
-            ("vin", false) => ordered.ThenByDescending(p => p.Vin).ThenByDescending(p => p.Id),
-            ("placa", true) => ordered.ThenBy(p => p.Plate).ThenByDescending(p => p.Id),
-            ("placa", false) => ordered.ThenByDescending(p => p.Plate).ThenByDescending(p => p.Id),
-            ("vendedor", true) => ordered.ThenBy(p => p.VendedorNombre).ThenByDescending(p => p.Id),
-            ("vendedor", false) => ordered.ThenByDescending(p => p.VendedorNombre).ThenByDescending(p => p.Id),
-            ("comprador", true) => ordered.ThenBy(p => p.CompradorNombre).ThenByDescending(p => p.Id),
-            ("comprador", false) => ordered.ThenByDescending(p => p.CompradorNombre).ThenByDescending(p => p.Id),
-            ("gestor", true) => ordered
+            (OtClientProcedureListSort.Vin, true) => ordered.ThenBy(p => p.Vin).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Vin, false) => ordered.ThenByDescending(p => p.Vin).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Placa, true) => ordered.ThenBy(p => p.Plate).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Placa, false) => ordered.ThenByDescending(p => p.Plate).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Vendedor, true) => ordered.ThenBy(p => p.VendedorNombre).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Vendedor, false) => ordered.ThenByDescending(p => p.VendedorNombre).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Comprador, true) => ordered.ThenBy(p => p.CompradorNombre).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Comprador, false) => ordered.ThenByDescending(p => p.CompradorNombre).ThenByDescending(p => p.Id),
+            (OtClientProcedureListSort.Gestor, true) => ordered
                 .ThenBy(p => _context.Users
                     .Where(u => u.Id == p.CreatedByUserId)
                     .Select(u => u.DisplayName)
                     .FirstOrDefault())
                 .ThenByDescending(p => p.Id),
-            ("gestor", false) => ordered
+            (OtClientProcedureListSort.Gestor, false) => ordered
                 .ThenByDescending(p => _context.Users
                     .Where(u => u.Id == p.CreatedByUserId)
                     .Select(u => u.DisplayName)
@@ -2054,37 +2133,37 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 .ThenByDescending(p => p.Id),
             // HU #12371 — por la parte numérica, no por el texto: ordenar FT1-…/FT2-… como texto
             // agruparía por familia. Misma regla que el listado del gestor.
-            ("referencenumber", true) or ("radicado", true) =>
+            (OtClientProcedureListSort.ReferenceNumber, true) or (OtClientProcedureListSort.Radicado, true) =>
                 ordered.ThenBy(p => p.Consecutivo).ThenByDescending(p => p.Id),
-            ("referencenumber", false) or ("radicado", false) =>
+            (OtClientProcedureListSort.ReferenceNumber, false) or (OtClientProcedureListSort.Radicado, false) =>
                 ordered.ThenByDescending(p => p.Consecutivo).ThenByDescending(p => p.Id),
-            ("status", true) or ("estado", true) =>
+            (OtClientProcedureListSort.Status, true) or (OtClientProcedureListSort.Estado, true) =>
                 ordered.ThenBy(p => p.Status).ThenByDescending(p => p.Id),
-            ("status", false) or ("estado", false) =>
+            (OtClientProcedureListSort.Status, false) or (OtClientProcedureListSort.Estado, false) =>
                 ordered.ThenByDescending(p => p.Status).ThenByDescending(p => p.Id),
             // La celda «Empresa / Gestor» apila los dos datos y hasta la HU #12219 solo se podía
             // ordenar por el segundo: la cabecera prometía un orden por empresa que no existía. La
             // razón social vive en otra tabla, así que va por subconsulta correlacionada — el mismo
             // patrón que ya usaba «gestor» contra identity.users.
-            ("empresa", true) => ordered
+            (OtClientProcedureListSort.Empresa, true) => ordered
                 .ThenBy(p => _context.Tenants
                     .Where(t => t.Id == p.TenantId)
                     .Select(t => t.LegalName)
                     .FirstOrDefault())
                 .ThenByDescending(p => p.Id),
-            ("empresa", false) => ordered
+            (OtClientProcedureListSort.Empresa, false) => ordered
                 .ThenByDescending(p => _context.Tenants
                     .Where(t => t.Id == p.TenantId)
                     .Select(t => t.LegalName)
                     .FirstOrDefault())
                 .ThenByDescending(p => p.Id),
-            ("tipo_tramite", true) or ("tipotramite", true) => ordered
+            (OtClientProcedureListSort.TipoTramite, true) or (OtClientProcedureListSort.TipoTramiteSinGuion, true) => ordered
                 .ThenBy(p => p.ProcedureType != null ? p.ProcedureType.Name : "")
                 .ThenByDescending(p => p.Id),
-            ("tipo_tramite", false) or ("tipotramite", false) => ordered
+            (OtClientProcedureListSort.TipoTramite, false) or (OtClientProcedureListSort.TipoTramiteSinGuion, false) => ordered
                 .ThenByDescending(p => p.ProcedureType != null ? p.ProcedureType.Name : "")
                 .ThenByDescending(p => p.Id),
-            ("createdat", true) or ("fecharadicacion", true) =>
+            (OtClientProcedureListSort.CreatedAt, true) or (OtClientProcedureListSort.FechaRadicacion, true) =>
                 ordered.ThenBy(p => p.CreatedAt).ThenByDescending(p => p.Id),
             _ => ordered.ThenByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id),
         };

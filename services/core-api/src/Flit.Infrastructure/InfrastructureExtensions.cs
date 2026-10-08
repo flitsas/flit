@@ -49,6 +49,7 @@ using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -310,6 +311,38 @@ public static class InfrastructureExtensions
 
         services.AddSecurityApplication();
 
+        // Épica #13216 — HU13389: acceso del OT + scope del tenant cliente + precedencia de la matriz del
+        // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
+        services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
+            OtClientProcedures.OtClientProcedureConsolidadoContext>();
+
+        // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
+        // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            ConsolidadoLotes.Ot.OtBandejaSeleccionResolver>();
+
+        // Épica #13216 — HU13373: persistencia de la creación del lote (lote + ítems + auditoría en una transacción)
+        // y de su purga (borrado criptográfico), reutilizada por #13379.
+        services.AddScoped<IConsolidadoLoteRepository, ConsolidadoLoteRepository>();
+        // Épica #13216 — HU13420: lectura y edición de los parámetros del motor por el Super Admin (row_version).
+        services.AddScoped<IConsolidadoExportSettingsRepository, ConsolidadoExportSettingsRepository>();
+        // Épica #13216 — HU13375: revalidación de acceso por ítem (caché 60 s por lote) y cierre del ítem.
+        services.AddScoped<IConsolidadoLoteAccessChecker, Security.ConsolidadoLoteAccessChecker>();
+        services.AddScoped<IConsolidadoLoteItemProceso, Persistence.Repositories.ConsolidadoLoteItemProceso>();
+        // Épica #13216 — HU13392: procesamiento por ítem del lote de maestros de la bandeja OT (origen ot_bandeja): acceso de
+        // la bandeja + transacción del tenant cliente + matriz del OT + guard de Quipux, sobre el entregador común.
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen,
+            ConsolidadoLotes.Ot.OtConsolidadoLoteEntregador>();
+        // Épica #13216 — HU13378: carril de empaquetado (reclamo de partes, cierre condicionado, terminal + lote_finalizado).
+        // Temporales en {TMPDIR}/flit-consolidado-lotes salvo ConsolidadoLotes:DirectorioTemporal (volumen dedicado ≥ 2 × M).
+        services.AddScoped<IConsolidadoLoteEmpaquetado, Persistence.Repositories.ConsolidadoLoteEmpaquetado>();
+        // Épica #13216 — HU13379: lectura del lote para su dueño (sub), vencidos para la purga y auditoría parte_descargada.
+        services.AddScoped<IConsolidadoLoteLectura, Persistence.Repositories.ConsolidadoLoteLectura>();
+        services.AddSingleton(_ =>
+            configuration["ConsolidadoLotes:DirectorioTemporal"] is { Length: > 0 } dir
+                ? new ConsolidadoLoteTemporales(dir)
+                : ConsolidadoLoteTemporales.Predeterminado());
+
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
         // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).
@@ -331,6 +364,13 @@ public static class InfrastructureExtensions
         services.AddHttpClient<IAttachmentStorage, FileManagerAttachmentStorage>((sp, c) =>
             FileManagerDownloader.ConfigureClient(
                 c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "el almacenamiento de adjuntos"));
+        // Épica #13216 — HU13372: partes cifradas del lote; sin timeout global (lo aplica el adaptador por llamada).
+        services.AddHttpClient<IConsolidadoLoteParteStorage, ConsolidadoLoteParteStorage>((sp, c) =>
+        {
+            FileManagerDownloader.ConfigureClient(
+                c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "las partes del lote de consolidados");
+            c.Timeout = Timeout.InfiniteTimeSpan;
+        });
     }
 
     private static void AddConsultationProviders(IServiceCollection services, IConfiguration configuration)
@@ -600,6 +640,7 @@ public static class InfrastructureExtensions
         // Epic #13217 (HU #13232): mismo nombre de aplicación y misma tabla que core-identity.
         services.AddFlitDataProtection<FlitDbContext>();
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+        services.AddSingleton<IConsolidadoLoteCipher, ConsolidadoLoteCipher>(); // Épica #13216 — HU13372
         // Bitácora ÚNICA del ciclo de identidad (envío/webhook/descifrado/errores). Escribe en su propio
         // scope, así queda registrada aunque el webhook termine en 500/401.
         services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
@@ -674,6 +715,15 @@ public static class InfrastructureExtensions
         services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue>(
             sp => sp.GetRequiredService<ChannelConsolidadoRegeneracionQueue>());
         services.AddHostedService<ConsolidadoRegeneracionProcessor>();
+        // Épica #13216 — HU13376: carril de ítems del lote de descarga masiva de consolidados (reclamo con lease, equidad
+        // entre lotes, reanudación). Sus parámetros y su interruptor viven en tramites.consolidado_export_settings: sin
+        // fila (base de pruebas recién reseteada) o con is_active = false no reclama nada.
+        // HU13378 AC5: limpieza de temporales huérfanos del carril de empaquetado ANTES de arrancar el procesador.
+        services.AddHostedService<ConsolidadoLoteTemporalesLimpieza>();
+        services.AddHostedService<ConsolidadoLoteProcessor>();
+        // HU13379: carril de purga a las 24 h (cada 10 min). Corre aunque el motor esté apagado (is_active = false): la
+        // retención de 24 h es una garantía de privacidad (CF-12, Ley 1581), no un trabajo del motor.
+        services.AddHostedService<ConsolidadoLotePurgaProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
