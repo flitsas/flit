@@ -395,6 +395,8 @@ public static partial class FurOverlayRenderer
     {
         try
         {
+            // HU #13371 — XImage.FromStream decodifica con ImageSharp y autodetección: solo PNG/JPEG.
+            PngJpegImageDecoding.EnsureAllowed(imageBytes);
             using var ms = new MemoryStream(FlattenAlphaOntoWhite(imageBytes));
             using var img = XImage.FromStream(() => ms);
             return FurSignatureLayout.Fit(img.PixelWidth, img.PixelHeight, maxW, maxH);
@@ -407,6 +409,8 @@ public static partial class FurOverlayRenderer
 
     private static void DrawImage(XGraphics gfx, double x, double y, double w, double h, byte[] imageBytes)
     {
+        // HU #13371 — un formato distinto de PNG/JPEG lanza igual que una imagen ilegible.
+        PngJpegImageDecoding.EnsureAllowed(imageBytes);
         var payload = FlattenAlphaOntoWhite(imageBytes);
         using var ms = new MemoryStream(payload);
         using var img = XImage.FromStream(() => ms);
@@ -422,7 +426,7 @@ public static partial class FurOverlayRenderer
     {
         try
         {
-            using var image = Image.Load<Rgba32>(imageBytes);
+            using var image = PngJpegImageDecoding.Load(imageBytes);
             var hasAlpha = false;
             for (var y = 0; y < image.Height && !hasAlpha; y++)
             {
