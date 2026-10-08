@@ -127,6 +127,11 @@ internal static class CoveredQueries
         new("Q49", "IdentityValidationOutboxRepository.ListStuckAsync (TenantScope)", "TenantScope", 1, SupportsGlobal: true),
         // HU #13390 (Épica #13216) — selección del lote desde la bandeja OT, mismo universo que Q24 sin paginar (OtBandejaSeleccionResolverIntegrationTests).
         new("Q50", "OtClientProcedureRepository.ListAccessibleRefsAsync (selección del lote, bandeja OT sin paginar)", "Guid otTenantId", 1, SupportsGlobal: false),
+        // Code review épica #13216 (Obs2) — selección del lote de /tramites y Super Admin con límite, y los COUNT del 422
+        // (CrearLoteConsolidadosIntegrationTests: AC6, M1, Obs2; OtBandejaSeleccionResolverIntegrationTests: Obs2).
+        new("Q51", "ProcedureInstanceRepository.ListIdsFilteredAsync (selección del lote, sin paginar, con límite)", "Guid? tenantId", 2, SupportsGlobal: true),
+        new("Q52", "ProcedureInstanceRepository.CountIdsFilteredAsync (total del 422 seleccion_excede_tope)", "Guid? tenantId", 2, SupportsGlobal: true),
+        new("Q53", "OtClientProcedureRepository.CountAccessibleRefsAsync (total del 422 desde la bandeja OT)", "Guid otTenantId", 1, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

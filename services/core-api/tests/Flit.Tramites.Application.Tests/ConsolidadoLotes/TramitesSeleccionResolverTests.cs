@@ -42,7 +42,7 @@ public sealed class TramitesSeleccionResolverTests
     private void RepoDevuelve(IReadOnlyList<ProcedureInstanceRef> refs) =>
         _repo.ListIdsFilteredAsync(
                 Arg.Any<Guid?>(), Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(refs);
 
     // ── AC1 — selección por filtro sin tope de página ────────────────────────────────────
@@ -91,10 +91,11 @@ public sealed class TramitesSeleccionResolverTests
                 f.Placa == "ABC123" && f.Estados != null && f.Estados.Count == 1 && f.Estados[0] == "borrador"),
             ProcedureInstanceSortBy.Placa,
             SortDirection.Ascending,
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().ListIdsFilteredAsync(
             tenantDelCuerpo, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -113,7 +114,7 @@ public sealed class TramitesSeleccionResolverTests
 
         await _repo.Received(1).ListIdsFilteredAsync(
             TenantC, Arg.Is<ProcedureInstanceListFilter>(f => f.ResponsableId == UsuarioC),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC2 — selección manual acotada a la compañía ─────────────────────────────────────
@@ -137,7 +138,7 @@ public sealed class TramitesSeleccionResolverTests
             Arg.Is<ProcedureInstanceListFilter>(f =>
                 f.IdsIncluidos != null && f.IdsIncluidos.Count == 4 && f.IdsIncluidos.Contains(idDeD)
                 && f.Estados == null && f.Placa == null && f.Condiciones == null),
-            ProcedureInstanceSortBy.Default, SortDirection.Descending, Arg.Any<CancellationToken>());
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -149,7 +150,7 @@ public sealed class TramitesSeleccionResolverTests
             new SeleccionPorIds([]), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
 
         resultado.Should().BeEmpty();
-        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, ct);
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, default, ct);
     }
 
     // ── AC3 — topes de 10.000 ────────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ public sealed class TramitesSeleccionResolverTests
         var ex = (await act.Should().ThrowAsync<LoteSeleccionInvalidaException>()).Which;
         ex.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
         ex.Message.Should().Contain("10001").And.Contain("10000");
-        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, ct);
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, default, ct);
     }
 
     [Fact]
@@ -226,7 +227,7 @@ public sealed class TramitesSeleccionResolverTests
             new LoteSeleccionContexto(TenantC, UsuarioC), ct);
 
         await act.Should().ThrowAsync<BusquedaRapidaDemasiadoAmpliaException>();
-        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, ct);
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, default, ct);
     }
 
     // ── Contrato — filtros fuera de catálogo, carga de otro origen y registro por origen ──
@@ -268,6 +269,107 @@ public sealed class TramitesSeleccionResolverTests
         FluentActions.Invoking(() => porOrigen.Para("ot_bandeja")).Should().Throw<InvalidOperationException>();
         FluentActions.Invoking(() => new LoteSeleccionResolverPorOrigen([_sut, _sut]))
             .Should().Throw<InvalidOperationException>();
+    }
+
+    // ── Code review épica #13216 (Obs2) — límite de lectura y conteo del 422 ──────────────────
+
+    [Fact]
+    public async Task Obs2_Filtro_PideAlRepositorioElLimiteMasLosExcluidos_YLosResta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var refs = Refs(8, TenantC);
+        RepoDevuelve(refs);
+        var excluidos = new[] { refs[2].Id, Guid.NewGuid() };
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()), excluidos),
+            new LoteSeleccionContexto(TenantC, UsuarioC), 6, ct);
+
+        resultado.Should().Equal(refs.Where(r => r.Id != refs[2].Id),
+            "con limite + excluidos leídos, quitar los excluidos deja al menos el límite si la selección lo alcanza");
+        await _repo.Received(1).ListIdsFilteredAsync(
+            TenantC, Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(),
+            8, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Obs2_Ids_PasanElLimiteTalCual_YSinLimiteSeLeeTodo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        RepoDevuelve(Refs(2, TenantC));
+
+        await _sut.ResolverAsync(new SeleccionPorIds([Guid.NewGuid(), Guid.NewGuid()]), new LoteSeleccionContexto(TenantC, UsuarioC), 5, ct);
+        await _sut.ResolverAsync(new SeleccionPorIds([Guid.NewGuid()]), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await _repo.Received(1).ListIdsFilteredAsync(
+            TenantC, Arg.Any<ProcedureInstanceListFilter>(), ProcedureInstanceSortBy.Default, SortDirection.Descending,
+            5, Arg.Any<CancellationToken>());
+        await _repo.Received(1).ListIdsFilteredAsync(
+            TenantC, Arg.Any<ProcedureInstanceListFilter>(), ProcedureInstanceSortBy.Default, SortDirection.Descending,
+            null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Obs2_Contar_Filtro_EsElConteoDelMismoFiltroMenosLosExcluidosQueLoCumplen()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var excluidos = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        _repo.CountIdsFilteredAsync(TenantC, Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos == null && f.Placa == "ABC123"),
+            Arg.Any<CancellationToken>()).Returns(350);
+        _repo.CountIdsFilteredAsync(TenantC,
+            Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos != null && f.IdsIncluidos.Count == 3 && f.Placa == "ABC123"),
+            Arg.Any<CancellationToken>()).Returns(2);
+
+        var total = await _sut.ContarAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest { Placa = "ABC123", TenantId = Guid.NewGuid() }), excluidos),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        total.Should().Be(348, "350 del filtro menos los 2 excluidos que lo cumplen; el tercero no estaba");
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, default, ct);
+    }
+
+    [Fact]
+    public async Task Obs2_Contar_Filtro_ConAtajoQueYaAcotaIds_IntersecaLosExcluidosConEsosIds()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dentro = Guid.NewGuid();
+        var fuera = Guid.NewGuid();
+        // «Mis trámites» sin usuario deja IdsIncluidos = [] (nada): los excluidos se intersecan con ese vacío y la
+        // intersección vacía no necesita una segunda consulta.
+        _repo.CountIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<CancellationToken>()).Returns(0);
+
+        var total = await _sut.ContarAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest { BusquedaRapida = BusquedaRapida.MisTramites }),
+                [dentro, fuera]),
+            new LoteSeleccionContexto(TenantC, null), ct);
+
+        total.Should().Be(0);
+        await _repo.Received(1).CountIdsFilteredAsync(TenantC,
+            Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos != null && f.IdsIncluidos.Count == 0), Arg.Any<CancellationToken>());
+        await _repo.Received(1).CountIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Obs2_Contar_Ids_CuentaLaInterseccionConLaCompania_YValidaComoElResolver()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var a = Guid.NewGuid();
+        _repo.CountIdsFilteredAsync(TenantC, Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos != null && f.IdsIncluidos.Count == 2),
+            Arg.Any<CancellationToken>()).Returns(1);
+
+        var total = await _sut.ContarAsync(new SeleccionPorIds([a, Guid.NewGuid(), a]), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+        var vacio = await _sut.ContarAsync(new SeleccionPorIds([]), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+        var invalido = () => _sut.ContarAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest
+            {
+                Condiciones = [new QueryCondition("campo_inexistente", "eq", ["x"])],
+            })),
+            new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        total.Should().Be(1);
+        vacio.Should().Be(0);
+        (await invalido.Should().ThrowAsync<LoteSeleccionInvalidaException>())
+            .Which.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoFiltroInvalido);
     }
 
     private sealed record FiltroDeOtroOrigen : LoteFiltro;

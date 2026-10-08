@@ -63,7 +63,7 @@ public sealed class ProcedureInstanceListIdsFilteredRepositoryTests
         var filtro = new ProcedureInstanceListFilter { Estados = [TramiteEstado.Borrador] };
 
         var refs = await repo.ListIdsFilteredAsync(
-            TenantC, filtro, ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            TenantC, filtro, ProcedureInstanceSortBy.Default, SortDirection.Descending, null, ct);
 
         var (pagina1, total) = await repo.ListWithSummaryGraphFilteredAsync(
             TenantC, 0, 200, filtro, ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
@@ -91,7 +91,7 @@ public sealed class ProcedureInstanceListIdsFilteredRepositoryTests
         var repo = new ProcedureInstanceRepository(db);
 
         var refs = await repo.ListIdsFilteredAsync(
-            TenantC, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Placa, SortDirection.Ascending, ct);
+            TenantC, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Placa, SortDirection.Ascending, null, ct);
 
         refs.Select(r => r.Plate).Should().Equal("AAA111", "BBB111", "CCC111");
     }
@@ -114,7 +114,7 @@ public sealed class ProcedureInstanceListIdsFilteredRepositoryTests
         var refs = await repo.ListIdsFilteredAsync(
             TenantC,
             new ProcedureInstanceListFilter { IdsIncluidos = deC.Select(x => x.Id).Append(deD.Id).ToList() },
-            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, null, ct);
 
         refs.Select(r => r.Id).Should().BeEquivalentTo(deC.Select(x => x.Id));
         refs.Select(r => r.Id).Should().NotContain(deD.Id);
@@ -132,7 +132,7 @@ public sealed class ProcedureInstanceListIdsFilteredRepositoryTests
         var repo = new ProcedureInstanceRepository(db);
 
         var refs = await repo.ListIdsFilteredAsync(
-            null, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            null, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, null, ct);
 
         refs.Select(r => r.TenantId).Should().BeEquivalentTo([TenantC, TenantD]);
     }
@@ -152,12 +152,46 @@ public sealed class ProcedureInstanceListIdsFilteredRepositoryTests
         var repo = new ProcedureInstanceRepository(db);
 
         var porFiltro = await repo.ListIdsFilteredAsync(
-            TenantC, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            TenantC, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, null, ct);
         var porIds = await repo.ListIdsFilteredAsync(
             TenantC, new ProcedureInstanceListFilter { IdsIncluidos = [vivo.Id, borrado.Id] },
-            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, null, ct);
 
         porFiltro.Select(r => r.Id).Should().Equal(vivo.Id);
         porIds.Select(r => r.Id).Should().Equal(vivo.Id);
+    }
+
+    // ── Code review épica #13216 (Obs2) — límite de lectura y conteo con el mismo predicado ──
+
+    [Fact]
+    public async Task Obs2_ConLimite_DevuelveElPrefijoDelMismoOrden_YElConteoEsElTotalSinLimite()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("ids-limite");
+        for (var i = 0; i < 30; i++)
+            db.ProcedureInstances.Add(Instancia(TenantC, $"R{i:D4}", TramiteEstado.Borrador, i));
+        for (var i = 0; i < 5; i++)
+            db.ProcedureInstances.Add(Instancia(TenantD, $"D{i:D4}", TramiteEstado.Borrador, i));
+        for (var i = 0; i < 4; i++)
+            db.ProcedureInstances.Add(Instancia(TenantC, $"E{i:D4}", TramiteEstado.Entregado, i));
+        var borrado = Instancia(TenantC, "RX", TramiteEstado.Borrador, 99);
+        borrado.DeletedAt = Base;
+        db.ProcedureInstances.Add(borrado);
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+        var filtro = new ProcedureInstanceListFilter { Estados = [TramiteEstado.Borrador] };
+
+        var todos = await repo.ListIdsFilteredAsync(TenantC, filtro, ProcedureInstanceSortBy.Default, SortDirection.Descending, null, ct);
+        var corte = await repo.ListIdsFilteredAsync(TenantC, filtro, ProcedureInstanceSortBy.Default, SortDirection.Descending, 11, ct);
+        var holgado = await repo.ListIdsFilteredAsync(TenantC, filtro, ProcedureInstanceSortBy.Default, SortDirection.Descending, 100, ct);
+
+        todos.Should().HaveCount(30);
+        corte.Should().Equal(todos.Take(11), "el límite corta después del mismo orden");
+        holgado.Should().Equal(todos, "un límite mayor que la selección no la corta");
+        (await repo.CountIdsFilteredAsync(TenantC, filtro, ct)).Should().Be(30, "mismo predicado: sin borrados ni otros estados");
+        (await repo.CountIdsFilteredAsync(null, filtro, ct)).Should().Be(35, "null = todas las compañías");
+        (await repo.CountIdsFilteredAsync(
+                TenantC, filtro with { IdsIncluidos = [todos[0].Id, todos[1].Id, borrado.Id, Guid.NewGuid()] }, ct))
+            .Should().Be(2, "IdsIncluidos se interseca con el resto del filtro");
     }
 }

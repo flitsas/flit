@@ -425,6 +425,94 @@ public sealed class CrearLoteConsolidadosHandlerTests
         _repo.Creado!.Items.Should().HaveCount(5, "el duplicado no cuenta contra el tope");
     }
 
+    // ── Code review épica #13216 (Obs2) — el tope corta la lectura; el total del 422 sale de un COUNT ──
+
+    [Theory]
+    [InlineData(ConsolidadoExportOrigin.Tramites)]
+    [InlineData(ConsolidadoExportOrigin.Superadmin)]
+    [InlineData(ConsolidadoExportOrigin.OtBandeja)]
+    public async Task Obs2_SeleccionEnorme_SeLeeHastaTopeMasUno_YEl422LlevaElTotalDelConteo(string origen)
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 5 };
+        var resolver = ResolverDe(origen);
+        resolver.Devuelve = Refs(40, TenantC);
+        resolver.Total = 250_000;
+
+        var r = await _sut.HandleAsync(DelOrigen(origen, new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()))), Ct);
+
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(250_000, "el total exacto sale del COUNT con el mismo predicado, no de lo leído");
+        r.Tope.Should().Be(5);
+        r.Mensaje.Should().Contain("250000").And.Contain("5");
+        resolver.Limites.Should().Equal([6], "una sola lectura, cortada en tope + 1");
+        resolver.Conteos.Should().Be(1);
+        _repo.CrearLlamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Obs2_SeleccionQueCabe_UnaSolaLecturaConLimite_YSinConteo()
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 5 };
+        var refs = Refs(4, TenantC);
+        _tramites.Devuelve = refs;
+
+        var r = await _sut.HandleAsync(Gestor(new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()))), Ct);
+
+        r.Creado.Should().BeTrue(r.Mensaje);
+        _repo.Creado!.Items.Select(i => i.Id).Should().Equal(refs.Select(x => x.Id));
+        _tramites.Limites.Should().Equal([6]);
+        _tramites.Conteos.Should().Be(0, "sin 422 no hace falta el total");
+    }
+
+    [Fact]
+    public async Task Obs2_InterseccionCF15DentroDelCorte_ReResuelveSinLimite_YCreaConLaSeleccionResuelta()
+    {
+        // tope 4: la lectura cortada en 5 trae 3 propios y 2 de otra compañía. Tras la intersección quedan 3 (<= tope)
+        // pero el corte pudo dejar fuera propios: se vuelve a resolver sin límite y quedan los 4 propios, que caben.
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 4 };
+        var propios = Refs(4, TenantC);
+        var ajenos = Refs(2, TenantD, "D");
+        _tramites.Devuelve = [propios[0], ajenos[0], propios[1], ajenos[1], propios[2], propios[3]];
+
+        var r = await _sut.HandleAsync(Gestor(new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()))), Ct);
+
+        r.Creado.Should().BeTrue(r.Mensaje);
+        _repo.Creado!.Items.Select(i => i.Id).Should().Equal(propios.Select(p => p.Id));
+        _tramites.Limites.Should().Equal([5, null]);
+        _tramites.Conteos.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Obs2_DuplicadosDentroDelCorte_ReResuelveYSiSiguenExcediendoElTotalEsElDeLaSeleccionEntera()
+    {
+        // tope 3: el corte en 4 trae un duplicado (3 únicos <= tope); la selección entera tiene 5 únicos.
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 3 };
+        var refs = Refs(5, TenantC);
+        _tramites.Devuelve = [refs[0], refs[0], refs[1], refs[2], refs[3], refs[4]];
+        _tramites.Total = 999; // no debe usarse: tras la segunda lectura la selección ya es completa
+
+        var r = await _sut.HandleAsync(Gestor(new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()))), Ct);
+
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(5, "la selección resuelta completa, sin duplicados");
+        _tramites.Limites.Should().Equal([4, null]);
+        _tramites.Conteos.Should().Be(0);
+        _repo.CrearLlamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Obs2_ConteoMenorQueLoLeido_PorUnaCarrera_ElTotalNuncaBajaDeLoMaterializado()
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 2 };
+        _tramites.Devuelve = Refs(10, TenantC);
+        _tramites.Total = 1;
+
+        var r = await _sut.HandleAsync(Gestor(new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()))), Ct);
+
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(3, "al menos lo que ya se leyó (tope + 1)");
+    }
+
     [Fact]
     public void M1_ElTopePorDefectoDeLaEntidadEsElDelDdl() =>
         new ConsolidadoExportSettings().MaxItemsPerBatch.Should().Be(10_000);
@@ -490,22 +578,37 @@ public sealed class CrearLoteConsolidadosHandlerTests
             throw new NotSupportedException();
     }
 
+    /// <summary>
+    /// Resolver de prueba que respeta el contrato del límite (Obs2): con límite devuelve solo el prefijo de ese tamaño,
+    /// como el <c>LIMIT</c> del repositorio, y su conteo es <see cref="Total"/> (por defecto, todo lo que devolvería).
+    /// </summary>
     private sealed class FakeResolver(string origen) : ILoteSeleccionResolver
     {
         public string Origen => origen;
-        public IReadOnlyList<ProcedureInstanceRef> Devuelve { get; set; } = [];
+        public List<ProcedureInstanceRef> Devuelve { get; set; } = [];
+        public int? Total { get; set; }
         public LoteSeleccionInvalidaException? Lanza { get; set; }
         public LoteSeleccionContexto? Contexto { get; private set; }
         public int Llamadas { get; private set; }
+        public List<int?> Limites { get; } = [];
+        public int Conteos { get; private set; }
 
         public Task<IReadOnlyList<ProcedureInstanceRef>> ResolverAsync(
-            LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default)
+            LoteSeleccion seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct = default)
         {
             Llamadas++;
             Contexto = contexto;
+            Limites.Add(limite);
             if (Lanza is not null)
                 throw Lanza;
-            return Task.FromResult(Devuelve);
+            return Task.FromResult<IReadOnlyList<ProcedureInstanceRef>>(
+                limite is { } max && Devuelve.Count > max ? [.. Devuelve.Take(max)] : Devuelve);
+        }
+
+        public Task<int> ContarAsync(LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default)
+        {
+            Conteos++;
+            return Task.FromResult(Total ?? Devuelve.Count);
         }
     }
 

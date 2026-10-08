@@ -71,7 +71,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         var excluido = Guid.NewGuid();
-        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<CancellationToken>())
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([
                 new OtClientProcedureRef(a, Cliente1, "FT1-1", "ABC123"),
                 new OtClientProcedureRef(excluido, Cliente1, "FT1-2", null),
@@ -119,14 +119,14 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
         await _factory.Bandeja.Received(1).ResolveTransitOfficeIdAsync(TenantOt, null, Arg.Any<CancellationToken>());
         await _factory.Bandeja.Received(1).ListAccessibleRefsAsync(TenantOt,
             Arg.Is<OtClientProcedureFilter?>(f => f!.Familia == "TRASPASO" && f.Condiciones!.Count == 1 && f.Busqueda == "1020304050"),
-            null, Organismo, Arg.Any<CancellationToken>());
+            null, Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task AC1_SinTipoDocumento_UsaConsolidadoMaestro_YOtAdminConTransitOfficeIdLoIgnora()
     {
         var a = Guid.NewGuid();
-        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, null, Arg.Any<IReadOnlyCollection<Guid>?>(), Organismo, Arg.Any<CancellationToken>())
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, null, Arg.Any<IReadOnlyCollection<Guid>?>(), Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new OtClientProcedureRef(a, Cliente1, "FT1-1", null)]);
 
         var response = await Cliente(OtAdmin()).PostAsync($"{Ruta}?transitOfficeId={OrganismoAjeno}", Json(new
@@ -230,7 +230,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
     public async Task AC5_SuperAdminConTransitOfficeId_202_TenantDelOtDuenoDelOrganismo_YRolSuperAdmin()
     {
         var a = Guid.NewGuid();
-        _factory.Bandeja.ListAccessibleRefsAsync(TenantOtAjeno, null, Arg.Any<IReadOnlyCollection<Guid>?>(), OrganismoAjeno, Arg.Any<CancellationToken>())
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOtAjeno, null, Arg.Any<IReadOnlyCollection<Guid>?>(), OrganismoAjeno, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new OtClientProcedureRef(a, Cliente2, "FT2-1", null)]);
 
         var response = await Cliente(SuperAdmin()).PostAsync($"{Ruta}?transitOfficeId={OrganismoAjeno}", CuerpoIds(a), Ct);
@@ -253,7 +253,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
     {
         var deLaBandeja = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
         var ajenos = new[] { Guid.NewGuid(), Guid.NewGuid() };
-        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, null, Arg.Any<IReadOnlyCollection<Guid>?>(), Organismo, Arg.Any<CancellationToken>())
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, null, Arg.Any<IReadOnlyCollection<Guid>?>(), Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(deLaBandeja.Select((id, i) => new OtClientProcedureRef(id, Cliente1, $"FT1-{i}", null)).ToList());
 
         var response = await Cliente(OtAdmin()).PostAsync(Ruta, CuerpoIds([.. deLaBandeja, .. ajenos]), Ct);
@@ -262,7 +262,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
         (await Raiz(response)).GetProperty("total").GetInt32().Should().Be(3);
         _factory.UltimoNuevo!.Items.Select(i => i.Id).Should().Equal(deLaBandeja);
         await _factory.Bandeja.Received(1).ListAccessibleRefsAsync(TenantOt, null,
-            Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids!.Count == 5), Organismo, Arg.Any<CancellationToken>());
+            Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids!.Count == 5), Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC7 — validaciones de entrada ────────────────────────────────────────────────────
@@ -292,7 +292,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
             Encoding.UTF8, "application/json"), Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        await _factory.Bandeja.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, default);
+        await _factory.Bandeja.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, default, default);
         await _factory.Lotes.DidNotReceiveWithAnyArgs().CrearAsync(default!, default);
     }
 
@@ -324,12 +324,15 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
     {
         _factory.Lotes.ObtenerSettingsAsync(Arg.Any<CancellationToken>())
             .Returns(new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 2 });
-        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<CancellationToken>())
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([
                 new OtClientProcedureRef(Guid.NewGuid(), Cliente1, "FT1-1", null),
                 new OtClientProcedureRef(Guid.NewGuid(), Cliente1, "FT1-2", null),
                 new OtClientProcedureRef(Guid.NewGuid(), Cliente2, "FT1-3", null),
             ]);
+        // Code review Obs2: la lectura se corta en tope + 1 y el total del 422 sale del COUNT con el mismo predicado.
+        _factory.Bandeja.CountAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<CancellationToken>())
+            .Returns(4321);
 
         var response = await Cliente(OtAdmin()).PostAsync(Ruta, Json(new
         {
@@ -341,8 +344,10 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await response.Content.ReadAsStringAsync(Ct));
         var raiz = await Raiz(response);
         raiz.GetProperty("error").GetString().Should().Be("seleccion_excede_tope");
-        raiz.GetProperty("total").GetInt32().Should().Be(3);
+        raiz.GetProperty("total").GetInt32().Should().Be(4321);
         raiz.GetProperty("tope").GetInt32().Should().Be(2);
+        await _factory.Bandeja.Received(1).ListAccessibleRefsAsync(
+            TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, 3, Arg.Any<CancellationToken>());
         await _factory.Lotes.DidNotReceiveWithAnyArgs().CrearAsync(default!, default);
     }
 
@@ -368,7 +373,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
     [Fact]
     public async Task AC9_ResumenDelFiltro_LlevaElOrganismo_CondicionesContadas_YBusquedaSoloPresenteYLongitud()
     {
-        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<CancellationToken>())
+        _factory.Bandeja.ListAccessibleRefsAsync(TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new OtClientProcedureRef(Guid.NewGuid(), Cliente1, "FT1-1", "ABC123")]);
 
         var response = await Cliente(OtAdmin()).PostAsync(Ruta, Json(new
@@ -504,7 +509,7 @@ public sealed class ConsolidadoLoteOtEndpointTests : IClassFixture<ConsolidadoLo
             Bandeja.ResolveTransitOfficeIdAsync(TenantOt, Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(Organismo);
             Bandeja.ResolveTransitOfficeIdAsync(TenantOtAjeno, OrganismoAjeno, Arg.Any<CancellationToken>()).Returns(OrganismoAjeno);
             Bandeja.ListAccessibleRefsAsync(Arg.Any<Guid>(), Arg.Any<OtClientProcedureFilter?>(), Arg.Any<IReadOnlyCollection<Guid>?>(),
-                    Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                    Arg.Any<Guid?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(Array.Empty<OtClientProcedureRef>());
             Lotes.ObtenerSettingsAsync(Arg.Any<CancellationToken>()).Returns(new ConsolidadoExportSettings { IsActive = true });
             Lotes.ObtenerLoteActivoIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Guid?)null);

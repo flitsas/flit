@@ -58,7 +58,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(a, TenantC, "TRM-1", "ABC123"), new ProcedureInstanceRef(b, TenantC, "TRM-2", null)]);
 
         var response = await Cliente(Gestor()).PostAsync(Ruta, Json(new
@@ -95,7 +95,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         var x = Guid.NewGuid();
         var excluido = Guid.NewGuid();
         _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(x, TenantC, "TRM-3", "XYZ987"), new ProcedureInstanceRef(excluido, TenantC, "TRM-4", null)]);
 
         var response = await Cliente(Gestor()).PostAsync(Ruta, Json(new
@@ -116,7 +116,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         _factory.UltimoNuevo.ModoSeleccion.Should().Be(ConsolidadoExportSelectionMode.Filtro);
         await _factory.Instancias.Received(1).ListIdsFilteredAsync(TenantC,
             Arg.Is<ProcedureInstanceListFilter>(f => f.Placa == "XYZ"),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC2 — sin permiso ─────────────────────────────────────────────────────────────────
@@ -198,8 +198,11 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         _factory.Lotes.ObtenerSettingsAsync(Arg.Any<CancellationToken>())
             .Returns(new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 2 });
         _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(Enumerable.Range(1, 3).Select(i => new ProcedureInstanceRef(Guid.NewGuid(), TenantC, $"TRM-{i}", null)).ToArray());
+        // Code review Obs2: la lectura se corta en tope + 1 y el total del 422 sale del COUNT con el mismo predicado.
+        _factory.Instancias.CountIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<CancellationToken>())
+            .Returns(1234);
 
         var response = await Cliente(Gestor()).PostAsync(Ruta, Json(new
         {
@@ -211,9 +214,11 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await response.Content.ReadAsStringAsync(ct));
         var raiz = await Raiz(response, ct);
         raiz.GetProperty("error").GetString().Should().Be("seleccion_excede_tope");
-        raiz.GetProperty("total").GetInt32().Should().Be(3);
+        raiz.GetProperty("total").GetInt32().Should().Be(1234);
         raiz.GetProperty("tope").GetInt32().Should().Be(2);
         raiz.GetProperty("detail").GetString().Should().NotBeNullOrWhiteSpace();
+        await _factory.Instancias.Received(1).ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), 3, Arg.Any<CancellationToken>());
         await _factory.Lotes.DidNotReceiveWithAnyArgs().CrearAsync(default!, default);
     }
 
@@ -316,10 +321,10 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         var deC = Guid.NewGuid();
         var deB = Guid.NewGuid();
         _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(deC, TenantC, "TRM-C", null)]);
         _factory.Instancias.ListIdsFilteredAsync(TenantB, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(deB, TenantB, "TRM-B", null)]);
 
         var client = Cliente(Gestor());
@@ -331,7 +336,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         _factory.UltimoNuevo.Origen.Should().Be(ConsolidadoExportOrigin.Tramites);
         _factory.UltimoNuevo.Items.Should().OnlyContain(i => i.TenantId == TenantC);
         await _factory.Instancias.DidNotReceive().ListIdsFilteredAsync(TenantB, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC6 — el origen lo decide el servidor ─────────────────────────────────────────────
@@ -344,7 +349,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(id, TenantC, "TRM-6", null)]);
 
         var cuerpo = $"{{\"{campo}\":\"superadmin\",\"tipoDocumento\":\"consolidado\",\"confirmaEfectos\":true," +
@@ -498,7 +503,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
                 });
             });
             Instancias.ListIdsFilteredAsync(Arg.Any<Guid?>(), Arg.Any<ProcedureInstanceListFilter>(),
-                    Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                    Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(Array.Empty<ProcedureInstanceRef>());
         }
 
@@ -526,12 +531,15 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
         public string Origen => ConsolidadoExportOrigin.Superadmin;
 
         public Task<IReadOnlyList<ProcedureInstanceRef>> ResolverAsync(
-            LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default)
+            LoteSeleccion seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct = default)
         {
             UltimoContexto = contexto;
             var tenant = contexto.TenantId ?? Guid.NewGuid();
             return Task.FromResult<IReadOnlyList<ProcedureInstanceRef>>([new ProcedureInstanceRef(Guid.NewGuid(), tenant, "TRM-SA", null)]);
         }
+
+        public Task<int> ContarAsync(LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default) =>
+            Task.FromResult(1);
     }
 
     private sealed class SingleScope : ITenantScopeResolver

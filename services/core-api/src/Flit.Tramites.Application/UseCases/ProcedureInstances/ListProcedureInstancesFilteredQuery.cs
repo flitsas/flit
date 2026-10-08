@@ -166,17 +166,43 @@ public sealed class ListProcedureInstancesFilteredHandler(
     /// <paramref name="request"/>, sin el tope de página y en el mismo orden. Mismo
     /// <see cref="BuildFilter"/>, misma búsqueda rápida (propaga
     /// <see cref="BusquedaRapidaDemasiadoAmpliaException"/>) y mismo orden que <see cref="HandleAsync"/>;
-    /// <c>Skip</c>/<c>Take</c> se ignoran.
+    /// <c>Skip</c>/<c>Take</c> se ignoran. Code review #13216 (Obs2): <paramref name="limite"/> corta la lectura en SQL
+    /// (<c>LIMIT</c> tras el mismo orden); <c>null</c> = sin límite.
     /// </summary>
     public async Task<IReadOnlyList<ProcedureInstanceRef>> ResolveIdsAsync(
-        ProcedureInstanceListRequest request, CancellationToken ct = default)
+        ProcedureInstanceListRequest request, int? limite = null, CancellationToken ct = default)
     {
         var sortBy = ProcedureInstanceSortFields.Resolve(request.SortBy);
         var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
         var filter = BuildFilter(request);
         filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
 
-        return await repo.ListIdsFilteredAsync(request.TenantId, filter, sortBy, direction, ct);
+        return await repo.ListIdsFilteredAsync(request.TenantId, filter, sortBy, direction, limite, ct);
+    }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántos trámites devolvería <see cref="ResolveIdsAsync"/> sin límite: mismo
+    /// <see cref="BuildFilter"/> y misma búsqueda rápida, contados en SQL. Con <paramref name="soloIds"/> cuenta solo los
+    /// de esa lista que cumplen el filtro (se intersecan con los ids que ya fije el atajo, si los fija); una
+    /// intersección vacía es 0 sin consultar.
+    /// </summary>
+    public async Task<int> CountIdsAsync(
+        ProcedureInstanceListRequest request, IReadOnlyCollection<Guid>? soloIds = null, CancellationToken ct = default)
+    {
+        var filter = BuildFilter(request);
+        filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
+
+        if (soloIds is not null)
+        {
+            var ids = filter.IdsIncluidos is { } yaAcotados
+                ? soloIds.Where(yaAcotados.ToHashSet().Contains).Distinct().ToList()
+                : soloIds.Distinct().ToList();
+            if (ids.Count == 0)
+                return 0;
+            filter = filter with { IdsIncluidos = ids };
+        }
+
+        return await repo.CountIdsFilteredAsync(request.TenantId, filter, ct);
     }
 
     /// <summary>

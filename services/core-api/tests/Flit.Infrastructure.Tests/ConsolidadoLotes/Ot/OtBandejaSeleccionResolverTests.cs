@@ -46,7 +46,7 @@ public sealed class OtBandejaSeleccionResolverTests
     private void RepoDevuelve(params OtClientProcedureRef[] refs) =>
         _repo.ListAccessibleRefsAsync(
                 Arg.Any<Guid>(), Arg.Any<OtClientProcedureFilter?>(), Arg.Any<IReadOnlyCollection<Guid>?>(),
-                Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<Guid?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(refs);
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class OtBandejaSeleccionResolverTests
 
         result.Select(r => r.Id).Should().Equal(refs.Select(r => r.Id));
         await _repo.Received(1).ListAccessibleRefsAsync(
-            TenantOt, criterios, null, null, Arg.Any<CancellationToken>());
+            TenantOt, criterios, null, null, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -119,6 +119,7 @@ public sealed class OtBandejaSeleccionResolverTests
             null,
             Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids != null && ids.Count == 2 && ids.Contains(dentro.Id) && ids.Contains(fuera)),
             null,
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -128,7 +129,7 @@ public sealed class OtBandejaSeleccionResolverTests
         var result = await Sut().ResolverAsync(new SeleccionPorIds([]), Contexto(), TestContext.Current.CancellationToken);
 
         result.Should().BeEmpty();
-        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, TestContext.Current.CancellationToken);
+        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -143,6 +144,7 @@ public sealed class OtBandejaSeleccionResolverTests
 
         await _repo.Received(2).ListAccessibleRefsAsync(
             TenantOt, Arg.Any<OtClientProcedureFilter?>(), Arg.Any<IReadOnlyCollection<Guid>?>(), Organismo,
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -191,7 +193,7 @@ public sealed class OtBandejaSeleccionResolverTests
 
         (await act.Should().ThrowAsync<LoteSeleccionInvalidaException>())
             .Which.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoFiltroInvalido);
-        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, TestContext.Current.CancellationToken);
+        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -223,7 +225,7 @@ public sealed class OtBandejaSeleccionResolverTests
             TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentException>();
-        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, TestContext.Current.CancellationToken);
+        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -237,6 +239,76 @@ public sealed class OtBandejaSeleccionResolverTests
 
         porOrigen.Para(ConsolidadoExportOrigin.OtBandeja).Should().BeSameAs(ot);
         porOrigen.Para(ConsolidadoExportOrigin.Tramites).Should().BeSameAs(tramites);
+    }
+
+    // ── Code review épica #13216 (Obs2) — límite de lectura y conteo del 422 ──────────────────
+
+    [Fact]
+    public async Task Obs2_filtro_pide_al_repositorio_el_limite_mas_los_excluidos_y_los_resta()
+    {
+        var refs = Enumerable.Range(1, 6).Select(n => Ref(ClienteA, n)).ToArray();
+        RepoDevuelve(refs);
+        var excluidos = new[] { refs[1].Id, Guid.NewGuid() };
+
+        var result = await Sut().ResolverAsync(
+            new SeleccionPorFiltro(new OtBandejaLoteFiltro(new OtClientProcedureFilter()), excluidos),
+            Contexto(Organismo), 4, TestContext.Current.CancellationToken);
+
+        result.Select(r => r.Id).Should().Equal(refs.Select(r => r.Id).Except(excluidos));
+        await _repo.Received(1).ListAccessibleRefsAsync(
+            TenantOt, Arg.Any<OtClientProcedureFilter?>(), null, Organismo, 6, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Obs2_ids_pasan_el_limite_tal_cual()
+    {
+        RepoDevuelve();
+
+        await Sut().ResolverAsync(
+            new SeleccionPorIds([Guid.NewGuid(), Guid.NewGuid()]), Contexto(), 3, TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).ListAccessibleRefsAsync(
+            TenantOt, null, Arg.Any<IReadOnlyCollection<Guid>?>(), null, 3, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Obs2_contar_filtro_resta_solo_los_excluidos_que_estan_en_la_bandeja()
+    {
+        var criterios = new OtClientProcedureFilter { Familia = "TRASPASO" };
+        var excluidos = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        _repo.CountAccessibleRefsAsync(TenantOt, criterios, null, Organismo, Arg.Any<CancellationToken>()).Returns(250);
+        _repo.CountAccessibleRefsAsync(TenantOt, criterios, Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids != null && ids.Count == 4),
+            Organismo, Arg.Any<CancellationToken>()).Returns(3);
+
+        var total = await Sut().ContarAsync(
+            new SeleccionPorFiltro(new OtBandejaLoteFiltro(criterios), excluidos), Contexto(Organismo),
+            TestContext.Current.CancellationToken);
+
+        total.Should().Be(247, "250 de la bandeja menos los 3 excluidos que estaban en ella");
+        await _repo.DidNotReceiveWithAnyArgs().ListAccessibleRefsAsync(default, default, default, default, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Obs2_contar_ids_cuenta_la_interseccion_con_la_bandeja_y_valida_como_el_resolver()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        _repo.CountAccessibleRefsAsync(TenantOt, null, Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids != null && ids.Count == 2),
+            null, Arg.Any<CancellationToken>()).Returns(1);
+
+        var total = await Sut().ContarAsync(new SeleccionPorIds([a, b, a]), Contexto(), TestContext.Current.CancellationToken);
+        var vacio = await Sut().ContarAsync(new SeleccionPorIds([]), Contexto(), TestContext.Current.CancellationToken);
+        var invalido = () => Sut().ContarAsync(
+            new SeleccionPorFiltro(new OtBandejaLoteFiltro(new OtClientProcedureFilter { Familia = "NO_EXISTE" })),
+            Contexto(), TestContext.Current.CancellationToken);
+        var sinTenant = () => Sut().ContarAsync(
+            new SeleccionPorIds([a]), new LoteSeleccionContexto(null, Usuario), TestContext.Current.CancellationToken);
+
+        total.Should().Be(1);
+        vacio.Should().Be(0);
+        (await invalido.Should().ThrowAsync<LoteSeleccionInvalidaException>())
+            .Which.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoFiltroInvalido);
+        await sinTenant.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]

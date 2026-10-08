@@ -234,4 +234,35 @@ public sealed class OtBandejaSeleccionResolverIntegrationTests(PostgresDatabaseF
 
         refs.Should().NotContain(r => r.TenantId == HierarchyScenario.O);
     }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — contra PostgreSQL real (lectura cross-tenant de la bandeja): el límite corta en
+    /// SQL tras el orden de la bandeja (prefijo de la lectura entera) y el conteo del 422 usa el mismo universo y filtro,
+    /// restando solo los excluidos que estaban en la bandeja. Sin organismo resoluble el conteo es 0.
+    /// </summary>
+    [PostgresFact]
+    public async Task Obs2_el_limite_corta_en_SQL_en_el_orden_de_la_bandeja_y_el_conteo_usa_el_mismo_predicado()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        var ids = await SembrarAsync(HierarchyScenario.C1, 9, n => $"LM{n:D4}");
+        await SembrarAsync(HierarchyScenario.C2, 3, n => $"LM{n:D4}", desde: 9, borrado: true);
+        var body = new OtBandejaSearchRequest { Placa = "LM", SortBy = "placa", SortDir = "asc", Page = 1, PageSize = 100 };
+        var excluidos = new[] { ids[0], ids[4], Guid.NewGuid() };
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var ctx = NewContext();
+        var resolver = new OtBandejaSeleccionResolver(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+        var entera = await resolver.ResolverAsync(PorFiltro(body, excluidos), Contexto(), ct);
+        var cortada = await resolver.ResolverAsync(PorFiltro(body, excluidos), Contexto(), 4, ct);
+        var total = await resolver.ContarAsync(PorFiltro(body, excluidos), Contexto(), ct);
+        var totalIds = await resolver.ContarAsync(new SeleccionPorIds([ids[1], ids[2], Guid.NewGuid()]), Contexto(), ct);
+        var sinOrganismo = await resolver.ContarAsync(PorFiltro(body), Contexto(HierarchyScenario.X), ct);
+
+        entera.Should().HaveCount(7, "9 de C1 menos 2 excluidos; los borrados de C2 no están en la bandeja");
+        cortada.Select(r => r.Id).Should().Equal(entera.Take(cortada.Count).Select(r => r.Id), "un prefijo en el mismo orden");
+        cortada.Count.Should().BeGreaterThanOrEqualTo(4, "con 4 o más en la selección devuelve al menos el límite");
+        total.Should().Be(entera.Count);
+        totalIds.Should().Be(2);
+        sinOrganismo.Should().Be(0);
+    }
 }
