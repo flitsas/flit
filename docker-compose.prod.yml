@@ -147,9 +147,10 @@ services:
       # navegador no la admite en un Origin) y QA/PDN ya la tienen bien, o su CORS fallaria.
       # SIN valor por defecto a proposito: un respaldo a DEV repetiria el bug en silencio.
       # Si falta, `docker compose` aborta antes de crear contenedores con el mensaje de abajo.
-      # Los sufijos son los de appsettings.json; si cambian alla, cambian aqui.
+      # Los sufijos son los de appsettings.json; si cambian alla, cambian aqui. La recuperacion va a
+      # /auth/reset-password: es la pagina que existe en el front (la /reset-password de appsettings.json no).
       Invitations__ActivateUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/invite/activate
-      PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/reset-password
+      PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/auth/reset-password
       Notifications__EmailAssets__BaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/email-assets
       PublicBranding__PublicBaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}
       # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
