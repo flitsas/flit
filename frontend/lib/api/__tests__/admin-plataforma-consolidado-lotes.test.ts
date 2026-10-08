@@ -147,6 +147,36 @@ describe("validarParametrosMotor — rangos desde `limites` (AC3)", () => {
   });
 });
 
+describe("validarParametrosMotor — enteros sin máximo (code review Obs2)", () => {
+  // Uso de ejemplo: validarParametrosMotor({ ...valores, itemTimeoutSeconds: "3000000000" }, limites).itemTimeoutSeconds
+  //   → «No puede superar 2.147.483.647.» (el servidor guarda `int`; `maximo: null` = máximo de int32).
+  const SIN_MAXIMO = [
+    "itemTimeoutSeconds",
+    "itemLeaseSeconds",
+    "retryDelaySeconds",
+    "partTimeoutSeconds",
+    "partLeaseSeconds",
+  ] as const;
+
+  it.each(SIN_MAXIMO)("%s = 3.000.000.000: error en ese campo con el máximo de int32", (campo) => {
+    const e = validarParametrosMotor({ ...valoresDe(PARAMETROS), [campo]: "3000000000" }, LIMITES);
+    expect(e[campo]).toBe("No puede superar 2.147.483.647.");
+  });
+
+  it("borde: 2.147.483.647 exacto es válido en un campo sin máximo", () => {
+    const e = validarParametrosMotor(
+      { ...valoresDe(PARAMETROS), retryDelaySeconds: "2147483647", partTimeoutSeconds: "2147483646", partLeaseSeconds: "2147483647" },
+      LIMITES,
+    );
+    expect(e).toEqual({});
+  });
+
+  it("contrato: con mínimo y máximo declarados el mensaje sigue siendo el rango del contrato", () => {
+    const e = validarParametrosMotor({ ...valoresDe(PARAMETROS), maxItemsPerBatch: "3000000000" }, LIMITES);
+    expect(e.maxItemsPerBatch).toBe("Debe estar entre 1 y 32.766.");
+  });
+});
+
 describe("interpretarErrorParametrosMotor — errores problem+json", () => {
   it("AC3 — 400 parametros_invalidos: errores por campo (camelCase o PascalCase) y generales aparte", () => {
     const err = new ApiError(400, "parametros_invalidos", {

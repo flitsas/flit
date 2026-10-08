@@ -165,6 +165,18 @@ describe("ParametrosMotorLotePanel — HU #13420", () => {
     expect(putMock).not.toHaveBeenCalled();
   });
 
+  it("code review Obs2 — valor mayor que int32 en un campo sin máximo: error junto al campo y NO llama al PUT", async () => {
+    getMock.mockResolvedValue(PARAMETROS);
+    await cargado();
+    const input = await escribir(/tiempo máximo por trámite/i, "3000000000");
+    await guardar();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(/no puede superar 2\.147\.483\.647/i);
+    expect(input).toHaveFocus();
+    expect(putMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("parametros-motor-resultado")).toHaveTextContent(/revisa los campos marcados/i);
+  });
+
   it("AC3 — lease ≤ timeout: error en el lease y NO llama al PUT", async () => {
     getMock.mockResolvedValue(PARAMETROS);
     await cargado();
