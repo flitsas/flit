@@ -27,7 +27,9 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # La suite completa ya cierra cerca de 18 min en develop; con 20 el job se cancela
+    # antes de publicar resultados (p. ej. PR #545).
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16-alpine
