@@ -306,8 +306,18 @@ y dice qué):
    `FASECOLDA_*`); ahora solo los lee core-consultas. Si a uno en modo real le falta su secreto, core-consultas no
    arranca y lo dice en el log. El certificado RUES sigue opcional (`RUES_ENABLED`, `RUES_BASE_URL`, `RUES_API_KEY`);
    sin él, Trámites cae a la carga manual como hoy.
-5. **Aviso de Kyverum:** `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL=https://<host del ambiente>/api/v1/consultas/avisos/kyverum-verify`.
-   El gateway ya enruta `/api/v1/consultas/avisos/*` a core-consultas; si nginx filtra rutas, abrir esa también.
+5. **Aviso de Kyverum — variable NUEVA, distinta de la que ya existe:**
+   `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL=https://<host del ambiente>/api/v1/consultas/avisos/kyverum-verify`.
+   En DEV, con el mismo host que hoy usa `KYVERUM_WEBHOOK_CALLBACK_URL`:
+   `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL=https://api.dev.flitsas.online/api/v1/consultas/avisos/kyverum-verify`.
+   - Cambia la **ruta**, no solo el host: la vieja termina en `/api/v1/webhooks/kyverum-verify` (core-api); la nueva en
+     `/api/v1/consultas/avisos/kyverum-verify` (core-consultas). Copiar el valor viejo deja las validaciones nuevas sin
+     resultado: Kyverum avisaría a core-api, que ya no las creó.
+   - **No borrar** `KYVERUM_WEBHOOK_CALLBACK_URL` ni la ruta vieja en el primer despliegue: las validaciones creadas
+     antes del corte siguen avisando ahí, y core-api las sigue atendiendo con el secreto que guardó al crearlas.
+   - El gateway ya enruta `/api/v1/consultas/avisos/*` a core-consultas; si nginx filtra rutas, abrir esa también.
+   - `KYVERUM_API_KEY`, `KYVERUM_BASE_URL` y `KYVERUM_RUNT_*` no cambian de valor: son los mismos de hoy, solo que ahora
+     los lee core-consultas.
 6. **Usuarios del broker** (con el broker arriba; si es el primer despliegue con broker, levantarlo antes con
    `docker compose up -d rabbitmq`): `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES"` y
    `deploy/rabbitmq/usuario-de-servicio.sh consultas "$CLAVE_CONSULTAS"`; las cadenas van a `RABBITMQ_URL_TRAMITES`
