@@ -188,7 +188,7 @@ public sealed class IctOrchestrationService(
         // Atributos "manuales" del traspaso que el frontend le pediría al gestor: se siembran con el default
         // del caso estándar (no leasing, sin cambio de carrocería) para que el wizard no vuelva a
         // solicitarlos, SOLO si core-ict no los mandó (Bug #13445: cambio_carroceria ya llega de las
-        // transformaciones del master, código 17). La prenda no se siembra aquí: la resuelve
+        // transformaciones del master, código 6 —Cambio de carrocería, catálogo Tipo Trámite—). La prenda no se siembra aquí: la resuelve
         // IctPrendaResolver después del preflight, con la señal RUNT ya hidratada.
         var esTraspasoDraft = request.ProcedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
         if (esTraspasoDraft)
@@ -263,7 +263,7 @@ public sealed class IctOrchestrationService(
 
         // Bug #13445 (D1/D3) — prenda: DESPUÉS del preflight, que es quien deja la señal runt_* en los
         // field_values. Automática solo en los casos de la matriz conservadora; el resto, aviso al gestor.
-        await ResolverPrendaIctAsync(reply, summary.Id, tenantId, context.CancellationToken);
+        await ResolverPrendaIctAsync(reply, summary.Id, tenantId, createdBy, context.CancellationToken);
 
         // Identidad auto-iniciada — PARIDAD con el wizard manual (ensure → biométrica, TramiteWizard) y con
         // v1 (identityValidationService.validateIdentities). ICT no pasa por el wizard, así que se replica
@@ -336,13 +336,15 @@ public sealed class IctOrchestrationService(
             .AnyAsync(p => p.ProcedureInstanceId == instanceId && p.TenantId == tenantId, ct);
         if (!tienePrenda)
         {
-            await ResolverPrendaIctAsync(reply, instanceId, tenantId, ct);
+            var creador = await ResolveIctCreatorAsync(request.CreatedByUserId, tenantId, ct);
+            RefrescarRastreo();
+            await ResolverPrendaIctAsync(reply, instanceId, tenantId, creador, ct);
         }
     }
 
     /// <summary>
     /// Bug #13445 — siembra <c>es_leasing</c>/<c>cambio_carroceria</c> = <c>"false"</c> del traspaso SOLO
-    /// para las claves que core-ict no mandó: si vino <c>cambio_carroceria="true"</c> (transformación 17),
+    /// para las claves que core-ict no mandó: si vino <c>cambio_carroceria="true"</c> (código 6, Cambio de carrocería, catálogo Tipo Trámite),
     /// el default no la pisa.
     /// </summary>
     internal static void SembrarAtributosManualesTraspaso(List<FieldValueInput> fieldItems, CreateDraftFromIctRequest request)
@@ -360,9 +362,11 @@ public sealed class IctOrchestrationService(
     /// <summary>
     /// Bug #13445 — lee los field_values de la instancia (ya con la señal RUNT del preflight) y la familia del
     /// tipo, resuelve con <see cref="IctPrendaResolver"/> y aplica. Best-effort: nada de esto tumba la
-    /// materialización.
+    /// materialización. La decisión automática queda a nombre del usuario de servicio ICT del tenant
+    /// (<paramref name="creadorIct"/>, el mismo creador del borrador) para que sea trazable.
     /// </summary>
-    private async Task ResolverPrendaIctAsync(DraftReply reply, Guid instanceId, Guid tenantId, CancellationToken ct)
+    private async Task ResolverPrendaIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, Guid creadorIct, CancellationToken ct)
     {
         IctPrendaResolucion resolucion;
         try
@@ -396,7 +400,7 @@ public sealed class IctOrchestrationService(
             input =>
             {
                 RefrescarRastreo();
-                return prendaHandler.HandleAsync(instanceId, tenantId, input, userId: null, ct);
+                return prendaHandler.HandleAsync(instanceId, tenantId, input, userId: creadorIct, ct);
             },
             ex =>
             {
@@ -408,7 +412,8 @@ public sealed class IctOrchestrationService(
 
     /// <summary>
     /// Bug #13445 — aplica la resolución de prenda: <c>Auto</c> → <paramref name="registrar"/> (el
-    /// <see cref="RegistrarPrendaHandler"/>, sin usuario: lo decide el sistema); su error →
+    /// <see cref="RegistrarPrendaHandler"/>, con metadata <c>{"origen":"ict_auto","resolucion":…}</c> para
+    /// distinguir la decisión automática de la del gestor; sin PII); su error →
     /// <c>prenda_auto_error:&lt;código&gt;</c>; <c>PendienteGestor</c> → <c>prenda_pendiente_gestor:&lt;motivo&gt;</c>;
     /// discrepancia con el RUNT → <c>prenda_discrepancia_runt:&lt;motivo&gt;</c>. Los avisos llevan solo
     /// códigos estables: el acreedor (PII) nunca sale en el reply ni en el log.
@@ -426,7 +431,8 @@ public sealed class IctOrchestrationService(
                 try
                 {
                     var (_, error) = await registrar(new RegistrarPrendaInput(
-                        resolucion.Decision!, resolucion.AcreedorNombre, resolucion.AcreedorDocumento));
+                        resolucion.Decision!, resolucion.AcreedorNombre, resolucion.AcreedorDocumento,
+                        MetadataJson: MetadataPrendaAuto(resolucion)));
                     if (error is not null)
                     {
                         AppendWarning(reply, "prenda_auto_error:" + error);
@@ -450,6 +456,18 @@ public sealed class IctOrchestrationService(
             AppendWarning(reply, "prenda_discrepancia_runt:" + resolucion.Discrepancia);
         }
     }
+
+    /// <summary>
+    /// Bug #13445 (revisión SEC) — metadata de la prenda decidida por el sistema: origen fijo
+    /// <c>ict_auto</c> y el caso de la matriz (la discrepancia avisada o, si no hay, la decisión). Solo
+    /// códigos estables: nunca el acreedor.
+    /// </summary>
+    internal static string MetadataPrendaAuto(IctPrendaResolucion resolucion) =>
+        System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string?>
+        {
+            ["origen"] = "ict_auto",
+            ["resolucion"] = resolucion.Discrepancia ?? resolucion.Decision,
+        });
 
     private async Task CompletarComercialAsync(
         DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)

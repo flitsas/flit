@@ -71,7 +71,7 @@ public sealed class IctPrendaResolverTests
     public static TheoryData<string, string?, ProcedureFamily, IctPrendaResolucionTipo, string?, string?, string?> Matriz => new()
     {
         // senal,        operacion, familia,                  tipo esperado,                          decisión,                   motivo,                                                  discrepancia
-        { "positiva",    "1",  ProcedureFamily.Traspaso,   IctPrendaResolucionTipo.Auto,            PrendaDecision.Levantar,  null,                                                    IctPrendaResolver.MotivoAcreedorDistinto },
+        { "positiva",    "1",  ProcedureFamily.Traspaso,   IctPrendaResolucionTipo.PendienteGestor, null,                     IctPrendaResolver.MotivoAcreedorDistinto,                IctPrendaResolver.MotivoAcreedorDistinto },
         { "positiva",    "1",  ProcedureFamily.Matriculas, IctPrendaResolucionTipo.PendienteGestor, null,                     IctPrendaResolver.MotivoMatriculaLevantarAtipico,        null },
         { "positiva",    "2",  ProcedureFamily.Traspaso,   IctPrendaResolucionTipo.PendienteGestor, null,                     IctPrendaResolver.MotivoTraspasoInscribirConPrendaRunt,  null },
         { "positiva",    "3",  ProcedureFamily.Traspaso,   IctPrendaResolucionTipo.PendienteGestor, null,                     IctPrendaResolver.MotivoTraspasoSinAccionConPrendaRunt,  null },
@@ -109,14 +109,30 @@ public sealed class IctPrendaResolverTests
     // ── Acreedor ──────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void LevantarEnTraspaso_UsaElAcreedorDelRuntAunqueElCuerpoTraigaOtro()
+    public void LevantarEnTraspaso_ConOtroAcreedorQueElRunt_QuedaParaElGestorConDiscrepancia()
     {
+        // D3/T2: acreedor del cuerpo ≠ RUNT en cualquier caso de levantar → no se decide solo.
         var r = Resolver("positiva", "1", ProcedureFamily.Traspaso);
 
+        r.Tipo.Should().Be(IctPrendaResolucionTipo.PendienteGestor);
+        r.Decision.Should().BeNull();
+        r.AcreedorNombre.Should().BeNull();
+        r.AcreedorDocumento.Should().BeNull();
+        r.Motivo.Should().Be(IctPrendaResolver.MotivoAcreedorDistinto);
+        r.Discrepancia.Should().Be(IctPrendaResolver.MotivoAcreedorDistinto);
+    }
+
+    [Fact]
+    public void LevantarEnTraspaso_SinDocumentoEnElCuerpo_UsaElAcreedorDelRunt()
+    {
+        // Sin documento en el cuerpo no hay contradicción: se levanta con el acreedor que consta en el RUNT.
+        var r = Resolver("positiva", "1", ProcedureFamily.Traspaso, doc: null);
+
         r.Tipo.Should().Be(IctPrendaResolucionTipo.Auto);
+        r.Decision.Should().Be(PrendaDecision.Levantar);
         r.AcreedorNombre.Should().Be(NombreRunt);
         r.AcreedorDocumento.Should().Be(DocRunt);
-        r.Discrepancia.Should().Be(IctPrendaResolver.MotivoAcreedorDistinto);
+        r.Discrepancia.Should().BeNull();
     }
 
     [Theory]
@@ -197,6 +213,24 @@ public sealed class IctPrendaResolverTests
         List<ProcedureInstanceFieldValue> fv =
         [
             Fv(RuntGravamenSignal.PrendasKey, "NO"),
+            Fv(RuntGravamenSignal.GravamenesKey, "SI"),
+            Fv(RuntGravamenSignal.DetalleKey, null, "[]"),
+            .. Cuerpo("1"),
+        ];
+
+        var r = IctPrendaResolver.Resolver(fv, ProcedureFamily.Traspaso);
+
+        r.Tipo.Should().Be(IctPrendaResolucionTipo.PendienteGestor);
+        r.Motivo.Should().Be(IctPrendaResolver.MotivoGravamenNoPrendario);
+    }
+
+    [Fact]
+    public void GravamenSinPrenda_BanderaDePrendasAusente_QuedaParaElGestor()
+    {
+        // Revisión CR m1: un RUNT que no informa prendas, con gravamen «SI» y sin garantías, tampoco
+        // prueba que el gravamen sea una prenda.
+        List<ProcedureInstanceFieldValue> fv =
+        [
             Fv(RuntGravamenSignal.GravamenesKey, "SI"),
             Fv(RuntGravamenSignal.DetalleKey, null, "[]"),
             .. Cuerpo("1"),
