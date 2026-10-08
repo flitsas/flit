@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   getStatusHistory: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 }),
 }));
 const fetchNetworkChildren = vi.hoisted(() => vi.fn());
+const fetchNetworkDocumentos = vi.hoisted(() => vi.fn());
 const MockTramitesApiError = vi.hoisted(
   () =>
     class MockTramitesApiError extends Error {
@@ -44,6 +45,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   setActiveTramitesTenant: vi.fn(),
   fetchNetworkChildren,
+  fetchNetworkDocumentos,
   TramitesApiError: MockTramitesApiError,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
@@ -211,6 +213,7 @@ beforeEach(() => {
   });
   prefs.put.mockImplementation(async (scope: string, value: unknown) => ({ scope, value }));
   fetchNetworkChildren.mockResolvedValue(HIJOS);
+  fetchNetworkDocumentos.mockResolvedValue(true);
   tokenCabeza();
 });
 afterEach(() => {
@@ -241,7 +244,7 @@ describe('TramitesTable — descarga masiva desde la vista de red (HU #13419)', 
     const user = userEvent.setup();
     prefScope({ mode: 'network', childTenantId: HIJO });
     mocks.searchNetworkInstances.mockResolvedValue({ items: [DE_HIJA], total: 57 });
-    const creado: LoteConsolidados = { ...LOTE, total: 57, alcanceRed: 'hija' };
+    const creado: LoteConsolidados = { ...LOTE, total: 57, alcanceRed: 'hija', alcanceHijaId: HIJO };
     servidor(() => json(202, creado), creado);
     montar();
     await screen.findByText('BBB222');
@@ -262,8 +265,10 @@ describe('TramitesTable — descarga masiva desde la vista de red (HU #13419)', 
     expect(body.seleccion.filtro).not.toHaveProperty('alcanceRed');
     // AC2 — el total del lote creado coincide con el contador.
     expect(card).toHaveTextContent('0 / 57');
-    // AC6 — acotado: «Red · nombre de la hija».
-    expect(within(card).getByTestId('lote-alcance-red')).toHaveTextContent('Red · Concesionario Hijo SAS');
+    // AC6 — acotado: «Red · nombre de la hija», resuelto por `alcanceHijaId` contra /network/children.
+    await waitFor(() =>
+      expect(within(card).getByTestId('lote-alcance-red')).toHaveTextContent('Red · Concesionario Hijo SAS'),
+    );
   });
 
   it('AC3 — cambiar de toda la red a una hija, o desactivar la red, reinicia la selección', async () => {
@@ -327,5 +332,91 @@ describe('TramitesTable — descarga masiva desde la vista de red (HU #13419)', 
     const card = await screen.findByTestId('lote-descarga-card');
     expect(cuerpoCrear().alcanceRed).toBeNull();
     expect(within(card).queryByTestId('lote-alcance-red')).not.toBeInTheDocument();
+  });
+});
+
+/** Promesa controlable: deja ver qué pinta la tabla mientras `documentosRed` aún no ha respondido. */
+function diferido<T>() {
+  let resolver!: (v: T) => void;
+  let rechazar!: (e: unknown) => void;
+  const promesa = new Promise<T>((res, rej) => {
+    resolver = res;
+    rechazar = rej;
+  });
+  return { promesa, resolver, rechazar };
+}
+
+describe('TramitesTable — «Descargar ZIP» según documentosRed de la vista de red (HU #13419 AC5)', { timeout: 30_000 }, () => {
+  it('AC5 — documentosRed=false: «Descargar ZIP» no se ofrece desde el primer render (ni mientras se consulta)', async () => {
+    const user = userEvent.setup();
+    prefScope({ mode: 'network' });
+    const consulta = diferido<boolean>();
+    fetchNetworkDocumentos.mockReturnValue(consulta.promesa);
+    servidor(() => json(202, LOTE));
+    montar();
+    await screen.findByText('BBB222');
+    await user.click(casilla('TR-HIJA'));
+    // Aún sin respuesta: fail-closed, nada que pulsar.
+    expect(screen.queryByRole('button', { name: /Descargar ZIP/ })).not.toBeInTheDocument();
+
+    consulta.resolver(false);
+    expect(await screen.findByTestId('descarga-red-no-disponible')).toHaveTextContent(
+      'La descarga en ZIP no está habilitada para la vista de red.',
+    );
+    expect(screen.queryByRole('button', { name: /Descargar ZIP/ })).not.toBeInTheDocument();
+    // La consulta se hizo una vez, con señal de aborto; nunca se intentó crear el lote.
+    expect(fetchNetworkDocumentos).toHaveBeenCalledTimes(1);
+    expect(fetchNetworkDocumentos).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+  });
+
+  it('AC5 — documentosRed=true: «Descargar ZIP» se ofrece y cambiar de toda la red a una hija no repite la consulta', async () => {
+    const user = userEvent.setup();
+    prefScope({ mode: 'network' });
+    servidor(() => json(202, LOTE));
+    montar();
+    await screen.findByText('BBB222');
+    await user.click(casilla('TR-HIJA'));
+    expect(await screen.findByRole('button', { name: /Descargar ZIP/ })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByTestId('network-scope-select'), scopeToOptionValue({ mode: 'network', childTenantId: HIJO }));
+    await waitFor(() =>
+      expect(mocks.searchNetworkInstances).toHaveBeenCalledWith(expect.objectContaining({ childTenantId: HIJO })),
+    );
+    await user.click(casilla('TR-HIJA'));
+    expect(await screen.findByRole('button', { name: /Descargar ZIP/ })).toBeInTheDocument();
+    expect(fetchNetworkDocumentos).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['falla (500 / red)', () => Promise.reject(new MockTramitesApiError(500, 'boom'))],
+    ['responde 403', () => Promise.reject(new MockTramitesApiError(403, 'network_scope_required'))],
+  ])('AC5 borde — la consulta %s: sin «Descargar ZIP» en la red (fail-closed) y la tabla sigue funcionando', async (_c, impl) => {
+    const user = userEvent.setup();
+    prefScope({ mode: 'network' });
+    fetchNetworkDocumentos.mockImplementation(impl);
+    servidor(() => json(202, LOTE));
+    montar();
+    await screen.findByText('BBB222');
+    await user.click(casilla('TR-HIJA'));
+    expect(await screen.findByTestId('descarga-red-no-disponible')).toHaveTextContent(
+      'No se pudo comprobar si la descarga en ZIP está habilitada para la vista de red.',
+    );
+    expect(screen.queryByRole('button', { name: /Descargar ZIP/ })).not.toBeInTheDocument();
+    // El resto de la vista sigue viva: filas, selección y contador.
+    expect(screen.getByText('AAA111')).toBeInTheDocument();
+    expect(screen.getByTestId('contador-seleccion-lote')).toHaveTextContent('1 trámite seleccionado');
+  });
+
+  it('AC5 contrato — «Mi compañía»: el botón sigue igual y no se consulta documentosRed', async () => {
+    const user = userEvent.setup();
+    prefScope({});
+    fetchNetworkDocumentos.mockResolvedValue(false);
+    servidor(() => json(202, LOTE));
+    montar();
+    await screen.findByText('AAA111');
+    await user.click(casilla('TR-PROPIO'));
+    expect(screen.getByRole('button', { name: /Descargar ZIP/ })).toBeInTheDocument();
+    expect(fetchNetworkDocumentos).not.toHaveBeenCalled();
   });
 });

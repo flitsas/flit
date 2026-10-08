@@ -48,6 +48,14 @@ export type CodigoRechazoRedLote =
  */
 export type AlcanceRedSolicitado = 'red' | (string & {}) | null;
 
+/**
+ * HU #13419 AC5 — `GET /api/v1/tramites/network/documentos`: `documentosRed=false` = cabeza CONCESIÓN
+ * con los documentos de red apagados (no se ofrece «Descargar ZIP» en la vista de red).
+ */
+export interface DocumentosRedRespuesta {
+  documentosRed: boolean;
+}
+
 export interface ParteLoteConsolidados {
   numero: number;
   nombreArchivo: string;
@@ -75,9 +83,14 @@ export interface LoteConsolidados {
   nombreBase?: string;
   /**
    * HU #13417/#13419 — lote creado desde la vista de red: `red` (toda la red) o `hija` (acotado a
-   * una compañía; el contrato no trae su id ni su nombre). Ausente en el lote propio.
+   * una compañía). Ausente en el lote propio.
    */
   alcanceRed?: 'red' | 'hija' | null;
+  /**
+   * HU #13419 AC6 — uuid de la compañía hija cuando `alcanceRed === 'hija'`; `null`/ausente en
+   * `'red'` y en el lote propio. El nombre NO viaja: el aviso lo resuelve contra `/network/children`.
+   */
+  alcanceHijaId?: string | null;
   /** Vacío hasta que el lote termina. */
   partes: ParteLoteConsolidados[];
 }

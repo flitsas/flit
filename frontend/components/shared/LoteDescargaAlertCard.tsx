@@ -30,8 +30,10 @@ import {
  * cancelar muestra «No se pudo cancelar la descarga» en tono error (`--badge-danger-*`).</p>
  *
  * <p>HU #13419 AC6 — lote de la vista de red: rótulo «Red» (toda la red) o «Red · {hija}» (acotado).
- * El contrato solo dice `alcanceRed: 'hija'`, sin id ni nombre: el nombre lo aporta quien creó el
- * lote (`nombreHija`); si no se conoce (recarga, otra pestaña) el rótulo cae a «Red».</p>
+ * El contrato trae `alcanceHijaId`; el nombre lo resuelve el seguimiento (`useNombreHijaLote`, contra
+ * `/network/children`) y llega en `nombreHija`. Si no se puede resolver (hija fuera de la red, lista
+ * aún sin cargar o fallida) dice «Red · compañía de la red»: nunca «Red» a secas, que afirmaría que el
+ * lote es de toda la red.</p>
  *
  * Uso de ejemplo:
  *   <LoteDescargaAlertCard lote={lote} expirado={expirado} onDescargarParte={(n) => descargar(n)}
@@ -45,14 +47,17 @@ export const TEXTO_DESCARGA_CANCELADA = 'Descarga cancelada';
 
 const formatoMiles = (n: number) => n.toLocaleString('es-CO');
 
+/** HU #13419 AC6 — rótulo del lote acotado a una hija cuyo nombre no se pudo resolver. */
+export const NOMBRE_HIJA_DESCONOCIDA = 'compañía de la red';
+
 /**
  * HU #13419 AC6 — rótulo del alcance de red del lote: `null` en el lote propio, «Red» en el de toda
- * la red y «Red · {nombreHija}» en el acotado (o «Red» si el nombre no se conoce).
+ * la red y «Red · {nombreHija}» en el acotado (o «Red · compañía de la red» si el nombre no se conoce).
  */
 export function etiquetaAlcanceLote(lote: LoteConsolidados, nombreHija?: string | null): string | null {
-  if (lote.alcanceRed !== 'red' && lote.alcanceRed !== 'hija') return null;
-  const nombre = lote.alcanceRed === 'hija' ? nombreHija?.trim() : '';
-  return nombre ? `Red · ${nombre}` : 'Red';
+  if (lote.alcanceRed === 'red') return 'Red';
+  if (lote.alcanceRed !== 'hija') return null;
+  return `Red · ${nombreHija?.trim() || NOMBRE_HIJA_DESCONOCIDA}`;
 }
 
 /** AC2 — tono semántico (de la escala de `statusTones` / `StatusBadge`) del lote. */
@@ -112,7 +117,7 @@ export interface LoteDescargaAlertCardProps {
   cancelando?: boolean;
   /** HU #13388 AC6 — error de la cancelación (404/403). */
   errorCancelacion?: string | null;
-  /** HU #13419 AC6 — nombre de la hija de un lote de red acotado, si se conoce. */
+  /** HU #13419 AC6 — nombre de la hija de un lote de red acotado, si se resolvió. */
   nombreHija?: string | null;
   className?: string;
 }

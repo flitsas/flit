@@ -7,7 +7,8 @@ import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
 // Uso de ejemplo (HU #13419 AC6):
 //   <LoteDescargaAlertCard lote={lote} nombreHija="Concesionario Hijo SAS" expirado={false}
 //     onDescargarParte={descargar} />
-//   // lote.alcanceRed 'red' → «Red»; 'hija' → «Red · Concesionario Hijo SAS»; ausente → sin rótulo.
+//   // lote.alcanceRed 'red' → «Red»; 'hija' → «Red · Concesionario Hijo SAS» (sin nombre: «Red · compañía
+//   // de la red»); ausente → sin rótulo.
 
 /** Datos sintéticos según `LoteConsolidados` del contrato (HU #13417). */
 const LOTE: LoteConsolidados = {
@@ -35,8 +36,8 @@ describe('etiquetaAlcanceLote — HU #13419 AC6', () => {
     ['red', null, 'Red'],
     ['red', 'Ignorada', 'Red'],
     ['hija', 'Concesionario Hijo SAS', 'Red · Concesionario Hijo SAS'],
-    ['hija', null, 'Red'],
-    ['hija', '   ', 'Red'],
+    ['hija', null, 'Red · compañía de la red'],
+    ['hija', '   ', 'Red · compañía de la red'],
   ] as const)('alcanceRed=%s nombreHija=%s ⇒ %s', (alcanceRed, nombreHija, esperado) => {
     expect(etiquetaAlcanceLote({ ...LOTE, alcanceRed }, nombreHija)).toBe(esperado);
   });
@@ -53,9 +54,9 @@ describe('LoteDescargaAlertCard — rótulo de red (HU #13419 AC6)', () => {
     expect(within(card()).getByTestId('lote-alcance-red')).toHaveTextContent('Red · Concesionario Hijo SAS');
   });
 
-  it('borde — lote de hija sin nombre conocido (recarga): cae a «Red»', () => {
+  it('borde — lote de hija sin nombre resoluble (hija fuera de la red, lista no cargada): «Red · compañía de la red»', () => {
     montar({ ...LOTE, alcanceRed: 'hija' }, null);
-    expect(within(card()).getByTestId('lote-alcance-red')).toHaveTextContent(/Red$/);
+    expect(within(card()).getByTestId('lote-alcance-red')).toHaveTextContent(/Red · compañía de la red$/);
   });
 
   it('contrato — lote propio (sin `alcanceRed`): no hay rótulo de red', () => {
