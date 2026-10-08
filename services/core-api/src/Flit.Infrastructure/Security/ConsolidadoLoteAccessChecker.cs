@@ -1,6 +1,8 @@
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.UserManagement;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +32,14 @@ namespace Flit.Infrastructure.Security;
 ///   <c>ot_bandeja</c>) o en las compañías donde tiene asignado el rol <c>SuperAdmin</c> activo (<c>superadmin</c> y el
 ///   lote OT del Super Admin). Si la tiene, el ítem se omite como
 ///   <c>acceso_revocado</c>; vencida o levantada, se procesa con normalidad.</item>
+///   <item><b>Lote de red</b> (HU #13418, <c>network_scope</c>, adenda v7 A7.4): la cabeza P es la compañía del lote.
+///   Lote acotado (<c>scope_tenant_id</c>) ⇒ el ítem debe ser de esa hija. Ítem de P ⇒ la regla de <c>tramites</c>.
+///   Ítem de una hija ⇒ además: rol <c>AdminCompany</c> activo en P leído de la BD (no del JWT), <c>group_read_scope</c>
+///   encendido, P sigue siendo cabeza con tipo de cabeza válido, interruptor <c>network_documents_concesion</c> si P es
+///   CONCESIÓN (cacheado 60 s por lote) y la compañía del ítem sigue teniendo <c>parent_tenant_id = P</c> (por ítem). La
+///   jerarquía y los interruptores se leen DIRECTAMENTE: <c>DbTenantScopeResolver</c> y <c>DbHierarchySwitches</c> se
+///   tragan las excepciones (fail-closed) y un error de BD acabaría como «acceso revocado»; aquí se propaga y el
+///   procesamiento del ítem lo reprograma como fallo técnico (AC8). Una excepción no se cachea.</item>
 /// </list>
 /// La decisión sobre el solicitante (usuario + rol + suspensión) se cachea 60 s por lote y compañía; la del trámite se
 /// consulta en cada ítem. Por esa caché, una suspensión (o su vencimiento) puede tardar hasta 60 s en reflejarse en un
@@ -54,6 +64,19 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
         Guid compania;
         switch (contexto.Origen)
         {
+            case ConsolidadoExportOrigin.Tramites when contexto.RedActiva:
+                // HU #13418 — lote de la vista de red de la cabeza (CompaniaLoteId).
+                if (contexto.CompaniaLoteId is not { } cabeza
+                    || (contexto.ScopeTenantId is { } hijaAcotada && contexto.CompaniaTramiteId != hijaAcotada))
+                    return false;
+                compania = contexto.CompaniaTramiteId;
+                solicitanteConAcceso = await CacheadoAsync(
+                        $"consolidado-lote-acceso:{contexto.BatchId:N}:{cabeza:N}",
+                        c => TienePermisoEnCompaniaAsync(contexto.SolicitanteId, cabeza, c),
+                        ct).ConfigureAwait(false)
+                    && (compania == cabeza || await RedVigenteParaAsync(contexto, cabeza, ct).ConfigureAwait(false));
+                break;
+
             case ConsolidadoExportOrigin.Tramites:
                 if (contexto.CompaniaLoteId is not { } companiaLote || contexto.CompaniaTramiteId != companiaLote)
                     return false;
@@ -99,6 +122,60 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
             .AnyAsync(p => p.Id == contexto.ProcedureInstanceId && p.TenantId == compania && p.DeletedAt == null, ct)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// HU #13418 — ¿el ítem de la hija <see cref="LoteItemContexto.CompaniaTramiteId"/> sigue al alcance de la red de
+    /// <paramref name="cabeza"/>? Solicitante + red: cacheado 60 s por lote (AC5, AC6); jerarquía: por ítem (AC4).
+    /// </summary>
+    private async Task<bool> RedVigenteParaAsync(LoteItemContexto contexto, Guid cabeza, CancellationToken ct)
+    {
+        var redVigente = await CacheadoAsync(
+            $"consolidado-lote-acceso:{contexto.BatchId:N}:red",
+            c => RolYRedVigentesAsync(contexto.SolicitanteId, cabeza, c),
+            ct).ConfigureAwait(false);
+        if (!redVigente)
+            return false;
+
+        var hija = contexto.CompaniaTramiteId;
+        return await db.Tenants
+            .AsNoTracking()
+            .AnyAsync(t => t.Id == hija && t.ParentTenantId == cabeza, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Rol <c>AdminCompany</c> activo del solicitante en la cabeza (BD) y red encendida: <c>group_read_scope</c>, la cabeza
+    /// sigue marcada como tal con un tipo de cabeza válido y, si es CONCESIÓN, <c>network_documents_concesion</c> (P2 = a).
+    /// Una fila de interruptor ausente es «apagado» (como en <c>DbHierarchySwitches</c>); un error de BD se propaga.
+    /// </summary>
+    private async Task<bool> RolYRedVigentesAsync(Guid userId, Guid cabeza, CancellationToken ct)
+    {
+        var esAdminDeLaCabeza = await RolesActivos(userId)
+            .AnyAsync(r => r.TenantId == cabeza && r.Code == NetworkScopePolicy.HeadAdminRole, ct)
+            .ConfigureAwait(false);
+        if (!esAdminDeLaCabeza || !await InterruptorAsync(HierarchySwitch.GroupReadScopeKey, ct).ConfigureAwait(false))
+            return false;
+
+        var tipoCabeza = await db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == cabeza && t.IsGroupParent)
+            .Select(t => t.TenantType)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (!GroupKindCodes.TryParse(tipoCabeza, out var clase))
+            return false;
+
+        return clase != GroupKind.Concesion
+            || await InterruptorAsync(HierarchySwitch.NetworkDocumentsConcesionKey, ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> InterruptorAsync(string clave, CancellationToken ct) =>
+        await db.HierarchySwitches
+            .AsNoTracking()
+            .Where(s => s.SwitchKey == clave)
+            .Select(s => (bool?)s.IsEnabled)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false) ?? false;
 
     private async Task<bool> CacheadoAsync(string clave, Func<CancellationToken, Task<bool>> calcular, CancellationToken ct)
     {
