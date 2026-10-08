@@ -21,8 +21,9 @@ public sealed record ParteConsultada(int Numero, string NombreArchivo, int Pdfs,
 /// HU #13379 (Épica #13216, ADR-0070 D7, CF-06/CF-11/CF-12) — <c>ObtenerLoteActualQuery</c> y la consulta por id.
 /// <list type="bullet">
 ///   <item>Solo el dueño (<c>sub</c>): otro usuario, incluido un Super Admin, recibe <c>null</c> (404/204 en la API).</item>
-///   <item><c>actual</c>: el lote activo o, si no hay, el último terminal todavía retenido (con su <c>expiraEn</c>); un
-///   lote ya purgado no se devuelve (204).</item>
+///   <item><c>actual</c>: el lote activo o, si no hay, el último terminal todavía retenido (con su <c>expiraEn</c>) o el
+///   último <c>cancelado</c> (HU #13386 AC6, hasta que el usuario crea otro lote); un lote purgado por retención no se
+///   devuelve (204).</item>
 ///   <item>Partes: solo cuando el lote es descargable (<see cref="ConsolidadoLoteDescargabilidad"/>); cada una con su
 ///   nombre (<see cref="ConsolidadoLoteNombres.Zip"/>) y su tamaño en claro.</item>
 /// </list>

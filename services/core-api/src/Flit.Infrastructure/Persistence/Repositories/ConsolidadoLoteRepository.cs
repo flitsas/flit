@@ -47,6 +47,14 @@ internal sealed partial class ConsolidadoLoteRepository(
             .Select(b => (Guid?)b.Id)
             .FirstOrDefaultAsync(ct);
 
+    /// <inheritdoc />
+    public Task<string?> GetStatusAsync(Guid batchId, CancellationToken ct = default) =>
+        // Una fila por PK, sin lock ni transacción: no compite con la cancelación ni con los cierres.
+        db.ConsolidadoExportBatches.AsNoTracking()
+            .Where(b => b.Id == batchId && b.DeletedAt == null)
+            .Select(b => (string?)b.Status)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<CrearLoteResultado> CrearAsync(NuevoLoteConsolidados nuevo, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(nuevo);

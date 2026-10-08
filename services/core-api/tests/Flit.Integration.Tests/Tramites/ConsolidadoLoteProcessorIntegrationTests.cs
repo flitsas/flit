@@ -167,7 +167,8 @@ public sealed class ConsolidadoLoteProcessorIntegrationTests(PostgresDatabaseFix
         services.AddScoped(sp => new ProcesarItemLoteHandler(
             sp.GetRequiredService<LoteItemOrigenPorOrigen>(),
             sp.GetRequiredService<IConsolidadoLoteItemProceso>(),
-            sp.GetRequiredService<ILogger<ProcesarItemLoteHandler>>()));
+            sp.GetRequiredService<ILogger<ProcesarItemLoteHandler>>(),
+            sp.GetRequiredService<IConsolidadoLoteRepository>()));
         var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         var processor = new ConsolidadoLoteProcessor(
             provider.GetRequiredService<IServiceScopeFactory>(),

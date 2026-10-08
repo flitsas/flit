@@ -20,7 +20,8 @@ namespace Flit.Integration.Tests.Tramites;
 ///   <item>AC1/AC4: lote <c>en_proceso</c> con una parte cerrada y otra empaquetando → <c>cancelado</c>, DEK NULL,
 ///   <c>finished_at = expires_at = purged_at</c>, ítems vivos <c>cancelado</c>, parte cerrada <c>purgada</c>, la otra
 ///   <c>descartada</c> y una sola fila <c>lote_cancelado</c> (con conteos, <c>parts_count</c> NULL). La segunda petición es
-///   idempotente. Después, <c>actual</c> no lo devuelve (purgado ⇒ 204) y por id sale <c>cancelado</c> sin partes.</item>
+///   idempotente. Después (HU #13386 AC6), <c>actual</c> lo devuelve <c>cancelado</c> sin partes, por id también, y la
+///   descarga de una parte es 410 <c>descarga_expirada</c>.</item>
 ///   <item>AC2: el índice único parcial libera el cupo: antes de cancelar la creación da <c>LoteActivo</c>, después
 ///   <c>Creado</c>, y la creación no vuelve a purgar el cancelado.</item>
 ///   <item>AC3: los consolidados generados por el lote siguen en el trámite.</item>
@@ -256,18 +257,19 @@ public sealed class ConsolidadoLoteRepositoryCancelTests(PostgresDatabaseFixture
         otra.Lote!.Status.Should().Be(ConsolidadoExportStatus.Cancelado);
         (await AuditoriasAsync(lote, ConsolidadoExportAuditEvent.LoteCancelado)).Should().Be(1);
 
-        // Consulta tras cancelar (#13379 tal cual): purgado ⇒ «actual» vacío (204); por id, cancelado sin partes; descarga 404.
+        // Consulta tras cancelar (HU #13386 AC6): «actual» devuelve el cancelado; por id, cancelado sin partes; descarga 410.
         await using (var ctx = NewContext())
         {
             var lectura = new ConsolidadoLoteLectura(ctx);
-            (await lectura.ObtenerActualDelDuenoAsync(u, Ct)).Should().BeNull("purged_at informado ⇒ 204 hasta #13386");
+            (await lectura.ObtenerActualDelDuenoAsync(u, Ct))!.Status.Should().Be(ConsolidadoExportStatus.Cancelado,
+                "HU #13386 AC6: el último lote cancelado se informa (antes, #13379/#13385: 204)");
             var porId = await new ConsultarLoteConsolidadosHandler(lectura).PorIdAsync(new ObtenerLoteQuery(lote, u), Ct);
             porId!.Lote.Status.Should().Be(ConsolidadoExportStatus.Cancelado);
             porId.Partes.Should().BeEmpty();
             var descarga = await new DescargarParteHandler(lectura, Substitute.For<IConsolidadoLoteParteStorage>(),
                     Substitute.For<IConsolidadoLoteCipher>())
                 .PrepararAsync(new DescargarParteQuery(lote, 1, u, "Radicador"), Ct);
-            descarga.Estado.Should().Be(DescargarParteEstado.NoEncontrada);
+            descarga.Estado.Should().Be(DescargarParteEstado.Expirada, "HU #13386 AC6: 410 descarga_expirada (antes 404)");
         }
     }
 

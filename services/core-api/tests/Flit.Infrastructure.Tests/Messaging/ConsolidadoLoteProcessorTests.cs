@@ -88,7 +88,8 @@ public sealed class ConsolidadoLoteProcessorTests
         services.AddScoped(sp => new ProcesarItemLoteHandler(
             sp.GetRequiredService<LoteItemOrigenPorOrigen>(),
             sp.GetRequiredService<IConsolidadoLoteItemProceso>(),
-            sp.GetRequiredService<ILogger<ProcesarItemLoteHandler>>()));
+            sp.GetRequiredService<ILogger<ProcesarItemLoteHandler>>(),
+            sp.GetRequiredService<IConsolidadoLoteRepository>()));
         var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
         var processor = new ConsolidadoLoteProcessor(
@@ -383,6 +384,11 @@ public sealed class ConsolidadoLoteProcessorTests
 
         public Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        /// <summary>HU #13386 — estado que ve el checkpoint del ítem (activo por defecto).</summary>
+        public string? Estado { get; set; } = ConsolidadoExportStatus.EnProceso;
+
+        public Task<string?> GetStatusAsync(Guid batchId, CancellationToken ct = default) => Task.FromResult(Estado);
     }
 
     private sealed class FakeProceso : IConsolidadoLoteItemProceso

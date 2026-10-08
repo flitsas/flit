@@ -5328,6 +5328,9 @@ paths:
         `X-Tenant-Id` se ignora y la ruta no exige compañía (el `ot_admin` consulta su lote OT). Devuelve el lote
         activo o, si no hay, el último lote terminal todavía retenido (no purgado, aunque ya haya vencido), con
         `expiraEn`. `partes` va vacío hasta que el lote es descargable (completado/completado_con_omitidos, no vencido).
+        HU #13386: si el último lote del usuario está `cancelado` se devuelve aunque ya esté purgado, con `terminadoEn` =
+        instante de la cancelación, los contadores congelados y `partes` vacío, hasta que el usuario crea otro lote (el
+        activo siempre gana a un retenido o cancelado). Un lote purgado por la retención de 24 h no se devuelve.
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -5337,7 +5340,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoteConsolidados" }
-        "204": { description: "El usuario no tiene lote activo ni retenido (o el último ya se purgó)" }
+        "204": { description: "El usuario no tiene lote activo, retenido ni cancelado como último lote (o el último se purgó por retención)" }
         "401": { description: "Sin token válido" }
         "403": { description: "Sin permiso consolidado-masivo.download" }
 
@@ -5372,7 +5375,8 @@ paths:
       description: >
         Feature #13306 / ADR-0070, HU #13379. Solo el dueño (`sub`; otro usuario o el Super Admin ⇒ 404). Descargable
         si el lote está `completado` o `completado_con_omitidos`, no purgado, con `expiraEn` futuro y la parte
-        `cerrada`; un lote `fallido` o `cancelado` no tiene partes (404). La fila de auditoría `parte_descargada` se
+        `cerrada`; un lote `fallido` no tiene partes (404) y uno `cancelado` ya está purgado (410 `descarga_expirada`,
+        HU #13386) para cualquier número de parte. La fila de auditoría `parte_descargada` se
         registra antes del primer byte: si no se puede, 503 sin bytes. El cuerpo se descifra en streaming
         (almacenamiento → descifrado → respuesta) con `Content-Length` fijado antes del primer byte; si la parte resulta
         corrupta antes de enviar nada, 500 `parte_no_disponible` sin bytes, y si falla a mitad del cuerpo el servidor
@@ -5399,14 +5403,14 @@ paths:
               schema: { type: string, format: binary }
         "401": { description: "Sin token válido" }
         "403": { description: "Sin permiso consolidado-masivo.download" }
-        "404": { description: "No existe, no es del usuario (incluido Super Admin), no tiene partes (fallido/cancelado) o la parte no existe" }
+        "404": { description: "No existe, no es del usuario (incluido Super Admin), no tiene partes (fallido) o la parte no existe" }
         "409":
           description: "El lote todavía no terminó (`lote_no_terminado`)"
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
         "410":
-          description: "Descarga expirada (`descarga_expirada`: lote purgado o vencido)"
+          description: "Descarga expirada (`descarga_expirada`: lote purgado, vencido o cancelado)"
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
@@ -5436,8 +5440,10 @@ paths:
         (si la auditoría falla, 503 y el lote sigue activo). Los consolidados que el lote ya generó en los trámites quedan
         como oficiales y no se revierten; un trámite que se estaba generando al cancelar termina su generación, pero no
         entra a ninguna parte. Idempotente: un lote ya cancelado responde 202 tal cual, sin nueva auditoría. Tras la
-        cancelación el lote ya está purgado: `GET …/actual` responde 204 hasta #13386 y `GET …/{loteId}` lo devuelve
-        `cancelado` con `partes` vacío.
+        cancelación el lote ya está purgado: `GET …/actual` (HU #13386) y `GET …/{loteId}` lo devuelven `cancelado` con
+        `partes` vacío, y la descarga de cualquiera de sus partes responde 410 `descarga_expirada`. Los procesos en curso
+        se detienen en checkpoints (HU #13386): ningún trámite se entrega después del checkpoint previo al generador y
+        ninguna parte se sube; si la finalización tomó el lote primero, la cancelación responde 409 `lote_terminado`.
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []

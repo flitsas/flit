@@ -2,6 +2,7 @@ using System.IO.Compression;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
+using Flit.Tramites.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
@@ -19,6 +20,10 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 ///   aquí</b>: este handler no depende de ningún generador (lo vigila un test).</item>
 ///   <item><b>Cifrado</b> a un segundo temporal con la DEK del lote (FLZ1, subclave por parte) y borrado inmediato del ZIP
 ///   en claro: el disco temporal queda en ≤ 2 × M.</item>
+///   <item><b>HU #13386 — checkpoints de cancelación</b>: al reclamar y cada <see cref="PdfsPorCheckpoint"/> PDF copiados
+///   se lee el estado del lote sin lock (<see cref="IConsolidadoLoteRepository.GetStatusAsync"/>); si está detenido se
+///   confirma bajo lock (parte <c>descartada</c>), se aborta y se borran los temporales, sin subir y sin marcar nada
+///   <c>fallida</c>/<c>fallido</c>. El tercer checkpoint es el de AC6 (antes de subir).</item>
 ///   <item><b>AC6</b>: antes de subir se comprueba bajo lock que el lote siga vivo; si se canceló, la parte queda
 ///   <c>descartada</c> y no se sube. Después se sube en streaming y se cierra la parte condicionada a que siga
 ///   <c>empaquetando</c> con los intentos del reclamo (o <c>descartada</c> si el lote se canceló entretanto).</item>
@@ -45,9 +50,15 @@ public sealed partial class EmpaquetarParteHandler(
     IAttachmentStorage adjuntos,
     IConsolidadoLoteAdjuntoActual adjuntoActual,
     ConsolidadoLoteTemporales temporales,
-    ILogger<EmpaquetarParteHandler> logger)
+    ILogger<EmpaquetarParteHandler> logger,
+    IConsolidadoLoteRepository lotes)
 {
     private const int Bufer = 81920;
+
+    /// <summary>HU #13386 — cada cuántos PDF copiados al ZIP se consulta el estado del lote (checkpoint 2).</summary>
+    public const int PdfsPorCheckpoint = 50;
+
+    private readonly IConsolidadoLoteRepository _lotes = lotes;
 
     public async Task<EmpaquetarParteDesenlace> HandleAsync(
         ParteLoteReclamada reclamada, short maxIntentos, CancellationToken ct = default)
@@ -59,10 +70,16 @@ public sealed partial class EmpaquetarParteHandler(
         string? rutaCifrado = null;
         try
         {
+            // HU #13386 AC4 — checkpoint 1 (al reclamar): un lote cancelado entre el reclamo y aquí no se empaqueta.
+            if (await AbortarSiLoteDetenidoAsync(reclamada, Checkpoint.Reclamo, ct).ConfigureAwait(false))
+                return EmpaquetarParteDesenlace.Descartada;
+
             var contenido = await empaquetado.LeerContenidoAsync(lote.Id, parte.PartNumber, ct).ConfigureAwait(false);
             (rutaZip, rutaCifrado) = temporales.NuevasRutas(lote.Id, parte.PartNumber);
 
-            var noDisponibles = await ArmarZipAsync(rutaZip, lote.DocumentType, contenido, ct).ConfigureAwait(false);
+            // Checkpoint 2 (cada PdfsPorCheckpoint PDF) dentro del armado: null = abortado; el finally borra el ZIP a medias.
+            if (await ArmarZipAsync(rutaZip, reclamada, contenido, ct).ConfigureAwait(false) is not { } noDisponibles)
+                return EmpaquetarParteDesenlace.Descartada;
 
             ConsolidadoLoteCifradoResultado cifrado;
             await using (var origen = AbrirLectura(rutaZip))
@@ -77,7 +94,7 @@ public sealed partial class EmpaquetarParteHandler(
             // El ZIP en claro ya no hace falta: solo vive el cifrado mientras se sube (≤ 2 × M en el pico).
             ConsolidadoLoteTemporales.BorrarSilencioso(rutaZip);
 
-            // AC6 — un lote cancelado no recibe la subida.
+            // AC6 (#13378) = checkpoint 3 de HU #13386 (antes de subir), ya bajo el lock del lote: no se sube.
             if (await empaquetado.DescartarSiLoteInactivoAsync(lote.Id, parte.PartNumber, parte.Attempts, ct).ConfigureAwait(false))
             {
                 LogDescartada(logger, lote.Id, parte.PartNumber);
@@ -151,11 +168,13 @@ public sealed partial class EmpaquetarParteHandler(
     /// Escribe el ZIP en <paramref name="ruta"/> y devuelve los ítems cuyo PDF no se pudo leer (AC4). Un error del
     /// almacenamiento (excepción, no «no existe») se propaga: es fallo técnico de la parte, no del ítem.
     /// </summary>
-    private async Task<IReadOnlyList<Guid>> ArmarZipAsync(
-        string ruta, string tipoDocumento, ContenidoParteLote contenido, CancellationToken ct)
+    private async Task<IReadOnlyList<Guid>?> ArmarZipAsync(
+        string ruta, ParteLoteReclamada reclamada, ContenidoParteLote contenido, CancellationToken ct)
     {
+        var tipoDocumento = reclamada.Lote.DocumentType;
         var noDisponibles = new List<PdfDeParte>();
         var nombres = new NombresDeEntradaZip();
+        var recorridos = 0;
 
         await using (var archivo = new FileStream(
             ruta, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, Bufer, FileOptions.Asynchronous))
@@ -174,8 +193,15 @@ public sealed partial class EmpaquetarParteHandler(
                     var entrada = zip.CreateEntry(
                         nombres.Reservar(ConsolidadoLoteNombres.Pdf(pdf.ReferenceNumber, pdf.Plate)),
                         CompressionLevel.NoCompression);
-                    await using var destino = entrada.Open();
-                    await origen.CopyToAsync(destino, Bufer, ct).ConfigureAwait(false);
+                    await using (var destino = entrada.Open())
+                    {
+                        await origen.CopyToAsync(destino, Bufer, ct).ConfigureAwait(false);
+                    }
+
+                    // HU #13386 AC4 — checkpoint 2: cada PdfsPorCheckpoint PDF copiados se mira si el lote sigue vivo.
+                    if (++recorridos % PdfsPorCheckpoint == 0
+                        && await AbortarSiLoteDetenidoAsync(reclamada, Checkpoint.CadaNPdf, ct).ConfigureAwait(false))
+                        return null;
                 }
 
                 var filas = contenido.Omitidos
@@ -213,6 +239,34 @@ public sealed partial class EmpaquetarParteHandler(
         return await adjuntos.OpenReadAsync(actual, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// HU #13386 — checkpoint cooperativo: lee el estado sin lock (<see cref="IConsolidadoLoteRepository.GetStatusAsync"/>)
+    /// y, si el lote está detenido (<see cref="ConsolidadoLoteCheckpoint.Detenido"/>), lo confirma bajo el lock del lote
+    /// dejando la parte <c>descartada</c> (idempotente: la cancelación ya la descartó). Una DEK destruida por la cancelación
+    /// no se trata como fallo: ni la parte ni el lote pasan a <c>fallida</c>/<c>fallido</c>.
+    /// </summary>
+    /// <returns><c>true</c> si hay que abortar (no se sube nada; el llamador borra los temporales).</returns>
+    private async Task<bool> AbortarSiLoteDetenidoAsync(ParteLoteReclamada reclamada, Checkpoint checkpoint, CancellationToken ct)
+    {
+        var estado = await _lotes.GetStatusAsync(reclamada.Lote.Id, ct).ConfigureAwait(false);
+        if (!ConsolidadoLoteCheckpoint.Detenido(estado))
+            return false;
+
+        var parte = reclamada.Parte;
+        if (!await empaquetado.DescartarSiLoteInactivoAsync(reclamada.Lote.Id, parte.PartNumber, parte.Attempts, ct).ConfigureAwait(false))
+            return false;
+
+        LogAbortada(logger, reclamada.Lote.Id, parte.PartNumber, checkpoint);
+        return true;
+    }
+
+    /// <summary>HU #13386 — los checkpoints sin lock del empaquetado (el tercero, antes de subir, es el descarte bajo lock).</summary>
+    private enum Checkpoint
+    {
+        Reclamo,
+        CadaNPdf,
+    }
+
     private async Task IntentarFinalizarAsync(Guid loteId, CancellationToken ct)
     {
         try
@@ -238,6 +292,10 @@ public sealed partial class EmpaquetarParteHandler(
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Lote {BatchId}: parte {PartNumber} descartada (el lote ya no está activo); no se sube.")]
     private static partial void LogDescartada(ILogger logger, Guid batchId, short partNumber);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Lote {BatchId}: parte {PartNumber} abortada en el checkpoint {Checkpoint}: el lote ya no está activo; queda descartada, sin subir, y se borran sus temporales.")]
+    private static partial void LogAbortada(ILogger logger, Guid batchId, short partNumber, Checkpoint checkpoint);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Lote {BatchId}: el cierre de la parte {PartNumber} no se aplicó (intentos del reclamo {Intentos}; otra ejecución la retomó).")]

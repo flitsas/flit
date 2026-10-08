@@ -485,6 +485,9 @@ public sealed class CrearLoteConsolidadosHandlerTests
 
         public Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<string?> GetStatusAsync(Guid batchId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeResolver(string origen) : ILoteSeleccionResolver

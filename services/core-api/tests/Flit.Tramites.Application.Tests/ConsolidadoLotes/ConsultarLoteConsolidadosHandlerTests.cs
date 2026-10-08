@@ -118,7 +118,8 @@ public sealed class ConsultarLoteConsolidadosHandlerTests
     [InlineData(ConsolidadoExportStatus.Completado, ConsolidadoLoteDescargable.Si)]
     [InlineData(ConsolidadoExportStatus.CompletadoConOmitidos, ConsolidadoLoteDescargable.Si)]
     [InlineData(ConsolidadoExportStatus.Fallido, ConsolidadoLoteDescargable.SinPartes)]
-    [InlineData(ConsolidadoExportStatus.Cancelado, ConsolidadoLoteDescargable.SinPartes)]
+    // HU #13386 AC6: un lote cancelado ya está purgado ⇒ 410 descarga_expirada (antes, #13379: SinPartes ⇒ 404).
+    [InlineData(ConsolidadoExportStatus.Cancelado, ConsolidadoLoteDescargable.Expirado)]
     public void Contrato_Descargabilidad_PorEstado(string estado, ConsolidadoLoteDescargable esperado)
     {
         ConsolidadoLoteDescargabilidad.Evaluar(LoteConsulta.Lote(estado), LoteConsulta.Ahora).Should().Be(esperado);

@@ -224,6 +224,10 @@ public sealed class ConsolidadoLoteProcessorEmpaquetadoTests : IDisposable
         public Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        /// <summary>HU #13386 — los checkpoints del empaquetado ven el lote vivo.</summary>
+        public Task<string?> GetStatusAsync(Guid batchId, CancellationToken ct = default) =>
+            Task.FromResult<string?>(ConsolidadoExportStatus.Empaquetando);
+
         public Task<Guid?> ObtenerLoteActivoIdAsync(Guid usuarioId, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<CrearLoteResultado> CrearAsync(NuevoLoteConsolidados nuevo, CancellationToken ct = default) => throw new NotSupportedException();

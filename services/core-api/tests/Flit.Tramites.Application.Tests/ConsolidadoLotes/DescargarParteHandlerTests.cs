@@ -184,10 +184,10 @@ public sealed class DescargarParteHandlerTests
         (await Handler().PrepararAsync(Query(lote, 3), Ct)).Estado.Should().Be(DescargarParteEstado.Expirada);
     }
 
+    // HU #13386 AC6: el cancelado salió de este caso (ahora es 410, ConsultaLoteCanceladoTests); el fallido sigue en 404.
     [Theory]
     [InlineData(ConsolidadoExportStatus.Fallido)]
-    [InlineData(ConsolidadoExportStatus.Cancelado)]
-    public async Task AC4_LoteFallidoOCancelado_NoEncontrada_NuncaDescargable(string estado)
+    public async Task AC4_LoteFallido_NoEncontrada_NuncaDescargable(string estado)
     {
         var lote = Preparar(estado);
 

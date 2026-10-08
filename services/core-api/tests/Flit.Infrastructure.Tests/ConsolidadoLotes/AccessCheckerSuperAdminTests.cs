@@ -5,6 +5,7 @@ using Flit.Infrastructure.Security;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
+using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -78,7 +79,16 @@ public sealed class AccessCheckerSuperAdminTests : IDisposable
     private ProcesarItemLoteHandler Handler(FlitDbContext db) => new(
         new LoteItemOrigenPorOrigen([new SuperAdminLoteItemOrigen(new ConsolidadoLoteAccessChecker(db, _cache), _entregador)]),
         _proceso,
-        NullLogger<ProcesarItemLoteHandler>.Instance);
+        NullLogger<ProcesarItemLoteHandler>.Instance,
+        LoteActivo());
+
+    /// <summary>HU #13386 — el checkpoint previo al entregador ve el lote activo.</summary>
+    private static IConsolidadoLoteRepository LoteActivo()
+    {
+        var lotes = Substitute.For<IConsolidadoLoteRepository>();
+        lotes.GetStatusAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(ConsolidadoExportStatus.EnProceso);
+        return lotes;
+    }
 
     private static ProcedureInstance Tramite(Guid compania) => new()
     {

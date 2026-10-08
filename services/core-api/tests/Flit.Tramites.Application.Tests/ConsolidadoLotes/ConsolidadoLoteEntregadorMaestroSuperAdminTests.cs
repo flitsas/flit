@@ -59,6 +59,7 @@ public sealed class ConsolidadoLoteEntregadorMaestroSuperAdminTests
             new LoteItemOrigenPorOrigen([new SuperAdminLoteItemOrigen(_acceso, _entregador)]),
             _proceso,
             NullLogger<ProcesarItemLoteHandler>.Instance,
+            LotesEnEstado.Con(ConsolidadoExportStatus.EnProceso),
             new RelojFijo(Ahora));
     }
 

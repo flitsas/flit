@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
+using Flit.Tramites.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
@@ -37,6 +38,12 @@ public enum ProcesarItemLoteDesenlace
 
     /// <summary>Error técnico con intentos disponibles: el ítem vuelve a <c>pendiente</c> con <c>next_attempt_at</c>.</summary>
     Reprogramado,
+
+    /// <summary>
+    /// HU #13386 — el lote ya no está activo (cancelado, terminal o borrado) en el checkpoint previo al entregador: no se
+    /// entrega ni se genera nada y no se escribe el ítem (la cancelación ya lo dejó <c>cancelado</c>).
+    /// </summary>
+    LoteDetenido,
 }
 
 /// <summary>Resultado de <see cref="ProcesarItemLoteHandler.HandleAsync"/>.</summary>
@@ -64,6 +71,10 @@ public sealed record ProcesarItemLoteResultado(
 /// <list type="number">
 ///   <item>Revalida el acceso del solicitante con el procesador de su origen (<see cref="ILoteItemOrigen"/>). Sin
 ///   acceso ⇒ <c>omitido</c> «Acceso revocado» y el entregador NO se llama.</item>
+///   <item>HU #13386 — checkpoint de cancelación justo antes del entregador
+///   (<see cref="IConsolidadoLoteRepository.GetStatusAsync"/>, sin lock): lote cancelado, terminal o borrado ⇒
+///   <see cref="ProcesarItemLoteDesenlace.LoteDetenido"/> sin entregar, generar ni escribir. Un ítem que ya estaba
+///   generando termina; su cierre condicionado actualiza 0 filas y se registra un aviso sin PII.</item>
 ///   <item>Entrega con el entregador del origen («existente o primera generación», #13371). Un reintento tras una
 ///   generación ya persistida toma ese consolidado como existente (<c>soloSiNoExiste</c>).</item>
 ///   <item>Incluido ⇒ snapshot + modo de entrega; omisión de negocio ⇒ texto de <see cref="ConsolidadoErrorTextos"/>;
@@ -85,6 +96,7 @@ public sealed partial class ProcesarItemLoteHandler(
     LoteItemOrigenPorOrigen origenes,
     IConsolidadoLoteItemProceso proceso,
     ILogger<ProcesarItemLoteHandler> logger,
+    IConsolidadoLoteRepository lotes,
     TimeProvider? timeProvider = null)
 {
     /// <summary>Causa registrada cuando la revalidación del acceso lanzó una excepción.</summary>
@@ -94,6 +106,7 @@ public sealed partial class ProcesarItemLoteHandler(
     public const string CausaResultadoInvalido = "resultado_entrega_invalido";
 
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+    private readonly IConsolidadoLoteRepository _lotes = lotes;
 
     public async Task<ProcesarItemLoteResultado> HandleAsync(ProcesarItemLoteCommand command, CancellationToken ct = default)
     {
@@ -114,6 +127,14 @@ public sealed partial class ProcesarItemLoteHandler(
 
         if (!tieneAcceso)
             return await OmitirAsync(command, ConsolidadoLoteOmisiones.AccesoRevocado, command.Item.Attempts, ct).ConfigureAwait(false);
+
+        // HU #13386 AC1 — checkpoint previo al entregador: un ítem reclamado justo antes de cancelar no entrega ni genera.
+        var estadoLote = await _lotes.GetStatusAsync(command.Lote.Id, ct).ConfigureAwait(false);
+        if (ConsolidadoLoteCheckpoint.Detenido(estadoLote))
+        {
+            LogLoteDetenido(logger, contexto.BatchId, contexto.ItemId, estadoLote ?? "inexistente");
+            return new ProcesarItemLoteResultado(ProcesarItemLoteDesenlace.LoteDetenido, false, command.Item.Attempts);
+        }
 
         LoteItemEntregaResult entrega;
         try
@@ -153,6 +174,7 @@ public sealed partial class ProcesarItemLoteHandler(
             .MarcarIncluidoAsync(new LoteItemIncluido(command.Lote.Id, item.Id, adjunto, modo, _clock.GetUtcNow()), ct)
             .ConfigureAwait(false);
         LogIncluido(logger, command.Lote.Id, item.Id, modo, aplicado);
+        AvisarSiSinEfecto(command, ProcesarItemLoteDesenlace.Incluido, aplicado);
         return new ProcesarItemLoteResultado(ProcesarItemLoteDesenlace.Incluido, aplicado, item.Attempts, DeliveryMode: modo);
     }
 
@@ -165,6 +187,7 @@ public sealed partial class ProcesarItemLoteHandler(
             .MarcarOmitidoAsync(new LoteItemOmitido(command.Lote.Id, item.Id, codigo, motivo, intentos, _clock.GetUtcNow()), ct)
             .ConfigureAwait(false);
         LogOmitido(logger, command.Lote.Id, item.Id, codigo, aplicado);
+        AvisarSiSinEfecto(command, ProcesarItemLoteDesenlace.Omitido, aplicado);
         return new ProcesarItemLoteResultado(ProcesarItemLoteDesenlace.Omitido, aplicado, intentos, codigo, motivo);
     }
 
@@ -182,9 +205,29 @@ public sealed partial class ProcesarItemLoteHandler(
         var aplicado = await proceso
             .ReprogramarAsync(new LoteItemReintento(command.Lote.Id, item.Id, intentos, siguiente), ct)
             .ConfigureAwait(false);
+        AvisarSiSinEfecto(command, ProcesarItemLoteDesenlace.Reprogramado, aplicado);
         return new ProcesarItemLoteResultado(
             ProcesarItemLoteDesenlace.Reprogramado, aplicado, intentos, SiguienteIntentoEn: siguiente);
     }
+
+    /// <summary>
+    /// HU #13386 AC2 — el cierre condicionado (<c>status = 'procesando'</c> y reserva vigente) no escribió: el lote se
+    /// canceló mientras se generaba (o la reserva venció). El consolidado ya persistido en el trámite queda oficial; el
+    /// ítem no suma contadores ni entra a ninguna parte. Solo ids y desenlace: nunca placa, radicado ni documento.
+    /// </summary>
+    private void AvisarSiSinEfecto(ProcesarItemLoteCommand command, ProcesarItemLoteDesenlace desenlace, bool aplicado)
+    {
+        if (!aplicado)
+            LogCierreSinEfecto(logger, command.Lote.Id, command.Item.Id, desenlace);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Lote {BatchId}: ítem {ItemId} no se entrega; el lote ya no está activo ({EstadoLote}).")]
+    private static partial void LogLoteDetenido(ILogger logger, Guid batchId, Guid itemId, string estadoLote);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Lote {BatchId}: el cierre del ítem {ItemId} ({Desenlace}) actualizó 0 filas; ya no estaba en procesando (lote cancelado o reserva vencida): no suben contadores ni entra a ninguna parte.")]
+    private static partial void LogCierreSinEfecto(ILogger logger, Guid batchId, Guid itemId, ProcesarItemLoteDesenlace desenlace);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Lote {BatchId}: ítem {ItemId} incluido ({DeliveryMode}); aplicado={Aplicado}.")]
