@@ -395,9 +395,10 @@ public static partial class FurOverlayRenderer
     {
         try
         {
-            // HU #13371 — XImage.FromStream decodifica con ImageSharp y autodetección: solo PNG/JPEG.
-            PngJpegImageDecoding.EnsureAllowed(imageBytes);
-            using var ms = new MemoryStream(FlattenAlphaOntoWhite(imageBytes));
+            // HU #13371 — XImage.FromStream decodifica con ImageSharp y autodetección: nunca recibe los
+            // bytes del usuario, sino un PNG recodificado (solo PNG/JPEG, con tope de píxeles, sin ICC ni
+            // metadatos).
+            using var ms = new MemoryStream(FlattenAlphaOntoWhite(PngJpegImageDecoding.RequireCleanPng(imageBytes)));
             using var img = XImage.FromStream(() => ms);
             return FurSignatureLayout.Fit(img.PixelWidth, img.PixelHeight, maxW, maxH);
         }
@@ -409,9 +410,9 @@ public static partial class FurOverlayRenderer
 
     private static void DrawImage(XGraphics gfx, double x, double y, double w, double h, byte[] imageBytes)
     {
-        // HU #13371 — un formato distinto de PNG/JPEG lanza igual que una imagen ilegible.
-        PngJpegImageDecoding.EnsureAllowed(imageBytes);
-        var payload = FlattenAlphaOntoWhite(imageBytes);
+        // HU #13371 — un formato distinto de PNG/JPEG o fuera del tope de píxeles lanza igual que una
+        // imagen ilegible; XImage recibe el PNG recodificado, no los bytes originales.
+        var payload = FlattenAlphaOntoWhite(PngJpegImageDecoding.RequireCleanPng(imageBytes));
         using var ms = new MemoryStream(payload);
         using var img = XImage.FromStream(() => ms);
         img.Interpolate = true;
