@@ -12065,7 +12065,13 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/ParametrosMotorLoteValidationProblem" }
-        "401": { description: No autenticado. }
+        "401":
+          description: >
+            Sin token o token inválido (sin cuerpo). Si el token es válido pero no identifica al usuario (sin `sub` ni
+            `NameIdentifier`), ProblemDetails `usuario_no_identificado` y no se escribe nada (nunca `updated_by` nulo).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ParametrosMotorLoteProblem" }
         "403": { description: Sin el rol SuperAdmin activo. }
         "404":
           description: No existe la fila de parámetros (`parametros_no_encontrados`).
@@ -12723,7 +12729,7 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
-        error: { type: string, enum: [parametros_no_encontrados, row_version_conflict] }
+        error: { type: string, enum: [parametros_no_encontrados, row_version_conflict, usuario_no_identificado] }
     ParametrosMotorLoteValidationProblem:
       type: object
       description: ValidationProblem (400) con `errors` por campo del cuerpo.

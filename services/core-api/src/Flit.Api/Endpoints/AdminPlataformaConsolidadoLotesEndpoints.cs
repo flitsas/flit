@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Tramites;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,7 +16,8 @@ namespace Flit.Api.Endpoints;
 ///   DDL 133; 404 <c>parametros_no_encontrados</c> si la fila no existe (no se inventan valores: sin fila el alta ya
 ///   responde 503 <c>motor_inactivo</c>).</item>
 ///   <item><c>PUT</c> ⇒ 200 con la fila releída; 400 ValidationProblem <c>parametros_invalidos</c> con <c>errors</c>
-///   por campo (camelCase); 409 <c>row_version_conflict</c>; 404 como el GET.</item>
+///   por campo (camelCase); 409 <c>row_version_conflict</c>; 404 como el GET; 401 <c>usuario_no_identificado</c> si el
+///   token no trae un usuario (<c>sub</c> / <c>NameIdentifier</c>), sin escribir (nunca <c>updated_by = NULL</c>).</item>
 /// </list>
 /// Errores en ProblemDetails con el código estable en <c>error</c> (como <c>ConsolidadoLoteEndpoints.Problema</c>).
 /// </summary>
@@ -31,6 +33,9 @@ public static class AdminPlataformaConsolidadoLotesEndpoints
 
     /// <summary>409: la fila cambió después de leerla (otro Super Admin guardó antes).</summary>
     public const string RowVersionConflict = "row_version_conflict";
+
+    /// <summary>401: el token no identifica al usuario (sin <c>sub</c> ni <c>NameIdentifier</c>); no se escribe nada.</summary>
+    public const string UsuarioNoIdentificado = "usuario_no_identificado";
 
     public static IEndpointRouteBuilder MapAdminPlataformaConsolidadoLotesEndpoints(this IEndpointRouteBuilder app)
     {
@@ -54,7 +59,7 @@ public static class AdminPlataformaConsolidadoLotesEndpoints
             .WithSummary("Actualiza los parámetros del motor (concurrencia optimista por rowVersion)")
             .Produces<ParametrosMotorLoteDto>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
-            .Produces(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
@@ -76,6 +81,14 @@ public static class AdminPlataformaConsolidadoLotesEndpoints
         [FromServices] ActualizarParametrosMotorLoteHandler handler,
         CancellationToken ct)
     {
+        // Code review Obs6 — sin usuario en el token no se guarda updated_by = NULL: 401 antes de validar o escribir.
+        if (ConsolidadoLoteEndpoints.UsuarioDelToken(user) is not { } usuarioId)
+            return Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: UsuarioNoIdentificado,
+                detail: "El token no identifica al usuario; vuelve a iniciar sesión.",
+                extensions: new Dictionary<string, object?> { ["error"] = UsuarioNoIdentificado });
+
         if (request is null)
             return Invalidos(new Dictionary<string, string[]> { ["body"] = ["El cuerpo es obligatorio."] });
 
@@ -84,7 +97,7 @@ public static class AdminPlataformaConsolidadoLotesEndpoints
                 request.MaxItemsPerBatch, request.MaxPdfsPerPart, request.MaxMbPerPart, request.ItemSlots,
                 request.ItemTimeoutSeconds, request.ItemLeaseSeconds, request.MaxItemAttempts, request.RetryDelaySeconds,
                 request.PartTimeoutSeconds, request.PartLeaseSeconds, request.MaxPartAttempts, request.RetentionHours,
-                request.IsActive, request.RowVersion, ResolveUserId(user)),
+                request.IsActive, request.RowVersion, usuarioId),
             ct).ConfigureAwait(false);
 
         return r.Estado switch
@@ -113,13 +126,6 @@ public static class AdminPlataformaConsolidadoLotesEndpoints
             title: ParametrosNoEncontrados,
             detail: "No existe la fila de parámetros del motor de descarga masiva.",
             extensions: new Dictionary<string, object?> { ["error"] = ParametrosNoEncontrados });
-
-    private static Guid? ResolveUserId(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirst("sub")?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var id) ? id : null;
-    }
 }
 
 /// <summary>

@@ -85,7 +85,7 @@ SELECT uuidv7()
  WHERE NOT EXISTS (SELECT 1 FROM tramites.consolidado_export_settings);
 
 COMMENT ON TABLE tramites.consolidado_export_settings IS
-    'HU #13367 (Feature #13306, ADR-0070) — parámetros del motor de lotes de descarga masiva de consolidados. Fila única (uq_consolidado_export_settings_singleton). GLOBAL DE PLATAFORMA: sin tenant_id y, en consecuencia, sin RLS (como admin.notification_test_settings). Configurable sin UI; histórico en audit.audit_logs.';
+    'HU #13367 (Feature #13306, ADR-0070) — parámetros del motor de lotes de descarga masiva de consolidados. Fila única (uq_consolidado_export_settings_singleton). GLOBAL DE PLATAFORMA: sin tenant_id y, en consecuencia, sin RLS (como admin.notification_test_settings). Editable por el Super Admin (HU #13420); histórico en audit.audit_logs.';
 COMMENT ON COLUMN tramites.consolidado_export_settings.max_pdfs_per_part IS 'N: PDF por parte ZIP. Recalibrar con la medición P-1 (N ≈ M / p50).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.max_mb_per_part IS 'M: MB de PDF en claro por parte. Lo limita la descarga como blob en el navegador.';
 COMMENT ON COLUMN tramites.consolidado_export_settings.item_slots IS 'Ítems concurrentes del motor por instancia = tope de generaciones de PDF del lote (v2, antes k_total).';
