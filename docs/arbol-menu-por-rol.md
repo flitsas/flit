@@ -120,7 +120,7 @@ FAB Inicio FLIT (Dashboard)
 │   │   ├── Mandatos                  → /admin/plataforma/mandatos
 │   │   ├── FUR                       → /admin/plataforma/fur
 │   │   ├── Notificaciones            → /admin/plataforma/notificaciones
-│   │   └── Banners                   → /admin/banners  (permiso banners.manage; bypass SA)
+│   │   └── Banners                   → /admin/banners  (solo SuperAdmin — HU #13439)
 │   └── Generación documental         → /admin/generacion-documental  (módulo accesible, no rol)
 ├── Integraciones ▾ (si aplica)
 │   ├── Log QX                        → ?m=log-qx  (logqx.read; bypass SA)
@@ -211,11 +211,10 @@ FAB Inicio FLIT (Dashboard)
 ├── Administradores ▾ (o píldora directa si es el único ítem)
 │   ├── Administración                → /admin/companies  (redirige a su tenant — HU #11228)
 │   ├── Red de clientes               → /admin/companies/{id}/children  (solo cabeza de grupo: CONCESION | MARCA_BLANCA — HU #12356)
-│   ├── Generación documental         → /admin/generacion-documental  (solo con módulo generacion-documental.read)
-│   └── Plataforma ▾ → Banners        → /admin/banners  (solo con permiso banners.manage)
+│   └── Generación documental         → /admin/generacion-documental  (solo con módulo generacion-documental.read)
 ```
 
-**No ve:** Compañías (listado global), Documental plataforma, Improntas, Quipux, Procesos periódicos, Tránsito, RBAC Admin, Auditoría global, Tipos de trámites/Mandatos/FUR/Notificaciones.
+**No ve:** Compañías (listado global), Documental plataforma, Improntas, Quipux, Procesos periódicos, Tránsito, RBAC Admin, Auditoría global, Tipos de trámites/Mandatos/FUR/Notificaciones/Banners (solo SuperAdmin — HU #13439).
 
 **Alcance de red (HU #12363/#12652):** solo el AdminCompany de una cabeza de grupo ve el selector «Alcance» (Mi compañía · Toda la red · cliente) en Trámites y Reportes; un Radicador/Operador de la cabeza ve solo su compañía. La cabeza Marca Blanca además configura marca (HU #12414) y dominio (HU #12427) desde su ficha.
 
@@ -343,7 +342,7 @@ Dentro del wizard, `tramites.create` es lo que habilita `/tramites/nuevo/{modali
 | Red de clientes | vía ficha | solo cabeza | ❌ | ❌ |
 | Generación documental | ✅ | por módulo | ❌ | por módulo |
 | Administración OT → Mandatos / Validar impronta / Configuración | vía tabs | ❌ | ✅ | ❌ |
-| Procesos periódicos · Plataforma (Tipos, Mandatos, FUR, Notificaciones, Confirmación RUNT, Banners) | ✅ | Banners por permiso | ❌ | ❌ |
+| Procesos periódicos · Plataforma (Tipos, Mandatos, FUR, Notificaciones, Confirmación RUNT, Banners) | ✅ | ❌ | ❌ | ❌ |
 | Administración OT ▾ (Reglas/Docs/Requisitos) | vía tabs | ❌ | ✅ | ❌ |
 | Preasignación (dock) | vía tabs | ❌ | ✅ | ❌ |
 | Integraciones ▾ (Log QX / Log ICT) | permiso o bypass | permiso | permiso | permiso |
