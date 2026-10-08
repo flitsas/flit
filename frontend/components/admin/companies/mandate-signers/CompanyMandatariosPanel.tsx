@@ -6,7 +6,8 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
-import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
+import { RowActions } from "@/components/atom/RowActions";
+import { SearchInput } from "@/components/atom/SearchInput";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -222,6 +223,20 @@ export function CompanyMandatariosPanel({
       ? organismosSinMedioDeFirma(signer.transitOfficeIds ?? [], signer)
       : [];
 
+  // Búsqueda en cliente por nombre o documento (sin puntos ni espacios); la paginación va DESPUÉS.
+  const [search, setSearch] = useState("");
+  const normaliza = (v: string) => v.toLowerCase().replace(/[\s.\-]/g, "");
+  const filtrados = useMemo(() => {
+    const q = normaliza(search.trim());
+    if (!q) return signers;
+    return signers.filter(
+      (x) => normaliza(x.fullName).includes(q) || normaliza(x.documentNumber ?? "").includes(q),
+    );
+  }, [signers, search]);
+  const sinValidar = signers.filter(
+    (x) => x.isActive && requiereValidacionPropia(x) && x.identityStatus !== "valid",
+  ).length;
+
   const sinOrganismos = offices.length === 0;
   const conFormato = offices.some((o) => o.formatName);
 
@@ -289,6 +304,29 @@ export function CompanyMandatariosPanel({
         onRetry={() => void load()}
         skeletonRows={4}
       >
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              pg.setPage(1);
+            }}
+            label="Buscar mandatarios"
+            placeholder="Buscar por nombre o documento…"
+            className="max-w-md flex-1"
+          />
+          <p className="text-xs text-[#59677D] dark:text-white/70" data-testid="mandatarios-resumen">
+            {signers.length} {signers.length === 1 ? "mandatario" : "mandatarios"}
+            {sinValidar > 0 ? ` · ${sinValidar} sin validación aprobada` : ""}
+          </p>
+        </div>
+
+        {filtrados.length === 0 ? (
+          <p className="py-10 text-center text-sm opacity-60" role="status">
+            Ningún mandatario coincide con la búsqueda.
+          </p>
+        ) : (
+        <>
         <div className="overflow-x-auto">
           <table
             className="text-xs"
@@ -349,7 +387,7 @@ export function CompanyMandatariosPanel({
               </tr>
             </thead>
             <tbody>
-              {pg.paginar(signers).map((signer) => {
+              {pg.paginar(filtrados).map((signer) => {
                 // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
                 const candado = tieneCandadoDelOrganismo(signer);
                 const puedeEditar = canCreate && puedeEditarMandatario(signer);
@@ -393,9 +431,7 @@ export function CompanyMandatariosPanel({
                     />
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActionsMenu
-                      ariaLabel={`Acciones de ${signer.fullName}`}
-                      subject={signer.fullName}
+                    <RowActions
                       actions={!puedeEditar ? [] : [
                         {
                           icon: Pencil,
@@ -454,11 +490,13 @@ export function CompanyMandatariosPanel({
         <Pagination
           page={pg.page}
           pageSize={pg.pageSize}
-          totalCount={signers.length}
+          totalCount={filtrados.length}
           onPageChange={pg.setPage}
           onPageSizeChange={pg.setPageSize}
           noun="mandatarios"
         />
+        </>
+        )}
       </UiStateBoundary>
       )}
 

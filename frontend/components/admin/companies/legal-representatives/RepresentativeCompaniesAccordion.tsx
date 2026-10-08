@@ -211,7 +211,7 @@ export function RepresentativeCompaniesAccordion({
   return (
     <>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+        <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">
           Empresas representadas (opcional)
         </h3>
         {mode !== "view" && (
@@ -227,7 +227,7 @@ export function RepresentativeCompaniesAccordion({
       </div>
 
       {mode !== "view" && (
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-60">
           Puedes registrar la persona sin empresas y asociar NITs después. La escritura de cada
           compañía también es opcional.
         </p>
@@ -235,7 +235,7 @@ export function RepresentativeCompaniesAccordion({
 
       {count === 0 ? (
         <p
-          className="rounded-xl border border-dashed px-3 py-6 text-center text-[11px] opacity-60"
+          className="rounded-xl border border-dashed px-3 py-6 text-center text-xs opacity-60"
           style={{ borderColor: RL_COLOR.border }}
           data-testid="rl-companies-empty"
         >
@@ -305,7 +305,7 @@ export function RepresentativeCompaniesAccordion({
                       )}
                       {vigentesCount > 0 && (
                         <span
-                          className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
                           style={{ background: RL_COLOR.successBg, color: RL_COLOR.successText }}
                         >
                           {vigentesCount} escritura{vigentesCount !== 1 ? "s" : ""} vigente
@@ -314,7 +314,7 @@ export function RepresentativeCompaniesAccordion({
                       )}
                     </div>
                     {mode === "view" && (
-                      <span className="font-mono text-[11px] opacity-60">{displayNit}</span>
+                      <span className="font-mono text-xs opacity-60">{displayNit}</span>
                     )}
                   </div>
                   {mode !== "view" && (
@@ -515,10 +515,10 @@ function DeedBlock({
   return (
     <section aria-label="Escrituras de la compañía">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-[11px] font-bold uppercase tracking-wide opacity-60">Escrituras</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wide opacity-60">Escrituras</h4>
         {disabled ? (
           <span
-            className="rounded-lg border px-2.5 py-1 text-[11px] opacity-50"
+            className="rounded-lg border px-2.5 py-1 text-xs opacity-50"
             style={{ borderColor: RL_COLOR.border }}
           >
             Disponible al guardar
@@ -541,11 +541,11 @@ function DeedBlock({
       </div>
 
       {disabled ? (
-        <p className="text-[11px] opacity-50">
+        <p className="text-xs opacity-50">
           Las escrituras estarán disponibles después de guardar el representante.
         </p>
       ) : deeds.length === 0 ? (
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-60">
           Sin escritura. Al asociar, la empresa se guarda automáticamente si aún no lo está.
         </p>
       ) : (
@@ -565,7 +565,7 @@ function DeedBlock({
                     label={deedEstadoLabel(deed.estado)}
                   />
                 </div>
-                <p className="mt-0.5 font-mono text-[10px] opacity-60">
+                <p className="mt-0.5 font-mono text-xs opacity-60">
                   {formatFechaCalendario(deed.vigenciaDesde)} – {formatFechaCalendario(deed.vigenciaHasta)}
                 </p>
               </div>
@@ -626,7 +626,7 @@ function AccordionField({
       </label>
       {children}
       {error && (
-        <p className="mt-1 text-[11px] font-medium" style={{ color: RL_COLOR.danger }} role="alert">
+        <p className="mt-1 text-xs font-medium" style={{ color: RL_COLOR.danger }} role="alert">
           {error}
         </p>
       )}
@@ -637,7 +637,7 @@ function AccordionField({
 function ContactField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[10px] font-semibold uppercase opacity-50">{label}</dt>
+      <dt className="text-xs font-semibold uppercase opacity-50">{label}</dt>
       <dd className="text-xs">{value}</dd>
     </div>
   );

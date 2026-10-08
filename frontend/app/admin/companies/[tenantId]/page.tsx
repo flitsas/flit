@@ -269,6 +269,7 @@ function CompanyDetail() {
                 settings={settings}
                 company={company}
                 restrictedToRepresentatives={restrictedToRepresentatives}
+                canConfigureImprontas={isSuperAdmin}
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 otSlot={
@@ -407,5 +408,6 @@ function defaultSettings(tenantId: string): TenantSettings {
       extraEmail: null,
     },
     metodosRecaudo: [],
+    generacionImprontas: true,
   };
 }

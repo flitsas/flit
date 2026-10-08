@@ -177,7 +177,7 @@ export function LinkCompanyDialog({
                     >
                       <span className="font-semibold">{c.razonSocial}</span>
                       <span className="font-mono opacity-70">{c.nit}</span>
-                      <span className="text-[10px] opacity-50">
+                      <span className="text-xs opacity-50">
                         {tenantTypeLabel(c.tenantType)} · {c.code}
                       </span>
                     </button>
@@ -190,7 +190,7 @@ export function LinkCompanyDialog({
       )}
 
       {error && (
-        <p className="mt-2 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="mt-2 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
           {error}
         </p>
       )}

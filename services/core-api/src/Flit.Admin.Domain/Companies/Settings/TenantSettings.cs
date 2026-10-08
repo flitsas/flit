@@ -149,6 +149,13 @@ public sealed class TenantSettings
     public bool ResolucionesModuleEnabled { get; init; }
 
     /// <summary>
+    /// Generación automática de improntas habilitada (<c>generate_improntas</c>, HU #13400,
+    /// Feature #13398). Nace ENCENDIDA (default true): es el comportamiento histórico. Solo la
+    /// consulta y modifica el SuperAdmin FLIT (los endpoints de settings son SuperAdmin-only).
+    /// </summary>
+    public bool GenerateImprontas { get; init; } = true;
+
+    /// <summary>
     /// Configuración por defecto cuando aún no existe fila para el tenant. La matrícula
     /// inicial nace APAGADA (default false): la compañía debe habilitarla explícitamente.
     /// </summary>
@@ -179,5 +186,6 @@ public sealed class TenantSettings
         TramitesModuleEnabled = true,
         ComparendosModuleEnabled = false,
         ResolucionesModuleEnabled = false,
+        GenerateImprontas = true,
     };
 }

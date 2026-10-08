@@ -36,6 +36,9 @@ public sealed class GenerarImprontaAttachmentHandler(
     IImprontaExternalClient externalClient,
     UploadAttachmentHandler uploadHandler)
 {
+    /// <summary>HU #13402 — código de error cuando el trámite nació con la generación de improntas deshabilitada.</summary>
+    public const string ImprontaGeneracionDeshabilitada = "generacion_improntas_deshabilitada";
+
     public async Task<(GenerarImprontaAttachmentResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -49,6 +52,10 @@ public sealed class GenerarImprontaAttachmentHandler(
             return (null, "not_draft");
         if (instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase)))
             return (null, "impronta_ya_existe");
+        // HU #13402 — parámetro de la compañía congelado al crear el trámite: con la generación
+        // deshabilitada no se llama a Kyverum ni se crea adjunto; la impronta se sube a mano.
+        if (!instance.ImprontaGeneracionHabilitada)
+            return (null, ImprontaGeneracionDeshabilitada);
 
         var fv = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);

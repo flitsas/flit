@@ -305,6 +305,8 @@ export function FirmaFurStep({
     /** ADR-0059 — origen del último rechazo para el chip del resumen. */
     rejectedFrom: string | null;
     statusHistory: StatusHistory[];
+    /** HU #13403 — false ⇒ la impronta no se genera automáticamente (carga manual). */
+    improntaGeneracionHabilitada: boolean;
   } | null>(null);
   /** Contacto completo (teléfono/dirección/ciudad) desde GET actors — el detalle de instancia no lo trae. */
   const [actorsContact, setActorsContact] = useState<ProcedureActor[]>([]);
@@ -360,6 +362,7 @@ export function FirmaFurStep({
         status: d.status,
         rejectedFrom: d.rejectedFrom ?? null,
         statusHistory: d.statusHistory ?? [],
+        improntaGeneracionHabilitada: d.improntaGeneracionHabilitada !== false,
       });
       setActorsContact(actors);
       // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY de 0-2 (una por familia). El resumen
@@ -616,6 +619,8 @@ export function FirmaFurStep({
 
   /** Estado del trámite como PRIMITIVO: `detail` es un objeto nuevo en cada recarga (ver arriba). */
   const estadoDetalle = detail?.status;
+  /** HU #13403 — primitivo por la misma razón que `estadoDetalle`. */
+  const improntaAutomatica = detail?.improntaGeneracionHabilitada !== false;
 
   // Feature #11066 — al entrar al paso FUR (con organismo y en borrador/subsanación) pre-genera
   // el paquete + impronta. Preparar/Guardar NO esperan a que termine; Radicar sí exige consolidado.
@@ -645,7 +650,8 @@ export function FirmaFurStep({
         // si aún no (matrícula), las casillas quedan vacías. Un FUR previo sin placa no se conserva.
         await tramitesClient.generarFur(instanceId);
 
-        if (!hasImpronta) {
+        // HU #13403 — con la generación deshabilitada la impronta se carga a mano en el checklist.
+        if (!hasImpronta && improntaAutomatica) {
           try {
             await tramitesClient.generarImpronta(instanceId);
           } catch {
@@ -663,7 +669,7 @@ export function FirmaFurStep({
         setPaqueteStatus('error');
       }
     })();
-  }, [instanceId, readOnly, organismoSelected, estadoDetalle, loadExpediente]);
+  }, [instanceId, readOnly, organismoSelected, estadoDetalle, improntaAutomatica, loadExpediente]);
 
   // Transformaciones de vehículo declaradas (`VehicleTransformationsCard`, paso de Requisitos): la
   // reutiliza «Expediente consolidado» como su cuarta casilla de confirmación dinámica — «trámites

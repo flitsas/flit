@@ -60,7 +60,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
 
           <ScopeBadge scope={o.scope} />
           <span
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-white"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
             style={{ background: "#557EFF" }}
             aria-label={`Orden ${o.orden}`}
           >

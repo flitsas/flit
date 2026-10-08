@@ -47,7 +47,7 @@ export function DocumentInUseDialog({
                 className="flex items-center justify-between rounded-xl border px-3 py-2"
               >
                 <span className="text-xs font-semibold">{p.nombre}</span>
-                <span className="font-mono text-[10px] opacity-60">{p.codigo}</span>
+                <span className="font-mono text-xs opacity-60">{p.codigo}</span>
               </li>
             ))}
           </ul>

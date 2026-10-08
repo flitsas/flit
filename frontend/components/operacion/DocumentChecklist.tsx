@@ -31,7 +31,16 @@ import type {
 export type DocumentUploadMode = 'individual' | 'batch';
 
 /** Mensaje del POST generate-impronta del trámite (ProblemDetails.detail). */
+export const IMPRONTA_MANUAL_TEXTO = 'Cargue la impronta; no se genera automáticamente.';
+
+/** HU #13403 — 409 `generacion_improntas_deshabilitada` (extensions.error en el ProblemDetails). */
+export function esGeneracionImprontasDeshabilitada(error: unknown): boolean {
+  const problem = (error as { problem?: Record<string, unknown> | null } | null)?.problem;
+  return problem?.error === 'generacion_improntas_deshabilitada';
+}
+
 export function describeGenerarImprontaEnTramite(error: unknown): string {
+  if (esGeneracionImprontasDeshabilitada(error)) return IMPRONTA_MANUAL_TEXTO;
   if (error instanceof Error && error.message.trim()) return error.message;
   return 'No se pudo generar la impronta. Verifica placa u organismo e intenta de nuevo.';
 }
@@ -64,6 +73,11 @@ interface Props {
    * obligatorio. Por defecto sí: solo `improntaSource === 'MANUAL'` la apaga.
    */
   permiteGenerarImprontaAutomatica?: boolean;
+  /**
+   * HU #13403 — false ⇒ la compañía tiene deshabilitada la generación de improntas: no se ofrece
+   * generar y se muestra la carga manual con un texto corto. Ausente/true ⇒ comportamiento histórico.
+   */
+  improntaGeneracionHabilitada?: boolean;
 }
 
 /**
@@ -709,6 +723,7 @@ export function DocumentSlot({
   onGenerateImpronta,
   onPreview,
   permiteGenerarImprontaAutomatica = true,
+  improntaGeneracionHabilitada = true,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
@@ -724,6 +739,8 @@ export function DocumentSlot({
   onPreview?: (attachment: ProcedureAttachment) => void;
   /** Si false, no se ofrece generar (tipo parametrizado en MANUAL). */
   permiteGenerarImprontaAutomatica?: boolean;
+  /** HU #13403 — false ⇒ carga manual de la impronta (sin generación automática). */
+  improntaGeneracionHabilitada?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -743,8 +760,10 @@ export function DocumentSlot({
     allowedMimes: item.mimeTypesAllowed,
     maxSizeBytes: item.maxSizeBytes,
   });
+  const improntaSoloManual = isImpronta && !improntaGeneracionHabilitada;
   const canGenerate =
     isImpronta &&
+    improntaGeneracionHabilitada &&
     permiteGenerarImprontaAutomatica &&
     !!onGenerateImpronta &&
     !attachment &&
@@ -841,6 +860,15 @@ export function DocumentSlot({
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
           <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
           <span className="opacity-70">{instruccion}</span>
+        </p>
+      )}
+      {improntaSoloManual && !readOnly && !attachment && !isAuto && (
+        <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
+          <span className="opacity-70">
+            {IMPRONTA_MANUAL_TEXTO}
+            {item.obligatorio ? ' Debe cargarla para radicar.' : ''}
+          </span>
         </p>
       )}
       <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
@@ -983,6 +1011,7 @@ export function DocumentChecklist({
   onUploadModeChange,
   hideModeToggle = false,
   permiteGenerarImprontaAutomatica = true,
+  improntaGeneracionHabilitada = true,
 }: Props) {
   const { state, refresh, upload, remove, clearError } = useProcedureDocuments(instanceId);
   const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
@@ -1291,7 +1320,7 @@ export function DocumentChecklist({
                   })
                 }
                 onGenerateImpronta={
-                  instanceId && permiteGenerarImprontaAutomatica
+                  instanceId && permiteGenerarImprontaAutomatica && improntaGeneracionHabilitada
                     ? async () => {
                         await tramitesClient.generarImpronta(instanceId);
                         await refresh();
@@ -1300,6 +1329,7 @@ export function DocumentChecklist({
                     : undefined
                 }
                 permiteGenerarImprontaAutomatica={permiteGenerarImprontaAutomatica}
+                improntaGeneracionHabilitada={improntaGeneracionHabilitada}
                 onPreview={instanceId ? (att) => void handlePreview(att) : undefined}
               />
             );

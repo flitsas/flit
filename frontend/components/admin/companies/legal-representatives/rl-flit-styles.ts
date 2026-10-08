@@ -60,7 +60,7 @@ export const rlDangerCtaClass =
 export const rlDangerCtaStyle = { background: RL_GRADIENT.danger } as const;
 
 export const rlGhostBrandClass =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50";
+  "inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50";
 
 export const rlGhostBrandStyle = {
   color: RL_COLOR.brand,
@@ -68,7 +68,7 @@ export const rlGhostBrandStyle = {
 } as const;
 
 export const rlIconActionClass =
-  "inline-flex items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-60";
+  "inline-flex items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60";
 
 export const rlDangerGhostStyle = {
   color: RL_COLOR.danger,
@@ -97,4 +97,4 @@ export const rlTextDangerActionStyle = {
 } as const;
 
 export const RL_INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] border-[#DDE5F0]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 border-[#DDE5F0]";

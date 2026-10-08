@@ -297,6 +297,76 @@ public sealed class ParentSnapshotTests(PostgresDatabaseFixture fixture) : Postg
     /// preservado puede no tener ninguno habilitado: en ese caso se habilita el elegido y se restaura
     /// al final de la prueba (regla del arnés: quien muta una tabla preservada, la restaura).
     /// </summary>
+    // ── HU #13402 · el trámite congela el parámetro «generar improntas» en el mismo INSERT ──────
+
+    private sealed class ImprontasGate(bool habilitadas) : Flit.Tramites.Domain.Integration.IProcedureFamilyCreationGate
+    {
+        public Task<bool> IsFamilyBlockedAsync(Guid tenantId, string? procedureFamily, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task<bool> IsImprontaGenerationEnabledAsync(Guid tenantId, CancellationToken ct = default) =>
+            Task.FromResult(habilitadas);
+    }
+
+    [PostgresFact]
+    public async Task HU13402_El_handler_persiste_el_parametro_congelado_y_la_actualizacion_no_lo_toca()
+    {
+        var type = await SeedScenarioWithEnabledTypeAsync();
+
+        Guid deshabilitado, habilitado;
+        await using (var ctx = NewContext())
+        {
+            var request = new CreateProcedureInstanceRequest(
+                HierarchyScenario.C1, type.Id, HierarchyScenario.UserOf(HierarchyScenario.C1), TransitOfficeId: null);
+            var apagado = new CreateProcedureInstanceHandler(
+                new ProcedureInstanceRepository(ctx), new ProcedureTypeRepository(ctx), familyCreationGate: new ImprontasGate(false));
+            deshabilitado = (await apagado.HandleAsync(request)).Result!.Id;
+            var prendido = new CreateProcedureInstanceHandler(
+                new ProcedureInstanceRepository(ctx), new ProcedureTypeRepository(ctx), familyCreationGate: new ImprontasGate(true));
+            habilitado = (await prendido.HandleAsync(request)).Result!.Id;
+        }
+
+        await using (var check = NewContext())
+        {
+            (await check.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == deshabilitado))
+                .ImprontaGeneracionHabilitada.Should().BeFalse();
+            (await check.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == habilitado))
+                .ImprontaGeneracionHabilitada.Should().BeTrue();
+        }
+
+        // La ruta de escritura genérica del wizard (db.Update de la entidad desconectada) no lo reescribe.
+        await using (var ctx = NewContext())
+        {
+            var detached = await ctx.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == deshabilitado);
+            detached.Plate = "ZZZ999";
+            detached.ImprontaGeneracionHabilitada = true;
+            await new ProcedureInstanceRepository(ctx).UpdateAsync(detached, CancellationToken.None);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var final = NewContext();
+        (await final.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == deshabilitado))
+            .ImprontaGeneracionHabilitada.Should().BeFalse("el valor congelado al crear no se reescribe");
+    }
+
+    [PostgresFact]
+    public async Task HU13402_El_repositorio_administrativo_sin_lector_de_settings_deja_el_default_true()
+    {
+        var type = await SeedScenarioWithEnabledTypeAsync();
+
+        Guid id;
+        await using (var ctx = NewContext())
+        {
+            id = (await new AdminProcedureInstanceRepository(ctx).CreateWithSnapshotAsync(
+                new NewProcedureInstance(HierarchyScenario.C2, type.Id, string.Empty, null, HierarchyScenario.UserOf(HierarchyScenario.C2)),
+                "{}", null)).Id;
+        }
+
+        await using var check = NewContext();
+        (await check.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == id))
+            .ImprontaGeneracionHabilitada.Should().BeTrue();
+    }
+
     private async Task<ProcedureType> SeedScenarioWithEnabledTypeAsync()
     {
         var type = await HierarchyScenario.SeedAsync(Fixture);

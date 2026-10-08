@@ -199,7 +199,11 @@ public sealed record ProcedureInstanceDetailDto(
     // cambian. Los arma BuildDetailAsync (detalle propio y vista de red por igual); null solo si el
     // detalle se construye sin repositorio (ToDetail directo en tests antiguos).
     ConsolidadoVigenciaDto? ConsolidadoWizard = null,
-    ConsolidadoVigenciaDto? ConsolidadoMaestro = null);
+    ConsolidadoVigenciaDto? ConsolidadoMaestro = null,
+    // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite (JSON
+    // improntaGeneracionHabilitada). El wizard (HU #13403) lo usa para ofrecer o no «generar
+    // impronta». Default true = comportamiento histórico para consumidores que no lo informen.
+    bool ImprontaGeneracionHabilitada = true);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -577,7 +581,8 @@ public sealed class GetProcedureInstanceHandler(
             revocationEligibility,
             activeRevocationRequest,
             lastRevocationDecision,
-            RejectedFrom: e.RejectedFrom);
+            RejectedFrom: e.RejectedFrom,
+            ImprontaGeneracionHabilitada: e.ImprontaGeneracionHabilitada);
     }
 
     private static readonly Dictionary<Guid, string> EmptyActorMap = [];

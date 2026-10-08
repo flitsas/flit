@@ -41,11 +41,11 @@ export function SignatureVaultDetailModal({ item, onClose }: SignatureVaultDetai
         {item.storagePath && (
           <div className="sm:col-span-2">
             <dt className="font-semibold opacity-60">Referencia de almacenamiento</dt>
-            <dd className="mt-0.5 break-all font-mono text-[11px]">{item.storagePath}</dd>
+            <dd className="mt-0.5 break-all font-mono text-xs">{item.storagePath}</dd>
           </div>
         )}
       </dl>
-      <p className="mt-4 text-[11px] opacity-60">
+      <p className="mt-4 text-xs opacity-60">
         Por seguridad, el archivo de la firma no se muestra ni se descarga desde esta consola.
       </p>
       <div className="mt-5 flex justify-end">

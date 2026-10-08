@@ -172,6 +172,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.TramitesModuleEnabled = settings.TramitesModuleEnabled;
         policy.ComparendosModuleEnabled = settings.ComparendosModuleEnabled;
         policy.ResolucionesModuleEnabled = settings.ResolucionesModuleEnabled;
+        policy.GenerateImprontas = settings.GenerateImprontas;
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -201,6 +202,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         TramitesModuleEnabled = entity.TramitesModuleEnabled,
         ComparendosModuleEnabled = entity.ComparendosModuleEnabled,
         ResolucionesModuleEnabled = entity.ResolucionesModuleEnabled,
+        GenerateImprontas = entity.GenerateImprontas,
     };
 
     private static List<string> DeserializePaymentMethods(string json)

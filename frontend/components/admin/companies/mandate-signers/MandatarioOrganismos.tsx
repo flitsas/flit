@@ -93,7 +93,7 @@ export function MandatarioOrganismos({
                 >
                   <span className="font-medium text-[#162744] dark:text-white">{o.nombre}</span>
                   <span
-                    className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                    className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
                     style={{
                       background: `var(--badge-${o.bloqueado ? "warning" : "success"}-bg)`,
                       color: `var(--badge-${o.bloqueado ? "warning" : "success"}-fg)`,
