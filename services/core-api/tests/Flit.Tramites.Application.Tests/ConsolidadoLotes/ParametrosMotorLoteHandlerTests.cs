@@ -89,9 +89,9 @@ public sealed class ParametrosMotorLoteHandlerTests
         dto.UpdatedByName.Should().Be("Ana Admin");
         dto.RowVersion.Should().Be(3);
         dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("maxItemsPerBatch", 1, 32_766, null));
-        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("retryDelaySeconds", 5, null, null));
-        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("itemLeaseSeconds", null, null, "itemTimeoutSeconds"));
-        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("partLeaseSeconds", null, null, "partTimeoutSeconds"));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("retryDelaySeconds", 5, 3600, null));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("itemLeaseSeconds", null, 7200, "itemTimeoutSeconds"));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("partLeaseSeconds", null, 14_400, "partTimeoutSeconds"));
         dto.Limites.Should().HaveCount(12, "los diez rangos de una columna y las dos reglas de lease");
     }
 
@@ -267,6 +267,72 @@ public sealed class ParametrosMotorLoteHandlerTests
         r.Parametros!.IsActive.Should().BeFalse();
         await _repo.Received(1).ActualizarAsync(Arg.Is<ConsolidadoExportSettingsValores>(v => !v.IsActive),
             Arg.Any<long>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Security L1 — topes de los tiempos del motor ────────────────────────────────────
+
+    [Fact]
+    public async Task L1_Obtener_LimitesPublicanLosTopesDeTiemposYLeases()
+    {
+        _repo.ObtenerAsync(Arg.Any<CancellationToken>()).Returns(new ConsolidadoExportSettingsLeidos(Fila(), null));
+
+        var dto = await new ObtenerParametrosMotorLoteHandler(_repo).HandleAsync(Ct);
+
+        dto!.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("itemTimeoutSeconds", 1, 3600, null));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("retryDelaySeconds", 5, 3600, null));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("partTimeoutSeconds", 1, 7200, null));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("itemLeaseSeconds", null, 7200, "itemTimeoutSeconds"));
+        dto.Limites.Should().ContainEquivalentOf(new ParametroMotorLoteLimiteDto("partLeaseSeconds", null, 14_400, "partTimeoutSeconds"));
+        dto.Limites.Should().OnlyContain(l => l.Maximo != null, "ningún parámetro del motor queda sin tope");
+    }
+
+    /// <summary>Un tiempo por encima de su tope (el lease se sube a su máximo para que el único error sea el del rango).</summary>
+    [Theory]
+    [InlineData("itemTimeoutSeconds", 3601, "Debe estar entre 1 y 3600.")]
+    [InlineData("retryDelaySeconds", 3601, "Debe estar entre 5 y 3600.")]
+    [InlineData("partTimeoutSeconds", 7201, "Debe estar entre 1 y 7200.")]
+    [InlineData("retryDelaySeconds", int.MaxValue, "Debe estar entre 5 y 3600.")]
+    public async Task L1_TiempoPorEncimaDeSuTope_Invalido_ConElMensajeDelRango_YNoEscribe(string campo, int valor, string mensaje)
+    {
+        var c = Con(Valido() with { ItemLeaseSeconds = 7200, PartLeaseSeconds = 14_400 }, campo, valor);
+
+        var r = await Handler().HandleAsync(c, Ct);
+
+        r.Estado.Should().Be(ParametrosMotorLoteEstado.Invalido);
+        r.Errores.Keys.Should().Equal(campo);
+        r.Errores[campo].Should().Equal(mensaje);
+        await _repo.DidNotReceiveWithAnyArgs().ActualizarAsync(default!, default, default, default, Ct);
+    }
+
+    [Theory]
+    [InlineData("itemLeaseSeconds", 7201, "Debe ser menor o igual que 7200.")]
+    [InlineData("partLeaseSeconds", 14_401, "Debe ser menor o igual que 14400.")]
+    [InlineData("partLeaseSeconds", int.MaxValue, "Debe ser menor o igual que 14400.")]
+    public async Task L1_LeasePorEncimaDeSuTope_Invalido_EnElCampoDelLease_YNoEscribe(string campo, int valor, string mensaje)
+    {
+        var c = campo == "itemLeaseSeconds" ? Valido() with { ItemLeaseSeconds = valor } : Valido() with { PartLeaseSeconds = valor };
+
+        var r = await Handler().HandleAsync(c, Ct);
+
+        r.Estado.Should().Be(ParametrosMotorLoteEstado.Invalido);
+        r.Errores.Keys.Should().Equal(campo);
+        r.Errores[campo].Should().Equal(mensaje);
+        await _repo.DidNotReceiveWithAnyArgs().ActualizarAsync(default!, default, default, default, Ct);
+    }
+
+    [Fact]
+    public void L1_LosTopesSonInclusivos_TodosEnSuMaximo_EsValido()
+    {
+        var c = Valido() with
+        {
+            ItemTimeoutSeconds = 3600,
+            ItemLeaseSeconds = 7200,
+            RetryDelaySeconds = 3600,
+            PartTimeoutSeconds = 7200,
+            PartLeaseSeconds = 14_400,
+        };
+
+        ConsolidadoExportSettingsRangos.Validar(Valores(c)).Should().BeEmpty();
     }
 
     [Fact]

@@ -44,19 +44,22 @@ public sealed record ParametrosMotorLoteDto(
             LimitesDto);
     }
 
-    /// <summary>Rangos del DDL 133 en el formato del contrato (<c>maximo</c> null si el CHECK solo pone mínimo).</summary>
+    /// <summary>
+    /// Rangos del DDL 133 en el formato del contrato (<c>maximo</c> null si el CHECK solo pone mínimo). Los leases llevan
+    /// su tope (Security L1) y <c>mayorQue</c>, sin mínimo propio.
+    /// </summary>
     public static IReadOnlyList<ParametroMotorLoteLimiteDto> LimitesDto { get; } =
     [
         .. ConsolidadoExportSettingsRangos.Todos.Select(r =>
             new ParametroMotorLoteLimiteDto(r.Campo, r.Minimo, r.SinMaximo ? null : r.Maximo, null)),
         .. ConsolidadoExportSettingsRangos.ReglasLease.Select(r =>
-            new ParametroMotorLoteLimiteDto(r.CampoLease, null, null, r.CampoTimeout)),
+            new ParametroMotorLoteLimiteDto(r.CampoLease, null, r.Maximo, r.CampoTimeout)),
     ];
 }
 
 /// <summary>
 /// HU #13420 — límite de un campo: <see cref="Minimo"/>/<see cref="Maximo"/> inclusivos (null = sin límite propio) y
-/// <see cref="MayorQue"/>, el campo cuyo valor debe superar (solo en los leases).
+/// <see cref="MayorQue"/>, el campo cuyo valor debe superar (solo en los leases, que además tienen <see cref="Maximo"/>).
 /// </summary>
 public sealed record ParametroMotorLoteLimiteDto(string Campo, int? Minimo, int? Maximo, string? MayorQue);
 

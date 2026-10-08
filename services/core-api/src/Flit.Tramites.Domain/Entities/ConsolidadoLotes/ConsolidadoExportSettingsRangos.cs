@@ -3,7 +3,7 @@ namespace Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 /// <summary>
 /// HU #13420 (épica #13216) — rango de un parámetro del motor que la base acota con un CHECK de una sola columna en
 /// <c>tramites.consolidado_export_settings</c> (DDL 133). <see cref="Maximo"/> es el máximo del tipo de la columna
-/// (<c>int.MaxValue</c>) cuando el CHECK solo pone mínimo (<c>&gt; 0</c> o <c>&gt;= 5</c>).
+/// (<c>int.MaxValue</c>) cuando el CHECK solo pone mínimo; desde Security L1 todos los CHECK de la tabla tienen tope.
 /// </summary>
 /// <param name="Campo">Nombre del campo en el contrato HTTP (camelCase), el que lleva <c>errors</c> en el 400.</param>
 /// <param name="Columna">Columna de la tabla.</param>
@@ -14,9 +14,12 @@ public sealed record ConsolidadoExportSettingsRango(string Campo, string Columna
     public bool SinMaximo => Maximo == int.MaxValue;
 }
 
-/// <summary>HU #13420 — regla «el lease es mayor que su tiempo máximo» (CHECK de dos columnas del DDL 133).</summary>
+/// <summary>
+/// HU #13420 — regla «el lease es mayor que su tiempo máximo» (CHECK de dos columnas del DDL 133). Security L1:
+/// el mismo CHECK pone el tope <see cref="Maximo"/> (inclusivo) al lease.
+/// </summary>
 public sealed record ConsolidadoExportSettingsReglaLease(
-    string CampoLease, string ColumnaLease, string CampoTimeout, string ColumnaTimeout, string Restriccion);
+    string CampoLease, string ColumnaLease, string CampoTimeout, string ColumnaTimeout, string Restriccion, int Maximo);
 
 /// <summary>HU #13420 — valores editables del motor tal como llegan del Super Admin, ya sin nulos.</summary>
 public sealed record ConsolidadoExportSettingsValores(
@@ -59,10 +62,20 @@ public static class ConsolidadoExportSettingsRangos
     public const int ItemSlotsMinimo = 1;
     public const int ItemSlotsMaximo = 6;
     public const int ItemTimeoutSecondsMinimo = 1;
+    /// <summary>Security L1 — tope de <c>item_timeout_seconds</c> (1 h).</summary>
+    public const int ItemTimeoutSecondsMaximo = 3600;
+    /// <summary>Security L1 — tope de <c>item_lease_seconds</c> (2 h); además debe superar <c>item_timeout_seconds</c>.</summary>
+    public const int ItemLeaseSecondsMaximo = 7200;
     public const int MaxItemAttemptsMinimo = 1;
     public const int MaxItemAttemptsMaximo = 10;
     public const int RetryDelaySecondsMinimo = 5;
+    /// <summary>Security L1 — tope de <c>retry_delay_seconds</c> (1 h).</summary>
+    public const int RetryDelaySecondsMaximo = 3600;
     public const int PartTimeoutSecondsMinimo = 1;
+    /// <summary>Security L1 — tope de <c>part_timeout_seconds</c> (2 h).</summary>
+    public const int PartTimeoutSecondsMaximo = 7200;
+    /// <summary>Security L1 — tope de <c>part_lease_seconds</c> (4 h); además debe superar <c>part_timeout_seconds</c>.</summary>
+    public const int PartLeaseSecondsMaximo = 14_400;
     public const int MaxPartAttemptsMinimo = 1;
     public const int MaxPartAttemptsMaximo = 10;
     public const int RetentionHoursMinimo = 1;
@@ -79,26 +92,26 @@ public static class ConsolidadoExportSettingsRangos
             MaxMbPerPartMinimo, MaxMbPerPartMaximo),
         new("itemSlots", "item_slots", "ck_consolidado_export_settings_item_slots", ItemSlotsMinimo, ItemSlotsMaximo),
         new("itemTimeoutSeconds", "item_timeout_seconds", "ck_consolidado_export_settings_item_timeout",
-            ItemTimeoutSecondsMinimo, int.MaxValue),
+            ItemTimeoutSecondsMinimo, ItemTimeoutSecondsMaximo),
         new("maxItemAttempts", "max_item_attempts", "ck_consolidado_export_settings_max_item_attempts",
             MaxItemAttemptsMinimo, MaxItemAttemptsMaximo),
         new("retryDelaySeconds", "retry_delay_seconds", "ck_consolidado_export_settings_retry_delay",
-            RetryDelaySecondsMinimo, int.MaxValue),
+            RetryDelaySecondsMinimo, RetryDelaySecondsMaximo),
         new("partTimeoutSeconds", "part_timeout_seconds", "ck_consolidado_export_settings_part_timeout",
-            PartTimeoutSecondsMinimo, int.MaxValue),
+            PartTimeoutSecondsMinimo, PartTimeoutSecondsMaximo),
         new("maxPartAttempts", "max_part_attempts", "ck_consolidado_export_settings_max_part_attempts",
             MaxPartAttemptsMinimo, MaxPartAttemptsMaximo),
         new("retentionHours", "retention_hours", "ck_consolidado_export_settings_retention",
             RetentionHoursMinimo, RetentionHoursMaximo),
     ];
 
-    /// <summary>Las dos reglas lease &gt; timeout (los leases no tienen CHECK de rango propio).</summary>
+    /// <summary>Las dos reglas lease &gt; timeout, con el tope del lease en el mismo CHECK (Security L1).</summary>
     public static IReadOnlyList<ConsolidadoExportSettingsReglaLease> ReglasLease { get; } =
     [
         new("itemLeaseSeconds", "item_lease_seconds", "itemTimeoutSeconds", "item_timeout_seconds",
-            "ck_consolidado_export_settings_item_lease"),
+            "ck_consolidado_export_settings_item_lease", ItemLeaseSecondsMaximo),
         new("partLeaseSeconds", "part_lease_seconds", "partTimeoutSeconds", "part_timeout_seconds",
-            "ck_consolidado_export_settings_part_lease"),
+            "ck_consolidado_export_settings_part_lease", PartLeaseSecondsMaximo),
     ];
 
     /// <summary>Errores por campo; vacío si los valores cumplen todos los CHECK del DDL 133.</summary>
@@ -118,8 +131,11 @@ public static class ConsolidadoExportSettingsRangos
 
         foreach (var regla in ReglasLease)
         {
-            if (Valor(valores, regla.CampoLease) <= Valor(valores, regla.CampoTimeout))
+            var lease = Valor(valores, regla.CampoLease);
+            if (lease <= Valor(valores, regla.CampoTimeout))
                 errores.Add(new(regla.CampoLease, $"Debe ser mayor que {regla.CampoTimeout}."));
+            if (lease > regla.Maximo)
+                errores.Add(new(regla.CampoLease, $"Debe ser menor o igual que {regla.Maximo}."));
         }
 
         return errores;

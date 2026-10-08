@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
@@ -245,6 +246,112 @@ public sealed class ParametrosMotorLoteEndpointTests : IClassFixture<ParametrosM
         dto.Should().Contain("maximum: 32766");
         Schema(yaml, "ActualizarParametrosMotorLoteRequest").Should().Contain("rowVersion:").And.Contain("required:");
         Schema(yaml, "ParametroMotorLoteLimite").Should().Contain("mayorQue:");
+    }
+
+    // ── Security L1 — topes de los tiempos del motor ────────────────────────────────────
+
+    [Theory]
+    [InlineData("itemTimeoutSeconds", 3601, "Debe estar entre 1 y 3600.")]
+    [InlineData("retryDelaySeconds", 3601, "Debe estar entre 5 y 3600.")]
+    [InlineData("partTimeoutSeconds", 7201, "Debe estar entre 1 y 7200.")]
+    [InlineData("retryDelaySeconds", 2_147_483_647, "Debe estar entre 5 y 3600.")]
+    public async Task L1_Put_TiempoPorEncimaDeSuTope_400_ConErrorsDelCampo_YMensajeDelRango_SinEscribir(
+        string campo, int valor, string mensaje)
+    {
+        // Leases en su máximo: el único error es el del rango del tiempo.
+        var response = await Cliente(Token("SuperAdmin")).PutAsync(Ruta,
+            Cuerpo(new() { [campo] = valor, ["itemLeaseSeconds"] = 7200, ["partLeaseSeconds"] = 14_400 }), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var raiz = await Raiz(response);
+        raiz.GetProperty("error").GetString().Should().Be("parametros_invalidos");
+        var errors = raiz.GetProperty("errors");
+        errors.EnumerateObject().Select(p => p.Name).Should().Equal(campo);
+        errors.GetProperty(campo).EnumerateArray().Select(e => e.GetString()).Should().Equal(mensaje);
+        await _factory.Repo.DidNotReceiveWithAnyArgs().ActualizarAsync(default!, default, default, default, Ct);
+    }
+
+    [Theory]
+    [InlineData("itemLeaseSeconds", 7201, "Debe ser menor o igual que 7200.")]
+    [InlineData("partLeaseSeconds", 14_401, "Debe ser menor o igual que 14400.")]
+    public async Task L1_Put_LeasePorEncimaDeSuTope_400_EnElCampoDelLease_SinEscribir(string campo, int valor, string mensaje)
+    {
+        var response = await Cliente(Token("SuperAdmin")).PutAsync(Ruta, Cuerpo(new() { [campo] = valor }), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errors = (await Raiz(response)).GetProperty("errors");
+        errors.EnumerateObject().Select(p => p.Name).Should().Equal(campo);
+        errors.GetProperty(campo).EnumerateArray().Select(e => e.GetString()).Should().Equal(mensaje);
+        await _factory.Repo.DidNotReceiveWithAnyArgs().ActualizarAsync(default!, default, default, default, Ct);
+    }
+
+    [Fact]
+    public async Task L1_Put_TodosLosTiemposEnSuTope_200()
+    {
+        var response = await Cliente(Token("SuperAdmin")).PutAsync(Ruta, Cuerpo(new()
+        {
+            ["itemTimeoutSeconds"] = 3600,
+            ["itemLeaseSeconds"] = 7200,
+            ["retryDelaySeconds"] = 3600,
+            ["partTimeoutSeconds"] = 7200,
+            ["partLeaseSeconds"] = 14_400,
+        }), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _factory.Repo.Received(1).ActualizarAsync(
+            Arg.Is<ConsolidadoExportSettingsValores>(v => v.ItemTimeoutSeconds == 3600 && v.PartLeaseSeconds == 14_400),
+            7, UsuarioId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("itemTimeoutSeconds", 1, 3600, null)]
+    [InlineData("retryDelaySeconds", 5, 3600, null)]
+    [InlineData("partTimeoutSeconds", 1, 7200, null)]
+    [InlineData("itemLeaseSeconds", null, 7200, "itemTimeoutSeconds")]
+    [InlineData("partLeaseSeconds", null, 14_400, "partTimeoutSeconds")]
+    public async Task L1_Get_LimitesDevuelveLosTopes(string campo, int? minimo, int maximo, string? mayorQue)
+    {
+        var response = await Cliente(Token("SuperAdmin")).GetAsync(Ruta, Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var limite = (await Raiz(response)).GetProperty("limites").EnumerateArray()
+            .Single(l => l.GetProperty("campo").GetString() == campo);
+        limite.GetProperty("maximo").GetInt32().Should().Be(maximo);
+        if (minimo is { } min)
+            limite.GetProperty("minimo").GetInt32().Should().Be(min);
+        else
+            limite.GetProperty("minimo").ValueKind.Should().Be(JsonValueKind.Null);
+        if (mayorQue is null)
+            limite.GetProperty("mayorQue").ValueKind.Should().Be(JsonValueKind.Null);
+        else
+            limite.GetProperty("mayorQue").GetString().Should().Be(mayorQue);
+    }
+
+    /// <summary>
+    /// Paridad OpenAPI ↔ <see cref="ConsolidadoExportSettingsRangos"/>: cada campo del esquema de respuesta y del request
+    /// declara el <c>maximum</c> (y el <c>minimum</c> si lo hay) de los rangos y de las reglas de lease.
+    /// </summary>
+    [Theory]
+    [InlineData("ParametrosMotorLote")]
+    [InlineData("ActualizarParametrosMotorLoteRequest")]
+    public void L1_Contrato_MinimumYMaximum_DeCadaCampo_SonLosDeRangos(string esquema)
+    {
+        var schema = Schema(Yaml(), esquema);
+        var esperados = ConsolidadoExportSettingsRangos.Todos
+            .Select(r => (r.Campo, Minimo: (int?)r.Minimo, r.Maximo))
+            .Concat(ConsolidadoExportSettingsRangos.ReglasLease.Select(r => (Campo: r.CampoLease, Minimo: (int?)null, r.Maximo)));
+
+        foreach (var (campo, minimo, maximo) in esperados)
+        {
+            var m = Regex.Match(schema, "^        " + campo + ":\\n((?:          .*\\n)+)", RegexOptions.Multiline);
+            m.Success.Should().BeTrue($"{esquema}.{campo} debe existir");
+            var bloque = m.Groups[1].Value;
+            Regex.Match(bloque, @"maximum: (\d+)").Groups[1].Value.Should().Be(maximo.ToString(CultureInfo.InvariantCulture), $"{esquema}.{campo}.maximum");
+            if (minimo is { } min)
+                Regex.Match(bloque, @"minimum: (\d+)").Groups[1].Value.Should().Be(min.ToString(CultureInfo.InvariantCulture), $"{esquema}.{campo}.minimum");
+            else
+                bloque.Should().NotContain("minimum:", $"{esquema}.{campo} no tiene mínimo propio (es mayor que su timeout)");
+        }
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────────
