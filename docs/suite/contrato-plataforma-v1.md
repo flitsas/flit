@@ -148,12 +148,6 @@ Todos bajo `/api/v1/platform/**`, documentados en `contracts/openapi/platform.v1
   "correlationId": "…", "data": { } }
 ```
 
-Todo evento, trabajo y llamada entre servicios lleva una empresa (`tenantId` / metadata `x-flit-tenant-id`). Lo que es
-de la plataforma y no de una empresa (simulación de mandato, buzón de pruebas de notificaciones, recuperación de
-contraseña de un usuario sin rol, reportes de alcance SuperAdmin) usa la empresa fija **«plataforma»**,
-`00000000-0000-0000-0000-0000000f1170` (`Flit.Platform.Sdk.PlatformTenants.Plataforma`, HU #13359). No existe como
-compañía en `admin.companies`.
-
 | Evento v1 | Productor | Datos | Uso |
 |---|---|---|---|
 | `platform.tenant_product.changed` | B | `{ tenantId, productCode, enabled }` | Invalidar caché de acceso |
