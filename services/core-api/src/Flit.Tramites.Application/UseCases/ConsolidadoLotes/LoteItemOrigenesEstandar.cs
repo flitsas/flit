@@ -20,9 +20,28 @@ public abstract class LoteItemOrigenEstandar(IConsolidadoLoteAccessChecker acces
     {
         ArgumentNullException.ThrowIfNull(contexto);
         return entregador.EntregarAsync(
-            new LoteItemEntregaRequest(contexto.ProcedureInstanceId, contexto.CompaniaTramiteId, contexto.TipoDocumento),
+            new LoteItemEntregaRequest(
+                contexto.ProcedureInstanceId,
+                contexto.CompaniaTramiteId,
+                contexto.TipoDocumento,
+                AntesDeGenerar: EsDeOtraCompania(contexto) ? SinGenerarEnLaHija : null),
             ct);
     }
+
+    /// <summary>
+    /// HU #13418 (adenda v7, P1 = a) — el ítem es de una compañía distinta de la del lote (<c>item.tenant_id ≠
+    /// batch.tenant_id</c>): el trámite de una hija en un lote de red. La red es de solo consulta: si hay que generar,
+    /// se omite. El lote del Super Admin no tiene compañía y nunca entra aquí.
+    /// </summary>
+    private static bool EsDeOtraCompania(LoteItemContexto contexto) =>
+        contexto.CompaniaLoteId is { } compania && compania != contexto.CompaniaTramiteId;
+
+    /// <summary>
+    /// Gancho del entregador: solo corre cuando NO hay consolidado guardado (nunca ante un existente), así que el ítem de
+    /// la hija se entrega si ya tiene el documento y, si no, se omite sin crear adjunto, bitácora ni impronta en ella.
+    /// </summary>
+    private static Task<string?> SinGenerarEnLaHija(CancellationToken ct) =>
+        Task.FromResult<string?>(ConsolidadoLoteOmisiones.RedSinConsolidado);
 }
 
 /// <summary>Origen <c>tramites</c>: listado de trámites de la compañía del Gestor/Radicador.</summary>

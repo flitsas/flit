@@ -41,9 +41,8 @@ public static class ConsolidadoErrorTextos
         [ConsolidadoLoteOmisiones.QuipuxSoloLectura] = "Organismo en modo Quipux de solo lectura",
         [ConsolidadoLoteOmisiones.AccesoRevocado] = "Acceso revocado",
         [ConsolidadoLoteOmisiones.ErrorTecnico] = "No se pudo generar el consolidado, intente de nuevo",
-        // HU #13417 (adenda v7, P1 = a): literal de 16-diseno-red §2 C; lo usa #13418.
-        [ConsolidadoLoteOmisiones.RedSinConsolidado] =
-            "Trámite de una compañía de la red sin consolidado: la red es de solo consulta",
+        // HU #13418 AC2 (adenda v7, P1 = a): literal del AC; la red es de solo consulta y el lote no genera en la hija.
+        [ConsolidadoLoteOmisiones.RedSinConsolidado] = "La compañía no ha generado su consolidado",
     };
 
     /// <summary>

@@ -10,7 +10,9 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 /// <remarks>
 /// Atiende <c>tramites</c>, <c>superadmin</c> y, para el solicitante, <c>ot_bandeja</c> (#13392: membresía y rol en el
 /// tenant OT del lote, o Super Admin activo); en <c>ot_bandeja</c> el trámite lo revalida el procesador OT con la regla
-/// de la bandeja.
+/// de la bandeja. HU #13418: en un lote de red (<see cref="LoteItemContexto.RedActiva"/>) el ítem de una hija exige además
+/// el rol <c>AdminCompany</c> activo en la cabeza, la red encendida y que la hija siga siéndolo (y sea la acotada, si la
+/// hay); un error de BD al leer la jerarquía se lanza (fallo técnico), nunca se devuelve <c>false</c>.
 /// Uso de ejemplo: <c>var ok = await checker.TieneAccesoAsync(LoteItemContexto.Desde(lote, item), ct);</c>.
 /// </remarks>
 public interface IConsolidadoLoteAccessChecker

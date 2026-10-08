@@ -47,6 +47,14 @@ public interface ILoteItemOrigen
 /// <param name="RolSolicitante">Rol con el que se creó el lote.</param>
 /// <param name="ProcedureInstanceId">Trámite del ítem.</param>
 /// <param name="TipoDocumento"><c>consolidado</c> o <c>consolidado_maestro</c>.</param>
+/// <param name="RedActiva">
+/// HU #13418 — el lote se creó desde la vista de red de la cabeza <see cref="CompaniaLoteId"/>
+/// (<c>batches.network_scope</c>): sus ítems pueden ser de las hijas y se revalidan con la regla de red.
+/// </param>
+/// <param name="ScopeTenantId">
+/// HU #13418 — hija acotada del lote de red (<c>batches.scope_tenant_id</c>); <c>null</c> = toda la red o lote que no es
+/// de red (el <c>scope_tenant_id</c> del Super Admin no viaja aquí).
+/// </param>
 public sealed record LoteItemContexto(
     Guid BatchId,
     Guid ItemId,
@@ -57,7 +65,9 @@ public sealed record LoteItemContexto(
     Guid SolicitanteId,
     string RolSolicitante,
     Guid ProcedureInstanceId,
-    string TipoDocumento)
+    string TipoDocumento,
+    bool RedActiva = false,
+    Guid? ScopeTenantId = null)
 {
     /// <summary>
     /// Compañía contra la que se revalida: la del lote; en el lote de Super Admin (sin compañía) la del trámite.
@@ -83,7 +93,9 @@ public sealed record LoteItemContexto(
             lote.RequestedByUserId,
             lote.RequestedRoleCode,
             item.ProcedureInstanceId,
-            lote.DocumentType);
+            lote.DocumentType,
+            lote.NetworkScope,
+            lote.NetworkScope ? lote.ScopeTenantId : null);
     }
 }
 
