@@ -16085,8 +16085,9 @@ components:
         total:
           type: integer
           description: >
-            Solo en `seleccion_excede_tope` por tope total (M1): trámites de la selección resuelta. Ausente en el
-            tope de las listas `ids`/`excluidos`.
+            Solo en `seleccion_excede_tope` por tope total (M1): trámites de la selección resuelta, exacto. El
+            servidor no carga la selección entera para responder: lee hasta `tope + 1` y cuenta el total en SQL con
+            el mismo filtro y sin los excluidos. Ausente en el tope de las listas `ids`/`excluidos`.
         tope:
           type: integer
           description: Solo junto a `total`; `max_items_per_batch` vigente (1–32.766, por defecto 10.000).

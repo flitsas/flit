@@ -2311,23 +2311,36 @@ internal sealed partial class ProcedureInstanceRepository(
     }
 
     // Épica #13216 (HU #13370) — selección del lote de consolidados. Reutiliza ApplyListFilters y
-    // ApplyListSort tal cual (ADR-0070 D3: cero lógica de visibilidad copiada); sin Skip/Take ni grafo.
+    // ApplyListSort tal cual (ADR-0070 D3: cero lógica de visibilidad copiada); sin Skip ni grafo.
+    // Code review #13216 (Obs2): `limite` es un LIMIT en SQL después del mismo orden; null = sin límite.
     public async Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
         Guid? tenantId,
         ProcedureInstanceListFilter filter,
         ProcedureInstanceSortBy sortBy,
         SortDirection direction,
+        int? limite,
         CancellationToken ct)
+    {
+        var refs = ApplyListSort(IdsFilteredQuery(tenantId, filter), sortBy, direction)
+            .Select(x => new ProcedureInstanceRef(x.Id, x.TenantId, x.ReferenceNumber, x.Plate));
+        if (limite is { } max)
+            refs = refs.Take(Math.Max(0, max));
+
+        return await refs.ToListAsync(ct);
+    }
+
+    // Code review #13216 (Obs2) — el mismo predicado que ListIdsFilteredAsync, contado en SQL.
+    public Task<int> CountIdsFilteredAsync(Guid? tenantId, ProcedureInstanceListFilter filter, CancellationToken ct) =>
+        IdsFilteredQuery(tenantId, filter).CountAsync(ct);
+
+    /// <summary>Base y filtros compartidos por <see cref="ListIdsFilteredAsync"/> y <see cref="CountIdsFilteredAsync"/>.</summary>
+    private IQueryable<ProcedureInstance> IdsFilteredQuery(Guid? tenantId, ProcedureInstanceListFilter filter)
     {
         var query = db.ProcedureInstances.AsNoTracking().Where(x => x.DeletedAt == null);
         if (tenantId is { } tid)
             query = query.Where(x => x.TenantId == tid);
 
-        query = ApplyListFilters(query, filter);
-
-        return await ApplyListSort(query, sortBy, direction)
-            .Select(x => new ProcedureInstanceRef(x.Id, x.TenantId, x.ReferenceNumber, x.Plate))
-            .ToListAsync(ct);
+        return ApplyListFilters(query, filter);
     }
 
     /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>

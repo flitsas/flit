@@ -158,37 +158,59 @@ public sealed partial class CrearLoteConsolidadosHandler(
             return LoteActivo(activo);
 
         // 6. Resolver la selección con la visibilidad del origen; tenant y usuario del token (CF-15).
-        IReadOnlyList<ProcedureInstanceRef> refs;
+        // Code review #13216 (Obs2): la lectura se corta en tope + 1 (LIMIT en SQL) para no cargar en memoria una
+        // selección que solo puede acabar en 422 (p. ej. el Super Admin con «todas las compañías»).
+        var topeTotal = settings.MaxItemsPerBatch;
+        var limite = topeTotal + 1;
+        var resolver = resolvers.Para(command.Origen);
+        var contexto = new LoteSeleccionContexto(
+            command.Origen == ConsolidadoExportOrigin.Superadmin ? command.ScopeTenantId : command.TenantId,
+            command.UsuarioId,
+            command.OtTransitOfficeId);
+        List<ProcedureInstanceRef> items;
+        int? total = null;
         try
         {
-            var contextoTenant = command.Origen == ConsolidadoExportOrigin.Superadmin
-                ? command.ScopeTenantId
-                : command.TenantId;
-            refs = await resolvers.Para(command.Origen)
-                .ResolverAsync(seleccion, new LoteSeleccionContexto(contextoTenant, command.UsuarioId, command.OtTransitOfficeId), ct)
-                .ConfigureAwait(false);
+            var refs = await resolver.ResolverAsync(seleccion, contexto, limite, ct).ConfigureAwait(false);
+            items = Congelar(command, refs);
+            var completa = refs.Count < limite;
+
+            // Con el corte alcanzado, la intersección CF-15 o la deduplicación pudieron dejar el prefijo leído en el tope
+            // o por debajo aunque fuera de él haya trámites que sí entran: solo entonces se resuelve sin límite, para que
+            // el corte nunca cambie el resultado de una selección que no excede. Camino raro: el repositorio ya acota
+            // por la misma compañía que la intersección y devuelve ids únicos.
+            if (!completa && items.Count <= topeTotal)
+            {
+                refs = await resolver.ResolverAsync(seleccion, contexto, limite: null, ct).ConfigureAwait(false);
+                items = Congelar(command, refs);
+                completa = true;
+            }
+
+            // 6b. M1 — tope total (max_items_per_batch), todos los orígenes y modos, sobre la selección YA resuelta:
+            // después de las exclusiones (resolver) y de la intersección de seguridad y la deduplicación (Congelar). Con
+            // el corte, el total exacto del 422 sale de un COUNT con el mismo predicado (opción A del review: el
+            // contrato de `total` no cambia); nunca menor que lo ya leído, por si la base cambió entre las dos consultas.
+            if (items.Count > topeTotal)
+                total = completa
+                    ? items.Count
+                    : Math.Max(items.Count, await resolver.ContarAsync(seleccion, contexto, ct).ConfigureAwait(false));
         }
         catch (LoteSeleccionInvalidaException ex)
         {
             return CrearLoteConsolidadosResultado.Falla(ex.Codigo, ex.Message);
         }
 
-        var items = Congelar(command, refs);
-
-        // 6b. M1 — tope total (max_items_per_batch), todos los orígenes y modos, sobre la selección YA resuelta: después
-        // de las exclusiones (resolver) y de la intersección de seguridad y la deduplicación (Congelar). Los resolvers ya
-        // devuelven las referencias materializadas (id, compañía, radicado, placa), así que contarlas aquí no añade
-        // consultas; se corta antes de cualquier escritura: ni lote, ni ítems, ni lote_creado, ni purga del retenido.
-        if (items.Count > settings.MaxItemsPerBatch)
+        // Se corta antes de cualquier escritura: ni lote, ni ítems, ni lote_creado, ni purga del retenido.
+        if (total is { } excedido)
         {
-            LogExcedeTope(_logger, command.UsuarioId, command.Origen, items.Count, settings.MaxItemsPerBatch);
+            LogExcedeTope(_logger, command.UsuarioId, command.Origen, excedido, topeTotal);
             return new CrearLoteConsolidadosResultado(
                 null,
                 LoteSeleccionInvalidaException.CodigoExcedeTope,
-                $"La selección tiene {items.Count} trámites y el máximo por descarga masiva es {settings.MaxItemsPerBatch}. " +
+                $"La selección tiene {excedido} trámites y el máximo por descarga masiva es {topeTotal}. " +
                 "Acota el filtro o desmarca trámites.",
-                Total: items.Count,
-                Tope: settings.MaxItemsPerBatch);
+                Total: excedido,
+                Tope: topeTotal);
         }
 
         var tiposConocidos = await TiposDeTramiteSiHacenFaltaAsync(seleccion, ct).ConfigureAwait(false);

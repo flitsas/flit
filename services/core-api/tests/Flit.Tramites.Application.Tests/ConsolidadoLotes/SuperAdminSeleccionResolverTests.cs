@@ -34,7 +34,7 @@ public sealed class SuperAdminSeleccionResolverTests
     {
         _sut = new SuperAdminSeleccionResolver(new ListProcedureInstancesFilteredHandler(_repo), _repo);
         _repo.ListIdsFilteredAsync(Arg.Any<Guid?>(), Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(Guid.NewGuid(), TenantA, "R-A", null), new ProcedureInstanceRef(Guid.NewGuid(), TenantB, "R-B", null)]);
     }
 
@@ -60,7 +60,7 @@ public sealed class SuperAdminSeleccionResolverTests
         refs.Select(r => r.TenantId).Should().BeEquivalentTo([TenantA, TenantB]);
         await _repo.Received(1).ListIdsFilteredAsync(null,
             Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos != null && f.IdsIncluidos.Count == 2),
-            ProcedureInstanceSortBy.Default, SortDirection.Descending, Arg.Any<CancellationToken>());
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -69,9 +69,9 @@ public sealed class SuperAdminSeleccionResolverTests
         await _sut.ResolverAsync(new SeleccionPorIds([Guid.NewGuid()]), new LoteSeleccionContexto(TenantB, SuperAdmin), Ct);
 
         await _repo.Received(1).ListIdsFilteredAsync(TenantB, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class SuperAdminSeleccionResolverTests
 
         await _repo.Received(1).ListIdsFilteredAsync(null,
             Arg.Is<ProcedureInstanceListFilter>(f => f.Condiciones != null && f.Condiciones.Any(c => c.FieldId == "compania")),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -102,5 +102,20 @@ public sealed class SuperAdminSeleccionResolverTests
         var invalido = () => _sut.ResolverAsync(new SeleccionPorFiltro(malo, []), new LoteSeleccionContexto(null, SuperAdmin), Ct);
         (await invalido.Should().ThrowAsync<LoteSeleccionInvalidaException>()).Which.Codigo
             .Should().Be(LoteSeleccionInvalidaException.CodigoFiltroInvalido);
+    }
+
+    /// <summary>Code review épica #13216 (Obs2) — el límite y el conteo del 422 se delegan en el resolver de tramites.</summary>
+    [Fact]
+    public async Task Obs2_DelegaElLimiteYElConteo_SinScopeEsTodaLaPlataforma()
+    {
+        _repo.CountIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<CancellationToken>()).Returns(120_000);
+        var seleccion = new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()), []);
+
+        await _sut.ResolverAsync(seleccion, new LoteSeleccionContexto(null, SuperAdmin), 10_001, Ct);
+        var total = await _sut.ContarAsync(seleccion, new LoteSeleccionContexto(null, SuperAdmin), Ct);
+
+        total.Should().Be(120_000);
+        await _repo.Received(1).ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), 10_001, Arg.Any<CancellationToken>());
     }
 }

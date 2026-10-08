@@ -213,12 +213,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     /// <see cref="ExecuteCrossTenantReadAsync{T}"/> → <see cref="BuildAccessibleQuery"/> →
     /// <see cref="ApplyListFilters"/> → <see cref="ApplyListSort"/>), sin <c>Skip</c>/<c>Take</c> ni
     /// <c>Include</c>: la selección del lote es exactamente lo que la bandeja mostraría con el mismo filtro.
+    /// Code review #13216 (Obs2): <paramref name="limite"/> es un <c>LIMIT</c> en SQL después del orden de la bandeja.
     /// </summary>
     public async Task<IReadOnlyList<OtClientProcedureRef>> ListAccessibleRefsAsync(
         Guid otTenantId,
         OtClientProcedureFilter? filter,
         IReadOnlyCollection<Guid>? ids,
         Guid? transitOfficeIdOverride = null,
+        int? limite = null,
         CancellationToken cancellationToken = default)
     {
         var refs = await ExecuteOtScopedAsync(
@@ -227,21 +229,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async transitOfficeId => await ExecuteCrossTenantReadAsync(
                 async () =>
                 {
-                    var query = BuildAccessibleQuery(transitOfficeId);
-                    if (filter is not null)
-                    {
-                        query = ApplyListFilters(query, filter);
-                    }
-
-                    if (ids is not null)
-                    {
-                        var idList = ids as List<Guid> ?? ids.ToList();
-                        query = query.Where(p => idList.Contains(p.Id));
-                    }
-
                     // Modo ids: orden por defecto de la bandeja (prioritario, fecha desc, id desc).
-                    return (IReadOnlyList<OtClientProcedureRef>)await ApplyListSort(query, filter ?? new OtClientProcedureFilter())
-                        .Select(p => new OtClientProcedureRef(p.Id, p.TenantId, p.ReferenceNumber, p.Plate))
+                    var query = ApplyListSort(AccessibleRefsQuery(transitOfficeId, filter, ids), filter ?? new OtClientProcedureFilter())
+                        .Select(p => new OtClientProcedureRef(p.Id, p.TenantId, p.ReferenceNumber, p.Plate));
+                    if (limite is { } max)
+                    {
+                        query = query.Take(Math.Max(0, max));
+                    }
+
+                    return (IReadOnlyList<OtClientProcedureRef>)await query
                         .ToListAsync(cancellationToken)
                         .ConfigureAwait(false);
                 },
@@ -250,6 +246,44 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
         // Sin organismo resoluble ExecuteOtScopedAsync devuelve default (null) sin leer nada: lista vacía.
         return refs ?? [];
+    }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — ver XML doc de la interfaz. La misma cadena que
+    /// <see cref="ListAccessibleRefsAsync"/> (organismo resuelto, lectura cross-tenant, <see cref="AccessibleRefsQuery"/>),
+    /// contada en SQL. Sin organismo resoluble, <c>default(int)</c> = 0 sin leer nada.
+    /// </summary>
+    public Task<int> CountAccessibleRefsAsync(
+        Guid otTenantId,
+        OtClientProcedureFilter? filter,
+        IReadOnlyCollection<Guid>? ids,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            transitOfficeId => ExecuteCrossTenantReadAsync(
+                () => AccessibleRefsQuery(transitOfficeId, filter, ids).CountAsync(cancellationToken),
+                cancellationToken),
+            cancellationToken);
+
+    /// <summary>Universo, filtros e ids compartidos por la selección del lote y su conteo (#13390, Obs2).</summary>
+    private IQueryable<ProcedureInstance> AccessibleRefsQuery(
+        Guid transitOfficeId, OtClientProcedureFilter? filter, IReadOnlyCollection<Guid>? ids)
+    {
+        var query = BuildAccessibleQuery(transitOfficeId);
+        if (filter is not null)
+        {
+            query = ApplyListFilters(query, filter);
+        }
+
+        if (ids is not null)
+        {
+            var idList = ids as List<Guid> ?? ids.ToList();
+            query = query.Where(p => idList.Contains(p.Id));
+        }
+
+        return query;
     }
 
     public Task<OtClientProcedure?> GetByIdAsync(

@@ -39,6 +39,10 @@ public sealed class SuperAdminSeleccionResolver(
     /// «solo entra el scope» sobre el resultado la repite <see cref="CrearLoteConsolidadosHandler"/> al congelar.
     /// </remarks>
     public Task<IReadOnlyList<ProcedureInstanceRef>> ResolverAsync(
-        LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default) =>
-        _tramites.ResolverAsync(seleccion, contexto, ct);
+        LoteSeleccion seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct = default) =>
+        _tramites.ResolverAsync(seleccion, contexto, limite, ct);
+
+    /// <inheritdoc />
+    public Task<int> ContarAsync(LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default) =>
+        _tramites.ContarAsync(seleccion, contexto, ct);
 }

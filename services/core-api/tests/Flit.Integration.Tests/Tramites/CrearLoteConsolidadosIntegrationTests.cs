@@ -551,6 +551,65 @@ public sealed class CrearLoteConsolidadosIntegrationTests(PostgresDatabaseFixtur
         r.Lote!.TotalItems.Should().Be(5, "exactamente el tope");
     }
 
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — el Super Admin con «todas las compañías» (sin scope): la lectura se corta en
+    /// tope + 1 y el 422 lleva el total exacto de la plataforma, contado en SQL con el mismo predicado y sin los
+    /// excluidos; con exclusiones que la dejan en el tope, el lote se crea con la selección completa.
+    /// </summary>
+    [PostgresFact]
+    public async Task Obs2_SuperAdminTodasLasCompanias_ExcedeConElTotalDelConteo_YConExclusionesHastaElTopeSeCrea()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await SembrarSettingsAsync(tope: 3);
+        var deC1 = await SembrarTramitesAsync(C1, 4, "SAO2");
+        var deC2 = await SembrarTramitesAsync(C2, 4, "SBO2");
+        var comando = Gestor(Preparados([deC1[0]])) with
+        {
+            Origen = ConsolidadoExportOrigin.Superadmin,
+            TenantId = null,
+            ScopeTenantId = null,
+            RolCodigo = "SuperAdmin",
+        };
+
+        CrearLoteConsolidadosResultado r;
+        await using (var ctx = NewContext())
+            r = await HandlerSuperAdmin(ctx).HandleAsync(comando, Ct);
+
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(7, "8 preparados de las dos compañías menos 1 excluido");
+        r.Tope.Should().Be(3);
+        (await ContarAsync("SELECT count(*) FROM tramites.consolidado_export_batches")).Should().Be(0);
+
+        // Q51/Q52 del inventario #12322: la lectura con límite y el conteo, por compañía y global, sin fugas.
+        var preparados = new ProcedureInstanceListFilter { Estados = [TramiteEstado.Preparado] };
+        await using (var ctx = NewContext())
+        {
+            var repo = new ProcedureInstanceRepository(ctx);
+            (await repo.CountIdsFilteredAsync(C1, preparados, Ct)).Should().Be(4);
+            (await repo.CountIdsFilteredAsync(C2, preparados, Ct)).Should().Be(4);
+            (await repo.CountIdsFilteredAsync(null, preparados, Ct)).Should().Be(8);
+            var cortadosDeC2 = await repo.ListIdsFilteredAsync(C2, preparados, ProcedureInstanceSortBy.Default, SortDirection.Descending, 3, Ct);
+            cortadosDeC2.Should().HaveCount(3).And.OnlyContain(x => x.TenantId == C2);
+        }
+
+        await using (var ctx = NewContext())
+            r = await HandlerSuperAdmin(ctx).HandleAsync(
+                comando with { Seleccion = Preparados([deC1[0], deC1[1], deC2[0], deC2[1], deC2[2]]) }, Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        r.Lote!.TotalItems.Should().Be(3, "exactamente el tope, con trámites de las dos compañías");
+    }
+
+    private CrearLoteConsolidadosHandler HandlerSuperAdmin(FlitDbContext ctx)
+    {
+        var procedimientos = new ProcedureInstanceRepository(ctx);
+        return new CrearLoteConsolidadosHandler(
+            new ConsolidadoLoteRepository(ctx),
+            new LoteSeleccionResolverPorOrigen(
+                [new SuperAdminSeleccionResolver(new ListProcedureInstancesFilteredHandler(procedimientos), procedimientos)]),
+            new ConsolidadoLoteCipher(_dataProtection));
+    }
+
     // ── SQL ─────────────────────────────────────────────────────────────────────────────
 
     private static async Task ExecAsync(NpgsqlConnection cn, string sql, params (string Name, object? Value)[] args)

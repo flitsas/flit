@@ -21,9 +21,38 @@ public interface ILoteSeleccionResolver
     string Origen { get; }
 
     /// <summary>Trámites de la selección, en el orden del listado del origen.</summary>
+    /// <param name="seleccion">Selección del cuerpo (ids o filtro con excluidos).</param>
+    /// <param name="contexto">Tenant y usuario del token.</param>
+    /// <param name="limite">
+    /// Code review épica #13216 (Obs2) — corte de lectura para el tope M1. <c>null</c> = la selección entera. Con valor:
+    /// si la selección (ya sin excluidos) tiene menos de <paramref name="limite"/> trámites se devuelve ENTERA; si tiene
+    /// <paramref name="limite"/> o más, se devuelven AL MENOS <paramref name="limite"/> (un prefijo en el mismo orden) y
+    /// el resto no se lee. Así «devolvió menos que el límite» garantiza selección completa.
+    /// </param>
+    /// <param name="ct">Cancelación.</param>
     /// <exception cref="LoteSeleccionInvalidaException">Tope superado o filtro inválido (422).</exception>
     Task<IReadOnlyList<ProcedureInstanceRef>> ResolverAsync(
-        LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default);
+        LoteSeleccion seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct = default);
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántos trámites devolvería <see cref="ResolverAsync"/> sin límite (excluidos
+    /// ya restados), con el MISMO predicado contado en SQL. Solo lo pide el 422 <c>seleccion_excede_tope</c> para
+    /// informar <c>total</c> sin cargar la selección.
+    /// </summary>
+    /// <exception cref="LoteSeleccionInvalidaException">Tope superado o filtro inválido (422).</exception>
+    Task<int> ContarAsync(LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default);
+}
+
+/// <summary>Atajos de <see cref="ILoteSeleccionResolver"/>.</summary>
+public static class LoteSeleccionResolverExtensions
+{
+    /// <summary>La selección entera, sin límite (equivale a <c>ResolverAsync(seleccion, contexto, null, ct)</c>).</summary>
+    public static Task<IReadOnlyList<ProcedureInstanceRef>> ResolverAsync(
+        this ILoteSeleccionResolver resolver, LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        return resolver.ResolverAsync(seleccion, contexto, limite: null, ct);
+    }
 }
 
 /// <summary>Elige el <see cref="ILoteSeleccionResolver"/> por la clave <c>origin</c> del lote.</summary>

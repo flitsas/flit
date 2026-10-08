@@ -719,12 +719,26 @@ public interface IProcedureInstanceRepository
     /// Misma base (<c>deleted_at IS NULL</c> + tenant), mismos filtros y mismo orden: solo cambia la
     /// proyección (<see cref="ProcedureInstanceRef"/>, sin grafo) y la ausencia de <c>Skip/Take</c>.
     /// <c>tenantId</c> <c>null</c> = todas las compañías (solo Super Admin; el guard vive en quien llama).
+    /// <para>Code review épica #13216 (Obs2): <paramref name="limite"/> corta la lectura en SQL (<c>LIMIT</c>, después
+    /// del mismo orden) para que el tope M1 no obligue a cargar toda la selección; <c>null</c> = sin límite.</para>
     /// </summary>
     Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
         Guid? tenantId,
         ProcedureInstanceListFilter filter,
         ProcedureInstanceSortBy sortBy,
         SortDirection direction,
+        int? limite = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántos trámites devolvería
+    /// <see cref="ListIdsFilteredAsync(Guid?, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, int?, CancellationToken)"/>
+    /// sin límite: misma base y mismo predicado, solo cambia la proyección (<c>COUNT</c>). Lo usa el 422
+    /// <c>seleccion_excede_tope</c> para informar el total sin cargar la selección.
+    /// </summary>
+    Task<int> CountIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
         CancellationToken ct = default);
 
     /// <summary>

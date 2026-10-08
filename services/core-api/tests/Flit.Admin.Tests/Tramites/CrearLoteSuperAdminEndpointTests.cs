@@ -59,7 +59,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
         var deA = Guid.NewGuid();
         var deB = Guid.NewGuid();
         _factory.Instancias.ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(deA, TenantA, "R-A", null), new ProcedureInstanceRef(deB, TenantB, "R-B", null)]);
 
         var response = await Cliente(SuperAdmin()).PostAsync(Ruta, CuerpoIds(deA, deB), Ct);
@@ -72,7 +72,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
         nuevo.RolCodigo.Should().Be("SuperAdmin");
         nuevo.Items.Select(i => (i.Id, i.TenantId)).Should().Equal((deA, TenantA), (deB, TenantB));
         await _factory.Instancias.Received(1).ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
         var deB = Guid.NewGuid();
         // Si el repositorio (mal) devolviera uno de A, la defensa del handler lo descarta igual.
         _factory.Instancias.ListIdsFilteredAsync(TenantB, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(deA, TenantA, "R-A", null), new ProcedureInstanceRef(deB, TenantB, "R-B", null)]);
         var client = Cliente(SuperAdmin());
         client.DefaultRequestHeaders.Add("X-Tenant-Id", TenantB.ToString());
@@ -107,7 +107,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
         nuevo.Items.Select(i => i.Id).Should().Equal(deB);
         (await Raiz(response)).GetProperty("total").GetInt32().Should().Be(1);
         await _factory.Instancias.DidNotReceive().ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC4 — tipo según el origen ────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
     public async Task AC4_SuperAdminConConsolidadoMaestro_202_ConEseTipo()
     {
         _factory.Instancias.ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(Guid.NewGuid(), TenantA, "R-A", null)]);
 
         var response = await Cliente(SuperAdmin()).PostAsync(Ruta, CuerpoIds("consolidado_maestro", Guid.NewGuid()), Ct);
@@ -143,7 +143,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
     {
         var id = Guid.NewGuid();
         _factory.Instancias.ListIdsFilteredAsync(TenantC, Arg.Any<ProcedureInstanceListFilter>(),
-                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([new ProcedureInstanceRef(id, TenantC, "R-C", null)]);
         var cuerpo =
             $"{{\"origen\":\"superadmin\",\"origin\":\"superadmin\",\"isSuperAdmin\":true,\"tenantId\":null," +
@@ -158,7 +158,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
         nuevo.TenantId.Should().Be(TenantC);
         nuevo.ScopeTenantId.Should().BeNull();
         await _factory.Instancias.DidNotReceive().ListIdsFilteredAsync(null, Arg.Any<ProcedureInstanceListFilter>(),
-            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC6 — usuario sin compañía que no es Super Admin ──────────────────────────────────
@@ -331,7 +331,7 @@ public sealed class CrearLoteSuperAdminEndpointTests : IClassFixture<CrearLoteSu
                 });
             });
             Instancias.ListIdsFilteredAsync(Arg.Any<Guid?>(), Arg.Any<ProcedureInstanceListFilter>(),
-                    Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<CancellationToken>())
+                    Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(Array.Empty<ProcedureInstanceRef>());
         }
 

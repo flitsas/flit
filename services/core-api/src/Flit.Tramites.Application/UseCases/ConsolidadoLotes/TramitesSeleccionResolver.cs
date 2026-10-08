@@ -21,22 +21,87 @@ public sealed class TramitesSeleccionResolver(
     public string Origen => OrigenTramites;
 
     public async Task<IReadOnlyList<ProcedureInstanceRef>> ResolverAsync(
-        LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default)
+        LoteSeleccion seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(seleccion);
         ArgumentNullException.ThrowIfNull(contexto);
 
         return seleccion switch
         {
-            SeleccionPorIds porIds => await ResolverIdsAsync(porIds, contexto, ct),
-            SeleccionPorFiltro porFiltro => await ResolverFiltroAsync(porFiltro, contexto, ct),
-            _ => throw new ArgumentException(
-                $"Modo de selección no soportado: {seleccion.GetType().Name}.", nameof(seleccion)),
+            SeleccionPorIds porIds => await ResolverIdsAsync(porIds, contexto, limite, ct),
+            SeleccionPorFiltro porFiltro => await ResolverFiltroAsync(porFiltro, contexto, limite, ct),
+            _ => throw NoSoportado(seleccion),
         };
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Mismas validaciones que <see cref="ResolverAsync"/>. Modo ids: los ids de la compañía del token que existen
+    /// (<c>COUNT</c> con <c>IdsIncluidos</c>). Modo filtro: <c>COUNT</c> del filtro del listado menos el <c>COUNT</c> de
+    /// los excluidos que lo cumplen (mismo predicado + <c>IdsIncluidos</c> = excluidos), así un excluido ajeno al
+    /// filtro no resta.
+    /// </remarks>
+    public async Task<int> ContarAsync(LoteSeleccion seleccion, LoteSeleccionContexto contexto, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(seleccion);
+        ArgumentNullException.ThrowIfNull(contexto);
+
+        switch (seleccion)
+        {
+            case SeleccionPorIds porIds:
+                {
+                    var ids = IdsValidados(porIds);
+                    return ids.Count == 0
+                        ? 0
+                        : await repo.CountIdsFilteredAsync(contexto.TenantId, new ProcedureInstanceListFilter { IdsIncluidos = ids }, ct);
+                }
+
+            case SeleccionPorFiltro porFiltro:
+                {
+                    var (request, excluidos) = FiltroValidado(porFiltro, contexto);
+                    var total = await listado.CountIdsAsync(request, soloIds: null, ct);
+                    if (excluidos.Count == 0 || total == 0)
+                        return total;
+
+                    var excluidosQueCumplen = await listado.CountIdsAsync(request, excluidos, ct);
+                    return Math.Max(0, total - excluidosQueCumplen);
+                }
+
+            default:
+                throw NoSoportado(seleccion);
+        }
+    }
+
     private async Task<IReadOnlyList<ProcedureInstanceRef>> ResolverIdsAsync(
-        SeleccionPorIds seleccion, LoteSeleccionContexto contexto, CancellationToken ct)
+        SeleccionPorIds seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct)
+    {
+        var ids = IdsValidados(seleccion);
+        if (ids.Count == 0)
+            return [];
+
+        // Sin filtros del listado: solo la base (no borrados + tenant del token) ∩ ids, en el orden por defecto.
+        var filter = new ProcedureInstanceListFilter { IdsIncluidos = ids };
+        return await repo.ListIdsFilteredAsync(
+            contexto.TenantId, filter, ProcedureInstanceSortBy.Default, SortDirection.Descending, limite, ct);
+    }
+
+    private async Task<IReadOnlyList<ProcedureInstanceRef>> ResolverFiltroAsync(
+        SeleccionPorFiltro seleccion, LoteSeleccionContexto contexto, int? limite, CancellationToken ct)
+    {
+        var (request, excluidos) = FiltroValidado(seleccion, contexto);
+
+        // Obs2: los excluidos se restan en memoria, así que se leen limite + excluidos: aunque todos caigan en el
+        // prefijo leído, quedan al menos `limite` si la selección los tiene (contrato de ILoteSeleccionResolver).
+        var refs = await listado.ResolveIdsAsync(request, limite is { } max ? max + excluidos.Count : null, ct);
+        if (excluidos.Count == 0)
+            return refs;
+
+        var fuera = excluidos.ToHashSet();
+        return refs.Where(r => !fuera.Contains(r.Id)).ToList();
+    }
+
+    /// <summary>Tope Q7 de la lista de ids y deduplicación.</summary>
+    private static List<Guid> IdsValidados(SeleccionPorIds seleccion)
     {
         var ids = seleccion.Ids ?? [];
         if (ids.Count > LoteSeleccionTopes.MaxIds)
@@ -45,17 +110,12 @@ public sealed class TramitesSeleccionResolver(
                 $"La selección trae {ids.Count} trámites y el máximo es {LoteSeleccionTopes.MaxIds}. " +
                 "Para descargar más, usa «Seleccionar todos» con un filtro.");
 
-        if (ids.Count == 0)
-            return [];
-
-        // Sin filtros del listado: solo la base (no borrados + tenant del token) ∩ ids, en el orden por defecto.
-        var filter = new ProcedureInstanceListFilter { IdsIncluidos = ids.Distinct().ToList() };
-        return await repo.ListIdsFilteredAsync(
-            contexto.TenantId, filter, ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+        return ids.Distinct().ToList();
     }
 
-    private async Task<IReadOnlyList<ProcedureInstanceRef>> ResolverFiltroAsync(
-        SeleccionPorFiltro seleccion, LoteSeleccionContexto contexto, CancellationToken ct)
+    /// <summary>Validaciones del modo filtro y la petición del listado con el tenant y el usuario del token.</summary>
+    private static (ProcedureInstanceListRequest Request, IReadOnlyList<Guid> Excluidos) FiltroValidado(
+        SeleccionPorFiltro seleccion, LoteSeleccionContexto contexto)
     {
         if (seleccion.Filtro is not TramitesLoteFiltro filtro)
             throw new ArgumentException(
@@ -84,11 +144,9 @@ public sealed class TramitesSeleccionResolver(
             Skip = 0,
         };
 
-        var refs = await listado.ResolveIdsAsync(request, ct);
-        if (excluidos.Count == 0)
-            return refs;
-
-        var fuera = excluidos.ToHashSet();
-        return refs.Where(r => !fuera.Contains(r.Id)).ToList();
+        return (request, excluidos);
     }
+
+    private static ArgumentException NoSoportado(LoteSeleccion seleccion) =>
+        new($"Modo de selección no soportado: {seleccion.GetType().Name}.", nameof(seleccion));
 }
