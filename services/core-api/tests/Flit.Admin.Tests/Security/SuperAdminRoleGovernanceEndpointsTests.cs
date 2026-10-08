@@ -22,8 +22,8 @@ namespace Flit.Admin.Tests.Security;
 /// <list type="bullet">
 ///   <item>AC1: SuperAdmin gestiona el ciclo de vida completo de un rol
 ///   (crear/editar permisos/desactivar/activar/eliminar) vía <c>/api/v1/superadmin/roles*</c>.</item>
-///   <item>AC2: AdminCompany pierde la capacidad de crear/editar/eliminar roles (antes expuesta en
-///   <c>/api/v1/security/roles*</c>) pero conserva el <c>GET</c> de solo lectura.</item>
+///   <item>AC2 (enmendado por la Épica #12750): AdminCompany solo gestiona roles propios de su tenant; los roles
+///   globales son de solo lectura para él y conserva el <c>GET</c>.</item>
 ///   <item>AC3: el único mecanismo de autorización SuperAdmin es la policy real basada en el rol
 ///   JWT (<c>AdminAuthorization.SuperAdminPolicy</c>) — se eliminó el stub por header
 ///   <c>X-Flit-SuperAdmin</c>. Un JWT de otro rol es rechazado con 403 en <c>/api/v1/superadmin/*</c>.</item>
@@ -123,28 +123,38 @@ public sealed class SuperAdminRoleGovernanceEndpointsTests : IClassFixture<WebAp
 
     // ── AC2 — AdminCompany pierde crear/editar/eliminar, conserva el GET de solo lectura ────
 
+    // Épica #12750 (HU #13441/#13442) enmienda el AC2 de la HU #10508: el Admin de Compañía vuelve a gestionar
+    // roles, pero SOLO los propios de su tenant (security.roles.tenant_id). Los roles globales de FLIT siguen siendo
+    // de solo lectura para él (403 ROLE_READ_ONLY) y la gobernanza de esos roles sigue siendo del SuperAdmin.
+
     [Fact]
-    public async Task AdminCompany_CreateRole_NoLongerRoutable()
+    public async Task AdminCompany_CreateRole_CreatesARoleOwnedByItsTenant()
     {
         UseToken("AdminCompany", _adminCompanyUserId, _tenantId);
 
         var response = await _client.PostAsJsonAsync(
             "/api/v1/security/roles",
-            new { code = $"ShouldFail-{Guid.NewGuid():N}"[..20], name = "No debería crear" },
+            new
+            {
+                targetEntityType = "COMPANY",
+                code = $"Own-{Guid.NewGuid():N}"[..20],
+                name = "Rol propio del tenant",
+                productCode = "plataforma",
+            },
             TestContext.Current.CancellationToken);
 
-        // HU #10508 AC2: POST /api/v1/security/roles se eliminó por completo. El template
-        // "/roles" sigue existiendo (solo GET, de solo lectura), así que el routing de ASP.NET
-        // Core encuentra coincidencia de PATH pero no de MÉTODO → 405 Method Not Allowed (no 403:
-        // nunca se llega a evaluar ninguna policy de autorización porque no hay endpoint que la
-        // tenga adjunta para POST).
-        response.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed,
-            "el endpoint POST /api/v1/security/roles se eliminó, pero el template \"/roles\" " +
-            "sigue existiendo (GET de solo lectura) → 405, no 404.");
+        // El producto «plataforma» no es delegable a una compañía: se rechaza con el código del tope de privilegios,
+        // por lo que el POST llega al handler del tenant (ya no es 405 ni 404) y no crea nada.
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "el endpoint existe para el Admin de Compañía, pero un rol de producto plataforma no es delegable.");
+
+        await using var db = CreateDbContext();
+        (await db.Roles.AnyAsync(r => r.TenantId == _tenantId, TestContext.Current.CancellationToken))
+            .Should().BeFalse("el intento rechazado no debe dejar un rol en el tenant.");
     }
 
     [Fact]
-    public async Task AdminCompany_DeleteRole_Returns403()
+    public async Task AdminCompany_DeleteGlobalRole_Returns403()
     {
         UseToken("AdminCompany", _adminCompanyUserId, _tenantId);
 
@@ -152,12 +162,12 @@ public sealed class SuperAdminRoleGovernanceEndpointsTests : IClassFixture<WebAp
             $"/api/v1/security/roles/{_companyRoleId}",
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound,
-            "el endpoint DELETE /api/v1/security/roles/{id} se eliminó por completo (HU #10508 AC2).");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "un rol global (tenant_id NULL) es de solo lectura para el Admin de Compañía.");
     }
 
     [Fact]
-    public async Task AdminCompany_SetRolePermissions_Returns403()
+    public async Task AdminCompany_SetPermissionsOfGlobalRole_Returns403()
     {
         UseToken("AdminCompany", _adminCompanyUserId, _tenantId);
 
@@ -166,8 +176,8 @@ public sealed class SuperAdminRoleGovernanceEndpointsTests : IClassFixture<WebAp
             new { permissionIds = Array.Empty<Guid>() },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound,
-            "el endpoint PUT /api/v1/security/roles/{id}/permissions se eliminó por completo (HU #10508 AC2).");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "un rol global (tenant_id NULL) es de solo lectura para el Admin de Compañía.");
     }
 
     [Fact]
@@ -299,7 +309,7 @@ public sealed class SuperAdminRoleGovernanceEndpointsTests : IClassFixture<WebAp
     {
         using var db = CreateDbContext();
 
-        db.Roles.RemoveRange(db.Roles.Where(r => r.Id == _companyRoleId));
+        db.Roles.RemoveRange(db.Roles.Where(r => r.Id == _companyRoleId || r.TenantId == _tenantId));
         db.Users.RemoveRange(db.Users.Where(u => u.Id == _adminCompanyUserId));
         db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == _tenantId));
         db.SaveChanges();
