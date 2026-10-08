@@ -51,10 +51,11 @@ public sealed class RolesPorTenantDdlTests
         ddl.Should().Contain("DROP INDEX IF EXISTS security.uq_roles_code_target_entity_type;");
         ddl.Should().Contain("ON security.roles (code, target_entity_type)")
             .And.Contain("WHERE deleted_at IS NULL AND tenant_id IS NULL");
-        ddl.Should().Contain("uq_roles_tenant_code").And.Contain("ON security.roles (tenant_id, code)")
+        ddl.Should().Contain("uq_roles_tenant_code").And.Contain("ON security.roles (tenant_id, lower(code))")
             .And.Contain("WHERE deleted_at IS NULL AND tenant_id IS NOT NULL");
         ddl.Should().Contain("tr_roles_tenant_code_not_global")
-            .And.Contain("g.tenant_id IS NULL AND g.deleted_at IS NULL AND g.code = NEW.code")
+            .And.Contain("g.tenant_id IS NULL AND g.deleted_at IS NULL AND lower(g.code) = lower(NEW.code)")
+            .And.Contain("lower(NEW.code) = 'admin_' || p.code")
             .And.Contain("ERRCODE = '23505'");
     }
 

@@ -22,11 +22,15 @@ public partial class HU13440_RolesPorTenant : Migration
 
     /// <inheritdoc />
     /// <remarks>
-    /// Los roles de tenant (tenant_id no nulo) no caben en el catalogo global: se borran sus asignaciones y permisos
-    /// antes de quitar la columna. Es destructivo a proposito; el Down existe para entornos de desarrollo.
+    /// Los roles de tenant (tenant_id no nulo) no caben en el catalogo global: se borran sus asignaciones, permisos e
+    /// invitaciones antes de quitar la columna. <c>security.user_invitations.role_id</c> es FK RESTRICT hacia roles, asi
+    /// que las invitaciones (de cualquier estado) cuyo rol primario es de un tenant se borran primero; sus filas en
+    /// <c>invitation_roles</c> caen en cascada y las de roles de tenant en otras invitaciones tambien (FK CASCADE).
+    /// Es destructivo a proposito; el Down existe para entornos de desarrollo.
     /// </remarks>
     protected override void Down(MigrationBuilder migrationBuilder) =>
         migrationBuilder.Sql("""
+            DELETE FROM security.user_invitations WHERE role_id IN (SELECT id FROM security.roles WHERE tenant_id IS NOT NULL);
             DELETE FROM security.user_role_assignments WHERE role_id IN (SELECT id FROM security.roles WHERE tenant_id IS NOT NULL);
             DELETE FROM security.role_permissions WHERE role_id IN (SELECT id FROM security.roles WHERE tenant_id IS NOT NULL);
             DELETE FROM security.roles WHERE tenant_id IS NOT NULL;
