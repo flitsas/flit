@@ -29,7 +29,24 @@ export type CodigoErrorLote =
   | 'lote_terminado'
   | 'descarga_expirada'
   | 'auditoria_no_registrada'
-  | 'motor_inactivo';
+  | 'motor_inactivo'
+  | CodigoRechazoRedLote;
+
+/**
+ * HU #13419 — 403 de la vista de red al crear el lote (HU #13417, ADR-0070 adenda v7 A7.2). Ninguno
+ * crea el lote.
+ */
+export type CodigoRechazoRedLote =
+  | 'network_scope_required'
+  | 'network_role_required'
+  | 'network_child_out_of_scope'
+  | 'network_documents_disabled';
+
+/**
+ * HU #13419 — alcance que se PIDE al crear el lote: `null` = propio, `'red'` = toda la red de la
+ * cabeza, o el uuid de una compañía hija. El servidor lo resuelve desde la BD.
+ */
+export type AlcanceRedSolicitado = 'red' | (string & {}) | null;
 
 export interface ParteLoteConsolidados {
   numero: number;
@@ -56,6 +73,11 @@ export interface LoteConsolidados {
   terminadoEn?: string | null;
   expiraEn?: string | null;
   nombreBase?: string;
+  /**
+   * HU #13417/#13419 — lote creado desde la vista de red: `red` (toda la red) o `hija` (acotado a
+   * una compañía; el contrato no trae su id ni su nombre). Ausente en el lote propio.
+   */
+  alcanceRed?: 'red' | 'hija' | null;
   /** Vacío hasta que el lote termina. */
   partes: ParteLoteConsolidados[];
 }
@@ -69,6 +91,12 @@ export interface CrearLoteConsolidadosRequest<TFiltro = unknown> {
   tipoDocumento: TipoDocumentoLote;
   /** CF-08: el usuario vio y aceptó el efecto declarado. Siempre `true`. */
   confirmaEfectos: true;
+  /**
+   * HU #13419 — alcance de la tabla en la RAÍZ, para los modos `ids` y `filtro`. Ausente = el
+   * servidor asume el propio (bandeja OT, Super Admin). `seleccion.filtro.alcanceRed` está
+   * deprecado en el contrato y el cliente nunca lo envía.
+   */
+  alcanceRed?: AlcanceRedSolicitado;
   seleccion: ModeloSeleccionLote<TFiltro>;
 }
 

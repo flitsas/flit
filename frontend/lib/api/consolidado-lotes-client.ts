@@ -4,7 +4,9 @@ import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { downloadFile } from './download';
 import { ApiError, ApiValidationError } from './types';
 import type {
+  AlcanceRedSolicitado,
   CodigoErrorLote,
+  CodigoRechazoRedLote,
   CrearLoteConsolidadosRequest,
   LoteConsolidados,
   ParteLoteConsolidados,
@@ -58,6 +60,41 @@ export const MENSAJE_LOTE_ACTIVO =
 export const MENSAJE_NO_SE_PUDO_CANCELAR = 'No se pudo cancelar la descarga';
 
 const MENSAJE_SIN_PERMISO = 'No tienes permiso para la descarga masiva de consolidados.';
+
+/** HU #13419 — 403 de la vista de red al crear el lote (contrato HU #13417). */
+export type CodigoRechazoRed = CodigoRechazoRedLote;
+
+/**
+ * HU #13419 AC4 — un mensaje claro por cada rechazo de red. Sin el código técnico en pantalla y sin
+ * reintento: ninguno se arregla volviendo a pulsar «Confirmar».
+ */
+export const MENSAJES_RECHAZO_RED: Record<CodigoRechazoRed, string> = {
+  network_documents_disabled:
+    'La descarga de documentos de tu red no está habilitada para tu compañía. Cambia a «Mi compañía» para descargar tus propios trámites.',
+  network_role_required:
+    'La descarga desde la vista de red es solo para el administrador de la compañía cabeza de red.',
+  network_child_out_of_scope:
+    'La compañía elegida ya no forma parte de tu red. Actualiza la vista de red y vuelve a seleccionar los trámites.',
+  network_scope_required:
+    'Tu compañía no tiene habilitada la vista de red. Cambia a «Mi compañía» para descargar tus propios trámites.',
+};
+
+const esRechazoRed = (codigo: string | null): codigo is CodigoRechazoRed =>
+  codigo !== null && Object.prototype.hasOwnProperty.call(MENSAJES_RECHAZO_RED, codigo);
+
+/**
+ * HU #13419 — `seleccion.filtro.alcanceRed` está deprecado (el alcance va en la raíz del cuerpo):
+ * nunca se envía, aunque el modelo lo traiga.
+ */
+function sinAlcanceEnFiltro<TFiltro>(seleccion: ModeloSeleccionLote<TFiltro>): ModeloSeleccionLote<TFiltro> {
+  const filtro = seleccion.filtro as unknown;
+  if (!filtro || typeof filtro !== 'object' || Array.isArray(filtro) || !('alcanceRed' in filtro)) {
+    return seleccion;
+  }
+  const { alcanceRed: _deprecado, ...resto } = filtro as Record<string, unknown>;
+  void _deprecado;
+  return { ...seleccion, filtro: resto as TFiltro };
+}
 
 /**
  * Error de una llamada al motor de lotes. `status` 0 = falla de red (no hubo respuesta HTTP).
@@ -178,6 +215,8 @@ export type ResultadoErrorCrearLote =
   | { tipo: 'lote_activo'; mensaje: string; loteActivoId: string | null }
   | { tipo: 'tope'; mensaje: string }
   | { tipo: 'permiso'; mensaje: string }
+  /** HU #13419 AC4 — 403 de la vista de red: mensaje propio por código, sin reintento. */
+  | { tipo: 'red'; codigo: CodigoRechazoRed; mensaje: string }
   | { tipo: 'reintentar'; mensaje: string };
 
 export function interpretarErrorCrearLote(err: unknown): ResultadoErrorCrearLote {
@@ -186,6 +225,9 @@ export function interpretarErrorCrearLote(err: unknown): ResultadoErrorCrearLote
       return { tipo: 'lote_activo', mensaje: MENSAJE_LOTE_ACTIVO, loteActivoId: err.loteActivoId };
     }
     if (err.status === 422) return { tipo: 'tope', mensaje: mensajeTopeDescarga(err.total, err.tope) };
+    if (err.status === 403 && esRechazoRed(err.codigo)) {
+      return { tipo: 'red', codigo: err.codigo, mensaje: MENSAJES_RECHAZO_RED[err.codigo] };
+    }
     if (err.status === 403) return { tipo: 'permiso', mensaje: MENSAJE_SIN_PERMISO };
   }
   // 503 (motor_inactivo / auditoria_no_registrada), red y cualquier otro fallo: reintento.
@@ -199,16 +241,21 @@ export const consolidadoLotesClient = {
    *
    * HU #13387 — `cabecerasDelListado` (Super Admin): la creación viaja con las mismas cabeceras
    * que el listado, no con el tenant activo/JWT. Sin él (Gestor) las cabeceras no cambian.
+   *
+   * HU #13419 — `alcanceRed` (vista de red) viaja en la RAÍZ del cuerpo en los dos modos; sin él
+   * (`undefined`) la clave no se envía. `seleccion.filtro.alcanceRed` (deprecado) nunca se envía.
    */
   crearLote: async <TFiltro>(params: {
     seleccion: ModeloSeleccionLote<TFiltro>;
     tipoDocumento?: CrearLoteConsolidadosRequest['tipoDocumento'];
     cabecerasDelListado?: CabecerasDelListado;
+    alcanceRed?: AlcanceRedSolicitado;
   }): Promise<LoteConsolidados> => {
     const cuerpo: CrearLoteConsolidadosRequest<TFiltro> = {
       tipoDocumento: params.tipoDocumento ?? 'consolidado',
       confirmaEfectos: true,
-      seleccion: params.seleccion,
+      ...(params.alcanceRed !== undefined ? { alcanceRed: params.alcanceRed } : {}),
+      seleccion: sinAlcanceEnFiltro(params.seleccion),
     };
     const res = await llamar(
       RUTA_CREAR,

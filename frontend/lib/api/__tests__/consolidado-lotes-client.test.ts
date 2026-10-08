@@ -39,7 +39,7 @@ const SELECCION_FILTRO: ModeloSeleccionLote<Record<string, unknown>> = {
   modo: 'filtro',
   ids: [],
   excluidos: ['inst-0002', 'inst-0005'],
-  filtro: { estado: 'preparado', alcanceRed: null },
+  filtro: { estado: 'preparado' },
 };
 
 function respuesta(status: number, body?: unknown): Response {

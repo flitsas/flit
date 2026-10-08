@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import {
   useConsolidadoLoteActual,
+  type OpcionesMostrarLote,
   type UseConsolidadoLoteActual,
 } from '@/hooks/useConsolidadoLoteActual';
 import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
@@ -30,8 +31,11 @@ import { LoteDescargaAlertCard } from './LoteDescargaAlertCard';
  */
 
 export interface AccionesLoteDescarga {
-  /** Muestra y sigue un lote concreto (el objeto ya leído o su id). */
-  mostrarLote: (lote: LoteConsolidados | string) => void;
+  /**
+   * Muestra y sigue un lote concreto (el objeto ya leído o su id). HU #13419: `nombreHija` para el
+   * rótulo «Red · {hija}» de un lote de red acotado.
+   */
+  mostrarLote: (lote: LoteConsolidados | string, opciones?: OpcionesMostrarLote) => void;
 }
 
 const SIN_PROVIDER: AccionesLoteDescarga = { mostrarLote: () => undefined };
@@ -81,6 +85,7 @@ export function LoteDescargaTracker() {
         onCancelar={() => void s.cancelar()}
         cancelando={s.cancelando}
         errorCancelacion={s.errorCancelacion}
+        nombreHija={s.nombreHija}
       />
     </div>
   );

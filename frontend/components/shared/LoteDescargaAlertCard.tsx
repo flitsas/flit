@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Clock, Download, FileArchive, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Download, FileArchive, Loader2, Network, XCircle } from 'lucide-react';
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import { MENSAJE_REINTENTAR_DESCARGA } from '@/lib/api/consolidado-lotes-client';
 import {
@@ -29,6 +29,10 @@ import {
  * El lote cancelado se pinta neutro con «Descarga cancelada», sin partes ni botones; un 404/403 al
  * cancelar muestra «No se pudo cancelar la descarga» en tono error (`--badge-danger-*`).</p>
  *
+ * <p>HU #13419 AC6 — lote de la vista de red: rótulo «Red» (toda la red) o «Red · {hija}» (acotado).
+ * El contrato solo dice `alcanceRed: 'hija'`, sin id ni nombre: el nombre lo aporta quien creó el
+ * lote (`nombreHija`); si no se conoce (recarga, otra pestaña) el rótulo cae a «Red».</p>
+ *
  * Uso de ejemplo:
  *   <LoteDescargaAlertCard lote={lote} expirado={expirado} onDescargarParte={(n) => descargar(n)}
  *     errorConsulta={errorConsulta} descargandoParte={null} />
@@ -40,6 +44,16 @@ export const TEXTO_DESCARGA_EXPIRADA = 'Descarga expirada';
 export const TEXTO_DESCARGA_CANCELADA = 'Descarga cancelada';
 
 const formatoMiles = (n: number) => n.toLocaleString('es-CO');
+
+/**
+ * HU #13419 AC6 — rótulo del alcance de red del lote: `null` en el lote propio, «Red» en el de toda
+ * la red y «Red · {nombreHija}» en el acotado (o «Red» si el nombre no se conoce).
+ */
+export function etiquetaAlcanceLote(lote: LoteConsolidados, nombreHija?: string | null): string | null {
+  if (lote.alcanceRed !== 'red' && lote.alcanceRed !== 'hija') return null;
+  const nombre = lote.alcanceRed === 'hija' ? nombreHija?.trim() : '';
+  return nombre ? `Red · ${nombre}` : 'Red';
+}
 
 /** AC2 — tono semántico (de la escala de `statusTones` / `StatusBadge`) del lote. */
 export function toneLoteConsolidados(lote: LoteConsolidados, expirado: boolean): StatusTone {
@@ -98,6 +112,8 @@ export interface LoteDescargaAlertCardProps {
   cancelando?: boolean;
   /** HU #13388 AC6 — error de la cancelación (404/403). */
   errorCancelacion?: string | null;
+  /** HU #13419 AC6 — nombre de la hija de un lote de red acotado, si se conoce. */
+  nombreHija?: string | null;
   className?: string;
 }
 
@@ -111,8 +127,10 @@ export function LoteDescargaAlertCard({
   onCancelar,
   cancelando = false,
   errorCancelacion = null,
+  nombreHija = null,
   className,
 }: LoteDescargaAlertCardProps) {
+  const alcance = etiquetaAlcanceLote(lote, nombreHija);
   const tone = toneLoteConsolidados(lote, expirado);
   const Icono = ICONO[tone];
   const terminado = lote.estado === 'completado' || lote.estado === 'completado_con_omitidos';
@@ -137,6 +155,18 @@ export function LoteDescargaAlertCard({
         <Icono className="mt-0.5 h-4 w-4 shrink-0" style={{ color: `var(--badge-${tone}-fg)` }} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-flit-primary dark:text-white">Descarga masiva de consolidados</h2>
+          {alcance ? (
+            <p
+              data-testid="lote-alcance-red"
+              className="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 text-[10px] font-semibold text-flit-brand"
+            >
+              <Network className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="sr-only">Alcance: </span>
+              <span className="truncate" title={alcance}>
+                {alcance}
+              </span>
+            </p>
+          ) : null}
           <p role="status" aria-live="polite" className="font-semibold" style={{ color: `var(--badge-${tone}-fg)` }}>
             {textoEstado(lote, expirado)}
           </p>
