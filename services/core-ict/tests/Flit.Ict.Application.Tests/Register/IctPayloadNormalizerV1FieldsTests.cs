@@ -170,7 +170,7 @@ public sealed class IctPayloadNormalizerV1FieldsTests
     }
 
     [Fact]
-    public void Transformations_are_mapped_with_their_runt_code_and_description()
+    public void Transformations_are_mapped_with_their_tipo_tramite_code_and_description()
     {
         var row = new RegisterRowInput(
             TransactionType: 3,
@@ -178,15 +178,15 @@ public sealed class IctPayloadNormalizerV1FieldsTests
             Plate: "TRF852",
             MoreTransactionTransactionType:
             [
-                new RegisterTransformationInput(5, "Azul AguaMarina"),
-                new RegisterTransformationInput(17, "Estacas"),
+                new RegisterTransformationInput(7, "Azul AguaMarina"),
+                new RegisterTransformationInput(6, "Estacas"),
             ]);
 
         var master = IctPayloadNormalizer.ToMaster(row, Tenant);
 
         master.Transformations.Should().HaveCount(2);
-        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 5 && t.Description == "Azul AguaMarina");
-        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 17 && t.Description == "Estacas");
+        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 7 && t.Description == "Azul AguaMarina");
+        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 6 && t.Description == "Estacas");
         master.Transformations.Should().OnlyContain(t => t.TenantId == Tenant);
     }
 
@@ -200,12 +200,37 @@ public sealed class IctPayloadNormalizerV1FieldsTests
             MoreTransactionTransactionType:
             [
                 new RegisterTransformationInput(5, "Azul"),
-                new RegisterTransformationInput(99, "Codigo fuera del catalogo RUNT"),
+                new RegisterTransformationInput(99, "Codigo fuera del catalogo Tipo Tramite"),
             ]);
 
         var master = IctPayloadNormalizer.ToMaster(row, Tenant);
 
         master.Transformations.Should().ContainSingle().Which.IdTransformationType.Should().Be(5);
+    }
+
+    /// <summary>Bug #13445 (D6): solo 5 blindaje, 6 carrocería, 7 color y 9 combustible son transformaciones.</summary>
+    [Theory]
+    [InlineData(5, true)]
+    [InlineData(6, true)]
+    [InlineData(7, true)]
+    [InlineData(9, true)]
+    [InlineData(17, false)]
+    [InlineData(8, false)]
+    [InlineData(10, false)]
+    [InlineData(11, false)]
+    [InlineData(1, false)]
+    public void Only_tipo_tramite_transformation_codes_are_kept_bug13445(int codigo, bool seConserva)
+    {
+        var row = new RegisterRowInput(
+            TransactionType: 3,
+            TransactionOperation: 1,
+            Plate: "TRF852",
+            MoreTransactionTransactionType: [new RegisterTransformationInput(codigo, "x")]);
+
+        var master = IctPayloadNormalizer.ToMaster(row, Tenant);
+
+        master.Transformations.Select(t => t.IdTransformationType)
+            .Should().BeEquivalentTo(seConserva ? new[] { codigo } : Array.Empty<int>());
     }
 
     [Fact]
