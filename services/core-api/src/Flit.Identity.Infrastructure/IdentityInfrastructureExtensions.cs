@@ -98,12 +98,8 @@ public static class IdentityInfrastructureExtensions
         services.AddSingleton(passwordRecovery);
 
         // HU #13003 (A-12): URLs de los correos de seguridad por ambiente. Sin sección propia, se derivan de las que ya
-        // configura cada ambiente (recursos de correo y URL pública de la marca).
-        var emailSettings = configuration
-            .GetSection(EmailSettings.SectionName)
-            .Get<EmailSettings>() ?? new EmailSettings();
-        services.AddSingleton(emailSettings);
-
+        // configura cada ambiente (recursos de correo y URL pública de la marca). HU #13359: la sección «Smtp» ya no se
+        // lee aquí: el SMTP vive solo en core-notificaciones.
         var emailAssets = configuration
             .GetSection(NotificationEmailAssetsOptions.SectionName)
             .Get<NotificationEmailAssetsOptions>() ?? new NotificationEmailAssetsOptions();

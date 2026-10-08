@@ -397,7 +397,6 @@ Flit.Infrastructure.Analytics.Scheduling.OtQueryReportDocumentBuilder => Flit.In
 Flit.Infrastructure.Analytics.Scheduling.OtReportDocumentBuilder => Flit.Infrastructure.Analytics.Scheduling.OtReportDocumentBuilder (Scoped)
 Flit.Infrastructure.Analytics.Scheduling.UsageReportDocumentBuilder => Flit.Infrastructure.Analytics.Scheduling.UsageReportDocumentBuilder (Scoped)
 Flit.Infrastructure.Domains.MemoryPublicBrandingCache => Flit.Infrastructure.Domains.MemoryPublicBrandingCache (Singleton)
-Flit.Infrastructure.Email.EmailSettings => instance:Flit.Infrastructure.Email.EmailSettings (Singleton)
 Flit.Infrastructure.Messaging.ChannelConsolidadoRegeneracionQueue => Flit.Infrastructure.Messaging.ChannelConsolidadoRegeneracionQueue (Singleton)
 Flit.Infrastructure.Messaging.ProcedureStateChangeEmailEnqueueNotifier => Flit.Infrastructure.Messaging.ProcedureStateChangeEmailEnqueueNotifier (Scoped)
 Flit.Infrastructure.Messaging.TramitesBusOptions => instance:Flit.Infrastructure.Messaging.TramitesBusOptions (Singleton)
