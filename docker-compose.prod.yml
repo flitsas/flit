@@ -362,7 +362,7 @@ services:
   # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Obligatorio
   # desde el corte (HU #13348): core-api e ICT ya no tienen proveedores. Sin `ports`: ni REST ni gRPC se publican.
   # Si falta configuración o el secreto de un proveedor en modo real, no arranca y el log dice qué variable falta.
-  # Pasos en docs/suite/handoff-vps-suite.md §4.9.
+  # Pasos en docs/suite/handoff-vps-consultas-notificaciones.md.
   core-consultas:
     image: ghcr.io/flitsas/flitdev/core-consultas:${CORE_CONSULTAS_TAG:-latest}
     extra_hosts:
@@ -433,7 +433,7 @@ services:
   # Notificaciones como servicio (Epic #13316, Feature #13324): envía los correos que arman core-api y core-identity
   # (llegan por el bus o, el buzón de pruebas, por gRPC), entrega los webhooks del OT y lleva su registro de entregas.
   # Obligatorio desde el corte (HU #13359): core-api y core-identity ya no tienen transportes. Sin `ports`: ni REST ni
-  # gRPC se publican. Pasos en docs/suite/handoff-vps-suite.md §4.10.
+  # gRPC se publican. Pasos en docs/suite/handoff-vps-consultas-notificaciones.md.
   core-notificaciones:
     image: ghcr.io/flitsas/flitdev/core-notificaciones:${CORE_NOTIFICACIONES_TAG:-latest}
     extra_hosts:

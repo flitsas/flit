@@ -144,8 +144,11 @@ quedan también en el `.env`.
 | **Hub (`frontend-hub`)** | `HUB_PORT` | **4022** | **5022** | **6022** |
 | gRPC interno de core-api (no publicado) | `CORE_API_GRPC_PORT` | 8082 | 8082 | 8082 |
 | gRPC interno de core-identity (no publicado, Epic #13316) | `CORE_IDENTITY_GRPC_PORT` | vacío = apagado; propuesto 8083 | igual | igual |
-| core-consultas REST (no publicado, perfil `consultas`) | `CORE_CONSULTAS_PORT` | 4026 (propuesto) | igual | igual |
+| core-consultas REST (no publicado) | `CORE_CONSULTAS_PORT` | 4026 (propuesto) | igual | igual |
 | core-consultas gRPC (no publicado) | `CORE_CONSULTAS_GRPC_PORT` | 8084 (propuesto) | igual | igual |
+| core-notificaciones REST (no publicado) | `CORE_NOTIFICACIONES_PORT` | 4027 (propuesto) | igual | igual |
+| core-notificaciones gRPC (no publicado) | `CORE_NOTIFICACIONES_GRPC_PORT` | 8085 (propuesto) | igual | igual |
+| Consola de RabbitMQ (solo `127.0.0.1`) | `RABBITMQ_MGMT_PORT` | 4672 | igual | igual |
 | Reservados, sin servicio todavía | — | Comparendos 4023; Diagnóstico 4024 | 5023; 5024 | 6023; 6024 |
 
 Notas:
@@ -267,202 +270,13 @@ Las demás variables (Verifik, Kyverum, Fasecolda, SMTP, Renting, ICT, migrador,
 cambian** con la suite. core-identity las recibe todas por el mismo bloque del compose que core-api: no hay que
 duplicar nada.
 
-### 4.8 ICT: del secreto HMAC al token de Identidad (Epic #13316, HU #13335)
+### 4.8 Consultas, Notificaciones y RabbitMQ (Epic #13316)
 
-Hoy core-ict firma un JWT con `ICT_SERVICE_TOKEN_SECRET`, el mismo secreto que tiene core-api. Pasa a pedir su token a
-Identidad (cliente `svc-ict`, scope `platform.tramites.ict`). Sin tocar nada, todo sigue como hoy. El paso, por ambiente
-y en este orden:
-
-1. `SVC_ICT_CLIENT_SECRET` en el `.env` (ver §4 de clientes de servicio) y recrear core-api y core-identity.
-2. `ICT_SERVICE_TOKEN_ACCEPT_IDENTITY=true` y recrear core-api: acepta los dos tokens.
-3. `ICT_SERVICE_TOKEN_USE_IDENTITY=true` y recrear core-ict. Pide el token en `ICT_IDENTITY_TOKEN_ENDPOINT` (por
-   defecto el gateway, `http://gateway:<GATEWAY_PORT>/connect/token`). Si falta el secreto, core-ict no arranca y lo
-   dice en el log.
-4. Comprobar que los trámites de ICT siguen entrando (log de core-ict sin `Unauthenticated`).
-5. El corte: `ICT_SERVICE_TOKEN_ACCEPT_LEGACY=false` y recrear core-api. Desde ahí el token HMAC se rechaza.
-
-Volver atrás: en orden inverso. El esquema HMAC se retira del código cuando el corte esté verificado en PDN. El
-reflejo de estado core-api → core-ict (`Ict:StateCallback`) sigue con el secreto HMAC: no es parte de esta HU.
-
-### 4.9 Consultas y bus de eventos: obligatorios desde el corte (Epic #13316, HUs #13343-#13351 y #13348)
-
-Con el corte (HU #13348) core-api ya no tiene proveedores ni sus secretos: toda consulta (RUNT, SIMIT, RNMC, RUES),
-avalúo, impronta, certificado RUES, RUNT de la Confirmación RUNT y validación de identidad de Kyverum va a
-core-consultas por gRPC, **sin respaldo en proceso**. Los avisos de Kyverum vuelven a Trámites por el bus, así que
-RabbitMQ y el bus de Trámites también son obligatorios. ICT consulta directo a core-consultas con su token de
-Identidad. En el compose ya no hay perfiles `bus` ni `consultas` (arrancan siempre) ni banderas para encenderlos.
-
-**Antes de desplegar la rama, por ambiente, en este orden** (si falta algo, `docker compose` o el servicio no arranca
-y dice qué):
-
-1. **Broker:** `RABBITMQ_ADMIN_USER` y `RABBITMQ_ADMIN_PASSWORD` en el `.env`. El vhost `flit` y los exchanges salen de
-   `deploy/rabbitmq/definitions.json` al arrancar (`deploy/rabbitmq/README.md`).
-2. **Base de Consultas:** usuario dueño del esquema `consultas` (`deploy/postgres/README.md`):
-   `psql "$ADMIN_URL" -v servicio=consultas -v conexiones=20 -v clave="$CLAVE" -f deploy/postgres/servicio-con-esquema-propio.sql`
-   y con eso `CONNECTION_STRING_CONSULTAS` (usuario `flit_consultas`) en el `.env`.
-3. **Secretos de clientes de servicio**, uno distinto por ambiente: `SVC_TRAMITES_CLIENT_SECRET` (obligatoria: con él
-   core-api llama a Consultas), `SVC_CONSULTAS_CLIENT_SECRET` y `SVC_ICT_CLIENT_SECRET`.
-4. **Secretos de proveedores:** los mismos nombres que ya tenía core-api (`VERIFIK_*`, `KYVERUM_*`, `KYVERUM_RUNT_*`,
-   `FASECOLDA_*`); ahora solo los lee core-consultas. Si a uno en modo real le falta su secreto, core-consultas no
-   arranca y lo dice en el log. El certificado RUES sigue opcional (`RUES_ENABLED`, `RUES_BASE_URL`, `RUES_API_KEY`);
-   sin él, Trámites cae a la carga manual como hoy.
-5. **Aviso de Kyverum — variable NUEVA, distinta de la que ya existe:**
-   `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL=https://<host del ambiente>/api/v1/consultas/avisos/kyverum-verify`.
-   En DEV, con el mismo host que hoy usa `KYVERUM_WEBHOOK_CALLBACK_URL`:
-   `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL=https://api.dev.flitsas.online/api/v1/consultas/avisos/kyverum-verify`.
-   - Cambia la **ruta**, no solo el host: la vieja termina en `/api/v1/webhooks/kyverum-verify` (core-api); la nueva en
-     `/api/v1/consultas/avisos/kyverum-verify` (core-consultas). Copiar el valor viejo deja las validaciones nuevas sin
-     resultado: Kyverum avisaría a core-api, que ya no las creó.
-   - **No borrar** `KYVERUM_WEBHOOK_CALLBACK_URL` ni la ruta vieja en el primer despliegue: las validaciones creadas
-     antes del corte siguen avisando ahí, y core-api las sigue atendiendo con el secreto que guardó al crearlas.
-   - El gateway ya enruta `/api/v1/consultas/avisos/*` a core-consultas; si nginx filtra rutas, abrir esa también.
-   - `KYVERUM_API_KEY`, `KYVERUM_BASE_URL` y `KYVERUM_RUNT_*` no cambian de valor: son los mismos de hoy, solo que ahora
-     los lee core-consultas.
-6. **Usuarios del broker** (con el broker arriba; si es el primer despliegue con broker, levantarlo antes con
-   `docker compose up -d rabbitmq`): `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES"` y
-   `deploy/rabbitmq/usuario-de-servicio.sh consultas "$CLAVE_CONSULTAS"`; las cadenas van a `RABBITMQ_URL_TRAMITES`
-   (obligatoria) y `RABBITMQ_URL_CONSULTAS`. Cada usuario escribe solo en su exchange.
-
-**Desplegar** (el CD construye core-consultas en `build-core-consultas`). core-consultas no publica puertos: REST
-`CORE_CONSULTAS_PORT` (4026) y gRPC `CORE_CONSULTAS_GRPC_PORT` (8084) quedan en la red de Docker; el CD revisa su
-`/health/ready` desde dentro del contenedor. Al arrancar aplica sus migraciones (solo su esquema).
-
-**Apenas termine el despliegue:**
-
-7. **Configuración por empresa:** `psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-configuracion-consultas.sql`.
-   Hasta correrlo, las consultas usan la cadena global (`Consultations:DefaultChains`), no la de cada empresa.
-8. **Solo DEV/QA:** `psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-valores-mock-avaluo.sql` (los
-   valores de avalúo de prueba que se hayan agregado a mano; los de siempre ya los siembra la migración).
-
-**Verificar:**
-
-- Una consulta de vehículo en un trámite de prueba responde y queda en `consultas.consumo`; el SuperAdmin ve el consumo
-  en `GET /api/v1/superadmin/consultas/consumo`. Si core-consultas no responde, la pantalla muestra «Consulta no
-  disponible» (y el log de core-api, `flit.consultas.no_disponible`): no hay respaldo.
-- El valor comercial sugerido de un trámite carga (y en DEV/QA, con el VIN de prueba `93Y9SR333RJ563653`, trae valor).
-- Una impronta de prueba se genera; la Confirmación RUNT («Consultar ahora») deja su intento.
-- Trámites publica: `rabbitmqctl list_exchanges -p flit`; en `tramites.outbox`, `published_at IS NULL` = pendientes
-  (con el broker caído esperan en la tabla y salen en orden al volver).
-- Una validación de identidad de prueba queda en `consultas.validaciones_kyverum`, su aviso en `consultas.avisos`
-  (`resultado = publicado`) y el trámite se actualiza. Un aviso con firma inválida queda como `firma_invalida`.
-- ICT sigue entrando: log de core-ict sin `Unauthenticated` ni errores de Consultas. core-ict ahora pide su token a
-  Identidad (`Ict__ServiceToken__UseIdentity` fijo en el compose) y core-api lo acepta siempre; el HMAC sigue
-  entrando hasta `ICT_SERVICE_TOKEN_ACCEPT_LEGACY=false` (§4.8, paso 5).
-
-**Las validaciones de Kyverum creadas antes del corte** siguen avisando al webhook de core-api, que se conserva para
-ellas; core-api consulta su estado por Consultas.
-
-**Volver atrás:** desplegar la imagen anterior de core-api y core-ict (con su `.env` de antes: banderas apagadas).
-core-consultas y el broker pueden seguir corriendo. Las variables nuevas no estorban a la versión anterior.
-
-### 4.10 Notificaciones: obligatorio desde el corte (Epic #13316, Feature #13324 y HU #13359)
-
-Con el corte (HU #13359), core-api y core-identity ya no tienen transportes de correo. **SMTP, el canal Renting y su
-certificado viven solo en core-notificaciones**, que envía todos los correos y entrega los webhooks del OT. Los correos
-llegan ya armados y con su canal resuelto.
-
-- **Lo que va por el bus:**
-  - Todos los correos.
-  - Los webhooks del OT, que core-api sigue firmando: viaja la firma, no la llave.
-- **Lo que necesita respuesta inmediata va por gRPC:** pantalla de canales, buzón de pruebas, registro de entregas de una
-  empresa y consola de mensajes muertos.
-- **Lo que no es de ninguna empresa va con la empresa «plataforma»** (`00000000-0000-0000-0000-0000000f1170`) y por FLIT:
-  simulación de mandato, buzón de pruebas, recuperación de contraseña de un usuario sin rol y reportes de alcance
-  SuperAdmin.
-- **Ya no existen:** el perfil `notificaciones` ni las banderas `NOTIFICACIONES_REMOTO_HABILITADO`,
-  `NOTIFICACIONES_REMOTO_WEBHOOKS` y `TRAMITES_BUS_ENTREGA_EN_PROCESO`.
-
-**Antes de desplegar la rama, por ambiente** (junto con los pasos de §4.9):
-
-1. **Base:** crear el usuario `flit_notificaciones` con
-   `psql "$ADMIN_URL" -v servicio=notificaciones -v conexiones=20 -v clave="$CLAVE" -f deploy/postgres/servicio-con-esquema-propio.sql`
-   y poner `CONNECTION_STRING_NOTIFICACIONES` en el `.env`.
-2. **Secretos:**
-   - `SVC_NOTIFICACIONES_CLIENT_SECRET`.
-   - SMTP: las mismas variables `SMTP_*` de siempre.
-   - Renting: las mismas `RENTING_API_*` y el mismo certificado `.pfx`, montado ahora en core-notificaciones. core-api y
-     core-identity ya no montan el certificado.
-3. **Broker:**
-   - `deploy/rabbitmq/usuario-de-servicio.sh notificaciones "$CLAVE"` → `RABBITMQ_URL_NOTIFICACIONES`.
-   - Los que dejan trabajos necesitan escribir en `flit.notificaciones`:
-     - volver a correr `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE_TRAMITES" notificaciones`, con la misma
-       clave que ya tiene;
-     - crear el de core-identity: `deploy/rabbitmq/usuario-de-servicio.sh plataforma "$CLAVE" notificaciones` →
-       `RABBITMQ_URL_PLATAFORMA` (obligatoria).
-
-**Desplegar** (`build-core-notificaciones` en el CD). No publica puertos: REST `CORE_NOTIFICACIONES_PORT` (4027) y gRPC
-`CORE_NOTIFICACIONES_GRPC_PORT` (8085). El CD revisa su `/health/ready` desde dentro del contenedor.
-
-**Verificar:**
-
-- Un cambio de estado de prueba deja su fila en `notificaciones.entregas`.
-- Una invitación y una recuperación de contraseña llegan.
-- La simulación de mandato llega y queda con la empresa «plataforma».
-- En la pantalla de notificaciones del SuperAdmin:
-  - los canales muestran su remitente;
-  - el buzón de pruebas envía.
-- Un webhook del OT llega al destino y queda en `notificaciones.webhooks`.
-- Correos (`notificaciones.email.send`): reintentos a 10 s, 1 min y 10 min; si se agotan, el mensaje pasa a la
-  `.dlq`.
-- Webhooks (`notificaciones.webhooks.salientes`): lo que no sale queda en su `.dlq`.
-- La alerta `deploy/rabbitmq/alerta-dlq.sh` avisa de lo que llega a cualquier `.dlq`. El SuperAdmin lista, reintenta y
-  descarta en `/api/v1/superadmin/notificaciones/mensajes-muertos?cola=correos|webhooks`.
-- Los webhooks de ICT siguen saliendo de core-ict hasta que tengan su llave de firma (pendiente anotado en la HU #13356).
-
-**Lo que no se mueve:**
-- El reflejo de estado a ICT es gRPC a core-ict, no un webhook: sigue en core-api.
-- La orquestación del cambio de estado se queda en core-api: decide los destinatarios y arma el correo y el webhook. Su
-  tabla `tramites.procedure_state_change_outbox` se sigue llenando.
-
-**Volver atrás:** desplegar la imagen anterior de core-api y core-identity con su `.env` de antes (`SMTP_*` y `RENTING_*`
-siguen definidos). core-notificaciones y el broker pueden seguir corriendo.
-
-### 4.11 Epic #13316: orden único por ambiente
-
-El PR de la Epic (Consultas y Notificaciones como servicios) llega con los cortes incluidos: al desplegarlo, core-api ya
-no consulta proveedores ni envía correos por sí mismo. Por eso **toda la preparación va antes de fusionar** (en DEV,
-fusionar es desplegar) y no hay banderas que encender después. El mismo orden se repite en QA y PDN antes de cada paso
-de rama.
-
-**Antes de fusionar o pasar de rama** (no cambia nada para los usuarios):
-
-1. Respaldo de la base (`pg_dump`).
-2. **Broker** (§4.9, paso 1): `RABBITMQ_ADMIN_USER` y `RABBITMQ_ADMIN_PASSWORD`; levantar solo `rabbitmq`
-   (`docker compose up -d rabbitmq`), que importa el vhost `flit` y los exchanges al arrancar. **Esperar a que
-   `docker compose ps rabbitmq` diga `healthy` antes del paso 3:** un `rabbitmqctl` lanzado mientras el broker arranca
-   crea la cookie de Erlang como root y el broker ya no puede leerla (se cae con `.erlang.cookie: eacces`; arreglo:
-   borrar el contenedor y su volumen `rabbitmq-datos`, y volver a levantarlo).
-3. **Usuarios del broker** (§4.9, paso 6 y §4.10, paso 3), cada uno con su clave:
-   - `tramites` (con destino `notificaciones`) → `RABBITMQ_URL_TRAMITES`;
-   - `consultas` → `RABBITMQ_URL_CONSULTAS`;
-   - `notificaciones` → `RABBITMQ_URL_NOTIFICACIONES`;
-   - `plataforma` (con destino `notificaciones`) → `RABBITMQ_URL_PLATAFORMA`.
-4. **Bases propias** (§4.9, paso 2 y §4.10, paso 1): usuarios `flit_consultas` y `flit_notificaciones` →
-   `CONNECTION_STRING_CONSULTAS` y `CONNECTION_STRING_NOTIFICACIONES`.
-5. **Clientes de servicio**, uno distinto por ambiente: `SVC_TRAMITES_CLIENT_SECRET`, `SVC_CONSULTAS_CLIENT_SECRET`,
-   `SVC_NOTIFICACIONES_CLIENT_SECRET`, `SVC_ICT_CLIENT_SECRET`.
-6. **Secretos de proveedores y de correo:** los mismos de siempre (`VERIFIK_*`, `KYVERUM_*`, `KYVERUM_RUNT_*`,
-   `FASECOLDA_*`, `RUES_*` opcional, `SMTP_*`, `RENTING_API_*`). Ahora los leen core-consultas y core-notificaciones; el
-   certificado `.pfx` se monta solo en core-notificaciones.
-7. **Aviso de Kyverum:** `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL` y, si nginx filtra rutas, abrir
-   `/api/v1/consultas/avisos/*`.
-8. **Comprobar el compose:** `docker compose -f docker-compose.prod.yml config` sin errores. Las variables obligatorias
-   nuevas (`RABBITMQ_URL_TRAMITES`, `RABBITMQ_URL_PLATAFORMA`, `SVC_TRAMITES_CLIENT_SECRET`) hacen que falle aquí, no
-   al desplegar.
-
-**Fusionar o pasar de rama:** el CD construye y levanta core-consultas y core-notificaciones junto con core-api;
-core-consultas aplica sus migraciones al arrancar.
-
-**Apenas termine el despliegue:**
-
-9. `deploy/postgres/migrar-configuracion-consultas.sql` (§4.9, paso 7); en DEV y QA también
-   `migrar-valores-mock-avaluo.sql` (§4.9, paso 8).
-10. Verificar con las listas de §4.9 y §4.10: consulta, avalúo, impronta y Confirmación RUNT; validación de identidad;
-    correo de cambio de estado, invitación, recuperación y simulación de mandato; webhook del OT; canales y buzón de
-    pruebas; consola de mensajes muertos; ICT entrando sin errores.
-
-**Volver atrás:** imagen anterior de core-api, core-identity y core-ict con el `.env` anterior (las variables viejas
-siguen ahí). core-consultas, core-notificaciones y el broker pueden quedar corriendo.
+Despliegue aparte, con su propio paso a paso: [handoff-vps-consultas-notificaciones.md](handoff-vps-consultas-notificaciones.md).
+Desde esa Epic core-api ya no habla con proveedores ni envía correos: `core-consultas`, `core-notificaciones` y RabbitMQ
+son obligatorios, así que su preparación va antes de fusionar. Incluye el paso de ICT al token de Identidad (antes
+§4.8 de este documento), el broker, las bases propias, las variables nuevas (entre ellas la URL nueva del aviso de
+Kyverum), la verificación y cómo volver atrás.
 
 ---
 

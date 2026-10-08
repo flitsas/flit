@@ -101,7 +101,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Notificaciones.
 ```
 
 - **Los correos salen de verdad** con el SMTP que pongas: llegan a las personas de tu base. Para no mandar nada, deja
-  `Smtp:Host` vacío: el correo se reintenta unos 11 minutos y termina en Plataforma → Mensajes muertos.
+  `Smtp:Host` vacío: en `Development` el correo se escribe en el log de core-notificaciones y no sale.
 - **Validación de identidad real** (`Biometrics:Provider` = `kyverum` en core-api): Kyverum avisa a core-consultas por
   internet. Abre un túnel (`cloudflared tunnel --url http://127.0.0.1:4026`) y pon su dirección +
   `/api/v1/consultas/avisos/kyverum-verify` en `Kyverum:WebhookCallbackUrl`. El túnel rápido cambia de dirección y a

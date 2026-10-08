@@ -32,6 +32,17 @@ SELECT format('ALTER ROLE %I WITH LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREAT
 -- 2. Su esquema, del que es dueño: crea, migra y borra solo ahí (sus migraciones y su tabla __EFMigrationsHistory).
 SELECT format('CREATE SCHEMA IF NOT EXISTS %I AUTHORIZATION %I', :'servicio', :'rol') \gexec
 SELECT format('ALTER SCHEMA %I OWNER TO %I', :'servicio', :'rol') \gexec
+-- Si el esquema ya existía (por ejemplo, el servicio corrió antes con el usuario principal de la base), sus tablas,
+-- secuencias y vistas siguen siendo del dueño anterior y el servicio no puede ni leer su __EFMigrationsHistory.
+-- Se traspasan al rol del servicio (idempotente: lo que ya es suyo no cambia).
+SELECT format('ALTER TABLE %I.%I OWNER TO %I', schemaname, tablename, :'rol')
+FROM pg_tables WHERE schemaname = :'servicio' AND tableowner <> :'rol' \gexec
+SELECT format('ALTER SEQUENCE %I.%I OWNER TO %I', n.nspname, c.relname, :'rol')
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = :'servicio' AND c.relkind = 'S' AND pg_get_userbyid(c.relowner) <> :'rol'
+  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = c.oid AND d.deptype IN ('a', 'i')) \gexec
+SELECT format('ALTER VIEW %I.%I OWNER TO %I', schemaname, viewname, :'rol')
+FROM pg_views WHERE schemaname = :'servicio' AND viewowner <> :'rol' \gexec
 
 -- 3. Entrar a la base, nada más. Sin search_path hacia otros esquemas.
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'rol') \gexec

@@ -64,7 +64,7 @@ antes del corte y tiene salida manual.
 
 - **Aviso de Kyverum Verify:** agregar `CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL` con la ruta nueva
   (`/api/v1/consultas/avisos/kyverum-verify`). No borrar la variable vieja en el primer despliegue. Detalle en
-  [handoff-vps-suite.md](handoff-vps-suite.md) §4.9, paso 5.
+  [handoff-vps-consultas-notificaciones.md](handoff-vps-consultas-notificaciones.md), paso 4.
 - **Si core-consultas se cae más de ~30 s**, las validaciones de identidad que se creen en ese momento quedan en «Error de
   envío» y hay que reenviarlas desde Identidad.
 - **Mensajes muertos** (Plataforma → Mensajes muertos) es la pantalla para revisar correos que no salieron.
