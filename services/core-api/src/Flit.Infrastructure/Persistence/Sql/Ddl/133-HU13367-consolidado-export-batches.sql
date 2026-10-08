@@ -45,8 +45,12 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_settings (
     retention_hours       integer     NOT NULL DEFAULT 24
         CONSTRAINT ck_consolidado_export_settings_retention CHECK (retention_hours BETWEEN 1 AND 168),
     -- M1 (épica #13216): tope total de trámites por lote, todos los orígenes y modos, sobre la selección resuelta.
+    -- Code review Obs1: máximo 32.766 = smallint(32.767) - 1. part_number es smallint y un lote puede tener UNA parte
+    -- por ítem sea cual sea max_pdfs_per_part (un PDF mayor que max_mb_per_part va solo, y dos que juntos lo superan
+    -- también), más como mucho la parte 0/0 de un lote sin partes; los omitidos tardíos van con al menos un ítem propio.
+    -- Un CHECK cruzado con max_pdfs_per_part no basta: M, no N, es quien fija el peor caso.
     max_items_per_batch   integer     NOT NULL DEFAULT 10000
-        CONSTRAINT ck_consolidado_export_settings_max_items CHECK (max_items_per_batch BETWEEN 1 AND 50000),
+        CONSTRAINT ck_consolidado_export_settings_max_items CHECK (max_items_per_batch BETWEEN 1 AND 32766),
     is_active             boolean     NOT NULL DEFAULT true,
     created_at            timestamptz NOT NULL DEFAULT now(),
     created_by            uuid        NULL,
@@ -85,7 +89,7 @@ COMMENT ON COLUMN tramites.consolidado_export_settings.item_slots IS 'Ítems con
 COMMENT ON COLUMN tramites.consolidado_export_settings.item_lease_seconds IS 'Lease del reclamo de ítem; siempre > item_timeout_seconds (sin heartbeat).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.retry_delay_seconds IS 'Espera antes de reintentar un ítem por error técnico (v2: 30 s, mínimo 5).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.retention_hours IS 'Horas que se conservan las partes tras terminar el lote (H6a: 24). Luego, borrado criptográfico.';
-COMMENT ON COLUMN tramites.consolidado_export_settings.max_items_per_batch IS 'M1: tope total de trámites de un lote (todos los orígenes, modos ids y filtro), contado sobre la selección resuelta (exclusiones e intersección de seguridad aplicadas). Superarlo = 422 seleccion_excede_tope sin crear nada. 1–50.000; por defecto 10.000. Lo edita el Super Admin (HU #13420).';
+COMMENT ON COLUMN tramites.consolidado_export_settings.max_items_per_batch IS 'M1: tope total de trámites de un lote (todos los orígenes, modos ids y filtro), contado sobre la selección resuelta (exclusiones e intersección de seguridad aplicadas). Superarlo = 422 seleccion_excede_tope sin crear nada. 1–32.766 (part_number smallint: como mucho una parte por ítem más la 0/0); por defecto 10.000. Lo edita el Super Admin (HU #13420).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.is_active IS 'Interruptor del motor. false = no se crean lotes ni se reclaman ítems (semántica exacta en el backend).';
 
 -- ════════════════════════════════════════════════════════════════════════════════════════════════

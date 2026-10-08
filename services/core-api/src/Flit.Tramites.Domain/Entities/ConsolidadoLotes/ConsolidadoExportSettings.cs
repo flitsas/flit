@@ -45,8 +45,18 @@ public sealed class ConsolidadoExportSettings
     public const int MaxItemsPerBatchPorDefecto = 10_000;
 
     /// <summary>
+    /// Code review épica #13216 (Obs1) — máximo de <see cref="MaxItemsPerBatch"/> que admite
+    /// <c>ck_consolidado_export_settings_max_items</c>: <c>short.MaxValue - 1</c>. El número de parte es
+    /// <c>smallint</c> y el reparto puede dar UNA parte por ítem con independencia de N (<c>max_pdfs_per_part</c>): un
+    /// PDF mayor que M (<c>max_mb_per_part</c>, desde 10 MB) va solo, y dos que juntos superan M también. Cada parte
+    /// lleva al menos un ítem propio (los omitidos tardíos incluidos) salvo la parte 0/0 de un lote sin partes, que es
+    /// como mucho una. Así un lote tiene a lo sumo <c>ítems + 1</c> partes, y con este máximo nunca pasa de 32.767.
+    /// </summary>
+    public const int MaxItemsPerBatchMaximo = short.MaxValue - 1;
+
+    /// <summary>
     /// M1 (épica #13216) — tope total de trámites de un lote, en todos los orígenes y en los dos modos de selección
-    /// (1–50.000, por defecto 10.000). Se compara con la selección ya resuelta (exclusiones e intersección de seguridad
+    /// (1–<see cref="MaxItemsPerBatchMaximo"/>, por defecto 10.000). Se compara con la selección ya resuelta (exclusiones e intersección de seguridad
     /// aplicadas); superarlo es <c>422 seleccion_excede_tope</c> y no se crea nada.
     /// </summary>
     public int MaxItemsPerBatch { get; set; } = MaxItemsPerBatchPorDefecto;

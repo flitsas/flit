@@ -204,6 +204,24 @@ public sealed class AsignadorDePartesTests
         AsignadorDePartes.MbABytes(10).Should().Be(10L * 1024 * 1024);
     }
 
+    /// <summary>
+    /// Code review épica #13216 (Obs1) — el peor reparto del tope máximo: con N = 500 y cada PDF de 6 MB contra
+    /// M = 10 MB (el mínimo del DDL), cada PDF va en su parte, así que N no acota las partes. Ese peor caso más la
+    /// parte de los omitidos tardíos cabe exactamente en <c>smallint</c>.
+    /// </summary>
+    [Fact]
+    public void Obs1_PeorRepartoDelTopeMaximo_UnaPartePorItem_YConLaParteExtraCabeEnSmallint()
+    {
+        var tope = Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings.MaxItemsPerBatchMaximo;
+        var pdfs = Enumerable.Range(0, tope).Select(i => Pdf(i, 6)).ToArray();
+
+        var plan = AsignadorDePartes.Planear(pdfs, 500, Mb(10), ModoAsignacion.Final, loteSinPartes: true);
+        var tardios = AsignadorDePartes.Planear([Omitido(tope)], 500, Mb(10), ModoAsignacion.Final, loteSinPartes: false);
+
+        plan.Should().HaveCount(tope, "dos PDF de 6 MB superan M: uno por parte, sea cual sea N");
+        (plan.Count + tardios.Count).Should().Be(short.MaxValue, "el último número de parte sigue siendo un smallint");
+    }
+
     [Fact]
     public void Contrato_CadaItemSaleUnaSolaVez()
     {

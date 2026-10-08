@@ -35,7 +35,8 @@ internal sealed class ConsolidadoExportSettingsConfiguration : IEntityTypeConfig
         builder.Property(x => x.PartLeaseSeconds).HasColumnName("part_lease_seconds");
         builder.Property(x => x.MaxPartAttempts).HasColumnName("max_part_attempts");
         builder.Property(x => x.RetentionHours).HasColumnName("retention_hours");
-        // M1: tope total del lote; el rango 1–50.000 lo impone ck_consolidado_export_settings_max_items (solo SQL).
+        // M1: tope total del lote; el rango 1–32.766 (Obs1: part_number smallint) lo impone
+        // ck_consolidado_export_settings_max_items (solo SQL: no cambia el modelo EF).
         builder.Property(x => x.MaxItemsPerBatch).HasColumnName("max_items_per_batch");
         builder.Property(x => x.IsActive).HasColumnName("is_active");
 
