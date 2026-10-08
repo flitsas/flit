@@ -15,6 +15,9 @@
 --   E5 batches.tenant_id NULL si y solo si origin = 'superadmin' (A3.1, Q8).
 --   E6 batches sin trg_audit_log: dek_wrapped nunca se copia a audit.audit_logs (adenda v6, H1).
 -- Delta R-d (adenda v5, A5.5): ot_transit_office_id existe si y solo si origin = 'ot_bandeja'.
+-- Delta vista de red (HU #13417, adenda v7, A7.1): network_scope = lote 'tramites' de una cabeza creado desde la vista
+-- de red; scope_tenant_id = hija acotada (nunca la propia compañía) o NULL = toda la red. Editado en sitio: la
+-- migración HU13367_ConsolidadoExportBatches no se había aplicado en ningún entorno compartido.
 --
 -- Idempotente y sin BEGIN/COMMIT: lo ejecuta la migración EF dentro de su transacción.
 
@@ -102,6 +105,7 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_batches (
     requested_by_user_id    uuid        NOT NULL,
     requested_role_code     text        NOT NULL,
     scope_tenant_id         uuid        NULL,
+    network_scope           boolean     NOT NULL DEFAULT false,
     origin                  text        NOT NULL
         CONSTRAINT ck_consolidado_export_batches_origin CHECK (origin IN ('tramites', 'superadmin', 'ot_bandeja')),
     document_type           text        NOT NULL
@@ -146,7 +150,12 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_batches (
     -- E5 (Q8): el único lote sin compañía es el de Super Admin, y el de Super Admin nunca lleva compañía
     -- (el acotamiento por X-Tenant-Id va en scope_tenant_id).
     CONSTRAINT ck_consolidado_export_batches_tenant_origin CHECK ((origin = 'superadmin') = (tenant_id IS NULL)),
-    CONSTRAINT ck_consolidado_export_batches_scope_origin CHECK (scope_tenant_id IS NULL OR origin = 'superadmin'),
+    -- HU #13417 (A7.1): el scope es el X-Tenant-Id del Super Admin o la hija acotada de un lote de red.
+    CONSTRAINT ck_consolidado_export_batches_scope_origin CHECK (scope_tenant_id IS NULL OR origin = 'superadmin' OR (origin = 'tramites' AND network_scope)),
+    -- HU #13417: la vista de red es de una cabeza de compañía (Super Admin y OT no tienen red).
+    CONSTRAINT ck_consolidado_export_batches_network_origin CHECK (NOT network_scope OR origin = 'tramites'),
+    -- HU #13417: la hija acotada nunca es la propia compañía del lote (la cabeza acotada a sí misma es el lote propio).
+    CONSTRAINT ck_consolidado_export_batches_network_child CHECK (scope_tenant_id IS NULL OR tenant_id IS NULL OR scope_tenant_id <> tenant_id),
     -- R-d (A5.5): todo lote de la bandeja del OT fija su organismo, y ningún otro origen lo lleva.
     CONSTRAINT ck_consolidado_export_batches_ot_origin CHECK ((origin = 'ot_bandeja') = (ot_transit_office_id IS NOT NULL)),
 
@@ -218,7 +227,9 @@ COMMENT ON TABLE tramites.consolidado_export_batches IS
     'HU #13367 (Feature #13306, ADR-0070) — cabecera de un lote de descarga masiva de consolidados en ZIP. Máximo un lote activo por usuario (uq_consolidado_export_batches_active_per_user). RLS decorativa: el aislamiento es por requested_by_user_id = sub en el repositorio.';
 COMMENT ON COLUMN tramites.consolidado_export_batches.tenant_id IS
     'Compañía del solicitante. NULL si y solo si origin = superadmin (Q8, ck_consolidado_export_batches_tenant_origin): el Super Admin no tiene compañía; las compañías alcanzadas quedan en la auditoría del lote (reached_tenant_ids) y en el tenant de cada ítem.';
-COMMENT ON COLUMN tramites.consolidado_export_batches.scope_tenant_id IS 'Solo origen superadmin (FA2): compañía a la que se acotó la selección (X-Tenant-Id). NULL = sin acotar.';
+COMMENT ON COLUMN tramites.consolidado_export_batches.scope_tenant_id IS 'Origen superadmin (FA2): compañía a la que se acotó la selección (X-Tenant-Id). Lote de red (network_scope, HU #13417): hija acotada, nunca la propia compañía. NULL = sin acotar.';
+COMMENT ON COLUMN tramites.consolidado_export_batches.network_scope IS
+    'Lote creado desde la vista de red de una cabeza (ADR-0070 v7, HU #13417): solo origen tramites, tenant_id = cabeza, scope_tenant_id = hija concreta o NULL = toda la red. Cada ítem conserva la compañía de su trámite.';
 COMMENT ON COLUMN tramites.consolidado_export_batches.requested_role_code IS 'Rol con el que se creó el lote (para revalidación CF-16 y auditoría).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.total_items IS 'Total congelado al crear (ítems insertados en la misma transacción).';
 COMMENT ON COLUMN tramites.consolidado_export_batches.generated_count IS 'v2: incluidos con delivery_mode = generado (primera generación). <= included_count.';

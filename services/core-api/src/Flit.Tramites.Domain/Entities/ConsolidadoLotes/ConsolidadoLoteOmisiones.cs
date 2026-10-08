@@ -3,7 +3,7 @@ namespace Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 /// <summary>
 /// HU #13371 (Épica #13216) — vocabulario de los motivos por los que un trámite queda <c>omitido</c> en un
 /// lote de descarga masiva de consolidados (<c>tramites.consolidado_export_batch_items.omission_code</c>).
-/// <para>Es contrato con el CHECK del DDL de la HU #13368, que lista estos mismos diez códigos de forma
+/// <para>Es contrato con el CHECK del DDL de la HU #13368, que lista estos mismos once códigos de forma
 /// literal: añadir o renombrar uno exige migración. El texto legible para el usuario (CSV de omitidos)
 /// no vive aquí: lo resuelve el catálogo de textos del procesamiento por ítem (#13375).</para>
 /// <para>Uso de ejemplo: <c>item.OmissionCode = ConsolidadoLoteOmisiones.FurRequerido;</c>.</para>
@@ -40,7 +40,13 @@ public static class ConsolidadoLoteOmisiones
     /// <summary>Error técnico persistente tras agotar los reintentos.</summary>
     public const string ErrorTecnico = "error_tecnico";
 
-    /// <summary>Los diez códigos, en el orden del CHECK del DDL.</summary>
+    /// <summary>
+    /// HU #13417 (ADR-0070 adenda v7, P1 = a) — trámite de una compañía hija en un lote de red sin consolidado: la red
+    /// es de solo consulta y el lote no genera en la hija. Lo asigna el procesamiento por ítem de #13418.
+    /// </summary>
+    public const string RedSinConsolidado = "red_sin_consolidado";
+
+    /// <summary>Los once códigos, en el orden del CHECK del DDL.</summary>
     public static IReadOnlyList<string> Todos { get; } =
     [
         FurRequerido,
@@ -53,6 +59,7 @@ public static class ConsolidadoLoteOmisiones
         QuipuxSoloLectura,
         AccesoRevocado,
         ErrorTecnico,
+        RedSinConsolidado,
     ];
 
     /// <summary>¿<paramref name="codigo"/> es un motivo de omisión del vocabulario? (comparación exacta).</summary>

@@ -20,6 +20,8 @@ public sealed class ConsolidadoErrorTextosTests
     [InlineData(ConsolidadoLoteOmisiones.AccesoRevocado, "Acceso revocado")]
     [InlineData(ConsolidadoLoteOmisiones.QuipuxSoloLectura, "Organismo en modo Quipux de solo lectura")]
     [InlineData(ConsolidadoLoteOmisiones.SinAdjuntos, "No hay adjuntos para consolidar")]
+    // HU #13417 (DDL 134): el código lo usa #13418 al omitir el trámite de una hija sin consolidado (P1 = a).
+    [InlineData(ConsolidadoLoteOmisiones.RedSinConsolidado, "Trámite de una compañía de la red sin consolidado: la red es de solo consulta")]
     public void ParaLote_LiteralesDelDiseno(string codigo, string esperado) =>
         ConsolidadoErrorTextos.ParaLote(codigo).Should().Be(esperado);
 

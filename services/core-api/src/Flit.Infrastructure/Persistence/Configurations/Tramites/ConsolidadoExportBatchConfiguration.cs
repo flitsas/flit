@@ -32,6 +32,9 @@ internal sealed class ConsolidadoExportBatchConfiguration : IEntityTypeConfigura
         builder.Property(x => x.RequestedByUserId).HasColumnName("requested_by_user_id").IsRequired();
         builder.Property(x => x.RequestedRoleCode).HasColumnName("requested_role_code").HasColumnType("text").IsRequired();
         builder.Property(x => x.ScopeTenantId).HasColumnName("scope_tenant_id");
+        // HU #13417 (adenda v7): DEFAULT false en el DDL; EF siempre envía el valor (el lote propio = false).
+        // Los CHECK network_origin / network_child / scope_origin viven en SQL.
+        builder.Property(x => x.NetworkScope).HasColumnName("network_scope").IsRequired();
         builder.Property(x => x.Origin).HasColumnName("origin").HasColumnType("text").IsRequired();
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasColumnType("text").IsRequired();
         builder.Property(x => x.SelectionMode).HasColumnName("selection_mode").HasColumnType("text").IsRequired();

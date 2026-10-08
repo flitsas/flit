@@ -517,6 +517,126 @@ public sealed class CrearLoteConsolidadosHandlerTests
     public void M1_ElTopePorDefectoDeLaEntidadEsElDelDdl() =>
         new ConsolidadoExportSettings().MaxItemsPerBatch.Should().Be(10_000);
 
+    // ── HU #13417 — lote desde la vista de red ──────────────────────────────────────────────
+
+    private static readonly Guid HijaC1 = Guid.NewGuid();
+    private static readonly Guid HijaC2 = Guid.NewGuid();
+    private static readonly Guid Ajena = Guid.NewGuid();
+
+    private static Flit.Queries.Domain.Tenancy.TenantScope Red() =>
+        Flit.Queries.Domain.Tenancy.TenantScope.Group(TenantC, [HijaC1, HijaC2], Flit.Queries.Domain.Tenancy.GroupKind.MarcaBlanca);
+
+    private static CrearLoteConsolidadosCommand AdminDeRed(LoteAlcanceRed alcance, LoteSeleccion? seleccion = null) =>
+        Gestor(seleccion) with { RolCodigo = "AdminCompany", AlcanceRed = alcance };
+
+    [Fact]
+    public async Task HU13417_AC1_TodaLaRed_ItemsDeCabezaEHijas_NetworkScopeSinHija_YResumenRed()
+    {
+        var refs = Refs(2, TenantC).Concat(Refs(2, HijaC1, "H")).Concat(Refs(1, HijaC2, "J")).ToList();
+        _tramites.Devuelve = refs;
+        var alcance = new LoteAlcanceRed(Red(), null);
+        var seleccion = new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()));
+
+        var r = await _sut.HandleAsync(AdminDeRed(alcance, seleccion), Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        var nuevo = _repo.Creado!;
+        nuevo.Items.Should().Equal(refs, "cada ítem conserva la compañía de su trámite");
+        nuevo.TenantId.Should().Be(TenantC, "el lote es de la cabeza");
+        nuevo.Origen.Should().Be(ConsolidadoExportOrigin.Tramites);
+        nuevo.NetworkScope.Should().BeTrue();
+        nuevo.ScopeTenantId.Should().BeNull("toda la red");
+        nuevo.ResumenFiltroJson.Should().Contain("\"alcanceRed\":\"red\"");
+        _tramites.Contexto!.Alcance.Should().BeSameAs(alcance.Alcance, "el resolver recibe el alcance del middleware");
+        _tramites.Contexto.TenantId.Should().Be(TenantC);
+    }
+
+    [Fact]
+    public async Task HU13417_AC2_UnaHija_ScopeTenantIdEsLaHija_YElResumenNoLlevaSuId()
+    {
+        _tramites.Devuelve = Refs(3, HijaC1);
+        var alcance = new LoteAlcanceRed(Flit.Queries.Domain.Tenancy.TenantScope.Single(HijaC1), HijaC1);
+
+        var r = await _sut.HandleAsync(AdminDeRed(alcance), Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        var nuevo = _repo.Creado!;
+        nuevo.ScopeTenantId.Should().Be(HijaC1);
+        nuevo.NetworkScope.Should().BeTrue();
+        nuevo.Items.Should().HaveCount(3).And.OnlyContain(i => i.TenantId == HijaC1);
+        nuevo.ResumenFiltroJson.Should().Contain("\"alcanceRed\":\"hija\"").And.NotContain(HijaC1.ToString());
+    }
+
+    [Fact]
+    public async Task HU13417_AC5_CongelarDescartaLoQueEstaFueraDelAlcance_DefensaDobleContraIdsInyectados()
+    {
+        var propios = Refs(1, TenantC);
+        var hija = Refs(1, HijaC1, "H");
+        var inyectados = Refs(2, Ajena, "X");
+        _tramites.Devuelve = [.. propios, .. inyectados, .. hija];
+
+        var r = await _sut.HandleAsync(AdminDeRed(new LoteAlcanceRed(Red(), null)), Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        _repo.Creado!.Items.Should().Equal([.. propios, .. hija], "un trámite de una compañía ajena nunca entra");
+
+        _tramites.Devuelve = [.. propios, .. hija];
+        var acotado = await _sut.HandleAsync(
+            AdminDeRed(new LoteAlcanceRed(Flit.Queries.Domain.Tenancy.TenantScope.Single(HijaC1), HijaC1)), Ct);
+        acotado.Creado.Should().BeTrue(acotado.Error);
+        _repo.Creado!.Items.Should().Equal(hija, "acotado a una hija, ni la cabeza entra");
+    }
+
+    [Fact]
+    public async Task HU13417_AC10_SinAlcanceDeRed_ElLoteEsElDeSiempre()
+    {
+        _tramites.Devuelve = Refs(2, TenantC);
+
+        var r = await _sut.HandleAsync(Gestor(), Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        _repo.Creado!.NetworkScope.Should().BeFalse();
+        _repo.Creado.ScopeTenantId.Should().BeNull();
+        _repo.Creado.ResumenFiltroJson.Should().NotContain("alcanceRed");
+        _tramites.Contexto!.Alcance.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HU13417_AC11_ElTopeTotalAplicaALaSeleccionDeRed()
+    {
+        _repo.Settings = new ConsolidadoExportSettings { IsActive = true, MaxItemsPerBatch = 3 };
+        _tramites.Devuelve = Refs(2, TenantC).Concat(Refs(3, HijaC1, "H")).ToList();
+        _tramites.Total = 9;
+
+        var r = await _sut.HandleAsync(AdminDeRed(new LoteAlcanceRed(Red(), null)), Ct);
+
+        r.Creado.Should().BeFalse();
+        r.Error.Should().Be(LoteSeleccionInvalidaException.CodigoExcedeTope);
+        r.Total.Should().Be(9, "el COUNT con el mismo predicado de red");
+        r.Tope.Should().Be(3);
+        _repo.CrearLlamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU13417_ElAlcanceDeRedSoloAplicaAlOrigenTramitesYALaCompaniaDelLote()
+    {
+        var superAdmin = new CrearLoteConsolidadosCommand
+        {
+            Origen = ConsolidadoExportOrigin.Superadmin,
+            UsuarioId = Usuario,
+            RolCodigo = "SuperAdmin",
+            Seleccion = new SeleccionPorIds([Guid.NewGuid()]),
+            ConfirmaEfectos = true,
+            AlcanceRed = new LoteAlcanceRed(Red(), null),
+        };
+        var cabezaAjena = AdminDeRed(new LoteAlcanceRed(
+            Flit.Queries.Domain.Tenancy.TenantScope.Group(TenantD, [HijaC1], Flit.Queries.Domain.Tenancy.GroupKind.MarcaBlanca), null));
+
+        await _sut.Invoking(s => s.HandleAsync(superAdmin, Ct)).Should().ThrowAsync<ArgumentException>();
+        await _sut.Invoking(s => s.HandleAsync(cabezaAjena, Ct)).Should().ThrowAsync<ArgumentException>(
+            "el alcance de red es el de la compañía del lote");
+    }
+
     // ── Dobles ────────────────────────────────────────────────────────────────────────────
 
     private sealed class FakeRepo : IConsolidadoLoteRepository

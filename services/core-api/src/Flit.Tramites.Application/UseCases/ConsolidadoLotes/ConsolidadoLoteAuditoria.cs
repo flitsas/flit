@@ -38,10 +38,15 @@ public static class ConsolidadoLoteAuditoria
     /// <summary>
     /// Resume la selección para <c>filter_summary</c>. <paramref name="otTransitOfficeId"/> = organismo del lote OT
     /// (A5.5). <paramref name="tiposDeTramite"/> = códigos de <c>tramites.procedure_types</c>; <c>null</c> = catálogo no
-    /// disponible y el <c>tipoCodigo</c> se minimiza.
+    /// disponible y el <c>tipoCodigo</c> se minimiza. <paramref name="alcanceRed"/> (HU #13417): <c>red</c> | <c>hija</c>
+    /// del lote desde la vista de red (<see cref="LoteAlcanceRed.Resumen"/>), sin el id ni el nombre de la hija, que ya
+    /// queda en <c>scope_tenant_id</c>; <c>null</c> = sin la clave.
     /// </summary>
     public static string ResumirSeleccion(
-        LoteSeleccion seleccion, Guid? otTransitOfficeId = null, IReadOnlySet<string>? tiposDeTramite = null)
+        LoteSeleccion seleccion,
+        Guid? otTransitOfficeId = null,
+        IReadOnlySet<string>? tiposDeTramite = null,
+        string? alcanceRed = null)
     {
         ArgumentNullException.ThrowIfNull(seleccion);
         var raiz = new JsonObject();
@@ -66,6 +71,9 @@ public static class ConsolidadoLoteAuditoria
 
         if (otTransitOfficeId is Guid organismo)
             raiz["organismo"] = organismo.ToString("D");
+
+        if (alcanceRed is LoteAlcanceRed.ResumenRed or LoteAlcanceRed.ResumenHija)
+            raiz["alcanceRed"] = alcanceRed;
 
         return raiz.ToJsonString(JsonOpciones);
     }

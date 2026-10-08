@@ -316,7 +316,8 @@ public sealed class ConsolidadoLoteEntregadorTests
     {
         ConsolidadoLoteOmisiones.Todos.Should().Equal(
             "fur_requerido", "migrado_solo_lectura", "sin_adjuntos", "adjunto_no_disponible", "mimetype_no_soportado",
-            "organismo_requerido", "modalidad_no_soportada", "quipux_solo_lectura", "acceso_revocado", "error_tecnico");
+            "organismo_requerido", "modalidad_no_soportada", "quipux_solo_lectura", "acceso_revocado", "error_tecnico",
+            "red_sin_consolidado");
         ConsolidadoLoteOmisiones.EsValido("en_regeneracion").Should().BeFalse("v2 eliminó ese motivo");
         ConsolidadoLoteOmisiones.EsValido(null).Should().BeFalse();
     }

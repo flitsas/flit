@@ -192,17 +192,26 @@ public sealed class ListProcedureInstancesFilteredHandler(
         var filter = BuildFilter(request);
         filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
 
-        if (soloIds is not null)
-        {
-            var ids = filter.IdsIncluidos is { } yaAcotados
-                ? soloIds.Where(yaAcotados.ToHashSet().Contains).Distinct().ToList()
-                : soloIds.Distinct().ToList();
-            if (ids.Count == 0)
-                return 0;
-            filter = filter with { IdsIncluidos = ids };
-        }
+        if (AcotarAIds(filter, soloIds) is not { } acotado)
+            return 0;
 
-        return await repo.CountIdsFilteredAsync(request.TenantId, filter, ct);
+        return await repo.CountIdsFilteredAsync(request.TenantId, acotado, ct);
+    }
+
+    /// <summary>
+    /// Filtro del conteo con <paramref name="soloIds"/>: sin lista, el filtro intacto; con lista, sus ids intersecados con
+    /// los que ya fije el atajo. <c>null</c> = intersección vacía (el conteo es 0 sin consultar). Compartido con el
+    /// conteo de red (HU #13417).
+    /// </summary>
+    internal static ProcedureInstanceListFilter? AcotarAIds(ProcedureInstanceListFilter filter, IReadOnlyCollection<Guid>? soloIds)
+    {
+        if (soloIds is null)
+            return filter;
+
+        var ids = filter.IdsIncluidos is { } yaAcotados
+            ? soloIds.Where(yaAcotados.ToHashSet().Contains).Distinct().ToList()
+            : soloIds.Distinct().ToList();
+        return ids.Count == 0 ? null : filter with { IdsIncluidos = ids };
     }
 
     /// <summary>

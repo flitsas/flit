@@ -26,7 +26,7 @@ public static class ConsolidadoErrorTextos
 {
     private const string Conflict = "Conflict";
 
-    /// <summary>Texto del CSV de omitidos por código de <see cref="ConsolidadoLoteOmisiones"/> (los diez).</summary>
+    /// <summary>Texto del CSV de omitidos por código de <see cref="ConsolidadoLoteOmisiones"/> (los once).</summary>
     private static readonly Dictionary<string, string> TextosLote = new(StringComparer.Ordinal)
     {
         [ConsolidadoLoteOmisiones.FurRequerido] = "El trámite no tiene FUR; no se pudo generar el consolidado",
@@ -41,6 +41,9 @@ public static class ConsolidadoErrorTextos
         [ConsolidadoLoteOmisiones.QuipuxSoloLectura] = "Organismo en modo Quipux de solo lectura",
         [ConsolidadoLoteOmisiones.AccesoRevocado] = "Acceso revocado",
         [ConsolidadoLoteOmisiones.ErrorTecnico] = "No se pudo generar el consolidado, intente de nuevo",
+        // HU #13417 (adenda v7, P1 = a): literal de 16-diseno-red §2 C; lo usa #13418.
+        [ConsolidadoLoteOmisiones.RedSinConsolidado] =
+            "Trámite de una compañía de la red sin consolidado: la red es de solo consulta",
     };
 
     /// <summary>

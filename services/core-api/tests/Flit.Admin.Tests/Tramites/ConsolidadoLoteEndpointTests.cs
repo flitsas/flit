@@ -89,7 +89,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
     }
 
     [Fact]
-    public async Task AC1_ModoFiltroConIdsVaciosYAlcanceRed_202_ResuelveConElFiltroDelListado()
+    public async Task AC1_ModoFiltroConIdsVacios_202_ResuelveConElFiltroDelListado()
     {
         var ct = TestContext.Current.CancellationToken;
         var x = Guid.NewGuid();
@@ -107,7 +107,7 @@ public sealed class ConsolidadoLoteEndpointTests : IClassFixture<ConsolidadoLote
                 modo = "filtro",
                 ids = Array.Empty<Guid>(),
                 excluidos = new[] { excluido },
-                filtro = new { placa = "XYZ", estado = "entregado", skip = 0, take = 50, alcanceRed = "red" },
+                filtro = new { placa = "XYZ", estado = "entregado", skip = 0, take = 50 },
             },
         }), ct);
 

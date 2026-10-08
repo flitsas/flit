@@ -132,6 +132,10 @@ internal static class CoveredQueries
         new("Q51", "ProcedureInstanceRepository.ListIdsFilteredAsync (selección del lote, sin paginar, con límite)", "Guid? tenantId", 2, SupportsGlobal: true),
         new("Q52", "ProcedureInstanceRepository.CountIdsFilteredAsync (total del 422 seleccion_excede_tope)", "Guid? tenantId", 2, SupportsGlobal: true),
         new("Q53", "OtClientProcedureRepository.CountAccessibleRefsAsync (total del 422 desde la bandeja OT)", "Guid otTenantId", 1, SupportsGlobal: false),
+        // HU #13417 (Épica #13216, ADR-0070 v7) — selección del lote desde la vista de red con TenantScope y su COUNT del 422
+        // (CrearLoteRedIntegrationTests: AC1 total = búsqueda de red, AC2 hija, AC5 ids de compañía ajena y de hija de otra cabeza).
+        new("Q54", "ProcedureInstanceRepository.ListIdsFilteredInScopeAsync (TenantScope, selección del lote de red con límite)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q55", "ProcedureInstanceRepository.CountIdsFilteredInScopeAsync (TenantScope, total del 422 de la red)", "TenantScope", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

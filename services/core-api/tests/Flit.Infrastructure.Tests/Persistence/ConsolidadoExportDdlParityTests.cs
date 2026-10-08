@@ -4,6 +4,9 @@ using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Xunit;
 
@@ -85,7 +88,60 @@ public sealed class ConsolidadoExportDdlParityTests
             "ck_consolidado_export_batches_tenant_origin CHECK ((origin = 'superadmin') = (tenant_id IS NULL))");
         ddl.Should().Contain(
             "ck_consolidado_export_batches_ot_origin CHECK ((origin = 'ot_bandeja') = (ot_transit_office_id IS NOT NULL))");
-        ddl.Should().Contain("ck_consolidado_export_batches_scope_origin CHECK (scope_tenant_id IS NULL OR origin = 'superadmin')");
+        // HU #13417 (adenda v7): el scope es del Super Admin o la hija acotada de un lote de red.
+        ddl.Should().Contain(
+            "ck_consolidado_export_batches_scope_origin CHECK (scope_tenant_id IS NULL OR origin = 'superadmin' OR (origin = 'tramites' AND network_scope))");
+    }
+
+    /// <summary>
+    /// HU #13417 (ADR-0070 adenda v7) — lote desde la vista de red: <c>network_scope</c> nace falso, solo existe en
+    /// origen <c>tramites</c> y la hija acotada nunca es la propia compañía del lote; el modelo EF lo mapea NOT NULL.
+    /// </summary>
+    [Fact]
+    public void HU13417_ElLoteDeRedTieneSuColumnaYSusChecks_YElModeloLaMapea()
+    {
+        var ddl = LoadDdl();
+
+        ddl.Should().Contain("network_scope           boolean     NOT NULL DEFAULT false");
+        ddl.Should().Contain("ck_consolidado_export_batches_network_origin CHECK (NOT network_scope OR origin = 'tramites')");
+        ddl.Should().Contain(
+            "ck_consolidado_export_batches_network_child CHECK (scope_tenant_id IS NULL OR tenant_id IS NULL OR scope_tenant_id <> tenant_id)");
+
+        using var db = NewModelContext();
+        var p = db.Model.FindEntityType(typeof(ConsolidadoExportBatch))!.FindProperty(nameof(ConsolidadoExportBatch.NetworkScope))!;
+        p.GetColumnName().Should().Be("network_scope");
+        p.IsNullable.Should().BeFalse();
+        new ConsolidadoExportBatch().NetworkScope.Should().BeFalse("el lote de siempre no es de red");
+    }
+
+    /// <summary>
+    /// HU #13417 — las dos migraciones Pending se regeneraron con la herramienta (no a mano): sus Designer y el snapshot
+    /// conocen <c>NetworkScope</c>, y las dos siguen cargando su DDL embebido (133 con la columna, 134 con el código).
+    /// </summary>
+    [Fact]
+    public void HU13417_LasMigracionesRegeneradasConocenNetworkScopeEnDesignerYSnapshot()
+    {
+        static bool ConoceRed(IReadOnlyModel? modelo) =>
+            modelo?.FindEntityType(typeof(ConsolidadoExportBatch).FullName!)?.FindProperty(nameof(ConsolidadoExportBatch.NetworkScope))
+                is not null;
+
+        var lote = new HU13367_ConsolidadoExportBatches();
+        var items = new HU13368_ConsolidadoExportItems();
+        foreach (var (migracion, sufijo, ddl) in new (Migration, string, string)[]
+                 {
+                     (lote, "_HU13367_ConsolidadoExportBatches", "network_scope"),
+                     (items, "_HU13368_ConsolidadoExportItems", "red_sin_consolidado"),
+                 })
+        {
+            migracion.GetType().GetCustomAttributes(typeof(MigrationAttribute), false).Cast<MigrationAttribute>()
+                .Should().ContainSingle().Which.Id.Should().EndWith(sufijo);
+            ConoceRed(migracion.TargetModel).Should().BeTrue($"el Designer de {sufijo} regenerado incluye network_scope");
+            migracion.UpOperations.OfType<SqlOperation>().Single().Sql.Should().Contain(ddl);
+        }
+
+        var snapshot = (ModelSnapshot)Activator.CreateInstance(
+            typeof(FlitDbContext).Assembly.GetType("Flit.Infrastructure.Migrations.FlitDbContextModelSnapshot")!, nonPublic: true)!;
+        ConoceRed(snapshot.Model).Should().BeTrue("el snapshot incluye network_scope");
     }
 
     [Fact]

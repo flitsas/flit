@@ -142,11 +142,14 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_batch_items (
         -- Q12 / §3 v2: catálogo exacto, contrato con ConsolidadoLoteOmisiones (#13371), en su orden.
         -- fur_requerido aplica a consolidado y a consolidado_maestro (el CHECK no depende del tipo).
         -- Eliminados en v2: consolidado_no_generado, en_regeneracion.
+        -- HU #13417 (adenda v7, P1 = a): red_sin_consolidado = trámite de una hija de un lote de red sin consolidado
+        -- (la red es de solo consulta; lo asigna #13418). Editado en sitio: la migración sigue sin aplicarse.
         CONSTRAINT ck_consolidado_export_batch_items_omission_code CHECK (omission_code IN (
             'fur_requerido', 'migrado_solo_lectura',
             'sin_adjuntos', 'adjunto_no_disponible', 'mimetype_no_soportado',
             'organismo_requerido', 'modalidad_no_soportada',
-            'quipux_solo_lectura', 'acceso_revocado', 'error_tecnico')),
+            'quipux_solo_lectura', 'acceso_revocado', 'error_tecnico',
+            'red_sin_consolidado')),
     omission_reason        text        NULL,
     part_number            smallint    NULL,
     processed_at           timestamptz NULL,

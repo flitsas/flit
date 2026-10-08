@@ -300,6 +300,7 @@ internal sealed partial class ConsolidadoLoteRepository(
             RequestedByUserId = nuevo.UsuarioId,
             RequestedRoleCode = nuevo.RolCodigo,
             ScopeTenantId = nuevo.ScopeTenantId,
+            NetworkScope = nuevo.NetworkScope,
             Origin = nuevo.Origen,
             DocumentType = nuevo.TipoDocumento,
             SelectionMode = nuevo.ModoSeleccion,

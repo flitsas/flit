@@ -36,8 +36,16 @@ public sealed record SeleccionPorFiltro(LoteFiltro Filtro, IReadOnlyList<Guid>? 
 /// <para>HU #13390 — <c>OtTransitOfficeId</c>: solo el origen <c>ot_bandeja</c>. Organismo que el Super
 /// Admin eligió con <c>?transitOfficeId</c> (el <c>ot_transit_office_id</c> del lote); <c>null</c> = el del
 /// perfil del tenant OT. Los demás orígenes lo ignoran.</para>
+/// <para>HU #13417 — <c>Alcance</c>: solo el origen <c>tramites</c> desde la vista de red. El
+/// <see cref="Flit.Queries.Domain.Tenancy.TenantScope"/> efectivo (grupo de la cabeza o una hija tras <c>Narrow</c>) que
+/// resolvió el middleware desde la BD; con él la selección se resuelve con <c>WhereTenantInScope</c> en vez de por
+/// <c>TenantId</c> (que sigue siendo la cabeza). <c>null</c> = alcance propio, como siempre.</para>
 /// </summary>
-public sealed record LoteSeleccionContexto(Guid? TenantId, Guid? UsuarioActualId, Guid? OtTransitOfficeId = null);
+public sealed record LoteSeleccionContexto(
+    Guid? TenantId,
+    Guid? UsuarioActualId,
+    Guid? OtTransitOfficeId = null,
+    Flit.Queries.Domain.Tenancy.TenantScope? Alcance = null);
 
 /// <summary>
 /// Topes de las listas que trae el cuerpo (ADR-0070, Q7). El tope TOTAL de trámites del lote (M1) no es constante:
