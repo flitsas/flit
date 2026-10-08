@@ -11,7 +11,7 @@ namespace Flit.Infrastructure.Tests.Ict;
 
 /// <summary>
 /// Bug #13445 — pasos de <c>IctOrchestrationService.CreateDraftFromIct</c> que no necesitan base de datos:
-/// aplicar la resolución de prenda (Auto → handler sin usuario; pendiente/discrepancia → aviso sin PII),
+/// aplicar la resolución de prenda (Auto → handler con metadata <c>ict_auto</c>; pendiente/discrepancia → aviso sin PII),
 /// la siembra de <c>es_leasing</c>/<c>cambio_carroceria</c> que no pisa lo que vino de ICT y el aviso de
 /// transformación sin subtipo.
 /// <para>Uso de ejemplo: <c>await IctOrchestrationService.AplicarResolucionPrendaAsync(reply,
@@ -48,6 +48,7 @@ public sealed class IctOrchestrationPrendaTests
         recibido!.Decision.Should().Be(PrendaDecision.Levantar);
         recibido.AcreedorNombre.Should().Be(Acreedor);
         recibido.AcreedorDocumento.Should().Be(AcreedorDoc);
+        recibido.MetadataJson.Should().Be("""{"origen":"ict_auto","resolucion":"levantar"}""");
         reply.ErrorCode.Should().BeNullOrEmpty();
     }
 
@@ -75,18 +76,36 @@ public sealed class IctOrchestrationPrendaTests
     }
 
     [Fact]
-    public async Task AutoConDiscrepancia_RegistraYAvisaLaDiscrepancia()
+    public async Task LevantarSinPrendaRunt_RegistraSinPrendaYAvisaLaDiscrepancia()
     {
+        // Tras T2 el único Auto con discrepancia es «levantar» con RUNT sin prenda → sin_prenda + aviso.
         var reply = new DraftReply();
+        RegistrarPrendaInput? recibido = null;
 
         await IctOrchestrationService.AplicarResolucionPrendaAsync(
             reply,
             IctPrendaResolucion.Auto(PrendaDecision.SinPrenda, null, null, IctPrendaResolver.MotivoLevantarSinPrendaRunt),
-            _ => Task.FromResult<(PrendaDto?, string?)>((null, null)),
+            input =>
+            {
+                recibido = input;
+                return Task.FromResult<(PrendaDto?, string?)>((null, null));
+            },
             _ => { },
             Ct);
 
+        recibido!.Decision.Should().Be(PrendaDecision.SinPrenda);
+        recibido.MetadataJson.Should().Be("""{"origen":"ict_auto","resolucion":"levantar_sin_prenda_runt"}""");
         reply.ErrorCode.Should().Be("prenda_discrepancia_runt:levantar_sin_prenda_runt");
+    }
+
+    [Fact]
+    public void MetadataPrendaAuto_NoLlevaElAcreedor()
+    {
+        var json = IctOrchestrationService.MetadataPrendaAuto(
+            IctPrendaResolucion.Auto(PrendaDecision.Registrar, Acreedor, AcreedorDoc));
+
+        json.Should().Be("""{"origen":"ict_auto","resolucion":"registrar"}""");
+        json.Should().NotContain(Acreedor).And.NotContain(AcreedorDoc);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// EF ni IO; el orquestador lee los <c>field_values</c> y aplica el resultado.
 ///
 /// <para><b>Matriz conservadora (D3).</b> Solo cuatro casos se aplican solos: traspaso que levanta con
-/// prenda en el RUNT (acreedor = el del RUNT), inscripción con RUNT sin prenda (acreedor del cuerpo),
+/// prenda en el RUNT (acreedor = el del RUNT; si el cuerpo trae otro documento, al gestor), inscripción con RUNT sin prenda (acreedor del cuerpo),
 /// levantar con RUNT sin prenda (<c>sin_prenda</c> + aviso) y matrícula que omite con prenda en el RUNT.
 /// Todo lo demás —incluido un RUNT que no se pudo leer— queda para el gestor con un motivo estable.</para>
 ///
@@ -103,9 +103,10 @@ public static class IctPrendaResolver
 
     /// <summary>
     /// Traspaso que levanta un gravamen que el RUNT sí reporta: se levanta con el acreedor DEL RUNT (es el
-    /// que consta en el registro). Si el cuerpo trae otro acreedor, sigue automático y se avisa. Con más
-    /// de una garantía no se adivina cuál levantar; sin garantías (solo bandera) no hay acreedor RUNT y se
-    /// usa el del cuerpo.
+    /// que consta en el registro). Si el cuerpo trae un acreedor con OTRO documento, no se decide: queda
+    /// para el gestor con discrepancia <c>acreedor_distinto</c> (D3/T2). Con documentos iguales o sin
+    /// documento en el cuerpo, sigue automático con el acreedor del RUNT. Con más de una garantía no se
+    /// adivina cuál levantar; sin garantías (solo bandera) no hay acreedor RUNT y se usa el del cuerpo.
     /// </summary>
     private static IctPrendaResolucion LevantarConPrendaRunt(Cuerpo cuerpo, IReadOnlyList<RuntGarantia> garantias)
     {
@@ -120,11 +121,13 @@ public static class IctPrendaResolver
             && runt.AcreedorDocumento is not null
             && !MismoDocumento(cuerpo.AcreedorDocumento, runt.AcreedorDocumento);
 
+        if (distinto)
+            return IctPrendaResolucion.Pendiente(MotivoAcreedorDistinto, MotivoAcreedorDistinto);
+
         return IctPrendaResolucion.Auto(
             PrendaDecision.Levantar,
             runt.AcreedorNombre ?? cuerpo.AcreedorNombre,
-            runt.AcreedorDocumento ?? cuerpo.AcreedorDocumento,
-            distinto ? MotivoAcreedorDistinto : null);
+            runt.AcreedorDocumento ?? cuerpo.AcreedorDocumento);
     }
 
     /// <summary>
@@ -170,14 +173,19 @@ public static class IctPrendaResolver
         return algunaNegativa && !algunaIlegible ? SenalRunt.Negativa : SenalRunt.Desconocida;
     }
 
+    /// <summary>
+    /// Gravamen sin prenda: la bandera de gravámenes dice «sí», ninguna garantía en el detalle y la de
+    /// prendas dice «no» o no viene (ausente/vacía). Un RUNT que no informa prendas no prueba que el
+    /// gravamen sea una prenda: se trata igual que el «no» explícito.
+    /// </summary>
     private static bool EsGravamenNoPrendario(string? prendas, string? gravamenes, int garantias) =>
         garantias == 0
         && RuntGravamenSignal.EsAfirmativo(gravamenes)
-        && RuntGravamenSignal.EsNegativo(prendas);
+        && (RuntGravamenSignal.EsNegativo(prendas) || string.IsNullOrWhiteSpace(prendas));
 
     /// <summary>
     /// Documentos iguales tras quitar todo lo que no sea letra o dígito y pasar a mayúscula. Un NIT con y
-    /// sin dígito de verificación (<c>860034313</c> vs <c>860.034.313-7</c>) cuenta como el mismo.
+    /// sin dígito de verificación (<c>900123456</c> vs <c>900.123.456-1</c>) cuenta como el mismo.
     /// </summary>
     internal static bool MismoDocumento(string a, string b)
     {

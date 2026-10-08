@@ -87,17 +87,17 @@ internal static class ProcedureInstanceFiltroSql
         switch (op)
         {
             case QueryOperator.EsAlguno:
-            {
-                var (consecutivos, textos) = LeerRadicados(valores);
-                return query.Where(x => consecutivos.Contains(x.Consecutivo)
-                    || textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
-            }
+                {
+                    var (consecutivos, textos) = LeerRadicados(valores);
+                    return query.Where(x => consecutivos.Contains(x.Consecutivo)
+                        || textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
+                }
             case QueryOperator.NoEsNinguno:
-            {
-                var (consecutivos, textos) = LeerRadicados(valores);
-                return query.Where(x => !consecutivos.Contains(x.Consecutivo)
-                    && !textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
-            }
+                {
+                    var (consecutivos, textos) = LeerRadicados(valores);
+                    return query.Where(x => !consecutivos.Contains(x.Consecutivo)
+                        && !textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
+                }
             case QueryOperator.Contiene:
                 return query.Where(x => x.ReferenceNumber
                     .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
@@ -155,33 +155,33 @@ internal static class ProcedureInstanceFiltroSql
 
     public static IQueryable<ProcedureInstance> PorPlaca(
         IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch
-    {
-        QueryOperator.EsAlguno => query.Where(x => x.Plate != null && valores.Contains(
-            x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-        QueryOperator.NoEsNinguno => query.Where(x => x.Plate == null || !valores.Contains(
-            x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-        QueryOperator.Contiene => query.Where(x => x.Plate != null && x.Plate
-            .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-            .Contains(valores[0])),
-        QueryOperator.EstaVacio => query.Where(x => x.Plate == null || x.Plate == ""),
-        QueryOperator.NoEstaVacio => query.Where(x => x.Plate != null && x.Plate != ""),
-        _ => query,
-    };
+        {
+            QueryOperator.EsAlguno => query.Where(x => x.Plate != null && valores.Contains(
+                x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
+            QueryOperator.NoEsNinguno => query.Where(x => x.Plate == null || !valores.Contains(
+                x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
+            QueryOperator.Contiene => query.Where(x => x.Plate != null && x.Plate
+                .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
+                .Contains(valores[0])),
+            QueryOperator.EstaVacio => query.Where(x => x.Plate == null || x.Plate == ""),
+            QueryOperator.NoEstaVacio => query.Where(x => x.Plate != null && x.Plate != ""),
+            _ => query,
+        };
 
     public static IQueryable<ProcedureInstance> PorVin(
         IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch
-    {
-        QueryOperator.EsAlguno => query.Where(x => x.Vin != null && valores.Contains(
-            x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-        QueryOperator.NoEsNinguno => query.Where(x => x.Vin == null || !valores.Contains(
-            x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-        QueryOperator.Contiene => query.Where(x => x.Vin != null && x.Vin
-            .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-            .Contains(valores[0])),
-        QueryOperator.EstaVacio => query.Where(x => x.Vin == null || x.Vin == ""),
-        QueryOperator.NoEstaVacio => query.Where(x => x.Vin != null && x.Vin != ""),
-        _ => query,
-    };
+        {
+            QueryOperator.EsAlguno => query.Where(x => x.Vin != null && valores.Contains(
+                x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
+            QueryOperator.NoEsNinguno => query.Where(x => x.Vin == null || !valores.Contains(
+                x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
+            QueryOperator.Contiene => query.Where(x => x.Vin != null && x.Vin
+                .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
+                .Contains(valores[0])),
+            QueryOperator.EstaVacio => query.Where(x => x.Vin == null || x.Vin == ""),
+            QueryOperator.NoEstaVacio => query.Where(x => x.Vin != null && x.Vin != ""),
+            _ => query,
+        };
 
     // ── Personas ──────────────────────────────────────────────────────────────────────────────
 
@@ -244,13 +244,13 @@ internal static class ProcedureInstanceFiltroSql
     /// <summary>Tipo de trámite, por el CÓDIGO del tipo (no por su nombre, que se puede renombrar).</summary>
     public static IQueryable<ProcedureInstance> PorTipoTramite(
         IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch
-    {
-        QueryOperator.EsAlguno => query.Where(x =>
-            x.ProcedureType != null && valores.Contains(x.ProcedureType.Code.ToUpper())),
-        QueryOperator.NoEsNinguno => query.Where(x =>
-            x.ProcedureType == null || !valores.Contains(x.ProcedureType.Code.ToUpper())),
-        _ => query,
-    };
+        {
+            QueryOperator.EsAlguno => query.Where(x =>
+                x.ProcedureType != null && valores.Contains(x.ProcedureType.Code.ToUpper())),
+            QueryOperator.NoEsNinguno => query.Where(x =>
+                x.ProcedureType == null || !valores.Contains(x.ProcedureType.Code.ToUpper())),
+            _ => query,
+        };
 
     /// <summary>
     /// Acota a una o varias compañías, comparando por identificador y no por razón social: dos
@@ -365,6 +365,10 @@ internal static class ProcedureInstanceFiltroSql
     /// el ícono no. La comparación de clave es exacta (las claves se escriben con las constantes de
     /// <see cref="RuntGravamenSignal"/>), mientras el dominio la hace sin distinguir mayúsculas.</para>
     /// </remarks>
+    // CA1866 pide StartsWith(char), pero Npgsql 10 NO traduce esa sobrecarga (el filtro devolvía 500,
+    // Bug #13445 revisión DB H1). Esto es un árbol de expresión que se traduce a SQL, no código que se
+    // ejecuta: la sobrecarga string es la correcta. Lo fija ProcedureInstanceFiltroSqlTraduccionTests.
+#pragma warning disable CA1866
     public static Expression<Func<ProcedureInstance, bool>> TienePrenda(FlitDbContext db) =>
         x => (x.ProcedureType != null && CodigosPrendaBase.Contains(x.ProcedureType.Code.ToUpper()))
             || db.ProcedureInstancePrendas.Any(p => p.ProcedureInstanceId == x.Id
@@ -382,8 +386,9 @@ internal static class ProcedureInstanceFiltroSql
                             && fv.ValueJson != RuntDetalleNulo)
                         || (fv.ValueJson == null
                             && fv.ValueText != null
-                            && fv.ValueText.Trim().StartsWith('[')
+                            && fv.ValueText.Trim().StartsWith("[")
                             && fv.ValueText.Trim() != RuntDetalleArrayVacio))));
+#pragma warning restore CA1866
 
     /// <summary>
     /// «Tiene transformación», en SQL. Réplica de <see cref="TramiteMarcas.TieneTransformacion"/>:
