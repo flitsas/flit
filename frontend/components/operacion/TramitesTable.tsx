@@ -93,6 +93,7 @@ import {
 } from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { useNetworkScope } from '@/hooks/useNetworkScope';
+import { useDocumentosRed } from '@/hooks/useDocumentosRed';
 import { NetworkScopeSelector } from './NetworkScopeSelector';
 import { useNavigableModules } from '@/hooks/useNavigableModules';
 import { controlCls } from './tramites-control-styles';
@@ -813,11 +814,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   );
   const etiquetaAlcanceLote = networkActive ? (nombreHijaLote ? `Red · ${nombreHijaLote}` : 'Red') : null;
   /**
-   * HU #13419 AC5 — el frontend no conoce el interruptor `network_documents_concesion` (solo lo
-   * expone la ruta del Super Admin): cuando el servidor responde 403 `network_documents_disabled`,
-   * la vista de red deja de ofrecer «Descargar ZIP» durante la sesión de la página.
+   * HU #13419 AC5 — con la vista de red activa se pregunta `GET /network/documentos` (una vez por
+   * activación, con `AbortSignal`) y «Descargar ZIP» solo se ofrece con `documentosRed=true`: ni
+   * mientras se consulta, ni si está apagado, ni si la consulta falla o da 403 (fail-closed). Con
+   * «Mi compañía» no se consulta y el botón sigue igual. Defensa: si aun así el servidor responde 403
+   * `network_documents_disabled` al crear el lote, la vista de red deja de ofrecerlo en la página.
    */
+  const documentosRed = useDocumentosRed(networkActive && puedeLote && !isAdmin);
   const [descargaRedApagada, setDescargaRedApagada] = useState(false);
+  const descargaRedNoDisponible: string | null = !networkActive
+    ? null
+    : descargaRedApagada || documentosRed === 'apagado'
+      ? 'La descarga en ZIP no está habilitada para la vista de red.'
+      : documentosRed === 'no_disponible'
+        ? 'No se pudo comprobar si la descarga en ZIP está habilitada para la vista de red.'
+        : null;
   const alRechazoRed = useCallback((codigo: string) => {
     if (codigo === 'network_documents_disabled') setDescargaRedApagada(true);
   }, []);
@@ -827,10 +838,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const alCrearLote = useCallback(
     (creado: LoteConsolidados) => {
       limpiarSeleccionLote();
-      // HU #13419 AC6 — el contrato no trae el nombre de la hija: lo pasa quien creó el lote.
-      mostrarLote(creado, { nombreHija: creado.alcanceRed === 'hija' ? nombreHijaLote : null });
+      // HU #13419 AC6 — el aviso resuelve el nombre de la hija por `alcanceHijaId` (useNombreHijaLote).
+      mostrarLote(creado);
     },
-    [limpiarSeleccionLote, mostrarLote, nombreHijaLote],
+    [limpiarSeleccionLote, mostrarLote],
   );
   /**
    * HU #13387 (W-f) — el Super Admin crea el lote con las MISMAS cabeceras que el listado. El
@@ -1610,22 +1621,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). HU #13382 — el
                 lote creado y el del 409 `lote_activo` pasan al seguimiento global del Shell. HU #13387 —
                 el Super Admin elige el tipo y crea con las cabeceras del listado. */}
-            <BotonDescargaMasivaZip
-              seleccion={lote.modelo}
-              contador={lote.contador}
-              onCreado={alCrearLote}
-              onLoteActivo={mostrarLote}
-              selectorTipo={isAdmin}
-              crear={isAdmin ? crearLoteSuperAdmin : undefined}
-              alcanceRed={isAdmin ? undefined : lote.alcance}
-              etiquetaAlcance={etiquetaAlcanceLote}
-              onRechazoRed={alRechazoRed}
-              noDisponible={
-                networkActive && descargaRedApagada
-                  ? 'La descarga en ZIP no está habilitada para la vista de red.'
-                  : null
-              }
-            />
+            {/* HU #13419 AC5 — en la vista de red, mientras `documentosRed` no responde, no hay botón. */}
+            {networkActive && documentosRed === 'consultando' && !descargaRedNoDisponible ? null : (
+              <BotonDescargaMasivaZip
+                seleccion={lote.modelo}
+                contador={lote.contador}
+                onCreado={alCrearLote}
+                onLoteActivo={mostrarLote}
+                selectorTipo={isAdmin}
+                crear={isAdmin ? crearLoteSuperAdmin : undefined}
+                alcanceRed={isAdmin ? undefined : lote.alcance}
+                etiquetaAlcance={etiquetaAlcanceLote}
+                onRechazoRed={alRechazoRed}
+                noDisponible={descargaRedNoDisponible}
+              />
+            )}
           </BarraSeleccionLote>
         ) : null}
 

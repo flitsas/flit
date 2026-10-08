@@ -3,9 +3,9 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import {
   useConsolidadoLoteActual,
-  type OpcionesMostrarLote,
   type UseConsolidadoLoteActual,
 } from '@/hooks/useConsolidadoLoteActual';
+import { useNombreHijaLote } from '@/hooks/useNombreHijaLote';
 import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
 import { LoteDescargaAlertCard } from './LoteDescargaAlertCard';
 
@@ -31,11 +31,8 @@ import { LoteDescargaAlertCard } from './LoteDescargaAlertCard';
  */
 
 export interface AccionesLoteDescarga {
-  /**
-   * Muestra y sigue un lote concreto (el objeto ya leído o su id). HU #13419: `nombreHija` para el
-   * rótulo «Red · {hija}» de un lote de red acotado.
-   */
-  mostrarLote: (lote: LoteConsolidados | string, opciones?: OpcionesMostrarLote) => void;
+  /** Muestra y sigue un lote concreto (el objeto ya leído o su id). */
+  mostrarLote: (lote: LoteConsolidados | string) => void;
 }
 
 const SIN_PROVIDER: AccionesLoteDescarga = { mostrarLote: () => undefined };
@@ -68,9 +65,14 @@ export function LoteDescargaTrackerProvider({
   );
 }
 
-/** Aviso flotante del lote. Sin lote (204), oculto o sin permiso no pinta nada (AC5). */
+/**
+ * Aviso flotante del lote. Sin lote (204), oculto o sin permiso no pinta nada (AC5). HU #13419 AC6 —
+ * el nombre de la hija de un lote de red acotado se resuelve aquí por `alcanceHijaId`, así que vale
+ * igual para el lote recién creado que para el recuperado por `/actual` tras una recarga.
+ */
 export function LoteDescargaTracker() {
   const s = useContext(EstadoCtx);
+  const nombreHija = useNombreHijaLote(s?.oculto ? null : s?.lote);
   if (!s?.lote || s.oculto) return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-end px-4 pt-4 md:px-6">
@@ -85,7 +87,7 @@ export function LoteDescargaTracker() {
         onCancelar={() => void s.cancelar()}
         cancelando={s.cancelando}
         errorCancelacion={s.errorCancelacion}
-        nombreHija={s.nombreHija}
+        nombreHija={nombreHija}
       />
     </div>
   );
