@@ -90,6 +90,7 @@ public sealed class ExternalClientsSchemaTests
     [Theory]
     [InlineData("external.tramites.read", true)]
     [InlineData("external.tramites.pii.read", true)]
+    [InlineData("external.tramites.attachments.write", true)]
     [InlineData("ict.transactions.write", false)]
     [InlineData(null, false)]
     public void LosPermisosValidosSonLosDelContrato(string? scope, bool valido) =>

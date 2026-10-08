@@ -51,7 +51,27 @@ Flito y no dejarlo en el historial de la terminal ni en archivos.
 
 Cada cambio queda en `audit.audit_logs` con el superadministrador en `updated_by`.
 
-## 4. Cierre
+## 4. Habilitar el envío de adjuntos (HU #13263, contrato v3.2 §7)
+
+Un cliente ya dado de alta recibe el permiso nuevo `external.tramites.attachments.write` **sin rotar el secreto**.
+
+**Desde la UI (recomendado):** Usuarios → Clientes de integración → editar el cliente → marcar «Envío de adjuntos» →
+Guardar cambios. El listado muestra la etiqueta «Adjuntos». El formulario conserva los permisos que no administra.
+
+**Por API (alternativa):** `PATCH` reemplaza la lista completa de permisos: enviar los vigentes más el nuevo.
+
+```http
+PATCH /api/v1/admin/external-clients/{id}
+Authorization: Bearer <token de superadministrador>
+Content-Type: application/json
+
+{ "scopes": ["external.tramites.read", "external.tramites.pii.read", "external.tramites.attachments.write"] }
+```
+
+El permiso se lee de la base al canjear el pase: Flito lo recibe en su **próximo pase** (los pases vigentes duran
+30 minutos y no lo traen). Comprobación: `GET /api/v1/admin/external-clients` muestra los tres permisos.
+
+## 5. Cierre
 
 Marcar como hecha la Task del ambiente, hija de la HU #13088, indicando la fecha y quién hizo el alta,
 **sin** el secreto.

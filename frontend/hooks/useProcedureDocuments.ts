@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useRevalidateOnFocus } from './useRevalidateOnFocus';
+import { CODIGO_ADJUNTO_BLOQUEADO_FLITO, mensajeErrorAdjunto } from '@/lib/tramites/flito';
 import type {
   ChecklistView,
   DocumentOcrResult,
@@ -282,6 +283,13 @@ export function useProcedureDocuments(
   // casi a la vez, y sin esto se pedirían dos checklists para la misma vuelta.
   const refrescandoRef = useRef(false);
 
+  // HU #13266 (AC3) — adjuntos vigentes a mano para `remove`: el 409 `adjunto_protegido` solo se
+  // traduce como «lo cargó FLITO» si el adjunto que se intentó borrar tiene `provider = flito`.
+  const attachmentsRef = useRef<ProcedureAttachment[]>(state.attachments);
+  useEffect(() => {
+    attachmentsRef.current = state.attachments;
+  }, [state.attachments]);
+
   /**
    * Relee checklist y adjuntos.
    *
@@ -472,9 +480,13 @@ export function useProcedureDocuments(
         setState((s) => ({
           ...s,
           uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
-          error:
-            err instanceof Error ? err.message : 'Error al subir el documento',
+          // HU #13266 (AC3) — 409 `adjunto_bloqueado_flito`: copy de FLITO, sin código técnico.
+          error: mensajeErrorAdjunto(err, 'Error al subir el documento'),
         }));
+        // FLITO cargó ese tipo mientras la pantalla estaba abierta: se relee para que la casilla
+        // muestre su adjunto (etiqueta y sin acciones) en vez de seguir ofreciendo «Adjuntar».
+        const problem = (err as { problem?: { error?: unknown } | null } | null)?.problem;
+        if (problem?.error === CODIGO_ADJUNTO_BLOQUEADO_FLITO) void refresh({ background: true });
         return false;
       }
     },
@@ -503,13 +515,12 @@ export function useProcedureDocuments(
         await refresh();
         return true;
       } catch (err) {
+        const adjunto = attachmentsRef.current.find((a) => a.id === attachmentId) ?? null;
         setState((s) => ({
           ...s,
           deletingId: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : 'Error al borrar el documento',
+          // HU #13266 (AC3) — 409 `adjunto_protegido` de un adjunto de FLITO: no «lo genera el sistema».
+          error: mensajeErrorAdjunto(err, 'Error al borrar el documento', adjunto),
         }));
         return false;
       }

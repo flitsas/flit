@@ -190,7 +190,12 @@ public static class ApiSecurityExtensions
             .AddPolicy(ExternalClientAuthorization.TramitesPiiReadPolicy, policy => policy
                 .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)
                 .RequireAuthenticatedUser()
-                .RequireClaim(ExternalClientAuthorization.ScopeClaim, ExternalScopes.TramitesPiiRead));
+                .RequireClaim(ExternalClientAuthorization.ScopeClaim, ExternalScopes.TramitesPiiRead))
+            // HU #13263 — envío de adjuntos: permiso propio, no basta con el de lectura.
+            .AddPolicy(ExternalClientAuthorization.AttachmentsWritePolicy, policy => policy
+                .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)
+                .RequireAuthenticatedUser()
+                .RequireClaim(ExternalClientAuthorization.ScopeClaim, ExternalScopes.AttachmentsWrite));
 
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, SuperAdminForbiddenResultHandler>();
 
