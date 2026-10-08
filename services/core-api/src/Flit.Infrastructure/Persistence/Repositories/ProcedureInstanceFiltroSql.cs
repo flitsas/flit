@@ -319,20 +319,71 @@ internal static class ProcedureInstanceFiltroSql
         [.. TramiteMarcas.ValoresAfirmativos];
 
     /// <summary>
+    /// Bug #13445 — formas afirmativas de las banderas RUNT, ya en mayúscula, tomadas de
+    /// <see cref="RuntGravamenSignal.ValoresAfirmativos"/> (de donde también se deriva
+    /// <see cref="RuntGravamenSignal.EsAfirmativo"/>).
+    /// </summary>
+    private static readonly string[] RuntValoresAfirmativos =
+        [.. RuntGravamenSignal.ValoresAfirmativos];
+
+    private const string RuntPrendasKey = RuntGravamenSignal.PrendasKey;
+    private const string RuntGravamenesKey = RuntGravamenSignal.GravamenesKey;
+    private const string RuntDetalleKey = RuntGravamenSignal.DetalleKey;
+
+    /// <summary>
+    /// Bug #13445 — <c>runt_gravamenes</c> que NO cuentan como garantía en SQL: el array vacío que
+    /// escriben los mappers cuando el proveedor respondió sin garantías
+    /// (<c>RuntGarantiasMobiliarias.SinGarantiasJson</c>) y los dos JSON que tampoco son un array con
+    /// ítems. Ver la aproximación documentada en <see cref="TienePrenda"/>.
+    /// </summary>
+    private const string RuntDetalleArrayVacio = "[]";
+    private const string RuntDetalleObjetoVacio = "{}";
+    private const string RuntDetalleNulo = "null";
+
+    /// <summary>
     /// «Tiene prenda», en SQL. Réplica de <see cref="TramiteMarcas.TienePrenda"/>: la decisión
     /// VIGENTE que no sea <c>omitir</c> ni <c>sin_prenda</c> <b>o</b> que el trámite SEA de prenda,
-    /// que lo es desde que se abre, antes de que nadie capture la decisión.
+    /// que lo es desde que se abre, antes de que nadie capture la decisión, <b>o</b> (Bug #13445, D2)
+    /// que la consulta RUNT reporte gravamen (<see cref="RuntGravamenSignal.Reporta(IEnumerable{ProcedureInstanceFieldValue})"/>).
     /// </summary>
     /// <remarks>
-    /// Recibe el contexto porque la decisión de prenda no cuelga de la instancia como navegación:
-    /// vive en su propia tabla y hay que ir a ella por subconsulta correlacionada.
+    /// <para>Recibe el contexto porque la decisión de prenda no cuelga de la instancia como navegación:
+    /// vive en su propia tabla y hay que ir a ella por subconsulta correlacionada.</para>
+    ///
+    /// <para><b>Señal RUNT — qué es exacto y qué es aproximado.</b> Las banderas
+    /// <c>runt_tiene_prendas</c>/<c>runt_tiene_gravamenes</c> son EXACTAS: mismas claves y mismos
+    /// valores afirmativos que el dominio (<c>Trim</c> + <c>ToUpper</c> contra
+    /// <see cref="RuntGravamenSignal.ValoresAfirmativos"/>). El detalle <c>runt_gravamenes</c> NO se
+    /// traduce literal: el dominio parsea el array y cuenta solo los objetos con nombre, documento,
+    /// idPrenda o fecha con valor; recorrer los elementos del <c>jsonb</c> exigiría SQL a mano fuera de
+    /// LINQ (y el proveedor en memoria de las pruebas no lo ejecuta). En SQL cuenta como garantía
+    /// cualquier <c>value_json</c> distinto de <c>[]</c>, <c>{}</c> y <c>null</c>, y —si
+    /// <c>value_json</c> es nulo— un <c>value_text</c> que empiece por <c>[</c> y no sea <c>[]</c>.
+    /// Es exacto para lo que escriben los mappers de consulta (<c>RuntGarantiasMobiliarias</c>
+    /// normaliza y DESCARTA los ítems sin datos, y escribe <c>[]</c> sin garantías); solo diverge ante
+    /// un array con ítems vacíos (<c>[{}]</c>) o un <c>value_text</c> ilegible, donde el SQL marca y
+    /// el ícono no. La comparación de clave es exacta (las claves se escriben con las constantes de
+    /// <see cref="RuntGravamenSignal"/>), mientras el dominio la hace sin distinguir mayúsculas.</para>
     /// </remarks>
     public static Expression<Func<ProcedureInstance, bool>> TienePrenda(FlitDbContext db) =>
         x => (x.ProcedureType != null && CodigosPrendaBase.Contains(x.ProcedureType.Code.ToUpper()))
             || db.ProcedureInstancePrendas.Any(p => p.ProcedureInstanceId == x.Id
                 && p.Estado == PrendaEstado.Vigente
                 && p.Decision != PrendaDecision.SinPrenda
-                && p.Decision != PrendaDecision.Omitir);
+                && p.Decision != PrendaDecision.Omitir)
+            || x.FieldValues.Any(fv =>
+                ((fv.FieldKey == RuntPrendasKey || fv.FieldKey == RuntGravamenesKey)
+                    && fv.ValueText != null
+                    && RuntValoresAfirmativos.Contains(fv.ValueText.Trim().ToUpper()))
+                || (fv.FieldKey == RuntDetalleKey
+                    && ((fv.ValueJson != null
+                            && fv.ValueJson != RuntDetalleArrayVacio
+                            && fv.ValueJson != RuntDetalleObjetoVacio
+                            && fv.ValueJson != RuntDetalleNulo)
+                        || (fv.ValueJson == null
+                            && fv.ValueText != null
+                            && fv.ValueText.Trim().StartsWith('[')
+                            && fv.ValueText.Trim() != RuntDetalleArrayVacio))));
 
     /// <summary>
     /// «Tiene transformación», en SQL. Réplica de <see cref="TramiteMarcas.TieneTransformacion"/>:
