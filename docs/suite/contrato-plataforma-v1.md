@@ -177,6 +177,12 @@ Los métodos se definen en los `.proto`; este contrato fija el servicio, quién 
   "correlationId": "…", "data": { } }
 ```
 
+Todo evento, trabajo y llamada entre servicios lleva una empresa (`tenantId` / metadata `x-flit-tenant-id`). Lo que es
+de la plataforma y no de una empresa (simulación de mandato, buzón de pruebas de notificaciones, recuperación de
+contraseña de un usuario sin rol, reportes de alcance SuperAdmin) usa la empresa fija **«plataforma»**,
+`00000000-0000-0000-0000-0000000f1170` (`Flit.Platform.Sdk.PlatformTenants.Plataforma`, HU #13359). No existe como
+compañía en `admin.companies`.
+
 | Evento v1 | Productor | Datos | Uso |
 |---|---|---|---|
 | `platform.tenant_product.changed` | B | `{ tenantId, productCode, enabled }` | Invalidar caché de acceso |
@@ -298,4 +304,4 @@ El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 | v1 | 2026-09-24 | Resoluciones y Flotas fuera de v1; SuperAdmin con bypass en todos los productos (§2.1); ubicación de `IProductAccessResolver`; habilitación de producto encendido/apagado en lugar de suscripción (§4, §6, §7, §9, §10); `DomainContext` sin romper constructores; formato de slugs del manifiesto; `SessionUser`; puertos | Cerrado por Samuel Cardenas (en rol de líder técnico) |
 | v1.1 | 2026-09-24 | §4: la carpeta de la interfaz pasa de `ProductAccess/` a `Products/` (evita CS0118) | Samuel Cardenas (frente B) |
 | v1.2 | 2026-10-02 | §1: se retira el producto `demo` (y sus puertos 4050/4051); la plantilla se valida con Comparendos o Diagnóstico. Migración `20261002120000_Suite_RetirarProductoDemo` | Samuel Cardenas |
-| v1.3 | 2026-10-06 | Epic #13316 (ADR-0064, ADR-0065, ADR-0070). §3: `aud` por servicio destino y scopes `platform.identidad.read`, `platform.consultas.admin`, `platform.notificaciones.send`, `platform.notificaciones.admin` y `platform.tramites.ict`; §6.1 suma `ValidacionIdentidadService`, `NotificacionesService` y `MensajesMuertosService`; §7 suma los trabajos. §6: se retira `POST /consultas/{fuente}` (nunca implementado); consumo lo atiende `core-consultas`; nueva §6.1 de llamadas gRPC entre servicios. §7: exchanges `flit.<productor>`, JSON e inbox; un AsyncAPI por productor. §11: puertos gRPC internos. Las rutas REST existentes no cambian | Pendiente: Jorman (líder técnico) |
+| v1.3 | 2026-10-06 | Epic #13316 (ADR-0064, ADR-0065, ADR-0070). §3: `aud` por servicio destino y scopes `platform.identidad.read`, `platform.consultas.admin`, `platform.notificaciones.send`, `platform.notificaciones.admin` y `platform.tramites.ict`; §6.1 suma `ValidacionIdentidadService`, `NotificacionesService` y `MensajesMuertosService`; §7 suma los trabajos. §6: se retira `POST /consultas/{fuente}` (nunca implementado); consumo lo atiende `core-consultas`; nueva §6.1 de llamadas gRPC entre servicios. §7: exchanges `flit.<productor>`, JSON e inbox; un AsyncAPI por productor. §7: empresa fija «plataforma» para lo que no es de una empresa. §11: puertos gRPC internos. Las rutas REST existentes no cambian | Pendiente: Jorman (líder técnico) |
