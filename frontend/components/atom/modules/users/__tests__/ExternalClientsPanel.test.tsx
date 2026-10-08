@@ -248,4 +248,71 @@ describe("ExternalClientsPanel (#13200)", () => {
     );
     expect(await within(fila("flito-dev")).findByText("Flito DEV 2")).toBeInTheDocument();
   });
+
+  // Feature #13261: el permiso de envío de adjuntos (comprobante de impuesto) se ve, se concede y no se pierde al editar.
+  it("#13261: el panel muestra el permiso de adjuntos y la edición lo conserva junto con permisos desconocidos", async () => {
+    const ue = userEvent.setup();
+    const conAdjuntos: ExternalClient = {
+      ...flito,
+      scopes: [
+        "external.tramites.read",
+        "external.tramites.pii.read",
+        "external.tramites.attachments.write",
+        "external.tramites.futuro",
+      ],
+    };
+    vi.mocked(fetchExternalClients).mockResolvedValue([conAdjuntos]);
+    vi.mocked(updateExternalClient).mockResolvedValue({ ...conAdjuntos, displayName: "Flito DEV 2" });
+    render(<ExternalClientsPanel />);
+    await screen.findByRole("table");
+    expect(within(fila("flito-dev")).getByLabelText("Permiso: envío de adjuntos")).toBeInTheDocument();
+
+    await ue.click(screen.getByRole("button", { name: /editar flito-dev/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText(/envío de adjuntos/i)).toBeChecked();
+    const nombre = within(dialog).getByLabelText(/^nombre/i);
+    await ue.clear(nombre);
+    await ue.type(nombre, "Flito DEV 2");
+    await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() =>
+      expect(updateExternalClient).toHaveBeenCalledWith("client-1", {
+        displayName: "Flito DEV 2",
+        purpose: flito.purpose,
+        scopes: [
+          "external.tramites.read",
+          "external.tramites.pii.read",
+          "external.tramites.attachments.write",
+          "external.tramites.futuro",
+        ],
+      }),
+    );
+  });
+
+  it("#13261: la edición concede el permiso de adjuntos al marcarlo", async () => {
+    const ue = userEvent.setup();
+    vi.mocked(updateExternalClient).mockResolvedValue({
+      ...flito,
+      scopes: [...flito.scopes, "external.tramites.attachments.write"],
+    });
+    render(<ExternalClientsPanel />);
+    await screen.findByRole("table");
+    expect(within(fila("flito-dev")).queryByLabelText("Permiso: envío de adjuntos")).not.toBeInTheDocument();
+
+    await ue.click(screen.getByRole("button", { name: /editar flito-dev/i }));
+    const dialog = await screen.findByRole("dialog");
+    const adjuntos = within(dialog).getByLabelText(/envío de adjuntos/i);
+    expect(adjuntos).not.toBeChecked();
+    await ue.click(adjuntos);
+    await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() =>
+      expect(updateExternalClient).toHaveBeenCalledWith("client-1", {
+        displayName: flito.displayName,
+        purpose: flito.purpose,
+        scopes: ["external.tramites.read", "external.tramites.pii.read", "external.tramites.attachments.write"],
+      }),
+    );
+    expect(await within(fila("flito-dev")).findByLabelText("Permiso: envío de adjuntos")).toBeInTheDocument();
+  });
 });
