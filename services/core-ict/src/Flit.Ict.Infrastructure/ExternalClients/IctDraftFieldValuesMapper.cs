@@ -7,23 +7,68 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 /// <summary>
 /// Bug #13445 — traduce las transformaciones y la prenda del pre-trámite ICT a los <c>field_values</c>
 /// que core-api persiste en el borrador (contrato de carriles, sin cambio de .proto).
-/// <para><b>Transformaciones:</b> se leen SOLO de <see cref="ExternalIntegrationMaster.Transformations"/>
-/// (códigos RUNT 5/9/17). El <c>transaction_type</c> principal no interviene: allí el 5 significa blindaje,
-/// aquí el código de transformación 5 es cambio de color.</para>
-/// <para><b>Catálogos:</b> <c>new_vehicle_fuel_type</c> (1-12) y <c>armor_level_number_id</c> (1-4) no
-/// tienen en core-ict un catálogo que diga qué combustible o nivel representa cada id, así que no hay
-/// equivalencia inequívoca con los códigos del wizard (<c>vehicle_fuel</c> GASOLINA/DIESEL/…,
-/// <c>blindaje_nivel</c> NIVEL_1..3/DESMONTE). Se envía solo la bandera y el gestor completa el valor.</para>
+/// <para><b>Transformaciones (D6):</b> las banderas se leen SOLO de
+/// <see cref="ExternalIntegrationMaster.Transformations"/>, cuyos códigos son del catálogo ICT
+/// <b>Tipo Trámite</b> (no RUNT): 5 blindaje, 6 cambio de carrocería, 7 cambio de color, 9 conversión de
+/// combustible. 8 (cambio de locatario), 10/11 (duplicados) y cualquier otro código no son
+/// transformaciones y no producen nada.</para>
+/// <para><b>Valores (D7/D8/D9):</b> <c>blindaje_nivel</c> y <c>vehicle_fuel</c> se envían siempre que la
+/// columna del master traiga un id con equivalencia exacta, venga o no la transformación (cubre el
+/// trámite principal 5/9 sin <c>more_transaction</c>). Sin equivalencia exacta no se envía valor y el
+/// gestor lo elige en el wizard.</para>
 /// <para><b>PII:</b> el nombre y el documento del acreedor solo viajan en el request; esta clase no
 /// registra nada.</para>
 /// </summary>
 internal static class IctDraftFieldValuesMapper
 {
-    internal const int TransformacionColor = 5;
-    internal const int TransformacionCombustibleOBlindaje = 9;
-    internal const int TransformacionCarroceria = 17;
+    internal const int TransformacionBlindaje = 5;
+    internal const int TransformacionCarroceria = 6;
+    internal const int TransformacionColor = 7;
+    internal const int TransformacionCombustible = 9;
 
     private const string True = "true";
+
+    /// <summary>
+    /// D7 — <c>armor_level_number_id</c> (ICT 1-4) → <c>blindaje_nivel</c> del wizard
+    /// (core-api <c>BlindajeOpciones</c>: NIVEL_1/NIVEL_2/NIVEL_3/DESMONTE).
+    /// </summary>
+    private static readonly Dictionary<short, string> NivelBlindaje = new()
+    {
+        [1] = "NIVEL_1",
+        [2] = "NIVEL_2",
+        [3] = "NIVEL_3",
+        [4] = "DESMONTE",
+    };
+
+    /// <summary>
+    /// D8 — <c>new_vehicle_fuel_type</c> → <c>vehicle_fuel</c> (texto del catálogo web
+    /// <c>VEHICLE_FUEL_CATALOG</c>, frontend/lib/catalogs/vehicle-transformations.ts). Solo equivalencias
+    /// exactas. Tabla ICT completa (contrato v1, 1-12):
+    /// <list type="table">
+    /// <item><term>1 GASOLINA</term><description>GASOLINA</description></item>
+    /// <item><term>2 GNV</term><description>GAS NATURAL</description></item>
+    /// <item><term>3 DIESEL</term><description>DIESEL</description></item>
+    /// <item><term>4 GAS GASOL</term><description>sin valor (dudoso: mezcla gas-gasolina)</description></item>
+    /// <item><term>5 ELECTRICO</term><description>ELECTRICO</description></item>
+    /// <item><term>6 HIDROGENO</term><description>HIDROGENO</description></item>
+    /// <item><term>7 ETANOL</term><description>ETANOL</description></item>
+    /// <item><term>8 BIODIESEL</term><description>BIODIESEL</description></item>
+    /// <item><term>9 GLP</term><description>sin valor (dudoso: el web no distingue GLP)</description></item>
+    /// <item><term>10 GASO ELEC</term><description>sin valor (dudoso: híbrido gasolina-eléctrico)</description></item>
+    /// <item><term>11 DIES ELEC</term><description>sin valor (dudoso: híbrido diésel-eléctrico)</description></item>
+    /// <item><term>12 AGUA CON GAS</term><description>sin valor (dudoso)</description></item>
+    /// </list>
+    /// </summary>
+    private static readonly Dictionary<short, string> CombustibleWeb = new()
+    {
+        [1] = "GASOLINA",
+        [2] = "GAS NATURAL",
+        [3] = "DIESEL",
+        [5] = "ELECTRICO",
+        [6] = "HIDROGENO",
+        [7] = "ETANOL",
+        [8] = "BIODIESEL",
+    };
 
     /// <summary>Field values de transformaciones y prenda, en orden estable y sin claves repetidas.</summary>
     internal static IReadOnlyList<FieldValue> Map(ExternalIntegrationMaster master)
@@ -40,9 +85,14 @@ internal static class IctDraftFieldValuesMapper
     {
         var codigos = master.Transformations.Select(t => t.IdTransformationType).ToHashSet();
 
-        if (codigos.Contains(TransformacionColor))
+        if (codigos.Contains(TransformacionBlindaje))
         {
-            Add(values, "cambio_color", True);
+            Add(values, "blindaje", True);
+        }
+
+        if (master.ArmorLevelNumberId is { } nivel && NivelBlindaje.TryGetValue(nivel, out var nivelWeb))
+        {
+            Add(values, "blindaje_nivel", nivelWeb);
         }
 
         if (codigos.Contains(TransformacionCarroceria))
@@ -50,26 +100,19 @@ internal static class IctDraftFieldValuesMapper
             Add(values, "cambio_carroceria", True);
         }
 
-        if (codigos.Contains(TransformacionCombustibleOBlindaje))
+        if (codigos.Contains(TransformacionColor))
         {
-            var conCombustible = master.NewVehicleFuelType is not null;
-            var conBlindaje = master.ArmorLevelNumberId is not null;
+            Add(values, "cambio_color", True);
+        }
 
-            if (conCombustible)
-            {
-                Add(values, "cambio_combustible", True);
-            }
+        if (codigos.Contains(TransformacionCombustible))
+        {
+            Add(values, "cambio_combustible", True);
+        }
 
-            if (conBlindaje)
-            {
-                Add(values, "blindaje", True);
-            }
-
-            if (!conCombustible && !conBlindaje)
-            {
-                // Sin subtipo no se adivina: core-api emite el aviso y el gestor la declara en el wizard.
-                Add(values, "ict_transformacion_sin_subtipo", True);
-            }
+        if (master.NewVehicleFuelType is { } combustible && CombustibleWeb.TryGetValue(combustible, out var combustibleWeb))
+        {
+            Add(values, "vehicle_fuel", combustibleWeb);
         }
     }
 
