@@ -5,9 +5,11 @@ import {
   MENSAJE_LOTE_ACTIVO,
   MENSAJE_REINTENTAR_DESCARGA,
   MENSAJE_TOPE_DESCARGA,
+  aErrorDeLote,
   consolidadoLotesClient,
   interpretarErrorCrearLote,
 } from '@/lib/api/consolidado-lotes-client';
+import { ApiError } from '@/lib/api/types';
 import type { LoteConsolidados } from '@/lib/api/types-consolidado-lotes';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 
@@ -107,12 +109,45 @@ describe('consolidadoLotesClient.crearLote — HU #13381', () => {
     expect(err.loteActivoId).toBe('abc');
   });
 
-  it('AC4 — 422: mensaje de tope', async () => {
+  it('AC4 — 422 sin `total`/`tope`: mensaje de tope genérico, sin cifra inventada', async () => {
     fetchMock.mockResolvedValue(respuesta(422, { error: 'seleccion_invalida' }));
     const err = await consolidadoLotesClient.crearLote({ seleccion: SELECCION_FILTRO }).catch((e) => e);
     expect(err.status).toBe(422);
     expect(interpretarErrorCrearLote(err)).toEqual({ tipo: 'tope', mensaje: MENSAJE_TOPE_DESCARGA });
-    expect(MENSAJE_TOPE_DESCARGA).toMatch(/10\.000/);
+    expect(MENSAJE_TOPE_DESCARGA).not.toMatch(/\d/);
+  });
+
+  // HU #13420 — el tope total lo edita el Super Admin (`maxItemsPerBatch`): el mensaje lee `total` y
+  // `tope` del cuerpo del 422 `seleccion_excede_tope`, no una constante del frontend.
+  it('HU13420 — 422 seleccion_excede_tope con `total` y `tope`: el mensaje usa esas cifras', async () => {
+    fetchMock.mockResolvedValue(
+      respuesta(422, { title: 'seleccion_excede_tope', error: 'seleccion_excede_tope', total: 12345, tope: 5000 }),
+    );
+    const err = await consolidadoLotesClient.crearLote({ seleccion: SELECCION_FILTRO }).catch((e) => e);
+    expect(err.codigo).toBe('seleccion_excede_tope');
+    expect(err.total).toBe(12345);
+    expect(err.tope).toBe(5000);
+    const r = interpretarErrorCrearLote(err);
+    expect(r.tipo).toBe('tope');
+    expect(r.mensaje).toMatch(/12\.345/);
+    expect(r.mensaje).toMatch(/5\.000/);
+    expect(r.mensaje).not.toMatch(/10\.000/);
+  });
+
+  it('HU13420 — `total`/`tope` también se leen de `extensions` y por `aErrorDeLote` (ApiError.body)', () => {
+    const r = interpretarErrorCrearLote(
+      aErrorDeLote(new ApiError(422, 'x', { extensions: { error: 'seleccion_excede_tope', total: 7001, tope: 7000 } })),
+    );
+    expect(r.mensaje).toMatch(/7\.001/);
+    expect(r.mensaje).toMatch(/7\.000/);
+  });
+
+  it('HU13420 — `tope` sin `total` (o valores no numéricos): mensaje con el tope y sin el total', () => {
+    expect(interpretarErrorCrearLote(new ConsolidadoLotesApiError(422, 'seleccion_excede_tope', null, null, 5000)).mensaje).toMatch(
+      /tope de 5\.000/,
+    );
+    const raro = aErrorDeLote(new ApiError(422, 'x', { error: 'seleccion_excede_tope', total: '9', tope: 'mucho' }));
+    expect(interpretarErrorCrearLote(raro).mensaje).toBe(MENSAJE_TOPE_DESCARGA);
   });
 
   it('AC4 — 503 motor_inactivo: «No se pudo completar la descarga, intente de nuevo»', async () => {

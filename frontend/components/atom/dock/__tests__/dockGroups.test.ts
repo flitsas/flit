@@ -104,8 +104,27 @@ describe("catálogo de Trámites", () => {
       "Mandatos",
       "FUR",
       "Notificaciones",
+      "Descarga masiva",
       "Banners",
     ]);
+  });
+
+  // HU #13420 AC5 — la entrada de los parámetros del motor de descarga masiva es solo del SuperAdmin.
+  it("HU13420 AC5 — «Descarga masiva» solo con SuperAdmin: apunta a su pantalla y no aparece sin el rol", () => {
+    const keys = (v: Partial<NavViewer>, ctx: Partial<TramitesNavContext> = {}) =>
+      dock(ctx, v).flatMap((g) => g.items.flatMap((i) => [i.key, ...(i.children?.map((c) => c.key) ?? [])]));
+    const plataforma = dock({}, { isSuperAdmin: true })
+      .find((g) => g.id === "administradores")
+      ?.items.find((i) => i.key === "admin-plataforma");
+    expect(plataforma?.children?.find((c) => c.key === "admin-descarga-masiva")?.href).toBe(
+      "/admin/plataforma/descarga-masiva",
+    );
+    expect(keys({ roles: ["AdminCompany"], permissions: ["banners.manage", "consolidados.lote.crear"] }, { isAdminCompany: true })).not.toContain(
+      "admin-descarga-masiva",
+    );
+    expect(keys({ roles: ["ot_admin"], modules: ["tramites"] }, { isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" })).not.toContain(
+      "admin-descarga-masiva",
+    );
   });
 
   it("Banners por permiso: un AdminCompany con banners.manage ve Plataforma solo con Banners", () => {

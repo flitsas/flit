@@ -1,7 +1,6 @@
 import { apiUrl, tenantHeader } from './tramites-client';
 import { getToken } from './client';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
-import { TOPE_SELECCION_LOTE } from '@/hooks/useSeleccionLote';
 import { downloadFile } from './download';
 import { ApiError, ApiValidationError } from './types';
 import type {
@@ -28,10 +27,28 @@ const formatoMiles = (n: number) => n.toLocaleString('es-CO');
 /** AC4 — 503 (motor apagado o auditoría no registrada) y falla de red. Texto aprobado. */
 export const MENSAJE_REINTENTAR_DESCARGA = 'No se pudo completar la descarga, intente de nuevo';
 
-/** AC4 — 422: la selección (o la búsqueda rápida) supera lo que el motor admite. */
-export const MENSAJE_TOPE_DESCARGA = `La selección supera el tope de ${formatoMiles(
-  TOPE_SELECCION_LOTE,
-)} trámites para una descarga. Ajusta el filtro para acotarla e intenta de nuevo.`;
+const AJUSTAR_FILTRO = 'Ajusta el filtro para acotarla e intenta de nuevo.';
+
+/**
+ * AC4 — 422 sin cifras en el cuerpo (p. ej. más ids o excluidos de los que admite una petición):
+ * la selección supera lo que el motor admite. Sin número: el tope total lo edita el Super Admin
+ * (HU #13420) y el frontend no lo conoce.
+ */
+export const MENSAJE_TOPE_DESCARGA = `La selección supera el tope de trámites para una descarga. ${AJUSTAR_FILTRO}`;
+
+/**
+ * HU #13420 — 422 `seleccion_excede_tope`: el servidor manda `total` (trámites de la selección
+ * resuelta) y `tope` (`maxItemsPerBatch` vigente). El mensaje usa esas cifras; sin ellas cae a
+ * {@link MENSAJE_TOPE_DESCARGA}.
+ */
+export function mensajeTopeDescarga(total: number | null, tope: number | null): string {
+  if (tope === null) return MENSAJE_TOPE_DESCARGA;
+  const prefijo =
+    total === null
+      ? 'La selección supera'
+      : `La selección tiene ${formatoMiles(total)} trámites y supera`;
+  return `${prefijo} el tope de ${formatoMiles(tope)} trámites para una descarga. ${AJUSTAR_FILTRO}`;
+}
 
 /** AC3 — 409 `lote_activo`. */
 export const MENSAJE_LOTE_ACTIVO =
@@ -45,32 +62,47 @@ const MENSAJE_SIN_PERMISO = 'No tienes permiso para la descarga masiva de consol
 /**
  * Error de una llamada al motor de lotes. `status` 0 = falla de red (no hubo respuesta HTTP).
  * `codigo` es el código estable del motor (`error` en la raíz o en `extensions`), o `null`.
+ * `total` y `tope` solo vienen en el 422 `seleccion_excede_tope` por tope total (HU #13420).
  */
 export class ConsolidadoLotesApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly codigo: CodigoErrorLote | string | null,
     public readonly loteActivoId: string | null = null,
+    public readonly total: number | null = null,
+    public readonly tope: number | null = null,
   ) {
     super(status === 0 ? 'Sin conexión con el servidor' : `Error ${status} del motor de lotes`);
     this.name = 'ConsolidadoLotesApiError';
   }
 }
 
-/** Lee `error` y `loteActivoId` de la raíz o de `extensions` (ProblemDetails). */
-function leerProblema(texto: string): { codigo: string | null; loteActivoId: string | null } {
-  if (!texto) return { codigo: null, loteActivoId: null };
+interface ProblemaLote {
+  codigo: string | null;
+  loteActivoId: string | null;
+  total: number | null;
+  tope: number | null;
+}
+
+const PROBLEMA_VACIO: ProblemaLote = { codigo: null, loteActivoId: null, total: null, tope: null };
+
+/** Lee `error`, `loteActivoId`, `total` y `tope` de la raíz o de `extensions` (ProblemDetails). */
+function leerProblema(texto: string): ProblemaLote {
+  if (!texto) return PROBLEMA_VACIO;
   try {
     return leerProblemaObjeto(JSON.parse(texto));
   } catch {
     // Cuerpo no JSON (HTML de un gateway ante 502/503/504): nunca se vuelca al usuario.
-    return { codigo: null, loteActivoId: null };
+    return PROBLEMA_VACIO;
   }
 }
 
+const entero = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null;
+
 /** Igual que {@link leerProblema}, sobre un cuerpo ya parseado (p. ej. `ApiError.body` de `downloadFile`). */
-function leerProblemaObjeto(cuerpo: unknown): { codigo: string | null; loteActivoId: string | null } {
-  if (!cuerpo || typeof cuerpo !== 'object') return { codigo: null, loteActivoId: null };
+function leerProblemaObjeto(cuerpo: unknown): ProblemaLote {
+  if (!cuerpo || typeof cuerpo !== 'object') return PROBLEMA_VACIO;
   const raw = cuerpo as Record<string, unknown>;
   const ext =
     raw.extensions && typeof raw.extensions === 'object'
@@ -81,6 +113,8 @@ function leerProblemaObjeto(cuerpo: unknown): { codigo: string | null; loteActiv
   return {
     codigo: typeof codigo === 'string' ? codigo : null,
     loteActivoId: typeof lote === 'string' ? lote : null,
+    total: entero(raw.total ?? ext.total),
+    tope: entero(raw.tope ?? ext.tope),
   };
 }
 
@@ -93,8 +127,8 @@ export function aErrorDeLote(err: unknown): unknown {
   if (err instanceof ConsolidadoLotesApiError) return err;
   if ((err as { name?: unknown } | null)?.name === 'AbortError') return err;
   if (err instanceof ApiError) {
-    const { codigo, loteActivoId } = leerProblemaObjeto(err.body);
-    return new ConsolidadoLotesApiError(err.status, codigo, loteActivoId);
+    const { codigo, loteActivoId, total, tope } = leerProblemaObjeto(err.body);
+    return new ConsolidadoLotesApiError(err.status, codigo, loteActivoId, total, tope);
   }
   if (err instanceof ApiValidationError) return new ConsolidadoLotesApiError(err.status, null);
   return new ConsolidadoLotesApiError(0, null);
@@ -133,8 +167,8 @@ async function llamar(
     throw new ConsolidadoLotesApiError(0, null);
   }
   if (!res.ok) {
-    const { codigo, loteActivoId } = leerProblema(await res.text().catch(() => ''));
-    throw new ConsolidadoLotesApiError(res.status, codigo, loteActivoId);
+    const { codigo, loteActivoId, total, tope } = leerProblema(await res.text().catch(() => ''));
+    throw new ConsolidadoLotesApiError(res.status, codigo, loteActivoId, total, tope);
   }
   return res;
 }
@@ -151,7 +185,7 @@ export function interpretarErrorCrearLote(err: unknown): ResultadoErrorCrearLote
     if (err.status === 409 && (err.codigo === 'lote_activo' || err.loteActivoId)) {
       return { tipo: 'lote_activo', mensaje: MENSAJE_LOTE_ACTIVO, loteActivoId: err.loteActivoId };
     }
-    if (err.status === 422) return { tipo: 'tope', mensaje: MENSAJE_TOPE_DESCARGA };
+    if (err.status === 422) return { tipo: 'tope', mensaje: mensajeTopeDescarga(err.total, err.tope) };
     if (err.status === 403) return { tipo: 'permiso', mensaje: MENSAJE_SIN_PERMISO };
   }
   // 503 (motor_inactivo / auditoria_no_registrada), red y cualquier otro fallo: reintento.
