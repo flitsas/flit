@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Services;
 using FluentAssertions;
@@ -84,7 +85,7 @@ public sealed class TramiteMarcasTests
     [Fact]
     public void TienePrenda_DecisionVigenteSobreUnTraspaso_EsVerdadero()
     {
-        TramiteMarcas.TienePrenda(hayDecisionVigente: true, "TRASPASO_STANDARD").Should().BeTrue();
+        TramiteMarcas.TienePrenda(hayDecisionVigente: true, "TRASPASO_STANDARD", []).Should().BeTrue();
     }
 
     [Theory]
@@ -96,13 +97,13 @@ public sealed class TramiteMarcasTests
     {
         // Un levantamiento de prenda es un trámite de prenda desde que se abre. Esperar a la
         // decisión dejaría sin marca justo a los trámites que se llaman así.
-        TramiteMarcas.TienePrenda(hayDecisionVigente: false, codigo).Should().BeTrue();
+        TramiteMarcas.TienePrenda(hayDecisionVigente: false, codigo, []).Should().BeTrue();
     }
 
     [Fact]
     public void TienePrenda_SinDecisionYTipoCorriente_EsFalso()
     {
-        TramiteMarcas.TienePrenda(hayDecisionVigente: false, "MATRICULA_NUEVA").Should().BeFalse();
+        TramiteMarcas.TienePrenda(hayDecisionVigente: false, "MATRICULA_NUEVA", []).Should().BeFalse();
     }
 
     [Fact]
@@ -178,4 +179,55 @@ public sealed class TramiteMarcasTests
         "DUPLICADO_PLACA", "DUPLICADO_TARJETA", "REGRABAR_MOTOR_CHASIS", "RADICADO_CUENTA",
         "TRASLADO_CUENTA", "CANCELACION_MATRICULA",
     ];
+
+    // ── Prenda: señal RUNT (Bug #13445, D2) ──────────────────────────────────────────────────
+
+    private static ProcedureInstanceFieldValue Runt(string clave, string? texto, string? json = null) =>
+        new() { FieldKey = clave, ValueText = texto, ValueJson = json };
+
+    [Theory]
+    [InlineData(RuntGravamenSignal.PrendasKey, "SI")]
+    [InlineData(RuntGravamenSignal.GravamenesKey, " sí ")]
+    [InlineData(RuntGravamenSignal.PrendasKey, "1")]
+    public void TienePrenda_ElRuntReportaGravamenPorBandera_EsVerdaderoSinDecisionNiTipoDePrenda(string clave, string valor)
+    {
+        // El vehículo tiene prenda aunque nadie haya decidido nada: la marca lo dice en todos los canales.
+        TramiteMarcas.TienePrenda(false, "TRASPASO_STANDARD", [Runt(clave, valor)]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void TienePrenda_ElRuntDiceNoPeroTraeUnaGarantiaEnElDetalle_EsVerdadero()
+    {
+        // Caso real del Bug #13203: banderas «NO»/«NO» y una garantía registrada en el RNGM.
+        TramiteMarcas.TienePrenda(false, "MATRICULA_NUEVA",
+            [
+                Runt(RuntGravamenSignal.PrendasKey, "NO"),
+                Runt(RuntGravamenSignal.GravamenesKey, "NO"),
+                Runt(RuntGravamenSignal.DetalleKey, null, """[{"nombreAcreedor":"BANCO DE PRUEBA","numeroDocumentoAcreedor":"900000001"}]"""),
+            ]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void TienePrenda_ElRuntDiceNoYElDetalleEstaVacio_EsFalso()
+    {
+        TramiteMarcas.TienePrenda(false, "MATRICULA_NUEVA",
+            [
+                Runt(RuntGravamenSignal.PrendasKey, "NO"),
+                Runt(RuntGravamenSignal.GravamenesKey, "NO"),
+                Runt(RuntGravamenSignal.DetalleKey, null, "[]"),
+            ]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TienePrenda_SinSenalRunt_NiDecision_NiTipo_EsFalso()
+    {
+        TramiteMarcas.TienePrenda(false, "TRASPASO_STANDARD", [Runt("plate", "ABC123")]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TienePrenda_DecisionVigenteConRuntNegativo_SigueSiendoVerdadero()
+    {
+        TramiteMarcas.TienePrenda(true, "TRASPASO_STANDARD", [Runt(RuntGravamenSignal.PrendasKey, "NO")])
+            .Should().BeTrue();
+    }
 }
