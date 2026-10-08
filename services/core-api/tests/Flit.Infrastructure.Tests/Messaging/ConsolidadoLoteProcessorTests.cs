@@ -380,6 +380,9 @@ public sealed class ConsolidadoLoteProcessorTests
 
         public Task<bool> PurgarAsync(Guid loteId, DateTimeOffset ahora, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<CancelarLoteResultado> CancelarAsync(CancelacionLote solicitud, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeProceso : IConsolidadoLoteItemProceso

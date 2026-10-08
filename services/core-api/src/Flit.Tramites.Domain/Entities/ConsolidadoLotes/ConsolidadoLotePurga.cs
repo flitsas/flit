@@ -38,6 +38,29 @@ public static class ConsolidadoLotePurga
             throw new InvalidOperationException(
                 $"El lote {lote.Id} no se puede purgar en estado '{lote.Status}' (solo terminales sin purgar).");
 
+        DescartarPartes(lote, partes, ahora);
+
+        lote.DekWrapped = null;
+        lote.PurgedAt = ahora;
+        lote.FinishedAt ??= ahora;
+        lote.ExpiresAt ??= ahora;
+        lote.Status = ConsolidadoExportStatus.Expirado;
+        lote.UpdatedAt = ahora;
+    }
+
+    /// <summary>
+    /// Descarte de las partes de un lote ya bloqueado, compartido por la purga y la cancelación (#13385): <c>cerrada</c> →
+    /// <c>purgada</c> (con <c>purged_at</c>); <c>pendiente</c>/<c>empaquetando</c> → <c>descartada</c> (sin lease);
+    /// <c>fallida</c>/<c>descartada</c>/<c>purgada</c> no cambian. Devuelve el <c>storage_path</c> de las partes que pasaron a
+    /// <c>purgada</c>, para su borrado best-effort fuera de la transacción.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Una parte no pertenece al lote.</exception>
+    public static IReadOnlyList<string> DescartarPartes(
+        ConsolidadoExportBatch lote, IEnumerable<ConsolidadoExportBatchPart> partes, DateTimeOffset ahora, Guid? usuarioId = null)
+    {
+        ArgumentNullException.ThrowIfNull(lote);
+        ArgumentNullException.ThrowIfNull(partes);
+        var purgadas = new List<string>();
         foreach (var parte in partes)
         {
             if (parte.BatchId != lote.Id)
@@ -48,20 +71,19 @@ public static class ConsolidadoLotePurga
                 parte.Status = ConsolidadoExportPartStatus.Purgada;
                 parte.PurgedAt = ahora;
                 parte.UpdatedAt = ahora;
+                parte.UpdatedBy = usuarioId ?? parte.UpdatedBy;
+                if (!string.IsNullOrWhiteSpace(parte.StoragePath))
+                    purgadas.Add(parte.StoragePath);
             }
             else if (parte.Status is ConsolidadoExportPartStatus.Pendiente or ConsolidadoExportPartStatus.Empaquetando)
             {
                 parte.Status = ConsolidadoExportPartStatus.Descartada;
                 parte.LeaseUntil = null;
                 parte.UpdatedAt = ahora;
+                parte.UpdatedBy = usuarioId ?? parte.UpdatedBy;
             }
         }
 
-        lote.DekWrapped = null;
-        lote.PurgedAt = ahora;
-        lote.FinishedAt ??= ahora;
-        lote.ExpiresAt ??= ahora;
-        lote.Status = ConsolidadoExportStatus.Expirado;
-        lote.UpdatedAt = ahora;
+        return purgadas;
     }
 }
