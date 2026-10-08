@@ -176,17 +176,60 @@ public sealed class IctDraftFieldValuesBug13445Tests
         fv.Keys.Should().BeEquivalentTo(["vin", "plate"]);
     }
 
+    // ---------- El valor implica su bandera (D9 + preflight core-api) ----------
+    // core-api (PreflightCommand.UpsertTransformationAwareField) pisa vehicle_fuel con el RUNT salvo que
+    // cambio_combustible="true": el valor declara la transformación y viaja siempre con su bandera.
+
     [Fact]
-    public async Task NivelYCombustibleSinCodigoDeTransformacion_EnvianSoloLosValores()
+    public async Task CombustibleExactoSinCodigo9_EnviaValorYBandera()
     {
-        // D9: trámite principal 5 (blindaje) o 9 (combustible) sin more_transaction: el valor viaja igual.
-        var master = Master(transactionType: 5);
-        master.ArmorLevelNumberId = 3;
+        var master = Master(transactionType: 9);
         master.NewVehicleFuelType = 7;
         var fv = await FieldValuesAsync(master);
 
-        fv.Should().Contain("blindaje_nivel", "NIVEL_3").And.Contain("vehicle_fuel", "ETANOL");
-        fv.Keys.Should().NotContain(["blindaje", "cambio_combustible", "cambio_color", "cambio_carroceria"]);
+        fv.Should().Contain("vehicle_fuel", "ETANOL").And.Contain("cambio_combustible", "true");
+        fv.Keys.Should().NotContain(["blindaje", "blindaje_nivel", "cambio_color", "cambio_carroceria"]);
+    }
+
+    [Fact]
+    public async Task NivelSinCodigo5_EnviaValorYBandera()
+    {
+        var master = Master(transactionType: 5);
+        master.ArmorLevelNumberId = 3;
+        var fv = await FieldValuesAsync(master);
+
+        fv.Should().Contain("blindaje_nivel", "NIVEL_3").And.Contain("blindaje", "true");
+        fv.Keys.Should().NotContain(["vehicle_fuel", "cambio_combustible", "cambio_color", "cambio_carroceria"]);
+    }
+
+    [Fact]
+    public async Task Codigo9ConCombustibleExacto_UnaSolaBandera()
+    {
+        var master = Master();
+        master.NewVehicleFuelType = 1;
+        master.ArmorLevelNumberId = 2;
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            ConTransformacion(5, ConTransformacion(9, master)), Tipo, SinAdjuntos(), log: null,
+            TestContext.Current.CancellationToken);
+
+        request.FieldValues.Count(f => f.FieldKey == "cambio_combustible").Should().Be(1);
+        request.FieldValues.Count(f => f.FieldKey == "blindaje").Should().Be(1);
+        request.FieldValues.Should().Contain(f => f.FieldKey == "vehicle_fuel" && f.ValueText == "GASOLINA");
+    }
+
+    [Theory]
+    [InlineData((short)4)]
+    [InlineData((short)9)]
+    [InlineData((short)13)]
+    public async Task CombustibleDudosoSinCodigo9_NoEnviaNada(short combustibleIct)
+    {
+        var master = Master(transactionType: 9);
+        master.NewVehicleFuelType = combustibleIct;
+        master.ArmorLevelNumberId = 9; // nivel fuera de catálogo: tampoco arrastra bandera
+        var fv = await FieldValuesAsync(master);
+
+        fv.Keys.Should().NotContain(["vehicle_fuel", "cambio_combustible", "blindaje", "blindaje_nivel"]);
+        fv.Keys.Should().BeEquivalentTo(["vin", "plate"]);
     }
 
     [Fact]
