@@ -45,6 +45,15 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
         _factory = factory;
     }
 
+    private const string ReportesSlug = "ict.reportes.read";
+
+    /// <summary>Bug #13445 (D12): Admin Company con el permiso de Reportes ICT que le da admin_tramites.</summary>
+    private static string ReportesToken() =>
+        TestTokenFactory.CreateTokenWithPermissions("AdminCompany", TenantId, ReportesSlug);
+
+    /// <summary>SuperAdmin como lo emite RsaJwtTokenIssuer (role + role_code), sin slugs: pasa por bypass.</summary>
+    private static string SuperAdminToken() => TestTokenFactory.CreateTokenWithPermissions("SuperAdmin", null);
+
     private HttpClient ClientWith(string token)
     {
         var client = _factory.CreateClient();
@@ -85,7 +94,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     {
         // ict.job_runs es una tabla GLOBAL de plataforma, sin tenant_id: exponerla a un
         // administrador de compañía filtraría el rendimiento del pipeline de TODOS los tenants.
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, rol));
+        var client = ClientWith(TestTokenFactory.CreateTokenWithPermissions(rol, TenantId, ReportesSlug));
 
         var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
 
@@ -97,7 +106,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     [InlineData(JobsExportUrl)]
     public async Task Jobs_ConSuperAdmin_PasaElBordeDeAutorizacion(string url)
     {
-        var client = ClientWith(TestTokenFactory.CreateToken("SuperAdmin"));
+        var client = ClientWith(SuperAdminToken());
 
         var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
 
@@ -119,7 +128,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     {
         // El aislamiento a nivel de DATOS (RLS + filtro tenant_id en el SQL) necesita Postgres real:
         // aquí solo se fija que el borde rechace pedir explícitamente otro tenant.
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"{ruta}?{Rango}&tenantId={OtherTenantId}", TestContext.Current.CancellationToken);
@@ -133,7 +142,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     [InlineData("/api/v1/analytics/ict-reports/webhooks")]
     public async Task ConTenantIdPropio_PasaElBordeDeAutorizacion(string ruta)
     {
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"{ruta}?{Rango}&tenantId={TenantId}", TestContext.Current.CancellationToken);
@@ -153,7 +162,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     [InlineData("page=99999999999999999999")]
     public async Task Novedades_ConPaginacionNoNumerica_Devuelve400(string query)
     {
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"/api/v1/analytics/ict-reports/novedades?{Rango}&{query}", TestContext.Current.CancellationToken);
@@ -165,7 +174,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     public async Task Novedades_SinRango_Devuelve400()
     {
         // 'from'/'to' son obligatorios (parámetros de ruta no anulables): sin ellos el binder corta.
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             "/api/v1/analytics/ict-reports/novedades", TestContext.Current.CancellationToken);
@@ -187,7 +196,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
         // El endpoint NORMALIZA (Math.Max/Math.Clamp) en vez de devolver 400: pedir la página 0 o un
         // tamaño de 99999 es un error del cliente que la API absorbe. Que el valor efectivo sea
         // page=1 / pageSize=200 se ve en la respuesta, que aquí no se puede leer (sin base).
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"/api/v1/analytics/ict-reports/novedades?{Rango}&{query}", TestContext.Current.CancellationToken);
@@ -210,7 +219,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     [InlineData("/api/v1/analytics/ict-reports/webhooks/export")]
     public async Task ConRangoInvertido_Devuelve400(string ruta)
     {
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"{ruta}?from=2026-08-19&to=2026-08-01", TestContext.Current.CancellationToken);
@@ -224,7 +233,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     public async Task Jobs_ConRangoInvertidoYSuperAdmin_Devuelve400(string ruta)
     {
         // En /jobs el rango se valida DESPUÉS del rol: sin SuperAdmin sigue ganando el 403.
-        var client = ClientWith(TestTokenFactory.CreateToken("SuperAdmin"));
+        var client = ClientWith(SuperAdminToken());
 
         var response = await client.GetAsync(
             $"{ruta}?from=2026-08-19&to=2026-08-01", TestContext.Current.CancellationToken);
@@ -239,7 +248,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     {
         // Precedencia deliberada: un rango inválido NO debe convertirse en un oráculo que le
         // confirme a un no-autorizado que el endpoint existe y qué valida.
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"{ruta}?from=2026-08-19&to=2026-08-01", TestContext.Current.CancellationToken);
@@ -251,7 +260,7 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     public async Task ConRangoDeUnSoloDia_NoEsRangoInvalido()
     {
         // from == to es un rango legítimo (un día), no invertido: el corte es estrictamente '>'.
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             "/api/v1/analytics/ict-reports/novedades?from=2026-08-19&to=2026-08-19",
@@ -267,12 +276,66 @@ public sealed class IctReportsEndpointsTests : IClassFixture<WebApplicationFacto
     {
         // Los cuatro /export entregan el documento completo hasta MaxRows: no declaran page/pageSize
         // y un cliente que los mande igual no debe romper la descarga (query sobrante = ignorado).
-        var client = ClientWith(TestTokenFactory.CreateOtAdminToken(TenantId, "AdminCompany"));
+        var client = ClientWith(ReportesToken());
 
         var response = await client.GetAsync(
             $"{NovedadesExportUrl}&page=2&pageSize=25", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
+
+    // ── Bug #13445 (D12): el grupo exige ict.reportes.read; SuperAdmin pasa siempre ─────────────
+
+    [Theory]
+    [InlineData(NovedadesUrl)]
+    [InlineData(AtascadosUrl)]
+    [InlineData(JobsUrl)]
+    [InlineData(WebhooksUrl)]
+    [InlineData(NovedadesExportUrl)]
+    [InlineData(AtascadosExportUrl)]
+    [InlineData(JobsExportUrl)]
+    [InlineData(WebhooksExportUrl)]
+    public async Task SinPermisoIctReportesRead_LosOchoEndpointsDevuelven403(string url)
+    {
+        // Admin Company con otros permisos ICT (trazabilidad, logs) pero sin el de reportes.
+        var client = ClientWith(TestTokenFactory.CreateTokenWithPermissions(
+            "AdminCompany", TenantId, "ict.trazabilidad.read", "ict.logs.read", "reportes.read"));
+
+        var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData(NovedadesUrl)]
+    [InlineData(AtascadosUrl)]
+    [InlineData(WebhooksUrl)]
+    [InlineData(NovedadesExportUrl)]
+    [InlineData(AtascadosExportUrl)]
+    [InlineData(WebhooksExportUrl)]
+    public async Task ConPermisoIctReportesRead_PasaElBordeDeAutorizacion(string url)
+    {
+        var client = ClientWith(ReportesToken());
+
+        var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
+
+        // Sin base no puede completar; lo que se fija es que el permiso abre el borde.
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Theory]
+    [InlineData(NovedadesUrl)]
+    [InlineData(AtascadosUrl)]
+    [InlineData(WebhooksUrl)]
+    public async Task SuperAdminSinSlug_PasaElBordePorBypass(string url)
+    {
+        var client = ClientWith(SuperAdminToken());
+
+        var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 }

@@ -22,11 +22,31 @@ public static class RuntGravamenSignal
     public const string GravamenesKey = RuntGravamenDatos.GravamenesKey;
     public const string DetalleKey = RuntGravamenDatos.DetalleKey;
 
+    /// <summary>
+    /// Formas afirmativas de las banderas, ya en mayúscula (Bug #13445): el filtro «Con prenda» del listado repite
+    /// esta comparación en SQL. Es la misma lista con la que core-consultas hidrata (<see cref="RuntGravamenDatos"/>),
+    /// así el ícono, el <c>WHERE</c> y la consulta no pueden separarse.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ValoresAfirmativos = RuntGravamenDatos.ValoresAfirmativos;
+
+    /// <summary>Formas NEGATIVAS explícitas de las banderas (Bug #13445): «el RUNT dijo que no».</summary>
+    public static readonly IReadOnlyList<string> ValoresNegativos = RuntGravamenDatos.ValoresNegativos;
+
     /// <summary>El RUNT contesta «SI»/«NO» en texto; se acepta cualquier variante afirmativa razonable.</summary>
     public static bool EsAfirmativo(string? valor) => RuntGravamenDatos.EsAfirmativo(valor);
 
+    /// <summary>¿La bandera dice explícitamente que NO? Vacío o ilegible no es «no»: es «no se sabe».</summary>
+    public static bool EsNegativo(string? valor) => RuntGravamenDatos.EsNegativo(valor);
+
     /// <summary>Garantías con datos en el array JSON (ver <see cref="RuntGravamenDatos.ContarGarantias"/>).</summary>
     public static int ContarGarantias(string? detalleJson) => RuntGravamenDatos.ContarGarantias(detalleJson);
+
+    /// <summary>
+    /// Bug #13445 — las garantías con datos del array, con el acreedor de cada una (ver
+    /// <see cref="RuntGravamenDatos.Garantias"/>). El acreedor es PII: no loguear.
+    /// </summary>
+    public static IReadOnlyList<RuntGarantia> Garantias(string? detalleJson) =>
+        [.. RuntGravamenDatos.Garantias(detalleJson).Select(g => new RuntGarantia(g.AcreedorNombre, g.AcreedorDocumento))];
 
     public static bool Reporta(string? prendas, string? gravamenes, string? detalleJson) =>
         RuntGravamenDatos.Reporta(prendas, gravamenes, detalleJson);
@@ -36,6 +56,17 @@ public static class RuntGravamenSignal
     /// lo hidratan los mappers) y, si viene vacío, de <c>ValueText</c>.
     /// </summary>
     public static bool Reporta(IEnumerable<ProcedureInstanceFieldValue> fieldValues)
+    {
+        var (prendas, gravamenes, detalle) = Leer(fieldValues);
+        return Reporta(prendas, gravamenes, detalle);
+    }
+
+    /// <summary>
+    /// Las tres claves de la señal tal como están en los <c>field_values</c> (Bug #13445: las comparte el
+    /// resolvedor de prenda ICT). El detalle se lee de <c>ValueJson</c> y, si viene vacío, de <c>ValueText</c>.
+    /// </summary>
+    public static (string? Prendas, string? Gravamenes, string? Detalle) Leer(
+        IEnumerable<ProcedureInstanceFieldValue> fieldValues)
     {
         ArgumentNullException.ThrowIfNull(fieldValues);
 
@@ -50,6 +81,17 @@ public static class RuntGravamenSignal
                 detalle = string.IsNullOrWhiteSpace(f.ValueJson) ? f.ValueText : f.ValueJson;
         }
 
-        return Reporta(prendas, gravamenes, detalle);
+        return (prendas, gravamenes, detalle);
     }
+}
+
+/// <summary>
+/// Bug #13445 — una garantía del detalle RUNT con su acreedor. Ambos campos son PII
+/// (@pii:medium, ADR-0055): <see cref="ToString"/> no los expone para que no lleguen a un log.
+/// </summary>
+/// <param name="AcreedorNombre">Nombre o razón social del acreedor, o null.</param>
+/// <param name="AcreedorDocumento">Documento del acreedor, o null.</param>
+public sealed record RuntGarantia(string? AcreedorNombre, string? AcreedorDocumento)
+{
+    public override string ToString() => nameof(RuntGarantia);
 }

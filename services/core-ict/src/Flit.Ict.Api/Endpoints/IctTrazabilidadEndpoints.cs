@@ -6,8 +6,9 @@ namespace Flit.Ict.Api.Endpoints;
 
 /// <summary>
 /// Trazabilidad ICT por trámite (Feature #11814). Solo lectura: no toca el pipeline de integración
-/// ni la escritura de logs. El Gateway aplica JwtRequired; aquí se verifica <c>ict.logs.read</c>,
-/// el mismo permiso que ya gobierna la observabilidad ICT.
+/// ni la escritura de logs. El Gateway aplica JwtRequired; aquí se verifica
+/// <c>ict.trazabilidad.read</c> (Bug #13445, D10): un permiso propio, distinto del de Logs ICT, que
+/// es solo de SuperAdmin.
 /// </summary>
 public static class IctTrazabilidadEndpoints
 {
@@ -33,7 +34,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.HasIctTrazabilidadAccess)
             {
                 // Cuerpo mínimo a propósito: no revela cuántos trámites existen ni de qué compañías.
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
@@ -70,7 +71,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.HasIctTrazabilidadAccess)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }
@@ -88,7 +89,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.HasIctTrazabilidadAccess)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }
@@ -111,7 +112,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.HasIctTrazabilidadAccess)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }
@@ -134,7 +135,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.HasIctTrazabilidadAccess)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }
@@ -155,7 +156,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.HasIctTrazabilidadAccess)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }
@@ -179,7 +180,7 @@ public static class IctTrazabilidadEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess || !access.HasPiiRevealAccess)
+            if (!access.HasIctTrazabilidadAccess || !access.HasPiiRevealAccess)
             {
                 // Se exige el permiso PROPIO de revelado además del del módulo. Sin ambos no se
                 // entrega nada y no queda registro: no hay dato que auditar.

@@ -134,16 +134,48 @@ describe("catálogo de Trámites", () => {
     expect(keys).not.toContain("ayuda");
   });
 
-  it("Integraciones agrupa Log QX e ICT, con Log ICT, Trazabilidad ICT y Reportes ICT bajo ICT", () => {
-    const groups = dock({}, { permissions: ["logqx.read", "ict.logs.read"] });
+  it("Integraciones agrupa Log QX e ICT; el Admin Company ve Trazabilidad ICT y Reportes ICT bajo ICT", () => {
+    const groups = dock({}, { permissions: ["logqx.read", "ict.trazabilidad.read", "ict.reportes.read"] });
     expect(groups.map((g) => g.label)).toEqual(["Integraciones"]);
     expect(groups[0].items.map((i) => i.label)).toEqual(["Log QX", "ICT"]);
-    expect(groups[0].items[1].children?.map((c) => c.label)).toEqual(["Log ICT", "Trazabilidad ICT", "Reportes ICT"]);
+    expect(groups[0].items[1].children?.map((c) => c.label)).toEqual(["Trazabilidad ICT", "Reportes ICT"]);
   });
 
-  it("la entrada activa sale de la URL: /?m=ict-logs marca Log ICT y su grupo", () => {
-    const [integraciones] = dock({}, { permissions: ["ict.logs.read"] }, "/", "m=ict-logs");
+  it("la entrada activa sale de la URL: /?m=ict-trazabilidad marca Trazabilidad ICT y su grupo", () => {
+    const [integraciones] = dock({}, { permissions: ["ict.trazabilidad.read"] }, "/", "m=ict-trazabilidad");
     expect(integraciones.active).toBe(true);
-    expect(integraciones.items[0].children?.find((c) => c.active)?.key).toBe("ict-logs");
+    expect(integraciones.items[0].children?.find((c) => c.active)?.key).toBe("ict-trazabilidad");
+  });
+});
+
+// Uso de ejemplo: dock({}, { permissions: ["ict.reportes.read"] }) → Integraciones > ICT > [Reportes ICT].
+describe("Bug #13445 — permisos del contenedor ICT", () => {
+  const ictChildren = (v: Partial<NavViewer>) =>
+    dock({}, v)
+      .flatMap((g) => g.items)
+      .find((i) => i.key === "ict")
+      ?.children?.map((c) => c.key);
+
+  it("Admin Company con ict.trazabilidad.read + ict.reportes.read ve ICT con Trazabilidad y Reportes, sin Log", () => {
+    expect(ictChildren({ permissions: ["ict.trazabilidad.read", "ict.reportes.read"] })).toEqual([
+      "ict-trazabilidad",
+      "ict-reportes",
+    ]);
+  });
+
+  it("con un solo slug el contenedor aparece con ese único hijo", () => {
+    expect(ictChildren({ permissions: ["ict.reportes.read"] })).toEqual(["ict-reportes"]);
+  });
+
+  it("solo ict.logs.read (no SuperAdmin) no ve Log ICT ni el contenedor", () => {
+    expect(ictChildren({ permissions: ["ict.logs.read"] })).toBeUndefined();
+  });
+
+  it("SuperAdmin ve los tres: Log, Trazabilidad y Reportes", () => {
+    expect(ictChildren({ isSuperAdmin: true })).toEqual(["ict-logs", "ict-trazabilidad", "ict-reportes"]);
+  });
+
+  it("sin slugs no hay contenedor ICT", () => {
+    expect(ictChildren({})).toBeUndefined();
   });
 });

@@ -2,7 +2,8 @@
 // QUIÉN lo ve; el dock de la suite lo filtra y lo dibuja. Las reglas son las del Shell anterior, entrada por entrada:
 // - módulos de la SPA (`/?m=…`): por módulo RBAC accesible (`/api/v1/security/modules`);
 // - administración de plataforma: solo SuperAdmin;
-// - Confirmación RUNT, Banners, LOG QX e ICT: por permiso del token (el SuperAdmin pasa siempre);
+// - Confirmación RUNT, Banners, LOG QX, Trazabilidad ICT y Reportes ICT: por permiso del token (el SuperAdmin pasa
+//   siempre); Log ICT es solo del SuperAdmin (Bug #13445);
 // - las entradas que dependen del tipo de empresa (organismo de tránsito, cabeza de grupo, AdminCompany) solo se
 //   declaran para quien corresponde, porque el SuperAdmin las vería todas.
 import {
@@ -42,7 +43,8 @@ import {
 } from "@/components/admin/generacion-documental/generacion-documental-nav";
 import {
   BANNERS_MANAGE_PERMISSION,
-  ICT_LOGS_READ_PERMISSION,
+  ICT_REPORTES_READ_PERMISSION,
+  ICT_TRAZABILIDAD_READ_PERMISSION,
   LOG_QX_READ_PERMISSION,
   RUNT_CONFIRMATION_HISTORY_READ_PERMISSION,
   RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION,
@@ -195,16 +197,17 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   entries.push(
     { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: Radar, permission: LOG_QX_READ_PERMISSION },
     {
-      // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619).
+      // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619). Sin permiso propio, como
+      // Plataforma: `buildDock` lo muestra solo si le queda algún hijo visible. Log ICT es solo del SuperAdmin;
+      // Trazabilidad y Reportes van por su permiso, que tiene el Admin Company (Bug #13445, D10).
       key: "ict",
       label: "ICT",
       href: "",
       icon: Network,
-      permission: ICT_LOGS_READ_PERMISSION,
       children: [
-        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: Network, permission: ICT_LOGS_READ_PERMISSION },
-        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, permission: ICT_LOGS_READ_PERMISSION },
-        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, permission: ICT_LOGS_READ_PERMISSION },
+        superAdmin("ict-logs", "Log ICT", "/?m=ict-logs", Network),
+        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, permission: ICT_TRAZABILIDAD_READ_PERMISSION },
+        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, permission: ICT_REPORTES_READ_PERMISSION },
       ],
     },
   );
