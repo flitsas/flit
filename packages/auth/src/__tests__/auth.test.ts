@@ -4,7 +4,7 @@ import { base64UrlEncode, pkceChallenge, seal, unseal } from "../crypto";
 import { createApiProxy } from "../proxy";
 import { createAuthRoutes, safeReturnTo } from "../routes";
 import { sessionUser } from "../claims";
-import type { AuthConfig } from "../config";
+import { authConfig, forRequest, hubUrlFor, type AuthConfig } from "../config";
 import { forgetRenewals, pack, unsealSession } from "../store";
 import type { StoredSession } from "../types";
 
@@ -14,6 +14,7 @@ import type { StoredSession } from "../types";
 const config: AuthConfig = {
   productCode: "tramites",
   hubUrl: "https://dev.flitsas.online",
+  hubUrls: ["https://dev.flitsas.online"],
   oidcInternalUrl: "http://gateway:4002",
   apiOrigin: "http://gateway:4002",
   sessionSecret: "s".repeat(40),
@@ -335,5 +336,72 @@ describe("SessionUser", () => {
 
     expect(user).toMatchObject({ id: "u1", product: "tramites", domain: "flit", permissions: ["tramites.read"], isSuperAdmin: true, expiresAt: 123 });
     expect(user.tenant).toEqual({ id: "t1", name: "Empresa", nit: "900", type: "RENTING", entityType: "COMPANY", parentId: null, isGroupParent: false });
+  });
+});
+
+// Raíces alternativas (PDN: flitsas.online y, a la vez, app.flitsas.com): quien entra por una raíz usa el hub de esa raíz
+// en el authorize, el canje, la renovación y el cierre de sesión, así no cambia de dominio durante el login.
+describe("raíces alternativas", () => {
+  const pdn: AuthConfig = { ...config, hubUrl: "https://flitsas.online", hubUrls: ["https://flitsas.online", "https://app.flitsas.com"] };
+  const pdnRoutes = createAuthRoutes({ productCode: "tramites", config: () => pdn });
+
+  it("FLIT_HUB_URLS suma hubs a la lista cerrada, sin repetir ni barras finales", () => {
+    const cfg = authConfig("tramites", {
+      FLIT_HUB_URL: "https://flitsas.online/",
+      FLIT_HUB_URLS: " https://app.flitsas.com/ , https://flitsas.online,",
+      FLIT_SESSION_SECRET: "s".repeat(40),
+    } as unknown as NodeJS.ProcessEnv);
+    expect(cfg.hubUrl).toBe("https://flitsas.online");
+    expect(cfg.hubUrls).toEqual(["https://flitsas.online", "https://app.flitsas.com"]);
+  });
+
+  it("elige el hub de la misma raíz; un host ajeno usa el principal", () => {
+    expect(hubUrlFor("tramites.flitsas.com", pdn)).toBe("https://app.flitsas.com");
+    expect(hubUrlFor("tramites.flitsas.online", pdn)).toBe("https://flitsas.online");
+    expect(hubUrlFor("evil.example.com", pdn)).toBe("https://flitsas.online");
+  });
+
+  it("con un solo hub, la configuración no cambia", () => {
+    expect(forRequest(new Request("https://tramites.flitsas.com/x"), config)).toBe(config);
+  });
+
+  it("login desde tramites.flitsas.com va al authorize de app.flitsas.com", async () => {
+    const response = await pdnRoutes.login(new Request("https://tramites.flitsas.com/auth/login"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.origin).toBe("https://app.flitsas.com");
+    expect(location.searchParams.get("redirect_uri")).toBe("https://tramites.flitsas.com/auth/callback");
+  });
+
+  it("el canje del código se sella con el hub de esa raíz", async () => {
+    const login = await pdnRoutes.login(new Request("https://tramites.flitsas.com/auth/login"));
+    const state = new URL(login.headers.get("location")!).searchParams.get("state")!;
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ access_token: jwt({ sub: "u1", exp: now() + 900 }), refresh_token: "r1", expires_in: 900 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await pdnRoutes.callback(new Request(`https://tramites.flitsas.com/auth/callback?code=c1&state=${state}`, {
+      headers: { cookie: cookieHeader(login.headers.getSetCookie()) },
+    }));
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["x-flit-domain"]).toBe("app.flitsas.com");
+  });
+
+  it("el cierre de sesión va al hub de esa raíz y vuelve a esa raíz", async () => {
+    const response = await pdnRoutes.logout(new Request("https://tramites.flitsas.com/auth/logout"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.origin + location.pathname).toBe("https://app.flitsas.com/connect/logout");
+    expect(location.searchParams.get("post_logout_redirect_uri")).toBe("https://tramites.flitsas.com/");
+  });
+
+  it("la renovación se sella con el hub de la raíz de la petición", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ access_token: jwt({ sub: "u1", exp: now() + 900 }), refresh_token: "r2", expires_in: 900 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const cookie = await sessionCookieHeader({ accessToken: jwt({ sub: "u1", exp: now() - 10 }), refreshToken: "r1", expiresAt: now() - 10 });
+
+    const response = await pdnRoutes.session(new Request("https://tramites.flitsas.com/auth/session", { headers: { cookie } }));
+
+    expect(response.status).toBe(200);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["x-flit-domain"]).toBe("app.flitsas.com");
   });
 });

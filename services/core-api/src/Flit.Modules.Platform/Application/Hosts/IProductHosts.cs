@@ -21,4 +21,17 @@ public interface IProductHosts
 
     /// <summary>Producto que sirve <paramref name="host"/>, o <c>null</c> si no es un host FLIT conocido.</summary>
     string? ProductForHost(string? host);
+
+    /// <summary>
+    /// Como <see cref="UrlFor(string)"/>, pero en la raíz de <paramref name="requestHost"/> cuando es una raíz
+    /// alternativa del ambiente (<c>Suite:Hosts:AlternateRoots</c>): quien entra por <c>app.flitsas.com</c> recibe
+    /// <c>tramites.flitsas.com</c>. Cualquier otro host (o ninguno) da la raíz principal.
+    /// </summary>
+    string UrlFor(string productCode, string? requestHost);
+
+    /// <summary>Como <see cref="LinkFor(string)"/>, en la raíz de <paramref name="requestHost"/> (ver <see cref="UrlFor(string, string?)"/>).</summary>
+    string LinkFor(string productCode, string? requestHost);
+
+    /// <summary>URL del producto en la raíz principal y en cada raíz alternativa (retornos del login de su cliente OIDC).</summary>
+    IReadOnlyList<string> AllUrlsFor(string productCode);
 }

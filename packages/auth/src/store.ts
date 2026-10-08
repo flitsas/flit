@@ -1,6 +1,6 @@
 // Lectura y escritura de la sesión cifrada en las cookies de la petición.
 import type { AuthConfig } from "./config";
-import { appOrigin } from "./config";
+import { appOrigin, forRequest } from "./config";
 import { sessionCookie, chunkedCookies, clearChunkedCookies, parseCookies, readChunked } from "./cookies";
 import { base64UrlDecode, base64UrlEncode, seal, unseal } from "./crypto";
 import { refreshSession } from "./tokens";
@@ -104,7 +104,9 @@ export function forgetRenewals(): void {
  * La sesión de la petición con el access token vigente: si está por vencer se renueva; si el refresh ya no sirve
  * (revocado, usuario suspendido, sin acceso al producto) se borra y queda sin sesión.
  */
-export async function freshSession(request: Request, config: AuthConfig, now = Math.floor(Date.now() / 1000)): Promise<FreshSession> {
+export async function freshSession(request: Request, requestConfig: AuthConfig, now = Math.floor(Date.now() / 1000)): Promise<FreshSession> {
+  // La renovación se sella con el hub de la raíz de la petición: es el emisor con que se obtuvo el refresh token.
+  const config = forRequest(request, requestConfig);
   const session = await readSession(request, config);
   if (!session) return { session: null, setCookies: [] };
   if (session.expiresAt - now > REFRESH_MARGIN_SECONDS) return { session, setCookies: [] };

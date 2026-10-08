@@ -197,6 +197,12 @@ services:
       Suite__Hosts__Environment: ${FLIT_SUITE_ENV?FLIT_SUITE_ENV debe estar definida (dev, qa o vacía en PDN); sin ella los clientes OIDC se reescriben con los hosts de PDN}
       # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
       Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
+      # Raíces alternativas de la suite (Suite:Hosts:AlternateRoots): en PDN el hub también en app.flitsas.com y cada
+      # producto en <producto>.flitsas.com, a la vez que flitsas.online. Quien entra por una raíz se queda en ella
+      # (emisor OIDC, retornos del login, menú). Vacías (DEV/QA): no hay raíz alternativa. Van juntas con FLIT_HUB_URLS y
+      # FLIT_TRAMITES_URLS (frontend y frontend-hub, abajo).
+      Suite__Hosts__AlternateRoots__0__Hub: ${FLIT_SUITE_ALT_HUB:-}
+      Suite__Hosts__AlternateRoots__0__Products: ${FLIT_SUITE_ALT_PRODUCTS:-}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
@@ -694,6 +700,8 @@ services:
       # exige el hub desplegado en FLIT_HUB_URL y Trámites en su propio host (A-11); se revierte volviendo a legacy.
       FLIT_SESSION_MODE: ${FLIT_SESSION_MODE:-legacy}
       FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      # Hubs de las raíces alternativas (lista cerrada, separada por comas; PDN: https://app.flitsas.com). Vacía: solo FLIT_HUB_URL.
+      FLIT_HUB_URLS: ${FLIT_HUB_URLS:-}
       FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
       FLIT_SESSION_SECRET: ${FLIT_SESSION_SECRET:-}
     ports:
@@ -723,12 +731,17 @@ services:
       # pública del hub (la exporta el CD); el canje de tokens va por la red interna al gateway. FLIT_SESSION_SECRET
       # cifra la cookie de sesión: obligatoria, al menos 32 caracteres, distinta por ambiente y solo en el .env.
       FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      # Hubs de las raíces alternativas (lista cerrada, separada por comas; PDN: https://app.flitsas.com). Vacía: solo FLIT_HUB_URL.
+      FLIT_HUB_URLS: ${FLIT_HUB_URLS:-}
       FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
       FLIT_SESSION_SECRET: ${FLIT_SESSION_SECRET:-}
       # HU #13002 (A-11): con true el hub ocupa la raíz y redirige con 308 las rutas de Trámites a su host. Se enciende
       # junto con el cambio del borde (deploy/edge/nginx/flit-suite-hosts.conf.example). FLIT_TRAMITES_URL la exporta el CD.
       FLIT_TRAMITES_HOST_ENABLED: ${FLIT_TRAMITES_HOST_ENABLED:-false}
       TRAMITES_URL: ${FLIT_TRAMITES_URL:-https://dev.tramites.flitsas.online}
+      # Trámites de las raíces alternativas (PDN: https://tramites.flitsas.com): el hub redirige y enlaza a la de la raíz
+      # por la que se entró. Vacía: solo FLIT_TRAMITES_URL.
+      TRAMITES_URLS: ${FLIT_TRAMITES_URLS:-}
       # Hosts FLIT (sin marca de red). Mismo valor que NEXT_PUBLIC_FLIT_HOSTS de Trámites en cd.yml.
       FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online}
     ports:

@@ -1,7 +1,7 @@
 // Rutas de sesión de una app (contrato §8): /auth/login, /auth/callback, /auth/logout, /auth/refresh,
 // /auth/session y /auth/frontchannel-logout. Authorization code con PKCE contra el hub; el token nunca llega al navegador.
 import { sessionUser } from "./claims";
-import { appOrigin, authConfig, type AuthConfig } from "./config";
+import { appOrigin, authConfig, forRequest, type AuthConfig } from "./config";
 import { parseCookies, serializeCookie, txCookie } from "./cookies";
 import { pkceChallenge, randomToken, seal, unseal } from "./crypto";
 import { clearSessionCookies, freshSession, isSecure, sessionCookies } from "./store";
@@ -38,7 +38,7 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
      * ya tiene sesión y, si no, vuelve a `returnTo` con `sso=0` (la página decide qué mostrar sin volver a intentar).
      */
     async login(request) {
-      const cfg = config();
+      const cfg = forRequest(request, config());
       const url = new URL(request.url);
       const silent = url.searchParams.get("prompt") === "none";
       const tx: Transaction = { state: randomToken(), verifier: randomToken(), returnTo: safeReturnTo(url.searchParams.get("returnTo")), silent };
@@ -61,7 +61,7 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
 
     /** GET /auth/callback?code&state → canje del código, sesión y vuelta a donde estaba. */
     async callback(request) {
-      const cfg = config();
+      const cfg = forRequest(request, config());
       const url = new URL(request.url);
       const secure = isSecure(request, cfg);
       const clearTx = serializeCookie(txCookie(cfg.productCode), "", { secure, maxAgeSeconds: 0 });
@@ -95,7 +95,7 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
 
     /** GET|POST /auth/logout → borra la sesión y cierra la del hub (A-13). */
     async logout(request) {
-      const cfg = config();
+      const cfg = forRequest(request, config());
       const endSession = new URL(`${cfg.hubUrl}/connect/logout`);
       endSession.search = new URLSearchParams({
         client_id: cfg.productCode,

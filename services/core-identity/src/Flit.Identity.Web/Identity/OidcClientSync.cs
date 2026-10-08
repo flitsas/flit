@@ -12,7 +12,8 @@ namespace Flit.Api.Identity;
 /// <list type="bullet">
 /// <item><b>Productos</b> (<see cref="ProductCodes.All"/>): <c>client_id</c> = código del producto, así <c>aud</c> sale sin
 /// mapeos (espiga A-04). Públicos, authorization code con PKCE obligatorio y refresh; retorno a
-/// <c>&lt;URL del producto&gt;/auth/callback</c> en este ambiente (<c>Suite:Hosts</c>) más los adicionales configurados.</item>
+/// <c>&lt;URL del producto&gt;/auth/callback</c> en este ambiente (<c>Suite:Hosts</c>, en la raíz principal y en cada raíz
+/// alternativa) más los adicionales configurados.</item>
 /// <item><b>Servicios</b> (<c>Suite:Oidc:ServiceClients</c>): confidenciales, client credentials con sus scopes (contrato §3).
 /// Sin secreto no se registran.</item>
 /// </list>
@@ -43,7 +44,6 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
 
     internal static OpenIddictApplicationDescriptor ProductClient(string product, IProductHosts hosts, OidcOptions options)
     {
-        var baseUrl = hosts.UrlFor(product).TrimEnd('/');
         var descriptor = new OpenIddictApplicationDescriptor
         {
             ClientId = product,
@@ -65,8 +65,15 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
             Requirements = { Requirements.Features.ProofKeyForCodeExchange },
         };
 
-        descriptor.RedirectUris.Add(new Uri(baseUrl + options.CallbackPath));
-        descriptor.PostLogoutRedirectUris.Add(new Uri(baseUrl + "/"));
+        // Un retorno por raíz (la principal y cada Suite:Hosts:AlternateRoots): quien entra por app.flitsas.com vuelve a
+        // tramites.flitsas.com, no a tramites.flitsas.online.
+        foreach (var url in hosts.AllUrlsFor(product))
+        {
+            var baseUrl = url.TrimEnd('/');
+            descriptor.RedirectUris.Add(new Uri(baseUrl + options.CallbackPath));
+            descriptor.PostLogoutRedirectUris.Add(new Uri(baseUrl + "/"));
+        }
+
         if (options.ExtraRedirectUris.TryGetValue(product, out var extra))
         {
             foreach (var uri in extra)

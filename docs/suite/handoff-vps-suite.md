@@ -296,6 +296,31 @@ muestra el host correcto.
 
 ---
 
+### 5.1 Raíz alternativa en PDN (`app.flitsas.com`)
+
+PDN se sirve en dos raíces a la vez: `flitsas.online` y `flitsas.com` (hub en `app.flitsas.com`, productos en
+`<producto>.flitsas.com`, API en `api.flitsas.com`). Quien entra por una raíz se queda en ella: emisor OIDC, retornos
+del login, menú de productos, redirecciones del hub y cierre de sesión salen del host de la petición, elegidos de una
+lista cerrada. Las sesiones son independientes por raíz (cookies sin `Domain`). En DEV y QA no se define nada.
+
+| Variable (`.env` de PDN) | Valor | Qué hace |
+|---|---|---|
+| `FLIT_SUITE_ALT_HUB` | `app.flitsas.com` | Hub de la raíz alternativa (`Suite:Hosts:AlternateRoots:0:Hub`): emisor OIDC propio |
+| `FLIT_SUITE_ALT_PRODUCTS` | `{product}.flitsas.com` | Host de cada producto en esa raíz: retornos del login de cada cliente OIDC |
+| `FLIT_HUB_URLS` | `https://app.flitsas.com` | `@flit/auth` (hub y Trámites): hubs aceptados además de `FLIT_HUB_URL` |
+| `FLIT_TRAMITES_URLS` | `https://tramites.flitsas.com` | Hub: Trámites de la raíz alternativa (308 de rutas viejas y enlaces) |
+| `CORS_ORIGIN_ALT` | `https://app.flitsas.com` | Ya existe (#559): solo hace falta con la sesión `legacy` |
+
+Las cuatro primeras van juntas. Después de cambiarlas: `up -d` de core-api, core-identity, gateway, frontend y
+frontend-hub (los clientes OIDC se reescriben al arrancar core-api/core-identity). DNS, certificado y server{} de
+`tramites.flitsas.com` (y de cada producto que se despliegue) como los de `.online` (§6.1); `app.flitsas.com` →
+`HUB_PORT` con las mismas reglas de §6.2.
+
+**Comprobar:** `curl -s https://app.flitsas.com/.well-known/openid-configuration` da `"issuer": "https://app.flitsas.com/"`;
+el SQL de §7.2 muestra en cada cliente las dos direcciones (`.online` y `.com`).
+
+Pendiente: los correos de recuperación de contraseña e invitación siguen saliendo con `CORS_ORIGIN` (`flitsas.online`).
+
 ## 6. nginx
 
 Plantilla en el repo: [`deploy/edge/nginx/flit-suite-hosts.conf.example`](../../deploy/edge/nginx/flit-suite-hosts.conf.example).

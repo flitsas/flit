@@ -1,4 +1,6 @@
+import { headers } from "next/headers";
 import Link from "next/link";
+import { hubUrlFor } from "@flit/auth/server";
 import { ShieldX } from "lucide-react";
 
 // Destino de acceso denegado (HU #10194, AC6). El middleware redirige aquí a los usuarios sin rol SuperAdmin antes de
@@ -26,7 +28,11 @@ export default async function ForbiddenPage({ searchParams }: { searchParams: Pr
   const { code } = await searchParams;
   const denied = code ? DENIED[code] : undefined;
   // Leída en cada petición (la página depende de la consulta): una sola imagen para los tres ambientes.
-  const hubUrl = (process.env.FLIT_HUB_URL || "").replace(/\/+$/, "");
+  // Con raíces alternativas (FLIT_HUB_URLS), el hub de la raíz por la que se entró: tramites.flitsas.com → app.flitsas.com.
+  const primaryHub = (process.env.FLIT_HUB_URL || "").replace(/\/+$/, "");
+  const hubUrls = [primaryHub, ...(process.env.FLIT_HUB_URLS ?? "").split(",").map((u) => u.trim().replace(/\/+$/, ""))].filter(Boolean);
+  const host = (await headers()).get("host");
+  const hubUrl = primaryHub && host ? hubUrlFor(host.split(":")[0], { hubUrl: primaryHub, hubUrls }) : primaryHub;
   const href = denied && hubUrl ? `${hubUrl}/?inicio=1` : "/";
 
   return (
