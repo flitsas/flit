@@ -150,11 +150,11 @@ public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixtur
     }
 
     /// <summary>
-    /// M1 (épica #13216) — <c>max_items_per_batch</c>: NOT NULL, sembrado en 10.000 y acotado a 1–50.000 por
-    /// <c>ck_consolidado_export_settings_max_items</c> (los extremos se aceptan).
+    /// M1 (épica #13216) — <c>max_items_per_batch</c>: NOT NULL, sembrado en 10.000 y acotado a 1–32.766 por
+    /// <c>ck_consolidado_export_settings_max_items</c> (los extremos se aceptan; code review Obs1).
     /// </summary>
     [PostgresFact]
-    public async Task M1_ElTopeTotalNaceEn10000_EsNotNull_YLaBaseLoAcotaEntre1Y50000()
+    public async Task M1_ElTopeTotalNaceEn10000_EsNotNull_YLaBaseLoAcotaEntre1Y32766()
     {
         await using var cn = await SeedAsync();
         await ExecAsync(cn, LoadDdl());
@@ -168,19 +168,48 @@ public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixtur
             """)).Should().Be("integer,NO,10000");
         (await ScalarAsync<int>(cn, "SELECT max_items_per_batch FROM tramites.consolidado_export_settings")).Should().Be(10_000);
 
-        foreach (var fuera in new[] { 0, -1, 50_001 })
+        foreach (var fuera in new[] { 0, -1, 32_767 })
         {
             (await ConstraintOfViolationAsync(() => ExecAsync(cn,
                     $"UPDATE tramites.consolidado_export_settings SET max_items_per_batch = {fuera}")))
                 .Should().Be("ck_consolidado_export_settings_max_items", $"{fuera} está fuera de rango");
         }
 
-        foreach (var dentro in new[] { 1, 50_000 })
+        foreach (var dentro in new[] { 1, ConsolidadoExportSettings.MaxItemsPerBatchMaximo })
         {
             (await ConstraintOfViolationAsync(() => ExecAsync(cn,
                     $"UPDATE tramites.consolidado_export_settings SET max_items_per_batch = {dentro}")))
                 .Should().BeNull($"{dentro} es un extremo válido");
         }
+    }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs1) — la combinación que desbordaba el <c>smallint</c> del número de parte
+    /// (<c>max_pdfs_per_part = 1</c> o M mínimo, con <c>max_items_per_batch = 50.000</c>) la rechaza la base; con N = 1
+    /// y M = 10 (una parte por ítem) el tope máximo sí entra, y los valores por defecto se aceptan tal cual.
+    /// </summary>
+    [PostgresFact]
+    public async Task Obs1_LaBaseRechazaElTopeQueDesbordariaElNumeroDeParte_YAceptaLosValoresPorDefecto()
+    {
+        await using var cn = await SeedAsync();
+        await ExecAsync(cn, LoadDdl());
+
+        (await ConstraintOfViolationAsync(() => ExecAsync(cn,
+                "UPDATE tramites.consolidado_export_settings SET max_pdfs_per_part = 1, max_mb_per_part = 10, max_items_per_batch = 50000")))
+            .Should().Be("ck_consolidado_export_settings_max_items", "50.000 partes no caben en smallint");
+        (await ConstraintOfViolationAsync(() => ExecAsync(cn,
+                "UPDATE tramites.consolidado_export_settings SET max_pdfs_per_part = 5000, max_mb_per_part = 2048, max_items_per_batch = 32767")))
+            .Should().Be("ck_consolidado_export_settings_max_items", "N y M grandes no acotan las partes: un PDF mayor que M va solo");
+
+        (await ConstraintOfViolationAsync(() => ExecAsync(cn,
+                $"UPDATE tramites.consolidado_export_settings SET max_pdfs_per_part = 1, max_mb_per_part = 10, max_items_per_batch = {ConsolidadoExportSettings.MaxItemsPerBatchMaximo}")))
+            .Should().BeNull("el peor reparto del tope máximo más la parte 0/0 es 32.767 partes");
+        (await ConstraintOfViolationAsync(() => ExecAsync(cn,
+                "UPDATE tramites.consolidado_export_settings SET max_pdfs_per_part = DEFAULT, max_mb_per_part = DEFAULT, max_items_per_batch = DEFAULT")))
+            .Should().BeNull("los valores por defecto");
+        (await ScalarAsync<string>(cn,
+                "SELECT concat_ws(',', max_pdfs_per_part, max_mb_per_part, max_items_per_batch) FROM tramites.consolidado_export_settings"))
+            .Should().Be("500,250,10000");
     }
 
     [PostgresFact]

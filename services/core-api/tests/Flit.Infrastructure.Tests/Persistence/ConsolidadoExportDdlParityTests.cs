@@ -238,8 +238,25 @@ public sealed class ConsolidadoExportDdlParityTests
         var ddl = LoadDdl();
 
         ddl.Should().Contain(
-            "CONSTRAINT ck_consolidado_export_settings_max_items CHECK (max_items_per_batch BETWEEN 1 AND 50000)");
+            "CONSTRAINT ck_consolidado_export_settings_max_items CHECK (max_items_per_batch BETWEEN 1 AND "
+            + $"{ConsolidadoExportSettings.MaxItemsPerBatchMaximo})");
         ddl.Should().Contain("COMMENT ON COLUMN tramites.consolidado_export_settings.max_items_per_batch");
         ddl.Should().Contain($"DEFAULT {ConsolidadoExportSettings.MaxItemsPerBatchPorDefecto}");
+    }
+
+    /// <summary>
+    /// Code review épica #13216 (Obs1) — el número de parte es <c>smallint</c> y un lote tiene como mucho
+    /// <c>ítems + 1</c> partes (una por ítem si cada PDF supera M, más la parte 0/0 de un lote sin partes), así que el
+    /// tope del DDL 133 es <c>short.MaxValue - 1</c>, sin el viejo 50.000 en el CHECK ni en el comentario de la columna.
+    /// </summary>
+    [Fact]
+    public void Obs1_ElTopeDelDdl133NoDesbordaElSmallintDelNumeroDeParte()
+    {
+        var ddl = LoadDdl();
+
+        (ConsolidadoExportSettings.MaxItemsPerBatchMaximo + 1).Should().Be(short.MaxValue, "ítems + la parte 0/0");
+        ConsolidadoExportSettings.MaxItemsPerBatchPorDefecto.Should().BeLessThanOrEqualTo(ConsolidadoExportSettings.MaxItemsPerBatchMaximo);
+        ddl.Should().Contain("BETWEEN 1 AND 32766").And.NotContain("50000").And.NotContain("50.000");
+        ddl.Should().Contain("1–32.766");
     }
 }
