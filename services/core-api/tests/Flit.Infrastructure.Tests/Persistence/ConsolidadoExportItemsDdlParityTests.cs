@@ -90,11 +90,13 @@ public sealed partial class ConsolidadoExportItemsDdlParityTests
     }
 
     [Fact]
-    public void ElCheckDeOmisionListaLosDiezCodigosDeConsolidadoLoteOmisionesEnSuOrden()
+    public void ElCheckDeOmisionListaLosOnceCodigosDeConsolidadoLoteOmisionesEnSuOrden()
     {
         var codigos = ValoresDelCheck(LoadDdl(), "ck_consolidado_export_batch_items_omission_code");
 
-        codigos.Should().HaveCount(10);
+        // HU #13417 (adenda v7): + red_sin_consolidado, el trámite de una hija sin consolidado (lo usa #13418).
+        codigos.Should().HaveCount(11);
+        codigos[^1].Should().Be("red_sin_consolidado");
         codigos.Should().Equal(ConsolidadoLoteOmisiones.Todos,
             "el CHECK es contrato con la clase de #13371: mismos códigos, literales y en el mismo orden");
         codigos.Should().NotContain(["consolidado_no_generado", "en_regeneracion"], "eliminados en v2");

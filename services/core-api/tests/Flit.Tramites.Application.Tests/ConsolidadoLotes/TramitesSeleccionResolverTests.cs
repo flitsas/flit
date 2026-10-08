@@ -372,5 +372,94 @@ public sealed class TramitesSeleccionResolverTests
             .Which.Codigo.Should().Be(LoteSeleccionInvalidaException.CodigoFiltroInvalido);
     }
 
+    // ── HU #13417 — alcance de la vista de red (TenantScope del middleware, nunca del cuerpo) ───────────
+
+    private static readonly Guid CabezaP = Guid.NewGuid();
+    private static readonly Guid HijaC1 = Guid.NewGuid();
+    private static readonly Guid HijaC2 = Guid.NewGuid();
+
+    private static Flit.Queries.Domain.Tenancy.TenantScope AlcanceRed() =>
+        Flit.Queries.Domain.Tenancy.TenantScope.Group(CabezaP, [HijaC1, HijaC2], Flit.Queries.Domain.Tenancy.GroupKind.MarcaBlanca);
+
+    private void RepoEnRedDevuelve(IReadOnlyList<ProcedureInstanceRef> refs) =>
+        _repo.ListIdsFilteredInScopeAsync(
+                Arg.Any<Flit.Queries.Domain.Tenancy.TenantScope>(), Arg.Any<ProcedureInstanceListFilter>(),
+                Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(refs);
+
+    [Fact]
+    public async Task HU13417_AC3_IdsConAlcanceDeRed_ResuelveContraElAlcance_NuncaContraElTenantSolo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var alcance = AlcanceRed();
+        var refs = new List<ProcedureInstanceRef> { new(Guid.NewGuid(), CabezaP, "R-1", null), new(Guid.NewGuid(), HijaC1, "R-2", null) };
+        RepoEnRedDevuelve(refs);
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorIds(refs.Select(r => r.Id).ToList()),
+            new LoteSeleccionContexto(CabezaP, UsuarioC, null, alcance), 11, ct);
+
+        resultado.Should().Equal(refs);
+        await _repo.Received(1).ListIdsFilteredInScopeAsync(
+            alcance, Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos != null && f.IdsIncluidos.Count == 2),
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, 11, Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, default, ct);
+    }
+
+    [Fact]
+    public async Task HU13417_AC1_FiltroConAlcanceDeRed_UsaElUniversoDelListadoDeRed_ConLosExcluidosRestados()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var alcance = AlcanceRed();
+        var refs = new List<ProcedureInstanceRef>
+        {
+            new(Guid.NewGuid(), CabezaP, "R-1", null), new(Guid.NewGuid(), HijaC1, "R-2", null), new(Guid.NewGuid(), HijaC2, "R-3", null),
+        };
+        RepoEnRedDevuelve(refs);
+
+        var resultado = await _sut.ResolverAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest { Placa = "ABC123" }), [refs[1].Id]),
+            new LoteSeleccionContexto(CabezaP, UsuarioC, null, alcance), 5, ct);
+
+        resultado.Should().Equal(refs[0], refs[2]);
+        await _repo.Received(1).ListIdsFilteredInScopeAsync(
+            alcance, Arg.Is<ProcedureInstanceListFilter>(f => f.Placa == "ABC123" && f.IdsIncluidos == null),
+            Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), 6, Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredAsync(default, default!, default, default, default, ct);
+    }
+
+    [Fact]
+    public async Task HU13417_AC11_ContarConAlcanceDeRed_CuentaConElMismoPredicadoDeRed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var alcance = AlcanceRed();
+        var excluidos = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        _repo.CountIdsFilteredInScopeAsync(alcance, Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos == null), Arg.Any<CancellationToken>())
+            .Returns(40);
+        _repo.CountIdsFilteredInScopeAsync(alcance, Arg.Is<ProcedureInstanceListFilter>(f => f.IdsIncluidos != null && f.IdsIncluidos.Count == 2),
+            Arg.Any<CancellationToken>()).Returns(1);
+
+        var porFiltro = await _sut.ContarAsync(
+            new SeleccionPorFiltro(new TramitesLoteFiltro(new ProcedureInstanceListRequest()), excluidos),
+            new LoteSeleccionContexto(CabezaP, UsuarioC, null, alcance), ct);
+        var porIds = await _sut.ContarAsync(
+            new SeleccionPorIds(excluidos), new LoteSeleccionContexto(CabezaP, UsuarioC, null, alcance), ct);
+
+        porFiltro.Should().Be(39);
+        porIds.Should().Be(1);
+        await _repo.DidNotReceiveWithAnyArgs().CountIdsFilteredAsync(default, default!, ct);
+    }
+
+    [Fact]
+    public async Task HU13417_AC10_SinAlcanceDeRed_NoTocaLaConsultaDeRed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        RepoDevuelve(Refs(1, TenantC));
+
+        await _sut.ResolverAsync(new SeleccionPorIds([Guid.NewGuid()]), new LoteSeleccionContexto(TenantC, UsuarioC), ct);
+
+        await _repo.DidNotReceiveWithAnyArgs().ListIdsFilteredInScopeAsync(default!, default!, default, default, default, ct);
+    }
+
     private sealed record FiltroDeOtroOrigen : LoteFiltro;
 }

@@ -18,7 +18,7 @@ namespace Flit.Integration.Tests.Tramites;
 /// </summary>
 public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
-    private const string MigrationId = "20261007223631_HU13367_ConsolidadoExportBatches";
+    private const string MigrationId = "20261008031329_HU13367_ConsolidadoExportBatches";
 
     private static readonly Guid Company = new("b2000000-0000-7000-8000-0000000013a1");
     private static readonly Guid Office = new("0199c200-0000-7000-8000-0000000013a1");
@@ -327,5 +327,55 @@ public sealed class ConsolidadoExportSchemaMigrationTests(PostgresDatabaseFixtur
         (await ConstraintOfViolationAsync(() =>
                 InsertBatchAsync(cn, ConsolidadoExportStatus.Completado, ConsolidadoExportOrigin.OtBandeja, officeId: Office)))
             .Should().BeNull();
+    }
+
+    /// <summary>
+    /// HU #13417 (ADR-0070 adenda v7) — lote desde la vista de red: <c>network_scope</c> nace falso y NOT NULL; solo
+    /// el origen <c>tramites</c> lo lleva; con red, <c>scope_tenant_id</c> es la hija acotada (o NULL = toda la red) y
+    /// nunca la propia compañía del lote; sin red, el scope sigue siendo exclusivo del Super Admin.
+    /// </summary>
+    [PostgresFact]
+    public async Task HU13417_NetworkScopeNaceFalso_YLosChecksDelLoteDeRed()
+    {
+        var hija = new Guid("b2134170-0000-7000-8000-0000000134c1");
+        await using var cn = await SeedAsync();
+        await using (var ctx = NewContext())
+        {
+            ctx.Tenants.Add(TenantSeed.New(hija, "IT-HIJA-13417", false, null));
+            await ctx.SaveChangesAsync(Ct);
+        }
+
+        Task Insertar(string origin, Guid? tenant, Guid? scope, bool? red) => ExecAsync(cn,
+            $"""
+            INSERT INTO tramites.consolidado_export_batches
+              (tenant_id, requested_by_user_id, requested_role_code, origin, document_type, selection_mode, status,
+               total_items, effects_acknowledged_at, finished_at, expires_at, scope_tenant_id{(red is null ? "" : ", network_scope")}, created_by)
+            VALUES (@t, @u, 'AdminCompany', @origin, 'consolidado', 'ids', 'completado',
+                    0, now(), now(), now() + interval '24 hours', @s{(red is null ? "" : ", @red")}, @u)
+            """,
+            ("t", tenant), ("u", UserU), ("origin", origin), ("s", scope), ("red", red));
+
+        (await ScalarAsync<string>(cn,
+            """
+            SELECT is_nullable || ':' || data_type || ':' || column_default FROM information_schema.columns
+             WHERE table_schema = 'tramites' AND table_name = 'consolidado_export_batches' AND column_name = 'network_scope'
+            """)).Should().Be("NO:boolean:false");
+
+        (await ConstraintOfViolationAsync(() => Insertar(ConsolidadoExportOrigin.Tramites, Company, hija, red: null)))
+            .Should().Be("ck_consolidado_export_batches_scope_origin", "sin red, la hija acotada no existe fuera del Super Admin");
+        (await ConstraintOfViolationAsync(() => Insertar(ConsolidadoExportOrigin.Superadmin, null, null, red: true)))
+            .Should().Be("ck_consolidado_export_batches_network_origin", "el Super Admin no tiene vista de red");
+        (await ConstraintOfViolationAsync(() => Insertar(ConsolidadoExportOrigin.Tramites, Company, Company, red: true)))
+            .Should().Be("ck_consolidado_export_batches_network_child", "la hija acotada nunca es la propia compañía");
+
+        (await ConstraintOfViolationAsync(() => Insertar(ConsolidadoExportOrigin.Tramites, Company, hija, red: true)))
+            .Should().BeNull("lote de red acotado a una hija");
+        (await ConstraintOfViolationAsync(() => Insertar(ConsolidadoExportOrigin.Tramites, Company, null, red: true)))
+            .Should().BeNull("lote de toda la red");
+        (await ConstraintOfViolationAsync(() => Insertar(ConsolidadoExportOrigin.Superadmin, null, hija, red: null)))
+            .Should().BeNull("el scope del Super Admin no cambia");
+        (await ScalarAsync<long>(cn,
+            "SELECT count(*) FROM tramites.consolidado_export_batches WHERE network_scope = false AND origin = 'superadmin'"))
+            .Should().Be(1, "sin la columna en el INSERT, el lote nace sin red");
     }
 }

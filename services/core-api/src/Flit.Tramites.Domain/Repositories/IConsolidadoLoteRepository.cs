@@ -185,8 +185,14 @@ public sealed record NuevoLoteConsolidados
 
     public required string RolCodigo { get; init; }
 
-    /// <summary>Solo origen superadmin: compañía a la que se acotó la selección.</summary>
+    /// <summary>
+    /// Compañía a la que se acotó la selección: origen superadmin (<c>X-Tenant-Id</c>) o, con <see cref="NetworkScope"/>,
+    /// la hija acotada del lote de red (HU #13417).
+    /// </summary>
     public Guid? ScopeTenantId { get; init; }
+
+    /// <summary>HU #13417 — lote creado desde la vista de red (<c>batches.network_scope</c>); solo origen tramites.</summary>
+    public bool NetworkScope { get; init; }
 
     /// <summary>Uno de <see cref="ConsolidadoExportOrigin"/>.</summary>
     public required string Origen { get; init; }

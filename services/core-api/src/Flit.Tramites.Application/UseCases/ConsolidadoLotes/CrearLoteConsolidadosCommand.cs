@@ -38,6 +38,13 @@ public sealed record CrearLoteConsolidadosCommand
     /// <summary>Solo y siempre <c>ot_bandeja</c>: organismo del lote (<c>ot_transit_office_id</c>).</summary>
     public Guid? OtTransitOfficeId { get; init; }
 
+    /// <summary>
+    /// HU #13417 (ADR-0070 adenda v7) — solo origen <c>tramites</c>: lote desde la vista de red de la cabeza
+    /// <see cref="TenantId"/>. Lo arma el endpoint con <see cref="LoteAlcanceRedPolicy.EvaluarAsync"/> desde el
+    /// <c>TenantScope</c> del middleware (nunca del cuerpo). <c>null</c> = el lote propio de siempre.
+    /// </summary>
+    public LoteAlcanceRed? AlcanceRed { get; init; }
+
     /// <summary><c>sub</c> del token: dueño del lote.</summary>
     public required Guid UsuarioId { get; init; }
 
@@ -166,7 +173,8 @@ public sealed partial class CrearLoteConsolidadosHandler(
         var contexto = new LoteSeleccionContexto(
             command.Origen == ConsolidadoExportOrigin.Superadmin ? command.ScopeTenantId : command.TenantId,
             command.UsuarioId,
-            command.OtTransitOfficeId);
+            command.OtTransitOfficeId,
+            command.AlcanceRed?.Alcance);
         List<ProcedureInstanceRef> items;
         int? total = null;
         try
@@ -221,7 +229,9 @@ public sealed partial class CrearLoteConsolidadosHandler(
             TenantId = command.Origen == ConsolidadoExportOrigin.Superadmin ? null : command.TenantId,
             UsuarioId = command.UsuarioId,
             RolCodigo = command.RolCodigo,
-            ScopeTenantId = command.Origen == ConsolidadoExportOrigin.Superadmin ? command.ScopeTenantId : null,
+            // HU #13417: en un lote de red, scope_tenant_id es la hija acotada (NULL = toda la red).
+            ScopeTenantId = command.Origen == ConsolidadoExportOrigin.Superadmin ? command.ScopeTenantId : command.AlcanceRed?.HijaId,
+            NetworkScope = command.AlcanceRed is not null,
             Origen = command.Origen,
             TipoDocumento = tipo,
             ModoSeleccion = seleccion is SeleccionPorIds
@@ -234,7 +244,8 @@ public sealed partial class CrearLoteConsolidadosHandler(
             ResumenFiltroJson = ConsolidadoLoteAuditoria.ResumirSeleccion(
                 seleccion,
                 command.Origen == ConsolidadoExportOrigin.OtBandeja ? command.OtTransitOfficeId : null,
-                tiposConocidos),
+                tiposConocidos,
+                command.AlcanceRed?.Resumen),
             IdsCount = ConsolidadoLoteAuditoria.ContarIds(seleccion),
             ExcluidosCount = ConsolidadoLoteAuditoria.ContarExcluidos(seleccion),
             ClientIp = command.ClientIp,
@@ -274,21 +285,26 @@ public sealed partial class CrearLoteConsolidadosHandler(
     /// <summary>
     /// Defensa en profundidad de CF-15 sobre lo que devolvió el resolver: en <c>tramites</c> solo la compañía del
     /// token; en <c>superadmin</c> acotado, solo la del scope. Sin duplicados (un trámite por lote), en su orden.
+    /// HU #13417 (AC5): en un lote de red, solo las compañías de <see cref="LoteAlcanceRed.Alcance"/>
+    /// (<c>ReadTenantIds</c>): la segunda barrera contra ids inyectados, después del <c>WhereTenantInScope</c> en SQL.
     /// </summary>
     private static List<ProcedureInstanceRef> Congelar(CrearLoteConsolidadosCommand command, IReadOnlyList<ProcedureInstanceRef> refs)
     {
         Guid? soloTenant = command.Origen switch
         {
-            ConsolidadoExportOrigin.Tramites => command.TenantId,
+            ConsolidadoExportOrigin.Tramites when command.AlcanceRed is null => command.TenantId,
             ConsolidadoExportOrigin.Superadmin => command.ScopeTenantId,
             _ => null,
         };
+        var alcanceRed = command.AlcanceRed?.Alcance.ReadTenantIds;
 
         var vistos = new HashSet<Guid>();
         var items = new List<ProcedureInstanceRef>(refs.Count);
         foreach (var r in refs)
         {
             if (soloTenant is { } tenant && r.TenantId != tenant)
+                continue;
+            if (alcanceRed is not null && !alcanceRed.Contains(r.TenantId))
                 continue;
             if (vistos.Add(r.Id))
                 items.Add(r);
@@ -344,6 +360,15 @@ public sealed partial class CrearLoteConsolidadosHandler(
             throw new ArgumentException("ScopeTenantId solo aplica al origen superadmin.", nameof(c));
         if ((c.Origen == ConsolidadoExportOrigin.OtBandeja) != (c.OtTransitOfficeId is { } o && o != Guid.Empty))
             throw new ArgumentException("El organismo es obligatorio en ot_bandeja y exclusivo de ese origen (R-d).", nameof(c));
+        if (c.AlcanceRed is { } red)
+        {
+            // HU #13417: la vista de red es de una cabeza de compañía (origen tramites), y su alcance es el de esa cabeza.
+            if (c.Origen != ConsolidadoExportOrigin.Tramites)
+                throw new ArgumentException("El alcance de red solo aplica al origen tramites.", nameof(c));
+            var cabeza = red.HijaId is null ? red.Alcance.WriteTenantId : null;
+            if ((cabeza is not null && cabeza != c.TenantId) || red.HijaId == c.TenantId)
+                throw new ArgumentException("El alcance de red no es el de la compañía del lote.", nameof(c));
+        }
     }
 
     private static string Truncar(string v) => v.Length <= 40 ? v : v[..40];

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json.Serialization;
 using Flit.Api.Authorization;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
@@ -26,6 +27,12 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   <c>X-Tenant-Id</c> opcional como scope.</item>
 ///   <item>Errores: ProblemDetails con el código estable en <c>error</c> (y <c>loteActivoId</c> en el 409), en la
 ///   raíz del cuerpo.</item>
+///   <item>HU #13417 (adenda v7): <c>alcanceRed</c> en la raíz del cuerpo (o, en transición, en el filtro) pide el lote
+///   desde la vista de red. El alcance es el <c>TenantScope</c> que el middleware resolvió desde la BD
+///   (<see cref="RequestTenantResolver.ScopeFromItems"/>), pasado por las puertas de <see cref="LoteAlcanceRedPolicy"/>:
+///   403 <c>network_scope_required</c> | <c>network_role_required</c> | <c>network_child_out_of_scope</c> |
+///   <c>network_documents_disabled</c> sin crear nada. Por decisión P3 = b no escribe en <c>network_access_audit</c>: la
+///   traza es <c>consolidado_export_audit</c> (<c>filter_summary.alcanceRed</c>).</item>
 /// </list>
 /// Uso de ejemplo:
 /// <code>
@@ -78,6 +85,7 @@ internal static partial class ConsolidadoLoteEndpoints
         [FromBody] CrearLoteConsolidadosBody? body,
         CrearLoteConsolidadosHandler handler,
         LoteSeleccionResolverPorOrigen resolvers,
+        IHierarchySwitches switches,
         ILoggerFactory loggers,
         CancellationToken ct)
     {
@@ -104,10 +112,25 @@ internal static partial class ConsolidadoLoteEndpoints
             return Problema(StatusCodes.Status400BadRequest, SeleccionInvalida,
                 "La selección debe ser modo «ids» con su lista, o modo «filtro» con el filtro del listado.");
 
-        // Desviación del frontend #2 — `alcanceRed` (vista de red) se acepta en el contrato pero el motor aún no
-        // lo aplica: el lote se resuelve con el alcance propio del token. Hallazgo reportado en HU #13374.
-        if (!string.IsNullOrWhiteSpace(body?.Seleccion?.Filtro?.AlcanceRed))
-            LogAlcanceRedIgnorado(logger, usuarioId);
+        // HU #13417 — vista de red: `alcanceRed` en la raíz (y, en transición, en el filtro). Solo pide; el alcance lo
+        // pone el TenantScope del middleware (BD) tras las puertas de /network/**, en su orden.
+        if (!LoteAlcanceRedPolicy.TryInterpretar(body?.AlcanceRed, body?.Seleccion?.Filtro?.AlcanceRed, out var pedido))
+            return Problema(StatusCodes.Status400BadRequest, SeleccionInvalida,
+                "El alcance de red debe ser «red» o el identificador de una compañía de la red, y el mismo en todo el cuerpo.");
+
+        LoteAlcanceRed? alcanceRed = null;
+        if (pedido is not null)
+        {
+            var (alcance, error) = await LoteAlcanceRedPolicy.EvaluarAsync(
+                RequestTenantResolver.ScopeFromItems(http), RequestTenantResolver.RoleValues(http.User), pedido, switches, ct);
+            if (error is not null)
+            {
+                LogAlcanceRedRechazado(logger, usuarioId, error);
+                return Problema(StatusCodes.Status403Forbidden, error, LoteAlcanceRedPolicy.Mensaje(error));
+            }
+
+            alcanceRed = alcance;
+        }
 
         var command = new CrearLoteConsolidadosCommand
         {
@@ -116,6 +139,7 @@ internal static partial class ConsolidadoLoteEndpoints
             RolCodigo = RolDelSolicitante(http.User, isSuperAdmin),
             TenantId = isSuperAdmin ? null : tenantId,
             ScopeTenantId = isSuperAdmin ? tenantId : null,
+            AlcanceRed = alcanceRed,
             TipoDocumento = string.IsNullOrWhiteSpace(body?.TipoDocumento) ? null : body.TipoDocumento.Trim(),
             Seleccion = seleccion,
             ConfirmaEfectos = body?.ConfirmaEfectos,
@@ -258,8 +282,8 @@ internal static partial class ConsolidadoLoteEndpoints
     private static partial void LogOrigenSinResolver(ILogger logger, string origen, Guid usuarioId);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Lote de consolidados: alcanceRed recibido e ignorado; se resuelve con el alcance propio (usuario {UsuarioId}).")]
-    private static partial void LogAlcanceRedIgnorado(ILogger logger, Guid usuarioId);
+        Message = "Lote de consolidados desde la vista de red rechazado: {Codigo} (usuario {UsuarioId}).")]
+    private static partial void LogAlcanceRedRechazado(ILogger logger, Guid usuarioId, string codigo);
 }
 
 /// <summary>Cuerpo de <c>POST /api/v1/tramites/consolidados/lotes</c> (<c>CrearLoteConsolidadosRequest</c>). Sin origen ni tenant.</summary>
@@ -270,6 +294,12 @@ internal sealed record CrearLoteConsolidadosBody
 
     /// <summary>CF-08: debe ser <c>true</c>.</summary>
     public bool? ConfirmaEfectos { get; init; }
+
+    /// <summary>
+    /// HU #13417 — alcance de la tabla, para los modos <c>ids</c> y <c>filtro</c>: <c>null</c> = propio; <c>red</c> = toda
+    /// la red; un uuid = una hija (el de la cabeza se normaliza a propio). Solo pide: el alcance lo decide el servidor.
+    /// </summary>
+    public string? AlcanceRed { get; init; }
 
     public LoteSeleccionBody? Seleccion { get; init; }
 }
@@ -297,7 +327,10 @@ internal sealed record LoteSeleccionBody
 /// </summary>
 internal sealed record LoteFiltroTramitesBody : TramitesSearchRequest
 {
-    /// <summary><c>null</c> = alcance propio; <c>red</c> o un <c>childTenantId</c> = vista de red (aún no aplicada por el motor).</summary>
+    /// <summary>
+    /// Transición (HU #13417): el alcance va en <see cref="CrearLoteConsolidadosBody.AlcanceRed"/>; aquí se sigue
+    /// aceptando, y si llegan los dos y difieren ⇒ 400 <c>seleccion_invalida</c>.
+    /// </summary>
     public string? AlcanceRed { get; init; }
 }
 
@@ -315,7 +348,9 @@ internal sealed record LoteConsolidadosDto(
     DateTimeOffset? TerminadoEn,
     DateTimeOffset? ExpiraEn,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NombreBase,
-    IReadOnlyList<ParteLoteConsolidadosDto> Partes)
+    IReadOnlyList<ParteLoteConsolidadosDto> Partes,
+    // HU #13417 — solo lectura: «red» | «hija» en un lote desde la vista de red; ausente en el lote propio.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AlcanceRed = null)
 {
     /// <summary>Proyección del lote. <paramref name="partes"/> vacío hasta que el lote termina (CF-09).</summary>
     public static LoteConsolidadosDto Desde(
@@ -335,7 +370,8 @@ internal sealed record LoteConsolidadosDto(
             lote.FinishedAt,
             lote.ExpiresAt,
             nombreBase,
-            partes ?? []);
+            partes ?? [],
+            LoteAlcanceRed.ResumenDe(lote));
     }
 }
 

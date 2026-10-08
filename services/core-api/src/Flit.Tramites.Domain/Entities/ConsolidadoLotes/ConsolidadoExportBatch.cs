@@ -23,8 +23,19 @@ public sealed class ConsolidadoExportBatch
     /// <summary>Rol con el que se creó el lote (revalidación CF-16 y auditoría).</summary>
     public string RequestedRoleCode { get; set; } = string.Empty;
 
-    /// <summary>Solo origen <see cref="ConsolidadoExportOrigin.Superadmin"/>: compañía a la que se acotó la selección.</summary>
+    /// <summary>
+    /// Compañía a la que se acotó la selección: en origen <see cref="ConsolidadoExportOrigin.Superadmin"/>, la de
+    /// <c>X-Tenant-Id</c>; en un lote de red (<see cref="NetworkScope"/>, HU #13417), la hija acotada (nunca la propia
+    /// compañía del lote). <c>null</c> = sin acotar (todas, o toda la red).
+    /// </summary>
     public Guid? ScopeTenantId { get; set; }
+
+    /// <summary>
+    /// HU #13417 (ADR-0070 adenda v7) — lote creado desde la vista de red de una cabeza: solo origen
+    /// <see cref="ConsolidadoExportOrigin.Tramites"/>, con <see cref="TenantId"/> = cabeza y cada ítem en la compañía de
+    /// su trámite. Lo garantizan los CHECK <c>network_origin</c>, <c>network_child</c> y <c>scope_origin</c> del DDL 133.
+    /// </summary>
+    public bool NetworkScope { get; set; }
 
     /// <summary>Uno de <see cref="ConsolidadoExportOrigin"/>.</summary>
     public string Origin { get; set; } = ConsolidadoExportOrigin.Tramites;

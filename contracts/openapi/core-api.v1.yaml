@@ -5265,6 +5265,18 @@ paths:
         búsqueda rápida abarca demasiados borradores, igual que el listado); 503 `motor_inactivo` (motor
         apagado u origen sin resolver) y `lote_no_creado` (la transacción o la
         auditoría falló).
+        Vista de red (HU #13417, ADR-0070 adenda v7): `alcanceRed` en la raíz del cuerpo pide el lote con el alcance
+        de la tabla de red (`red` = cabeza + hijas, uuid = una hija; el de la propia cabeza = lote propio). El
+        alcance NO sale del cuerpo: es el TenantScope que el middleware resuelve desde la BD, con las mismas puertas
+        y en el mismo orden que `/api/v1/tramites/network/**`. 403 `network_scope_required` (Super Admin, compañía
+        hija o cliente sin red), `network_role_required` (la red es solo del rol AdminCompany de la cabeza),
+        `network_child_out_of_scope` (la compañía pedida no es de la red; no se consulta nada) y
+        `network_documents_disabled` (cabeza CONCESIÓN con `network_documents_concesion` apagado). Ninguno crea
+        lote, ítems ni auditoría. El lote de red es de la cabeza (`tenant_id`), cada ítem conserva la compañía de
+        su trámite y el total coincide con el de `POST /api/v1/tramites/network/instances/search` con el mismo
+        filtro; el tope `max_items_per_batch` aplica a la selección de red. La traza es `consolidado_export_audit`
+        (`reached_tenant_ids` y `filter_summary.alcanceRed` = `red` | `hija`, sin el id ni el nombre de la hija);
+        no se escribe en `network_access_audit`.
       x-required-permission: consolidado-masivo.download
       security:
         - bearerAuth: []
@@ -5291,14 +5303,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LoteConsolidados" }
         "400":
-          description: "Selección inválida (`seleccion_requerida`, `seleccion_invalida`), condición fuera de catálogo (`filtro_invalido`), `confirmacion_requerida` o `tipo_no_permitido` (consolidado_maestro fuera de origen superadmin)."
+          description: "Selección inválida (`seleccion_requerida`, `seleccion_invalida`; también un `alcanceRed` que no es `red` ni un uuid, o distinto en la raíz y en el filtro), condición fuera de catálogo (`filtro_invalido`), `confirmacion_requerida` o `tipo_no_permitido` (consolidado_maestro fuera de origen superadmin)."
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
         "401":
           description: Sin token válido.
         "403":
-          description: "Sin permiso consolidado-masivo.download (el SuperAdmin pasa por bypass aunque su token no traiga el claim), o `sin_compania` (usuario sin compañía que no es SuperAdmin)."
+          description: "Sin permiso consolidado-masivo.download (el SuperAdmin pasa por bypass aunque su token no traiga el claim), `sin_compania` (usuario sin compañía que no es SuperAdmin) o, con `alcanceRed` (HU #13417), `network_scope_required`, `network_role_required`, `network_child_out_of_scope` o `network_documents_disabled`."
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/LoteProblem" }
@@ -16150,6 +16162,15 @@ components:
             genera el de los trámites que no tienen). Debe ser true (si no ⇒ 400 confirmacion_requerida).
         seleccion:
           $ref: "#/components/schemas/LoteSeleccionRequest"
+        alcanceRed:
+          type: string
+          nullable: true
+          description: >
+            HU #13417 — alcance de la tabla, para los modos `ids` y `filtro`: null = propio; `red` = toda la red de la
+            cabeza; un uuid = una compañía hija (el de la propia cabeza = propio). Solo pide: el alcance lo resuelve el
+            servidor desde la BD. Un valor que no es `red` ni un uuid, o distinto del `seleccion.filtro.alcanceRed`
+            (transición), ⇒ 400 seleccion_invalida.
+          example: red
 
     LoteSeleccionRequest:
       type: object
@@ -16190,9 +16211,11 @@ components:
             alcanceRed:
               type: string
               nullable: true
+              deprecated: true
               description: >
-                Alcance de la tabla: null = propio; `red` o un childTenantId = vista de red. Se acepta; el motor
-                todavía NO lo aplica (HU #13374): el lote se resuelve con el alcance propio del token.
+                Transición (HU #13417): el alcance va en `CrearLoteConsolidadosRequest.alcanceRed` (raíz del
+                cuerpo). Aquí se sigue aceptando con la misma semántica; si llegan los dos y difieren ⇒ 400
+                seleccion_invalida.
 
     CrearLoteConsolidadosOtRequest:
       type: object
@@ -16318,6 +16341,10 @@ components:
             - descarga_expirada
             - auditoria_no_registrada
             - parte_no_disponible
+            - network_scope_required
+            - network_role_required
+            - network_child_out_of_scope
+            - network_documents_disabled
         total:
           type: integer
           description: >
@@ -16373,6 +16400,14 @@ components:
         terminadoEn: { type: string, format: date-time, nullable: true, description: "En `cancelado`, instante de la cancelación." }
         expiraEn: { type: string, format: date-time, nullable: true, description: terminadoEn + 24 h }
         nombreBase: { type: string, example: consolidados_20261006_1430, description: Ausente hasta que el motor lo fija. }
+        alcanceRed:
+          type: string
+          nullable: true
+          readOnly: true
+          enum: [red, hija]
+          description: >
+            HU #13417 — lote creado desde la vista de red: `red` (toda la red) o `hija` (acotado a una compañía; sin
+            su id). Ausente en el lote propio. Para el aviso global del lote.
         partes:
           type: array
           description: Vacío hasta que el lote termina (las partes solo se descargan al terminar, CF-09/H4a).

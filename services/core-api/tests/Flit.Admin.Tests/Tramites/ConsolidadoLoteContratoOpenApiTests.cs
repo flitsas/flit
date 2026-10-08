@@ -146,6 +146,37 @@ public sealed class ConsolidadoLoteContratoOpenApiTests
         Schema(yaml, "LoteProblem").Should().Contain("- lote_terminado").And.Contain("- auditoria_no_registrada");
     }
 
+    /// <summary>
+    /// HU #13417 — lote desde la vista de red: <c>alcanceRed</c> en la raíz del cuerpo (null | red | uuid), aceptado
+    /// también en el filtro durante la transición; los cuatro 403 de red; <c>LoteConsolidados.alcanceRed</c>
+    /// (<c>red</c> | <c>hija</c>, solo lectura) y la retirada del aviso «el motor todavía NO lo aplica».
+    /// </summary>
+    [Fact]
+    public void HU13417_ElContratoPublicaElAlcanceDeRedEnLaRaiz_LosCuatro403_YElAlcanceDelLote()
+    {
+        var yaml = Yaml();
+
+        var cuerpo = Schema(yaml, "CrearLoteConsolidadosRequest");
+        cuerpo.Should().Contain("        alcanceRed:").And.Contain("nullable: true").And.Contain("seleccion_invalida");
+
+        var filtro = Schema(yaml, "LoteFiltroTramites");
+        filtro.Should().Contain("alcanceRed").And.NotContain("todavía NO lo aplica").And.Contain("Transición");
+
+        var post = Path(yaml, "/api/v1/tramites/consolidados/lotes");
+        var problema = Schema(yaml, "LoteProblem");
+        foreach (var codigo in new[]
+                 {
+                     "network_scope_required", "network_role_required", "network_child_out_of_scope", "network_documents_disabled",
+                 })
+        {
+            post.Should().Contain(codigo, $"el 403 {codigo} debe documentarse en el POST");
+            problema.Should().Contain("- " + codigo);
+        }
+
+        var lote = Schema(yaml, "LoteConsolidados");
+        lote.Should().Contain("        alcanceRed:").And.Contain("enum: [red, hija]").And.Contain("readOnly: true");
+    }
+
     [Fact]
     public void AC4_DocumentaElSearchDeTramites_YTramitesSearchFilterReutilizado()
     {

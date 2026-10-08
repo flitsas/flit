@@ -21,7 +21,7 @@ public sealed class ConsolidadoExportItemsSchemaMigrationTests(PostgresDatabaseF
     private const string MigrationName = "HU13368_ConsolidadoExportItems";
 
     /// <summary>ID exacto tras regenerar la migración con la columna <c>parts_count</c> (HU #13378 AC2).</summary>
-    private const string MigrationId = "20261007232819_HU13368_ConsolidadoExportItems";
+    private const string MigrationId = "20261008031425_HU13368_ConsolidadoExportItems";
 
     private static readonly Guid Company = new("b3000000-0000-7000-8000-0000000013c1");
     private static readonly Guid OtherCompany = new("b3100000-0000-7000-8000-0000000013c2");

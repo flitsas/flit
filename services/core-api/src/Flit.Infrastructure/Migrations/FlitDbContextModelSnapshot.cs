@@ -7449,6 +7449,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_claimed_at");
 
+                    b.Property<bool>("NetworkScope")
+                        .HasColumnType("boolean")
+                        .HasColumnName("network_scope");
+
                     b.Property<int>("OmittedCount")
                         .HasColumnType("integer")
                         .HasColumnName("omitted_count");
