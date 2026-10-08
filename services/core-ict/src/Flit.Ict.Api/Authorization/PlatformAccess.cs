@@ -10,7 +10,7 @@ namespace Flit.Ict.Api.Authorization;
 /// </param>
 /// <param name="HasIctTrazabilidadAccess">
 /// Abrir la Trazabilidad ICT (Bug #13445, D10): SuperAdmin o el permiso <c>ict.trazabilidad.read</c>.
-/// Quien no es SuperAdmin queda atado a su tenant en cada consulta.
+/// Quien no es SuperAdmin queda atado a su tenant en cada consulta; sin <c>tenant_id</c> válido no entra.
 /// </param>
 /// <param name="HasPiiRevealAccess">
 /// Ver los datos personales EN CLARO (HU #11820). Va aparte de <c>HasIctTrazabilidadAccess</c> a
@@ -74,8 +74,10 @@ public static class PlatformAccessReader
             isSuperAdmin || hasClientAdmin,
             isSuperAdmin,
             tenantId,
-            HasIctTrazabilidadAccess: isSuperAdmin || hasTrazabilidad,
-            HasPiiRevealAccess: isSuperAdmin || hasPiiReveal,
+            // Fail-closed (Bug #13445 p.4): sin tenant el SQL `@tenant IS NULL OR …` abriría todos los
+            // tenants, así que quien no es SuperAdmin necesita un tenant_id válido además del slug.
+            HasIctTrazabilidadAccess: isSuperAdmin || (hasTrazabilidad && tenantId is not null),
+            HasPiiRevealAccess: isSuperAdmin || (hasPiiReveal && tenantId is not null),
             Subject: subject,
             Role: role);
     }
