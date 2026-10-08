@@ -49,7 +49,7 @@ export const OT_ADMIN_SPA_OMIT: ReadonlySet<string> = new Set([
 /**
  * Único módulo universal de navegación: soporte real para cualquier usuario.
  * `auditoria` / `log-qx` / `ict-logs` / `ict-reportes` / `ict-trazabilidad` NO son universales — solo si claims/permisos
- * del dock los mostrarían (SuperAdmin / logqx.read / ict.logs.read).
+ * del dock los mostrarían (SuperAdmin / logqx.read / ict.trazabilidad.read / ict.reportes.read).
  */
 export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda"];
 
@@ -58,7 +58,12 @@ export type NavigableModulesContext = {
   isSuperAdmin: boolean;
   isOtAdmin: boolean;
   canReadLogQx: boolean;
+  /** Log ICT: solo SuperAdmin (Bug #13445). */
   canReadIctLogs: boolean;
+  /** Trazabilidad ICT: `ict.trazabilidad.read` o SuperAdmin. */
+  canReadIctTrazabilidad: boolean;
+  /** Reportes ICT: `ict.reportes.read` o SuperAdmin. */
+  canReadIctReportes: boolean;
 };
 
 /**
@@ -90,13 +95,11 @@ export function resolveNavigableModuleIds(ctx: NavigableModulesContext): ModuleI
     ids.add("log-qx");
   }
 
-  if (ctx.canReadIctLogs) {
-    ids.add("ict-logs");
-    // Reportes ICT (HU #11619) comparte el gate de Log ICT: mismo público, distinto espacio.
-    ids.add("ict-reportes");
-    // Trazabilidad ICT (Feature #11814): mismo permiso ict.logs.read, tercer espacio del sistema.
-    ids.add("ict-trazabilidad");
-  }
+  // ICT (Bug #13445, D10): cada espacio con su gate. Log ICT es solo del SuperAdmin; Reportes y Trazabilidad
+  // van por su permiso propio (ict.reportes.read / ict.trazabilidad.read), que el Admin Company tiene.
+  if (ctx.canReadIctLogs) ids.add("ict-logs");
+  if (ctx.canReadIctReportes) ids.add("ict-reportes");
+  if (ctx.canReadIctTrazabilidad) ids.add("ict-trazabilidad");
 
   return Array.from(ids);
 }
@@ -113,6 +116,8 @@ export function buildValidModules(accessibleCodes: ModuleId[]): ModuleId[] {
     isOtAdmin: false,
     canReadLogQx: false,
     canReadIctLogs: false,
+    canReadIctTrazabilidad: false,
+    canReadIctReportes: false,
   });
 }
 
