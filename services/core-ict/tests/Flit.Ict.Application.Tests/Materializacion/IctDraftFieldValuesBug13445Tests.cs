@@ -1,6 +1,7 @@
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 using Flit.Ict.Infrastructure.ExternalClients;
+using Flit.Ict.Infrastructure.Persistence.Sql;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -9,13 +10,13 @@ using Xunit;
 namespace Flit.Ict.Application.Tests.Materializacion;
 
 /// <summary>
-/// Bug #13445 — las transformaciones (<c>master.Transformations</c>, códigos RUNT 5/9/17) y la prenda
+/// Bug #13445 — las transformaciones (<c>master.Transformations</c>, catálogo Tipo Trámite ICT 5/6/7/9) y la prenda
 /// (<c>master.Limitations*</c>) viajan a core-api en <c>CreateDraftFromIctRequest.field_values</c>
 /// según el contrato de carriles (05-contrato-carriles.md). Antes solo viajaban <c>vin</c> y <c>plate</c>.
 /// <para>Uso de ejemplo:
 /// <code>
 /// var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(master, tipo, resolver, log: null, ct);
-/// request.FieldValues // contiene cambio_color="true" si master.Transformations trae el código 5
+/// request.FieldValues // contiene cambio_color="true" si master.Transformations trae el código 7
 /// </code></para>
 /// </summary>
 public sealed class IctDraftFieldValuesBug13445Tests
@@ -74,109 +75,166 @@ public sealed class IctDraftFieldValuesBug13445Tests
         "ict_prenda_acreedor_documento", "ict_prenda_fecha_inscripcion",
     ];
 
-    // ---------- Transformaciones ----------
+    // ---------- Transformaciones (catálogo Tipo Trámite ICT: 5/6/7/9 — D6) ----------
 
     [Fact]
-    public async Task Codigo5_EnviaCambioColor()
+    public async Task Codigo5_EsBlindaje()
     {
         var fv = await FieldValuesAsync(ConTransformacion(5));
 
-        fv.Should().ContainKey("cambio_color").WhoseValue.Should().Be("true");
-        fv.Keys.Should().NotContain(["cambio_carroceria", "cambio_combustible", "blindaje", "ict_transformacion_sin_subtipo"]);
+        fv.Should().ContainKey("blindaje").WhoseValue.Should().Be("true");
+        fv.Keys.Should().NotContain(["cambio_color", "cambio_carroceria", "cambio_combustible", "blindaje_nivel"]);
+    }
+
+    [Theory]
+    [InlineData((short)1, "NIVEL_1")]
+    [InlineData((short)2, "NIVEL_2")]
+    [InlineData((short)3, "NIVEL_3")]
+    [InlineData((short)4, "DESMONTE")]
+    public async Task Codigo5ConNivel_EnviaBlindajeYNivel(short nivelIct, string esperado)
+    {
+        var master = Master();
+        master.ArmorLevelNumberId = nivelIct;
+        var fv = await FieldValuesAsync(ConTransformacion(5, master));
+
+        fv.Should().Contain("blindaje", "true").And.Contain("blindaje_nivel", esperado);
     }
 
     [Fact]
-    public async Task Codigo17_EnviaCambioCarroceria()
+    public async Task Codigo6_EsCambioDeCarroceria()
     {
-        var fv = await FieldValuesAsync(ConTransformacion(17));
+        var fv = await FieldValuesAsync(ConTransformacion(6));
 
         fv.Should().ContainKey("cambio_carroceria").WhoseValue.Should().Be("true");
         fv.Keys.Should().NotContain(["cambio_color", "cambio_combustible", "blindaje"]);
     }
 
     [Fact]
-    public async Task Codigo9ConCombustible_EnviaSoloLaBandera_PorqueElCatalogoIctNoTieneEquivalenteWeb()
+    public async Task Codigo7_EsCambioDeColor()
+    {
+        var fv = await FieldValuesAsync(ConTransformacion(7));
+
+        fv.Should().ContainKey("cambio_color").WhoseValue.Should().Be("true");
+        fv.Keys.Should().NotContain(["cambio_carroceria", "cambio_combustible", "blindaje"]);
+    }
+
+    [Theory]
+    [InlineData((short)1, "GASOLINA")]
+    [InlineData((short)2, "GAS NATURAL")]
+    [InlineData((short)3, "DIESEL")]
+    [InlineData((short)5, "ELECTRICO")]
+    [InlineData((short)6, "HIDROGENO")]
+    [InlineData((short)7, "ETANOL")]
+    [InlineData((short)8, "BIODIESEL")]
+    public async Task Codigo9ConCombustibleExacto_EnviaBanderaYCombustible(short combustibleIct, string esperado)
     {
         var master = Master();
-        master.NewVehicleFuelType = 3;
+        master.NewVehicleFuelType = combustibleIct;
         var fv = await FieldValuesAsync(ConTransformacion(9, master));
 
-        fv.Should().ContainKey("cambio_combustible").WhoseValue.Should().Be("true");
-        // ids 1-12 sin catálogo semántico en core-ict → el gestor completa vehicle_fuel en el wizard.
-        fv.Keys.Should().NotContain(["vehicle_fuel", "blindaje", "ict_transformacion_sin_subtipo"]);
+        fv.Should().Contain("cambio_combustible", "true").And.Contain("vehicle_fuel", esperado);
+        fv.Keys.Should().NotContain(["blindaje", "ict_transformacion_sin_subtipo"]);
+    }
+
+    [Theory]
+    [InlineData((short)4)]   // GAS GASOL
+    [InlineData((short)9)]   // GLP
+    [InlineData((short)10)]  // GASO ELEC
+    [InlineData((short)11)]  // DIES ELEC
+    [InlineData((short)12)]  // AGUA CON GAS
+    [InlineData((short)13)]  // fuera del catálogo
+    public async Task Codigo9ConCombustibleSinEquivalenciaExacta_EnviaSoloLaBandera(short combustibleIct)
+    {
+        var master = Master();
+        master.NewVehicleFuelType = combustibleIct;
+        var fv = await FieldValuesAsync(ConTransformacion(9, master));
+
+        fv.Should().Contain("cambio_combustible", "true");
+        fv.Keys.Should().NotContain("vehicle_fuel");
     }
 
     [Fact]
-    public async Task Codigo9ConBlindaje_EnviaSoloLaBandera_PorqueElCatalogoIctNoTieneEquivalenteWeb()
-    {
-        var master = Master();
-        master.ArmorLevelNumberId = 2;
-        var fv = await FieldValuesAsync(ConTransformacion(9, master));
-
-        fv.Should().ContainKey("blindaje").WhoseValue.Should().Be("true");
-        fv.Keys.Should().NotContain(["blindaje_nivel", "cambio_combustible", "ict_transformacion_sin_subtipo"]);
-    }
-
-    [Fact]
-    public async Task Codigo9ConAmbosSubtipos_EnviaAmbasBanderas()
-    {
-        var master = Master();
-        master.NewVehicleFuelType = 1;
-        master.ArmorLevelNumberId = 1;
-        var fv = await FieldValuesAsync(ConTransformacion(9, master));
-
-        fv.Should().Contain("cambio_combustible", "true").And.Contain("blindaje", "true");
-        fv.Keys.Should().NotContain("ict_transformacion_sin_subtipo");
-    }
-
-    [Fact]
-    public async Task Codigo9SinSubtipo_NoEnviaBandera_YMarcaSinSubtipo()
+    public async Task Codigo9SinCombustible_EnviaSoloLaBandera_YYaNoHayMarcadorSinSubtipo()
     {
         var fv = await FieldValuesAsync(ConTransformacion(9));
 
-        fv.Should().ContainKey("ict_transformacion_sin_subtipo").WhoseValue.Should().Be("true");
-        fv.Keys.Should().NotContain(["cambio_combustible", "vehicle_fuel", "blindaje", "blindaje_nivel"]);
+        fv.Should().Contain("cambio_combustible", "true");
+        fv.Keys.Should().NotContain(["ict_transformacion_sin_subtipo", "vehicle_fuel", "blindaje", "blindaje_nivel"]);
     }
 
-    [Fact]
-    public async Task CodigoDesconocido_NoEnviaNada()
+    [Theory]
+    [InlineData(17)] // carrocería RUNT del catálogo viejo: retirado
+    [InlineData(8)]  // cambio de locatario
+    [InlineData(10)] // duplicado de placa
+    [InlineData(11)] // duplicado de tarjeta
+    [InlineData(42)]
+    public async Task CodigoQueNoEsTransformacion_NoEnviaNada(int codigo)
     {
-        var fv = await FieldValuesAsync(ConTransformacion(42));
+        var fv = await FieldValuesAsync(ConTransformacion(codigo));
 
         fv.Keys.Should().NotContain(ClavesDelBug);
         fv.Keys.Should().BeEquivalentTo(["vin", "plate"]);
     }
 
     [Fact]
-    public async Task SubtiposSinCodigo9_NoEnvianNada()
+    public async Task NivelYCombustibleSinCodigoDeTransformacion_EnvianSoloLosValores()
     {
-        // Los subtipos solo cuentan cuando la transformación 9 viene declarada.
-        var master = Master();
-        master.NewVehicleFuelType = 4;
+        // D9: trámite principal 5 (blindaje) o 9 (combustible) sin more_transaction: el valor viaja igual.
+        var master = Master(transactionType: 5);
         master.ArmorLevelNumberId = 3;
+        master.NewVehicleFuelType = 7;
         var fv = await FieldValuesAsync(master);
 
-        fv.Keys.Should().NotContain(ClavesDelBug);
+        fv.Should().Contain("blindaje_nivel", "NIVEL_3").And.Contain("vehicle_fuel", "ETANOL");
+        fv.Keys.Should().NotContain(["blindaje", "cambio_combustible", "cambio_color", "cambio_carroceria"]);
     }
 
     [Fact]
-    public async Task TransactionTypePrincipal5SinTransformaciones_NoEsCambioDeColor()
+    public async Task NivelFueraDeCatalogo_NoEnviaNivel()
     {
-        // El validador trata transaction_type principal 5 como blindaje; aquí solo manda master.Transformations.
-        var master = Master(transactionType: 5);
-        master.ArmorLevelNumberId = 1;
-        var fv = await FieldValuesAsync(master);
+        var master = Master();
+        master.ArmorLevelNumberId = 5;
+        var fv = await FieldValuesAsync(ConTransformacion(5, master));
 
-        fv.Keys.Should().NotContain(ClavesDelBug);
+        fv.Should().Contain("blindaje", "true");
+        fv.Keys.Should().NotContain("blindaje_nivel");
     }
 
     [Fact]
     public async Task VariasTransformaciones_SeSuman()
     {
-        var master = ConTransformacion(17, ConTransformacion(5));
+        var master = Master();
+        master.ArmorLevelNumberId = 1;
+        master.NewVehicleFuelType = 1;
+        master = ConTransformacion(9, ConTransformacion(7, ConTransformacion(6, ConTransformacion(5, master))));
         var fv = await FieldValuesAsync(master);
 
-        fv.Should().Contain("cambio_color", "true").And.Contain("cambio_carroceria", "true");
+        fv.Should().Contain("blindaje", "true")
+            .And.Contain("blindaje_nivel", "NIVEL_1")
+            .And.Contain("cambio_carroceria", "true")
+            .And.Contain("cambio_color", "true")
+            .And.Contain("cambio_combustible", "true")
+            .And.Contain("vehicle_fuel", "GASOLINA");
+    }
+
+    // ---------- Catálogo DDL (sin PostgreSQL: se lee el script embebido) ----------
+
+    [Fact]
+    public void Ddl27_SeEmbebeDespuesDel12YDel13_YCorrigeElCatalogoSinBorrarEl17()
+    {
+        var scripts = EmbeddedDdl.AllScriptsInOrder().ToList();
+        const string script27 = "27-ICT-transformation-type-tipo-tramite.sql";
+        scripts.Should().Contain(script27);
+        scripts.IndexOf(script27).Should().BeGreaterThan(scripts.IndexOf("13-ICT-master-transformations.sql"));
+
+        var sql = EmbeddedDdl.LoadUp(script27);
+        sql.Should().Contain("(5, 'Blindaje')")
+            .And.Contain("(6, 'Cambio de Carrocería')")
+            .And.Contain("(7, 'Cambio de Color')")
+            .And.Contain("(9, 'Conversiones de Combustible')")
+            .And.Contain("SET is_active = false")
+            .And.Contain("WHERE NOT EXISTS");
+        sql.Should().NotContainEquivalentOf("DELETE FROM");
     }
 
     // ---------- Prenda ----------
