@@ -54,7 +54,11 @@ Cada cambio queda en `audit.audit_logs` con el superadministrador en `updated_by
 ## 4. Habilitar el envío de adjuntos (HU #13263, contrato v3.2 §7)
 
 Un cliente ya dado de alta recibe el permiso nuevo `external.tramites.attachments.write` **sin rotar el secreto**.
-`PATCH` reemplaza la lista completa de permisos: enviar los vigentes más el nuevo.
+
+**Desde la UI (recomendado):** Usuarios → Clientes de integración → editar el cliente → marcar «Envío de adjuntos» →
+Guardar cambios. El listado muestra la etiqueta «Adjuntos». El formulario conserva los permisos que no administra.
+
+**Por API (alternativa):** `PATCH` reemplaza la lista completa de permisos: enviar los vigentes más el nuevo.
 
 ```http
 PATCH /api/v1/admin/external-clients/{id}

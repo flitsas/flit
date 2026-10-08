@@ -13,6 +13,8 @@ const BASE = "/api/v1/admin/external-clients";
 /** Permisos que puede tener un cliente externo (ADR-0067). */
 export const EXTERNAL_SCOPE_READ = "external.tramites.read";
 export const EXTERNAL_SCOPE_PII = "external.tramites.pii.read";
+/** Feature #13261 (HU #13263): envío del comprobante de impuesto (POST /external/tramites/{id}/adjuntos). */
+export const EXTERNAL_SCOPE_ATTACHMENTS = "external.tramites.attachments.write";
 
 /** Mismo formato que exige el backend (ck_external_clients_client_id_formato, DDL 125). */
 export const EXTERNAL_CLIENT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,63}$/;
