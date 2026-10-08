@@ -1802,7 +1802,7 @@ public static class DevelopmentAuthSeeder
     /// <summary>
     /// HU #12239 (Feature #12236) -- banners promocionales
     /// (ADR-0058-banners-tabla-global-sin-tenant-excepcion) -- modulo banners + permiso
-    /// banners.manage, concedido a SuperAdmin y AdminCompany. Metodo propio e idempotente,
+    /// banners.manage, concedido SOLO a SuperAdmin (HU #13438, Épica #12750). Metodo propio e idempotente,
     /// separado de SeedBaseModulesAsync por el mismo motivo que SeedGeneracionDocumentalPermissionsAsync
     /// (ese metodo hace early-return si el modulo dashboard ya existe).
     /// </summary>
@@ -1848,25 +1848,33 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        // HU #13438: la gestión de banners es exclusiva del Super Admin FLIT. Además de conceder el permiso a
+        // SuperAdmin, retira cualquier grant sobre otro rol (bases ya sembradas con AdminCompany o roles
+        // personalizados), de modo que el seeder converge al mismo estado que la migración 133.
+        var superAdminRoleIds = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .Select(r => r.Id)
+            .ToListAsync(ct);
+        foreach (var roleId in superAdminRoleIds)
         {
-            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
-            foreach (var role in roles)
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == roleId && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
             {
-                var alreadyGranted = await db.RoleGrants
-                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
-                if (!alreadyGranted)
+                db.RoleGrants.Add(new RoleGrant
                 {
-                    db.RoleGrants.Add(new RoleGrant
-                    {
-                        Id = Guid.CreateVersion7(),
-                        RoleId = role.Id,
-                        PermissionId = action.Id,
-                        CreatedAt = now,
-                    });
-                }
+                    Id = Guid.CreateVersion7(),
+                    RoleId = roleId,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
             }
         }
+
+        var strayGrants = await db.RoleGrants
+            .Where(g => g.PermissionId == action.Id && !superAdminRoleIds.Contains(g.RoleId))
+            .ToListAsync(ct);
+        db.RoleGrants.RemoveRange(strayGrants);
 
         await db.SaveChangesAsync(ct);
     }
