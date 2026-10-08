@@ -47,11 +47,11 @@ describe("Contenedor de pestañas — modelo de guardado", () => {
     expect(screen.queryByText("Cambios sin guardar")).not.toBeInTheDocument();
   });
 
-  it("«Guardar todo» no aparece fuera del PUT (Productos, Documentos, Historial)", async () => {
+  it("«Guardar todo» no aparece fuera del PUT (Documentos, Historial)", async () => {
     const user = userEvent.setup();
     render(<CompanyConfigTabs settings={settings} onSaveSettings={vi.fn()} {...slots} />);
 
-    expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /guardar todo/i })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Documentos" }));
     expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /historial/i }));
@@ -64,27 +64,27 @@ describe("Contenedor de pestañas — modelo de guardado", () => {
     const user = userEvent.setup();
     render(<CompanyConfigTabs settings={settings} onSaveSettings={vi.fn()} {...slots} />);
 
-    const productos = screen.getByRole("tab", { name: "Productos" });
-    productos.focus();
-    expect(productos).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("tabindex", "-1");
+    const primera = screen.getByRole("tab", { name: "Trámites" });
+    primera.focus();
+    expect(primera).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: /configuración empresa/i })).toHaveAttribute("tabindex", "-1");
 
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: /configuración empresa/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /configuración empresa/i })).toHaveFocus();
 
     await user.keyboard("{End}");
     expect(screen.getByRole("tab", { name: /historial/i })).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "Productos" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{ArrowLeft}");
     expect(screen.getByRole("tab", { name: /historial/i })).toHaveFocus();
     await user.keyboard("{Home}");
-    expect(screen.getByRole("tab", { name: "Productos" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveFocus();
 
     const panel = screen.getByRole("tabpanel");
-    expect(panel).toHaveAttribute("aria-labelledby", screen.getByRole("tab", { name: "Productos" }).id);
-    expect(screen.getByRole("tab", { name: "Productos" })).toHaveAttribute("aria-controls", panel.id);
+    expect(panel).toHaveAttribute("aria-labelledby", screen.getByRole("tab", { name: "Trámites" }).id);
+    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("aria-controls", panel.id);
   });
 });
 
@@ -144,12 +144,12 @@ describe("Pestaña Configuración Empresa — estructura", () => {
   it("agrupa por intención en tarjetas con título y ofrece un índice de anclas con nombre accesible", async () => {
     await abrir();
 
-    const titulos = ["Firma y documentos", "Notificaciones", "Cobro y recaudo", "Consultas y fuentes"];
+    const titulos = ["Firma y documentos", "Módulos activos del dashboard", "Notificaciones", "Cobro y recaudo", "Consultas y fuentes"];
     for (const t of titulos) {
       expect(screen.getByRole("heading", { level: 3, name: t })).toBeInTheDocument();
     }
     const nav = screen.getByRole("navigation", { name: /bloques de configuración/i });
-    expect(within(nav).getAllByRole("link")).toHaveLength(5);
+    expect(within(nav).getAllByRole("link")).toHaveLength(6);
     expect(within(nav).getByRole("link", { name: "Ir al bloque Cobro y recaudo" })).toHaveAttribute("href", "#cfg-recaudo");
     expect(screen.getByText("panel-organismos")).toBeInTheDocument();
   });
