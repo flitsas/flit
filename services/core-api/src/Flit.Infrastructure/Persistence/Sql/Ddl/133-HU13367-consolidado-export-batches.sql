@@ -34,14 +34,14 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_settings (
     item_slots            smallint    NOT NULL DEFAULT 2
         CONSTRAINT ck_consolidado_export_settings_item_slots CHECK (item_slots BETWEEN 1 AND 6),
     item_timeout_seconds  integer     NOT NULL DEFAULT 300
-        CONSTRAINT ck_consolidado_export_settings_item_timeout CHECK (item_timeout_seconds > 0),
+        CONSTRAINT ck_consolidado_export_settings_item_timeout CHECK (item_timeout_seconds BETWEEN 1 AND 3600),
     item_lease_seconds    integer     NOT NULL DEFAULT 600,
     max_item_attempts     smallint    NOT NULL DEFAULT 3
         CONSTRAINT ck_consolidado_export_settings_max_item_attempts CHECK (max_item_attempts BETWEEN 1 AND 10),
     retry_delay_seconds   integer     NOT NULL DEFAULT 30
-        CONSTRAINT ck_consolidado_export_settings_retry_delay CHECK (retry_delay_seconds >= 5),
+        CONSTRAINT ck_consolidado_export_settings_retry_delay CHECK (retry_delay_seconds BETWEEN 5 AND 3600),
     part_timeout_seconds  integer     NOT NULL DEFAULT 1200
-        CONSTRAINT ck_consolidado_export_settings_part_timeout CHECK (part_timeout_seconds > 0),
+        CONSTRAINT ck_consolidado_export_settings_part_timeout CHECK (part_timeout_seconds BETWEEN 1 AND 7200),
     part_lease_seconds    integer     NOT NULL DEFAULT 1800,
     max_part_attempts     smallint    NOT NULL DEFAULT 3
         CONSTRAINT ck_consolidado_export_settings_max_part_attempts CHECK (max_part_attempts BETWEEN 1 AND 10),
@@ -61,8 +61,10 @@ CREATE TABLE IF NOT EXISTS tramites.consolidado_export_settings (
     updated_by            uuid        NULL,
     row_version           bigint      NOT NULL DEFAULT 0,
     -- Invariante de no-solapamiento (D2): una ejecución nunca sobrevive a su propio lease.
-    CONSTRAINT ck_consolidado_export_settings_item_lease CHECK (item_lease_seconds > item_timeout_seconds),
-    CONSTRAINT ck_consolidado_export_settings_part_lease CHECK (part_lease_seconds > part_timeout_seconds)
+    -- Security L1: tiempos y leases con tope (horas, no int.MaxValue) para que un worker caído no deje ítems ni
+    -- partes arrendados indefinidamente. Rangos inclusivos; paridad con ConsolidadoExportSettingsRangos.
+    CONSTRAINT ck_consolidado_export_settings_item_lease CHECK (item_lease_seconds > item_timeout_seconds AND item_lease_seconds <= 7200),
+    CONSTRAINT ck_consolidado_export_settings_part_lease CHECK (part_lease_seconds > part_timeout_seconds AND part_lease_seconds <= 14400)
 );
 
 -- Fila única: misma llave constante para todas las filas (patrón uq_notification_test_settings_singleton).
@@ -89,8 +91,8 @@ COMMENT ON TABLE tramites.consolidado_export_settings IS
 COMMENT ON COLUMN tramites.consolidado_export_settings.max_pdfs_per_part IS 'N: PDF por parte ZIP. Recalibrar con la medición P-1 (N ≈ M / p50).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.max_mb_per_part IS 'M: MB de PDF en claro por parte. Lo limita la descarga como blob en el navegador.';
 COMMENT ON COLUMN tramites.consolidado_export_settings.item_slots IS 'Ítems concurrentes del motor por instancia = tope de generaciones de PDF del lote (v2, antes k_total).';
-COMMENT ON COLUMN tramites.consolidado_export_settings.item_lease_seconds IS 'Lease del reclamo de ítem; siempre > item_timeout_seconds (sin heartbeat).';
-COMMENT ON COLUMN tramites.consolidado_export_settings.retry_delay_seconds IS 'Espera antes de reintentar un ítem por error técnico (v2: 30 s, mínimo 5).';
+COMMENT ON COLUMN tramites.consolidado_export_settings.item_lease_seconds IS 'Lease del reclamo de ítem; siempre > item_timeout_seconds (sin heartbeat) y <= 7200 s.';
+COMMENT ON COLUMN tramites.consolidado_export_settings.retry_delay_seconds IS 'Espera antes de reintentar un ítem por error técnico (v2: 30 s, de 5 a 3600).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.retention_hours IS 'Horas que se conservan las partes tras terminar el lote (H6a: 24). Luego, borrado criptográfico.';
 COMMENT ON COLUMN tramites.consolidado_export_settings.max_items_per_batch IS 'M1: tope total de trámites de un lote (todos los orígenes, modos ids y filtro), contado sobre la selección resuelta (exclusiones e intersección de seguridad aplicadas). Superarlo = 422 seleccion_excede_tope sin crear nada. 1–32.766 (part_number smallint: como mucho una parte por ítem más la 0/0); por defecto 10.000. Lo edita el Super Admin (HU #13420).';
 COMMENT ON COLUMN tramites.consolidado_export_settings.is_active IS 'Interruptor del motor. false = no se crean lotes ni se reclaman ítems (semántica exacta en el backend).';

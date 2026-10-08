@@ -12039,7 +12039,8 @@ paths:
       description: >
         Solo SuperAdmin. Todos los campos son obligatorios (un nulo o ausente es 400 en su campo). Rangos idénticos a
         los CHECK del DDL 133 (ver `ParametrosMotorLote.limites`); además `itemLeaseSeconds > itemTimeoutSeconds` y
-        `partLeaseSeconds > partTimeoutSeconds`. Concurrencia optimista: `rowVersion` es el leído en el GET; si otro
+        `partLeaseSeconds > partTimeoutSeconds`. Todos los tiempos tienen tope (Security L1): `itemTimeoutSeconds` y
+        `retryDelaySeconds` ≤ 3600, `partTimeoutSeconds` ≤ 7200, `itemLeaseSeconds` ≤ 7200 y `partLeaseSeconds` ≤ 14400. Concurrencia optimista: `rowVersion` es el leído en el GET; si otro
         Super Admin guardó después, 409 `row_version_conflict` y no se escribe nada. Guarda `updated_by`/`updated_at`
         y el trigger `trg_audit_log` deja en `audit.audit_logs` los valores anterior y nuevo. El alta de lotes y el
         motor leen la fila en cada uso: el cambio aplica sin reiniciar y no altera los lotes ya creados. Con
@@ -12613,10 +12614,12 @@ components:
         itemTimeoutSeconds:
           type: integer
           minimum: 1
+          maximum: 3600
           description: "Tiempo máximo por trámite, en segundos."
         itemLeaseSeconds:
           type: integer
-          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds`."
+          maximum: 7200
+          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds` y como mucho 7200."
         maxItemAttempts:
           type: integer
           minimum: 1
@@ -12625,14 +12628,17 @@ components:
         retryDelaySeconds:
           type: integer
           minimum: 5
+          maximum: 3600
           description: "Espera entre reintentos de un trámite, en segundos."
         partTimeoutSeconds:
           type: integer
           minimum: 1
+          maximum: 7200
           description: "Tiempo máximo por parte, en segundos."
         partLeaseSeconds:
           type: integer
-          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds`."
+          maximum: 14400
+          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds` y como mucho 14400."
         maxPartAttempts:
           type: integer
           minimum: 1
@@ -12688,10 +12694,12 @@ components:
         itemTimeoutSeconds:
           type: integer
           minimum: 1
+          maximum: 3600
           description: "Tiempo máximo por trámite, en segundos."
         itemLeaseSeconds:
           type: integer
-          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds`."
+          maximum: 7200
+          description: "Lease del reclamo de un trámite, en segundos; mayor que `itemTimeoutSeconds` y como mucho 7200."
         maxItemAttempts:
           type: integer
           minimum: 1
@@ -12700,14 +12708,17 @@ components:
         retryDelaySeconds:
           type: integer
           minimum: 5
+          maximum: 3600
           description: "Espera entre reintentos de un trámite, en segundos."
         partTimeoutSeconds:
           type: integer
           minimum: 1
+          maximum: 7200
           description: "Tiempo máximo por parte, en segundos."
         partLeaseSeconds:
           type: integer
-          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds`."
+          maximum: 14400
+          description: "Lease del empaquetado de una parte, en segundos; mayor que `partTimeoutSeconds` y como mucho 14400."
         maxPartAttempts:
           type: integer
           minimum: 1

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Security;
@@ -294,27 +295,73 @@ public sealed class ParametrosMotorLoteIntegrationTests(PostgresDatabaseFixture 
 
         foreach (var rango in ConsolidadoExportSettingsRangos.Todos)
         {
-            (await IntentarAsync(cn, rango.Columna, rango.Minimo)).Should().BeNull($"{rango.Columna} = {rango.Minimo} es válido");
-            (await IntentarAsync(cn, rango.Columna, rango.Minimo - 1)).Should().Be(rango.Restriccion);
+            // Un timeout en su tope solo cabe si su lease lo supera: el lease va a su propio máximo en el mismo UPDATE.
+            var lease = ConsolidadoExportSettingsRangos.ReglasLease.SingleOrDefault(r => r.ColumnaTimeout == rango.Columna);
+            var extra = lease is null ? null : $"{lease.ColumnaLease} = {lease.Maximo.ToString(CultureInfo.InvariantCulture)}";
+            (await IntentarAsync(cn, rango.Columna, rango.Minimo, extra: extra)).Should().BeNull($"{rango.Columna} = {rango.Minimo} es válido");
+            (await IntentarAsync(cn, rango.Columna, rango.Minimo - 1, extra: extra)).Should().Be(rango.Restriccion);
             if (rango.SinMaximo)
                 continue;
-            (await IntentarAsync(cn, rango.Columna, rango.Maximo)).Should().BeNull($"{rango.Columna} = {rango.Maximo} es válido");
-            (await IntentarAsync(cn, rango.Columna, rango.Maximo + 1)).Should().Be(rango.Restriccion);
+            (await IntentarAsync(cn, rango.Columna, rango.Maximo, extra: extra)).Should().BeNull($"{rango.Columna} = {rango.Maximo} es válido");
+            (await IntentarAsync(cn, rango.Columna, rango.Maximo + 1, extra: extra)).Should().Be(rango.Restriccion);
         }
 
         foreach (var regla in ConsolidadoExportSettingsRangos.ReglasLease)
             (await IntentarAsync(cn, regla.ColumnaLease, null, $"{regla.ColumnaTimeout}")).Should().Be(regla.Restriccion);
     }
 
+    /// <summary>
+    /// Security L1 — los tiempos del motor y sus leases tienen tope en la base real, inclusivo e idéntico a
+    /// <see cref="ConsolidadoExportSettingsRangos"/>: un valor cercano a <c>int.MaxValue</c> lo rechaza el CHECK.
+    /// </summary>
+    [PostgresFact]
+    public async Task L1_LosTiemposYLeasesDelMotor_TienenTope_EnLaBaseReal()
+    {
+        await SembrarSettingsAsync();
+        await using var cn = await Fixture.OpenConnectionAsync();
+
+        foreach (var (columna, restriccion, maximo) in new[]
+                 {
+                     ("item_timeout_seconds", "ck_consolidado_export_settings_item_timeout", 3600),
+                     ("retry_delay_seconds", "ck_consolidado_export_settings_retry_delay", 3600),
+                     ("part_timeout_seconds", "ck_consolidado_export_settings_part_timeout", 7200),
+                 })
+        {
+            var rango = ConsolidadoExportSettingsRangos.Todos.Single(r => r.Columna == columna);
+            rango.Maximo.Should().Be(maximo);
+            var lease = ConsolidadoExportSettingsRangos.ReglasLease.SingleOrDefault(r => r.ColumnaTimeout == columna);
+            var extra = lease is null ? null : $"{lease.ColumnaLease} = {lease.Maximo.ToString(CultureInfo.InvariantCulture)}";
+            (await IntentarAsync(cn, columna, maximo, extra: extra)).Should().BeNull($"{columna} = {maximo} es válido");
+            (await IntentarAsync(cn, columna, maximo + 1, extra: extra)).Should().Be(restriccion);
+            // Con int.MaxValue el timeout también rompería su lease: el extremo absurdo se prueba donde no hay lease.
+            if (lease is null)
+                (await IntentarAsync(cn, columna, int.MaxValue)).Should().Be(restriccion);
+        }
+
+        foreach (var (columna, restriccion, maximo) in new[]
+                 {
+                     ("item_lease_seconds", "ck_consolidado_export_settings_item_lease", 7200),
+                     ("part_lease_seconds", "ck_consolidado_export_settings_part_lease", 14_400),
+                 })
+        {
+            ConsolidadoExportSettingsRangos.ReglasLease.Single(r => r.ColumnaLease == columna).Maximo.Should().Be(maximo);
+            (await IntentarAsync(cn, columna, maximo)).Should().BeNull($"{columna} = {maximo} es válido");
+            (await IntentarAsync(cn, columna, maximo + 1)).Should().Be(restriccion);
+            (await IntentarAsync(cn, columna, int.MaxValue)).Should().Be(restriccion);
+        }
+    }
+
     /// <summary>UPDATE en una transacción revertida; devuelve la restricción violada o <c>null</c> si se aceptó.</summary>
-    private static async Task<string?> IntentarAsync(NpgsqlConnection cn, string columna, int? valor, string? expresion = null)
+    private static async Task<string?> IntentarAsync(
+        NpgsqlConnection cn, string columna, int? valor, string? expresion = null, string? extra = null)
     {
         await using var tx = await cn.BeginTransactionAsync(Ct);
         try
         {
-            // Columna del catálogo de Rangos (constante), nunca de entrada externa; el valor va parametrizado.
+            // Columnas y literal del catálogo de Rangos (constantes), nunca de entrada externa; el valor va parametrizado.
             await using var cmd = new NpgsqlCommand(
-                $"UPDATE tramites.consolidado_export_settings SET {columna} = {expresion ?? "@v"}", cn, tx);
+                $"UPDATE tramites.consolidado_export_settings SET {columna} = {expresion ?? "@v"}"
+                + (extra is null ? string.Empty : ", " + extra), cn, tx);
             if (valor is { } v)
                 cmd.Parameters.AddWithValue("v", v);
             await cmd.ExecuteNonQueryAsync(Ct);

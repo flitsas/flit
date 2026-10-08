@@ -25,7 +25,7 @@ public sealed class ConsolidadoExportSettings
 
     public short MaxItemAttempts { get; set; }
 
-    /// <summary>Espera antes de reintentar un ítem por error técnico (mínimo 5 s, por defecto 30).</summary>
+    /// <summary>Espera antes de reintentar un ítem por error técnico (5–3600 s, por defecto 30).</summary>
     public int RetryDelaySeconds { get; set; }
 
     public int PartTimeoutSeconds { get; set; }

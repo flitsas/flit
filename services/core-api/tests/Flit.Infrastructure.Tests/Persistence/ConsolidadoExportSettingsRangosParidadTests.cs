@@ -70,9 +70,56 @@ public sealed class ConsolidadoExportSettingsRangosParidadTests
         var tabla = TablaSettings();
         foreach (var regla in ConsolidadoExportSettingsRangos.ReglasLease)
             tabla.Should().Contain(
-                $"CONSTRAINT {regla.Restriccion} CHECK ({regla.ColumnaLease} > {regla.ColumnaTimeout})");
+                $"CONSTRAINT {regla.Restriccion} CHECK ({regla.ColumnaLease} > {regla.ColumnaTimeout} " +
+                $"AND {regla.ColumnaLease} <= {regla.Maximo.ToString(CultureInfo.InvariantCulture)})");
 
-        Regex.Matches(tabla, @"CHECK \((\w+)_lease_seconds > (\w+)_timeout_seconds\)").Should().HaveCount(2);
+        Regex.Matches(tabla, @"CHECK \((\w+)_lease_seconds > (\w+)_timeout_seconds AND \w+_lease_seconds <= \d+\)")
+            .Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Security L1 (épica #13216) — los tiempos del motor tienen tope superior en el DDL 133 y en
+    /// <see cref="ConsolidadoExportSettingsRangos"/>: sin él, un Super Admin (o una cuenta comprometida) podía fijar valores
+    /// cercanos a <c>int.MaxValue</c> y, si un worker caía, ítems y partes quedaban arrendados indefinidamente.
+    /// </summary>
+    [Theory]
+    [InlineData("ck_consolidado_export_settings_item_timeout", "item_timeout_seconds", 1, 3600)]
+    [InlineData("ck_consolidado_export_settings_retry_delay", "retry_delay_seconds", 5, 3600)]
+    [InlineData("ck_consolidado_export_settings_part_timeout", "part_timeout_seconds", 1, 7200)]
+    public void L1_LosTiemposDelMotor_TienenTope_EnElDdl133_YEnRangos(string restriccion, string columna, int minimo, int maximo)
+    {
+        ChecksDeUnaColumna()[restriccion].Should().Be((columna, minimo, maximo), "el CHECK del DDL 133 acota {0}", columna);
+
+        var rango = ConsolidadoExportSettingsRangos.Todos.Single(r => r.Restriccion == restriccion);
+        (rango.Columna, rango.Minimo, rango.Maximo).Should().Be((columna, minimo, maximo));
+        rango.SinMaximo.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("ck_consolidado_export_settings_item_lease", "item_lease_seconds", 7200)]
+    [InlineData("ck_consolidado_export_settings_part_lease", "part_lease_seconds", 14_400)]
+    public void L1_LosLeases_TienenTope_EnElDdl133_YEnRangos(string restriccion, string columna, int maximo)
+    {
+        var regla = ConsolidadoExportSettingsRangos.ReglasLease.Single(r => r.Restriccion == restriccion);
+        regla.ColumnaLease.Should().Be(columna);
+        regla.Maximo.Should().Be(maximo);
+
+        TablaSettings().Should().Contain(
+            $"CHECK ({columna} > {regla.ColumnaTimeout} AND {columna} <= {maximo.ToString(CultureInfo.InvariantCulture)})");
+    }
+
+    [Fact]
+    public void L1_LosValoresPorDefectoDelDdl133_CabenEnLosTopes()
+    {
+        var tabla = TablaSettings();
+        int PorDefecto(string columna) => int.Parse(
+            Regex.Match(tabla, columna + @"\s+integer\s+NOT NULL DEFAULT (\d+)").Groups[1].Value, CultureInfo.InvariantCulture);
+
+        foreach (var rango in ConsolidadoExportSettingsRangos.Todos.Where(r => r.Columna.EndsWith("_seconds", StringComparison.Ordinal)))
+            PorDefecto(rango.Columna).Should().BeInRange(rango.Minimo, rango.Maximo, rango.Columna);
+        foreach (var regla in ConsolidadoExportSettingsRangos.ReglasLease)
+            PorDefecto(regla.ColumnaLease).Should()
+                .BeGreaterThan(PorDefecto(regla.ColumnaTimeout)).And.BeLessThanOrEqualTo(regla.Maximo, regla.ColumnaLease);
     }
 
     [Fact]
