@@ -306,7 +306,7 @@ describe("Bandeja OT — «Descargar ZIP» de maestros (HU #13394)", { timeout: 
   });
 
   it.each([
-    ["422", new ConsolidadoLotesApiError(422, null), /tope de 10\.000/, true],
+    ["422", new ConsolidadoLotesApiError(422, "seleccion_excede_tope", null, 12345, 5000), /tope de 5\.000/, true],
     ["503", new ConsolidadoLotesApiError(503, "auditoria_no_registrada"), /^No se pudo completar la descarga, intente de nuevo$/, true],
     ["red", new ConsolidadoLotesApiError(0, null), /^No se pudo completar la descarga, intente de nuevo$/, true],
     ["403", new ConsolidadoLotesApiError(403, null), /No tienes permiso/, false],

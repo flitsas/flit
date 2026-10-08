@@ -229,13 +229,13 @@ describe('DescargaMasivaConfirmModal — HU #13381', () => {
     expect(await within(dialogo()).findByText(/Ya hay una descarga en curso/)).toBeInTheDocument();
   });
 
-  it('AC4 — 422: muestra el mensaje de tope y no crea', async () => {
+  it('AC4 — 422: muestra el mensaje de tope con `total`/`tope` del servidor (HU #13420) y no crea', async () => {
     const user = userEvent.setup();
-    servidor(() => respuesta(422, { error: 'seleccion_invalida' }));
+    servidor(() => respuesta(422, { error: 'seleccion_excede_tope', total: 12345, tope: 5000 }));
     const props = montarModal();
     await user.click(botonConfirmar());
     const alerta = await within(dialogo()).findByRole('alert');
-    expect(alerta).toHaveTextContent(/tope de 10\.000/);
+    expect(alerta).toHaveTextContent(/12\.345 trámites y supera el tope de 5\.000/);
     expect(props.onCreado).not.toHaveBeenCalled();
   });
 

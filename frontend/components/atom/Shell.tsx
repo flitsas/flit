@@ -66,6 +66,7 @@ import {
   Route,
   X,
   FileText,
+  FileArchive,
   ClipboardList,
   ListChecks,
   Monitor,
@@ -384,6 +385,14 @@ export function Shell({
         icon: Bell,
         active: pathname.startsWith("/admin/plataforma/notificaciones"),
         onClick: () => router.push("/admin/plataforma/notificaciones"),
+      },
+      // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
+      {
+        key: "admin-descarga-masiva",
+        label: "Descarga masiva",
+        icon: FileArchive,
+        active: pathname.startsWith("/admin/plataforma/descarga-masiva"),
+        onClick: () => router.push("/admin/plataforma/descarga-masiva"),
       },
     );
   }
