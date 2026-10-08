@@ -1378,7 +1378,7 @@ public static class DevelopmentAuthSeeder
             ("ict.reportes.read", "Ver reportes ICT", "/api/v1/analytics/ict-reports"),
         ];
 
-        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites];
+        string[] targetRoleCodes = ["SuperAdmin", "admin_tramites"]; // staging no tiene ProductRoleCodes (multi-producto); mismo valor que la constante en develop
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
