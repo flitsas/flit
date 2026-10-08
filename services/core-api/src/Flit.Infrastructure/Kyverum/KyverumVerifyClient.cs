@@ -156,7 +156,9 @@ internal sealed class KyverumVerifyClient(
             // La ÚNICA señal fiable de cierre real es `result.closedAt` (no-null solo cuando la validación
             // CERRÓ en el proveedor). Por eso:
             //   - aprobado=true            → "aprobado" (terminal, siempre).
-            //   - rechazo CON closedAt     → "rechazado" (terminal: Kyverum cerró la validación).
+            //   - rechazo CON closedAt     → "rechazado". Tampoco es terminal por sí solo: Kyverum trae closedAt
+            //                                también tras un intento intermedio; el reconciliador solo cierra con
+            //                                los intentos agotados (IdentityValidationReconciler).
             //   - rechazo SIN closedAt     → "rechazado_intento" (no terminal: el reconciliador decide con
             //                                el conteo de intentos autoritativo del webhook).
             // "rechazo" cubre tanto `result.aprobado=false` como el status top-level `rechazado` — ambas son

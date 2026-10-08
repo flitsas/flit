@@ -592,6 +592,24 @@ public static class BiometricRules
     /// </summary>
     public const int KyverumMaxReconcilePolls = 3;
 
+    /// <summary>
+    /// ¿Es un rechazo de Kyverum aplicado ANTES de agotar los intentos? Pasaba cuando la consulta de estado traía
+    /// <c>result.closedAt</c> tras un intento intermedio y se tomaba como cierre: la persona seguía con intentos en el
+    /// mismo enlace, aprobaba, y el aprobado se descartaba porque la fila ya era terminal. Una fila así se sigue
+    /// consultando y un aprobado de Kyverum sobre la MISMA verificación la reemplaza. No aplica al flujo manual (otro
+    /// proveedor, o rechazo de la revisión humana con motivo) ni a un rechazo con los intentos agotados.
+    /// </summary>
+    public static bool EsRechazoKyverumConIntentosDisponibles(ProcedureInstanceBiometricValidation validation)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        return validation.Status == BiometricEstados.Rechazado
+            && string.Equals(validation.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(validation.KyverumVerificationId)
+            && validation.RejectionReasonCode is null
+            && validation.MaxAttempts > 0
+            && validation.Attempts < validation.MaxAttempts;
+    }
+
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
 
