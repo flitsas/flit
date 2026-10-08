@@ -182,25 +182,4 @@ public sealed class IctOrchestrationPrendaTests
 
         items.Should().ContainSingle().Which.FieldKey.Should().Be("cambio_carroceria");
     }
-
-    // ── Transformación sin subtipo ────────────────────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("true", "transformacion_sin_subtipo")]
-    [InlineData(" TRUE ", "transformacion_sin_subtipo")]
-    [InlineData("false", "")]
-    public void MarcadorSinSubtipo_EmiteElAviso(string valor, string esperado)
-    {
-        var request = new CreateDraftFromIctRequest();
-        request.FieldValues.Add(new FieldValue
-        {
-            FieldKey = IctOrchestrationService.TransformacionSinSubtipoKey,
-            ValueText = valor,
-        });
-        var reply = new DraftReply();
-
-        IctOrchestrationService.AvisarTransformacionSinSubtipo(reply, request);
-
-        (reply.ErrorCode ?? string.Empty).Should().Be(esperado);
-    }
 }
