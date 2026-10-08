@@ -61,8 +61,10 @@ public sealed class ReconciliarIdentidadHandler(
             || string.IsNullOrWhiteSpace(v.KyverumVerificationId))
             return (null, "no_kyverum");
 
-        // Solo tiene sentido consultar mientras está pendiente; terminal → nada que reconciliar.
-        if (v.Status is not (BiometricEstados.EnProceso or BiometricEstados.Enviado))
+        // Solo tiene sentido consultar mientras está pendiente; terminal → nada que reconciliar. El rechazo aplicado
+        // antes de agotar los intentos se sigue consultando: la persona pudo aprobar en un intento posterior.
+        if (v.Status is not (BiometricEstados.EnProceso or BiometricEstados.Enviado)
+            && !BiometricRules.EsRechazoKyverumConIntentosDisponibles(v))
             return (new ReconciliarIdentidadResult(v.Status, false), null);
 
         KyverumVerifyStatus? status;

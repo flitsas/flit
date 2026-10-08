@@ -434,8 +434,10 @@ public sealed class KyverumWebhookHandler(
             return (null, "firma_invalida");
         }
 
-        // Idempotencia: estados terminales no se re-procesan (AC2).
-        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        // Idempotencia: estados terminales no se re-procesan (AC2), salvo el rechazo aplicado antes de agotar los
+        // intentos: un aprobado posterior del mismo enlace lo reemplaza (el applier decide).
+        if ((v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            && !BiometricRules.EsRechazoKyverumConIntentosDisponibles(v))
             return ("ok", null);
 
         return await ApplyFromBodyAsync(v, input.RawBody, ct);
@@ -589,7 +591,8 @@ public sealed class KyverumWebhookHandler(
     private async Task<(string? Result, string? Error)> ReconcileFromKyverumAsync(
         ProcedureInstanceBiometricValidation v, CancellationToken ct)
     {
-        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        if ((v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            && !BiometricRules.EsRechazoKyverumConIntentosDisponibles(v))
             return ("ok", null);
         if (string.IsNullOrWhiteSpace(v.KyverumVerificationId))
             return ("ok", null); // sin id no hay cómo consultar; el worker/reintento lo cubrirá.

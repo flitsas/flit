@@ -155,12 +155,34 @@ export function canReadLogQx(payload: JwtPayload | null): boolean {
   return isSuperAdmin(payload) || hasPermission(payload, LOG_QX_READ_PERMISSION);
 }
 
-/** Permiso del submódulo de observabilidad ICT (HU10893). */
+/**
+ * Permiso histórico del submódulo de observabilidad ICT (HU10893). Desde el Bug #13445 ya NO abre Log ICT en la
+ * interfaz (es solo del SuperAdmin); se conserva porque el backend lo sigue emitiendo.
+ */
 export const ICT_LOGS_READ_PERMISSION = "ict.logs.read";
 
-/** Puede ver los logs/alertas de Integración con Terceros: permiso `ict.logs.read` o SuperAdmin. */
+/** Permiso de lectura de Trazabilidad ICT (Bug #13445, D10): lo tiene el Admin Company. */
+export const ICT_TRAZABILIDAD_READ_PERMISSION = "ict.trazabilidad.read";
+
+/** Permiso de lectura de Reportes ICT (Bug #13445, D10/D12): lo tiene el Admin Company. */
+export const ICT_REPORTES_READ_PERMISSION = "ict.reportes.read";
+
+/**
+ * Puede ver Log ICT (logs técnicos/alertas de Integración con Terceros): **solo SuperAdmin FLIT** (Bug #13445, D10).
+ * Tener `ict.logs.read` ya no basta.
+ */
 export function canReadIctLogs(payload: JwtPayload | null): boolean {
-  return isSuperAdmin(payload) || hasPermission(payload, ICT_LOGS_READ_PERMISSION);
+  return isSuperAdmin(payload);
+}
+
+/** Puede ver Trazabilidad ICT: permiso `ict.trazabilidad.read` o SuperAdmin (Bug #13445). */
+export function canReadIctTrazabilidad(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_TRAZABILIDAD_READ_PERMISSION);
+}
+
+/** Puede ver Reportes ICT: permiso `ict.reportes.read` o SuperAdmin (Bug #13445). */
+export function canReadIctReportes(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_REPORTES_READ_PERMISSION);
 }
 
 /** Permiso para administrar (CRUD) los clientes de integración ICT (ronda 2, Feature #10888). */

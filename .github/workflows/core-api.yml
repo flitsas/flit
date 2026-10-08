@@ -23,8 +23,9 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    # La suite completa ya cierra entre 17 y 20 min en develop; con 20 el job se cancela
-    # antes de publicar resultados (develop y todos los PRs de backend).
+    # La suite completa ya cierra cerca de 18-22 min en develop; con 20 el job se cancela
+    # antes de publicar resultados (p. ej. PR #545 y #565). Restaura el valor de 6f4fa2a91,
+    # que se perdió al integrar 553a2160e.
     timeout-minutes: 35
     services:
       postgres:

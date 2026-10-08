@@ -30,6 +30,8 @@ import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 import { getToken } from "@/lib/api/client";
 import {
   canReadIctLogs,
+  canReadIctReportes,
+  canReadIctTrazabilidad,
   canReadLogQx,
   decodeJwtPayload,
   isOtUser,
@@ -51,7 +53,10 @@ function HomeContent() {
   const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
   const [isOtAdminUser] = useState<boolean>(() => isOtUser(decodeJwtPayload(getToken())));
   const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
+  // ICT (Bug #13445): Log solo SuperAdmin; Trazabilidad y Reportes por su permiso propio.
   const [canIctLogs] = useState<boolean>(() => canReadIctLogs(decodeJwtPayload(getToken())));
+  const [canIctTrazabilidad] = useState<boolean>(() => canReadIctTrazabilidad(decodeJwtPayload(getToken())));
+  const [canIctReportes] = useState<boolean>(() => canReadIctReportes(decodeJwtPayload(getToken())));
 
   const accessibleCodes = useMemo(
     () => accessibleModules.map((m) => m.code) as ModuleId[],
@@ -67,8 +72,10 @@ function HomeContent() {
         isOtAdmin: isOtAdminUser,
         canReadLogQx: canLogQx,
         canReadIctLogs: canIctLogs,
+        canReadIctTrazabilidad: canIctTrazabilidad,
+        canReadIctReportes: canIctReportes,
       }),
-    [accessibleCodes, isSuperAdminUser, isOtAdminUser, canLogQx, canIctLogs],
+    [accessibleCodes, isSuperAdminUser, isOtAdminUser, canLogQx, canIctLogs, canIctTrazabilidad, canIctReportes],
   );
 
   // Clave estable: evita re-ejecutar el effect por nueva referencia de array.
@@ -183,8 +190,8 @@ function HomeContent() {
         <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />
       )}
       {moduleReady && module === "ict-logs" && canIctLogs && <IctLogs />}
-      {moduleReady && module === "ict-reportes" && canIctLogs && <IctReports />}
-      {moduleReady && module === "ict-trazabilidad" && canIctLogs && <IctTrazabilidad />}
+      {moduleReady && module === "ict-reportes" && canIctReportes && <IctReports />}
+      {moduleReady && module === "ict-trazabilidad" && canIctTrazabilidad && <IctTrazabilidad />}
     </Shell>
   );
 }
