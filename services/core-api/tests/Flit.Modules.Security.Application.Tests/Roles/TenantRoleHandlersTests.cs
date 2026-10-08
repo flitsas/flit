@@ -199,6 +199,36 @@ public sealed class TenantRoleHandlersTests
         await _repo.Received(1).SetPermissionsAsync(RoleId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
     }
 
+    // Revisión PR #575: el tope se valida sobre lo que se agrega, no sobre lo que el rol ya tenía.
+    [Fact]
+    public async Task CambiarPermisos_ConservarUnPermisoQueElAdminNoPosee_NoResponde_NOT_HELD()
+    {
+        var existing = new RoleDetail(RoleId, "COMPANY", "contador", "Contador", null, false, true,
+            [new PermissionSlug(PermUsers.Id, PermUsers.Slug, PermUsers.Name)], "tramites", TenantId);
+        _repo.GetVisibleToTenantAsync(TenantId, RoleId, Arg.Any<CancellationToken>()).Returns(existing);
+        _repo.GetByIdAsync(RoleId, Arg.Any<CancellationToken>()).Returns(existing);
+        string[] caller = ["tramites.read"]; // no posee security.users.read, que el rol ya traía
+
+        await new SetTenantRolePermissionsHandler(_repo).HandleAsync(
+            new SetTenantRolePermissionsCommand(TenantId, RoleId, [PermUsers.Id, PermTramites.Id], caller), CancellationToken.None);
+
+        await _repo.Received(1).SetPermissionsAsync(RoleId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CambiarPermisos_AgregarUnPermisoQueNoPosee_SigueRespondiendo_NOT_HELD()
+    {
+        _repo.GetVisibleToTenantAsync(TenantId, RoleId, Arg.Any<CancellationToken>()).Returns(Role(TenantId));
+        string[] caller = ["tramites.read"];
+
+        var act = () => new SetTenantRolePermissionsHandler(_repo).HandleAsync(
+            new SetTenantRolePermissionsCommand(TenantId, RoleId, [PermUsers.Id], caller), CancellationToken.None);
+
+        var ex = await act.Should().ThrowAsync<PrivilegeCeilingException>();
+        ex.Which.Code.Should().Be(PrivilegeCeilingCodes.NotHeld);
+        await _repo.DidNotReceiveWithAnyArgs().SetPermissionsAsync(default, default!, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CambiarPermisos_ConPermisoDePlataforma_NoGuarda()
     {

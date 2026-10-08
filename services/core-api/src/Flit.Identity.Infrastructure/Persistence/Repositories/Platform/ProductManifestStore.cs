@@ -103,7 +103,7 @@ internal sealed class ProductManifestStore : IProductManifestStore
         foreach (var r in manifest.DefaultRoles)
         {
             var role = await _context.Roles
-                .FirstOrDefaultAsync(x => x.Code == r.Code && x.TargetEntityType == "COMPANY" && x.DeletedAt == null, ct)
+                .FirstOrDefaultAsync(x => x.Code == r.Code && x.TargetEntityType == "COMPANY" && x.TenantId == null && x.DeletedAt == null, ct)
                 .ConfigureAwait(false);
             if (role is null)
             {

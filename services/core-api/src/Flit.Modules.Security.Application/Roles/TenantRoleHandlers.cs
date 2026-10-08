@@ -111,7 +111,11 @@ public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository)
         var permissionIds = command.PermissionIds.Distinct().ToList();
 
         var enabled = await repository.GetEnabledProductCodesAsync(command.TenantId, ct);
-        await CreateTenantRoleHandler.EnforceAsync(repository, role.ProductCode, permissionIds, command.CallerPermissions, enabled, ct);
+        // El tope se valida sobre lo que se AGREGA: otro Admin de la compañía que no posee un permiso que el rol ya
+        // tiene debe poder editar el resto del rol sin que le respondan NOT_HELD por algo que no tocó.
+        var current = role.Permissions.Select(x => x.Id).ToHashSet();
+        var added = permissionIds.Where(id => !current.Contains(id)).ToList();
+        await CreateTenantRoleHandler.EnforceAsync(repository, role.ProductCode, added, command.CallerPermissions, enabled, ct);
 
         await repository.SetPermissionsAsync(command.RoleId, permissionIds, ct);
         return (await repository.GetByIdAsync(command.RoleId, ct))!;
