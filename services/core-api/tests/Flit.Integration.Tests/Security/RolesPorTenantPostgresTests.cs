@@ -1,5 +1,8 @@
+using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace Flit.Integration.Tests.Security;
@@ -220,5 +223,26 @@ public sealed class RolesPorTenantPostgresTests(PostgresDatabaseFixture fixture)
 
         (await Scalar(cn, "SELECT count(*) FROM information_schema.columns WHERE table_schema='security' AND table_name='roles' AND column_name='tenant_id'"))
             .Should().Be(1, "el rollback dejó el esquema como estaba");
+    }
+
+    // Regresión hallada en la prueba E2E de integración (Épica #12750): con la estrategia de reintentos de Npgsql
+    // (la que usa la app), abrir la transacción fuera de la estrategia lanzaba InvalidOperationException y crear o
+    // editar permisos de un rol respondía 500. Los tests con InMemory no lo detectan.
+    [PostgresFact]
+    public async Task SetPermissionsAsync_con_la_estrategia_de_reintentos_de_Npgsql_no_lanza()
+    {
+        await using var cn = await SeedAsync();
+        var roleId = Guid.NewGuid();
+        await Exec(cn, $"INSERT INTO security.roles (id, code, name, target_entity_type) VALUES ('{roleId}', 'it_retry_role', 'Retry', 'COMPANY')");
+
+        var options = new DbContextOptionsBuilder<FlitDbContext>()
+            .UseNpgsql(Fixture.ConnectionString, o => o.EnableRetryOnFailure())
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var db = new FlitDbContext(options);
+
+        var act = async () => await new RoleRepository(db).SetPermissionsAsync(roleId, [], CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
     }
 }

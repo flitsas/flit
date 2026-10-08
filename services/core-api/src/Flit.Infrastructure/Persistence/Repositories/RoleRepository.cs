@@ -223,32 +223,55 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
     {
         // HU #13441: borrar + insertar va en una transacción; un fallo en el insert (permiso inexistente, producto
         // distinto) no puede dejar el rol sin permisos. Si ya hay una transacción abierta se reutiliza.
-        var ownsTransaction = db.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(ct) : null;
+        // Con Npgsql la transacción iniciada por el usuario debe correr DENTRO de la estrategia de reintentos
+        // (NpgsqlRetryingExecutionStrategy); abrirla fuera lanza InvalidOperationException y daba 500 al crear/editar roles.
+        if (db.Database.IsRelational() && db.Database.CurrentTransaction is null)
+        {
+            var strategy = db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(ct);
+                await ReplaceGrantsAsync(roleId, permissionIds, ct);
+                await transaction.CommitAsync(ct);
+            });
+            return;
+        }
 
+        await ReplaceGrantsAsync(roleId, permissionIds, ct);
+    }
+
+    private async Task ReplaceGrantsAsync(Guid roleId, IReadOnlyList<Guid> permissionIds, CancellationToken ct)
+    {
         // Hard delete de role_permissions existentes para este rol
         await db.RoleGrants
             .Where(rg => rg.RoleId == roleId)
             .ExecuteDeleteAsync(ct);
 
         // Insertar nuevos grants
-        if (permissionIds.Count > 0)
-        {
-            var now = DateTimeOffset.UtcNow;
-            var newGrants = permissionIds.Select(permId => new RoleGrant
-            {
-                Id = Guid.NewGuid(),
-                RoleId = roleId,
-                PermissionId = permId,
-                CreatedAt = now,
-            }).ToList();
+        if (permissionIds.Count == 0)
+            return;
 
-            db.RoleGrants.AddRange(newGrants);
+        var now = DateTimeOffset.UtcNow;
+        var newGrants = permissionIds.Select(permId => new RoleGrant
+        {
+            Id = Guid.NewGuid(),
+            RoleId = roleId,
+            PermissionId = permId,
+            CreatedAt = now,
+        }).ToList();
+
+        db.RoleGrants.AddRange(newGrants);
+        try
+        {
             await db.SaveChangesAsync(ct);
         }
-
-        if (transaction is not null)
-            await transaction.CommitAsync(ct);
+        catch
+        {
+            // Si la estrategia reintenta, los grants de este intento no deben quedar rastreados (se duplicarían).
+            foreach (var grant in newGrants)
+                db.Entry(grant).State = EntityState.Detached;
+            throw;
+        }
     }
 
     public async Task SetActiveAsync(Guid roleId, bool isActive, CancellationToken ct)
