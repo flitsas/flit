@@ -156,6 +156,52 @@ public sealed class CrearLoteConsolidadosOtIntegrationTests(PostgresDatabaseFixt
         busqueda.GetProperty("longitud").GetInt32().Should().Be(HierarchyScenario.SharedPlate.Length);
     }
 
+    /// <summary>
+    /// HU #13390 (L3, Habeas Data) — la fila <c>lote_creado</c> no retiene texto libre metido en campos de catálogo:
+    /// el estado válido queda literal, la basura del <c>status</c> y un <c>sortBy</c>/<c>sortDir</c> fuera de la lista
+    /// blanca quedan como <c>{presente, longitud}</c>. El lote congela lo mismo que sin la basura.
+    /// </summary>
+    [PostgresFact]
+    public async Task L3_FilterSummaryDeLoteCreado_MinimizaStatusYOrdenFueraDeCatalogo()
+    {
+        await SembrarAsync();
+        const string pii = "1037654321 JUAN PEREZ";
+        var body = new OtBandejaSearchRequest
+        {
+            Status = $"entregado,{pii}",
+            Condiciones = [new QueryCondition("placa", QueryOperator.EsAlguno, [HierarchyScenario.SharedPlate])],
+            SortBy = pii,
+            SortDir = "PEREZ",
+            Page = 1,
+            PageSize = 25,
+        };
+        var seleccion = new SeleccionPorFiltro(new OtBandejaLoteFiltro(body.ToFilter()), []);
+
+        CrearLoteConsolidadosResultado r;
+        var comando = await ComandoOtAdminAsync(seleccion);
+        await using (var ctx = NewContext())
+            r = await Handler(ctx).HandleAsync(comando, Ct);
+
+        r.Creado.Should().BeTrue(r.Error);
+        r.Lote!.TotalItems.Should().Be(HierarchyScenario.Clients.Count, "el resumen auditado no cambia qué trámites entran");
+
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(
+            "SELECT filter_summary::text FROM tramites.consolidado_export_audit WHERE batch_id = @b AND event = 'lote_creado'", cn);
+        cmd.Parameters.AddWithValue("b", r.Lote.Id);
+        var resumenTexto = (string?)await cmd.ExecuteScalarAsync(Ct);
+
+        resumenTexto.Should().NotBeNull();
+        resumenTexto.Should().NotContain("1037654321").And.NotContain("JUAN").And.NotContain("PEREZ");
+        var filtro = JsonDocument.Parse(resumenTexto!).RootElement.GetProperty("filtro");
+        var status = filtro.GetProperty("status");
+        status[0].GetString().Should().Be(TramiteEstado.Entregado);
+        status[1].GetProperty("presente").GetBoolean().Should().BeTrue();
+        status[1].GetProperty("longitud").GetInt32().Should().Be(pii.Length);
+        filtro.GetProperty("sortBy").GetProperty("longitud").GetInt32().Should().Be(pii.Length);
+        filtro.GetProperty("sortDir").GetProperty("longitud").GetInt32().Should().Be("PEREZ".Length);
+    }
+
     [PostgresFact]
     public async Task AC6_IdsDeLaBandejaYDeOtroOrganismo_SoloCongelaLosDeLaBandeja()
     {
