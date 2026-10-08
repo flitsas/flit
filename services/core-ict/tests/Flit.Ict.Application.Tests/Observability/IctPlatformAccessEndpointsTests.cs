@@ -197,6 +197,28 @@ public sealed class IctPlatformAccessEndpointsTests : IAsyncLifetime
             1001, TenantId, Arg.Any<SolicitanteRevelado>(), Arg.Any<CancellationToken>());
     }
 
+    // ── Fail-closed: no SuperAdmin sin tenant_id no ve nada (Bug #13445 p.4) ──────────────────
+
+    [Fact]
+    public async Task Trazabilidad_NoSuperAdminSinTenant_Devuelve403()
+    {
+        // Sin tenant el SQL (@tenant IS NULL OR ...) devolvería todos los tenants: se cierra en el borde.
+        var response = await Client(Token("admin_tramites", null, "ict.trazabilidad.read")).GetAsync(BandejaUrl, Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await _bandeja.DidNotReceiveWithAnyArgs().ConsultarAsync(default!, Ct);
+    }
+
+    [Fact]
+    public async Task RevelarPii_NoSuperAdminSinTenant_Devuelve403YNoAudita()
+    {
+        var response = await Client(Token("admin_tramites", null, "ict.trazabilidad.read", "ict.pii.reveal"))
+            .PostAsync(RevelarUrl, content: null, Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await _revelar.DidNotReceiveWithAnyArgs().RevelarAsync(default, default, default!, Ct);
+    }
+
     // ── Contrato de PlatformAccessReader ──────────────────────────────────────────────────────
 
     [Fact]
