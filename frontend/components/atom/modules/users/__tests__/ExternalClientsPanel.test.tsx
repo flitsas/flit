@@ -249,8 +249,9 @@ describe("ExternalClientsPanel (#13200)", () => {
     expect(await within(fila("flito-dev")).findByText("Flito DEV 2")).toBeInTheDocument();
   });
 
-  // Feature #13261: el permiso de envío de adjuntos (comprobante de impuesto) se ve, se concede y no se pierde al editar.
-  it("#13261: el panel muestra el permiso de adjuntos y la edición lo conserva junto con permisos desconocidos", async () => {
+  // HU #13434 (Feature #13261): el permiso de envío de adjuntos (comprobante de impuesto) se ve, se concede y no se pierde al editar.
+  // Uso de ejemplo: editar un cliente con attachments.write y guardar → el PATCH conserva attachments.write.
+  it("#13434 AC2: el panel muestra el permiso de adjuntos y la edición lo conserva junto con permisos desconocidos", async () => {
     const ue = userEvent.setup();
     const conAdjuntos: ExternalClient = {
       ...flito,
@@ -289,7 +290,7 @@ describe("ExternalClientsPanel (#13200)", () => {
     );
   });
 
-  it("#13261: la edición concede el permiso de adjuntos al marcarlo", async () => {
+  it("#13434 AC1 y AC4: sin el permiso no hay etiqueta ni casilla marcada; al marcarlo la edición lo concede", async () => {
     const ue = userEvent.setup();
     vi.mocked(updateExternalClient).mockResolvedValue({
       ...flito,
@@ -314,5 +315,39 @@ describe("ExternalClientsPanel (#13200)", () => {
       }),
     );
     expect(await within(fila("flito-dev")).findByLabelText("Permiso: envío de adjuntos")).toBeInTheDocument();
+  });
+
+  // Uso de ejemplo: alta con «Envío de adjuntos» marcado → createExternalClient recibe attachments.write.
+  it("#13434 AC3: el alta envía el permiso de adjuntos cuando se marca", async () => {
+    const ue = userEvent.setup();
+    vi.mocked(createExternalClient).mockResolvedValue({
+      client: {
+        ...flito,
+        id: "client-3",
+        clientId: "flito-qa2",
+        scopes: ["external.tramites.read", "external.tramites.attachments.write"],
+      },
+      clientSecret: SECRETO,
+    });
+    render(<ExternalClientsPanel />);
+    await screen.findByRole("table");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo cliente/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText(/envío de adjuntos/i)).not.toBeChecked();
+    await ue.type(within(dialog).getByLabelText(/identificador/i), "flito-qa2");
+    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Flito (QA)");
+    await ue.type(within(dialog).getByLabelText(/finalidad/i), "Sincronización");
+    await ue.click(within(dialog).getByLabelText(/envío de adjuntos/i));
+    await ue.click(screen.getByRole("button", { name: /crear cliente/i }));
+
+    await waitFor(() =>
+      expect(createExternalClient).toHaveBeenCalledWith({
+        clientId: "flito-qa2",
+        displayName: "Flito (QA)",
+        purpose: "Sincronización",
+        scopes: ["external.tramites.read", "external.tramites.attachments.write"],
+      }),
+    );
   });
 });
