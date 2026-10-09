@@ -74,6 +74,9 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
     /// Bug #13304 — además de tinta visible exige fondo transparente y paleta baja: el logo «Verify»
     /// persistido por error deja de valer y la captura lo re-extrae (autocorrección).
     /// </summary>
+    /// <summary>Expone la regla de forma de la rúbrica a las pruebas.</summary>
+    internal static bool IsSignatureShapedForTests(int width, int height) => Candidate.IsSignatureShaped(width, height);
+
     public bool IsUsableInk(byte[] imageBytes) =>
         PdfXObjectPngDecoder.LooksLikeSignatureArtifact(imageBytes);
 
@@ -171,13 +174,21 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
 
         public double Aspect => Height == 0 ? 0 : (double)Width / Height;
 
-        /// <summary>Descarta fotos de cédula (muy grandes) y QR/logo (casi cuadrados y chicos).</summary>
+        /// <summary>Descarta fotos de cédula (verticales o muy grandes) y QR/logo (casi cuadrados y chicos).</summary>
         public bool LooksLikeSignature => IsSignatureShaped(Width, Height);
+
+        /// <summary>
+        /// Área máxima de una rúbrica. Kyverum pasó de entregarla en 672x270 (~181 mil píxeles) a 1192x540 (~644 mil):
+        /// con el tope anterior de 400 mil la rúbrica quedaba fuera, ganaba el logo de la cabecera y la captura se
+        /// omitía para todas las partes y el mandatario. El nuevo tope deja fuera las fotos de la cédula en cualquier
+        /// orientación (1280x960 = ~1,23 millones), que así no se decodifican completas (Bug #13304).
+        /// </summary>
+        public const long MaxSignatureArea = 1_000_000;
 
         public static bool IsSignatureShaped(int width, int height)
         {
             var area = (long)width * height;
-            return width >= 200 && height >= 40 && height < width && area is >= 8_000 and <= 400_000;
+            return width >= 200 && height >= 40 && height < width && area is >= 8_000 and <= MaxSignatureArea;
         }
 
         public bool Beats(Candidate other) =>
