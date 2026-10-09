@@ -85,10 +85,10 @@ export interface MandatoOtConfigFormProps {
    */
   lockedCompany?: { id: string; name: string; nit: string } | null;
   /**
-   * Abre el alta de mandatario (hub OT): con compañía, el mandatario de esa empresa; sin ella, el del propio
-   * organismo (el general), que el OT registra para sí.
+   * Abre el alta de un mandatario del organismo (hub OT). El OT no registra mandatarios de las compañías: solo asigna
+   * de los suyos el general y el de cada compañía.
    */
-  onRegisterSigner?: (companyTenantId?: string) => void;
+  onRegisterSigner?: () => void;
   /**
    * HU #13151 - permite al Super Admin editar el tipo de mandato de cada compania. Solo lo activa
    * Plataforma; el hub del OT no lo pasa.
@@ -490,13 +490,17 @@ export function MandatoOtConfigForm({
     }
   };
 
-  const signersForCompany = (companyTenantId: string) =>
-    otSigners.filter((s) => {
-      const inCompany = s.companyTenantIds?.includes(companyTenantId);
-      if (!inCompany) return false;
-      const offices = s.transitOfficeIds?.length ? s.transitOfficeIds : [s.transitOfficeId];
-      return offices.includes(office.officeId);
-    });
+  // Mandatarios DEL OT: del organismo y sin compañía dueña. De ellos sale el general y el que el OT asigna a cada
+  // compañía (nivel 1 de la prelación); los mandatarios de las compañías los gestiona cada compañía.
+  const mandatariosDelOt = useMemo(
+    () =>
+      otSigners.filter((s) => {
+        if ((s.companyTenantIds ?? []).length > 0) return false;
+        const offices = s.transitOfficeIds?.length ? s.transitOfficeIds : [s.transitOfficeId];
+        return offices.includes(office.officeId);
+      }),
+    [otSigners, office.officeId],
+  );
 
   const handlePreview = async () => {
     setError(null);
@@ -573,41 +577,41 @@ export function MandatoOtConfigForm({
       },
       {
         key: "defaultSigner",
-        header: "Mandatario default",
+        header: "Mandatario del organismo",
         cellClassName: "!px-2.5 w-[48%]",
         headerClassName: "!px-2.5",
         render: (row) => {
           const rowBusy = savingCompanyId === row.companyTenantId;
-          const candidates = signersForCompany(row.companyTenantId);
           const defaultValue = row.defaultMandateSignerId ?? "";
+          // Una asignación anterior a un mandatario de la compañía se sigue mostrando para poder quitarla.
+          const heredado =
+            defaultValue !== "" && !mandatariosDelOt.some((s) => s.id === defaultValue)
+              ? { id: defaultValue, nombre: row.defaultMandateSignerName ?? "Mandatario de la compañía" }
+              : null;
           return (
             <div className="flex flex-col gap-1">
               <select
                 value={defaultValue}
-                disabled={busy || rowBusy || candidates.length === 0}
+                disabled={busy || rowBusy || (mandatariosDelOt.length === 0 && !heredado)}
                 onChange={(e) => void handleDefaultSignerChange(row, e.target.value)}
                 className="w-full max-w-full rounded-lg border border-[#DFE5ED] bg-white px-1.5 py-1.5 text-xs text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
-                aria-label={`Mandatario por defecto para ${row.companyName}`}
+                aria-label={`Mandatario del organismo para ${row.companyName}`}
                 data-testid={`mandato-company-default-signer-${row.companyTenantId}`}
               >
                 <option value="">
-                  {candidates.length === 0 ? "Sin mandatarios" : "Sin default"}
+                  {mandatariosDelOt.length === 0 ? "El organismo no tiene mandatarios" : "Sin asignar"}
                 </option>
-                {candidates.map((s) => (
+                {mandatariosDelOt.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.fullName}
                   </option>
                 ))}
+                {heredado ? (
+                  <option value={heredado.id} disabled>
+                    {heredado.nombre} (de la compañía)
+                  </option>
+                ) : null}
               </select>
-              {onRegisterSigner ? (
-                <button
-                  type="button"
-                  className="text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                  onClick={() => onRegisterSigner(row.companyTenantId)}
-                >
-                  Registrar mandatario
-                </button>
-              ) : null}
             </div>
           );
         },
@@ -658,7 +662,7 @@ export function MandatoOtConfigForm({
     ],
     // Handlers son estables por cierre de render; deps cubren estado que cambia las celdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers del mismo render
-    [busy, savingCompanyId, otSigners, office.officeId, onRegisterSigner, editableCompanyType],
+    [busy, savingCompanyId, mandatariosDelOt, editableCompanyType],
   );
 
   return (
@@ -1032,17 +1036,17 @@ export function MandatoOtConfigForm({
                   className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
                 >
                   <option value="">
-                    {otSigners.length === 0 ? "Sin mandatarios" : "Sin default (vacío al nacer)"}
+                    {mandatariosDelOt.length === 0 ? "El organismo no tiene mandatarios" : "Sin mandatario general"}
                   </option>
-                  {otSigners.map((s) => (
+                  {mandatariosDelOt.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.fullName}
                     </option>
                   ))}
                 </select>
                 <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Es quien firma cuando la compañía no tiene un mandatario propio. Si a una compañía le elegiste
-                  uno específico, ese tiene prioridad. Si no hay ninguno, el mandato sale con los datos en blanco.
+                  Es quien firma cuando la compañía no tiene asignado un mandatario del organismo ni uno propio. Si no
+                  hay ninguno, el mandato sale con los datos en blanco.
                 </span>
                 {onRegisterSigner ? (
                   <div className="flex flex-col gap-1.5 pt-1">
@@ -1071,8 +1075,9 @@ export function MandatoOtConfigForm({
                   Tipo de mandatario por compañía
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Si una compañía no tiene configuración propia, usa la del organismo. En «Mandatario de la compañía»
-                  puedes elegir un mandatario preferido, que aparece ya seleccionado al radicar.{" "}
+                  Si una compañía no tiene configuración propia, usa la del organismo. En «Mandatario del organismo»
+                  le asignas a la compañía uno de tus mandatarios: firma sus trámites antes que el mandatario propio de
+                  la compañía.{" "}
                   {rulesStatus === "ready" ? (
                     <span className="font-medium text-[#162244] dark:text-white/80">
                       {companyRules.length} compañía{companyRules.length === 1 ? "" : "s"}

@@ -131,6 +131,66 @@ describe("MandatoOtConfigForm", () => {
     cta.click();
     expect(onRegisterSigner).toHaveBeenCalledWith();
   });
+  describe("El OT asigna de sus mandatarios; no crea ni gestiona los de las compañías", () => {
+    const signer = (id: string, fullName: string, companyTenantIds: string[]) => ({
+      id,
+      fullName,
+      isActive: true,
+      companyTenantIds,
+      transitOfficeId: funza.officeId,
+      transitOfficeIds: [funza.officeId],
+    });
+    const regla = {
+      companyTenantId: "cia-1",
+      companyName: "Gestora Funza S.A.S.",
+      assignmentMode: "signer",
+      hasExplicitRule: true,
+      defaultMandateSignerId: null,
+      defaultMandateSignerName: null,
+    };
+
+    it("la lista por compañía y la del general solo ofrecen mandatarios del organismo, sin «Registrar mandatario» por fila", async () => {
+      listCompanyOtMandateRules.mockResolvedValue([regla]);
+      fetchMandateSigners.mockResolvedValue([
+        signer("ot-1", "Ana del Organismo", []),
+        signer("cia-signer", "Bruno de la Compañía", ["cia-1"]),
+      ]);
+      render(
+        <MandatoOtConfigForm
+          office={funza}
+          mode="mandatario"
+          onRegisterSigner={vi.fn()}
+          onClose={() => undefined}
+          onSaved={() => undefined}
+        />,
+      );
+
+      const porCompania = await screen.findByTestId("mandato-company-default-signer-cia-1");
+      await waitFor(() => expect(porCompania).toHaveTextContent("Ana del Organismo"));
+      expect(porCompania).not.toHaveTextContent("Bruno de la Compañía");
+      const general = screen.getByTestId("mandato-ot-default-signer");
+      expect(general).toHaveTextContent("Ana del Organismo");
+      expect(general).not.toHaveTextContent("Bruno de la Compañía");
+      // Un solo «Registrar mandatario»: el del organismo, junto al mandatario general.
+      expect(screen.getAllByRole("button", { name: "Registrar mandatario" })).toHaveLength(1);
+    });
+
+    it("una asignación anterior a un mandatario de la compañía se sigue viendo, marcada y sin poder elegirse otra vez", async () => {
+      listCompanyOtMandateRules.mockResolvedValue([
+        { ...regla, defaultMandateSignerId: "cia-signer", defaultMandateSignerName: "Bruno de la Compañía" },
+      ]);
+      fetchMandateSigners.mockResolvedValue([signer("ot-1", "Ana del Organismo", [])]);
+      render(
+        <MandatoOtConfigForm office={funza} mode="mandatario" onClose={() => undefined} onSaved={() => undefined} />,
+      );
+
+      const porCompania = await screen.findByTestId("mandato-company-default-signer-cia-1");
+      const heredado = await screen.findByRole("option", { name: "Bruno de la Compañía (de la compañía)" });
+      expect(heredado).toBeDisabled();
+      expect(porCompania).toHaveValue("cia-signer");
+    });
+  });
+
   describe("HU #13174 formatos desde el catálogo del backend", () => {
     const renderCon = (formatos: MandatoFormatosState, office = funza) =>
       render(
