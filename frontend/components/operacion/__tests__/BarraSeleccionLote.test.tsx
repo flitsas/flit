@@ -272,9 +272,9 @@ describe('TramitesTable + selección de lote — HU #13380', { timeout: 30_000 }
     montar();
     await screen.findByText('P0001');
     expect(
-      screen.queryByRole('region', { name: /descarga masiva de consolidados/ }),
+      screen.queryByRole('region', { name: 'Acciones sobre los trámites seleccionados' }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: /para la descarga masiva/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /^Seleccionar el trámite/ })).not.toBeInTheDocument();
   });
 
   it('AC1 — con permiso cada fila tiene casilla con el radicado; marcarla no abre el detalle', async () => {
@@ -282,7 +282,8 @@ describe('TramitesTable + selección de lote — HU #13380', { timeout: 30_000 }
     mocks.listInstances.mockResolvedValue(makeInstances(3));
     montar();
     await screen.findByText('P0001');
-    const casillas = await screen.findAllByRole('checkbox', { name: /para la descarga masiva/ });
+    // HU #13380 (casilla única) — con el permiso el nombre es neutro: la selección sirve a varias acciones.
+    const casillas = await screen.findAllByRole('checkbox', { name: /^Seleccionar el trámite TR-\d+$/ });
     expect(casillas).toHaveLength(3);
     expect(screen.getByRole('checkbox', { name: /TR-0002/ })).toBeInTheDocument();
 
@@ -356,7 +357,7 @@ describe('TramitesTable + selección de lote — HU #13380', { timeout: 30_000 }
     mocks.listInstances.mockResolvedValue([]);
     montar();
     await screen.findByText('Aún no hay trámites');
-    const region = screen.getByRole('region', { name: /descarga masiva de consolidados/ });
+    const region = screen.getByRole('region', { name: 'Acciones sobre los trámites seleccionados' });
     expect(within(region).getByRole('checkbox', { name: /Seleccionar todos/ })).toBeDisabled();
     expect(contador()).toBeEmptyDOMElement();
   });

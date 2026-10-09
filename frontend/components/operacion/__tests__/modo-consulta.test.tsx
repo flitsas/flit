@@ -500,8 +500,8 @@ describe('HU #12362 — AC6: acciones masivas mixtas', () => {
     );
     await userEvent.click(screen.getByRole('checkbox', { name: /Seleccionar el trámite TR-RED/ }));
 
-    const barra = screen.getByRole('region', { name: 'Acciones masivas de pausa' });
-    expect(barra).toHaveTextContent('2 seleccionados');
+    const barra = screen.getByRole('region', { name: 'Acciones sobre los trámites seleccionados' });
+    expect(barra).toHaveTextContent('2 trámites seleccionados');
     expect(barra).toHaveTextContent('1 excluido: trámites de la red (solo consulta)');
 
     await userEvent.click(within(barra).getByRole('button', { name: /Pausar/ }));
@@ -518,7 +518,7 @@ describe('HU #12362 — AC6: acciones masivas mixtas', () => {
     renderTable();
     await screen.findByText('BBB222');
     await userEvent.click(screen.getByRole('checkbox', { name: /Seleccionar el trámite TR-RED/ }));
-    const barra = screen.getByRole('region', { name: 'Acciones masivas de pausa' });
+    const barra = screen.getByRole('region', { name: 'Acciones sobre los trámites seleccionados' });
     expect(within(barra).queryByRole('button', { name: /Pausar/ })).not.toBeInTheDocument();
     expect(within(barra).queryByRole('button', { name: /Reanudar/ })).not.toBeInTheDocument();
     expect(barra).toHaveTextContent('1 excluido: trámites de la red (solo consulta)');
