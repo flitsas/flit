@@ -32,6 +32,16 @@ export interface BarraSeleccionLoteProps {
   mensajeTope: string | null;
   /** Acciones de la barra (p. ej. «Descargar ZIP», #13381). */
   children?: ReactNode;
+  /**
+   * Nombre accesible de la región. Por defecto el de la descarga masiva (bandeja del OT, #13393);
+   * el listado de trámites la nombra por lo que hace hoy: descarga y pausa en lote (#13380).
+   */
+  etiquetaRegion?: string;
+  /**
+   * «Seleccionar todos (del filtro)» solo tiene sentido para la descarga masiva. Sin ese permiso la
+   * barra del listado sirve únicamente a la pausa ICT, que se marca fila a fila. Por defecto `true`.
+   */
+  permiteSeleccionarTodos?: boolean;
 }
 
 const formatoMiles = (n: number) => n.toLocaleString('es-CO');
@@ -50,6 +60,8 @@ export function BarraSeleccionLote({
   onLimpiar,
   mensajeTope,
   children,
+  etiquetaRegion = 'Selección para descarga masiva de consolidados',
+  permiteSeleccionarTodos = true,
 }: BarraSeleccionLoteProps) {
   const casillaRef = useRef<HTMLInputElement>(null);
   const lleno = estadoTabla === 'lleno';
@@ -64,25 +76,27 @@ export function BarraSeleccionLote({
     <div className="flex flex-col gap-2">
       <div
         role="region"
-        aria-label="Selección para descarga masiva de consolidados"
+        aria-label={etiquetaRegion}
         className="flex flex-wrap items-center gap-3 rounded-xl border border-flit-brand/30 bg-flit-brand/[0.06] px-3 py-2 text-xs"
       >
-        <label
-          className={`inline-flex items-center gap-2 font-semibold text-flit-primary dark:text-white ${
-            lleno ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
-          }`}
-        >
-          <input
-            ref={casillaRef}
-            type="checkbox"
-            disabled={!lleno}
-            checked={lleno && estadoCabecera === 'todo'}
-            aria-checked={parcial ? 'mixed' : lleno && estadoCabecera === 'todo'}
-            onChange={onAlternarTodos}
-            className="h-4 w-4 shrink-0 cursor-pointer accent-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1 disabled:cursor-not-allowed"
-          />
-          Seleccionar todos (del filtro)
-        </label>
+        {permiteSeleccionarTodos ? (
+          <label
+            className={`inline-flex items-center gap-2 font-semibold text-flit-primary dark:text-white ${
+              lleno ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+            }`}
+          >
+            <input
+              ref={casillaRef}
+              type="checkbox"
+              disabled={!lleno}
+              checked={lleno && estadoCabecera === 'todo'}
+              aria-checked={parcial ? 'mixed' : lleno && estadoCabecera === 'todo'}
+              onChange={onAlternarTodos}
+              className="h-4 w-4 shrink-0 cursor-pointer accent-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1 disabled:cursor-not-allowed"
+            />
+            Seleccionar todos (del filtro)
+          </label>
+        ) : null}
 
         {/* Región viva siempre montada; vacía mientras la tabla no está llena (AC7). */}
         <span
@@ -122,13 +136,26 @@ export interface CasillaFilaLoteProps {
   radicado: string;
   seleccionado: boolean;
   onAlternar: () => void;
+  /**
+   * Nombre accesible. Por defecto menciona la descarga masiva (bandeja del OT); el listado de
+   * trámites lo pasa neutro, porque la misma casilla sirve también a la pausa ICT (#13380).
+   */
+  ariaLabel?: string;
+  /** Pista visual opcional (p. ej. «Solo consulta: queda excluido de la pausa en lote»). */
+  title?: string;
 }
 
 /**
  * Casilla de una fila. Detiene la propagación del clic y del teclado: la fila abre el detalle con
  * su `onClick`, y marcar no debe abrirlo (AC1). Espacio la alterna, como cualquier checkbox nativo.
  */
-export function CasillaFilaLote({ radicado, seleccionado, onAlternar }: CasillaFilaLoteProps) {
+export function CasillaFilaLote({
+  radicado,
+  seleccionado,
+  onAlternar,
+  ariaLabel,
+  title,
+}: CasillaFilaLoteProps) {
   return (
     <span
       className="flex"
@@ -139,7 +166,8 @@ export function CasillaFilaLote({ radicado, seleccionado, onAlternar }: CasillaF
         type="checkbox"
         checked={seleccionado}
         onChange={onAlternar}
-        aria-label={`Seleccionar el trámite ${radicado} para la descarga masiva`}
+        aria-label={ariaLabel ?? `Seleccionar el trámite ${radicado} para la descarga masiva`}
+        title={title}
         className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
       />
     </span>

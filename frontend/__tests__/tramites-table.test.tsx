@@ -1716,7 +1716,8 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
     await userEvent.click(checks[0]);
     await userEvent.click(checks[1]);
-    expect(screen.getByText('2 seleccionados')).toBeInTheDocument();
+    // HU #13380 — una sola barra para la selección única (descarga y pausa en lote).
+    expect(screen.getByText('2 trámites seleccionados')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
@@ -1727,7 +1728,7 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
   async function seleccionarTodas(placa: string) {
     await screen.findByText(placa);
     for (const check of screen.getAllByRole('checkbox')) await userEvent.click(check);
-    return screen.getByRole('region', { name: 'Acciones masivas de pausa' });
+    return screen.getByRole('region', { name: 'Acciones sobre los trámites seleccionados' });
   }
 
   it('Bug #13109 — sin ninguna fila pausada la barra solo ofrece "Pausar"', async () => {
@@ -1767,11 +1768,11 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const barra = await seleccionarTodas('MIX001');
-    expect(within(barra).getByText('2 seleccionados')).toBeInTheDocument();
+    expect(within(barra).getByText('2 trámites seleccionados')).toBeInTheDocument();
     expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
     expect(within(barra).queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument();
-    // «Limpiar» sigue disponible para salir de la selección.
-    expect(within(barra).getByRole('button', { name: 'Limpiar' })).toBeInTheDocument();
+    // «Limpiar selección» sigue disponible para salir de la selección.
+    expect(within(barra).getByRole('button', { name: 'Limpiar selección' })).toBeInTheDocument();
   });
 });
 

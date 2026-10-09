@@ -20,7 +20,6 @@ import {
   Star,
   Undo2,
   Upload,
-  X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
@@ -38,9 +37,16 @@ import {
   ETIQUETA_CLIENTE_PROPIO,
   ETIQUETA_SOLO_CONSULTA,
   isNetworkReadOnly,
-  partirSeleccionPorAlcance,
   textoExcluidosRed,
 } from '@/lib/tramites/network-scope';
+import {
+  NOTA_PAUSA_MODO_FILTRO,
+  accionPausaLote,
+  partirSeleccionParaPausa,
+  pausaLoteDisponibleEnModo,
+  seleccionTieneBorradorIct,
+  textoExcluidosNoIct,
+} from '@/lib/tramites/pausa-lote';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { SoatSoporteAsignado } from './SoatSoporteAsignado';
@@ -605,8 +611,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const pageSize = pageSizeElegido ?? pageSizeGuardado;
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
-  // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  /**
+   * HU #13380 — la pausa ICT en lote ya no tiene selección propia: sale de `lote` (una casilla por
+   * fila). La selección se conserva al cambiar de página, así que se guarda el resumen de cada fila
+   * al marcarla para poder decidir si es un borrador ICT aunque ya no esté en la página vigente.
+   */
+  const [resumenesMarcados, setResumenesMarcados] = useState<ReadonlyMap<string, InstanceSummary>>(
+    () => new Map(),
+  );
 
   // El respiro tras la última tecla. 350 ms es el rango en que una pausa se lee como «terminé de
   // escribir» sin que la tabla se sienta perezosa.
@@ -1181,50 +1193,59 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [isAdmin, currentTenantId],
   );
 
-  // ICT (paridad v1 pause-unpause-massive) — selección múltiple para pausa/reanudación en lote.
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  /**
+   * HU #13380 — alterna una fila en la selección única y recuerda su resumen (ver
+   * `resumenesMarcados`). Lo usan las casillas de las filas en vez de `lote.alternar`.
+   */
+  const { alternar: alternarLote, limpiar: limpiarLote } = lote;
+  const alternarFilaSeleccion = useCallback(
+    (id: string): boolean => {
+      const fila = items.find((it) => it.id === id);
+      if (fila) setResumenesMarcados((prev) => new Map(prev).set(id, fila));
+      return alternarLote(id);
+    },
+    [items, alternarLote],
+  );
+  const seleccionFilas = useMemo(
+    () => ({ estaSeleccionado: lote.estaSeleccionado, alternar: alternarFilaSeleccion }),
+    [lote.estaSeleccionado, alternarFilaSeleccion],
+  );
 
   /**
-   * HU #12362 (AC6) — de la selección, cuáles son PROPIOS (accionables) y cuántos son de la red
-   * (excluidos). La barra ofrece las acciones solo si hay propios y dice cuántos quedaron fuera.
+   * HU #12362 (AC6) + HU #13380 — de la selección única, cuáles se pausan (borradores ICT PROPIOS)
+   * y cuántos quedan fuera: los de la red (solo consulta) y los que no son borradores ICT. La fila
+   * vigente manda sobre el resumen guardado (lleva el `isPaused` optimista).
    */
-  const seleccionPorAlcance = useMemo(
-    () => partirSeleccionPorAlcance(items, selectedIds, currentTenantId),
-    [items, selectedIds, currentTenantId],
-  );
+  const pausaEnModo = pausaLoteDisponibleEnModo(lote.modo);
+  const particionPausa = useMemo(() => {
+    const porId = new Map(items.map((it) => [it.id, it] as const));
+    return partirSeleccionParaPausa(
+      pausaEnModo ? lote.modelo.ids : [],
+      (id) => porId.get(id) ?? resumenesMarcados.get(id),
+      currentTenantId,
+    );
+  }, [items, pausaEnModo, lote.modelo.ids, resumenesMarcados, currentTenantId]);
 
   /**
    * Bug #13109 (punto 3) — como el menú por fila, la barra ofrece una sola acción según el estado
    * de los propios seleccionados: todos pausados → Reanudar; ninguno → Pausar; mezcla → ninguna.
    */
-  const pausadosSeleccionados = seleccionPorAlcance.propios.filter((it) => it.isPaused).length;
-  const ofrecePausar = seleccionPorAlcance.propios.length > 0 && pausadosSeleccionados === 0;
-  const ofreceReanudar =
-    seleccionPorAlcance.propios.length > 0 &&
-    pausadosSeleccionados === seleccionPorAlcance.propios.length;
+  const accionPausa = accionPausaLote(particionPausa.pausables);
+  const muestraPausa = seleccionTieneBorradorIct(particionPausa);
 
   const handleBulkPause = useCallback(
     async (paused: boolean) => {
-      if (selectedIds.size === 0) return;
       // HU #12362 — solo los propios: ni actualización optimista ni llamada para los de la red.
-      const propiosIds = new Set(seleccionPorAlcance.propios.map((it) => it.id));
-      if (propiosIds.size === 0) {
-        setSelectedIds(new Set());
+      const pausables = particionPausa.pausables;
+      if (pausables.length === 0) {
+        limpiarLote();
         return;
       }
+      const pausablesIds = new Set(pausables.map((it) => it.id));
       // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
       setItems((prev) =>
         prev.map((it) =>
-          propiosIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
+          pausablesIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
             ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
             : it,
         ),
@@ -1232,8 +1253,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       // El superadmin puede seleccionar trámites de varias compañías; el endpoint masivo se acota por
       // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
       const byTenant = new Map<string, string[]>();
-      for (const it of items) {
-        if (!propiosIds.has(it.id)) continue;
+      for (const it of pausables) {
         const arr = byTenant.get(it.tenantId) ?? [];
         arr.push(it.id);
         byTenant.set(it.tenantId, arr);
@@ -1247,10 +1267,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       } catch {
         void load(); // ante fallo parcial, refresca para reflejar el estado real del backend
       } finally {
-        setSelectedIds(new Set());
+        limpiarLote();
       }
     },
-    [selectedIds, items, isAdmin, load, seleccionPorAlcance],
+    [particionPausa, isAdmin, load, limpiarLote],
   );
 
   const hasServerFilters =
@@ -1567,57 +1587,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onQuitarCondicion={handleQuitarCondicion}
         />
 
-        {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
-        {selectedIds.size > 0 ? (
-          <div
-            role="region"
-            aria-label="Acciones masivas de pausa"
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-3 py-2 text-xs"
-          >
-            <span className="font-semibold text-[#162744] dark:text-white">
-              {`${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}`}
-            </span>
-            {/* HU #12362 (AC6) — las acciones solo existen si hay trámites PROPIOS en la selección;
-                los de la red se cuentan aparte, con su motivo, para que la exclusión no sea muda. */}
-            {ofrecePausar ? (
-              <button
-                type="button"
-                onClick={() => void handleBulkPause(true)}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
-              >
-                <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
-              </button>
-            ) : null}
-            {ofreceReanudar ? (
-              <button
-                type="button"
-                onClick={() => void handleBulkPause(false)}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-              >
-                <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
-              </button>
-            ) : null}
-            {seleccionPorAlcance.excluidos > 0 ? (
-              <span
-                role="status"
-                className="inline-flex items-center gap-1 text-[#162744]/70 dark:text-white/70"
-              >
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                {textoExcluidosRed(seleccionPorAlcance.excluidos)}
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={clearSelection}
-              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-[#162744]/60 transition hover:text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white/60 dark:hover:text-white"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
-            </button>
-          </div>
-        ) : null}
-
-        {/* HU #13380 — sin el permiso no hay barra ni casillas (AC6). */}
-        {puedeLote ? (
+        {/* HU #13380 — UNA barra para la selección única: «Descargar ZIP» con el permiso de descarga
+            masiva y «Pausar»/«Reanudar» si la selección lleva borradores ICT propios. Con el permiso
+            la barra está siempre (AC7 de #13380); sin él solo aparece al marcar un borrador ICT, y no
+            ofrece «Seleccionar todos» ni nada de la descarga. */}
+        {puedeLote || lote.contador > 0 ? (
           <BarraSeleccionLote
             estadoTabla={estadoTablaLote}
             estadoCabecera={lote.estadoCabecera}
@@ -1626,12 +1600,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             onAlternarTodos={lote.alternarTodos}
             onLimpiar={lote.limpiar}
             mensajeTope={lote.mensajeTope}
+            etiquetaRegion="Acciones sobre los trámites seleccionados"
+            permiteSeleccionarTodos={puedeLote}
           >
             {/* HU #13381 — «Descargar ZIP»: crear el lote limpia la selección (AC2). HU #13382 — el
                 lote creado y el del 409 `lote_activo` pasan al seguimiento global del Shell. HU #13387 —
                 el Super Admin elige el tipo y crea con las cabeceras del listado. */}
             {/* HU #13419 AC5 — en la vista de red, mientras `documentosRed` no responde, no hay botón. */}
-            {networkActive && documentosRed === 'consultando' && !descargaRedNoDisponible ? null : (
+            {!puedeLote ||
+            (networkActive && documentosRed === 'consultando' && !descargaRedNoDisponible) ? null : (
               <BotonDescargaMasivaZip
                 seleccion={lote.modelo}
                 contador={lote.contador}
@@ -1645,6 +1622,41 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 noDisponible={descargaRedNoDisponible}
               />
             )}
+            {/* ICT (paridad v1 pause-unpause-massive) + HU #12362 (AC6): las acciones solo existen si
+                hay borradores ICT PROPIOS; los demás se cuentan aparte, con su motivo, para que la
+                exclusión no sea muda. */}
+            {muestraPausa && accionPausa === 'pausar' ? (
+              <button
+                type="button"
+                onClick={() => void handleBulkPause(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-flit-primary/20 px-2.5 py-1 font-semibold text-flit-primary transition hover:bg-flit-primary/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+              >
+                <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+              </button>
+            ) : null}
+            {muestraPausa && accionPausa === 'reanudar' ? (
+              <button
+                type="button"
+                onClick={() => void handleBulkPause(false)}
+                className="inline-flex items-center gap-1 rounded-lg border border-flit-brand/40 px-2.5 py-1 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+              >
+                <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+              </button>
+            ) : null}
+            {muestraPausa && particionPausa.excluidosRed > 0 ? (
+              <span className="inline-flex items-center gap-1 text-flit-primary/70 dark:text-white/70">
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                {textoExcluidosRed(particionPausa.excluidosRed)}
+              </span>
+            ) : null}
+            {muestraPausa && particionPausa.excluidosNoIct > 0 ? (
+              <span className="text-flit-primary/70 dark:text-white/70">
+                {textoExcluidosNoIct(particionPausa.excluidosNoIct)}
+              </span>
+            ) : null}
+            {!pausaEnModo ? (
+              <span className="text-flit-primary/70 dark:text-white/70">{NOTA_PAUSA_MODO_FILTRO}</span>
+            ) : null}
           </BarraSeleccionLote>
         ) : null}
 
@@ -1671,9 +1683,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
           onTogglePause={handleTogglePause}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          seleccionLote={puedeLote ? lote : null}
+          seleccionLote={seleccionFilas}
+          puedeLote={puedeLote}
           onProcesar={openProcesar}
           onOpen={abrirAsistente}
           onVerDocumentos={setDocsTramite}
@@ -2011,7 +2022,21 @@ function SortableHeaderCell({
   );
 }
 
-/** HU #13380 — lo que las filas necesitan de la selección de descarga masiva. */
+/**
+ * HU #13380 — nombre accesible de la casilla única. Con el permiso de descarga es neutro (la
+ * selección sirve a varias acciones); sin él la casilla solo existe en borradores ICT y sirve a la
+ * pausa, así que lo dice, sin mencionar la descarga.
+ */
+export function etiquetaCasillaFila(
+  radicado: string,
+  { puedeLote, soloConsultaIct }: { puedeLote: boolean; soloConsultaIct: boolean },
+): string {
+  const base = `Seleccionar el trámite ${radicado}`;
+  if (soloConsultaIct) return `${base} (solo consulta: queda excluido de la pausa en lote)`;
+  return puedeLote ? base : `${base} para pausar/reanudar en lote`;
+}
+
+/** HU #13380 — lo que las filas necesitan de la selección única. */
 interface SeleccionLoteFilas {
   estaSeleccionado: (id: string) => boolean;
   alternar: (id: string) => boolean;
@@ -2041,9 +2066,8 @@ function TableBody({
   onClearFilters,
   onTogglePriority,
   onTogglePause,
-  selectedIds,
-  onToggleSelect,
   seleccionLote,
+  puedeLote,
   onProcesar,
   onOpen,
   onVerDocumentos,
@@ -2083,10 +2107,10 @@ function TableBody({
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
-  selectedIds: Set<string>;
-  onToggleSelect: (id: string) => void;
-  /** HU #13380 — selección de descarga masiva; `null` sin el permiso (sin casillas, AC6). */
-  seleccionLote: SeleccionLoteFilas | null;
+  /** HU #13380 — selección única de la tabla (descarga masiva y pausa ICT en lote). */
+  seleccionLote: SeleccionLoteFilas;
+  /** HU #13380 — permiso de descarga masiva: con él todas las filas llevan casilla (AC6). */
+  puedeLote: boolean;
   onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
@@ -2279,10 +2303,9 @@ function TableBody({
                 onClosePopover={onClosePopover}
                 onTogglePriority={onTogglePriority}
                 onTogglePause={onTogglePause}
-                selected={selectedIds.has(item.id)}
-                onToggleSelect={onToggleSelect}
-                seleccionadoLote={seleccionLote?.estaSeleccionado(item.id) ?? false}
-                onAlternarLote={seleccionLote ? seleccionLote.alternar : null}
+                seleccionado={seleccionLote.estaSeleccionado(item.id)}
+                onAlternarSeleccion={seleccionLote.alternar}
+                puedeLote={puedeLote}
                 onProcesar={onProcesar}
                 onOpen={onOpen}
                 onVerDocumentos={onVerDocumentos}
@@ -2423,10 +2446,9 @@ function TramiteRow({
   onClosePopover,
   onTogglePriority,
   onTogglePause,
-  selected,
-  onToggleSelect,
-  seleccionadoLote,
-  onAlternarLote,
+  seleccionado,
+  onAlternarSeleccion,
+  puedeLote,
   onProcesar,
   onOpen,
   onVerDocumentos,
@@ -2450,12 +2472,15 @@ function TramiteRow({
   onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
-  selected: boolean;
-  onToggleSelect: (id: string) => void;
-  /** HU #13380 — la fila va en la selección de descarga masiva. */
-  seleccionadoLote: boolean;
-  /** HU #13380 — alterna la fila en la selección; `null` sin el permiso (sin casilla). */
-  onAlternarLote: ((id: string) => boolean) | null;
+  /** HU #13380 — la fila va en la selección única (descarga masiva y pausa ICT en lote). */
+  seleccionado: boolean;
+  /** HU #13380 — alterna la fila en la selección única. */
+  onAlternarSeleccion: (id: string) => boolean;
+  /**
+   * HU #13380 — permiso de descarga masiva. Con él todas las filas llevan casilla; sin él, solo los
+   * borradores ICT (para no quitarle la pausa en lote a quien no descarga).
+   */
+  puedeLote: boolean;
   onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
@@ -3163,31 +3188,22 @@ function TramiteRow({
           className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle dark:border-white/10"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* HU #13380 — casilla de descarga masiva; si la fila es además un borrador ICT, la de
-              pausa va debajo (son selecciones distintas, cada una con su etiqueta). */}
-          {onAlternarLote ? (
+          {/* HU #13380 — UNA casilla por fila: la misma selección sirve a la descarga masiva y a la
+              pausa ICT en lote (antes había dos casillas idénticas y se confundían con «Pausado»). */}
+          {puedeLote || isIctDraft ? (
             <CasillaFilaLote
               radicado={item.referenceNumber}
-              seleccionado={seleccionadoLote}
-              onAlternar={() => onAlternarLote(item.id)}
-            />
-          ) : null}
-          {isIctDraft ? (
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelect(item.id)}
-              aria-label={
-                consultaMode
-                  ? `Seleccionar el trámite ${item.referenceNumber} (solo consulta: queda excluido de las acciones masivas)`
-                  : `Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`
-              }
+              seleccionado={seleccionado}
+              onAlternar={() => onAlternarSeleccion(item.id)}
+              ariaLabel={etiquetaCasillaFila(item.referenceNumber, {
+                puedeLote,
+                soloConsultaIct: isIctDraft && consultaMode,
+              })}
               title={
-                consultaMode
-                  ? 'Solo consulta: queda excluido de las acciones masivas'
-                  : 'Seleccionar para pausar/reanudar en lote'
+                isIctDraft && consultaMode
+                  ? 'Solo consulta: queda excluido de la pausa en lote'
+                  : undefined
               }
-              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
             />
           ) : null}
         </td>

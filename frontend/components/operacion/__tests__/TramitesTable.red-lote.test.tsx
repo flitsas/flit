@@ -193,7 +193,7 @@ const montar = () =>
     </ToastProvider>,
   );
 const casilla = (radicado: string) =>
-  screen.getByRole('checkbox', { name: new RegExp(`Seleccionar el trámite ${radicado} para la descarga masiva`) });
+  screen.getByRole('checkbox', { name: new RegExp(`^Seleccionar el trámite ${radicado}$`) });
 const dialogo = () => screen.getByRole('dialog', { name: /Descargar consolidados en ZIP/ });
 
 beforeEach(() => {
