@@ -74,7 +74,8 @@ public sealed class MotorDePlazos(CalendarioHabil calendario)
 
     public FechasLegales Calcular(TipoImposicion tipo, DateOnly? fechaImposicion, DateOnly? fechaNotificacion)
     {
-        var anclaDescuento = tipo == TipoImposicion.Fisico ? fechaImposicion ?? fechaNotificacion : fechaNotificacion;
+        // §6.2: el físico cuenta el descuento desde la imposición; sin esa fecha no hay ventana de descuento.
+        var anclaDescuento = tipo == TipoImposicion.Fisico ? fechaImposicion : fechaNotificacion;
         var (hasta50, hasta25) = TramosDeDescuento(tipo);
 
         return new FechasLegales(
