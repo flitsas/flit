@@ -1,0 +1,8 @@
+<!-- nombre: Carta al conductor por cambio de contraventor -->
+<p style="text-align:right">{{hoy}}</p>
+<p>Señor(a)<br><b>{{conductor.nombres}}</b><br>{{conductor.tipo_documento}} {{conductor.numero_documento}}<br>{{conductor.direccion}}, {{conductor.ciudad}}</p>
+<p><b>Asunto:</b> Solicitud de cambio de contraventor — comparendo {{comparendo.numero}}</p>
+<p style="text-align:justify">Le informamos que {{peticionario.nombre}}, propietaria del vehículo de placa <b>{{comparendo.placa}}</b>, solicitó ante {{ot.nombre}} el cambio de contraventor del comparendo {{comparendo.numero}}, impuesto el {{comparendo.fecha_imposicion}} por la infracción {{comparendo.codigo_infraccion}} ({{comparendo.descripcion_infraccion}}), porque usted tenía el vehículo bajo su responsabilidad en esa fecha.</p>
+<p style="text-align:justify">El organismo de tránsito podrá contactarlo para continuar el proceso. Esta comunicación es informativa: no necesita responderla.</p>
+<p>Cordialmente,</p>
+<p><b>{{peticionario.nombre}}</b></p>

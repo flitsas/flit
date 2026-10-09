@@ -17,6 +17,8 @@ public static class Modulos
         services.AddScoped<Bandeja.ConsultaBandeja>();
         services.AddScoped<Configuracion.ResolutorRepresentante>();
         services.AddScoped<Configuracion.PermisosOt>();
+        services.AddScoped<Plantillas.ContextoPlantilla>();
+        services.AddScoped<Plantillas.ServicioPlantillas>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
         // Ingesta (HU #13460, #13461). Las fuentes reales se conectan al final (Feature #13464); mientras tanto, simulada.
@@ -66,6 +68,7 @@ public static class Modulos
         Configuracion.EmpresasEndpoints.Map(api);
         Configuracion.TipologiasEndpoints.Map(api);
         Configuracion.RepresentantesEndpoints.Map(api);
+        Plantillas.PlantillasEndpoints.Map(api);
         return app;
     }
 }

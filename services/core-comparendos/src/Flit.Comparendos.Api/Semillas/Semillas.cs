@@ -28,6 +28,8 @@ public static class Semillas
         await TrabajosAsync(db, ahora, ct).ConfigureAwait(false);
         await TipologiasSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await PlantillasSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Días de 2015 a 2040 con los festivos calculados (Ley Emiliani y Pascua) [MOD03 RN-06, S-26].</summary>

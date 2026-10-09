@@ -102,6 +102,7 @@ public static class TipologiasEndpoints
             CreadoPor = usuario.Id,
         };
         db.Tipologias.Add(t);
+        await Semillas.PlantillasSemilla.CrearParaTipologiaAsync(db, t.Id, reloj.Ahora, ct).ConfigureAwait(false);
         auditoria.Registrar(null, "tipologia_dp", t.Id, "CREAR", new CambioCampo("codigo", null, codigo));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}/admin/tipologias/{t.Id}", Dto(t));
