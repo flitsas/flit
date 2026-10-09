@@ -1,3 +1,4 @@
+using Flit.Comparendos.Api.Modulos.Portal;
 using Flit.Platform.Sdk.Grpc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -20,6 +21,8 @@ public static class Modulos
         services.AddScoped<Plantillas.ContextoPlantilla>();
         services.AddScoped<Plantillas.ServicioPlantillas>();
         services.AddScoped<Contraventor.ServicioContraventor>();
+        services.AddScoped<Portal.ServicioPortal>();
+        services.AddLimitePortal();
         services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Contraventor.ReintentoContraventor>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
@@ -74,6 +77,7 @@ public static class Modulos
         Plantillas.PlantillasEndpoints.Map(api);
         Contraventor.ContraventorEndpoints.Map(api);
         Correo.MensajesEndpoints.Map(api);
+        Portal.PortalEndpoints.Map(api);
         return app;
     }
 }

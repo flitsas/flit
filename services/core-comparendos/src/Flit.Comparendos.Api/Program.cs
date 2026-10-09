@@ -96,6 +96,7 @@ public static class Program
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
 
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (ComparendosDb db, CancellationToken ct) =>
