@@ -121,9 +121,11 @@ export function CameraViewer({
 
   const ready = status === "ready";
   const isDoc = shape === "rect";
-  // Bug #13449: con la cámara frontal el rostro se ve como en un espejo (al moverse a la derecha, la imagen
-  // también). Solo la vista en vivo: la foto capturada no se invierte. El documento nunca, para que el texto se lea.
-  const mirrored = !isDoc && actualFacing === "user";
+  // Bug #13449: con una cámara frontal (la del celular o la webcam del computador, que no reporta `facingMode`)
+  // la vista sigue el gesto como un espejo, en rostro y en documento. La trasera del celular no se invierte.
+  // Solo la vista en vivo: la foto capturada no se invierte. El marco del documento es simétrico, así que el
+  // recorte coincide con lo que se ve.
+  const mirrored = actualFacing !== "environment";
   return (
     <div className="flex flex-col gap-4">
       <div className={`relative overflow-hidden rounded-2xl bg-slate-900 ${isDoc ? "aspect-[10/9]" : "aspect-square"}`}>
