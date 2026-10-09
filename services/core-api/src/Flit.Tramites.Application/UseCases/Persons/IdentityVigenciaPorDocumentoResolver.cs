@@ -14,7 +14,10 @@ public sealed record IdentityVigenciaResult(
     string Status,
     DateTimeOffset? ValidatedAt,
     DateTimeOffset? ValidUntil,
-    string? CertificateHash)
+    string? CertificateHash,
+    // Ruta del PNG de la rúbrica capturada en Kyverum. Solo la llena la validación propia APROBADA del mandatario:
+    // el mandato la estampa como al mandante.
+    string? SignatureImagePath = null)
 {
     /// <summary>Sin ninguna validación para ese documento en el tenant.</summary>
     public static readonly IdentityVigenciaResult SinValidacion =
@@ -209,7 +212,8 @@ public sealed class IdentityVigenciaPorDocumentoResolver(IProcedureInstanceRepos
 
         return latest.Status == BiometricEstados.Aprobado
             ? new IdentityVigenciaResult(
-                IdentityVigenciaEstados.AprobadaVigente, latest.ValidatedAt, null, latest.CertificateHash)
+                IdentityVigenciaEstados.AprobadaVigente, latest.ValidatedAt, null, latest.CertificateHash,
+                latest.SignatureImagePath)
             : Classify(latest, now);
     }
 

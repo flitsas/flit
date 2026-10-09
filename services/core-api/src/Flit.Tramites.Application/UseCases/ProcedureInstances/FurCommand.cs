@@ -1036,12 +1036,12 @@ public sealed class GenerarFurHandler(
     /// vigente, y si no el sello de su validación de identidad. Best-effort: cualquier fallo deja la
     /// línea de firma en blanco, nunca rompe la generación del mandato.
     /// </summary>
-    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos)> ResolveMandatarioFirmaAsync(
+    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, byte[]? FirmaIdentidad)> ResolveMandatarioFirmaAsync(
         FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
     {
         // La precedencia vive en MandatarioFirmaResolver: el simulador de mandatos la comparte para
         // mostrar el documento tal como saldría del trámite (Feature #11702).
-        var (firma, sello, metadatos, _) = await MandatarioFirmaResolver
+        var (firma, sello, metadatos, _, firmaIdentidad) = await MandatarioFirmaResolver
             .ResolveAsync(
                 _vaultPolicy,
                 storage,
@@ -1051,7 +1051,7 @@ public sealed class GenerarFurHandler(
                 ct)
             .ConfigureAwait(false);
 
-        return (firma, sello, metadatos);
+        return (firma, sello, metadatos, firmaIdentidad);
     }
 
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
@@ -1347,9 +1347,10 @@ public sealed class GenerarFurHandler(
                         // la línea en blanco aunque el mandatario tuviera firma en el baúl o identidad
                         // validada. Misma precedencia que el resto de documentos: imagen del baúl > sello
                         // de identidad > línea.
-                        var (firma, sello, metadatos) =
+                        var (firma, sello, metadatos, firmaIdentidad) =
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
-                        mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
+                        mandatario = new MandatarioFirmante(
+                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad);
 
                         if (enBorrador)
                             instance.MandateSignerId = signerId;
