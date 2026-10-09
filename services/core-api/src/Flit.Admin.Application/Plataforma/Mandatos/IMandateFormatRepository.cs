@@ -83,4 +83,15 @@ public interface IMandateFormatRepository
         SaveMandateFormatCommand command,
         Guid? userId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve el formato a su redacción de fábrica: la versión vigente pasa a 0 y las versiones publicadas se
+    /// conservan (son inmutables y trazan lo ya firmado). Mismo control de concurrencia que <see cref="SaveAsync"/>.
+    /// <see cref="MandateFormatSaveResult.Changed"/> es false si ya usaba la redacción de fábrica.
+    /// </summary>
+    Task<MandateFormatSaveResult> ResetTemplateAsync(
+        string code,
+        long? expectedRowVersion,
+        Guid? userId,
+        CancellationToken ct = default);
 }

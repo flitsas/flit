@@ -41,7 +41,7 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
         var entregado = await SeedProcedureAsync(x, "entregado");
         var borrador = await SeedProcedureAsync(x, "borrador");
         var aprobado = await SeedProcedureAsync(x, "aprobado");
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var response = await _client.DeleteAsync(Hub(x, "?confirmarImpacto=true"), Ct);
 
@@ -63,7 +63,7 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
     {
         var x = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
         var entregado = await SeedProcedureAsync(x, "entregado");
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var response = await _client.DeleteAsync(Hub(x, "?confirmarImpacto=true"), Ct);
 
@@ -122,7 +122,7 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
         }));
         var client = fallido.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", MintToken("ot_admin", _otTenant, _otAdminUser, AdminAuthorization.TransitOfficeEntityType));
+            "Bearer", MintToken("SuperAdmin", _superAdminTenant, _superAdminUser, null));
 
         HttpStatusCode? status = null;
         try

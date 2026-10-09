@@ -73,7 +73,7 @@ public sealed class MandateSignerIdentityResendEndpointsTests(WebApplicationFact
         var signer = await SeedNaturalAsync();
         Launcher.Calls.Clear();
         Launcher.Outcome = MandateSignerIdentityLaunchOutcome.Sent;
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var response = await _client.PostAsync(Hub(signer, "/identity-validation/resend"), null, Ct);
 
@@ -103,7 +103,7 @@ public sealed class MandateSignerIdentityResendEndpointsTests(WebApplicationFact
     public async Task ReenviarConBaul_409_MandatarioNoRequiereValidacion()
     {
         var signer = await SeedNaturalAsync(method: "baul");
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var response = await _client.PostAsync(Hub(signer, "/identity-validation/resend"), null, Ct);
 
@@ -116,7 +116,7 @@ public sealed class MandateSignerIdentityResendEndpointsTests(WebApplicationFact
     public async Task ReenviarJuridica_409_MandatarioNoRequiereValidacion()
     {
         var signer = await SeedNaturalAsync(model: "juridica", email: null);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         (await _client.PostAsync(Hub(signer, "/identity-validation/resend"), null, Ct)).StatusCode
             .Should().Be(HttpStatusCode.Conflict);
@@ -126,7 +126,7 @@ public sealed class MandateSignerIdentityResendEndpointsTests(WebApplicationFact
     public async Task ReenviarSinCorreo_422ConElCampoEmail()
     {
         var signer = await SeedNaturalAsync(email: null);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var response = await _client.PostAsync(Hub(signer, "/identity-validation/resend"), null, Ct);
 
@@ -156,7 +156,7 @@ public sealed class MandateSignerIdentityResendEndpointsTests(WebApplicationFact
     {
         var signer = await SeedNaturalAsync();
         Launcher.Outcome = MandateSignerIdentityLaunchOutcome.Failed;
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var response = await _client.PostAsync(Hub(signer, "/identity-validation/resend"), null, Ct);
         Launcher.Outcome = MandateSignerIdentityLaunchOutcome.Sent;

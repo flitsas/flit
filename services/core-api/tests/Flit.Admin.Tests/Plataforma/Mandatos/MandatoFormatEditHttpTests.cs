@@ -234,4 +234,51 @@ public sealed class MandatoFormatEditHttpTests(WebApplicationFactory<Program> fa
 
         base.Dispose();
     }
+
+    // ── Restablecer redacción de fábrica (sin publicar plantillas: las versiones son inmutables) ────────────────
+
+    private Task<HttpResponseMessage> ResetAsync(object body, string code = Code) =>
+        Client.PostAsJsonAsync($"{FormatsUrl}/{code}/restablecer-plantilla", body, Ct);
+
+    [Fact]
+    public async Task Restablecer_SuperAdmin_SinPlantillaEditada_Responde200_SinCambios()
+    {
+        AuthenticateSuperAdmin();
+        var before = await ReadFormatAsync();
+        // Corre contra la base local: si alguien publicó una plantilla en «generico», no se le descarta. El restablecer
+        // con plantilla editada se prueba en MandateFormatAdminServiceTests / MandateFormatRepositoryTests.
+        if (before.GetProperty("currentVersion").GetInt32() > 0)
+            return;
+
+        var response = await ResetAsync(new { rowVersion = before.GetProperty("rowVersion").GetInt64() });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("changed").GetBoolean().Should().BeFalse();
+        (await ReadFormatAsync()).GetProperty("currentVersion").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Restablecer_SoloSuperAdmin_AdminOt403_AdminDeCompania403_SinToken401()
+    {
+        var body = new { rowVersion = 0L };
+
+        AuthenticateOtAdmin();
+        var ot = await ResetAsync(body);
+        AuthenticateCompanyAdmin();
+        var company = await ResetAsync(body);
+        AuthenticateAnonymous();
+        var anonymous = await ResetAsync(body);
+
+        ot.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        company.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        anonymous.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Restablecer_SinRowVersion_Responde409()
+    {
+        AuthenticateSuperAdmin();
+
+        (await ResetAsync(new { })).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
 }
