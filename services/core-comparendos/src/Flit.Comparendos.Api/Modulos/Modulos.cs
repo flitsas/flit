@@ -12,6 +12,9 @@ public static class Modulos
         services.AddScoped<Comun.Auditoria>();
         services.AddScoped<Catalogos.MapeadorOt>();
         services.AddScoped<Comparendos.Timeline>();
+        services.AddScoped<Comparendos.AccesoComparendo>();
+        services.AddScoped<Bandeja.ConsultaBandeja>();
+        services.AddScoped<Bandeja.ExportacionBandeja>();
 
         // Ingesta (HU #13460, #13461). Las fuentes reales se conectan al final (Feature #13464); mientras tanto, simulada.
         services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteSimulada>();
@@ -40,6 +43,7 @@ public static class Modulos
             services.AddHostedService<Trabajos.ProgramadorTrabajos>();
             services.AddHostedService<Trabajos.ProcesadorTrabajos>();
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
+            services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
         }
         return services;
     }
@@ -53,6 +57,8 @@ public static class Modulos
         Ingesta.IngestaEndpoints.Map(api);
         Correo.CorreoEndpoints.Map(api);
         Ingesta.AlertasYLogEndpoints.Map(api);
+        Bandeja.BandejaEndpoints.Map(api);
+        Comparendos.DetalleEndpoints.Map(api);
         return app;
     }
 }
