@@ -26,7 +26,8 @@ public static class PortalEndpoints
         {
             o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             o.AddPolicy(PoliticaLimite, http => RateLimitPartition.GetFixedWindowLimiter(
-                http.Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim() is { Length: > 0 } ip ? ip : http.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+                // X-Real-IP lo pone nginx con la IP real (pisa lo que mande el cliente); X-Forwarded-For se puede falsear desde afuera.
+                http.Request.Headers["X-Real-IP"].ToString().Trim() is { Length: > 0 } ip ? ip : http.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
 
