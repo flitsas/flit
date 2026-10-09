@@ -68,7 +68,12 @@ public sealed record MandateSignerCandidate(
     /// la compañía del trámite (un asociado de otra compañía, o el default del OT). Nulo o vacío ⇒ solo se busca en
     /// el tenant del trámite. Ver <see cref="VaultTenants"/>.
     /// </summary>
-    IReadOnlyList<Guid>? VaultTenantIds = null)
+    IReadOnlyList<Guid>? VaultTenantIds = null,
+    /// <summary>
+    /// Ruta del PNG de la rúbrica de su validación de identidad PROPIA aprobada (Kyverum). El mandato la estampa
+    /// cuando no firma con el baúl, igual que la del mandante. Nula sin validación aprobada o sin rúbrica.
+    /// </summary>
+    string? RubricaIdentidadPath = null)
 {
     /// <summary>
     /// Tenants donde buscar su firma del baúl, en orden: primero el de la compañía del trámite (comportamiento

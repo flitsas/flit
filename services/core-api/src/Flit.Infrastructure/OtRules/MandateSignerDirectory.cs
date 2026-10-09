@@ -51,7 +51,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
     }
 
     /// <summary>Identidad de un mandatario: su estado (ADR-0050), certificado y hasta cuándo vale.</summary>
-    private sealed record IdentidadResuelta(string Status, string? Certificado, DateTimeOffset? ValidUntil)
+    private sealed record IdentidadResuelta(
+        string Status, string? Certificado, DateTimeOffset? ValidUntil, string? RubricaPath = null)
     {
         public bool Vigente => Status == IdentityVigenciaEstados.AprobadaVigente;
     }
@@ -181,7 +182,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     firmanAMano.Contains(s.Id),
                     firma?.Valida ?? true, firma?.Motivo,
                     s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId),
-                    VaultTenantIds: tenantsVinculados.GetValueOrDefault(s.Id));
+                    VaultTenantIds: tenantsVinculados.GetValueOrDefault(s.Id),
+                    RubricaIdentidadPath: vigentes.GetValueOrDefault(s.Id)?.RubricaPath);
             }),
         ];
     }
@@ -245,7 +247,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             Eliminado: signer.Eliminado,
             // HU #13180b — el default del OT no está vinculado a la compañía del trámite: su baúl vive en sus propias compañías.
             VaultTenantIds: (await LoadLinkedTenantsAsync([signer.Id], cancellationToken).ConfigureAwait(false))
-                .GetValueOrDefault(signer.Id));
+                .GetValueOrDefault(signer.Id),
+            RubricaIdentidadPath: vigente?.RubricaPath);
     }
 
     /// <summary>
@@ -329,7 +332,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         foreach (var (signerId, result) in resueltos)
         {
-            map[signerId] = new IdentidadResuelta(result.Status, result.CertificateHash, result.ValidUntil);
+            map[signerId] = new IdentidadResuelta(
+                result.Status, result.CertificateHash, result.ValidUntil, result.SignatureImagePath);
         }
 
         return map;
