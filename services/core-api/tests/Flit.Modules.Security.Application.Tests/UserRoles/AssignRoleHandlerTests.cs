@@ -36,6 +36,34 @@ public sealed class AssignRoleHandlerTests
             .Returns(existing is null ? [] : new List<UserRoleAssignmentSnapshot> { existing });
     }
 
+    // HU #13441 — un rol propio de OTRA compañía no es asignable (no se revela que existe).
+    [Fact]
+    public async Task HandleAsync_RoleOwnedByAnotherTenant_ThrowsNotFoundAndDoesNotAssign()
+    {
+        SetupHappyPath(existing: null);
+        _repo.GetActiveRoleAsync(RoleId, Arg.Any<CancellationToken>())
+            .Returns(new RoleForAssignmentSnapshot(RoleId, "COMPANY", Guid.NewGuid()));
+
+        await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
+            .Should().ThrowAsync<RoleForAssignmentNotFoundException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().CreateAssignmentAsync(default!, Arg.Any<CancellationToken>());
+    }
+
+    // HU #13441 — el rol propio del mismo tenant sí se asigna.
+    [Fact]
+    public async Task HandleAsync_RoleOwnedByTheSameTenant_Assigns()
+    {
+        SetupHappyPath(existing: null);
+        _repo.GetActiveRoleAsync(RoleId, Arg.Any<CancellationToken>())
+            .Returns(new RoleForAssignmentSnapshot(RoleId, "COMPANY", TenantId));
+
+        await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
+            .Should().NotThrowAsync();
+
+        await _repo.Received(1).CreateAssignmentAsync(Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
+    }
+
     // Un usuario tiene UN rol: asignar uno nuevo CIERRA el anterior. Lo que define lo que puede
     // hacer son los permisos de ese rol, no acumular roles (revierte el aditivo de HU #10506).
     [Fact]

@@ -48,6 +48,41 @@ export interface TenantRole {
   isSystem: boolean;
   permissionCount: number;
   createdAt: string;
+  /** HU #13441: `null`/ausente = rol global del catálogo FLIT (solo lectura para la compañía); con valor = rol propio. */
+  tenantId?: string | null;
+  isActive?: boolean;
+  targetEntityType?: string;
+  productCode?: string;
+}
+
+/** HU #13441: permiso que el Admin de Compañía puede ofrecer al armar un rol propio. */
+export interface GrantablePermission {
+  id: string;
+  slug: string;
+  name: string;
+  moduleCode: string;
+  productCode: string;
+}
+
+/** HU #13441: detalle de un rol visible para la compañía (permisos asignados incluidos). */
+export interface TenantRoleDetail {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  productCode: string;
+  tenantId: string | null;
+  permissions: { id: string; slug: string; name: string }[];
+}
+
+export interface NewTenantRole {
+  code: string;
+  name: string;
+  description?: string | null;
+  productCode?: string;
+  permissionIds: string[];
 }
 
 export interface AccessibleAction {
@@ -117,6 +152,41 @@ export async function getUsers(onlyDeleted?: boolean): Promise<TenantUser[]> {
 /** GET /api/v1/security/roles */
 export async function getRoles(): Promise<TenantRole[]> {
   return apiFetch<TenantRole[]>("/api/v1/security/roles");
+}
+
+// ── HU #13441/#13443 — roles propios de la compañía (solo AdminCompany; el resto recibe 403) ──────────────
+
+/** GET /api/v1/security/roles/grantable-permissions → solo lo que el caller puede otorgar. */
+export async function getGrantablePermissions(): Promise<GrantablePermission[]> {
+  return apiFetch<GrantablePermission[]>("/api/v1/security/roles/grantable-permissions");
+}
+
+/** GET /api/v1/security/roles/{id} */
+export async function getTenantRole(id: string): Promise<TenantRoleDetail> {
+  return apiFetch<TenantRoleDetail>(`/api/v1/security/roles/${id}`);
+}
+
+/** POST /api/v1/security/roles → 201 { id }. Siempre rol COMPANY con el tenant del caller. */
+export async function createTenantRole(body: NewTenantRole): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>("/api/v1/security/roles", {
+    method: "POST",
+    body: { targetEntityType: "COMPANY", productCode: "tramites", ...body },
+  });
+}
+
+/** PUT /api/v1/security/roles/{id} → nombre y descripción. */
+export async function updateTenantRole(id: string, body: { name: string; description?: string | null }): Promise<TenantRoleDetail> {
+  return apiFetch<TenantRoleDetail>(`/api/v1/security/roles/${id}`, { method: "PUT", body });
+}
+
+/** PUT /api/v1/security/roles/{id}/permissions → reemplaza los permisos del rol. */
+export async function setTenantRolePermissions(id: string, permissionIds: string[]): Promise<TenantRoleDetail> {
+  return apiFetch<TenantRoleDetail>(`/api/v1/security/roles/${id}/permissions`, { method: "PUT", body: { permissionIds } });
+}
+
+/** DELETE /api/v1/security/roles/{id} → 204; 409 ROLE_HAS_ACTIVE_USERS si tiene usuarios. */
+export async function deleteTenantRole(id: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/roles/${id}`, { method: "DELETE" });
 }
 
 /** PUT /api/v1/security/users/{userId}/role */
