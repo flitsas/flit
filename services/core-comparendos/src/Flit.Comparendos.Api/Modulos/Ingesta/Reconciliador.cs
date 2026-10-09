@@ -112,6 +112,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
             UltimoEventoEn = ahora,
         };
         AplicarCampos(c, item);
+        c.EnCobroCoactivo = EsCobroCoactivo(c.EstadoFuente);
         if (c.NombreInfractor is null && clave.IdentificacionId is { } idNit)
         {
             c.NombreInfractor = await db.IdentificacionesMonitoreadas.Where(n => n.Id == idNit).Select(n => n.NombreTitular).FirstOrDefaultAsync(ct).ConfigureAwait(false);

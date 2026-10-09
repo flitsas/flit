@@ -169,7 +169,27 @@ public sealed partial class CicloDeIngesta(
         {
             var hechas = m.Variantes.SelectMany(v => cache.TryGetValue(v, out var h) ? h : []).ToList();
             foreach (var grupo in hechas.GroupBy(h => h.Parcial.MunicipioCodigo))
-                await RepartirAsync(ciclo, m, grupo.Key, grupo.ToList(), m.Variantes.Count, motor, ct).ConfigureAwait(false);
+            {
+                // RN-027: un fallo al repartir una clave no detiene las demás. Si otra clave de la misma empresa creó el
+                // mismo comparendo a la vez (índice único por número), se reintenta una vez: ahora entra como actualización.
+                for (var intento = 1; ; intento++)
+                {
+                    try
+                    {
+                        await RepartirAsync(ciclo, m, grupo.Key, grupo.ToList(), m.Variantes.Count, motor, ct).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (DbUpdateException ex) when (intento == 1 && ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+                    {
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        LogFalloReparto(logger, ciclo.Canal, m.Etiqueta, ex);
+                        ciclo.ClavesError++;
+                        break;
+                    }
+                }
+            }
         }
 
         ciclo.Resultado = ciclo.ClavesTotal == 0 || ciclo.ClavesError == 0 ? ResultadoCiclo.Exitoso
@@ -304,6 +324,9 @@ public sealed partial class CicloDeIngesta(
             .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimoResultado, ciclo.Resultado), CancellationToken.None).ConfigureAwait(false);
         await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Falló el reparto de {Canal} para {Clave}; el ciclo sigue con las demás.")]
+    private static partial void LogFalloReparto(ILogger logger, CanalIngesta canal, string clave, Exception ex);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Ciclo de {Canal} omitido: la fuente no está conectada en este ambiente.")]
     private static partial void LogSinFuente(ILogger logger, CanalIngesta canal);
