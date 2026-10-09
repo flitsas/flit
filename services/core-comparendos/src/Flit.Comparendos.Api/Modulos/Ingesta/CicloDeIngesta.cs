@@ -37,6 +37,7 @@ public sealed partial class CicloDeIngesta(
     IAlertasIntegracion alertas,
     Reloj reloj,
     IConfiguration configuration,
+    ColaTrabajos cola,
     ILogger<CicloDeIngesta> logger) : IEjecutorTrabajo
 {
     private int Paralelismo => Math.Clamp(configuration.GetValue("Comparendos:Ingesta:Paralelismo", 4), 1, 16);
@@ -190,6 +191,16 @@ public sealed partial class CicloDeIngesta(
                     }
                 }
             }
+        }
+
+        ciclo.ClavesError = Math.Min(ciclo.ClavesError, ciclo.ClavesTotal);
+
+        // §6.4.3: lo que entró nuevo y espera conductor por la API de contratos se consulta ya, sin esperar al trabajo diario.
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
+            if (await db.Comparendos.AnyAsync(c => c.CreadoEn >= ciclo.InicioEn && c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente, ct).ConfigureAwait(false))
+                await cola.EncolarAsync(new SolicitudTrabajo(TipoTrabajo.ReintentoContraventor, Disparo.Programado), ct).ConfigureAwait(false);
         }
 
         ciclo.Resultado = ciclo.ClavesTotal == 0 || ciclo.ClavesError == 0 ? ResultadoCiclo.Exitoso

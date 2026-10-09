@@ -113,6 +113,12 @@ public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioCont
             {
                 LogOmitido(logger, id, ex.Codigo);
                 db.ChangeTracker.Clear();
+                // §4.7: si el OT bloquea la consulta o faltan placa/fecha, no aplica: el comparendo pasa a «Sin contraventor (manual)».
+                if (ex.Codigo is "OT_BLOQUEADO" or "SIN_DATOS_CONSULTA")
+                {
+                    await db.Comparendos.Where(c => c.Id == id)
+                        .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.NoAplica), ct).ConfigureAwait(false);
+                }
             }
         }
     }
