@@ -63,7 +63,19 @@ public sealed record ResultadoOcr(
 /// </summary>
 public interface IProveedorOcr
 {
+    /// <summary>False cuando no hay proveedor real ni modo simulado: no se aceptan paquetes.</summary>
+    bool Configurado => true;
+
     Task<ResultadoOcr> ExtraerAsync(byte[] contenido, string contentType, string prompt, string modelo, CancellationToken ct);
+}
+
+/// <summary>QA y PDN sin llave: el OCR no está disponible (no se simula sobre documentos reales).</summary>
+public sealed class ProveedorOcrNoConfigurado : IProveedorOcr
+{
+    public bool Configurado => false;
+
+    public Task<ResultadoOcr> ExtraerAsync(byte[] contenido, string contentType, string prompt, string modelo, CancellationToken ct) =>
+        Task.FromResult(ResultadoOcr.Fallo(modelo, TipoFalloOcr.ArchivoInvalido, "El OCR no está configurado en este ambiente."));
 }
 
 /// <summary>Interpreta la salida del LLM: un objeto JSON (puede venir rodeado de texto o de ```json) con cada campo como valor o como {valor, confianza}.</summary>

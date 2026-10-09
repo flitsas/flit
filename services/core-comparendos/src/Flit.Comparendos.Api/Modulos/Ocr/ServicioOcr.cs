@@ -45,6 +45,8 @@ public sealed class ServicioOcr(
     {
         ArgumentNullException.ThrowIfNull(lista);
         await capacidades.ExigirAsync(tenant, Capacidad.Ocr, ct).ConfigureAwait(false);
+        if (!proveedor.Configurado)
+            throw ReglaException.Conflicto("OCR_NO_CONFIGURADO", "El OCR no está configurado en este ambiente: falta la llave del proveedor.");
         if (string.IsNullOrWhiteSpace(nombre) || nombre.Trim().Length > 150)
             throw new ReglaException("NOMBRE_INVALIDO", "El paquete necesita un nombre de hasta 150 caracteres.");
         if (lista.Count is 0 or > MaximoDocumentos)

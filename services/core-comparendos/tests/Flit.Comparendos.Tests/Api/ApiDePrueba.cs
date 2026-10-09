@@ -84,6 +84,7 @@ public class ApiDePrueba : IAsyncLifetime
             ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
             ["Comparendos:Plataforma:RegistrarManifiesto"] = "false",
             ["Comparendos:Trabajos:Habilitados"] = "false",
+            ["Comparendos:Simulacion:Habilitada"] = "true",
             [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         foreach (var (k, v) in Configuracion())

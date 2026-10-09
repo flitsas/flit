@@ -399,6 +399,10 @@ services:
       Comparendos__Ocr__ApiKey: ${COMPARENDOS_OCR_API_KEY:-}
       # Correos por core-notificaciones (gRPC EnviarCorreo). Vacío = modo consola: los correos solo quedan en el log.
       Comparendos__Notificaciones__Address: ${NOTIFICACIONES_REMOTO_ADDRESS:-http://core-notificaciones:8085}
+      # Modo simulado (fuentes, API de contratos y OCR sin llave). Vacío = solo en Dev/Development. En QA y PDN, lo que
+      # no está conectado no inventa datos: los ciclos de ingesta se omiten, el OCR no acepta paquetes y la API de
+      # contratos responde error.
+      Comparendos__Simulacion__Habilitada: ${COMPARENDOS_SIMULACION:-}
       # Fuentes de comparendos (#13029). Sin URL, la fuente queda en modo simulado (DEV) o apagada.
       Comparendos__SmartCloud__UrlIdentificacion: ${URL_SMART_CLOUD_ACCOUNT_STATEMENT_ID:-}
       Comparendos__SmartCloud__UrlPlaca: ${URL_SMART_CLOUD_ACCOUNT_STATEMENT_PLATE:-}

@@ -67,7 +67,7 @@ public static class Program
         builder.Services.AddSingleton<CalendarioService>();
         builder.Services.AddScoped<Capacidades>();
         builder.Services.AddAlmacenArchivos(builder.Configuration);
-        builder.Services.AddModulosComparendos(builder.Configuration);
+        builder.Services.AddModulosComparendos(builder.Configuration, builder.Environment);
         builder.Services.AddHttpClient(RegistroManifiesto.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
         if (builder.Configuration.GetValue("Comparendos:Plataforma:RegistrarManifiesto", true))
             builder.Services.AddHostedService<RegistroManifiesto>();

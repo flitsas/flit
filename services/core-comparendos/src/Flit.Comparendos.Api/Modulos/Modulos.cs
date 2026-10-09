@@ -7,9 +7,25 @@ namespace Flit.Comparendos.Api.Modulos;
 /// <summary>Registro y mapeo de los módulos del producto. Cada módulo agrega aquí sus servicios y sus endpoints.</summary>
 public static class Modulos
 {
-    public static IServiceCollection AddModulosComparendos(this IServiceCollection services, IConfiguration configuration)
+    /// <summary>
+    /// Modo simulado (fuentes, API de contratos y OCR sin llave): solo donde se pide de forma explícita con
+    /// <c>Comparendos:Simulacion:Habilitada</c>, o por defecto en Development, Dev y Local. En QA y PDN, lo que no está
+    /// conectado no inventa datos: los ciclos de ingesta se omiten, el OCR rechaza paquetes y la API de contratos
+    /// responde error.
+    /// </summary>
+    public static bool SimulacionHabilitada(IConfiguration configuration, IHostEnvironment entorno)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(entorno);
+        return bool.TryParse(configuration["Comparendos:Simulacion:Habilitada"], out var explicito)
+            ? explicito
+            : entorno.IsDevelopment() || entorno.IsEnvironment("Dev") || entorno.IsEnvironment("Local");
+    }
+
+    public static IServiceCollection AddModulosComparendos(this IServiceCollection services, IConfiguration configuration, IHostEnvironment entorno)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var simulacion = SimulacionHabilitada(configuration, entorno);
         services.AddScoped<Comun.Auditoria>();
         services.AddScoped<Comun.RegistroArchivos>();
         services.AddScoped<Catalogos.MapeadorOt>();
@@ -30,7 +46,10 @@ public static class Modulos
         services.AddScoped<Correo.IReaccionCorreo, CambioContraventor.ReaccionCambioContraventor>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Avisos.SchedulerAvisos>();
         services.AddLimitePortal();
-        services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();
+        if (simulacion)
+            services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();
+        else
+            services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosNoConectada>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Contraventor.ReintentoContraventor>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
@@ -44,11 +63,14 @@ public static class Modulos
         services.Configure<Ocr.OpcionesAnthropic>(configuration.GetSection(Ocr.OpcionesAnthropic.Seccion));
         if (configuration[$"{Ocr.OpcionesAnthropic.Seccion}:ApiKey"] is { Length: > 0 })
             services.AddHttpClient<Ocr.IProveedorOcr, Ocr.ProveedorOcrAnthropic>(h => h.Timeout = TimeSpan.FromMinutes(3));
-        else
+        else if (simulacion)
             services.AddSingleton<Ocr.IProveedorOcr, Ocr.ProveedorOcrSimulado>();
+        else
+            services.AddSingleton<Ocr.IProveedorOcr, Ocr.ProveedorOcrNoConfigurado>();
 
         // Ingesta (HU #13460, #13461). Las fuentes reales se conectan al final (Feature #13464); mientras tanto, simulada.
-        services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteSimulada>();
+        if (simulacion)
+            services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteSimulada>();
         services.AddScoped<Ingesta.Reconciliador>();
         services.AddScoped<Ingesta.CicloDeIngesta>();
         services.AddScoped<Trabajos.IEjecutorTrabajo>(sp => sp.GetRequiredService<Ingesta.CicloDeIngesta>());

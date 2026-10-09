@@ -25,6 +25,13 @@ public interface IApiContratos
     Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct);
 }
 
+/// <summary>Fuera de DEV, mientras no se conecte la API real: responde error (se reintenta) y nunca inventa un conductor.</summary>
+internal sealed class ApiContratosNoConectada : IApiContratos
+{
+    public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct) =>
+        Task.FromResult(new RespuestaContrato(ResultadoContrato.Error, null, "La API de contratos no está conectada en este ambiente.", null));
+}
+
 internal sealed class ApiContratosSimulada : IApiContratos
 {
     public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct)

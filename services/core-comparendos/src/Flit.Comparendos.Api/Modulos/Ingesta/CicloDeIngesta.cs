@@ -66,8 +66,17 @@ public sealed partial class CicloDeIngesta(
         await EjecutarAsync(Canal(solicitud.Tipo)!.Value, solicitud.Disparo, solicitud.TenantId, solicitud.UsuarioId, ct).ConfigureAwait(false);
     }
 
+    public bool FuenteConectada(CanalIngesta canal) => fuentes.Any(f => f.Atiende(canal));
+
     public async Task<Guid> EjecutarAsync(CanalIngesta canal, Disparo disparo, Guid? tenantManual, Guid? usuario, CancellationToken ct)
     {
+        // Sin fuente real ni simulada (QA/PDN antes de conectar SmartCloud y la municipal): no hay ciclo ni alerta.
+        if (!FuenteConectada(canal))
+        {
+            LogSinFuente(logger, canal);
+            return Guid.Empty;
+        }
+
         var ciclo = new CicloIngesta
         {
             Id = Guid.CreateVersion7(),
@@ -295,6 +304,9 @@ public sealed partial class CicloDeIngesta(
             .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimoResultado, ciclo.Resultado), CancellationToken.None).ConfigureAwait(false);
         await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Ciclo de {Canal} omitido: la fuente no está conectada en este ambiente.")]
+    private static partial void LogSinFuente(ILogger logger, CanalIngesta canal);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Falló el ciclo de ingesta {Canal}.")]
     private static partial void LogFalloCiclo(ILogger logger, CanalIngesta canal, Exception ex);
