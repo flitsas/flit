@@ -466,6 +466,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
         {
             fullName = "Ana Restrepo",
             documentNumber = Documento,
+            email = "ana@example.com",
             companyTenantIds = new[] { _head },
             transitOfficeIds = new[] { _officeA },
             signerModel = "natural",
