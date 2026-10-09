@@ -353,7 +353,9 @@ public sealed class ServicioOcr(
         }
 
         string? V(string n) => Valor(campos, n);
-        var complementado = campos.Any(c => CamposOcr.Obligatorios.Contains(c.NombreCampo) && c.ValorExtraido is null && c.ValorFinal is not null);
+        // RN-059: tipo 3 si al salir del LLM le faltaba algún obligatorio (ausente o ilegible) y el operador lo completó.
+        var alExtraer = Faltantes(campos.Select(c => new DocumentoOcrCampo { NombreCampo = c.NombreCampo, ValorFinal = c.ValorExtraido }).ToList());
+        var complementado = alExtraer.Count > 0;
         var fotomulta = ValoresOcr.Booleano(V(CamposOcr.EsFotomulta));
         var imposicion = ValoresOcr.Fecha(V(CamposOcr.FechaInfraccion));
         var item = new ItemFuente
