@@ -59,9 +59,12 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchOtAssociableCompanies: (...a: unknown[]) => fetchOtAssociableCompanies(...a),
 }));
 
+const fetchOtSignatureVaultByDocument = vi.fn();
 vi.mock("@/lib/api/admin-signature-vault", () => ({
   fetchSignatureVaultByDocument: vi.fn().mockResolvedValue([]),
   createSignatureVaultEntry: vi.fn(),
+  fetchOtSignatureVaultByDocument: (...a: unknown[]) => fetchOtSignatureVaultByDocument(...a),
+  createOtSignatureVaultEntry: vi.fn(),
 }));
 
 const office = {
@@ -218,7 +221,7 @@ describe("OtMandatosSection", () => {
     );
   });
 
-  it("AC1/AC2/AC3/AC6 ot_admin registra solo contra el endpoint del OT, sin baúl ni empresas representadas", async () => {
+  it("AC1/AC2/AC3/AC6 ot_admin registra el mandatario general en el propio OT, sin empresas representadas", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
     listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
     createMandateSigner.mockResolvedValue({ id: "ms-9", integrityHash: "h" });
@@ -242,7 +245,8 @@ describe("OtMandatosSection", () => {
       expect.objectContaining({
         fullName: "Ana Mandataria",
         documentNumber: "52123456",
-        companyTenantIds: ["cia-1"],
+        // El OT es dueño de su mandatario general: no se asocia a ninguna compañía.
+        companyTenantIds: [],
         transitOfficeIds: ["ot-1"],
         signerModel: "natural",
         signatureMethod: "biometria",
@@ -254,6 +258,48 @@ describe("OtMandatosSection", () => {
     // AC3: ninguna lectura de rutas de la compañía.
     expect(fetchCompanyTransitOffices).not.toHaveBeenCalled();
     expect(fetchRepresentedCompanies).not.toHaveBeenCalled();
+  });
+
+  it("con Baúl de firmas, el mandatario general elige su firma del baúl del propio OT y se envía al guardar", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
+    createMandateSigner.mockResolvedValue({ id: "ms-9", integrityHash: "h" });
+    fetchOtSignatureVaultByDocument.mockResolvedValue([
+      {
+        id: "firma-ot-1",
+        documentType: "CC",
+        documentNumber: "52123456",
+        fullName: "Ana Mandataria",
+        vigenciaDesde: "2026-01-01",
+        vigenciaHasta: "2027-01-01",
+        estado: "activa",
+      },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await abrirFormularioGeneral(user);
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Mandataria");
+    await user.type(screen.getByLabelText("Número de documento"), "52123456");
+    await user.type(screen.getByLabelText(/^Correo/), "ana@ot.test");
+    await user.click(screen.getByRole("radio", { name: "Baúl de firmas" }));
+
+    const selector = await screen.findByLabelText("Firma del baúl");
+    await waitFor(() =>
+      expect(fetchOtSignatureVaultByDocument).toHaveBeenCalledWith("ot-1", "CC", "52123456", true, expect.anything()),
+    );
+    expect(screen.queryByTestId("mandatario-hub-firma-nota")).not.toBeInTheDocument();
+    await user.selectOptions(selector, "firma-ot-1");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(createMandateSigner).toHaveBeenCalledTimes(1));
+    expect(createMandateSigner).toHaveBeenCalledWith(
+      "ot-1",
+      expect.objectContaining({ companyTenantIds: [], signatureMethod: "baul", signatureVaultId: "firma-ot-1" }),
+    );
   });
 
   it("AC4 muestra el mensaje del 422 en lenguaje claro y deja el formulario abierto", async () => {

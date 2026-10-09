@@ -331,6 +331,7 @@ app.MapAdminMandateSignersEndpoints();
 app.MapAdminCompanyMandateSignersEndpoints();
 app.MapAdminMandateSignerIdentityEndpoints();
 app.MapAdminSignatureVaultEndpoints();
+app.MapAdminOtSignatureVaultEndpoints();
 app.MapAdminLegalRepresentativesEndpoints();
 app.MapAdminDeedsEndpoints();
 app.MapAdminPersonalizedDocumentsEndpoints();

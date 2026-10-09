@@ -79,8 +79,8 @@ export function CompanyMandatarioForm({
   onResend,
 }: {
   /**
-   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía (sin selector del
-   * baúl, el servidor resuelve la firma) y el organismo queda fijo.
+   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía y el organismo queda fijo.
+   * El mandatario del propio OT elige o captura su firma en el baúl del OT.
    * HU #13132: modelo, forma de firma y vigencia igual que en la compañía.
    */
   variant?: "company" | "hub";
@@ -136,6 +136,12 @@ export function CompanyMandatarioForm({
   // Verdadero cuando el Admin de Compañía no tiene hijas: no hay lista y el mandatario es solo suyo.
   const [sinRed, setSinRed] = useState(false);
   const isHub = variant === "hub";
+  // El OT es dueño del mandatario que registra para sí (sin compañías): su firma con baúl se elige o se captura en el
+  // baúl del propio OT. Uno de una compañía editado desde el hub conserva la firma que eligió la compañía.
+  const baulDelOt =
+    isHub && (editing ? (editing.companyTenantIds ?? []).length === 0 : ownerCompanyIds.length === 0);
+  const organismoDelHub = restrictToOfficeIds?.[0] ?? offices[0]?.transitOfficeId;
+  const conSelectorBaul = !isHub || baulDelOt;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ErroresMandatario>({});
@@ -146,7 +152,6 @@ export function CompanyMandatarioForm({
   // AC5: se avisa antes de guardar que cambiar de Persona natural descarta forma de firma y vigencia.
   const descartaDatos = editing != null && (editing.signerModel ?? "natural") === "natural" && !esNatural;
 
-  const conBiometria = esNatural && signatureMethod === "biometria";
   const datosDeValidacion = {
     editing,
     metodo: signatureMethod,
@@ -236,8 +241,9 @@ export function CompanyMandatarioForm({
         errores.documentNumber = esJuridica ? "Escribe el NIT." : "Escribe el número de documento.";
       }
     }
-    // HU #13248 — con validación de identidad el enlace se envía al correo: es obligatorio.
-    if (esNatural && signatureMethod === "biometria" && !email.trim()) {
+    // El correo es obligatorio en toda Persona natural: ahí llega el enlace de validación (VID), también si
+    // después pasa de baúl a validación de identidad.
+    if (esNatural && !email.trim()) {
       errores.email = "Escribe el correo: ahí enviamos el enlace de validación.";
     }
     if (selected.length === 0) {
@@ -254,7 +260,7 @@ export function CompanyMandatarioForm({
           validTo,
           signatureVaultId,
         },
-        { exigeSelectorBaul: !isHub },
+        { exigeSelectorBaul: conSelectorBaul },
       ),
     );
     setFieldErrors(errores);
@@ -265,7 +271,7 @@ export function CompanyMandatarioForm({
       return;
     }
 
-    const conBaul = esNatural && signatureMethod === "baul" && !isHub;
+    const conBaul = esNatural && signatureMethod === "baul" && conSelectorBaul;
     setSaving(true);
     try {
       await onSubmit({
@@ -283,7 +289,7 @@ export function CompanyMandatarioForm({
           validTo,
           signatureVaultId,
         }),
-        signatureVaultId: isHub ? undefined : conBaul ? signatureVaultId : null,
+        signatureVaultId: !conSelectorBaul ? undefined : conBaul ? signatureVaultId : null,
         // Sin lista (Admin de Compañía sin red) no se envía nada: aplica solo a su compañía.
         officeCompanies:
           fuenteAsociadas && !sinRed
@@ -466,13 +472,13 @@ export function CompanyMandatarioForm({
               {esNatural && (
                 <div>
                   <label htmlFor="mandatario-email" className="mb-1.5 block text-xs font-semibold">
-                    Correo{conBiometria ? " (obligatorio)" : " (opcional)"}
+                    Correo (obligatorio)
                   </label>
                   <input
                     id="mandatario-email"
                     type="email"
-                    required={conBiometria}
-                    aria-required={conBiometria ? true : undefined}
+                    required
+                    aria-required
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
@@ -484,7 +490,7 @@ export function CompanyMandatarioForm({
                   />
                   <FieldError id="mandatario-email-error" message={fieldErrors.email} />
                   <p id="mandatario-email-ayuda" className="mt-1 text-xs leading-tight opacity-70">
-                    {conBiometria ? "Aquí le llega el enlace para validar su identidad." : "Es un dato de contacto."}
+                    Aquí le llega el enlace para validar su identidad.
                   </p>
                 </div>
               )}
@@ -533,13 +539,13 @@ export function CompanyMandatarioForm({
                 />
               )}
 
-              {signatureMethod === "baul" && isHub && (
+              {signatureMethod === "baul" && !conSelectorBaul && (
                 <p className="text-xs leading-tight opacity-70" data-testid="mandatario-hub-firma-nota">
                   Se usa la firma que la persona tenga vigente en el baúl de la empresa.
                 </p>
               )}
 
-              {signatureMethod === "baul" && !isHub && (
+              {signatureMethod === "baul" && conSelectorBaul && (
                 <div>
                   <label htmlFor="lr-sig-vault" className="mb-1.5 block text-xs font-semibold">
                     Firma del baúl
@@ -547,6 +553,7 @@ export function CompanyMandatarioForm({
                   <SignatureVaultSelector
                     tenantId={tenantId ?? ""}
                     networkHeadId={networkHeadId}
+                    transitOfficeId={baulDelOt ? organismoDelHub : undefined}
                     documentType={documentType}
                     documentNumber={documentNumber}
                     value={signatureVaultId}

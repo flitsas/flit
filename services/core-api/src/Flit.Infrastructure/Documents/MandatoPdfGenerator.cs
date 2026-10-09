@@ -704,6 +704,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             FlitFirmaLinea.Underscores,
             selloBaul: manual ? null : SelloBaulDe(MandatarioEnCuerpo(data)),
             etiquetaSinEstampa: "Sin firmar",
+            // Rúbrica de Kyverum de su validación propia, como la del mandante. FlitFirmaBlock da prioridad al baúl.
+            firmaIdentidad: manual ? null : MandatarioEnCuerpo(data)?.FirmaIdentidadImagen,
             compact: compact);
     }
 
