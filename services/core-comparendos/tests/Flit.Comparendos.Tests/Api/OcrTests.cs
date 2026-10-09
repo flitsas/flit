@@ -160,7 +160,9 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         var b = await api.EnDbAsync(db => db.Comparendos.AsNoTracking().SingleAsync(c => c.TenantId == empresa && c.NumeroNormalizado == "OCRB", ct));
         (b.TipoIngreso, b.ValorTotal).Should().Be((TipoIngreso.OcrComplemento, 302050m));
         (await api.EnDbAsync(db => db.Timeline.CountAsync(t => t.ComparendoId == b.Id && t.Tipo == TipoEventoTimeline.Ingreso, ct))).Should().Be(1);
-        (await api.EnDbAsync(db => db.DocumentoOcrEdiciones.SingleAsync(e => e.DocumentoOcrId == docs["b.png"].Id, ct))).Motivo.Should().Be("Leído del original");
+        var edicion = await api.EnDbAsync(db => db.DocumentoOcrEdiciones.SingleAsync(e => e.DocumentoOcrId == docs["b.png"].Id, ct));
+        (edicion.Motivo, edicion.UsuarioNombre).Should().Be(("Leído del original", "operador@empresa.test"));
+        (await api.EnDbAsync(db => db.PaquetesOcr.SingleAsync(p => p.Id == paquete, ct))).CreadoPorNombre.Should().Be("operador@empresa.test");
 
         var final = await api.EnDbAsync(db => db.PaquetesOcr.AsNoTracking().SingleAsync(p => p.Id == paquete, ct));
         (final.Estado, final.CantidadRegistrados, final.CerradoEn is not null).Should().Be((EstadoPaqueteOcr.Cerrado, 2, true));

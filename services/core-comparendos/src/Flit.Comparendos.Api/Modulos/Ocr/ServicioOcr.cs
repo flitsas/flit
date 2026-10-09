@@ -41,7 +41,7 @@ public sealed class ServicioOcr(
     private static readonly TimeSpan[] Esperas = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(45)];
     private static readonly EstadoDocumentoOcr[] Finales = [EstadoDocumentoOcr.Registrado, EstadoDocumentoOcr.Descartado, EstadoDocumentoOcr.Duplicado];
 
-    public async Task<PaqueteOcr> CrearPaqueteAsync(Guid tenant, string? nombre, IReadOnlyList<IFormFile> lista, Guid usuario, CancellationToken ct)
+    public async Task<PaqueteOcr> CrearPaqueteAsync(Guid tenant, string? nombre, IReadOnlyList<IFormFile> lista, Guid usuario, CancellationToken ct, string? usuarioNombre = null)
     {
         ArgumentNullException.ThrowIfNull(lista);
         await capacidades.ExigirAsync(tenant, Capacidad.Ocr, ct).ConfigureAwait(false);
@@ -57,7 +57,7 @@ public sealed class ServicioOcr(
         var paquete = new PaqueteOcr
         {
             Id = Guid.CreateVersion7(), TenantId = tenant, Nombre = nombre.Trim(), CantidadDocumentos = lista.Count, CantidadPendientes = lista.Count,
-            PromptVersionId = prompt.Id, CreadoPor = usuario, CreadoEn = reloj.Ahora,
+            PromptVersionId = prompt.Id, CreadoPor = usuario, CreadoPorNombre = usuarioNombre, CreadoEn = reloj.Ahora,
         };
         db.PaquetesOcr.Add(paquete);
         foreach (var f in lista)
@@ -289,7 +289,7 @@ public sealed class ServicioOcr(
     }
 
     /// <summary>Corrección o complemento de campos (RN-057): cada cambio queda con valor anterior, nuevo, usuario y motivo.</summary>
-    public async Task CorregirAsync(DocumentoOcr doc, IReadOnlyDictionary<string, string?> cambios, string? motivo, Guid usuario, CancellationToken ct)
+    public async Task CorregirAsync(DocumentoOcr doc, IReadOnlyDictionary<string, string?> cambios, string? motivo, Guid usuario, CancellationToken ct, string? usuarioNombre = null)
     {
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(cambios);
@@ -320,7 +320,7 @@ public sealed class ServicioOcr(
                 continue;
             db.DocumentoOcrEdiciones.Add(new DocumentoOcrEdicion
             {
-                Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, Campo = nombre, ValorAnterior = campo.ValorFinal, ValorNuevo = nuevo, UsuarioId = usuario, EditadoEn = ahora,
+                Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, Campo = nombre, ValorAnterior = campo.ValorFinal, ValorNuevo = nuevo, UsuarioId = usuario, UsuarioNombre = usuarioNombre, EditadoEn = ahora,
                 Motivo = string.IsNullOrWhiteSpace(motivo) ? null : motivo.Trim(),
             });
             (campo.ValorCorregido, campo.ValorFinal) = (nuevo, nuevo);

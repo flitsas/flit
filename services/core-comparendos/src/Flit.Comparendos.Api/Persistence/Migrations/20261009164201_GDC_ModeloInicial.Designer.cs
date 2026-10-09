@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Comparendos.Api.Persistence.Migrations
 {
     [DbContext(typeof(ComparendosDb))]
-    [Migration("20261009163403_GDC_ModeloInicial")]
+    [Migration("20261009164201_GDC_ModeloInicial")]
     partial class GDC_ModeloInicial
     {
         /// <inheritdoc />
@@ -530,6 +530,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid>("CargadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("cargado_por");
+
+                    b.Property<string>("CargadoPorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cargado_por_nombre");
 
                     b.Property<string>("Estado")
                         .IsRequired()
@@ -2073,6 +2078,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("usuario_id");
 
+                    b.Property<string>("UsuarioNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("usuario_nombre");
+
                     b.Property<string>("ValorAnterior")
                         .HasColumnType("text")
                         .HasColumnName("valor_anterior");
@@ -2853,6 +2863,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid>("CreadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("creado_por");
+
+                    b.Property<string>("CreadoPorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("creado_por_nombre");
 
                     b.Property<string>("Estado")
                         .IsRequired()

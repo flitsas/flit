@@ -84,14 +84,14 @@ public static class OcrEndpoints
     private static object Resumen(PaqueteOcr p) => new
     {
         p.Id, p.TenantId, p.Nombre, estado = p.Estado.ToString(), p.CantidadDocumentos, p.CantidadPendientes, p.CantidadCompletos, p.CantidadIncompletos, p.CantidadFallidos,
-        p.CantidadDuplicados, p.CantidadRegistrados, p.CantidadDescartados, procesados = p.CantidadDocumentos - p.CantidadPendientes, p.CreadoPor, p.CreadoEn,
+        p.CantidadDuplicados, p.CantidadRegistrados, p.CantidadDescartados, procesados = p.CantidadDocumentos - p.CantidadPendientes, p.CreadoPor, p.CreadoPorNombre, p.CreadoEn,
         p.ProcesamientoIniciadoEn, p.CerradoEn, p.PromptVersionId,
     };
 
     private static async Task<IResult> Crear(HttpRequest request, UsuarioActual usuario, ServicioOcr servicio, CancellationToken ct)
     {
         var form = await request.ReadFormAsync(ct).ConfigureAwait(false);
-        var paquete = await servicio.CrearPaqueteAsync(usuario.EmpresaOperacion(), form["nombre"].ToString(), form.Files.ToList(), usuario.Id, ct).ConfigureAwait(false);
+        var paquete = await servicio.CrearPaqueteAsync(usuario.EmpresaOperacion(), form["nombre"].ToString(), form.Files.ToList(), usuario.Id, ct, usuario.Nombre).ConfigureAwait(false);
         if (string.Equals(form["iniciar"].ToString(), "true", StringComparison.OrdinalIgnoreCase))
             await servicio.IniciarAsync(paquete, ct).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}/ocr/paquetes/{paquete.Id}", Resumen(paquete));
@@ -157,7 +157,7 @@ public static class OcrEndpoints
         var campos = await db.DocumentoOcrCampos.AsNoTracking().Where(c => c.DocumentoOcrId == id).ToListAsync(ct).ConfigureAwait(false);
         var orden = CamposOcr.Todos.Select((n, i) => (n, i)).ToDictionary(x => x.n, x => x.i);
         var ediciones = await db.DocumentoOcrEdiciones.AsNoTracking().Where(e => e.DocumentoOcrId == id).OrderBy(e => e.EditadoEn)
-            .Select(e => new { e.Campo, e.ValorAnterior, e.ValorNuevo, e.UsuarioId, e.EditadoEn, e.Motivo }).ToListAsync(ct).ConfigureAwait(false);
+            .Select(e => new { e.Campo, e.ValorAnterior, e.ValorNuevo, e.UsuarioId, e.UsuarioNombre, e.EditadoEn, e.Motivo }).ToListAsync(ct).ConfigureAwait(false);
         var intentos = await db.DocumentoOcrIntentos.AsNoTracking().Where(i => i.DocumentoOcrId == id).OrderBy(i => i.Numero)
             .Select(i => new { i.Numero, i.Resultado, tipoError = i.TipoError.HasValue ? i.TipoError.Value.ToString() : null, i.MensajeError, i.IntentadoEn, i.ProximoReintentoEn })
             .ToListAsync(ct).ConfigureAwait(false);
@@ -195,7 +195,7 @@ public static class OcrEndpoints
     private static async Task<IResult> Corregir(Guid id, PedidoCorreccion pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
     {
         var d = await DocumentoAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
-        await servicio.CorregirAsync(d, pedido.Campos ?? [], pedido.Motivo, usuario.Id, ct).ConfigureAwait(false);
+        await servicio.CorregirAsync(d, pedido.Campos ?? [], pedido.Motivo, usuario.Id, ct, usuario.Nombre).ConfigureAwait(false);
         return Results.Ok(new { d.Id, estado = d.Estado.ToString(), d.CamposFaltantes, d.FuenteDuplicado });
     }
 

@@ -523,6 +523,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("carga_masiva_pagos");
             e.HasKey(x => x.Id);
             e.Property(x => x.NombreArchivo).HasMaxLength(255);
+            e.Property(x => x.CargadoPorNombre).HasMaxLength(200);
             e.HasIndex(x => new { x.TenantId, x.CargadoEn });
         });
         m.Entity<CargaMasivaPagosFila>(e =>
@@ -548,6 +549,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("paquete_ocr");
             e.HasKey(x => x.Id);
             e.Property(x => x.Nombre).HasMaxLength(150);
+            e.Property(x => x.CreadoPorNombre).HasMaxLength(200);
             e.HasIndex(x => new { x.TenantId, x.CreadoEn });
             e.HasIndex(x => new { x.TenantId, x.Estado });
         });
@@ -581,6 +583,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("documento_ocr_edicion");
             e.HasKey(x => x.Id);
             e.Property(x => x.Campo).HasMaxLength(60);
+            e.Property(x => x.UsuarioNombre).HasMaxLength(200);
             e.HasIndex(x => x.DocumentoOcrId);
         });
         m.Entity<DocumentoOcrIntento>(e =>

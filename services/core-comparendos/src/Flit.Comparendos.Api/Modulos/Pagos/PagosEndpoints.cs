@@ -101,7 +101,7 @@ public static class PagosEndpoints
         await using var stream = archivo.OpenReadStream();
         using var memoria = new MemoryStream();
         await stream.CopyToAsync(memoria, ct).ConfigureAwait(false);
-        var carga = new CargaMasivaPagos { Id = Guid.CreateVersion7(), TenantId = tenant, NombreArchivo = archivo.FileName, CargadoPor = usuario.Id, CargadoEn = reloj.Ahora };
+        var carga = new CargaMasivaPagos { Id = Guid.CreateVersion7(), TenantId = tenant, NombreArchivo = archivo.FileName, CargadoPor = usuario.Id, CargadoPorNombre = usuario.Nombre, CargadoEn = reloj.Ahora };
         carga.ArchivoId = await archivos.GuardarAsync(tenant, "carga_pagos", archivo.FileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", memoria.ToArray(), ct, usuario.Id).ConfigureAwait(false);
         db.CargasMasivasPagos.Add(carga);
 
@@ -209,7 +209,7 @@ public static class PagosEndpoints
         return Results.Ok(await db.CargasMasivasPagos.AsNoTracking().Where(c => tenant == null || c.TenantId == tenant).OrderByDescending(c => c.CargadoEn).Take(50)
             .Select(c => new
             {
-                c.Id, c.NombreArchivo, estado = c.Estado.ToString(), c.TotalFilas, c.FilasValidas, c.FilasInvalidas, c.CargadoPor, c.CargadoEn,
+                c.Id, c.NombreArchivo, estado = c.Estado.ToString(), c.TotalFilas, c.FilasValidas, c.FilasInvalidas, c.CargadoPor, c.CargadoPorNombre, c.CargadoEn,
                 motivoRechazo = db.CargaMasivaPagosFilas.Where(f => f.CargaId == c.Id && f.NumeroFila == 0).Select(f => f.Errores[0]).FirstOrDefault(),
             }).ToListAsync(ct).ConfigureAwait(false));
     }

@@ -252,6 +252,7 @@ public sealed class CargaMasivaPagos
     public int FilasInvalidas { get; set; }
     public EstadoCargaMasiva Estado { get; set; } = EstadoCargaMasiva.Validando;
     public Guid CargadoPor { get; set; }
+    public string? CargadoPorNombre { get; set; }
     public DateTimeOffset CargadoEn { get; set; }
     public DateTimeOffset? ProcesadoEn { get; set; }
 }
@@ -284,6 +285,7 @@ public sealed class PaqueteOcr
     public int CantidadDescartados { get; set; }
     public Guid PromptVersionId { get; set; }
     public Guid CreadoPor { get; set; }
+    public string? CreadoPorNombre { get; set; }
     public DateTimeOffset CreadoEn { get; set; }
     public DateTimeOffset? ProcesamientoIniciadoEn { get; set; }
     public DateTimeOffset? CerradoEn { get; set; }
@@ -338,6 +340,7 @@ public sealed class DocumentoOcrEdicion
     public string? ValorAnterior { get; set; }
     public string? ValorNuevo { get; set; }
     public Guid UsuarioId { get; set; }
+    public string? UsuarioNombre { get; set; }
     public DateTimeOffset EditadoEn { get; set; }
     public string? Motivo { get; set; }
 }

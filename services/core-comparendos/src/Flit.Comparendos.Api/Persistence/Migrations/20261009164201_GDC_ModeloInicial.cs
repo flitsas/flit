@@ -201,6 +201,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     filas_invalidas = table.Column<int>(type: "integer", nullable: false),
                     estado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     cargado_por = table.Column<Guid>(type: "uuid", nullable: false),
+                    cargado_por_nombre = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     cargado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     procesado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
@@ -509,6 +510,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     valor_anterior = table.Column<string>(type: "text", nullable: true),
                     valor_nuevo = table.Column<string>(type: "text", nullable: true),
                     usuario_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    usuario_nombre = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     editado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     motivo = table.Column<string>(type: "text", nullable: true)
                 },
@@ -777,6 +779,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     cantidad_descartados = table.Column<int>(type: "integer", nullable: false),
                     prompt_version_id = table.Column<Guid>(type: "uuid", nullable: false),
                     creado_por = table.Column<Guid>(type: "uuid", nullable: false),
+                    creado_por_nombre = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     creado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     procesamiento_iniciado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     cerrado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
