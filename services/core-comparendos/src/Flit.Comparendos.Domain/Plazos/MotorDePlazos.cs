@@ -59,6 +59,7 @@ public sealed record SituacionLegal(
 /// <item>Caducidad 1 año y prescripción 3 años [ADO #12878], desde la notificación [Excel C7]; si caen en día no hábil,
 /// se corren al siguiente hábil (RN-074).</item>
 /// <item>Próximo a vencer: a 2 días hábiles o menos del límite de gestión [ADO #12982 «48 horas», en hábiles por C6].</item>
+/// <item>Cada estado empieza el día después de su fecha límite (§6.1: hoy &gt; fecha).</item>
 /// </list>
 /// </summary>
 public sealed class MotorDePlazos(CalendarioHabil calendario)
@@ -101,8 +102,8 @@ public sealed class MotorDePlazos(CalendarioHabil calendario)
 
         var estado = hoy switch
         {
-            _ when fechas.Prescripcion is { } p && hoy >= p => EstadoLegal.Prescrito,
-            _ when fechas.Caducidad is { } c && hoy >= c => EstadoLegal.Caducado,
+            _ when fechas.Prescripcion is { } p && hoy > p => EstadoLegal.Prescrito,
+            _ when fechas.Caducidad is { } c && hoy > c => EstadoLegal.Caducado,
             _ when hoy > limite => EstadoLegal.Vencido,
             _ => EstadoLegal.EnTiempo,
         };

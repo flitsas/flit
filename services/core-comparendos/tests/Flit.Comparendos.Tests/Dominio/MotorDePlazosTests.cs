@@ -60,8 +60,9 @@ public sealed class MotorDePlazosTests
     [InlineData("2026-10-19", EstadoLegal.EnTiempo, Descuento.Cincuenta, true)]
     [InlineData("2026-10-20", EstadoLegal.Vencido, Descuento.Veinticinco, false)]
     [InlineData("2026-11-11", EstadoLegal.Vencido, Descuento.Ninguno, false)]
-    [InlineData("2027-10-01", EstadoLegal.Caducado, Descuento.Ninguno, false)]
-    [InlineData("2029-10-01", EstadoLegal.Prescrito, Descuento.Ninguno, false)]
+    [InlineData("2027-10-01", EstadoLegal.Vencido, Descuento.Ninguno, false)]
+    [InlineData("2027-10-02", EstadoLegal.Caducado, Descuento.Ninguno, false)]
+    [InlineData("2029-10-02", EstadoLegal.Prescrito, Descuento.Ninguno, false)]
     public void Evaluar_fotomulta(string hoy, EstadoLegal estado, Descuento descuento, bool proximo)
     {
         var f = Motor.Calcular(TipoImposicion.Fotomulta, null, Notificacion);
