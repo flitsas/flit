@@ -7,6 +7,7 @@ import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
+import { partirCorreos } from "@/lib/correos";
 import { TIPO_ALERTA } from "@/lib/etiquetas";
 import type { ConfigAlertas, DestinatarioAlerta } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -14,12 +15,18 @@ import { useCarga } from "@/lib/useCarga";
 function Configuracion({ inicial, onGuardado }: { inicial: ConfigAlertas; onGuardado: () => void }) {
   const toast = useToast();
   const [c, setC] = useState(inicial);
+  const [internos, setInternos] = useState((inicial.correosInternosReportes ?? []).join(", "));
   const [ocupado, setOcupado] = useState(false);
+  const listaInternos = partirCorreos(internos);
 
   const guardar = async () => {
+    if (listaInternos.invalidos.length > 0) {
+      toast.show(`Correo inválido en la lista interna: ${listaInternos.invalidos.join(", ")}`, "error");
+      return;
+    }
     setOcupado(true);
     try {
-      await apiFetch("/admin/alertas", { method: "PUT", body: c });
+      await apiFetch("/admin/alertas", { method: "PUT", body: { ...c, correosInternosReportes: listaInternos.validos } });
       toast.show("Configuración guardada.", "success");
       onGuardado();
     } catch (e) {
@@ -48,6 +55,14 @@ function Configuracion({ inicial, onGuardado }: { inicial: ConfigAlertas; onGuar
         Asunto
         <input className={INPUT_CLS} value={c.plantillaAsunto} onChange={(e) => setC({ ...c, plantillaAsunto: e.target.value })} />
         <span className="font-normal opacity-70">Puedes usar {"{FUENTE}"} y {"{TIMESTAMP}"}.</span>
+      </label>
+      <label className={`${ETIQUETA_CLS} sm:col-span-2`}>
+        Correos internos para reportes
+        <input className={INPUT_CLS} value={internos} placeholder="cuentas@flit.com.co, gerencia@flit.com.co" onChange={(e) => setInternos(e.target.value)} />
+        <span className="font-normal opacity-70">
+          Reciben en copia oculta los cierres semanal y mensual de todas las empresas con reportes. Separa con coma.
+          {listaInternos.invalidos.length > 0 && <b className="text-[#B42318]"> Inválidos: {listaInternos.invalidos.join(", ")}</b>}
+        </span>
       </label>
       <div className="sm:col-span-2">
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={guardar}>

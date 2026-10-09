@@ -302,6 +302,8 @@ export interface ConfigAlertas {
   umbralFallosCiclo: number;
   plantillaAsunto: string;
   remitenteNombre: string;
+  /** Lista interna de FLIT que recibe en copia oculta los reportes automáticos (S-61). */
+  correosInternosReportes?: string[] | null;
 }
 
 export interface DestinatarioAlerta {
