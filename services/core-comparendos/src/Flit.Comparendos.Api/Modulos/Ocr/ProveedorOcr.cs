@@ -115,7 +115,7 @@ public static class RespuestaOcr
 
 public sealed class OpcionesAnthropic
 {
-    public const string Seccion = "Comparendos:Ocr:Anthropic";
+    public const string Seccion = "Comparendos:Ocr";
 
     public string BaseUrl { get; set; } = "https://api.anthropic.com";
     public string ApiKey { get; set; } = string.Empty;
