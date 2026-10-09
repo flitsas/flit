@@ -6,6 +6,7 @@ public static class Modulos
     public static IServiceCollection AddModulosComparendos(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        services.AddScoped<Comun.Auditoria>();
         return services;
     }
 
@@ -13,6 +14,7 @@ public static class Modulos
     {
         var api = app.MapGroup(prefijo);
         api.MapGet("/sesion", Sesion.Obtener).RequireAuthorization(Plataforma.AutorizacionExtensions.PoliticaUsuario);
+        Monitoreo.MonitoreoEndpoints.Map(api);
         return app;
     }
 }

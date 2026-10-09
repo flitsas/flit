@@ -95,14 +95,39 @@ public sealed class UsuarioActual(IHttpContextAccessor http, IPlatformTenantAcce
         EsSuperAdmin || User.FindAll("permissions").Any(c => string.Equals(c.Value, slug, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Empresa sobre la que actúa una ESCRITURA: la del token; el SuperAdmin debe decir cuál. Null = petición inválida.
+    /// Empresa sobre la que OPERA el usuario (crear, enviar, registrar): siempre la de su token. El SuperAdmin no opera
+    /// comparendos de una gestora [Excel S2]: 403 <c>SUPERADMIN_SOLO_LECTURA</c>.
     /// </summary>
-    public Guid? EmpresaParaEscribir(Guid? pedida) =>
-        EsSuperAdmin ? pedida : EmpresaId is { } propia && (pedida is null || pedida == propia) ? propia : null;
+    public Guid EmpresaOperacion()
+    {
+        if (EsSuperAdmin)
+            throw ReglaException.Prohibido("SUPERADMIN_SOLO_LECTURA", "Como administrador de FLIT ves la gestión de las empresas, pero la operación es de cada empresa.");
+        return EmpresaId ?? throw ReglaException.Prohibido("SIN_EMPRESA", "Tu usuario no tiene una empresa asignada.");
+    }
 
-    /// <summary>Empresa para LEER: un usuario, la suya; el SuperAdmin, la pedida o todas (null).</summary>
-    public (bool Valida, Guid? Empresa) EmpresaParaLeer(Guid? pedida) =>
-        EsSuperAdmin ? (true, pedida)
-        : EmpresaId is { } propia && (pedida is null || pedida == propia) ? (true, propia)
-        : (false, null);
+    /// <summary>
+    /// Empresa que LEE: un usuario, la suya (si pide otra, 403); el SuperAdmin, la que pida. Si <paramref name="obligatoria"/>
+    /// y el SuperAdmin no eligió, 400 <c>EMPRESA_REQUERIDA</c> (filtro maestro por gestora, ADO #12982).
+    /// </summary>
+    public Guid? EmpresaLectura(Guid? pedida, bool obligatoria = true)
+    {
+        if (EsSuperAdmin)
+        {
+            if (pedida is null && obligatoria)
+                throw new ReglaException("EMPRESA_REQUERIDA", "Elige una empresa para ver su información.", StatusCodes.Status400BadRequest);
+            return pedida;
+        }
+
+        var propia = EmpresaId ?? throw ReglaException.Prohibido("SIN_EMPRESA", "Tu usuario no tiene una empresa asignada.");
+        if (pedida is { } otra && otra != propia)
+            throw ReglaException.Prohibido("OTRA_EMPRESA", "No puedes ver información de otra empresa.");
+        return propia;
+    }
+
+    /// <summary>Solo el SuperAdmin (configuración global).</summary>
+    public void ExigirSuperAdmin()
+    {
+        if (!EsSuperAdmin)
+            throw ReglaException.Prohibido("SOLO_SUPERADMIN", "Esta configuración es solo del administrador de FLIT.");
+    }
 }
