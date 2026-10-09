@@ -128,11 +128,16 @@ internal sealed class MandateFormatRepository(FlitDbContext db) : IMandateFormat
         MandateFormatVersionEntity? version = null;
         if (body is not null)
         {
+            // La siguiente a la MÁS ALTA publicada, no a la vigente: tras restablecer la redacción de fábrica la vigente
+            // es 0 y las versiones anteriores siguen ahí (son inmutables).
+            var ultima = await db.MandateFormatVersions
+                .Where(v => v.FormatSettingId == setting.Id)
+                .MaxAsync(v => (int?)v.VersionNumber, ct).ConfigureAwait(false) ?? 0;
             version = new MandateFormatVersionEntity
             {
                 Id = Guid.NewGuid(),
                 FormatSettingId = setting.Id,
-                VersionNumber = setting.CurrentVersion + 1,
+                VersionNumber = ultima + 1,
                 Body = body,
                 BodySha256 = Sha256Hex(body),
                 CreatedAt = now,
@@ -162,6 +167,45 @@ internal sealed class MandateFormatRepository(FlitDbContext db) : IMandateFormat
             ToView(setting),
             version is null ? null : ToVersionView(normalized, version),
             Changed: true);
+    }
+
+    public async Task<MandateFormatSaveResult> ResetTemplateAsync(
+        string code,
+        long? expectedRowVersion,
+        Guid? userId,
+        CancellationToken ct = default)
+    {
+        var normalized = Normalize(code);
+        if (normalized is null || !MandatoFormatCatalog.Contains(normalized))
+            return new(MandateFormatWriteStatus.UnknownCode);
+
+        var setting = await db.MandateFormatSettings
+            .FirstOrDefaultAsync(s => s.FormatCode == normalized, ct).ConfigureAwait(false);
+        if (setting is null)
+            return new(MandateFormatWriteStatus.UnknownCode);
+
+        if (expectedRowVersion is not { } expected || setting.RowVersion != expected)
+            return new(MandateFormatWriteStatus.Conflict, ToView(setting));
+
+        if (setting.CurrentVersion == 0)
+            return new(MandateFormatWriteStatus.Ok, ToView(setting), null, Changed: false);
+
+        setting.CurrentVersion = 0;
+        setting.UpdatedAt = DateTimeOffset.UtcNow;
+        setting.UpdatedBy = userId;
+
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            return new(MandateFormatWriteStatus.Conflict);
+        }
+
+        await db.Entry(setting).ReloadAsync(ct).ConfigureAwait(false);
+        return new(MandateFormatWriteStatus.Ok, ToView(setting), null, Changed: true);
     }
 
     internal static string Sha256Hex(string body) =>

@@ -334,6 +334,25 @@ export async function updateMandatoFormat(
   };
 }
 
+/**
+ * «Restablecer redacción de fábrica»: descarta la plantilla editada y el formato vuelve al texto original del sistema.
+ * Conserva el nombre, el tipo y el historial de versiones. `rowVersion` obligatorio (409 si está desactualizado).
+ */
+export async function resetMandatoFormatTemplate(
+  code: string,
+  rowVersion: number | null,
+  signal?: AbortSignal,
+): Promise<{ format: MandatoFormatView; changed: boolean }> {
+  const data = await apiFetch<Record<string, unknown>>(
+    `${base}/formatos/${encodeURIComponent(code)}/restablecer-plantilla`,
+    { method: "POST", body: { rowVersion }, signal },
+  );
+  return {
+    format: mapFormat((data.format ?? {}) as Record<string, unknown>),
+    changed: data.changed === true,
+  };
+}
+
 /** Vista previa (PDF de muestra) de la plantilla en borrador; no publica ninguna versión. */
 export async function previewMandatoFormatDraft(
   code: string,
