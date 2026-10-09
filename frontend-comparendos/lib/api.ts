@@ -78,6 +78,18 @@ export async function apiDownload(path: string, fallbackName: string, query?: Qu
   return { aceptado: false };
 }
 
+/** POST que devuelve un archivo (p. ej. la vista previa en PDF de una plantilla) como Blob. */
+export async function apiPostBlob(path: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) await readResponse<never>(response);
+  return response.blob();
+}
+
 async function readResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
 
