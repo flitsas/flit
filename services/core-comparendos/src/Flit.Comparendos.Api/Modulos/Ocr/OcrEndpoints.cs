@@ -39,21 +39,25 @@ public static class OcrEndpoints
         return tenant;
     }
 
-    private static async Task<PaqueteOcr> PaqueteAsync(ComparendosDb db, Guid id, UsuarioActual usuario, bool operar, CancellationToken ct)
+    private static async Task<PaqueteOcr> PaqueteAsync(ComparendosDb db, Guid id, UsuarioActual usuario, bool operar, Capacidades capacidades, CancellationToken ct)
     {
         var tenant = operar ? usuario.EmpresaOperacion() : (Guid?)null;
         var p = await db.PaquetesOcr.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
         if (p is null || (operar ? p.TenantId != tenant : !usuario.EsSuperAdmin && p.TenantId != usuario.EmpresaId))
             throw ReglaException.NoEncontrado("El paquete");
+        if (!usuario.EsSuperAdmin)
+            await capacidades.ExigirAsync(p.TenantId, Capacidad.Ocr, ct).ConfigureAwait(false);
         return p;
     }
 
-    private static async Task<DocumentoOcr> DocumentoAsync(ComparendosDb db, Guid id, UsuarioActual usuario, bool operar, CancellationToken ct)
+    private static async Task<DocumentoOcr> DocumentoAsync(ComparendosDb db, Guid id, UsuarioActual usuario, bool operar, Capacidades capacidades, CancellationToken ct)
     {
         var tenant = operar ? usuario.EmpresaOperacion() : (Guid?)null;
         var d = await db.DocumentosOcr.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
         if (d is null || (operar ? d.TenantId != tenant : !usuario.EsSuperAdmin && d.TenantId != usuario.EmpresaId))
             throw ReglaException.NoEncontrado("El documento");
+        if (!usuario.EsSuperAdmin)
+            await capacidades.ExigirAsync(d.TenantId, Capacidad.Ocr, ct).ConfigureAwait(false);
         return d;
     }
 
@@ -97,9 +101,9 @@ public static class OcrEndpoints
         return Results.Created($"{Program.Prefijo}/ocr/paquetes/{paquete.Id}", Resumen(paquete));
     }
 
-    private static async Task<IResult> Paquete(Guid id, string? estado, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
+    private static async Task<IResult> Paquete(Guid id, string? estado, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
     {
-        var p = await PaqueteAsync(db, id, usuario, operar: false, ct).ConfigureAwait(false);
+        var p = await PaqueteAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
         var q = db.DocumentosOcr.AsNoTracking().Where(d => d.PaqueteId == id);
         if (Enum.TryParse<EstadoDocumentoOcr>(estado, true, out var e))
             q = q.Where(d => d.Estado == e);
@@ -111,16 +115,16 @@ public static class OcrEndpoints
         return Results.Ok(new { paquete = Resumen(p), documentos });
     }
 
-    private static async Task<IResult> Iniciar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> Iniciar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var p = await PaqueteAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var p = await PaqueteAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         await servicio.IniciarAsync(p, ct).ConfigureAwait(false);
         return Results.Accepted($"{Program.Prefijo}/ocr/paquetes/{id}", Resumen(p));
     }
 
-    private static async Task<IResult> RegistrarCompletos(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> RegistrarCompletos(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var p = await PaqueteAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var p = await PaqueteAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         var ids = await db.DocumentosOcr.Where(d => d.PaqueteId == p.Id && d.Estado == EstadoDocumentoOcr.Completo).OrderBy(d => d.Id).Select(d => d.Id).ToListAsync(ct).ConfigureAwait(false);
         var registrados = new List<Registro>();
         var omitidos = new List<object>();
@@ -142,18 +146,18 @@ public static class OcrEndpoints
         return Results.Ok(new { registrados, omitidos, placasPorMonitorear = registrados.Where(r => r.Placa is not null && !r.PlacaYaMonitoreada).Select(r => r.Placa).Distinct() });
     }
 
-    private static async Task<IResult> DescartarFallidos(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> DescartarFallidos(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var p = await PaqueteAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var p = await PaqueteAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         var docs = await db.DocumentosOcr.Where(d => d.PaqueteId == p.Id && d.Estado == EstadoDocumentoOcr.Fallido).ToListAsync(ct).ConfigureAwait(false);
         foreach (var d in docs)
             await servicio.DescartarAsync(d, string.IsNullOrWhiteSpace(pedido.Motivo) ? "Descarte masivo de fallidos" : pedido.Motivo, usuario.Id, ct).ConfigureAwait(false);
         return Results.Ok(new { descartados = docs.Count });
     }
 
-    private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
+    private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
     {
-        var d = await DocumentoAsync(db, id, usuario, operar: false, ct).ConfigureAwait(false);
+        var d = await DocumentoAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
         var campos = await db.DocumentoOcrCampos.AsNoTracking().Where(c => c.DocumentoOcrId == id).ToListAsync(ct).ConfigureAwait(false);
         var orden = CamposOcr.Todos.Select((n, i) => (n, i)).ToDictionary(x => x.n, x => x.i);
         var ediciones = await db.DocumentoOcrEdiciones.AsNoTracking().Where(e => e.DocumentoOcrId == id).OrderBy(e => e.EditadoEn)
@@ -192,29 +196,29 @@ public static class OcrEndpoints
         });
     }
 
-    private static async Task<IResult> Corregir(Guid id, PedidoCorreccion pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> Corregir(Guid id, PedidoCorreccion pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var d = await DocumentoAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         await servicio.CorregirAsync(d, pedido.Campos ?? [], pedido.Motivo, usuario.Id, ct, usuario.Nombre).ConfigureAwait(false);
         return Results.Ok(new { d.Id, estado = d.Estado.ToString(), d.CamposFaltantes, d.FuenteDuplicado });
     }
 
-    private static async Task<IResult> Registrar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> Registrar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var d = await DocumentoAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         return Results.Ok(await servicio.RegistrarAsync(d, Actor.De(usuario), ct).ConfigureAwait(false));
     }
 
-    private static async Task<IResult> Descartar(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> Descartar(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var d = await DocumentoAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         await servicio.DescartarAsync(d, pedido.Motivo, usuario.Id, ct).ConfigureAwait(false);
         return Results.NoContent();
     }
 
-    private static async Task<IResult> Reintentar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, CancellationToken ct)
+    private static async Task<IResult> Reintentar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
-        var d = await DocumentoAsync(db, id, usuario, operar: true, ct).ConfigureAwait(false);
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         await servicio.ReintentarAsync(d, ct).ConfigureAwait(false);
         return Results.Accepted();
     }
