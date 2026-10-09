@@ -1,5 +1,7 @@
 // Textos literales del paso Datos (réplica de Kyverum, decisión del PO, Épica #13202).
 
+import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
+
 /**
  * Versión del TEXTO de consentimiento que este front renderiza. Debe coincidir con la vigente del backend
  * (`ManualCaptureConsent.TextVersion`, que devuelve el GET en `consentTextVersion`); al aceptar se envía la que
@@ -22,7 +24,8 @@ export const CAPTURE_TIPS = [
   "Usa el documento original.",
 ] as const;
 
-export const CONTACT_EMAIL = "samuel.cardenas@flitsas.com";
+// Bug #13449: canal de soporte de FLIT (el mismo de Ayuda y Dr. FLIT), no un correo personal.
+export const CONTACT_EMAIL = DR_FLIT_SUPPORT_EMAIL;
 
 export const LEGAL_FOOTER_PREFIX =
   "FLIT 2.0 guarda tus datos. Para conocerlos, corregirlos o pedir que se borren:";
