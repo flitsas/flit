@@ -143,6 +143,12 @@ quedan también en el `.env`.
 | `migracion-api` (no publicado) | `MIGRACION_API_PORT` | 4030 | 5030 | 6030 |
 | **Hub (`frontend-hub`)** | `HUB_PORT` | **4022** | **5022** | **6022** |
 | gRPC interno de core-api (no publicado) | `CORE_API_GRPC_PORT` | 8082 | 8082 | 8082 |
+| gRPC interno de core-identity (no publicado, Epic #13316) | `CORE_IDENTITY_GRPC_PORT` | vacío = apagado; propuesto 8083 | igual | igual |
+| core-consultas REST (no publicado) | `CORE_CONSULTAS_PORT` | 4026 (propuesto) | igual | igual |
+| core-consultas gRPC (no publicado) | `CORE_CONSULTAS_GRPC_PORT` | 8084 (propuesto) | igual | igual |
+| core-notificaciones REST (no publicado) | `CORE_NOTIFICACIONES_PORT` | 4027 (propuesto) | igual | igual |
+| core-notificaciones gRPC (no publicado) | `CORE_NOTIFICACIONES_GRPC_PORT` | 8085 (propuesto) | igual | igual |
+| Consola de RabbitMQ (solo `127.0.0.1`) | `RABBITMQ_MGMT_PORT` | 4672 | igual | igual |
 | Reservados, sin servicio todavía | — | Comparendos 4023; Diagnóstico 4024 | 5023; 5024 | 6023; 6024 |
 
 Notas:
@@ -252,7 +258,7 @@ No cambian con la suite (hoy todo corre como `Development`), pero ahora tienen v
 
 | Nombre | Tipo | Qué hace | Cuándo |
 |---|---|---|---|
-| `FLIT_DEPLOY_ROLLING` | Variable del Environment | `true`: el CD despliega servicio por servicio, sin `down` de todo el stack | Fase 5 |
+| `FLIT_DEPLOY_ROLLING` | Variable del Environment | `true`: el CD despliega servicio por servicio, sin `down` de todo el stack. Desde la HU #13329 solo recrea los contenedores cuya imagen cambió (despliega `tag@digest`) y, si falla el build de un servicio, despliega los demás y ese conserva su versión (el CD termina en rojo para que se vea) | Fase 5 |
 | `HOSTINGER_SSH_*`, `HOSTINGER_DEPLOY_PATH`, `GHCR_PAT`, `GHCR_USERNAME` | Secretos | Sin cambios | — |
 
 Las imágenes nuevas (`core-identity`, `frontend-hub`) las construye y publica el mismo CD. Se construyen por primera
@@ -263,6 +269,14 @@ vez cuando la rama se fusiona en `develop`.
 Las demás variables (Verifik, Kyverum, Fasecolda, SMTP, Renting, ICT, migrador, Anthropic, file-manager) **no
 cambian** con la suite. core-identity las recibe todas por el mismo bloque del compose que core-api: no hay que
 duplicar nada.
+
+### 4.8 Consultas, Notificaciones y RabbitMQ (Epic #13316)
+
+Despliegue aparte, con su propio paso a paso: [handoff-vps-consultas-notificaciones.md](handoff-vps-consultas-notificaciones.md).
+Desde esa Epic core-api ya no habla con proveedores ni envía correos: `core-consultas`, `core-notificaciones` y RabbitMQ
+son obligatorios, así que su preparación va antes de fusionar. Incluye el paso de ICT al token de Identidad (antes
+§4.8 de este documento), el broker, las bases propias, las variables nuevas (entre ellas la URL nueva del aviso de
+Kyverum), la verificación y cómo volver atrás.
 
 ---
 

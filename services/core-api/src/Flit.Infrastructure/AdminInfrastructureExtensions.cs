@@ -219,15 +219,13 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
 
-        // HU #11367 (Feature #11349) — canales de notificación con su remitente resuelto por
-        // configuración (EmailSettings / RentingChannelOptions). Sin adaptador de envío: lee, no
-        // construye — mantiene el Feature #11349 independiente del #11348.
+        // HU #11367 (Feature #11349) — canales de notificación con su remitente; desde el corte (HU #13359) los da
+        // core-notificaciones (ICanalesDeNotificaciones, que registra Flit.Api).
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService>();
 
-        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido. Usa el
-        // IEmailSender del proceso (registrado en AddPostgresInfrastructure, ya decorado con
-        // bitácora) y EmailTransportDescriptor para declarar si el transporte fue de consola (AC8).
+        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido; envía por
+        // core-notificaciones (HU #13359).
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
 
@@ -267,12 +265,8 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.IPdfDocumentInspector,
             Flit.Infrastructure.Documents.PdfSharpDocumentInspector>();
 
-        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío: repositorio
-        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo). El escritor
-        // (INotificationDeliveryLogWriter) se registra en InfrastructureExtensions.AddPostgresInfrastructure,
-        // junto al decorador de IEmailSender.
-        services.AddScoped<Flit.Admin.Application.Companies.NotificationDeliveryLogs.INotificationDeliveryLogRepository,
-            Flit.Infrastructure.Persistence.Repositories.NotificationDeliveryLogRepository>();
+        // HU #11363 — el registro de entregas lo lleva core-notificaciones desde el corte (HU #13359): el repositorio lo
+        // registra Flit.Api (gRPC ListarEntregas).
 
         // HU #11764 (ADR-0050) — el bloque de validación de identidad administrativa desacoplada por
         // correo (HU #10907/#11028) se RETIRA por completo: sin consumidor real (el módulo Identidad es
@@ -360,11 +354,6 @@ public static class AdminInfrastructureExtensions
         // ProcedureStateChangeNotifierRegistration (HU #11464), invocado desde AddIctStateReflection
         // (con o sin canal inverso), para que un sink nuevo no silencie OT al registrarse aparte.
         services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
-
-        services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(30);
-        });
 
         // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
         services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();

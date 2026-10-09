@@ -104,6 +104,7 @@ describe("catálogo de Trámites", () => {
       "Mandatos",
       "FUR",
       "Notificaciones",
+      "Mensajes muertos",
       "Banners",
     ]);
   });

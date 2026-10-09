@@ -11,6 +11,7 @@ using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -420,6 +421,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
         // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
         Configurations.Identity.OidcModel.Map(modelBuilder);
+
+        // HU #13350 (Epic #13316): outbox del SDK para los eventos que Trámites publica en flit.tramites.
+        modelBuilder.AddFlitOutbox("tramites");
+        // HU #13351: bandeja de entrada de los eventos que Trámites consume (avisos de Kyverum desde Consultas).
+        modelBuilder.AddFlitInbox("tramites");
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

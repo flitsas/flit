@@ -1,0 +1,232 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+import "flit/consultas/v1/resultado.proto";
+import "flit/platform/v1/tipos.proto";
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Consultas a proveedores externos (RUNT, SIMIT, RNMC, RUES, avalúos) como servicio de plataforma
+// (ADR-0065, contrato de plataforma v1.3 §6.1). Lo atiende core-consultas, el único con los secretos de
+// los proveedores.
+//
+// Autenticación y alcance (ADR-0070, contrato §3):
+//   - metadata `authorization`: token de servicio con `aud=consultas` y scope `platform.consultas`. El
+//     producto que consulta sale del token y queda en la medición de consumo.
+//   - metadata `x-flit-tenant-id`: empresa por la que se consulta. Obligatoria; sin ella, INVALID_ARGUMENT.
+//
+// Las solicitudes no dependen de ningún trámite: llevan los datos del sujeto de forma explícita. Lo que hoy
+// hace Trámites con el resultado (escribir campos de la instancia, ingerir certificaciones, eventos) sigue en
+// Trámites. Cadena de respaldo, caché, overrides por empresa y modo mock o real los resuelve el servicio.
+//
+// Un proveedor caído NO es un error gRPC: el método responde OK con un chequeo en estado ERROR (igual que hoy
+// IConsultationProvider). Los errores gRPC quedan para entrada inválida, autenticación y fallas del propio
+// servicio.
+service ConsultasService {
+  // Vehículo en el RUNT por placa (con el documento del propietario) o por VIN. Cadena por empresa
+  // vehicle_plate o vehicle_vin.
+  rpc ConsultarVehiculo(ConsultarVehiculoRequest) returns (ConsultarVehiculoResponse);
+
+  // Persona o conductor en el RUNT por documento. Cadena por empresa conductor.
+  rpc ConsultarConductor(ConsultarConductorRequest) returns (ConsultarConductorResponse);
+
+  // Comparendos y acuerdos de pago (SIMIT o fuente interna, según la empresa) por documento o por placa.
+  rpc ConsultarMultas(ConsultarMultasRequest) returns (ConsultarMultasResponse);
+
+  // Medidas correctivas en el RNMC de la Policía.
+  rpc ConsultarRnmc(ConsultarRnmcRequest) returns (ConsultarRnmcResponse);
+
+  // Persona jurídica en el RUES por NIT.
+  rpc ConsultarRues(ConsultarRuesRequest) returns (ConsultarRuesResponse);
+
+  // Avalúo comercial de un vehículo en todas las fuentes habilitadas para la empresa, en paralelo.
+  rpc ConsultarAvaluos(ConsultarAvaluosRequest) returns (ConsultarAvaluosResponse);
+
+  // Respuesta CRUDA del vehículo en el RUNT con un proveedor concreto (HU #13348; Confirmación RUNT). Sin cadena,
+  // sin caché y sin override por empresa: el que pide elige el proveedor en su propia configuración.
+  rpc ConsultarVehiculoCrudo(ConsultarVehiculoCrudoRequest) returns (ConsultarVehiculoCrudoResponse);
+
+  // Certificado de Improntas Digitales (Res. 17145/2023) generado por Kyverum RUNT (HU #13348).
+  rpc GenerarImpronta(GenerarImprontaRequest) returns (GenerarImprontaResponse);
+
+  // Certificado RUES de una persona jurídica por NIT (HU #13348).
+  rpc GenerarCertificadoRues(GenerarCertificadoRuesRequest) returns (GenerarCertificadoRuesResponse);
+}
+
+// Opciones comunes a todas las consultas.
+message OpcionesConsulta {
+  // Clave de un proveedor concreto (por ejemplo "verifik", "kyverum_runt"). Vacío = la cadena configurada para
+  // la empresa. Hoy la usan los flujos ligados a una plantilla de consulta con proveedor fijo.
+  string proveedor = 1;
+  // Ignorar la caché y consultar al proveedor.
+  bool forzar_actualizacion = 2;
+  // La persona consultada otorgó el consentimiento de tratamiento de datos (ADR-0031). Sin él, una consulta de
+  // persona nunca reutiliza la caché.
+  bool consentimiento_datos_personales = 3;
+  // Incluir en el resultado la respuesta cruda sanitizada del proveedor, cuando la haya.
+  bool incluir_respuesta_cruda = 4;
+  // Referencia opaca de quien consulta (por ejemplo el id del trámite). Solo se guarda para trazabilidad.
+  string referencia = 5;
+}
+
+message ConsultarVehiculoRequest {
+  OpcionesConsulta opciones = 1;
+  // Placa o VIN; al menos uno. Si llegan los dos y el VIN es válido (17 caracteres), se consulta por VIN.
+  flit.platform.v1.Placa placa = 2;
+  flit.platform.v1.Vin vin = 3;
+  // Documento del propietario. Obligatorio para consultar por placa.
+  flit.platform.v1.DocumentoIdentidad propietario = 4;
+}
+
+message ConsultarVehiculoResponse {
+  ResultadoConsulta resultado = 1;
+}
+
+message ConsultarConductorRequest {
+  OpcionesConsulta opciones = 1;
+  flit.platform.v1.DocumentoIdentidad documento = 2;
+}
+
+message ConsultarConductorResponse {
+  ResultadoConsulta resultado = 1;
+}
+
+message ConsultarMultasRequest {
+  OpcionesConsulta opciones = 1;
+  // Documento del infractor, o la placa (solo SIMIT); al menos uno.
+  flit.platform.v1.DocumentoIdentidad documento = 2;
+  flit.platform.v1.Placa placa = 3;
+  // Decide el proveedor cuando la fuente es externa: persona natural (SIMIT) o jurídica.
+  TipoPersona tipo_persona = 4;
+}
+
+message ConsultarMultasResponse {
+  ResultadoConsulta resultado = 1;
+}
+
+message ConsultarRnmcRequest {
+  OpcionesConsulta opciones = 1;
+  flit.platform.v1.DocumentoIdentidad documento = 2;
+  // Fecha de expedición del documento, AAAA-MM-DD. La exige el proveedor.
+  string fecha_expedicion_documento = 3;
+}
+
+message ConsultarRnmcResponse {
+  ResultadoConsulta resultado = 1;
+}
+
+message ConsultarRuesRequest {
+  OpcionesConsulta opciones = 1;
+  // NIT sin dígito de verificación.
+  string nit = 2;
+}
+
+message ConsultarRuesResponse {
+  ResultadoConsulta resultado = 1;
+}
+
+message ConsultarAvaluosRequest {
+  OpcionesConsulta opciones = 1;
+  flit.platform.v1.Vin vin = 2;
+  flit.platform.v1.Placa placa = 3;
+  // Atributos que algunas fuentes necesitan para identificar la referencia (Fasecolda).
+  int32 modelo = 4;
+  int32 cilindraje = 5;
+  string combustible = 6;
+  int32 pasajeros = 7;
+}
+
+message ConsultarAvaluosResponse {
+  // Valor sugerido según la fuente principal de la empresa; 0 si ninguna respondió con valor.
+  int64 valor_sugerido = 1;
+  // Fuente de la que sale el valor sugerido; vacío si no hay.
+  string fuente_principal = 2;
+  repeated Avaluo avaluos = 3;
+}
+
+enum TipoPersona {
+  TIPO_PERSONA_UNSPECIFIED = 0;
+  TIPO_PERSONA_NATURAL = 1;
+  TIPO_PERSONA_JURIDICA = 2;
+}
+
+// ── Confirmación RUNT ────────────────────────────────────────────────────────────────────────────────────────────
+
+message ConsultarVehiculoCrudoRequest {
+  // kyverum_runt | verifik.
+  string proveedor = 1;
+  // Exactamente uno: VIN, o placa con el documento del propietario.
+  flit.platform.v1.Vin vin = 2;
+  flit.platform.v1.Placa placa = 3;
+  flit.platform.v1.DocumentoIdentidad propietario = 4;
+}
+
+enum ResultadoCrudo {
+  RESULTADO_CRUDO_UNSPECIFIED = 0;
+  // El proveedor devolvió el vehículo.
+  RESULTADO_CRUDO_ENCONTRADO = 1;
+  // El proveedor dijo que no existe (o que el documento no es del propietario).
+  RESULTADO_CRUDO_NO_ENCONTRADO = 2;
+  // Timeout, 5xx, red o respuesta ilegible: no es veredicto.
+  RESULTADO_CRUDO_ERROR = 3;
+}
+
+message ConsultarVehiculoCrudoResponse {
+  ResultadoCrudo resultado = 1;
+  // JSON tal como llegó (o el sintético de «no encontrado» / del error HTTP). Ausente si no hay nada guardable.
+  optional string respuesta_cruda = 2;
+  optional string mensaje = 3;
+}
+
+// ── Documentos generados por proveedores ─────────────────────────────────────────────────────────────────────────
+// Un error del proveedor NO es un error gRPC: llega en `error`, con `transitorio` para decidir si reintentar.
+
+message ErrorProveedor {
+  // Mensaje del proveedor, sin secretos.
+  string mensaje = 1;
+  // Reintentable (timeout, red, proveedor caído) o definitivo (validación, no autorizado).
+  bool transitorio = 2;
+}
+
+message GenerarImprontaRequest {
+  optional string placa = 1;
+  // Documento del propietario.
+  string documento = 2;
+  optional string num_motor = 3;
+  optional string num_chasis = 4;
+  optional string num_serie = 5;
+  optional string marca = 6;
+  optional string linea = 7;
+  optional string modelo = 8;
+  string org_nombre = 9;
+  optional string org_nit = 10;
+  optional string org_ciudad = 11;
+  string operador = 12;
+  // VIN en vez de placa cuando el vehículo aún no tiene placa (matrícula inicial).
+  optional string vin = 13;
+}
+
+message GenerarImprontaResponse {
+  // Certificado como Data URI (data:application/pdf;base64,...), tal como lo entrega el proveedor.
+  string pdf_data_uri = 1;
+  string hash = 2;
+  string radicado = 3;
+  string fecha_impresa = 4;
+  ErrorProveedor error = 5;
+}
+
+message GenerarCertificadoRuesRequest {
+  // NIT sin dígito de verificación.
+  string nit = 1;
+  optional string razon_social = 2;
+}
+
+message GenerarCertificadoRuesResponse {
+  // false: la autogeneración no está configurada en el ambiente (respaldo: carga manual).
+  bool habilitado = 1;
+  // Certificado como Data URI o base64.
+  string pdf_data_uri = 2;
+  optional string radicado = 3;
+  ErrorProveedor error = 4;
+}

@@ -15,6 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Identity.Web\Flit.Identity.Web.csproj" />
+    <!-- Epic #13316 (HU #13334): servidor gRPC de Identidad. Va aquí y no en Flit.Identity.Web, que core-api todavía
+         referencia: así la imagen de core-api no necesita contracts/proto. -->
+    <ProjectReference Include="..\Flit.Identidad.Grpc.Contracts\Flit.Identidad.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <!--

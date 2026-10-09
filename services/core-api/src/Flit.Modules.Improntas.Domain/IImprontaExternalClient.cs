@@ -41,6 +41,7 @@ namespace Flit.Modules.Improntas.Domain;
 /// <see cref="NumSerie"/> — verificado contra el proveedor real que acepta un atributo <c>vin</c>
 /// propio. No se expone en el formulario administrativo de generación manual.
 /// </param>
+/// <param name="TenantId">Empresa que genera: core-consultas mide la generación por empresa (HU #13348).</param>
 public sealed record ImprontaExternalRequest(
     string? Placa,
     string Documento,
@@ -54,7 +55,8 @@ public sealed record ImprontaExternalRequest(
     string? OrgNit,
     string? OrgCiudad,
     string Operador,
-    string? Vin = null);
+    string? Vin = null,
+    Guid? TenantId = null);
 
 /// <summary>
 /// Resultado exitoso de Kyverum RUNT al generar una impronta. <see cref="PdfDataUri"/> viene tal cual

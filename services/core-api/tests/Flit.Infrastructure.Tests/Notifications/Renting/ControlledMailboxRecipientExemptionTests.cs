@@ -3,6 +3,7 @@ using System.Text;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
+using Flit.Modules.Notificaciones;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -54,7 +55,7 @@ public sealed class ControlledMailboxRecipientExemptionTests
         SendEmailDevelopmentRecipientUsername = "Desvío QA",
     };
 
-    private static (TenantChannelEmailRouter Router, MockHttpMessageHandler Handler) NewRouterWithRealRentingAdapter(
+    private static (CorreoPorCanal Router, MockHttpMessageHandler Handler) NewRouterWithRealRentingAdapter(
         RentingChannelOptions options)
     {
         var handler = new MockHttpMessageHandler((_, _) =>
@@ -74,28 +75,11 @@ public sealed class ControlledMailboxRecipientExemptionTests
             recipientOverride,
             NullLogger<RentingEmailApiSender>.Instance);
 
-        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
-        var tenantId = Guid.Parse("11111111-2222-4000-8000-000000000099");
-        settingsRepo.GetAsync(tenantId, Ct).Returns(new TenantSettings
-        {
-            TenantId = tenantId,
-            AllowInitialRegistration = true,
-            AllowMiscNewVehicles = true,
-            OnlyOwnVehicles = false,
-            SignatureVaultEnabled = false,
-            NotificationChannel = NotificationChannel.TenantApi,
-            NotificationTarget = NotificationTarget.Radicador,
-            PaymentMethods = [],
-        });
-
         var flitTransport = Substitute.For<IEmailSender>();
 
-        var router = new TenantChannelEmailRouter(
-            flitTransport,
-            new NotificationChannelResolver(settingsRepo),
-            rentingSender,
-            Options.Create(options),
-            NullLogger<TenantChannelEmailRouter>.Instance);
+        // HU #13359: el enrutador en proceso se retiró; la regla (exención solo para el buzón de pruebas) vive en
+        // CorreoPorCanal, el mismo que usa core-notificaciones.
+        var router = new CorreoPorCanal(flitTransport, rentingSender, Options.Create(options));
 
         return (router, handler);
     }
@@ -126,7 +110,7 @@ public sealed class ControlledMailboxRecipientExemptionTests
         var options = NewOptions(overrideEnabled: true); // desvío obligatorio activo, como en producción
         var (router, handler) = NewRouterWithRealRentingAdapter(options);
 
-        var result = await router.SendAsync(NotificationChannel.TenantApi, TestBenchMessage(TestMailboxEmail), Ct);
+        var result = await router.SendAsync(CanalCorreo.EmpresaApi, TestBenchMessage(TestMailboxEmail), ControlledMailboxRecipient.Instance, Ct);
 
         result.Success.Should().BeTrue();
         result.RecipientDiverted.Should().BeFalse(
@@ -145,8 +129,8 @@ public sealed class ControlledMailboxRecipientExemptionTests
         var options = NewOptions(overrideEnabled: true);
         var (router, handler) = NewRouterWithRealRentingAdapter(options);
 
-        // Camino de producción: IEmailSender.SendAsync(EmailMessage, ct) — el "método de una vía".
-        var result = await router.SendAsync(ProductionMessage(OriginalRecipientEmail), Ct);
+        // Camino de producción: sin exención.
+        var result = await router.SendAsync(CanalCorreo.EmpresaApi, ProductionMessage(OriginalRecipientEmail), exencion: null, Ct);
 
         result.Success.Should().BeTrue();
         result.RecipientDiverted.Should().BeTrue(
@@ -168,7 +152,7 @@ public sealed class ControlledMailboxRecipientExemptionTests
         var options = NewOptions(overrideEnabled: true);
         var (router, handler) = NewRouterWithRealRentingAdapter(options);
 
-        await router.SendAsync(ProductionMessage(OriginalRecipientEmail), Ct);
+        await router.SendAsync(CanalCorreo.EmpresaApi, ProductionMessage(OriginalRecipientEmail), exencion: null, Ct);
 
         handler.LastRequestParts!.Values.Should().NotContain(OriginalRecipientEmail);
     }

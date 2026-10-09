@@ -1,6 +1,7 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Infrastructure.Persistence;
+using Flit.Platform.Sdk.Messaging;
 
 namespace Flit.Infrastructure.Messaging;
 
@@ -11,12 +12,18 @@ namespace Flit.Infrastructure.Messaging;
 /// confirma con la unidad de trabajo del <c>ITramiteLifecycleService</c> (outbox transaccional):
 /// transición confirmada ⇒ exactamente un evento; rollback ⇒ cero eventos. La entrega efectiva
 /// la hace <see cref="ProcedureStateChangeOutboxProcessor"/> tras el commit.
+/// HU #13350: con el bus encendido (<paramref name="bus"/> registrado) encola además
+/// <c>tramites.procedure.state_changed</c> en la outbox del SDK, en la misma unidad de trabajo.
 /// </summary>
-internal sealed class ProcedureStateChangeOutboxPublisher(FlitDbContext db) : ITramiteTransitionPublisher
+internal sealed class ProcedureStateChangeOutboxPublisher(
+    FlitDbContext db,
+    IPlatformOutbox? bus = null) : ITramiteTransitionPublisher
 {
     public Task EnqueueAsync(TramiteTransitionRecord record, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(record);
+
+        bus?.Enqueue(TramitesEventos.EstadoCambiado, 1, record.TenantId, TramitesEventos.Datos(record));
 
         var now = DateTimeOffset.UtcNow;
 

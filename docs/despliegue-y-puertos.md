@@ -161,6 +161,17 @@ no se reutilizan.
   despliegue por primera vez (L-10). El producto `demo` se retiró (DDL 125).
 - Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
 
+#### Puertos gRPC internos (contrato v1.3 §11, Epic #13316)
+
+Solo en la red de Docker: sin mapeo en `ports`, sin nginx y el mismo número en todos los ambientes (cada ambiente es
+su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto aparte del REST.
+
+| Servicio | Puerto | Variable | Estado |
+|----------|--------|----------|--------|
+| `core-api` (ICT) | `8082` | `CORE_API_GRPC_PORT` | En uso |
+| `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
+| `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
+
 ---
 
 ## 3. Comunicación entre servicios

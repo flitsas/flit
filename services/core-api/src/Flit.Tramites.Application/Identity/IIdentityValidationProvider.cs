@@ -12,7 +12,9 @@ public sealed record IdentityProviderStartRequest(
     string Nombre,
     string TipoDoc,
     string Documento,
-    string Email);
+    string Email,
+    /// <summary>HU #13351 — empresa de la validación; Consultas la exige cuando atiende a Kyverum.</summary>
+    Guid? TenantId = null);
 
 /// <summary>
 /// Resultado del inicio con el proveedor: id de verificación remoto, URL de captura, secreto del webhook

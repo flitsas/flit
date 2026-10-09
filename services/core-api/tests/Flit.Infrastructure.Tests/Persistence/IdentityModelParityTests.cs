@@ -28,7 +28,9 @@ public sealed class IdentityModelParityTests
         identityTables.Keys.Should().Contain(
             ["identity.users", "identity.tenants", "security.roles", "security.user_role_assignments", "platform.tenant_products",
              "security.user_credentials", "identity.oidc_authorizations", "admin.v_active_network_domains"]);
-        foreach (var (table, shape) in identityTables)
+        // HU #13355: la outbox del SDK es de cada servicio (en core-api, OutboxMessage ya es tramites.outbox); core-api crea
+        // identity.outbox con una migración sin modelo, y la prueba de integración comprueba que exista.
+        foreach (var (table, shape) in identityTables.Where(t => t.Key != "identity.outbox"))
         {
             flitTables.Should().ContainKey(table, "core-api migra todas las tablas que usa core-identity");
             shape.Should().BeEquivalentTo(flitTables[table], $"{table} tiene que ser igual en los dos contextos");

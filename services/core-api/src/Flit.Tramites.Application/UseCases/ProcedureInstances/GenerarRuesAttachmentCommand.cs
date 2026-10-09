@@ -53,8 +53,12 @@ public sealed class GenerarRuesAttachmentHandler(
         try
         {
             providerResult = await externalClient
-                .GenerarAsync(new RuesExternalRequest(actorNit.DocumentNumber.Trim(), actorNit.FullName), ct)
+                .GenerarAsync(new RuesExternalRequest(actorNit.DocumentNumber.Trim(), actorNit.FullName, tenantId), ct)
                 .ConfigureAwait(false);
+        }
+        catch (RuesExternalException ex) when (ex.AutogenDeshabilitada)
+        {
+            return (null, "rues_autogen_disabled");
         }
         catch (RuesExternalException ex)
         {

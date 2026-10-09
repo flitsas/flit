@@ -27,8 +27,6 @@ public sealed record RuntConfirmationCandidate(
     public DateTimeOffset CutoffAt => SubmittedAt ?? ApprovedAt ?? CreatedAt;
 }
 
-public sealed record RuntDocument(string Type, string Number);
-
 /// <summary>Filtros del universo de la corrida (HU #12309 AC2), calculados desde la configuración.</summary>
 public sealed record RuntConfirmationUniverseFilter(
     int MaxAttempts,
@@ -81,39 +79,4 @@ public interface IRuntConfirmationStore
 
     /// <summary><c>status</c> actual del trámite, o NULL si no existe.</summary>
     Task<string?> GetProcedureStatusAsync(Guid instanceId, CancellationToken ct = default);
-}
-
-/// <summary>Cómo se consulta al proveedor. Exactamente una de las dos formas.</summary>
-public sealed record RuntRawQuery(string? Vin, string? Plate, RuntDocument? Document)
-{
-    public static RuntRawQuery ByVin(string vin) => new(vin, null, null);
-    public static RuntRawQuery ByPlate(string plate, RuntDocument document) => new(null, plate, document);
-    public string SubjectKey => Vin ?? Plate ?? string.Empty;
-}
-
-public enum RuntRawOutcome
-{
-    /// <summary>El proveedor devolvió el vehículo (crudo completo).</summary>
-    Found,
-
-    /// <summary>El proveedor dijo que no existe (o que el documento no es del propietario). Hay crudo (real o sintético).</summary>
-    NotFound,
-
-    /// <summary>Timeout, 5xx, red, respuesta ilegible: NO es veredicto, no consume intento.</summary>
-    Error,
-}
-
-public sealed record RuntRawQueryResult(RuntRawOutcome Outcome, string? RawJson, string? Message)
-{
-    public static RuntRawQueryResult Error(string message) => new(RuntRawOutcome.Error, null, message);
-}
-
-/// <summary>
-/// Consumidor PROPIO del cliente RUNT según el proveedor configurado. No pasa por
-/// <c>IConsultationProviderChainResolver</c> ni por el override por tenant: la Confirmación RUNT
-/// elige su proveedor en su configuración global, no en la de la empresa.
-/// </summary>
-public interface IRuntVehicleRawClient
-{
-    Task<RuntRawQueryResult> ConsultAsync(string providerKey, RuntRawQuery query, CancellationToken ct = default);
 }

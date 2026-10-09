@@ -4,8 +4,7 @@ using System.Net.Http.Json;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Tests.Companies;
 using Flit.Infrastructure.Email;
-using Flit.Infrastructure.Notifications.Renting;
-using Flit.Infrastructure.Notifications.Routing;
+using Flit.Infrastructure.Notifications.Admin;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Modules.Security.Domain.Auth;
@@ -391,7 +390,8 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
 }
 
 /// <summary>
-/// Factory que sustituye <see cref="IExplicitChannelEmailSender"/> por un doble NSubstitute — mismo
+/// HU #13359: la sustitución es de <c>ICanalesDeNotificaciones</c> (core-notificaciones); lo de abajo describe la
+/// historia de la suite. Factory que sustituye <see cref="IExplicitChannelEmailSender"/> por un doble NSubstitute — mismo
 /// patrón que <c>TransferStartEndpointTests.TransferTestFactory</c> — para que esta suite nunca
 /// intente una conexión SMTP/Renting real. HU #11371: <c>NotificationTestSendAdminService</c> ya no
 /// depende de <see cref="IEmailSender"/> — llama directamente al enrutador vía
@@ -446,9 +446,7 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
     private const string TestRentingSenderEmail = "pruebas-renting@flit.test";
     private const string TestRentingSenderName = "FLIT Pruebas (Renting)";
 
-    // Internal, no public: IExplicitChannelEmailSender es internal en Flit.Infrastructure
-    // (InternalsVisibleTo cubre Flit.Admin.Tests) — una propiedad pública no puede exponer un tipo
-    // menos accesible (CS0053).
+    // Internal, no public: IExplicitChannelEmailSender es un tipo internal de este proyecto (CS0053).
     internal IExplicitChannelEmailSender ExplicitChannelEmailSender { get; } = Substitute.For<IExplicitChannelEmailSender>();
 
     /// <summary>
@@ -476,34 +474,34 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
-            services.AddScoped(_ => ExplicitChannelEmailSender);
+            // HU #13359: canales y envío vienen de core-notificaciones (ICanalesDeNotificaciones); el adaptador
+            // traduce el doble de siempre y los remitentes de prueba a lo que respondería Notificaciones.
+            services.AddScoped<ICanalesDeNotificaciones>(_ => new CanalesDePrueba(ExplicitChannelEmailSender));
             services.AddScoped(_ => ThemeResolver);
             services.AddSingleton<System.TimeProvider>(TimeProvider);
-
-            // Remitente y transporte SMTP deterministas — EmailSettings se registra en Program.cs
-            // como instancia YA MATERIALIZADA (AddSingleton de un objeto, no de un tipo resuelto en
-            // caliente); solo sobrescribiendo la registración del servicio en sí (aquí, al final del
-            // pipeline) se logra que el test la vea. EmailTransportDescriptor viaja aparte por la
-            // misma razón: decide IsConsoleTransport y también se calcula en el arranque.
-            services.AddSingleton(new EmailSettings
-            {
-                DefaultSenderEmail = TestSmtpSenderEmail,
-                DefaultSenderName = TestSmtpSenderName,
-                Host = string.Empty,
-            });
-            services.AddSingleton(new EmailTransportDescriptor(IsConsole: false));
-
-            // Remitente del canal Renting: DESPUÉS del registro de la app (ConfigureTestServices se
-            // aplica al final), porque AddRentingChannel con el canal deshabilitado sobre-escribe
-            // RentingChannelOptions entero salvo Enabled — poner esto en ConfigureAppConfiguration no
-            // sobreviviría a ese retorno temprano.
-            services.Configure<RentingChannelOptions>(o =>
-            {
-                o.SendEmailSenderEmail = TestRentingSenderEmail;
-                o.SendEmailSenderUsername = TestRentingSenderName;
-            });
         });
     }
+
+    private sealed class CanalesDePrueba(IExplicitChannelEmailSender doble) : ICanalesDeNotificaciones
+    {
+        public Task<IReadOnlyList<CanalDeNotificacion>> ListarAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<CanalDeNotificacion>>(
+            [
+                new(NotificationChannel.FlitSmtp, doble.IsChannelAvailable(NotificationChannel.FlitSmtp), TestSmtpSenderEmail, TestSmtpSenderName, Consola: false),
+                new(NotificationChannel.TenantApi, doble.IsChannelAvailable(NotificationChannel.TenantApi), TestRentingSenderEmail, TestRentingSenderName, Consola: false),
+            ]);
+
+        public Task<EmailSendResult> EnviarPruebaAsync(NotificationChannel canal, EmailMessage mensaje, CancellationToken ct) =>
+            doble.SendAsync(canal, mensaje, ct);
+    }
+}
+
+/// <summary>El puerto de envío por canal explícito que tenía core-api antes del corte (HU #13359); aquí, solo el doble.</summary>
+public interface IExplicitChannelEmailSender
+{
+    bool IsChannelAvailable(NotificationChannel channel);
+
+    Task<EmailSendResult> SendAsync(NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken);
 }
 
 /// <summary>

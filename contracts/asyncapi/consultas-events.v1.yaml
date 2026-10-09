@@ -1,0 +1,75 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — eventos de Consultas
+  version: 1.0.0
+  description: |
+    Eventos que publica Consultas (core-consultas) en el exchange `flit.consultas` (ADR-0065, ADR-0064).
+    Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos del consultado: solo la medición, salvo
+    los avisos de proveedores, que llevan el cuerpo del aviso para el servicio que pidió la validación.
+defaultContentType: application/json
+
+channels:
+  consultas.consulta.realizada:
+    description: |
+      Terminó una consulta a un proveedor externo. Base de la medición de consumo por empresa y producto
+      (HU #13345, #13352). Se emite también cuando el resultado vino de caché.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: consultaRealizada
+      message:
+        $ref: '#/components/messages/ConsultaRealizada'
+
+  consultas.aviso.kyverum_verify:
+    description: |
+      Llegó un aviso de Kyverum Verify con firma válida para una validación de identidad que Consultas creó por
+      pedido de un servicio (HU #13351, ADR-0065 §6). Lleva el cuerpo tal como llegó; lo aplica el servicio dueño de
+      la validación (`producto`), hoy Trámites. Los avisos con firma inválida no se publican.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: avisoKyverumVerify
+      message:
+        $ref: '#/components/messages/AvisoKyverumVerify'
+
+components:
+  messages:
+    ConsultaRealizada:
+      name: consultas.consulta.realizada
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [producto, fuente, proveedor, resultado, desdeCache, latenciaMs]
+                properties:
+                  producto: { type: string, description: Producto que pidió la consulta (del token de servicio). }
+                  fuente: { type: string, description: "Qué se consultó (vehículo por placa, por VIN, conductor, SIMIT, RNMC, RUES…)." }
+                  proveedor: { type: string, description: Proveedor que respondió (clave del adaptador). }
+                  resultado: { type: string, enum: [verde, amarillo, rojo, sin_semaforo, error], description: Semáforo del resultado normalizado; error si el proveedor falló. }
+                  desdeCache: { type: boolean }
+                  latenciaMs: { type: integer, minimum: 0 }
+    AvisoKyverumVerify:
+      name: consultas.aviso.kyverum_verify
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [validacionId, verificationId, producto, avisoId, cuerpo]
+                properties:
+                  validacionId: { type: string, format: uuid, description: Id de la validación en el servicio que la pidió. }
+                  verificationId: { type: string, description: Id de la verificación en Kyverum. }
+                  producto: { type: string, description: Servicio que pidió la validación (dueño del resultado). }
+                  avisoId: { type: string, format: uuid, description: Fila del aviso en consultas.avisos. }
+                  cuerpo: { type: string, description: Cuerpo del aviso tal como llegó (JSON de Kyverum en texto). }

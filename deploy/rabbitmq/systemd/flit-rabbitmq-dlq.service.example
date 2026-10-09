@@ -1,0 +1,15 @@
+# deploy/rabbitmq/systemd/flit-rabbitmq-dlq.service.example (HU #13352)
+#
+# Instalar como /etc/systemd/system/flit-rabbitmq-dlq.service en el VPS, junto con el timer. El archivo de entorno
+# define OPS_ALERT_WEBHOOK_URL y FLIT_AMBIENTE (y COMPOSE si el compose del ambiente no es el de por defecto).
+
+[Unit]
+Description=FLIT - alerta de mensajes muertos en RabbitMQ (HU #13352)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/flit-rabbitmq/env
+WorkingDirectory=/opt/flit
+ExecStart=/opt/flit/deploy/rabbitmq/alerta-dlq.sh

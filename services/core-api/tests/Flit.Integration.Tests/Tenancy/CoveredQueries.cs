@@ -49,7 +49,7 @@ internal sealed record CoveredQuery(
 /// (vista global cross-tenant por diseño, ADR-0022, sin parámetro tenant); listado de usuarios de
 /// <c>GET /security/users</c> (LINQ inline en <c>SecurityEndpoints</c>, sin repositorio: exige
 /// <c>WebApplicationFactory</c>); <c>OtMetricsReadRepository.Get*</c> distintos de
-/// <c>ListClientCompaniesAsync</c> (mismo <c>OtTenantScope</c> por grants, ya ejercitado en Q24/Q25);
+/// <c>ListClientCompaniesAsync</c> (mismo <c>OtTenantScope</c> por grants, ya ejercitado en Q23/Q24);
 /// <c>MandateConfigAdminService</c> (servicio de configuración con dependencias de documento, no
 /// consulta de listado).
 /// </para>
@@ -71,19 +71,18 @@ internal static class CoveredQueries
         new("Q08", "ListProcedureInstancesFilteredHandler (historial por placa, request de PlateHistoryScope)", "Guid? TenantId", 1, SupportsGlobal: true),
         new("Q09", "CompanyReadRepository.ListAsync (listado de compañías)", "— (SuperAdmin)", 1, SupportsGlobal: true, TenantOnly: true),
         new("Q10", "CompanyReadRepository.GetByIdAsync", "Guid tenantId", 1, SupportsGlobal: false),
-        new("Q11", "NotificationDeliveryLogRepository.ListByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
-        new("Q12", "CompanyDocumentParamRepository.ListByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
-        new("Q13", "CompanyAgreementRepository.ListActiveOfficeIdsAsync", "Guid companyTenantId", 1, SupportsGlobal: false),
-        new("Q14", "AdminAuditLogRepository.ListPagedAsync", "Guid? filter.TenantId", 1, SupportsGlobal: true),
-        new("Q15", "InvitationRepository.ListPendingByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
-        new("Q16", "AnalyticsReadRepository.GetOverviewAsync", "Guid? tenantId", 2, SupportsGlobal: true),
-        new("Q17", "AnalyticsReadRepository.GetTopProducersAsync", "Guid? tenantId", 1, SupportsGlobal: true),
-        new("Q18", "AnalyticsReadRepository.GetMonthlyTrendAsync", "Guid? tenantId", 2, SupportsGlobal: true),
-        new("Q19", "AnalyticsReadRepository.GetProcedureDetailsAsync", "Guid tenantId", 2, SupportsGlobal: false),
-        new("Q20", "AnalyticsMetricsReadRepository.GetLiveOverviewAsync", "Guid tenantId", 2, SupportsGlobal: false),
-        new("Q21", "AnalyticsMetricsReadRepository.GetFunnelAsync", "MetricsFilter.TenantId", 2, SupportsGlobal: false),
-        new("Q22", "DetailedReportReadRepository.GetProceduresAsync", "DetailedReportFilter.TenantId", 2, SupportsGlobal: false),
-        new("Q23", "CompanyQueryRepository.ExecuteAsync / ExecuteForSuperAdminAsync", "Guid tenantId / todos", 2, SupportsGlobal: true),
+        new("Q11", "CompanyDocumentParamRepository.ListByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
+        new("Q12", "CompanyAgreementRepository.ListActiveOfficeIdsAsync", "Guid companyTenantId", 1, SupportsGlobal: false),
+        new("Q13", "AdminAuditLogRepository.ListPagedAsync", "Guid? filter.TenantId", 1, SupportsGlobal: true),
+        new("Q14", "InvitationRepository.ListPendingByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
+        new("Q15", "AnalyticsReadRepository.GetOverviewAsync", "Guid? tenantId", 2, SupportsGlobal: true),
+        new("Q16", "AnalyticsReadRepository.GetTopProducersAsync", "Guid? tenantId", 1, SupportsGlobal: true),
+        new("Q17", "AnalyticsReadRepository.GetMonthlyTrendAsync", "Guid? tenantId", 2, SupportsGlobal: true),
+        new("Q18", "AnalyticsReadRepository.GetProcedureDetailsAsync", "Guid tenantId", 2, SupportsGlobal: false),
+        new("Q19", "AnalyticsMetricsReadRepository.GetLiveOverviewAsync", "Guid tenantId", 2, SupportsGlobal: false),
+        new("Q20", "AnalyticsMetricsReadRepository.GetFunnelAsync", "MetricsFilter.TenantId", 2, SupportsGlobal: false),
+        new("Q21", "DetailedReportReadRepository.GetProceduresAsync", "DetailedReportFilter.TenantId", 2, SupportsGlobal: false),
+        new("Q22", "CompanyQueryRepository.ExecuteAsync / ExecuteForSuperAdminAsync", "Guid tenantId / todos", 2, SupportsGlobal: true),
     ];
 
     /// <summary>
@@ -92,39 +91,39 @@ internal static class CoveredQueries
     /// </summary>
     public static readonly IReadOnlyList<CoveredQuery> Dedicated =
     [
-        new("Q24", "OtClientProcedureRepository.ListAsync (bandeja OT por grants)", "Guid otTenantId", 1, SupportsGlobal: false),
-        new("Q25", "OtMetricsReadRepository.ListClientCompaniesAsync (grants)", "Guid otTenantId", 1, SupportsGlobal: false),
-        new("Q26", "DbTenantScopeResolver.ResolveAsync", "Guid tenantId", 0, SupportsGlobal: false),
-        new("Q27", "TenantScopeQueryableExtensions.WhereTenantInScope (ruta nueva)", "TenantScope", 2, SupportsGlobal: true),
+        new("Q23", "OtClientProcedureRepository.ListAsync (bandeja OT por grants)", "Guid otTenantId", 1, SupportsGlobal: false),
+        new("Q24", "OtMetricsReadRepository.ListClientCompaniesAsync (grants)", "Guid otTenantId", 1, SupportsGlobal: false),
+        new("Q25", "DbTenantScopeResolver.ResolveAsync", "Guid tenantId", 0, SupportsGlobal: false),
+        new("Q26", "TenantScopeQueryableExtensions.WhereTenantInScope (ruta nueva)", "TenantScope", 2, SupportsGlobal: true),
         // HU #12358 — sobrecargas con TenantScope de la vista consolidada de la red (NetworkProceduresReadTests).
-        new("Q28", "ProcedureInstanceRepository.ListWithSummaryGraphFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
-        new("Q29", "ProcedureInstanceRepository.CountByStatusFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
-        new("Q30", "ProcedureInstanceRepository.GetByIdWithDetailsAsync (TenantScope, detalle de red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q27", "ProcedureInstanceRepository.ListWithSummaryGraphFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q28", "ProcedureInstanceRepository.CountByStatusFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q29", "ProcedureInstanceRepository.GetByIdWithDetailsAsync (TenantScope, detalle de red)", "TenantScope", 2, SupportsGlobal: false),
         // HU #12361 — auditoria del acceso consolidado (NetworkAccessAuditTests).
-        new("Q31", "ProcedureInstanceRepository.ListTenantIdsWithMatchesAsync (TenantScope, hijos alcanzados por las estadisticas)", "TenantScope", 1, SupportsGlobal: false),
-        new("Q32", "NetworkAccessAuditReader.SearchAsync (auditoria del hijo / SuperAdmin)", "NetworkAccessAuditQuery.TenantId", 0, SupportsGlobal: true),
+        new("Q30", "ProcedureInstanceRepository.ListTenantIdsWithMatchesAsync (TenantScope, hijos alcanzados por las estadisticas)", "TenantScope", 1, SupportsGlobal: false),
+        new("Q31", "NetworkAccessAuditReader.SearchAsync (auditoria del hijo / SuperAdmin)", "NetworkAccessAuditQuery.TenantId", 0, SupportsGlobal: true),
         // HU #12359 — estadisticas de red con conjunto explicito = ANY(@tenants) (NetworkAnalyticsTests). Sin modo global.
-        new("Q33", "AnalyticsNetworkReadRepository.GetNetworkOverviewAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
-        new("Q34", "AnalyticsNetworkReadRepository.GetNetworkTopProducersAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 1, SupportsGlobal: false),
-        new("Q35", "AnalyticsNetworkReadRepository.GetNetworkMonthlyTrendAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
+        new("Q32", "AnalyticsNetworkReadRepository.GetNetworkOverviewAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
+        new("Q33", "AnalyticsNetworkReadRepository.GetNetworkTopProducersAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 1, SupportsGlobal: false),
+        new("Q34", "AnalyticsNetworkReadRepository.GetNetworkMonthlyTrendAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
         // HU #12360 — reporte detallado de red con conjunto explicito = ANY(@tenants) sobre la vista (NetworkReportsTests). Sin modo global.
-        new("Q36", "DetailedReportNetworkReadRepository.GetNetworkProceduresAsync (red, uuid[])", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
-        new("Q37", "DetailedReportNetworkReadRepository.ExportNetworkProceduresAsync (red, uuid[], mismo predicado que Q36)", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
+        new("Q35", "DetailedReportNetworkReadRepository.GetNetworkProceduresAsync (red, uuid[])", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
+        new("Q36", "DetailedReportNetworkReadRepository.ExportNetworkProceduresAsync (red, uuid[], mismo predicado que Q35)", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
         // HU #12410 — documentos de la red: dueño por IProcedureInstanceOwnerLookup + CanRead, luego los handlers de anexos con ese tenant (NetworkAttachmentsTests). Sin modo global.
-        new("Q38", "NetworkAttachmentsHandler.ListAsync (red: ProcedureInstanceOwnerLookup + ListAttachmentsHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
-        new("Q39", "NetworkAttachmentsHandler.DownloadAsync (red: ProcedureInstanceOwnerLookup + DownloadAttachmentHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q37", "NetworkAttachmentsHandler.ListAsync (red: ProcedureInstanceOwnerLookup + ListAttachmentsHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q38", "NetworkAttachmentsHandler.DownloadAsync (red: ProcedureInstanceOwnerLookup + DownloadAttachmentHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
         // HU #12429 (Feature #12366) — suite de paridad y anti-enumeracion de Marca Blanca (MarcaBlanca/).
-        new("Q40", "ResolvePublicBrandingHandler.HandleAsync (GET /public/branding: dominio -> BrandIdentity, BrandParityTests/BrandingFallbackTests/CrossNetworkIsolationTests)", "bool isNetworkDomain, Guid? headTenantId", 0, SupportsGlobal: false),
-        new("Q41", "DbEmailThemeResolver.ResolveAsync (tema de correo por clase del tenant, BrandParityTests/EmailThemeByClassTests/BrandingFallbackTests)", "Guid? tenantId", 0, SupportsGlobal: false),
-        new("Q42", "POST /api/v1/auth/login (LoginHandler, anti-enumeracion por dominio via WebApplicationFactory, LoginAntiEnumerationTests/CrossNetworkIsolationTests)", "X-Flit-Domain + email/password", 0, SupportsGlobal: false),
-        new("Q43", "POST /api/v1/auth/forgot-password + GET /public/branding negativos (ForgotPasswordHandler/ResolvePublicBrandingHandler via WebApplicationFactory, RecoveryAndBrandingAntiEnumerationTests)", "X-Flit-Domain + email", 0, SupportsGlobal: false),
-        new("Q44", "MarcaBlancaHeadCompanyAuthorizationHandler (policy /company/branding* y /company/domain*, endurecimiento del hecho 88)", "ClaimsPrincipal + GetHierarchyInfoAsync", 0, SupportsGlobal: false),
+        new("Q39", "ResolvePublicBrandingHandler.HandleAsync (GET /public/branding: dominio -> BrandIdentity, BrandParityTests/BrandingFallbackTests/CrossNetworkIsolationTests)", "bool isNetworkDomain, Guid? headTenantId", 0, SupportsGlobal: false),
+        new("Q40", "DbEmailThemeResolver.ResolveAsync (tema de correo por clase del tenant, BrandParityTests/EmailThemeByClassTests/BrandingFallbackTests)", "Guid? tenantId", 0, SupportsGlobal: false),
+        new("Q41", "POST /api/v1/auth/login (LoginHandler, anti-enumeracion por dominio via WebApplicationFactory, LoginAntiEnumerationTests/CrossNetworkIsolationTests)", "X-Flit-Domain + email/password", 0, SupportsGlobal: false),
+        new("Q42", "POST /api/v1/auth/forgot-password + GET /public/branding negativos (ForgotPasswordHandler/ResolvePublicBrandingHandler via WebApplicationFactory, RecoveryAndBrandingAntiEnumerationTests)", "X-Flit-Domain + email", 0, SupportsGlobal: false),
+        new("Q43", "MarcaBlancaHeadCompanyAuthorizationHandler (policy /company/branding* y /company/domain*, endurecimiento del hecho 88)", "ClaimsPrincipal + GetHierarchyInfoAsync", 0, SupportsGlobal: false),
         // HU #12706 / #12708 — Validación de Identidad con TenantScope: SuperAdmin «todas» y red de la cabeza (Tramites/IdentityValidationScopeTests).
-        new("Q45", "ProcedureInstanceRepository.ListBiometricValidationsGroupedByPersonAsync (TenantScope, SQL crudo = ANY(uuid[]))", "TenantScope", 2, SupportsGlobal: true),
-        new("Q46", "ProcedureInstanceRepository.CountBiometricPersonsByEstadoAsync (TenantScope, mismo CTE que Q45)", "TenantScope", 2, SupportsGlobal: true),
-        new("Q47", "ProcedureInstanceRepository.ListBiometricValidationsByTenantAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
-        new("Q48", "ProcedureInstanceRepository.CountBiometricValidationsByEstadoAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
-        new("Q49", "IdentityValidationOutboxRepository.ListStuckAsync (TenantScope)", "TenantScope", 1, SupportsGlobal: true),
+        new("Q44", "ProcedureInstanceRepository.ListBiometricValidationsGroupedByPersonAsync (TenantScope, SQL crudo = ANY(uuid[]))", "TenantScope", 2, SupportsGlobal: true),
+        new("Q45", "ProcedureInstanceRepository.CountBiometricPersonsByEstadoAsync (TenantScope, mismo CTE que Q44)", "TenantScope", 2, SupportsGlobal: true),
+        new("Q46", "ProcedureInstanceRepository.ListBiometricValidationsByTenantAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
+        new("Q47", "ProcedureInstanceRepository.CountBiometricValidationsByEstadoAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
+        new("Q48", "IdentityValidationOutboxRepository.ListStuckAsync (TenantScope)", "TenantScope", 1, SupportsGlobal: true),
     ];
 
     public static CoveredQuery Get(string id) =>
@@ -233,79 +232,73 @@ internal static class CoveredQueries
 
             case "Q11":
                 {
-                    var rows = await new NotificationDeliveryLogRepository(ctx).ListByTenantAsync(tenant, 0, 100, ct);
+                    var rows = await new CompanyDocumentParamRepository(ctx).ListByTenantAsync(tenant, ct);
                     return Rows(rows.Select(r => r.Id));
                 }
 
             case "Q12":
                 {
-                    var rows = await new CompanyDocumentParamRepository(ctx).ListByTenantAsync(tenant, ct);
-                    return Rows(rows.Select(r => r.Id));
-                }
-
-            case "Q13":
-                {
                     var offices = await new CompanyAgreementRepository(ctx).ListActiveOfficeIdsAsync(tenant, ct);
                     return Scalar(offices.Count);
                 }
 
-            case "Q14":
+            case "Q13":
                 {
                     var page = await new AdminAuditLogRepository(ctx).ListPagedAsync(
                         new AdminAuditLogFilter { TenantId = reader, Page = 1, PageSize = 100 }, ct);
                     return Rows(page.Items.Select(i => i.Id));
                 }
 
-            case "Q15":
+            case "Q14":
                 {
                     var rows = await new InvitationRepository(ctx).ListPendingByTenantAsync(tenant, ct);
                     return Rows(rows.Select(r => r.InvitationId));
                 }
 
-            case "Q16":
+            case "Q15":
                 {
                     var categories = await new AnalyticsReadRepository(ctx).GetOverviewAsync(reader, From, To, ct);
                     return Scalar(categories.Sum(c => c.Total));
                 }
 
-            case "Q17":
+            case "Q16":
                 {
                     var producers = await new AnalyticsReadRepository(ctx).GetTopProducersAsync(reader, From, To, 100, ct);
                     return Rows(producers.Select(p => p.UserId));
                 }
 
-            case "Q18":
+            case "Q17":
                 {
                     var points = await new AnalyticsReadRepository(ctx).GetMonthlyTrendAsync(reader, From, To, ct);
                     return Scalar(points.Sum(p => p.Total));
                 }
 
-            case "Q19":
+            case "Q18":
                 {
                     var page = await new AnalyticsReadRepository(ctx).GetProcedureDetailsAsync(tenant, From, To, null, null, 1, 100, ct);
                     return Rows(page.Items.Select(i => i.Id));
                 }
 
-            case "Q20":
+            case "Q19":
                 {
                     var live = await new AnalyticsMetricsReadRepository(ctx).GetLiveOverviewAsync(tenant, 7, ct);
                     return Scalar(live.Today.ByStatus.Sum(s => s.Count));
                 }
 
-            case "Q21":
+            case "Q20":
                 {
                     var funnel = await new AnalyticsMetricsReadRepository(ctx).GetFunnelAsync(new MetricsFilter(tenant, From, To), ct);
                     return Scalar(funnel.States[0].Count);
                 }
 
-            case "Q22":
+            case "Q21":
                 {
                     var page = await new DetailedReportReadRepository(ctx).GetProceduresAsync(
                         new DetailedReportFilter(tenant, From, To, null, null, null, null, null, null, null, null, null), 1, 100, ct);
                     return Rows(page.Items.Select(i => i.Id));
                 }
 
-            case "Q23":
+            case "Q22":
                 {
                     var request = new QueryRequest(
                         new QueryDefinition(

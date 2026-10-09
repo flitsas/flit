@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package flit.prueba.v1;
+
+option csharp_namespace = "Flit.Platform.Sdk.Tests.Prueba";
+
+// Servicio de prueba del SDK (HU #13337): devuelve lo que recibió para verificar metadata, deadline y errores.
+service PruebaService {
+  rpc Eco(EcoRequest) returns (EcoResponse);
+}
+
+message EcoRequest {
+  // "ok", "unavailable" (falla con UNAVAILABLE), "producto_apagado" (lanza PRODUCT_NOT_ENABLED).
+  string modo = 1;
+}
+
+message EcoResponse {
+  string authorization = 1;
+  string tenant = 2;
+  string correlation = 3;
+  string traceparent = 4;
+  // Milisegundos que le quedaban al deadline cuando llegó la llamada (0 = sin deadline).
+  int64 deadline_ms = 5;
+  string cliente = 6;
+}

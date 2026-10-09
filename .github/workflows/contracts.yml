@@ -43,6 +43,9 @@ jobs:
             echo "::notice::contracts/openapi/platform.v1.yaml aún no existe, omitido"
           fi
 
+  # HU #13328 (Epic #13316, ADR-0064) — valida TODOS los contratos AsyncAPI de contracts/asyncapi con
+  # @asyncapi/parser en versión fija. Reemplaza `@asyncapi/cli validate events.v1.yaml`, que nunca corría: el
+  # archivo se renombró por el CLI roto (docs/ci/asyncapi-cli-broken-generator-hooks.md) y hoy el CLI exige Node 24.
   validate-asyncapi:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -51,10 +54,37 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Validate events.v1.yaml
+      - name: Instalar @asyncapi/parser
+        run: npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/asyncapi" @asyncapi/parser@3.4.0
+      - name: Validar contratos AsyncAPI
+        env:
+          ASYNCAPI_PARSER_DIR: ${{ runner.temp }}/asyncapi
+        run: node contracts/asyncapi/validate.cjs
+
+  # HU #13326 (Epic #13316, ADR-0070) — contratos gRPC entre servicios en contracts/proto.
+  # lint: convenciones de buf (STANDARD). breaking: un cambio que rompe a quien ya usa un .proto
+  # publicado no se fusiona (regla FILE). Se compara contra la rama destino del PR, o contra el
+  # commit anterior en un push a develop/main. Si la base aún no tiene contracts/proto (el primer PR
+  # que lo crea), no hay nada publicado contra qué comparar y el paso se omite con un aviso.
+  lint-proto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: buf lint
+        working-directory: contracts/proto
+        run: npx -y @bufbuild/buf@1.73.0 lint
+      - name: buf breaking
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
         run: |
-          if [ -f contracts/asyncapi/events.v1.yaml ]; then
-            npx -y @asyncapi/cli@latest validate contracts/asyncapi/events.v1.yaml
-          else
-            echo "::notice::contracts/asyncapi/events.v1.yaml aún no existe, omitido"
+          if ! git cat-file -e "${BASE_REF}:contracts/proto/buf.yaml" 2>/dev/null; then
+            echo "::notice::La base (${BASE_REF}) aún no tiene contracts/proto; no hay contratos publicados contra qué comparar"
+            exit 0
           fi
+          npx -y @bufbuild/buf@1.73.0 breaking contracts/proto --against ".git#ref=${BASE_REF},subdir=contracts/proto"

@@ -7,6 +7,10 @@
 #
 # El contenedor replica la estructura del repo bajo /services, así las ProjectReference relativas resuelven igual que
 # en local (core-identity -> ../../../core-api/src/...).
+#
+# Epic #13316 (HU #13334): los contratos gRPC (contracts/proto, fuera de services/) llegan por un contexto con nombre,
+# sin ampliar el contexto principal a todo el repo. En local:
+#   docker build -f services/core-identity/Dockerfile --build-context contracts=contracts/proto services
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /services/core-identity
@@ -17,15 +21,19 @@ COPY core-api/src/Flit.Admin.Application/ /services/core-api/src/Flit.Admin.Appl
 COPY core-api/src/Flit.Admin.Domain/ /services/core-api/src/Flit.Admin.Domain/
 COPY core-api/src/Flit.Identity.Infrastructure/ /services/core-api/src/Flit.Identity.Infrastructure/
 COPY core-api/src/Flit.Modules.Improntas.Domain/ /services/core-api/src/Flit.Modules.Improntas.Domain/
+COPY core-api/src/Flit.Modules.Notificaciones/ /services/core-api/src/Flit.Modules.Notificaciones/
 COPY core-api/src/Flit.Modules.Platform/ /services/core-api/src/Flit.Modules.Platform/
 COPY core-api/src/Flit.Modules.Security.Application/ /services/core-api/src/Flit.Modules.Security.Application/
 COPY core-api/src/Flit.Modules.Security.Domain/ /services/core-api/src/Flit.Modules.Security.Domain/
+COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
 COPY core-api/src/Flit.Queries.Domain/ /services/core-api/src/Flit.Queries.Domain/
 COPY core-api/src/Flit.Suite.AspNetCore/ /services/core-api/src/Flit.Suite.AspNetCore/
 # Configuración base compartida con core-api (Flit.Identity.Api la enlaza: mismo emisor, llaves y clientes OIDC). Solo
 # appsettings.json: appsettings.Development.json no está en git (lleva secretos locales) y no va en la imagen, igual que
 # en la de core-api; en el servidor la configuración por ambiente llega por variables del compose.
 COPY core-api/src/Flit.Api/appsettings.json /services/core-api/src/Flit.Api/
+# Contratos gRPC (Flit.*.Grpc.Contracts los generan con ProtoRoot ../../../../contracts/proto).
+COPY --from=contracts . /contracts/proto/
 # El servicio.
 COPY core-identity/src/ ./src/
 # Framework-dependent (JIT), como core-api: sin AOT ni sus analizadores (rompen el publish con TreatWarningsAsErrors).

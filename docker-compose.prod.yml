@@ -38,7 +38,8 @@
 #                             (https://marcablanca<env>.flitsas.online, mismo front)
 #   CORS_ORIGIN_ALT         tercer origen del gateway, opcional: dominio alternativo de la app
 #                           (en PDN, https://app.flitsas.com). Vacío en DEV/QA
-#   VERIFIK_API_TOKEN       token Verifik (RUNT)
+#   VERIFIK_API_TOKEN       token Verifik (RUNT); lo lee core-consultas (HU #13348)
+#   RABBITMQ_URL_TRAMITES   usuario tramites del broker; OBLIGATORIA desde el corte (HU #13348)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
 #   FLIT_INTERNAL_API_KEY   clave compartida Gateway <-> core-api para GET /internal/domains/active
@@ -133,6 +134,8 @@ services:
     # HU #13226: ancla — core-identity reusa TODO este bloque (misma llave de firma, clientes OIDC, correo, base), así
     # los dos procesos no pueden quedar con valores distintos. Lo que cambie aquí cambia en los dos.
     environment: &core-api-env
+      # HU #13332 (Epic #13316): trazas y logs hacia el colector OTLP. Vacía = apagado (como hasta ahora).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # HU #12895 (FLIT Suite A-02) — nombre del ambiente .NET, igual en core-api, core-ict y gateway. Sin la variable
       # sigue en Development, como hoy. Tiene nombre propio (no ASPNETCORE_ENVIRONMENT) para que otra variable del .env
       # no lo cambie sin querer. Qué depende del nombre: docs/suite/frentes/a-inventario-ambientes.md.
@@ -178,12 +181,10 @@ services:
       #   FLIT_SEED_RBAC_CATALOG  roles de sistema, módulos, permisos y catálogo de organismos (dejar en true)
       #   FLIT_SEED_DEMO_USERS    cuentas demo con contraseña fija y sus empresas (false fuera de DEV)
       #   FLIT_SWAGGER_ENABLED    /swagger público (false en PDN)
-      #   SMTP_USE_CONSOLE_WHEN_NO_HOST  sin SMTP_HOST, el correo sale por consola en vez de fallar
       #   FLIT_DEV_SEED           las migraciones de datos demo también siembran con otro nombre de ambiente
       Seed__RbacCatalog: ${FLIT_SEED_RBAC_CATALOG:-true}
       Seed__DemoUsers: ${FLIT_SEED_DEMO_USERS:-true}
       Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
-      Smtp__UseConsoleWhenNoHost: ${SMTP_USE_CONSOLE_WHEN_NO_HOST:-true}
       FLIT_DEV_SEED: ${FLIT_DEV_SEED:-}
       # HU #12896 (FLIT Suite A-03) — la API firma con una llave PERSISTENTE (security.jwt_signing_keys,
       # cifrada con Data Protection) en vez de una efímera que cambiaba en cada despliegue, y VALIDA firma,
@@ -197,34 +198,15 @@ services:
       Suite__Hosts__Environment: ${FLIT_SUITE_ENV?FLIT_SUITE_ENV debe estar definida (dev, qa o vacía en PDN); sin ella los clientes OIDC se reescriben con los hosts de PDN}
       # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
       Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
-      # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
-      # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
-      # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
-      VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
-      VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
-      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
-      # Modos real|mock por proveedor (explícitos para un deploy determinista).
-      VERIFIK_VEHICLE_MODE: ${VERIFIK_VEHICLE_MODE:-real}
-      VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
-      VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
-      VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
-      VERIFIK_RUES_MODE: ${VERIFIK_RUES_MODE:-mock}
-      INTEMPO_MODE: ${INTEMPO_MODE:-mock}
-      # Avalúo Fasecolda (Feature #10707). Mismo patrón CRUDO que Verifik/Kyverum:
-      # InfrastructureExtensions lee Environment.GetEnvironmentVariable("FASECOLDA_*");
-      # pasar `Fasecolda__*` NO funciona. Sin FASECOLDA_MODE el proveedor cae a mock y
-      # suggested-value responde "Sin valor de referencia mock para el VIN".
-      # Credenciales solo en el .env del VPS — NUNCA en el repo.
-      FASECOLDA_MODE: ${FASECOLDA_MODE:-mock}
-      FASECOLDA_API_USERNAME: ${FASECOLDA_API_USERNAME:-}
-      FASECOLDA_API_PASSWORD: ${FASECOLDA_API_PASSWORD:-}
-      FASECOLDA_BY_VIN_API_BASE_URL: ${FASECOLDA_BY_VIN_API_BASE_URL:-https://fasecoldaback.quantil.co}
-      FASECOLDA_BY_VIN_API_PATH: ${FASECOLDA_BY_VIN_API_PATH:-/api/busquedaVin}
-      FASECOLDA_API_BASE_URL: ${FASECOLDA_API_BASE_URL:-https://guiadevalores.fasecolda.com/apifasecolda}
-      FASECOLDA_AUTH_API_PATH: ${FASECOLDA_AUTH_API_PATH:-/token}
-      FASECOLDA_LIST_CODE_API_PATH: ${FASECOLDA_LIST_CODE_API_PATH:-/api/listacodigosid/consultabycodigo}
-      FASECOLDA_API_GRANT_TYPE: ${FASECOLDA_API_GRANT_TYPE:-password}
-      FASECOLDA_API_SECONDS_TIMEOUT: ${FASECOLDA_API_SECONDS_TIMEOUT:-55}
+      # HU #13333 (Epic #13316, contrato v1.3 §3): secretos de los clientes de servicio, uno por servicio y por ambiente.
+      # Vacío = el cliente no se registra (como hasta ahora). Los scopes de cada uno están en appsettings.json.
+      Suite__Oidc__ServiceClients__svc-tramites__Secret: ${SVC_TRAMITES_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-ict__Secret: ${SVC_ICT_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-consultas__Secret: ${SVC_CONSULTAS_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-notificaciones__Secret: ${SVC_NOTIFICACIONES_CLIENT_SECRET:-}
+      Suite__Oidc__ServiceClients__svc-identidad__Secret: ${SVC_IDENTIDAD_CLIENT_SECRET:-}
+      # HU #13348 (Epic #13316): core-api ya no tiene proveedores (Verifik, Intempo, Fasecolda, Kyverum RUNT y Verify,
+      # RUES): sus variables y secretos viven solo en core-consultas (abajo).
       # HU #10970 — modo por AMBIENTE de las validaciones transversales del ciclo de vida:
       #   · CF-01 duplicidad de trámite en curso (409 DUPLICATE_ACTIVE_PROCEDURE)
       #   · CF-03 precondición registral / vehículo ya matriculado (422 VEHICLE_STATE_INVALID_FOR_TYPE)
@@ -244,42 +226,8 @@ services:
       # el .env del VPS (TRAMITE_VALIDATION_MANDATARIO_MODE=block) más un reinicio, sin despliegue; lo decide
       # el Líder Técnico tras migrar la firma física. En código, ausente o inválido resuelve a block.
       TramiteValidations__MandatarioRequerido__Mode: ${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}
-      # SMTP — vars ya presentes en el .env del VPS
-      Smtp__Host: ${SMTP_HOST:-}
-      Smtp__Port: ${SMTP_PORT:-587}
-      Smtp__UseStartTls: ${SMTP_USE_STARTTLS:-true}
-      Smtp__DisableAuthentication: ${SMTP_DISABLE_AUTH:-false}
-      Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
-      Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
-      Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
-      # Comprobación de revocación (CRL/OCSP) del certificado del servidor SMTP. Default true:
-      # un despliegue que no defina la variable sigue comprobándola. Ponerla en false NO
-      # desactiva la validación TLS —cadena, emisor, host y vigencia se siguen verificando—,
-      # solo deja de consultarse si el certificado fue revocado antes de expirar. Se expone
-      # porque en redes con proxy o antivirus que inspecciona TLS la consulta de revocación no
-      # llega, y el handshake falla ANTES de autenticar (visto en local el 2026-08-11).
-      Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
-      # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
-      # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
-      # Default mock ⇒ no rompe regresión si el .env no define el proveedor.
+      # Biometría (HU #10233): el proveedor elegido (mock | kyverum). Kyverum Verify se llama por core-consultas (HU #13348).
       BIOMETRICS_PROVIDER: ${BIOMETRICS_PROVIDER:-mock}
-      KYVERUM_API_KEY: ${KYVERUM_API_KEY:-}
-      KYVERUM_BASE_URL: ${KYVERUM_BASE_URL:-https://verify.kyverum.com}
-      KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
-      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
-      KYVERUM_WEBHOOK_CALLBACK_URL: ${KYVERUM_WEBHOOK_CALLBACK_URL:-}
-      # Kyverum RUNT — dominio DISTINTO de Kyverum Verify (runt.kyverum.com vs
-      # verify.kyverum.com): mismo proveedor, otro producto y otra API key/scope.
-      # UN SOLO bloque alimenta DOS consumidores porque comparten ImprontaRuntOptions:
-      #   · improntas (HU #10465, ImprontaRuntClient — endpoint improntas:generar)
-      #   · consultas RUNT (HU #10478, KyverumRuntApiClient — vehículo/conductor default,
-      #     con fallback a Verifik).
-      # Mismo patrón CRUDO: InfrastructureExtensions.AddImprontas lee
-      # Environment.GetEnvironmentVariable("KYVERUM_RUNT_*"), NO `ImprontaRunt__*`.
-      KYVERUM_RUNT_BASE_URL: ${KYVERUM_RUNT_BASE_URL:-https://runt.kyverum.com}
-      KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
-      KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
-      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
       # OCR de trámites (Anthropic). Mismo patrón: el código lee env vars CRUDAS
       # (OCR_PROVIDER / ANTHROPIC_*), no `Anthropic__*`. Default mock ⇒ no rompe si el .env no lo define.
       OCR_PROVIDER: ${OCR_PROVIDER:-mock}
@@ -304,8 +252,225 @@ services:
       Ict__GrpcPort: ${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-ict (valida el canal directo y firma el inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+      # Epic #13316 (HU #13335/#13348): core-ict usa el token de servicio de Identidad (svc-ict), que necesita para
+      # consultar en core-consultas; core-api lo acepta siempre. AcceptLegacy=false es el corte del HMAC.
+      Ict__ServiceToken__AcceptIdentity: "true"
+      Ict__ServiceToken__AcceptLegacy: ${ICT_SERVICE_TOKEN_ACCEPT_LEGACY:-true}
+      # Epic #13316 (HU #13348, el corte): core-api consulta, pide avalúos, impronta, certificado RUES y validación de
+      # identidad a core-consultas, sin respaldo en proceso. core-api pide su token de servicio como svc-tramites
+      # (SVC_TRAMITES_CLIENT_SECRET).
+      Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
+      # HU #13350/#13348: Trámites publica sus eventos en flit.tramites (outbox del SDK) y recibe los avisos de Kyverum
+      # de Consultas por el bus: el bus es obligatorio. Necesita el usuario tramites del broker
+      # (deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE").
+      Tramites__Bus__Habilitado: "true"
+      Platform__Messaging__Producer: tramites
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_TRAMITES:?RABBITMQ_URL_TRAMITES es obligatoria (amqp://tramites:<clave>@rabbitmq:5672/flit; el bus de Trámites ya no es opcional)}
+      # Epic #13316 (HU #13355-#13359, el corte): core-api y core-identity no tienen transportes de correo (SMTP y
+      # Renting viven solo en core-notificaciones). Los correos y los webhooks del OT (firmados aquí) se dejan como
+      # trabajos por el bus; canales, buzón de pruebas, registro de entregas y mensajes muertos van por gRPC.
+      Notificaciones__Remoto__Address: ${NOTIFICACIONES_REMOTO_ADDRESS:-http://core-notificaciones:8085}
+      Platform__ServiceClient__ClientId: svc-tramites
+      # Obligatoria desde el corte (HU #13348): core-api llama a core-consultas con este cliente.
+      Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:?SVC_TRAMITES_CLIENT_SECRET es obligatoria (core-api consulta por core-consultas como svc-tramites)}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
+    ports:
+      - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_API_PORT:-4003}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${CORE_API_MEM_LIMIT:-0}
+    cpus: ${CORE_API_CPUS:-0}
+    oom_score_adj: ${CORE_API_OOM_SCORE_ADJ:-0}
+    logging: *default-logging
+
+  # ── core-identity (Epic #13217, HU #13233) — CORE_IDENTITY_PORT ──────────────
+  # El servicio de identidad de la FLIT Suite, con su propia imagen (services/core-identity): login (el de siempre y
+  # OIDC del hub), recuperación de cuenta, productos de la empresa y marca pública. No carga Trámites ni corre procesos
+  # de negocio ni migraciones (las corre core-api). Ver docs/suite/identidad-frontera.md.
+  # Perfil "identity": no arranca si no se pide (COMPOSE_PROFILES=identity), y aun arrancado no recibe tráfico hasta
+  # que el gateway tenga FLIT_IDENTITY_CLUSTER_ENABLED=true. Volver atrás = apagar esa bandera.
+  # Sin depends_on de core-api a propósito: tiene que poder arrancar aunque core-api esté caído.
+  core-identity:
+    profiles: ["identity"]
+    image: ghcr.io/flitsas/flitdev/core-identity:${CORE_IDENTITY_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Mismo bloque de variables que core-api (ancla): llave de firma, clientes OIDC, correo, base. Lo que cambie allá
+      # cambia aquí; si difirieran, un proceso rechazaría los tokens del otro.
+      <<: *core-api-env
+      ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4025}
+      # Epic #13316 (HU #13334): gRPC de Identidad (flit.identidad.v1) para los demás servicios, solo en la red interna
+      # (sin mapeo en ports, como el 8082 de core-api). Sin la variable no escucha gRPC: todo queda como antes.
+      Identidad__GrpcPort: ${CORE_IDENTITY_GRPC_PORT:-}
+      # HU #13355: core-identity publica como «plataforma» (outbox identity.outbox) con su usuario del broker
+      # (usuario-de-servicio.sh plataforma "$CLAVE" notificaciones); no el de Trámites que trae el ancla.
+      Platform__Messaging__Producer: plataforma
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_PLATAFORMA:?RABBITMQ_URL_PLATAFORMA es obligatoria (core-identity deja sus correos a Notificaciones por el bus)}
+    ports:
+      - "127.0.0.1:${CORE_IDENTITY_PORT:-4025}:${CORE_IDENTITY_PORT:-4025}"
+    healthcheck:
+      # Listo = base alcanzable y sin migraciones que falten (no solo «vivo»). El gateway también lo consulta.
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_IDENTITY_PORT:-4025}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${CORE_IDENTITY_MEM_LIMIT:-0}
+    cpus: ${CORE_IDENTITY_CPUS:-0}
+    oom_score_adj: ${CORE_IDENTITY_OOM_SCORE_ADJ:-0}
+    logging: *default-logging
+
+  # ── rabbitmq (Epic #13316, HU #13349) — bus de eventos, perfil "bus" ─────────
+  # Un broker por ambiente (ADR-0064) hasta k3s. Vhost "flit" y exchanges de los productores desde
+  # deploy/rabbitmq/definitions.json; un usuario por servicio con deploy/rabbitmq/usuario-de-servicio.sh. AMQP solo en
+  # la red interna; la consola de administración solo en 127.0.0.1 (túnel SSH). Ver deploy/rabbitmq/README.md.
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    # Nombre de nodo fijo: el volumen guarda los datos por nombre de nodo.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_ADMIN_USER:-flit-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_ADMIN_PASSWORD:-}
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq
+      - ./deploy/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-flit.conf:ro
+      - ./deploy/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    ports:
+      - "127.0.0.1:${RABBITMQ_MGMT_PORT:-4672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${RABBITMQ_MEM_LIMIT:-0}
+    logging: *default-logging
+
+  # ── core-consultas (Epic #13316, HU #13347) — CORE_CONSULTAS_PORT / CORE_CONSULTAS_GRPC_PORT, sin publicar ──
+  # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Obligatorio
+  # desde el corte (HU #13348): core-api e ICT ya no tienen proveedores. Sin `ports`: ni REST ni gRPC se publican.
+  # Si falta configuración o el secreto de un proveedor en modo real, no arranca y el log dice qué variable falta.
+  # Pasos en docs/suite/handoff-vps-consultas-notificaciones.md.
+  core-consultas:
+    image: ghcr.io/flitsas/flitdev/core-consultas:${CORE_CONSULTAS_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:${CORE_CONSULTAS_PORT:-4026}
+      Servicio__GrpcPort: ${CORE_CONSULTAS_GRPC_PORT:-8084}
+      # Usuario de base dueño del esquema consultas (deploy/postgres/servicio-con-esquema-propio.sql).
+      ConnectionStrings__Servicio: ${CONNECTION_STRING_CONSULTAS:-}
+      Platform__ServiceClient__ClientSecret: ${SVC_CONSULTAS_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
+      Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
+      Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh consultas).
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_CONSULTAS:-amqp://consultas:sin-clave@rabbitmq:5672/flit}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Proveedores: desde el corte (HU #13348) solo aquí; los nombres son los que tenía core-api.
+      VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
+      VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
+      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
+      VERIFIK_VEHICLE_MODE: ${VERIFIK_VEHICLE_MODE:-real}
+      VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
+      VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
+      VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
+      VERIFIK_RUES_MODE: ${VERIFIK_RUES_MODE:-mock}
+      INTEMPO_MODE: ${INTEMPO_MODE:-mock}
+      FASECOLDA_MODE: ${FASECOLDA_MODE:-mock}
+      FASECOLDA_API_USERNAME: ${FASECOLDA_API_USERNAME:-}
+      FASECOLDA_API_PASSWORD: ${FASECOLDA_API_PASSWORD:-}
+      FASECOLDA_BY_VIN_API_BASE_URL: ${FASECOLDA_BY_VIN_API_BASE_URL:-https://fasecoldaback.quantil.co}
+      FASECOLDA_BY_VIN_API_PATH: ${FASECOLDA_BY_VIN_API_PATH:-/api/busquedaVin}
+      FASECOLDA_API_BASE_URL: ${FASECOLDA_API_BASE_URL:-https://guiadevalores.fasecolda.com/apifasecolda}
+      FASECOLDA_AUTH_API_PATH: ${FASECOLDA_AUTH_API_PATH:-/token}
+      FASECOLDA_LIST_CODE_API_PATH: ${FASECOLDA_LIST_CODE_API_PATH:-/api/listacodigosid/consultabycodigo}
+      FASECOLDA_API_GRANT_TYPE: ${FASECOLDA_API_GRANT_TYPE:-password}
+      FASECOLDA_API_SECONDS_TIMEOUT: ${FASECOLDA_API_SECONDS_TIMEOUT:-55}
+      KYVERUM_RUNT_BASE_URL: ${KYVERUM_RUNT_BASE_URL:-https://runt.kyverum.com}
+      KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
+      KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
+      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
+      # HU #13351: Kyverum Verify por Consultas (misma llave que core-api). La URL del aviso es la del receptor de
+      # Consultas (https://<host>/api/v1/consultas/avisos/kyverum-verify), distinta de la de core-api.
+      KYVERUM_API_KEY: ${KYVERUM_API_KEY:-}
+      KYVERUM_BASE_URL: ${KYVERUM_BASE_URL:-https://verify.kyverum.com}
+      KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
+      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
+      KYVERUM_WEBHOOK_CALLBACK_URL: ${CONSULTAS_KYVERUM_WEBHOOK_CALLBACK_URL:-}
+      # HU #13348: autogeneración del certificado RUES (RF36). Opt-in: sin RUES_ENABLED=true y RUES_BASE_URL, Trámites
+      # cae a la carga manual del documento.
+      RUES_ENABLED: ${RUES_ENABLED:-false}
+      RUES_BASE_URL: ${RUES_BASE_URL:-}
+      RUES_API_KEY: ${RUES_API_KEY:-}
+      RUES_AUTH_SCHEME: ${RUES_AUTH_SCHEME:-Bearer}
+      RUES_TIMEOUT_SECONDS: ${RUES_TIMEOUT_SECONDS:-30}
+    healthcheck:
+      # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${CORE_CONSULTAS_MEM_LIMIT:-0}
+    cpus: ${CORE_CONSULTAS_CPUS:-0}
+    logging: *default-logging
+
+  # Notificaciones como servicio (Epic #13316, Feature #13324): envía los correos que arman core-api y core-identity
+  # (llegan por el bus o, el buzón de pruebas, por gRPC), entrega los webhooks del OT y lleva su registro de entregas.
+  # Obligatorio desde el corte (HU #13359): core-api y core-identity ya no tienen transportes. Sin `ports`: ni REST ni
+  # gRPC se publican. Pasos en docs/suite/handoff-vps-consultas-notificaciones.md.
+  core-notificaciones:
+    image: ghcr.io/flitsas/flitdev/core-notificaciones:${CORE_NOTIFICACIONES_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:${CORE_NOTIFICACIONES_PORT:-4027}
+      Servicio__GrpcPort: ${CORE_NOTIFICACIONES_GRPC_PORT:-8085}
+      # Usuario de base dueño del esquema notificaciones (deploy/postgres/servicio-con-esquema-propio.sql).
+      ConnectionStrings__Servicio: ${CONNECTION_STRING_NOTIFICACIONES:-}
+      Platform__ServiceClient__ClientSecret: ${SVC_NOTIFICACIONES_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
+      Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
+      Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh notificaciones).
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_NOTIFICACIONES:-amqp://notificaciones:sin-clave@rabbitmq:5672/flit}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Transportes de correo: desde el corte (HU #13359) solo aquí; los nombres son los que tenía core-api.
+      # SMTP de FLIT. Sin SMTP_HOST y con SMTP_USE_CONSOLE_WHEN_NO_HOST (por defecto) el correo se escribe en el log en
+      # vez de enviarse.
+      Smtp__UseConsoleWhenNoHost: ${SMTP_USE_CONSOLE_WHEN_NO_HOST:-true}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__UseStartTls: ${SMTP_USE_STARTTLS:-true}
+      Smtp__DisableAuthentication: ${SMTP_DISABLE_AUTH:-false}
+      Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
+      Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
+      Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
+      # Comprobación de revocación (CRL/OCSP) del certificado del servidor SMTP. Default true:
+      # un despliegue que no defina la variable sigue comprobándola. Ponerla en false NO
+      # desactiva la validación TLS —cadena, emisor, host y vigencia se siguen verificando—,
+      # solo deja de consultarse si el certificado fue revocado antes de expirar. Se expone
+      # porque en redes con proxy o antivirus que inspecciona TLS la consulta de revocación no
+      # llega, y el handshake falla ANTES de autenticar (visto en local el 2026-08-11).
+      Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
       # ── Canal de notificaciones "API Renting cliente" (Feature #11348) ──────
       # Mismo patrón CRUDO que Verifik/Kyverum/Fasecolda: el código lee
       # Environment.GetEnvironmentVariable("RENTING_API_*"); pasar `Notifications__Renting__*`
@@ -367,47 +532,15 @@ services:
       # ausente o ilegible NO impide que el servicio levante, se manifiesta como un envío
       # fallido. No confíes en que un arranque limpio signifique canal operativo.
       - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
-    ports:
-      - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_API_PORT:-4003}/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_NOTIFICACIONES_PORT:-4027}/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 40s
     restart: *restart
-    logging: *default-logging
-
-  # ── core-identity (Epic #13217, HU #13233) — CORE_IDENTITY_PORT ──────────────
-  # El servicio de identidad de la FLIT Suite, con su propia imagen (services/core-identity): login (el de siempre y
-  # OIDC del hub), recuperación de cuenta, productos de la empresa y marca pública. No carga Trámites ni corre procesos
-  # de negocio ni migraciones (las corre core-api). Ver docs/suite/identidad-frontera.md.
-  # Perfil "identity": no arranca si no se pide (COMPOSE_PROFILES=identity), y aun arrancado no recibe tráfico hasta
-  # que el gateway tenga FLIT_IDENTITY_CLUSTER_ENABLED=true. Volver atrás = apagar esa bandera.
-  # Sin depends_on de core-api a propósito: tiene que poder arrancar aunque core-api esté caído.
-  core-identity:
-    profiles: ["identity"]
-    image: ghcr.io/flitsas/flitdev/core-identity:${CORE_IDENTITY_TAG:-latest}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      # Mismo bloque de variables que core-api (ancla): llave de firma, clientes OIDC, correo, base. Lo que cambie allá
-      # cambia aquí; si difirieran, un proceso rechazaría los tokens del otro.
-      <<: *core-api-env
-      ASPNETCORE_URLS: http://+:${CORE_IDENTITY_PORT:-4025}
-    volumes:
-      # Mismo certificado del canal API Renting que core-api: identidad envía los correos de recuperación e invitación.
-      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
-    ports:
-      - "127.0.0.1:${CORE_IDENTITY_PORT:-4025}:${CORE_IDENTITY_PORT:-4025}"
-    healthcheck:
-      # Listo = base alcanzable y sin migraciones que falten (no solo «vivo»). El gateway también lo consulta.
-      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_IDENTITY_PORT:-4025}/health/ready"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 40s
-    restart: *restart
+    mem_limit: ${CORE_NOTIFICACIONES_MEM_LIMIT:-0}
+    cpus: ${CORE_NOTIFICACIONES_CPUS:-0}
     logging: *default-logging
 
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
@@ -425,10 +558,17 @@ services:
       # HU #12895 (A-02) — misma variable que core-api.
       Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
-      # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
+      # gRPC hacia core-api (orquestación): puerto interno dedicado HTTP/2.
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-api (canal directo e inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+      # Epic #13316 (HU #13335/#13348): core-ict pide su token a Identidad (cliente svc-ict, mismo secreto que
+      # SVC_ICT_CLIENT_SECRET): lo necesita para consultar en core-consultas.
+      Ict__ServiceToken__UseIdentity: "true"
+      Ict__ServiceToken__TokenEndpoint: ${ICT_IDENTITY_TOKEN_ENDPOINT:-http://gateway:${GATEWAY_PORT:-4002}/connect/token}
+      Ict__ServiceToken__ClientSecret: ${SVC_ICT_CLIENT_SECRET:-}
+      # Epic #13316 (HU #13346/#13348): ICT consulta directo a core-consultas (svc-ict, producto ict), sin respaldo.
+      CoreConsultas__Address: ${ICT_CORE_CONSULTAS_ADDRESS:-http://core-consultas:8084}
       # File Manager: DONDE SUBE ICT los binarios de los adjuntos. Tiene que ser EXACTAMENTE la
       # misma URL que FileManager__BaseUrl de core-api (misma var FILE_MANAGER_BASE_URL): si difieren,
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador
@@ -461,6 +601,10 @@ services:
       retries: 3
       start_period: 40s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${CORE_ICT_MEM_LIMIT:-0}
+    cpus: ${CORE_ICT_CPUS:-0}
     logging: *default-logging
 
   # ── Migrador V1 -> V2 (herramienta de operacion, NO un servicio) ──────────
@@ -550,6 +694,10 @@ services:
       retries: 3
       start_period: 20s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${MIGRACION_API_MEM_LIMIT:-0}
+    cpus: ${MIGRACION_API_CPUS:-0}
     logging: *default-logging
 
   # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────
@@ -559,6 +707,8 @@ services:
     # content root = working_dir, para que YARP cargue sus rutas de appsettings.json
     working_dir: /app/gateway
     environment:
+      # HU #13332 (Epic #13316): trazas y logs hacia el colector OTLP. Vacía = apagado (como hasta ahora).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
@@ -574,6 +724,8 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
+      # HU #13351: avisos de proveedores al receptor de core-consultas (/api/v1/consultas/avisos/*).
+      ReverseProxy__Clusters__core-consultas-cluster__Destinations__core-consultas-1__Address: http://core-consultas:${CORE_CONSULTAS_PORT:-4026}/
       # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
       # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
       Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}
@@ -614,6 +766,10 @@ services:
       retries: 3
       start_period: 20s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${GATEWAY_MEM_LIMIT:-0}
+    cpus: ${GATEWAY_CPUS:-0}
     logging: *default-logging
 
   # ── python-ml (FastAPI OCR/ML, detras de YARP /ml) — PYTHON_ML_PORT ────────
@@ -629,6 +785,10 @@ services:
       retries: 3
       start_period: 20s
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${PYTHON_ML_MEM_LIMIT:-0}
+    cpus: ${PYTHON_ML_CPUS:-0}
     logging: *default-logging
 
   # ── Frontend (Next.js) — FRONTEND_PORT ────────────────────────────────────
@@ -701,6 +861,10 @@ services:
     depends_on:
       - gateway
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${FRONTEND_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_CPUS:-0}
     logging: *default-logging
 
   # ── FLIT Suite: hub en flitsas.online (B-09) — HUB_PORT ────────────────────
@@ -742,6 +906,26 @@ services:
     depends_on:
       - gateway
     restart: *restart
+    # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
+    # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
+    mem_limit: ${FRONTEND_HUB_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_HUB_CPUS:-0}
+    logging: *default-logging
+
+  # HU #13332 (Epic #13316) — colector OpenTelemetry + Tempo (trazas) + Loki (logs) + Grafana en un contenedor. Solo
+  # con el perfil `observabilidad`. Para usarlo: COMPOSE_PROFILES=...,observabilidad y
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://observabilidad:4317 en el .env. Grafana queda solo en 127.0.0.1 (túnel SSH o
+  # nginx con acceso restringido); el colector no se publica: lo alcanzan los servicios por la red interna.
+  observabilidad:
+    profiles: ["observabilidad"]
+    image: grafana/otel-lgtm:0.30.0
+    ports:
+      - "127.0.0.1:${OBSERVABILIDAD_GRAFANA_PORT:-4090}:3000"
+    volumes:
+      - observabilidad-datos:/data
+    restart: *restart
+    mem_limit: ${OBSERVABILIDAD_MEM_LIMIT:-0}
+    cpus: ${OBSERVABILIDAD_CPUS:-0}
     logging: *default-logging
 
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
@@ -770,3 +954,8 @@ networks:
     ipam:
       config:
         - subnet: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
+
+# HU #13332: datos de trazas y logs del perfil `observabilidad`.
+volumes:
+  observabilidad-datos:
+  rabbitmq-datos:

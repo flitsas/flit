@@ -22,6 +22,10 @@ internal static class SuperAdminEndpointExtensions
         SecurityUsersEndpoints.Map(group);
         // HU #10679 — consulta global del rastro de auditoría administrativa/seguridad.
         SecurityAuditEndpoints.Map(group);
+        // Epic #13316 (HU #13345) — consumo de consultas por empresa, producto y fuente (vive en Consultas).
+        ConsultasConsumoEndpoints.Map(group);
+        // Epic #13316 (HU #13357) — mensajes muertos de Notificaciones (correos y webhooks que no salieron).
+        MensajesMuertosEndpoints.Map(group);
 
         return app;
     }

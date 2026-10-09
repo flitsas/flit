@@ -73,13 +73,15 @@ public sealed class FieldValueContractGuardTests
     private const string Src = "services/core-api/src/";
     private const string App = Src + "Flit.Tramites.Application/";
     private const string Infra = Src + "Flit.Infrastructure/";
+    // HU #13342 (Epic #13316): los mappers y adaptadores de consultas viven en el módulo de plataforma.
+    private const string Consultas = Src + "Flit.Modules.Consultas/";
 
-    private const string Verifik = App + "UseCases/Consultations/VerifikResultMapper.cs";
-    private const string Kyverum = App + "UseCases/Consultations/KyverumRuntVehicleResultMapper.cs";
+    private const string Verifik = Consultas + "Contracts/VerifikResultMapper.cs";
+    private const string Kyverum = Consultas + "Contracts/KyverumRuntVehicleResultMapper.cs";
     private const string RunConsulta = App + "UseCases/Consultations/RunConsultationCommand.cs";
     private const string Ocr = App + "UseCases/ProcedureInstances/OcrFieldsCommand.cs";
     private const string Preflight = App + "UseCases/ProcedureInstances/PreflightCommand.cs";
-    private const string RuesProvider = Infra + "Consultations/VerifikRuesConsultationProvider.cs";
+    private const string RuesProvider = Consultas + "Providers/VerifikRuesConsultationProvider.cs";
     private const string RuesLookup = App + "UseCases/Consultations/RuesPersonLookupHandler.cs";
     /// <summary>
     /// HU sin ADO 2026-08-11 (segunda tanda) — casilla 18/19 del FUR elegidas por el operador en
@@ -446,7 +448,7 @@ public sealed class FieldValueContractGuardTests
     /// <summary>Los tres mappers que traducen una consulta de vehículo del RUNT a <c>field_values</c>.</summary>
     private static readonly string[] MappersDeRunt = [Verifik, Kyverum, Intempo];
 
-    private const string Intempo = App + "UseCases/Consultations/IntempoVehicleResultMapper.cs";
+    private const string Intempo = Consultas + "Contracts/IntempoVehicleResultMapper.cs";
 
     [Fact]
     public void NingunMapperEscribeElEstadoDelSoatSinNormalizar()
@@ -480,7 +482,7 @@ public sealed class FieldValueContractGuardTests
         // envía, y lo que falta se descarta en silencio al deserializar. Aquí se comprueba lo contrario
         // —que nada del modelo quede sin usar— porque una propiedad declarada y nunca leída es la
         // señal de que alguien amplió el modelo y olvidó el mapper.
-        var modelo = Leer(App + "UseCases/Consultations/IntempoVehicleResponse.cs");
+        var modelo = Leer(Consultas + "Contracts/IntempoVehicleResponse.cs");
         var mapper = Leer(Intempo);
 
         foreach (var propiedad in new[] { "NoPoliza", "FechaExpedicion", "FechaVigencia", "FechaVencimiento", "EntidadExpideSoat" })

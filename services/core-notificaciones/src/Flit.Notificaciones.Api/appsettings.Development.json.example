@@ -1,0 +1,41 @@
+{
+  // core-notificaciones en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado
+  // por git) y reemplaza cada CAMBIAR. Aquí van el SMTP y la API de Renting que antes estaban en core-api.
+  "Urls": "http://127.0.0.1:4027",
+  "Servicio": { "GrpcPort": 8085 },
+  "ConnectionStrings": {
+    // La misma base de core-api; el servicio usa su esquema propio «notificaciones».
+    "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+
+  "Platform": {
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-notificaciones-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      // deploy/rabbitmq/usuario-de-servicio.sh notificaciones <clave>
+      "ConnectionString": "amqp://notificaciones:CAMBIAR@127.0.0.1:5672/flit"
+    }
+  },
+
+  // Canal FLIT (correo real). Ojo: los correos llegan de verdad a las personas de tu base.
+  "Smtp": {
+    "Host": "smtp.office365.com",
+    "Port": 587,
+    "UseStartTls": true,
+    "DefaultSenderEmail": "CAMBIAR",
+    "DefaultSenderPassword": "CAMBIAR",
+    "DefaultSenderName": "FLIT",
+    "CheckCertificateRevocation": false
+  },
+
+  // Canal de la API del cliente (Renting). Apagado en local salvo que tengas el certificado .pfx.
+  "Notifications": {
+    "Renting": { "Enabled": false }
+  }
+}

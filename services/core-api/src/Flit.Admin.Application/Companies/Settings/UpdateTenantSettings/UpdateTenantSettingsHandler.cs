@@ -19,11 +19,14 @@ public sealed class UpdateTenantSettingsHandler
 {
     private readonly ITenantSettingsRepository _repository;
     private readonly ITenantProductFlags _products;
+    private readonly IConsultasConfigSync? _consultas;
 
-    public UpdateTenantSettingsHandler(ITenantSettingsRepository repository, ITenantProductFlags products)
+    /// <param name="consultas">HU #13344: solo con Consultas remoto encendido; sin él, todo queda como antes.</param>
+    public UpdateTenantSettingsHandler(ITenantSettingsRepository repository, ITenantProductFlags products, IConsultasConfigSync? consultas = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _products = products ?? throw new ArgumentNullException(nameof(products));
+        _consultas = consultas;
     }
 
     public async Task<UpdateTenantSettingsResult> HandleAsync(
@@ -185,6 +188,21 @@ public sealed class UpdateTenantSettingsHandler
         };
 
         var changes = SettingsDiff.Compute(previous, updated);
+
+        // HU #13344: primero Consultas. Si no responde, no se guarda nada: nunca queda en FLIT una configuración que
+        // Consultas no tiene. Volver a guardar reintenta (la sincronización es idempotente).
+        if (_consultas is not null)
+        {
+            try
+            {
+                await _consultas.SyncAsync(command.TenantId, updated, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ConsultasConfigSyncException)
+            {
+                return UpdateTenantSettingsResult.Invalid(
+                    [new SettingsValidationError("consultationProviderConfig", "No se pudo guardar la configuración en Consultas. No se guardó ningún cambio; inténtalo de nuevo.")]);
+            }
+        }
 
         await _repository
             .SaveAsync(updated, changes, command.ChangedBy, command.CorrelationId, cancellationToken)

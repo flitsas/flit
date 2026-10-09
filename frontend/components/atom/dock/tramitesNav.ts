@@ -10,6 +10,7 @@ import {
   BadgeCheck,
   BarChart3,
   Bell,
+  MailWarning,
   Building2,
   ClipboardList,
   FileSignature,
@@ -148,6 +149,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", FileSignature),
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", FileText),
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", Bell),
+        // Epic #13316 (HU #13358): correos y webhooks que agotaron sus reintentos.
+        superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", MailWarning),
         superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
       ],
     },

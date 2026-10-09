@@ -102,8 +102,9 @@ instante; las sesiones abiertas siguen sirviendo (llaves y sesiones viven en la 
 
 ## Paso 3 — Límites de recursos
 
-Con lo anotado en el paso 0. Estos valores van en `docker-compose.prod.yml` por PR, no a mano en la VPS: el CD copia
-el compose en cada despliegue y borraría el cambio. Pasar los números medidos al equipo para el PR.
+Con lo anotado en el paso 0. Desde la HU #13331 el compose ya trae los límites como variables (`<SERVICIO>_MEM_LIMIT`,
+`<SERVICIO>_CPUS`, `<SERVICIO>_OOM_SCORE_ADJ`, ver `.env.prod.example`): se fijan en el `.env` de cada ambiente, sin PR.
+Sin la variable no hay límite, como hasta ahora.
 
 | Qué | Propuesta | Por qué |
 |---|---|---|

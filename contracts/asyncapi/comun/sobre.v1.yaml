@@ -1,0 +1,33 @@
+# Sobre común de todo mensaje del bus de FLIT (contrato de plataforma §7, ADR-0064).
+# No es un documento AsyncAPI: lo referencian los contratos de cada productor. `data` lo define cada mensaje.
+Sobre:
+  type: object
+  additionalProperties: false
+  required: [eventId, type, version, occurredAt, tenantId, producer, correlationId, data]
+  properties:
+    eventId:
+      type: string
+      format: uuid
+      description: UUIDv7. Llave de idempotencia; también viaja como propiedad message-id del mensaje.
+    type:
+      type: string
+      description: "<productor>.<entidad>.<hecho>; también viaja como propiedad type del mensaje."
+    version:
+      type: integer
+      minimum: 1
+      description: Cambia solo si el formato de data deja de ser compatible.
+    occurredAt:
+      type: string
+      format: date-time
+    tenantId:
+      type: string
+      format: uuid
+      description: Empresa del hecho. Ningún consumidor mezcla empresas.
+    producer:
+      type: string
+      description: Código del servicio productor (exchange flit.<producer>).
+    correlationId:
+      type: string
+      description: El mismo de la petición que originó el hecho; también viaja como propiedad del mensaje.
+    data:
+      type: object

@@ -1,0 +1,111 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — eventos de plataforma
+  version: 1.0.0
+  description: |
+    Eventos que publica la plataforma (core-identity) en el exchange `flit.plataforma` (contrato §7, ADR-0064).
+    Publicación solo vía outbox; consumo idempotente por `eventId` con bandeja de entrada.
+    Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos personales más allá de los ids.
+defaultContentType: application/json
+
+channels:
+  platform.tenant_product.changed:
+    description: Se encendió o apagó un producto para una empresa. Los productos invalidan su caché de acceso.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: tenantProductChanged
+      message:
+        $ref: '#/components/messages/TenantProductChanged'
+  platform.user.suspended:
+    description: Un usuario fue suspendido. Cada producto revoca sus sesiones.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: userSuspended
+      message:
+        $ref: '#/components/messages/UserSuspended'
+  platform.tenant.suspended:
+    description: Una empresa fue suspendida. Cada producto revoca las sesiones de sus usuarios.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: tenantSuspended
+      message:
+        $ref: '#/components/messages/TenantSuspended'
+  platform.roles.changed:
+    description: Cambiaron los roles de un usuario en un producto. El producto fuerza la renovación del token.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.plataforma, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: rolesChanged
+      message:
+        $ref: '#/components/messages/RolesChanged'
+
+components:
+  messages:
+    TenantProductChanged:
+      name: platform.tenant_product.changed
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId, productCode, enabled]
+                properties:
+                  tenantId: { type: string, format: uuid }
+                  productCode: { type: string, description: Código de producto (contrato §1). }
+                  enabled: { type: boolean }
+    UserSuspended:
+      name: platform.user.suspended
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [userId, tenantId]
+                properties:
+                  userId: { type: string, format: uuid }
+                  tenantId: { type: string, format: uuid }
+    TenantSuspended:
+      name: platform.tenant.suspended
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId]
+                properties:
+                  tenantId: { type: string, format: uuid }
+    RolesChanged:
+      name: platform.roles.changed
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [userId, tenantId, productCode]
+                properties:
+                  userId: { type: string, format: uuid }
+                  tenantId: { type: string, format: uuid }
+                  productCode: { type: string }

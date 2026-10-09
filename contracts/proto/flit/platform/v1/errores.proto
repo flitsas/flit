@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package flit.platform.v1;
+
+option csharp_namespace = "Flit.Platform.Grpc.V1";
+
+// Motivos de error estables de la plataforma (contrato de plataforma §10, ADR-0070 decisión 5).
+//
+// Un servicio que responde con error devuelve un estado gRPC y, en los detalles, un
+// google.rpc.ErrorInfo con:
+//   - domain = "flitsas.com"
+//   - reason = el nombre del valor SIN el prefijo "CODIGO_ERROR_" (por ejemplo "PRODUCT_NOT_ENABLED"),
+//     que es el mismo `code` que la API REST devuelve en RFC 7807.
+// Así un error que nace en un servicio interno puede salir hacia afuera sin traducir su código.
+// Un motivo nuevo se agrega primero al contrato §10 y después aquí.
+enum CodigoError {
+  CODIGO_ERROR_UNSPECIFIED = 0;
+  // 403: el producto está apagado para la empresa o para su cabeza.
+  CODIGO_ERROR_PRODUCT_NOT_ENABLED = 1;
+  // 403: el usuario no tiene rol en el producto.
+  CODIGO_ERROR_PRODUCT_ROLE_REQUIRED = 2;
+  // 401: token de otro producto o de otro servicio destino.
+  CODIGO_ERROR_TOKEN_AUDIENCE_MISMATCH = 3;
+  // 401: token usado bajo un dominio distinto al que lo emitió (ADR-0060).
+  CODIGO_ERROR_SESSION_DOMAIN_MISMATCH = 4;
+  // 403: el usuario pertenece a una red con dominio propio (ADR-0060).
+  CODIGO_ERROR_NETWORK_DOMAIN_REQUIRED = 5;
+}

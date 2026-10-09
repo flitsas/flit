@@ -28,6 +28,24 @@ public sealed class IctServiceTokenOptions
     public string Scope { get; init; } = "ict.orchestration";
 
     public int TtlMinutes { get; init; } = 10;
+
+    // ── Epic #13316 (HU #13335): token de servicio de Identidad en lugar del HMAC compartido ──────────────────────
+
+    /// <summary>
+    /// Con <c>true</c>, core-ict pide su token a Identidad (client credentials, contrato v1.3 §3) y deja de firmar el
+    /// HMAC. core-api tiene que aceptarlo antes (<c>Ict:ServiceToken:AcceptIdentity</c>). Por defecto, como siempre.
+    /// </summary>
+    public bool UseIdentity { get; init; }
+
+    /// <summary>Endpoint de token de Identidad, por la red interna (p. ej. <c>http://gateway:4002/connect/token</c>).</summary>
+    public string TokenEndpoint { get; init; } = string.Empty;
+
+    public string ClientId { get; init; } = "svc-ict";
+
+    /// <summary>Secreto del cliente <c>svc-ict</c>: el mismo <c>SVC_ICT_CLIENT_SECRET</c> que tiene Identidad.</summary>
+    public string ClientSecret { get; init; } = string.Empty;
+
+    public string IdentityScope { get; init; } = "platform.tramites.ict";
 }
 
 /// <summary>
