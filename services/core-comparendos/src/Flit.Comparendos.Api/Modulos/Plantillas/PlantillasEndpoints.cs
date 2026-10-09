@@ -49,13 +49,20 @@ public static class PlantillasEndpoints
     private static VersionDto Dto(PlantillaVersion v) =>
         new(v.Id, v.PlantillaId, v.NumeroVersion, v.Estado.ToString(), v.Asunto, v.CuerpoHtml, v.VariablesUsadas, v.NotaCambio, v.PublicadaEn);
 
-    private static async Task<IResult> Listar(string? conjunto, string? tipo, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
+    /// <summary>§7.16: la gestora ve FLIT y su propio conjunto; el SuperAdmin, todos.</summary>
+    private static async Task<List<ConjuntoPlantillas>> PermitidosAsync(UsuarioActual usuario, Capacidades capacidades, CancellationToken ct)
     {
         var permitidos = new List<ConjuntoPlantillas> { ConjuntoPlantillas.Flit };
         if (usuario.EsSuperAdmin)
             permitidos.Add(ConjuntoPlantillas.Renting);
         else if (usuario.EmpresaId is { } e)
             permitidos.Add((await capacidades.DeAsync(e, ct).ConfigureAwait(false)).ConjuntoPlantillas);
+        return permitidos;
+    }
+
+    private static async Task<IResult> Listar(string? conjunto, string? tipo, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
+    {
+        var permitidos = await PermitidosAsync(usuario, capacidades, ct).ConfigureAwait(false);
 
         var q = db.Plantillas.AsNoTracking().Where(p => permitidos.Contains(p.Conjunto));
         if (Enum.TryParse<ConjuntoPlantillas>(conjunto, true, out var c))
@@ -75,16 +82,24 @@ public static class PlantillasEndpoints
         return Results.Ok(lista);
     }
 
-    private static async Task<IResult> Detalle(Guid id, ComparendosDb db, CancellationToken ct)
+    private static async Task<IResult> Detalle(Guid id, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, CancellationToken ct)
     {
-        var p = await db.Plantillas.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La plantilla");
+        var permitidos = await PermitidosAsync(usuario, capacidades, ct).ConfigureAwait(false);
+        var p = await db.Plantillas.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && permitidos.Contains(x.Conjunto), ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La plantilla");
         var versiones = await db.PlantillaVersiones.AsNoTracking().Where(v => v.PlantillaId == id).OrderByDescending(v => v.NumeroVersion)
             .Select(v => new VersionResumen(v.Id, v.NumeroVersion, v.Estado.ToString(), v.NotaCambio, v.CreadoEn, v.PublicadaEn)).ToListAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { p.Id, conjunto = p.Conjunto.ToString(), tipo = p.Tipo.ToString(), p.TipologiaId, p.Nombre, p.VersionPublicadaId, versiones });
     }
 
-    private static async Task<IResult> Version(Guid id, ComparendosDb db, CancellationToken ct) =>
-        Results.Ok(Dto(await db.PlantillaVersiones.AsNoTracking().FirstOrDefaultAsync(v => v.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La versión")));
+    private static async Task<IResult> Version(Guid id, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, CancellationToken ct)
+    {
+        var permitidos = await PermitidosAsync(usuario, capacidades, ct).ConfigureAwait(false);
+        var v = await (from x in db.PlantillaVersiones.AsNoTracking()
+                       join p in db.Plantillas.AsNoTracking() on x.PlantillaId equals p.Id
+                       where x.Id == id && permitidos.Contains(p.Conjunto)
+                       select x).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return Results.Ok(Dto(v ?? throw ReglaException.NoEncontrado("La versión")));
+    }
 
     /// <summary>Vista previa con datos de ejemplo o de un comparendo real de la empresa del usuario; HTML o PDF.</summary>
     private static async Task<IResult> Previsualizar(VistaPrevia pedido, UsuarioActual usuario, AccesoComparendo acceso, ContextoPlantilla contexto, CancellationToken ct)
@@ -168,8 +183,9 @@ public static class PlantillasEndpoints
         var numeroAnterior = p.VersionPublicadaId is { } previa
             ? await db.PlantillaVersiones.Where(x => x.Id == previa).Select(x => (int?)x.NumeroVersion).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             : null;
-        if (p.VersionPublicadaId is { } anterior)
-            await db.PlantillaVersiones.Where(x => x.Id == anterior).ExecuteUpdateAsync(u => u.SetProperty(x => x.Estado, EstadoPlantillaVersion.Retirada), ct).ConfigureAwait(false);
+        // Retirar la anterior y publicar la nueva en el mismo SaveChanges: nunca queda la plantilla sin versión publicada.
+        if (p.VersionPublicadaId is { } anterior && await db.PlantillaVersiones.FirstOrDefaultAsync(x => x.Id == anterior, ct).ConfigureAwait(false) is { } previaVersion)
+            previaVersion.Estado = EstadoPlantillaVersion.Retirada;
         (v.Estado, v.PublicadaEn, v.PublicadaPor, v.NotaCambio, v.VariablesUsadas) = (EstadoPlantillaVersion.Publicada, reloj.Ahora, usuario.Id, pedido.Nota.Trim(), [.. validacion.Usadas]);
         p.VersionPublicadaId = v.Id;
         auditoria.Registrar(null, "plantilla", p.Id, "PUBLICAR", new CambioCampo("version_publicada", numeroAnterior, v.NumeroVersion));
