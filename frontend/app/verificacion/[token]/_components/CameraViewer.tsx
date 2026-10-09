@@ -44,7 +44,7 @@ export function CameraViewer({
   const [notice, setNotice] = useState<string | null>(null);
   const [captured, setCaptured] = useState<Blob | null>(initialBlob ?? null);
   const previewRef = useRef<HTMLImageElement | null>(null);
-  const { videoRef, status, restart, capture } = useLiveCamera({ facing, enabled: !captured });
+  const { videoRef, status, restart, capture, actualFacing } = useLiveCamera({ facing, enabled: !captured });
 
   // La URL blob vive exactamente lo que dura el efecto que la creó: se revoca en su cleanup (al
   // reemplazar la captura, al repetir o al desmontar), cuando la <img> ya no la usa. Nunca se
@@ -121,10 +121,22 @@ export function CameraViewer({
 
   const ready = status === "ready";
   const isDoc = shape === "rect";
+  // Bug #13449: con una cámara frontal (la del celular o la webcam del computador, que no reporta `facingMode`)
+  // la vista sigue el gesto como un espejo, en rostro y en documento. La trasera del celular no se invierte.
+  // Solo la vista en vivo: la foto capturada no se invierte. El marco del documento es simétrico, así que el
+  // recorte coincide con lo que se ve.
+  const mirrored = actualFacing !== "environment";
   return (
     <div className="flex flex-col gap-4">
       <div className={`relative overflow-hidden rounded-2xl bg-slate-900 ${isDoc ? "aspect-[10/9]" : "aspect-square"}`}>
-        <video ref={videoRef} playsInline muted aria-label="Vista en vivo de la cámara" className="size-full object-cover" />
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          aria-label="Vista en vivo de la cámara"
+          data-mirrored={mirrored ? "true" : "false"}
+          className={`size-full object-cover ${mirrored ? "-scale-x-100" : ""}`}
+        />
         {!ready ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 p-6 text-center text-white">
             <Loader2 aria-hidden="true" className="size-8 motion-safe:animate-spin" />

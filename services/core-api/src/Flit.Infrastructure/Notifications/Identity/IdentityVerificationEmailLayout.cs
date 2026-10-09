@@ -49,6 +49,9 @@ public static class IdentityVerificationEmailLayout
     private const string StepBubble = "#E8EDFB";
     private const string FlitBlue = "#557EFF";
 
+    /// <summary>Bug #13449 — canal de soporte de FLIT que el cliente ve al recibir la verificación.</summary>
+    public const string SupportEmail = "soporte@flitsas.com";
+
     public static string Render(
         EmailTheme theme, string assetsBaseUrl, string? recipientName, string link, IdentityVerificationEmailContent content)
     {
@@ -134,6 +137,9 @@ public static class IdentityVerificationEmailLayout
             .Append(";word-break:break-all;\">").Append(href).Append("</a></p>");
         sb.Append("<p style=\"margin:10px 0 0;font-size:12px;line-height:1.5;color:").Append(Muted).Append(";\">")
             .Append(Enc(content.FooterNote)).Append("</p>");
+        sb.Append("<p style=\"margin:10px 0 0;font-size:12px;line-height:1.5;color:").Append(Muted).Append(";\">")
+            .Append("¿Necesitas ayuda? Escríbenos a <a href=\"mailto:").Append(SupportEmail).Append("\" style=\"color:").Append(accent)
+            .Append(";\">").Append(SupportEmail).Append("</a>.</p>");
 
         sb.Append("</td></tr></table></td></tr></table></body></html>");
         return sb.ToString();

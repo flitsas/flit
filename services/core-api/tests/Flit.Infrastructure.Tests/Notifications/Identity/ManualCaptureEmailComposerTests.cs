@@ -127,7 +127,7 @@ public sealed class ManualCaptureEmailComposerTests
             Steps: ["Paso A", "Paso B"],
             ButtonLabel: "Reintentar",
             FallbackLinkIntro: "Copia este enlace:",
-            FooterNote: "Vale 24 horas.",
+            FooterNote: "Caduca en 24 horas.",
             BannerText: "Tu validación anterior fue rechazada.",
             BannerTone: IdentityEmailBannerTone.Warning);
 
@@ -138,6 +138,23 @@ public sealed class ManualCaptureEmailComposerTests
         html.Should().Contain("Vuelve a intentarlo").And.Contain("Reintentar").And.Contain("Paso B").And.NotContain("Paso C");
         baseline.Should().NotContain("#FFF4E0", "sin banner no se pinta la caja de aviso");
         html.Should().Contain("max-width:520px").And.Contain("border-radius:16px");
+    }
+
+    /// <summary>Bug #13449 (hallazgos 1 y 4): el pie dice «caduca en 24 horas» y ofrece el canal de soporte de FLIT.</summary>
+    [Theory]
+    [MemberData(nameof(Temas))]
+    public void InicialYRechazo_DicenCaducaEn24Horas_YOfrecenElCorreoDeSoporte(string tema)
+    {
+        var (_, inicial) = ManualCaptureEmailComposer.Compose("Ana Perez", Link, ThemeOf(tema), Assets);
+        var (_, rechazo) = ManualCaptureEmailComposer.ComposeRejected("Ana Perez", "Imagen borrosa", Link, ThemeOf(tema), Assets);
+
+        foreach (var html in new[] { inicial, rechazo })
+        {
+            var text = WebUtility.HtmlDecode(html);
+            text.Should().Contain("de un solo uso y caduca en 24 horas.").And.NotContain("vale 24 horas");
+            text.Should().Contain("¿Necesitas ayuda? Escríbenos a");
+            html.Should().Contain("href=\"mailto:soporte@flitsas.com\"");
+        }
     }
 
     [Fact]
