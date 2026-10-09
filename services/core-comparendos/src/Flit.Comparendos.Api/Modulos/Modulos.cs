@@ -23,6 +23,8 @@ public static class Modulos
         services.AddScoped<Contraventor.ServicioContraventor>();
         services.AddScoped<Portal.ServicioPortal>();
         services.AddScoped<Avisos.ServicioAvisos>();
+        services.AddScoped<CambioContraventor.ServicioCambioContraventor>();
+        services.AddScoped<Correo.IReaccionCorreo, CambioContraventor.ReaccionCambioContraventor>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Avisos.SchedulerAvisos>();
         services.AddLimitePortal();
         services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();
@@ -81,6 +83,7 @@ public static class Modulos
         Correo.MensajesEndpoints.Map(api);
         Portal.PortalEndpoints.Map(api);
         Avisos.AvisosEndpoints.Map(api);
+        CambioContraventor.CambioContraventorEndpoints.Map(api);
         return app;
     }
 }
