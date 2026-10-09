@@ -16,6 +16,7 @@ const fetchMandatoTemplatePreview = vi.fn();
 const listMandatoFormats = vi.fn();
 const getMandatoFormat = vi.fn();
 const updateMandatoFormat = vi.fn();
+const resetMandatoFormatTemplate = vi.fn();
 const formato = (code: string, name: string, assignmentMode = "signer") => ({
   code,
   name,
@@ -37,6 +38,7 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   listMandatoFormats: (...a: unknown[]) => listMandatoFormats(...a),
   getMandatoFormat: (...a: unknown[]) => getMandatoFormat(...a),
   updateMandatoFormat: (...a: unknown[]) => updateMandatoFormat(...a),
+  resetMandatoFormatTemplate: (...a: unknown[]) => resetMandatoFormatTemplate(...a),
   getMandatoFormatVersion: vi.fn(),
   previewMandatoFormatDraft: vi.fn(),
   readFormatError: () => ({ error: null, unknownVariables: [] }),
@@ -407,6 +409,74 @@ describe("MandatosCatalogPanel configurador", () => {
       await waitFor(() => expect(within(tabla).getByText("Envigado jurídico")).toBeInTheDocument());
       expect(within(tabla).getByText("Institucional (organismo)")).toBeInTheDocument();
       expect(screen.queryByTestId("mandato-formato-editor")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Restablecer redacción de fábrica desde Formatos de contrato", () => {
+    const completo = (code: string, name: string, over: Record<string, unknown> = {}) => ({
+      ...formato(code, name),
+      currentVersion: 2,
+      hasCustomTemplate: true,
+      rowVersion: 3,
+      updatedAt: "2026-09-30T15:00:00Z",
+      ...over,
+    });
+
+    beforeEach(() => resetMandatoFormatTemplate.mockReset());
+
+    it("solo se ofrece en los formatos con plantilla editada, y no en la automática", async () => {
+      const user = userEvent.setup();
+      listMandatoFormats.mockResolvedValue([
+        completo("auto", "Automática", { currentVersion: 0, hasCustomTemplate: false }),
+        completo("generico", "Genérico"),
+        completo("bello", "Bello", { currentVersion: 0, hasCustomTemplate: false }),
+      ]);
+      renderPanel("formatos");
+      await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+
+      expect(await hayAccion(user, /restablecer redacción de fábrica del formato genérico/i)).toBe(true);
+      expect(await hayAccion(user, /restablecer redacción de fábrica del formato bello/i)).toBe(false);
+      expect(await hayAccion(user, /restablecer redacción de fábrica del formato automática/i)).toBe(false);
+    }, 20_000);
+
+    it("confirma, llama al API con rowVersion y la fila vuelve a «De fábrica»", async () => {
+      const user = userEvent.setup();
+      const antes = completo("generico", "Genérico");
+      const despues = completo("generico", "Genérico", { currentVersion: 0, rowVersion: 4 });
+      listMandatoFormats.mockResolvedValueOnce([antes]).mockResolvedValue([despues]);
+      resetMandatoFormatTemplate.mockResolvedValue({ format: despues, changed: true });
+
+      renderPanel("formatos");
+      await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+      await pulsarAccion(user, /restablecer redacción de fábrica del formato genérico/i);
+      const dialogo = await screen.findByTestId("mandatos-formato-reset-dialog");
+      expect(dialogo).toHaveTextContent(/versión 2/);
+      expect(dialogo).toHaveTextContent(/historial de versiones se conservan/i);
+      await user.click(within(dialogo).getByRole("button", { name: /^restablecer$/i }));
+
+      await waitFor(() => expect(resetMandatoFormatTemplate).toHaveBeenCalledWith("generico", 3));
+      expect(await screen.findByText(/volvió a la redacción de fábrica/i)).toBeInTheDocument();
+      const tabla = await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+      await waitFor(() => expect(within(tabla).getByText("De fábrica")).toBeInTheDocument());
+    });
+
+    it("cancelar no llama al API", async () => {
+      const user = userEvent.setup();
+      listMandatoFormats.mockResolvedValue([completo("generico", "Genérico")]);
+      renderPanel("formatos");
+      await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
+      await pulsarAccion(user, /restablecer redacción de fábrica del formato genérico/i);
+      await user.click(within(await screen.findByTestId("mandatos-formato-reset-dialog")).getByRole("button", { name: /cancelar/i }));
+
+      expect(resetMandatoFormatTemplate).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("mandatos-formato-reset-dialog")).not.toBeInTheDocument();
+    });
+
+    it("el «Restablecer default» de Configuración por organismo sigue en su pestaña", async () => {
+      const user = userEvent.setup();
+      renderPanel("organismos");
+      await esperarFilas();
+      expect(await hayAccion(user, /restablecer default/i)).toBe(true);
     });
   });
 });

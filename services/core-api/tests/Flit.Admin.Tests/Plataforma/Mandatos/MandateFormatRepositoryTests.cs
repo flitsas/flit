@@ -212,4 +212,66 @@ public sealed class MandateFormatRepositoryTests
         same.Changed.Should().BeFalse();
         db.MandateFormatVersions.Should().BeEmpty();
     }
+
+    // ── Restablecer redacción de fábrica ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Restablecer_VuelveALaRedaccionDeFabrica_YConservaLasVersiones()
+    {
+        var (db, repo) = await NewRepoAsync();
+        await using var _ = db;
+        await repo.SaveAsync("bello", new(0, Body: "Texto uno"), Author, Ct);
+        var rv = (await repo.GetAsync("bello", Ct))!.RowVersion;
+
+        var result = await repo.ResetTemplateAsync("bello", rv, Author, Ct);
+
+        result.Status.Should().Be(MandateFormatWriteStatus.Ok);
+        result.Changed.Should().BeTrue();
+        result.Setting!.CurrentVersion.Should().Be(0);
+        (await repo.GetCurrentVersionAsync("bello", Ct)).Should().BeNull("vuelve a la redacción de fábrica");
+        (await repo.ListVersionsAsync("bello", Ct)).Should().ContainSingle().Which.Body.Should().Be("Texto uno");
+    }
+
+    [Fact]
+    public async Task Restablecer_YLuegoPublicar_CreaLaVersionSiguienteALaMasAlta()
+    {
+        var (db, repo) = await NewRepoAsync();
+        await using var _ = db;
+        await repo.SaveAsync("bello", new(0, Body: "Texto uno"), Author, Ct);
+        await repo.SaveAsync("bello", new(0, Body: "Texto dos"), Author, Ct);
+        await repo.ResetTemplateAsync("bello", 0, Author, Ct);
+
+        var result = await repo.SaveAsync("bello", new(0, Body: "Texto tres"), Author, Ct);
+
+        result.Status.Should().Be(MandateFormatWriteStatus.Ok);
+        result.PublishedVersion!.VersionNumber.Should().Be(3, "las versiones 1 y 2 siguen guardadas");
+        result.Setting!.CurrentVersion.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Restablecer_SinPlantillaEditada_NoCambiaNada()
+    {
+        var (db, repo) = await NewRepoAsync();
+        await using var _ = db;
+
+        var result = await repo.ResetTemplateAsync("bello", 0, Author, Ct);
+
+        result.Status.Should().Be(MandateFormatWriteStatus.Ok);
+        result.Changed.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(7L)]
+    public async Task Restablecer_ConRowVersionAusenteODesactualizado_EsConflicto(long? rowVersion)
+    {
+        var (db, repo) = await NewRepoAsync();
+        await using var _ = db;
+        await repo.SaveAsync("bello", new(0, Body: "Texto uno"), Author, Ct);
+
+        var result = await repo.ResetTemplateAsync("bello", rowVersion, Author, Ct);
+
+        result.Status.Should().Be(MandateFormatWriteStatus.Conflict);
+        (await repo.GetAsync("bello", Ct))!.CurrentVersion.Should().Be(1);
+    }
 }
