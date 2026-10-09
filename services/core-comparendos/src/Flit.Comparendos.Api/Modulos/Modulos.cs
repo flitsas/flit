@@ -62,6 +62,7 @@ public static class Modulos
         Bandeja.BandejaEndpoints.Map(api);
         Comparendos.DetalleEndpoints.Map(api);
         Configuracion.EmpresasEndpoints.Map(api);
+        Configuracion.TipologiasEndpoints.Map(api);
         return app;
     }
 }
