@@ -167,7 +167,7 @@ public static class OcrEndpoints
         {
             duplicado = await db.Comparendos.AsNoTracking().Where(c => c.Id == cid).Select(c => new
             {
-                tipo = "comparendo", c.Id, c.Numero, fuente = d.FuenteDuplicado, registradoEn = c.CreadoEn, c.EstadoGestion, c.Activo, c.Pagado,
+                tipo = "comparendo", c.Id, c.Numero, fuente = d.FuenteDuplicado, registradoEn = c.CreadoEn, estadoGestion = c.EstadoGestion.ToString(), c.Activo, c.Pagado,
             }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         }
         else if (d.DuplicadoDeDocumentoId is { } did)
@@ -183,7 +183,7 @@ public static class OcrEndpoints
         {
             d.Id, d.PaqueteId, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, estado = d.Estado.ToString(), d.Intentos, d.ProveedorModelo, d.NumeroComparendoExtraido,
             d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), d.MensajeError, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
-            d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, duplicado,
+            d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, d.FuenteDuplicado, duplicado,
             campos = campos.OrderBy(c => orden.GetValueOrDefault(c.NombreCampo, 99)).Select(c => new
             {
                 c.NombreCampo, obligatorio = CamposOcr.Obligatorios.Contains(c.NombreCampo), c.ValorExtraido, c.Confianza, c.EsNull, c.ValorCorregido, c.ValorFinal,
