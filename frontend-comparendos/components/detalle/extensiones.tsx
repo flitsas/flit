@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AccionesCambio } from "@/components/detalle/AccionesCambio";
 import { AccionesConductor } from "@/components/detalle/AccionesConductor";
 import { AccionesDp } from "@/components/detalle/AccionesDp";
 import { AccionesPago } from "@/components/detalle/AccionesPago";
@@ -30,9 +31,13 @@ export interface ExtensionesDetalle {
   pago?: (ctx: ContextoDetalle) => ReactNode;
 }
 
-/** Extensiones registradas por defecto: conductor (HU #13481), derecho de petición (HU #13491) y pago (HU #13494). */
+/**
+ * Extensiones registradas por defecto: conductor y cambio de contraventor (HU #13481), derecho de petición (HU #13491) y
+ * pago (HU #13494).
+ */
 export const EXTENSIONES_DETALLE: ExtensionesDetalle = {
   contraventor: (ctx) => <AccionesConductor ctx={ctx} />,
+  cambioContraventor: (ctx) => <AccionesCambio ctx={ctx} />,
   dp: (ctx) => <AccionesDp ctx={ctx} />,
   pago: (ctx) => <AccionesPago ctx={ctx} />,
 };
