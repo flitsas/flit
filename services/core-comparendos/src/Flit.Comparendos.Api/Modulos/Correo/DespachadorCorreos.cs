@@ -115,7 +115,8 @@ public sealed partial class DespachadorCorreos(IServiceScopeFactory scopes, Time
             c.ProximoIntentoEn = null;
             c.MotivoFallo = null;
         }
-        else if (r.Transitorio && c.CantidadReintentos < 3)
+        // RN-122: hasta 3 reintentos (1, 5 y 25 min) después del primer intento.
+        else if (r.Transitorio && c.CantidadReintentos <= Esperas.Length)
         {
             c.ProximoIntentoEn = ahora + Esperas[c.CantidadReintentos - 1];
             c.MotivoFallo = r.Mensaje;
