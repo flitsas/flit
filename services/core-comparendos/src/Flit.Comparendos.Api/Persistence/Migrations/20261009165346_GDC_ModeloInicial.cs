@@ -1380,7 +1380,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 name: "ux_aviso_conductor_programado",
                 schema: "comparendos",
                 table: "aviso_conductor",
-                columns: new[] { "comparendo_id", "tipo_aviso" },
+                columns: new[] { "comparendo_id", "tipo_aviso", "correo_destino" },
                 unique: true,
                 filter: "disparo = 'Programado'");
 

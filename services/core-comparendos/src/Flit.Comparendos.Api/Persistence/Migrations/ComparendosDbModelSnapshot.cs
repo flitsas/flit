@@ -373,7 +373,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_aviso_conductor");
 
-                    b.HasIndex("ComparendoId", "TipoAviso")
+                    b.HasIndex("ComparendoId", "TipoAviso", "CorreoDestino")
                         .IsUnique()
                         .HasDatabaseName("ux_aviso_conductor_programado")
                         .HasFilter("disparo = 'Programado'");

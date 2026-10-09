@@ -426,7 +426,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("aviso_conductor");
             e.HasKey(x => x.Id);
             e.Property(x => x.CorreoDestino).HasMaxLength(254);
-            e.HasIndex(x => new { x.ComparendoId, x.TipoAviso }).IsUnique().HasFilter("disparo = 'Programado'")
+            e.HasIndex(x => new { x.ComparendoId, x.TipoAviso, x.CorreoDestino }).IsUnique().HasFilter("disparo = 'Programado'")
                 .HasDatabaseName("ux_aviso_conductor_programado");
         });
         m.Entity<CambioContraventorSolicitud>(e =>

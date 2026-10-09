@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Comparendos.Api.Persistence.Migrations
 {
     [DbContext(typeof(ComparendosDb))]
-    [Migration("20261009164201_GDC_ModeloInicial")]
+    [Migration("20261009165346_GDC_ModeloInicial")]
     partial class GDC_ModeloInicial
     {
         /// <inheritdoc />
@@ -376,7 +376,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_aviso_conductor");
 
-                    b.HasIndex("ComparendoId", "TipoAviso")
+                    b.HasIndex("ComparendoId", "TipoAviso", "CorreoDestino")
                         .IsUnique()
                         .HasDatabaseName("ux_aviso_conductor_programado")
                         .HasFilter("disparo = 'Programado'");

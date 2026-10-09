@@ -105,4 +105,24 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     [InlineData("07:00", "06:59", false)]
     public void EnTramo(string hora, string ahora, bool esperado) =>
         SchedulerAvisos.EnTramo(TimeOnly.Parse(hora, System.Globalization.CultureInfo.InvariantCulture), TimeOnly.Parse(ahora, System.Globalization.CultureInfo.InvariantCulture)).Should().Be(esperado);
+
+    [Fact]
+    public async Task S33_ConductorReemplazado_RecibeSusPropiosAvisosAutomaticos()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, ids) = await PrepararAsync("AV-R");
+        var id = ids["AVR"];
+        await SchedulerAsync(empresa);
+        (await AvisosAsync(id)).Should().ContainSingle();
+
+        (await api.Cliente(new UsuarioDePrueba(empresa, Operador)).PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
+        {
+            tipoDocumento = "CC", numeroDocumento = "79888777", nombres = "Ana Ruiz", correo = "ana@ejemplo.com", motivo = "El contrato era de otra conductora", declaracionTratamientoDatos = true,
+        }, ct)).EnsureSuccessStatusCode();
+        api.Reloj.Hoy(new DateOnly(2026, 10, 13));
+        await SchedulerAsync(empresa);
+        var destinos = await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id && a.TipoAviso == TipoAviso.Aviso1).Select(a => a.CorreoDestino).ToListAsync(ct));
+        destinos.Should().BeEquivalentTo("juan@ejemplo.com", "ana@ejemplo.com");
+    }
 }

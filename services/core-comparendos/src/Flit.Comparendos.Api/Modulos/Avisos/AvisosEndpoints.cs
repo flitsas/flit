@@ -132,7 +132,9 @@ public sealed partial class SchedulerAvisos(ComparendosDb db, ServicioAvisos avi
                 var ventana = Comparendos.Plazos.Ventana(motor.Evaluar(Comparendos.Plazos.Fechas(c), hoy), c);
                 if (await avisos.AutomaticoQueTocaAsync(c, ventana, ct).ConfigureAwait(false) is not { } tipo || !activos.Contains(tipo))
                     continue;
-                if (await db.AvisosConductor.AnyAsync(a => a.ComparendoId == id && a.TipoAviso == tipo && a.Disparo == Disparo.Programado, ct).ConfigureAwait(false))
+                // S-33: tras reemplazar el conductor, el nuevo recibe sus propios avisos automáticos (la unicidad es por destinatario).
+                var destino = c.Contraventor?.Correo;
+                if (await db.AvisosConductor.AnyAsync(a => a.ComparendoId == id && a.TipoAviso == tipo && a.Disparo == Disparo.Programado && a.CorreoDestino == destino, ct).ConfigureAwait(false))
                     continue;
                 await avisos.EnviarAsync(c, tipo, Disparo.Programado, Actor.Scheduler, ct).ConfigureAwait(false);
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
