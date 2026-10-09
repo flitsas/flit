@@ -138,8 +138,8 @@ export function OtMandatosSection({
     const payload = decodeJwtPayload(getToken());
     return isSuperAdmin(payload) || isOtAdmin(payload);
   });
-  // Alta desde el panel de configuración: con compañía, el mandatario de esa empresa; con `null`, el del propio OT.
-  const [registro, setRegistro] = useState<{ companyId: string | null } | null>(null);
+  // Alta desde el panel de configuración: siempre un mandatario del organismo (el OT no registra los de las compañías).
+  const [registrando, setRegistrando] = useState(false);
   // Alta directa desde la pestaña Mandatarios: el organismo queda fijo y las compañías son opcionales.
   const [creating, setCreating] = useState(false);
   // HU #13139 — edición del mandatario desde la lista (solo si el servidor lo permite por rol y origen).
@@ -519,9 +519,7 @@ export function OtMandatosSection({
           lockedCompany={panel.company ?? null}
           signersRevision={signerEpoch}
           lastCreatedSignerId={lastCreatedSignerId}
-          onRegisterSigner={
-            canRegisterSigner ? (companyId) => setRegistro({ companyId: companyId ?? null }) : undefined
-          }
+          onRegisterSigner={canRegisterSigner ? () => setRegistrando(true) : undefined}
           onClose={() => {
             setPanel(null);
             void load({ silent: true });
@@ -572,26 +570,25 @@ export function OtMandatosSection({
         />
       ) : null}
 
-      {registro ? (
+      {registrando ? (
         <CompanyMandatarioForm
           variant="hub"
           offices={[{ transitOfficeId, code: office.code, name: office.name }]}
           editing={null}
           initialOfficeIds={[transitOfficeId]}
           restrictToOfficeIds={[transitOfficeId]}
-          ownerCompanyIds={registro.companyId ? [registro.companyId] : []}
           overlayClassName="z-[80]"
-          onCancel={() => setRegistro(null)}
+          onCancel={() => setRegistrando(false)}
           onSubmit={async (input: CompanyMandateSignerInput) => {
             const saved = await createMandateSigner(transitOfficeId, {
               fullName: input.fullName,
               documentType: input.documentType,
               documentNumber: input.documentNumber,
               email: input.email,
-              companyTenantIds: registro.companyId ? [registro.companyId] : [],
+              companyTenantIds: [],
               transitOfficeIds: [transitOfficeId],
-              // Mandatario del OT: firma del baúl del propio OT. El de una compañía la resuelve el servidor en su baúl.
-              signatureVaultId: registro.companyId ? undefined : input.signatureVaultId,
+              // Mandatario del OT: firma del baúl del propio OT.
+              signatureVaultId: input.signatureVaultId,
               // HU #13132 — modelo, forma de firma y vigencia.
               signerModel: input.signerModel,
               signatureMethod: input.signatureMethod,
@@ -601,13 +598,13 @@ export function OtMandatosSection({
               // HU #13181 — compañías asociadas elegidas en el formulario.
               officeCompanies: input.officeCompanies,
             });
-            setRegistro(null);
+            setRegistrando(false);
             setLastCreatedSignerId(saved.id);
             setSignerEpoch((n) => n + 1);
             const base =
               panel?.mode === "mandatario" && !panel.companyId
                 ? "Mandatario registrado. Quedó preseleccionado como general del OT; guarda el firmante para fijarlo."
-                : "Mandatario registrado. Ya puedes asociarlo como default de la empresa.";
+                : "Mandatario registrado. Ya puedes asignarlo a una compañía.";
             const validacion = mensajeValidacionTrasGuardar(saved, input.email);
             show(validacion ? `${base} ${validacion}` : base, saved.identity === "failed" ? "error" : "success");
             void load();
