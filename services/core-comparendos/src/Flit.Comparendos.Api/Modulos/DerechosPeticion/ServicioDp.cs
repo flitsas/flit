@@ -333,5 +333,31 @@ internal sealed class ReaccionDp(ComparendosDb db, Timeline timeline, Calendario
             timeline.Agregar(c, TipoEventoTimeline.DpEnvioFallido, $"No se pudo enviar el derecho de petición {dp.Radicado}: {resultado.Mensaje ?? resultado.Resultado}. Se puede reintentar con el mismo radicado.",
                 Actor.Sistema, null, "derecho_peticion", dp.Id);
         }
+
+        await ReflejarEnLoteAsync(dp, resultado, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>§6.17: el ítem del lote sigue el resultado real del correo al OT (también si un reintento lo arregla después).</summary>
+    private async Task ReflejarEnLoteAsync(DerechoPeticion dp, ResultadoEnvioCorreo resultado, CancellationToken ct)
+    {
+        if (dp.LoteId is not { } loteId)
+            return;
+        var item = await db.LoteDpItems.FirstOrDefaultAsync(i => i.LoteId == loteId && i.DerechoPeticionId == dp.Id, ct).ConfigureAwait(false);
+        var lote = await db.LotesDp.FirstOrDefaultAsync(l => l.Id == loteId, ct).ConfigureAwait(false);
+        if (item is null || lote is null)
+            return;
+        if (dp.Estado == EstadoDp.EnvioFallido && item.Estado == EstadoItemLote.Enviado)
+        {
+            (item.Estado, item.Motivo) = (EstadoItemLote.Fallido, $"El correo al OT falló: {resultado.Mensaje ?? resultado.Resultado}");
+            (lote.Enviados, lote.Fallidos) = (lote.Enviados - 1, lote.Fallidos + 1);
+        }
+        else if (dp.Estado == EstadoDp.Enviado && item.Estado == EstadoItemLote.Fallido)
+        {
+            (item.Estado, item.Motivo) = (EstadoItemLote.Enviado, null);
+            (lote.Enviados, lote.Fallidos) = (lote.Enviados + 1, lote.Fallidos - 1);
+        }
+
+        if (lote.Estado != EstadoLoteDp.EnCurso)
+            lote.Estado = lote.Fallidos > 0 ? EstadoLoteDp.CompletadoConErrores : EstadoLoteDp.Completado;
     }
 }

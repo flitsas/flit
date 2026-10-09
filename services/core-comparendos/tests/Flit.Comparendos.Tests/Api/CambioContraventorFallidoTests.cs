@@ -106,4 +106,38 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
         (await api.EnDbAsync(db => db.Comparendos.SingleAsync(c => c.Id == id, ct))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.SinNotificar);
         (await api.EnDbAsync(db => db.AvisosConductor.AnyAsync(a => a.ComparendoId == id, ct))).Should().Be(queda);
     }
+
+    /// <summary>§6.17: si el correo al OT de un ítem falla, el lote termina con errores aunque el DP se haya creado.</summary>
+    [Fact]
+    public async Task LoteDp_CorreoAlOtFallido_QuedaCompletadoConErrores()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
+        (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001", new { correosRadicacion = new[] { "radicacion@movilidad.test" } }, ct)).EnsureSuccessStatusCode();
+        var empresa = await EmpresaAsync(api, dp: true);
+        var dc = (await super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/tipologias", ct)).EnumerateArray().Single(t => t.GetProperty("codigo").GetString() == "DC").GetProperty("id").GetGuid();
+        (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/tipologias/{dc}", new { habilitada = true }, ct)).EnsureSuccessStatusCode();
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer, Permisos.DpGenerar, Permisos.DpEnviar, Permisos.DpEnviarMasivo, Permisos.RepresentantesGestionar]));
+        var rl = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
+        {
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", cargo = "Representante legal",
+            direccionNotificacion = "Calle 100 # 9A-45", permisoEnvioDp = true, permisoCambioContraventor = true,
+        }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        using var firma = new MultipartFormDataContent { { new ByteArrayContent(Convert.FromBase64String(png)) { Headers = { ContentType = new MediaTypeHeaderValue("image/png") } }, "archivo", "firma.png" } };
+        (await cliente.PostAsync($"/api/v1/comparendos/representantes/{rl.GetProperty("id").GetGuid()}/documentos/firma", firma, ct)).EnsureSuccessStatusCode();
+        var ids = await IngresarAsync(api, empresa, Item("LF-1", notificacion: new DateOnly(2025, 9, 1)));
+
+        var lote = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/dp/lotes", new { tipologiaId = dc, comparendoIds = ids.Values }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        var procesador = api.App.Services.GetRequiredService<Flit.Comparendos.Api.Modulos.DerechosPeticion.ProcesadorLotesDp>();
+        while (await procesador.ProcesarSiguienteAsync(ct))
+        {
+        }
+
+        var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/dp/lotes/{lote.GetProperty("id").GetGuid()}", ct);
+        (detalle.GetProperty("estado").GetString(), detalle.GetProperty("enviados").GetInt32(), detalle.GetProperty("fallidos").GetInt32())
+            .Should().Be(("CompletadoConErrores", 0, 1));
+    }
 }
