@@ -90,6 +90,7 @@ public static class Modulos
         CambioContraventor.CambioContraventorEndpoints.Map(api);
         DerechosPeticion.DpEndpoints.Map(api);
         DerechosPeticion.LotesDpEndpoints.Map(api);
+        Pagos.PagosEndpoints.Map(api);
         return app;
     }
 }
