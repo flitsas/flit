@@ -90,6 +90,23 @@ export async function apiPostBlob(path: string, body: unknown, signal?: AbortSig
   return response.blob();
 }
 
+/** Abre en otra pestaña un PDF que entrega la API por GET (vistas previas). La pestaña se pide antes del fetch para que
+ * el navegador no la bloquee como ventana emergente. */
+export async function apiAbrirPdf(path: string, query?: Query): Promise<void> {
+  const ventana = window.open("", "_blank");
+  try {
+    const response = await fetch(buildUrl(path, query));
+    if (!response.ok) await readResponse<never>(response);
+    const url = URL.createObjectURL(await response.blob());
+    if (ventana) ventana.location.href = url;
+    else window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    ventana?.close();
+    throw e;
+  }
+}
+
 async function readResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
 

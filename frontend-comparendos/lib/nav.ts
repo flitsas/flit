@@ -21,6 +21,7 @@ import {
   Plug,
   Receipt,
   ScanText,
+  Send,
   Settings,
   ShieldCheck,
   Timer,
@@ -66,6 +67,9 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
   const items: NavItem[] = [
     { key: "bandeja", label: "Bandeja", href: "/", section: "operacion", icon: Inbox, permission: P.bandejaVer },
     ...(caps.ocr ? [{ key: "ocr", label: "Paquetes OCR", href: "/ocr", section: "operacion", icon: ScanText, permission: P.ocrVer }] : []),
+    ...(caps.derechosPeticion
+      ? [{ key: "dp-lotes", label: "Envíos masivos de DP", href: "/dp/lotes", section: "operacion", icon: Send, permission: P.dpEnviarMasivo }]
+      : []),
     { key: "pagos", label: "Carga de pagos", href: "/pagos", section: "operacion", icon: Wallet, permission: P.pagosCargarMasivo },
     { key: "mensajes", label: "Centro de mensajes", href: "/mensajes", section: "operacion", icon: MailWarning, permission: P.mensajesVer },
     ...(caps.reportes

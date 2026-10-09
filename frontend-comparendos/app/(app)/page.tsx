@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Download, SlidersHorizontal } from "lucide-react";
-import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
+import { Download, Send, SlidersHorizontal } from "lucide-react";
+import { DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
+import { EnvioMasivoDp } from "@/components/bandeja/EnvioMasivoDp";
 import { PanelFiltros } from "@/components/bandeja/PanelFiltros";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { useSesion } from "@/components/ComparendosShell";
@@ -14,8 +15,10 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { controlCls, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { MAXIMO_LOTE } from "@/lib/dp";
 import { aQuery, contarFiltros, FILTROS_VACIOS, type FiltrosBandeja } from "@/lib/filtros";
-import { tienePermiso } from "@/lib/sesion";
+import { P } from "@/lib/nav";
+import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contadores, FilaBandeja, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
@@ -42,11 +45,16 @@ export default function Bandeja() {
   const [descendente, setDescendente] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
+  // Selección para el envío masivo de DP: se conserva al cambiar de página, se limpia al cambiar los filtros.
+  const [marcados, setMarcados] = useState<Map<string, FilaBandeja>>(new Map());
+  const [envioMasivo, setEnvioMasivo] = useState(false);
   const pg = usePaginacion(50);
   const { setPage } = pg;
+  const puedeLote = !esSuperAdmin && tienePermiso(sesion, P.dpEnviarMasivo) && capacidades(sesion).derechosPeticion;
 
   const setFiltros = (f: FiltrosBandeja) => {
     setFiltrosEstado(f);
+    setMarcados(new Map());
     setPage(1);
   };
 
@@ -79,6 +87,32 @@ export default function Bandeja() {
   if (errorSesion) return <InlineAlert tone="error">{errorSesion}</InlineAlert>;
 
   const nFiltros = contarFiltros(filtros);
+  const pagina = lista.datos?.items ?? [];
+  const todosMarcados = pagina.length > 0 && pagina.every((f) => marcados.has(f.id));
+  const alternar = (filas: FilaBandeja[], marcar: boolean) =>
+    setMarcados((actual) => {
+      const nuevo = new Map(actual);
+      for (const f of filas) {
+        if (marcar) nuevo.set(f.id, f);
+        else nuevo.delete(f.id);
+      }
+      return nuevo;
+    });
+  const columnaSeleccion: DataTableColumn<FilaBandeja> = {
+    key: "seleccion",
+    header: (
+      <input type="checkbox" aria-label="Seleccionar los comparendos de esta página" checked={todosMarcados} onChange={(e) => alternar(pagina, e.target.checked)} />
+    ),
+    render: (f) => (
+      <input
+        type="checkbox"
+        aria-label={`Seleccionar ${f.numero}`}
+        checked={marcados.has(f.id)}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => alternar([f], e.target.checked)}
+      />
+    ),
+  };
   return (
     <section className="flex flex-col gap-4">
       <Encabezado
@@ -148,12 +182,28 @@ export default function Bandeja() {
             )}
           </div>
 
+          {puedeLote && marcados.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <span className="font-semibold">
+                {marcados.size} seleccionado{marcados.size === 1 ? "" : "s"}
+                {marcados.size > MAXIMO_LOTE && ` (máximo ${MAXIMO_LOTE} por envío)`}
+              </span>
+              <button type="button" className={controlCls(true)} onClick={() => setEnvioMasivo(true)}>
+                <Send className="h-3.5 w-3.5" aria-hidden />
+                Enviar derecho de petición
+              </button>
+              <button type="button" className="font-semibold text-[#3B4FD6] hover:underline" onClick={() => setMarcados(new Map())}>
+                Quitar selección
+              </button>
+            </div>
+          )}
+
           {verPanel && <PanelFiltros filtros={filtros} onCambio={setFiltros} empresa={esSuperAdmin ? empresa : null} />}
 
           <DataTable
             ariaLabel="Comparendos"
-            columns={COLUMNAS_BANDEJA}
-            rows={lista.datos?.items ?? []}
+            columns={puedeLote ? [columnaSeleccion, ...COLUMNAS_BANDEJA] : COLUMNAS_BANDEJA}
+            rows={pagina}
             getRowKey={(f) => f.id}
             onRowClick={(f) => setSeleccionado(f.id)}
             status={lista.estado}
@@ -180,6 +230,7 @@ export default function Bandeja() {
           contadores.recargar();
         }}
       />
+      {envioMasivo && <EnvioMasivoDp filas={[...marcados.values()]} onCerrar={() => setEnvioMasivo(false)} />}
     </section>
   );
 }

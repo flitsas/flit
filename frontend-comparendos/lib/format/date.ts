@@ -31,3 +31,10 @@ const PESOS = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP
 export function formatoPesos(valor: number | null | undefined): string {
   return valor === null || valor === undefined ? "—" : PESOS.format(valor);
 }
+
+const ISO_DIA = new Intl.DateTimeFormat("en-CA", { timeZone: ZONA_COLOMBIA, year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** Día de Colombia como «2026-10-09» (lo que esperan los formularios de la API y los <input type="date">). */
+export function diaColombia(instante: Date | string = new Date()): string {
+  return ISO_DIA.format(typeof instante === "string" ? new Date(instante) : instante);
+}

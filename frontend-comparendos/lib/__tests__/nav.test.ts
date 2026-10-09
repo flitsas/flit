@@ -15,6 +15,12 @@ describe("comparendosNav", () => {
     expect(keys).toEqual(expect.arrayContaining(["ocr", "dashboard", "productividad"]));
   });
 
+  it("los envíos masivos de DP dependen de la capacidad y del permiso", () => {
+    expect(comparendosNav(SIN_CAPACIDADES).items.map((i) => i.key)).not.toContain("dp-lotes");
+    const lotes = comparendosNav({ ...SIN_CAPACIDADES, derechosPeticion: true }).items.find((i) => i.key === "dp-lotes");
+    expect(lotes).toMatchObject({ href: "/dp/lotes", permission: "comparendos.dp.enviar_masivo" });
+  });
+
   it("la administración FLIT es solo del SuperAdmin", () => {
     const flit = comparendosNav(SIN_CAPACIDADES).items.find((i) => i.key === "flit");
     expect(flit?.superAdminOnly).toBe(true);

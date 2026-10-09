@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AccionesConductor } from "@/components/detalle/AccionesConductor";
+import { AccionesDp } from "@/components/detalle/AccionesDp";
 import type { SesionComparendos } from "@/lib/sesion";
 import type { DetalleComparendo } from "@/lib/tipos";
 
@@ -28,10 +29,8 @@ export interface ExtensionesDetalle {
   pago?: (ctx: ContextoDetalle) => ReactNode;
 }
 
-/**
- * Extensiones registradas por defecto. El bloque «Cambio de contraventor» (solicitar, rechazo, aceptación) llega con su
- * API en la HU #13479; avisos, DP y pagos, con sus Features.
- */
+/** Extensiones registradas por defecto: conductor (HU #13481) y derecho de petición (HU #13491). */
 export const EXTENSIONES_DETALLE: ExtensionesDetalle = {
   contraventor: (ctx) => <AccionesConductor ctx={ctx} />,
+  dp: (ctx) => <AccionesDp ctx={ctx} />,
 };
