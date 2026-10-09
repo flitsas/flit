@@ -24,6 +24,9 @@ public static class Modulos
         services.AddScoped<Portal.ServicioPortal>();
         services.AddScoped<Avisos.ServicioAvisos>();
         services.AddScoped<CambioContraventor.ServicioCambioContraventor>();
+        services.AddScoped<DerechosPeticion.ServicioDp>();
+        services.AddScoped<Correo.IReaccionCorreo, DerechosPeticion.ReaccionDp>();
+        services.AddSingleton<DerechosPeticion.ProcesadorLotesDp>();
         services.AddScoped<Correo.IReaccionCorreo, CambioContraventor.ReaccionCambioContraventor>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Avisos.SchedulerAvisos>();
         services.AddLimitePortal();
@@ -59,6 +62,7 @@ public static class Modulos
             services.AddHostedService<Trabajos.ProcesadorTrabajos>();
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
             services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
+            services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
         }
         return services;
     }
@@ -84,6 +88,8 @@ public static class Modulos
         Portal.PortalEndpoints.Map(api);
         Avisos.AvisosEndpoints.Map(api);
         CambioContraventor.CambioContraventorEndpoints.Map(api);
+        DerechosPeticion.DpEndpoints.Map(api);
+        DerechosPeticion.LotesDpEndpoints.Map(api);
         return app;
     }
 }
