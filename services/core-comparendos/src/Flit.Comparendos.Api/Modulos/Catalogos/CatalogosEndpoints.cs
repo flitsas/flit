@@ -24,7 +24,7 @@ public static class CatalogosEndpoints
 
     public sealed record NuevoAlias(string Texto, Guid OrganismoTransitoId);
 
-    public sealed record MunicipioDto(Guid Id, string CodigoFuente, string Nombre, Guid? OrganismoTransitoId, bool Activo);
+    public sealed record MunicipioDto(Guid Id, string CodigoFuente, string Nombre, Guid? OrganismoTransitoId, string? Organismo, bool Activo);
 
     public sealed record NuevoMunicipio(string CodigoFuente, string Nombre, Guid? OrganismoTransitoId);
 
@@ -148,10 +148,17 @@ public static class CatalogosEndpoints
         return Results.NoContent();
     }
 
-    private static MunicipioDto Dto(MunicipioFuente m) => new(m.Id, m.CodigoFuente, m.Nombre, m.OrganismoTransitoId, m.Activo);
+    private static MunicipioDto Dto(MunicipioFuente m, string? organismo = null) => new(m.Id, m.CodigoFuente, m.Nombre, m.OrganismoTransitoId, organismo, m.Activo);
 
-    private static async Task<IResult> ListarMunicipios(ComparendosDb db, CancellationToken ct) =>
-        Results.Ok((await db.MunicipiosFuente.AsNoTracking().OrderBy(m => m.Nombre).ToListAsync(ct).ConfigureAwait(false)).Select(Dto));
+    private static async Task<IResult> ListarMunicipios(ComparendosDb db, CancellationToken ct)
+    {
+        var lista = await (from m in db.MunicipiosFuente.AsNoTracking()
+                           join o in db.OrganismosTransito.AsNoTracking() on m.OrganismoTransitoId equals o.Id into os
+                           from o in os.DefaultIfEmpty()
+                           orderby m.Nombre
+                           select new { m, organismo = o == null ? null : o.Nombre }).ToListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(lista.Select(x => Dto(x.m, x.organismo)));
+    }
 
     private static async Task<IResult> CrearMunicipio(NuevoMunicipio pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, CancellationToken ct)
     {

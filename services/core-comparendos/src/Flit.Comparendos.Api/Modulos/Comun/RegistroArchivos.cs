@@ -88,7 +88,7 @@ public sealed class RegistroArchivos(ComparendosDb db, IAlmacenArchivos almacen,
     };
 }
 
-/// <summary>Descarga de un archivo: de la empresa del usuario o global; el SuperAdmin, cualquiera.</summary>
+/// <summary>Descarga de un archivo: el de la empresa del usuario; los globales (alertas internas, respuestas crudas de las fuentes) y los de cualquier empresa, solo el SuperAdmin.</summary>
 public static class ArchivosEndpoints
 {
     public static void Map(RouteGroupBuilder api) =>
@@ -97,7 +97,7 @@ public static class ArchivosEndpoints
     private static async Task<IResult> Descargar(Guid id, bool? inline, RegistroArchivos archivos, UsuarioActual usuario, CancellationToken ct)
     {
         var leido = await archivos.LeerAsync(id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("El archivo");
-        if (!usuario.EsSuperAdmin && leido.Archivo.TenantId is { } dueno && dueno != Guid.Empty && dueno != usuario.EmpresaId)
+        if (!usuario.EsSuperAdmin && (leido.Archivo.TenantId is not { } dueno || dueno == Guid.Empty || dueno != usuario.EmpresaId))
             throw ReglaException.NoEncontrado("El archivo");
         return inline == true
             ? Results.File(leido.Contenido, leido.Archivo.ContentType)

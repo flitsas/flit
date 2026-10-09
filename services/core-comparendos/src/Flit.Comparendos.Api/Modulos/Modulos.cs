@@ -73,6 +73,7 @@ public static class Modulos
         Configuracion.RepresentantesEndpoints.Map(api);
         Plantillas.PlantillasEndpoints.Map(api);
         Contraventor.ContraventorEndpoints.Map(api);
+        Correo.MensajesEndpoints.Map(api);
         return app;
     }
 }
