@@ -59,9 +59,41 @@ describe("CameraViewer · vista en espejo (Bug #13449)", () => {
     expect(video).not.toHaveClass("-scale-x-100");
   });
 
-  it("documento: nunca se invierte, aunque la cámara sea frontal (el texto debe leerse)", async () => {
+  it("documento en computador (webcam frontal que no reporta la cámara): la vista sigue el gesto en espejo", async () => {
+    mockMedia(streamReporting());
+    render(<CameraViewer shape="rect" facing="environment" captureLabel="Capturar documento" onContinue={vi.fn()} />);
+    const video = await videoWhenReady("Capturar documento");
+    expect(video).toHaveAttribute("data-mirrored", "true");
+    expect(video).toHaveClass("-scale-x-100");
+  });
+
+  it("documento con la cámara frontal del celular: también en espejo", async () => {
     mockMedia(streamReporting("user"));
     render(<CameraViewer shape="rect" facing="environment" captureLabel="Capturar documento" onContinue={vi.fn()} />);
+    expect(await videoWhenReady("Capturar documento")).toHaveAttribute("data-mirrored", "true");
+  });
+
+  it("documento con la cámara trasera del celular: no se invierte", async () => {
+    mockMedia(streamReporting("environment"));
+    render(<CameraViewer shape="rect" facing="environment" captureLabel="Capturar documento" onContinue={vi.fn()} />);
     expect(await videoWhenReady("Capturar documento")).toHaveAttribute("data-mirrored", "false");
+  });
+
+  it("la foto capturada no se invierte: se dibuja el fotograma tal cual, sin escala negativa", async () => {
+    mockMedia(streamReporting());
+    const ctx = { drawImage: vi.fn(), scale: vi.fn(), setTransform: vi.fn(), translate: vi.fn() };
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ctx) as never;
+    HTMLCanvasElement.prototype.toBlob = vi.fn(function (this: HTMLCanvasElement, cb: BlobCallback, type?: string) {
+      cb(new Blob(["x"], { type }));
+    }) as never;
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    render(<CameraViewer shape="oval" facing="user" captureLabel="Capturar rostro" onContinue={vi.fn()} />);
+    await videoWhenReady("Capturar rostro");
+    screen.getByRole("button", { name: "Capturar rostro" }).click();
+    await waitFor(() => expect(ctx.drawImage).toHaveBeenCalled());
+    expect(ctx.scale).not.toHaveBeenCalled();
+    expect(ctx.setTransform).not.toHaveBeenCalled();
+    expect(ctx.translate).not.toHaveBeenCalled();
   });
 });

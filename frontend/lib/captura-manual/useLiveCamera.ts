@@ -35,9 +35,9 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
   });
   // «opening» se deriva (la clave cambió y aún no hay resultado): evita setState síncrono en el efecto.
   const status: CameraStatus = result.key === key ? result.status : "opening";
-  // Cámara que el navegador abrió de verdad (en computador suele ignorar `facingMode` y no lo reporta):
-  // sin dato, se asume la pedida.
-  const actualFacing: CameraFacing = (result.key === key && result.actualFacing) || facing;
+  // Cámara que el navegador dice haber abierto. En computador suele ignorar `facingMode` y no lo reporta
+  // (`undefined`): la webcam es frontal aunque se haya pedido la trasera.
+  const actualFacing: CameraFacing | undefined = result.key === key ? result.actualFacing : undefined;
 
   useEffect(() => {
     if (!enabled) return;
