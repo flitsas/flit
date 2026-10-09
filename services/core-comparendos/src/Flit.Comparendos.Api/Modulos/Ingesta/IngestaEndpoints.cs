@@ -27,6 +27,7 @@ public static class IngestaEndpoints
         g.MapGet("/trabajos", ListarTrabajos);
         g.MapPatch("/trabajos/{tipo}", CambiarTrabajo);
         g.MapPost("/ejecutar", Ejecutar);
+        g.MapPost("/trabajos/{tipo}/ejecutar", EjecutarTrabajo);
         g.MapGet("/ciclos", ListarCiclos);
         g.MapGet("/ciclos/{id:guid}", DetalleCiclo);
         g.MapGet("/consultas/{id:guid}/respuesta", RespuestaCruda);
@@ -82,6 +83,19 @@ public static class IngestaEndpoints
         auditoria.Registrar(pedido.EmpresaId, "trabajo_programado", CicloDeIngesta.Trabajo(canal), "EJECUTAR_MANUAL", new CambioCampo("empresa", null, pedido.EmpresaId));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await cola.EncolarAsync(new SolicitudTrabajo(CicloDeIngesta.Trabajo(canal), Disparo.Manual, pedido.EmpresaId, usuario.Id), ct).ConfigureAwait(false);
+        return Results.Accepted();
+    }
+
+    /// <summary>Ejecución manual de un trabajo que no es de ingesta (reportes, avisos, reintento de contraventor), opcionalmente para una empresa.</summary>
+    private static async Task<IResult> EjecutarTrabajo(string tipo, Guid? empresaId, ColaTrabajos cola, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, CancellationToken ct)
+    {
+        if (!Enum.TryParse<TipoTrabajo>(tipo, true, out var t) || !Enum.IsDefined(t))
+            throw ReglaException.NoEncontrado("El trabajo");
+        if (CicloDeIngesta.Canal(t) is not null)
+            throw new ReglaException("USAR_EJECUTAR_INGESTA", "Los ciclos de ingesta se ejecutan con /admin/ingesta/ejecutar.");
+        auditoria.Registrar(empresaId, "trabajo_programado", t, "EJECUTAR_MANUAL", new CambioCampo("empresa", null, empresaId));
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await cola.EncolarAsync(new SolicitudTrabajo(t, Disparo.Manual, empresaId, usuario.Id), ct).ConfigureAwait(false);
         return Results.Accepted();
     }
 

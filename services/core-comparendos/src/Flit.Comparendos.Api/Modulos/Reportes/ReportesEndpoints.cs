@@ -14,6 +14,7 @@ public static class ReportesEndpoints
         var g = api.MapGroup("/reportes");
         g.MapGet("/dashboard", Dashboard).RequirePermiso(Permisos.ReportesVer);
         g.MapGet("/radar", Radar).RequirePermiso(Permisos.ReportesVer);
+        g.MapGet("/nits", Nits).RequirePermiso(Permisos.ReportesVer);
         g.MapGet("/productividad", Productividad).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/detalle", Detalle).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/excel", Excel).RequirePermiso(Permisos.ProductividadVer);
@@ -51,6 +52,15 @@ public static class ReportesEndpoints
             },
             porNit = await reportes.TotalesPorNitAsync(a, ct).ConfigureAwait(false),
         });
+    }
+
+    /// <summary>NITs monitoreados para el filtro del dashboard (sin exigir el permiso de monitoreo).</summary>
+    private static async Task<IResult> Nits(Guid? empresa, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
+    {
+        var a = await AlcanceAsync(usuario, capacidades, empresa, null, null, null, reloj, ct).ConfigureAwait(false);
+        return Results.Ok(await db.IdentificacionesMonitoreadas.AsNoTracking().Where(i => a.Tenant == null || i.TenantId == a.Tenant)
+            .OrderBy(i => i.NombreTitular).Select(i => new { i.Id, i.TenantId, i.TipoDocumento, i.NumeroBase, i.DigitoVerificacion, i.NombreTitular, i.Activo })
+            .Take(1000).ToListAsync(ct).ConfigureAwait(false));
     }
 
     /// <summary>La lista detrás del KPI «Radar de vencimientos» (la pantalla también puede saltar a la bandeja con el filtro rápido).</summary>

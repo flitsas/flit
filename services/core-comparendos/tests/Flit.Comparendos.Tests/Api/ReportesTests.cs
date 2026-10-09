@@ -90,6 +90,9 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         d.GetProperty("anual").GetProperty("actual").GetArrayLength().Should().Be(12);
         d.GetProperty("porNit").EnumerateArray().Single().GetProperty("total").GetInt32().Should().Be(4);
 
+        (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/nits", ct)).GetArrayLength().Should().Be(1);
+        (await Super.PostAsync($"/api/v1/comparendos/admin/ingesta/trabajos/ReporteSemanal/ejecutar?empresaId={empresa}", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await Super.PostAsync("/api/v1/comparendos/admin/ingesta/trabajos/IngestaSimitNit/ejecutar", null, ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var radar = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/radar", ct);
         radar.EnumerateArray().Single().GetProperty("id").GetGuid().Should().Be(ids["R4"]);
 
