@@ -150,6 +150,51 @@ export const EVENTO_TIMELINE: Record<string, string> = {
   NotaManual: "Observación",
 };
 
+export const ESTADO_COMUNICACION: Record<string, Etiqueta> = {
+  Pendiente: { texto: "Pendiente", tono: "warning" },
+  Enviado: { texto: "Enviado", tono: "info" },
+  Entregado: { texto: "Entregado", tono: "success" },
+  Abierto: { texto: "Abierto", tono: "success" },
+  Rebotado: { texto: "Rebotado", tono: "danger" },
+  Fallido: { texto: "Fallido", tono: "danger" },
+};
+
+export const TIPO_COMUNICACION: Record<string, string> = {
+  Aviso1: "Aviso 1 al conductor",
+  Aviso2: "Aviso 2 al conductor",
+  Aviso3: "Aviso 3 al conductor",
+  Aviso4: "Aviso 4 (cambio de contraventor)",
+  DpOt: "Derecho de petición al OT",
+  CambioContraventorOt: "Cambio de contraventor al OT",
+  AlertaFalloIntegracion: "Alerta de integración",
+  AlertaFalloOcr: "Alerta de OCR",
+  AlertaSinRepresentante: "Alerta sin representante legal",
+  ReporteSemanal: "Reporte semanal",
+  ReporteMensual: "Reporte mensual",
+  ExportacionLista: "Exportación lista",
+};
+
+export const TIPO_PLANTILLA: Record<string, string> = {
+  DpDocumento: "Documento del derecho de petición",
+  CartaCambioContraventor: "Carta al conductor (cambio de contraventor)",
+  FormatoCambioContraventor: "Formato de cambio de contraventor",
+  CorreoAviso1: "Correo: aviso 1",
+  CorreoAviso2: "Correo: aviso 2",
+  CorreoAviso3: "Correo: aviso 3",
+  CorreoAviso4: "Correo: aviso 4",
+  CorreoDpOt: "Correo: DP al OT",
+  CorreoCambioContraventorOt: "Correo: cambio de contraventor al OT",
+  CorreoAlertaFallo: "Correo: alerta de fallo",
+  CorreoAlertaSinRl: "Correo: alerta sin representante",
+  CorreoReporteSemanal: "Correo: reporte semanal",
+  CorreoReporteMensual: "Correo: reporte mensual",
+};
+
+/** Las plantillas de correo se ven como HTML; las demás son documentos PDF. */
+export const esPlantillaDeCorreo = (tipo: string) => tipo.startsWith("Correo");
+
+export const estadoComunicacion = (v: string | null | undefined) => de(ESTADO_COMUNICACION, v);
+
 export const estadoLegal = (v: string | null | undefined) => de(ESTADO_LEGAL, v);
 export const estadoProceso = (v: string | null | undefined) => de(ESTADO_PROCESO, v);
 export const ultimoAviso = (v: string | null | undefined) => de(ULTIMO_AVISO, v);

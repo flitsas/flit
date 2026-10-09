@@ -77,7 +77,7 @@ export default function Municipios() {
           columns={[
             { key: "codigo", header: "Código", render: (m) => <span className="font-mono">{m.codigoFuente}</span> },
             { key: "nombre", header: "Nombre", render: (m) => m.nombre },
-            { key: "ot", header: "Organismo", render: (m) => (m.organismoTransitoId ? "Asociado" : "—") },
+            { key: "ot", header: "Organismo", render: (m) => m.organismo ?? (m.organismoTransitoId ? "Asociado" : "—") },
             { key: "estado", header: "Estado", render: (m) => <StatusBadge label={m.activo ? "Activo" : "Inactivo"} tone={activeTone(m.activo)} /> },
             {
               key: "accion",
