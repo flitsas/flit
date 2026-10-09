@@ -42,6 +42,7 @@ interface PaqueteResumen {
   cantidadDescartados: number;
   procesados: number;
   creadoPor: string;
+  creadoPorNombre: string | null;
   creadoEn: string;
   procesamientoIniciadoEn: string | null;
   cerradoEn: string | null;
@@ -345,7 +346,7 @@ function Paquetes() {
           columns={[
             { key: "nombre", header: "Paquete", render: (p) => <span className="font-semibold">{p.nombre}</span> },
             { key: "fecha", header: "Creado", render: (p) => formatoFechaHora(p.creadoEn) },
-            { key: "creador", header: "Creador", render: (p) => <span title={p.creadoPor} className="font-mono text-[11px] opacity-70">{corto(p.creadoPor)}</span> },
+            { key: "creador", header: "Creador", render: (p) => (p.creadoPorNombre ? <span title={p.creadoPor}>{p.creadoPorNombre}</span> : <span title={p.creadoPor} className="font-mono text-[11px] opacity-70">{corto(p.creadoPor)}</span>) },
             { key: "estado", header: "Estado", render: (p) => <Chip e={estadoPaquete(p.estado)} /> },
             { key: "progreso", header: "Progreso", render: (p) => <Progreso p={p} /> },
             { key: "completos", header: "Completos", align: "right", render: (p) => p.cantidadCompletos },

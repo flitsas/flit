@@ -75,7 +75,7 @@ interface Documento {
   motivoDescarte: string | null;
   duplicado: Duplicado | null;
   campos: Campo[];
-  ediciones: { campo: string; valorAnterior: string | null; valorNuevo: string | null; usuarioId: string; editadoEn: string; motivo: string | null }[];
+  ediciones: { campo: string; valorAnterior: string | null; valorNuevo: string | null; usuarioId: string; usuarioNombre: string | null; editadoEn: string; motivo: string | null }[];
   historialIntentos: { numero: number; resultado: string; tipoError: string | null; mensajeError: string | null; intentadoEn: string; proximoReintentoEn: string | null }[];
 }
 
@@ -395,7 +395,7 @@ function Historial({ d }: { d: Documento }) {
             { key: "campo", header: "Campo", render: (e) => ETIQUETA_CAMPO[e.campo] ?? e.campo },
             { key: "antes", header: "Anterior", render: (e) => e.valorAnterior ?? "—" },
             { key: "nuevo", header: "Nuevo", render: (e) => e.valorNuevo ?? "—" },
-            { key: "usuario", header: "Usuario", render: (e) => <span title={e.usuarioId} className="font-mono text-[11px] opacity-70">{e.usuarioId.slice(0, 8)}</span> },
+            { key: "usuario", header: "Usuario", render: (e) => (e.usuarioNombre ? <span title={e.usuarioId}>{e.usuarioNombre}</span> : <span title={e.usuarioId} className="font-mono text-[11px] opacity-70">{e.usuarioId.slice(0, 8)}</span>) },
             { key: "motivo", header: "Motivo", render: (e) => e.motivo ?? "—" },
           ]}
         />
