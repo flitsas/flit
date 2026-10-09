@@ -172,13 +172,30 @@ public sealed class MandatarioIdentidadPropiaDisparoTests
     }
 
     [Fact]
-    public async Task Alta_ConBaul_SinCorreo_SeGuardaSinErrores_YNoLanza()
+    public async Task Alta_ConBaul_SinCorreo_SeRechaza_YNoLanza()
     {
+        // El correo es obligatorio en toda Persona natural, también con baúl: ahí llegará la VID si pasa a biometría.
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
         var firma = await SeedFirmaAsync(ctx, "1020304050");
         var launcher = new StubMandateSignerIdentityLauncher();
 
         var result = await Creator(ctx, launcher).HandleAsync(Alta(metodo: "baul", email: null, vault: firma), Ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e =>
+            e.Field == "email" && e.Message == MandateSignerModelRules.CorreoRequeridoMessage);
+        launcher.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Alta_ConBaul_ConCorreo_SeGuardaSinErrores_YNoLanza()
+    {
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+        var firma = await SeedFirmaAsync(ctx, "1020304050");
+        var launcher = new StubMandateSignerIdentityLauncher();
+
+        var result = await Creator(ctx, launcher).HandleAsync(
+            Alta(metodo: "baul", email: "ana@example.com", vault: firma), Ct);
 
         result.IsValid.Should().BeTrue();
         result.Identity.Should().Be(MandateSignerIdentityOutcome.NotAttempted);

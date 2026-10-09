@@ -72,16 +72,25 @@ async function llenar(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Número de documento"), "1020304050");
 }
 
-describe("HU #13248 AC3 — correo obligatorio con validación de identidad", () => {
-  it("con Validación de identidad el correo se marca obligatorio; con Baúl sigue opcional", async () => {
+describe("HU #13248 AC3 — correo obligatorio en Persona natural", () => {
+  it("el correo es obligatorio desde el inicio, con Validación de identidad y con Baúl", async () => {
     const user = userEvent.setup();
     renderForm();
-    expect(correo()).not.toBeRequired();
-    expect(screen.getByLabelText("Correo (opcional)")).toBeInTheDocument();
-    await user.click(radio("Validación de identidad"));
     expect(screen.getByLabelText("Correo (obligatorio)")).toBeRequired();
+    await user.click(radio("Validación de identidad"));
+    expect(correo()).toBeRequired();
     await user.click(radio("Baúl de firmas"));
-    expect(correo()).not.toBeRequired();
+    expect(correo()).toBeRequired();
+  });
+
+  it("con Baúl de firmas tampoco guarda sin correo", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await llenar(user);
+    await user.click(radio("Baúl de firmas"));
+    await user.click(guardar());
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/Escribe el correo/)).toBeInTheDocument();
   });
 
   it("sin correo no guarda y lo dice junto al campo", async () => {

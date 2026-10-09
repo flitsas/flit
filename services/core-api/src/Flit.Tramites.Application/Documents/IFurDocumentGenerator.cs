@@ -265,7 +265,10 @@ public sealed record MandatarioFirmante(
     // HU #11170 — trazabilidad de la firma del baúl del mandatario (vigencia y hash), que se estampa
     // bajo la imagen. No se resuelve por rol del trámite como la de las partes: el mandatario no es
     // parte, así que sus metadatos viajan aquí.
-    FirmaBaulMetadata? FirmaBaulMetadatos = null);
+    FirmaBaulMetadata? FirmaBaulMetadatos = null,
+    // Rúbrica de Kyverum de su validación de identidad propia: sin baúl, se estampa sobre el sello de
+    // identidad, igual que la del mandante.
+    byte[]? FirmaIdentidadImagen = null);
 
 /// <summary>
 /// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que

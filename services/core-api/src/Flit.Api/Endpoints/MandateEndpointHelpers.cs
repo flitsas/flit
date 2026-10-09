@@ -40,7 +40,11 @@ internal static class MandateEndpointHelpers
                 Results.BadRequest(new { error = "editor_cuerpo_invalido" }),
             // HU #13126 — el default de mandatario no es válido.
             MandateConfigWriteStatus.InvalidDefaultSigner =>
-                Results.BadRequest(new { error = "mandatario_default_invalido" }),
+                Results.BadRequest(new
+                {
+                    error = "mandatario_default_invalido",
+                    message = "Elige uno de los mandatarios del organismo. Los mandatarios de las compañías los gestiona cada compañía.",
+                }),
             _ => Results.BadRequest(),
         };
 }

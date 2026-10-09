@@ -28,11 +28,11 @@ public sealed class MandateSignerLifecycleAuditEndpointsTests(WebApplicationFact
     private static JsonElement Payload(TenantConfigAuditLog log) => JsonDocument.Parse(log.NewValue!).RootElement;
 
     [Fact]
-    public async Task AC1_y_AC2_el_Admin_OT_que_desactiva_deja_baja_y_un_retiro_por_cada_default_con_rol_y_modulo()
+    public async Task AC1_y_AC2_el_Super_Admin_que_desactiva_deja_baja_y_un_retiro_por_cada_default_con_rol_y_modulo()
     {
         var signer = await SeedSignerAsync("Ana Restrepo", [(_companyA, "organismo")]);
         await SeedDefaultsAsync(signer);   // default de la compañía A y general del organismo A
-        AuthenticateOt();
+        AuthenticateSuperAdmin();
 
         (await _client.PostAsync(Hub(signer, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
@@ -40,10 +40,10 @@ public sealed class MandateSignerLifecycleAuditEndpointsTests(WebApplicationFact
         var baja = eventos.Should().ContainSingle(l => l.FieldName == "deactivated").Subject;
         baja.Operation.Should().Be("deactivate");
         baja.Result.Should().Be("success");
-        baja.ChangedBy.Should().Be(_otAdminUser);
+        baja.ChangedBy.Should().Be(_superAdminUser);
         var payload = Payload(baja);
-        payload.GetProperty("actorRole").GetString().Should().Be("admin_ot");
-        payload.GetProperty("actorModule").GetString().Should().Be("ot");
+        payload.GetProperty("actorRole").GetString().Should().Be("super_admin");
+        payload.GetProperty("actorModule").GetString().Should().Be("plataforma");
         payload.GetProperty("mandateSignerId").GetGuid().Should().Be(signer);
         payload.GetProperty("links").GetArrayLength().Should().Be(1);
         eventos.Count(l => l.FieldName == "default_removed" && l.Operation == "remove_default").Should().Be(2);
@@ -72,7 +72,7 @@ public sealed class MandateSignerLifecycleAuditEndpointsTests(WebApplicationFact
     public async Task AC4_la_reactivacion_deja_un_evento_con_los_vinculos_restaurados()
     {
         var signer = await SeedSignerAsync("Ana", [(_companyA, "organismo"), (_companyB, "organismo")]);
-        AuthenticateOt();
+        AuthenticateSuperAdmin();
         (await _client.PostAsync(Hub(signer, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
         AuthenticateSuperAdmin();
 
@@ -97,7 +97,7 @@ public sealed class MandateSignerLifecycleAuditEndpointsTests(WebApplicationFact
         (await _client.PostAsync(Company(_companyA, delOrganismo, "/inactivate"), null, Ct))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        AuthenticateOt();
+        AuthenticateSuperAdmin();
         (await _client.PostAsync(Hub(Guid.NewGuid(), "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await _client.DeleteAsync(Hub(conImpacto), Ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
 

@@ -1,5 +1,7 @@
+using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
@@ -19,14 +21,17 @@ public sealed class UpdateMandateSignerHandler
     private readonly IMandateSignerRepository _repository;
     private readonly IMandatarioAssociableCompanies? _associable;
     private readonly IMandateSignerIdentityLauncher? _identityLauncher;
+    private readonly ISignatureVaultReader? _vaultReader;
 
     public UpdateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
         IMandateSignerRepository repository,
         IMandatarioAssociableCompanies? associable = null,
-        IMandateSignerIdentityLauncher? identityLauncher = null)
+        IMandateSignerIdentityLauncher? identityLauncher = null,
+        ISignatureVaultReader? vaultReader = null)
     {
+        _vaultReader = vaultReader;
         _identityLauncher = identityLauncher;
         _associable = associable;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
@@ -133,6 +138,29 @@ public sealed class UpdateMandateSignerHandler
             if (baulError is not null)
             {
                 errors.Add(baulError);
+            }
+            else if (command.ActualizaFirma
+                && command.SignatureVaultId is { } firmaId
+                && companyIds.Count == 0
+                && otTenantId is { } baulDelOt)
+            {
+                // Mandatario del propio OT (sin compañías): la firma elegida tiene que ser del baúl del OT, de esa
+                // persona, activa y vigente. Mismo criterio que el alta.
+                var firmaError = await CreateCompanyMandateSignerHandler.ValidarFirmaAsync(
+                    _vaultReader,
+                    baulDelOt,
+                    new CompanyMandateSignerRequest(
+                        command.FullName,
+                        command.DocumentNumber,
+                        offices,
+                        command.DocumentType,
+                        command.Email,
+                        SignatureVaultId: firmaId),
+                    cancellationToken).ConfigureAwait(false);
+                if (firmaError is not null)
+                {
+                    errors.Add(firmaError);
+                }
             }
         }
 

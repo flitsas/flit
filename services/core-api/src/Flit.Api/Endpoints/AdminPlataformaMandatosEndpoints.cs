@@ -97,6 +97,15 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // «Restablecer redacción de fábrica»: el formato vuelve al texto original del sistema (versión vigente 0). Conserva
+        // el nombre, el tipo y las versiones publicadas. RowVersion obligatorio; misma bitácora que la edición.
+        group.MapPost("/formatos/{code}/restablecer-plantilla", ResetFormatTemplateAsync)
+            .WithName("AdminPlataformaMandatosFormatResetTemplate")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         // HU #13173 — vista previa de la plantilla EN BORRADOR de un formato: valida y genera el PDF de muestra sin guardar nada.
         group.MapPost("/formatos/{code}/preview", PreviewDraftAsync)
             .WithName("AdminPlataformaMandatosFormatDraftPreview")
@@ -246,6 +255,42 @@ public static class AdminPlataformaMandatosEndpoints
             _ => Results.Json(
                 new { error = result.ErrorCode, unknownVariables = result.UnknownVariables },
                 statusCode: StatusCodes.Status400BadRequest),
+        };
+    }
+
+    /// <summary>Cuerpo de <c>POST /formatos/{code}/restablecer-plantilla</c>.</summary>
+    public sealed record ResetMandateFormatTemplateRequest(long? RowVersion);
+
+    private static async Task<IResult> ResetFormatTemplateAsync(
+        string code,
+        [FromBody] ResetMandateFormatTemplateRequest request,
+        HttpContext http,
+        ClaimsPrincipal user,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var result = await formats
+            .ResetTemplateAsync(code, request?.RowVersion, MandateEndpointHelpers.ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        // Misma bitácora que la edición: la versión anterior y la nueva (0 = redacción de fábrica), sin cuerpo.
+        await MandateFormatAudit.WriteAsync(
+                http,
+                code?.Trim().ToLowerInvariant() ?? string.Empty,
+                new UpdateMandateFormatRequest(request?.RowVersion, null, null, null),
+                result)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            MandateFormatUpdateStatus.Ok => Results.Ok(new
+            {
+                format = MandatoFormatResponses.Describe(result.Current!),
+                changed = result.Changed,
+            }),
+            MandateFormatUpdateStatus.NotFound => Results.NotFound(),
+            MandateFormatUpdateStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.Json(new { error = result.ErrorCode }, statusCode: StatusCodes.Status400BadRequest),
         };
     }
 

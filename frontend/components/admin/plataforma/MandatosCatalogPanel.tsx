@@ -20,8 +20,10 @@ import {
   deleteMandateOtConfig,
   fetchMandatoTemplatePreview,
   listMandateOtConfigs,
+  resetMandatoFormatTemplate,
   type MandateOtConfigView,
 } from "@/lib/api/admin-plataforma-mandatos";
+import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import { useMandatoFormatos } from "@/hooks/useMandatoFormatos";
 import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
@@ -50,6 +52,9 @@ export function MandatosCatalogPanel() {
   const [actingId, setActingId] = useState<string | null>(null);
   // HU #13153 — confirmación detallada antes de restablecer.
   const [resetTarget, setResetTarget] = useState<MandateOtConfigView | null>(null);
+  // Formato cuya redacción de fábrica se va a restablecer (pestaña «Formatos de contrato»).
+  const [resetFormat, setResetFormat] = useState<MandatoFormatView | null>(null);
+  const [resettingFormat, setResettingFormat] = useState(false);
   const [editing, setEditing] = useState<{
     office: MandateOtConfigView;
     mode: MandatoOtConfigPanelMode;
@@ -112,6 +117,27 @@ export function MandatosCatalogPanel() {
       showToast("No se pudo restablecer la configuración.", "error");
     } finally {
       setActingId(null);
+    }
+  };
+
+  const handleResetFormat = async (formato: MandatoFormatView) => {
+    setResettingFormat(true);
+    try {
+      const { format } = await resetMandatoFormatTemplate(formato.code, formato.rowVersion);
+      setResetFormat(null);
+      formatos.reload();
+      showToast(`«${format.name}» volvió a la redacción de fábrica.`, "success");
+    } catch (err) {
+      setResetFormat(null);
+      formatos.reload();
+      showToast(
+        err instanceof ApiError && err.status === 409
+          ? `Alguien cambió «${formato.name}» mientras tanto. Revisa la lista e inténtalo de nuevo.`
+          : `No se pudo restablecer «${formato.name}». Inténtalo de nuevo.`,
+        "error",
+      );
+    } finally {
+      setResettingFormat(false);
     }
   };
 
@@ -264,6 +290,7 @@ export function MandatosCatalogPanel() {
             previewing={previewing}
             onEdit={setEditingFormat}
             onPreview={handlePreviewTemplate}
+            onResetTemplate={setResetFormat}
           />
         )}
       </section>
@@ -342,6 +369,15 @@ export function MandatosCatalogPanel() {
         />
       ) : null}
 
+      {resetFormat ? (
+        <ResetFormatoDialog
+          formato={resetFormat}
+          busy={resettingFormat}
+          onConfirm={() => void handleResetFormat(resetFormat)}
+          onCancel={() => setResetFormat(null)}
+        />
+      ) : null}
+
       {editingFormat ? (
         <MandatoFormatoEditor
           code={editingFormat}
@@ -384,6 +420,65 @@ export function MandatosCatalogPanel() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** Confirmación de «Restablecer redacción de fábrica» de un formato de contrato. */
+function ResetFormatoDialog({
+  formato,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  formato: MandatoFormatView;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      busy={busy}
+      icon={AlertTriangle}
+      iconBg="#F9AC00"
+      title="Restablecer redacción de fábrica"
+      titleClassName="text-base font-bold text-[#162744]"
+      size="md"
+    >
+      <div className="space-y-3 text-xs" data-testid="mandatos-formato-reset-dialog">
+        <p>
+          <strong>{formato.name}</strong> dejará de usar el texto editado (versión {formato.currentVersion}) y volverá
+          al texto original de FLIT en los mandatos que se generen desde ahora.
+        </p>
+        <p
+          className="rounded-xl border px-3 py-2 leading-relaxed"
+          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          role="note"
+        >
+          El nombre, el tipo y el historial de versiones se conservan. Los mandatos ya generados no cambian.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            {busy ? "Restableciendo…" : "Restablecer"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
