@@ -108,6 +108,7 @@ public static class Modulos
         Ocr.OcrEndpoints.Map(api);
         Ocr.PromptsOcrEndpoints.Map(api);
         Reportes.ReportesEndpoints.Map(api);
+        Calendario.CalendarioEndpoints.Map(api);
         return app;
     }
 }

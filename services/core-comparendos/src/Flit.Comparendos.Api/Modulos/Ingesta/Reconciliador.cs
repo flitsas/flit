@@ -465,7 +465,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         return $"Límite de gestión {F(c.FechaLimiteGestion)}; 50% hasta {F(c.FechaFinDescuento50)}; 25% hasta {F(c.FechaFinDescuento25)}; caducidad {F(c.FechaCaducidad)}; prescripción {F(c.FechaPrescripcion)}.";
     }
 
-    private static object PlazosDatos(FechasLegales? antes, Comparendo c) => new
+    public static object PlazosDatos(FechasLegales? antes, Comparendo c) => new
     {
         anteriores = antes,
         nuevas = Plazos.Fechas(c),
