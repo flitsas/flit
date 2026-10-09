@@ -28,6 +28,9 @@ env:
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
   # FLIT Suite (B-09): hub en flitsas.online. Una sola imagen por ambiente, sin build-args (config en runtime).
   FRONTEND_HUB_IMAGE: ghcr.io/flitsas/flitdev/frontend-hub
+  # Epic #12878 (GDC): Comparendos, API y app web (perfil «comparendos» del compose).
+  CORE_COMPARENDOS_IMAGE: ghcr.io/flitsas/flitdev/core-comparendos
+  FRONTEND_COMPARENDOS_IMAGE: ghcr.io/flitsas/flitdev/frontend-comparendos
 
 jobs:
   # ── Resolver ambiente segun la rama ─────────────────────────────────────────
@@ -50,6 +53,8 @@ jobs:
       migracion_port: ${{ steps.env.outputs.migracion_port }}
       hub_port: ${{ steps.env.outputs.hub_port }}
       identity_port: ${{ steps.env.outputs.identity_port }}
+      comparendos_port: ${{ steps.env.outputs.comparendos_port }}
+      core_comparendos_port: ${{ steps.env.outputs.core_comparendos_port }}
       suite_env: ${{ steps.env.outputs.suite_env }}
       tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       internal_subnet: ${{ steps.env.outputs.internal_subnet }}
@@ -75,6 +80,7 @@ jobs:
               api_domain=api.flitsas.online
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6022; identity_port=6025
+              comparendos_port=6023; core_comparendos_port=6028
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
               tramites_domain=tramites.flitsas.online
@@ -87,6 +93,7 @@ jobs:
               api_domain=api.qa.flitsas.online
               image_tag=qa
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5022; identity_port=5025
+              comparendos_port=5023; core_comparendos_port=5028
               suite_env=qa
               tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
@@ -98,6 +105,7 @@ jobs:
               api_domain=api.dev.flitsas.online
               image_tag=dev
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4022; identity_port=4025
+              comparendos_port=4023; core_comparendos_port=4028
               suite_env=dev
               tramites_domain=dev.tramites.flitsas.online
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
@@ -131,6 +139,8 @@ jobs:
             echo "migracion_port=$migracion_port"
             echo "hub_port=$hub_port"
             echo "identity_port=$identity_port"
+            echo "comparendos_port=$comparendos_port"
+            echo "core_comparendos_port=$core_comparendos_port"
             echo "suite_env=$suite_env"
             echo "tramites_domain=$tramites_domain"
             echo "internal_subnet=$internal_subnet"
@@ -414,6 +424,90 @@ jobs:
           cache-to: type=gha,mode=max,scope=core-consultas
 
 
+  # Epic #12878 (GDC): core-comparendos (perfil «comparendos»; ver docs/suite/servicio-nuevo.md).
+  build-core-comparendos:
+    name: Build & push core-comparendos (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_COMPARENDOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-comparendos
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-comparendos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_COMPARENDOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-comparendos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK de plataforma y sus contratos (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-comparendos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-comparendos
+          cache-to: type=gha,mode=max,scope=core-comparendos
+
+
   # Epic #13316 (HU #13353): core-notificaciones (perfil «notificaciones»; ver docs/suite/servicio-nuevo.md).
   build-core-notificaciones:
     name: Build & push core-notificaciones (.NET) image
@@ -683,6 +777,88 @@ jobs:
           cache-from: type=gha,scope=frontend-hub
           cache-to: type=gha,mode=max,scope=frontend-hub
 
+  # Epic #12878 (GDC): app web de Comparendos (misma receta que el hub: config en runtime, sin build-args).
+  build-frontend-comparendos:
+    name: Build & push frontend-comparendos image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_COMPARENDOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-comparendos
+            packages/ui
+            packages/brand
+            packages/auth
+            packages/shell
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
+      - name: Extract metadata — frontend-comparendos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_COMPARENDOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-comparendos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-comparendos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-comparendos
+          cache-to: type=gha,mode=max,scope=frontend-comparendos
+
   build-python-ml:
     name: Build & push python-ml image
     needs: setup
@@ -836,7 +1012,7 @@ jobs:
 
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
     # HU #13329: corre aunque falle el build de algún servicio. En despliegue por servicio (FLIT_DEPLOY_ROLLING) se
     # despliegan los demás y el que falló conserva su versión; sin él, se detiene sin tocar nada, como antes.
     if: ${{ !cancelled() && needs.setup.result == 'success' }}
@@ -936,6 +1112,8 @@ jobs:
             export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_HUB_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export CORE_COMPARENDOS_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export FRONTEND_COMPARENDOS_TAG=${{ needs.setup.outputs.deploy_tag }}
             export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
             export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
@@ -943,6 +1121,8 @@ jobs:
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
             export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
             export HUB_PORT=${{ needs.setup.outputs.hub_port }}
+            export COMPARENDOS_PORT=${{ needs.setup.outputs.comparendos_port }}
+            export CORE_COMPARENDOS_PORT=${{ needs.setup.outputs.core_comparendos_port }}
             # HU #13226 (Epic #13217): core-identity (perfil "identity"); sin el perfil no se levanta.
             export CORE_IDENTITY_PORT=${{ needs.setup.outputs.identity_port }}
             # FLIT Suite: hosts de los productos en este ambiente (Suite:Hosts:Environment de core-api).
@@ -963,13 +1143,15 @@ jobs:
             # HU #13329 (Epic #13316): resultado y digest del build de cada imagen (sin arreglos asociativos, para
             # que el script corra igual en cualquier bash).
             IMAGE_TAG="${{ needs.setup.outputs.image_tag }}"
-            SERVICES="core-api core-identity core-consultas core-notificaciones core-ict frontend frontend-hub python-ml"
+            SERVICES="core-api core-identity core-consultas core-notificaciones core-comparendos core-ict frontend frontend-hub frontend-comparendos python-ml"
             build_result() {
               case "$1" in
                 core-api) echo "${{ needs.build-core-api.result }}" ;;
                 core-identity) echo "${{ needs.build-core-identity.result }}" ;;
                 core-consultas) echo "${{ needs.build-core-consultas.result }}" ;;
                 core-notificaciones) echo "${{ needs.build-core-notificaciones.result }}" ;;
+                core-comparendos) echo "${{ needs.build-core-comparendos.result }}" ;;
+                frontend-comparendos) echo "${{ needs.build-frontend-comparendos.result }}" ;;
                 core-ict) echo "${{ needs.build-core-ict.result }}" ;;
                 frontend) echo "${{ needs.build-frontend.result }}" ;;
                 frontend-hub) echo "${{ needs.build-frontend-hub.result }}" ;;
@@ -982,6 +1164,8 @@ jobs:
                 core-identity) echo "${{ needs.build-core-identity.outputs.digest }}" ;;
                 core-consultas) echo "${{ needs.build-core-consultas.outputs.digest }}" ;;
                 core-notificaciones) echo "${{ needs.build-core-notificaciones.outputs.digest }}" ;;
+                core-comparendos) echo "${{ needs.build-core-comparendos.outputs.digest }}" ;;
+                frontend-comparendos) echo "${{ needs.build-frontend-comparendos.outputs.digest }}" ;;
                 core-ict) echo "${{ needs.build-core-ict.outputs.digest }}" ;;
                 frontend) echo "${{ needs.build-frontend.outputs.digest }}" ;;
                 frontend-hub) echo "${{ needs.build-frontend-hub.outputs.digest }}" ;;
@@ -990,7 +1174,7 @@ jobs:
             }
             tag_var() {
               case "$1" in
-                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-notificaciones) echo CORE_NOTIFICACIONES_TAG ;; core-ict) echo CORE_ICT_TAG ;;
+                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-notificaciones) echo CORE_NOTIFICACIONES_TAG ;; core-comparendos) echo CORE_COMPARENDOS_TAG ;; frontend-comparendos) echo FRONTEND_COMPARENDOS_TAG ;; core-ict) echo CORE_ICT_TAG ;;
                 frontend) echo FRONTEND_TAG ;; frontend-hub) echo FRONTEND_HUB_TAG ;; python-ml) echo PYTHON_ML_TAG ;;
               esac
             }
