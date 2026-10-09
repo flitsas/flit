@@ -434,9 +434,9 @@ describe("MandatosCatalogPanel configurador", () => {
       renderPanel("formatos");
       await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
 
-      expect(await hayAccion(user, /restablecer redacción de fábrica del formato genérico/i)).toBe(true);
-      expect(await hayAccion(user, /restablecer redacción de fábrica del formato bello/i)).toBe(false);
-      expect(await hayAccion(user, /restablecer redacción de fábrica del formato automática/i)).toBe(false);
+      expect(await hayAccion(user, /restablecer formato genérico/i)).toBe(true);
+      expect(await hayAccion(user, /restablecer formato bello/i)).toBe(false);
+      expect(await hayAccion(user, /restablecer formato automática/i)).toBe(false);
     }, 20_000);
 
     it("confirma, llama al API con rowVersion y la fila vuelve a «De fábrica»", async () => {
@@ -448,7 +448,7 @@ describe("MandatosCatalogPanel configurador", () => {
 
       renderPanel("formatos");
       await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
-      await pulsarAccion(user, /restablecer redacción de fábrica del formato genérico/i);
+      await pulsarAccion(user, /restablecer formato genérico/i);
       const dialogo = await screen.findByTestId("mandatos-formato-reset-dialog");
       expect(dialogo).toHaveTextContent(/versión 2/);
       expect(dialogo).toHaveTextContent(/historial de versiones se conservan/i);
@@ -465,7 +465,7 @@ describe("MandatosCatalogPanel configurador", () => {
       listMandatoFormats.mockResolvedValue([completo("generico", "Genérico")]);
       renderPanel("formatos");
       await screen.findByRole("table", { name: /formatos de contrato de mandato/i });
-      await pulsarAccion(user, /restablecer redacción de fábrica del formato genérico/i);
+      await pulsarAccion(user, /restablecer formato genérico/i);
       await user.click(within(await screen.findByTestId("mandatos-formato-reset-dialog")).getByRole("button", { name: /cancelar/i }));
 
       expect(resetMandatoFormatTemplate).not.toHaveBeenCalled();

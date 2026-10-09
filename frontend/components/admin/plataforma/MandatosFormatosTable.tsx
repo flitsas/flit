@@ -97,8 +97,7 @@ export function MandatosFormatosTable({
               ? [
                   {
                     icon: RotateCcw,
-                    label: `Restablecer redacción de fábrica del formato ${row.name}`,
-                    tone: "danger" as const,
+                    label: `Restablecer formato ${row.name}`,
                     onClick: () => onResetTemplate(row),
                     disabled: previewing !== null,
                   },
