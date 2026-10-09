@@ -45,6 +45,7 @@ public static class Modulos
         services.AddSingleton<DerechosPeticion.ProcesadorLotesDp>();
         services.AddScoped<Correo.IReaccionCorreo, CambioContraventor.ReaccionCambioContraventor>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Avisos.SchedulerAvisos>();
+        services.AddScoped<Correo.IReaccionCorreo, Avisos.ReaccionAvisos>();
         services.AddLimitePortal();
         if (simulacion)
             services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();

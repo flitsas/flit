@@ -16,9 +16,13 @@ namespace Flit.Comparendos.Tests.Api;
 public sealed class EnvioQueRechazaOt : IEnvioCorreo
 {
     public Task<ResultadoEnvioCorreo> EnviarAsync(Guid? tenantId, CorreoParaEnviar correo, CancellationToken ct) =>
-        Task.FromResult(correo.DestinatarioEmail.StartsWith("radicacion@", StringComparison.Ordinal)
-            ? new ResultadoEnvioCorreo("RECHAZADO", "Buzón inexistente", false, null)
-            : new ResultadoEnvioCorreo(ResultadoEnvioCorreo.Enviado, null, false, Guid.NewGuid().ToString()));
+        Task.FromResult(correo.DestinatarioEmail switch
+        {
+            var d when d.StartsWith("radicacion@", StringComparison.Ordinal) => new ResultadoEnvioCorreo("RECHAZADO", "Buzón inexistente", false, null),
+            var d when d.StartsWith("rebota@", StringComparison.Ordinal) => new ResultadoEnvioCorreo("DESTINATARIO_RECHAZADO", "550 user unknown", false, null),
+            var d when d.StartsWith("falla@", StringComparison.Ordinal) => new ResultadoEnvioCorreo("ERROR", "Error del proveedor", false, null),
+            _ => new ResultadoEnvioCorreo(ResultadoEnvioCorreo.Enviado, null, false, Guid.NewGuid().ToString()),
+        });
 }
 
 public sealed class ApiConOtCaido : ApiConFuente
@@ -67,5 +71,39 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
         (await api.EnDbAsync(db => db.Comunicaciones.AnyAsync(c => c.ComparendoId == id && c.Tipo == TipoComunicacion.Aviso4, ct))).Should().BeFalse();
         (await api.EnDbAsync(db => db.Comparendos.SingleAsync(c => c.Id == id, ct))).EstadoCambioContraventor.Should().Be(EstadoCambioContraventor.SinSolicitar);
         (await api.EnDbAsync(db => db.SolicitudesCambio.SingleAsync(s => s.ComparendoId == id, ct))).Estado.Should().Be(EstadoSolicitudCambio.EnvioFallido);
+    }
+
+    /// <summary>RN-114: un aviso que no llegó no cuenta; el fallido se reintenta y el rebotado espera un correo nuevo.</summary>
+    [Theory]
+    [InlineData("falla@ejemplo.com", false)]
+    [InlineData("rebota@ejemplo.com", true)]
+    public async Task AvisoNoEntregado_NoCuentaComoEnviado(string correo, bool queda)
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api);
+        var id = (await IngresarAsync(api, empresa, Item($"AVF-{correo[..4]}"))).Values.Single();
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.ContraventorAsignar])).PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
+        {
+            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo, declaracionTratamientoDatos = true,
+        }, ct)).EnsureSuccessStatusCode();
+
+        await using (var scope = api.App.Services.CreateAsyncScope())
+        {
+            var ejecutor = scope.ServiceProvider.GetServices<Flit.Comparendos.Api.Modulos.Trabajos.IEjecutorTrabajo>().OfType<Flit.Comparendos.Api.Modulos.Avisos.SchedulerAvisos>().Single();
+            await ejecutor.EjecutarAsync(new Flit.Comparendos.Api.Modulos.Trabajos.SolicitudTrabajo(TipoTrabajo.AvisosConductor,
+                Disparo.Manual, empresa), ct);
+        }
+
+        // Tres intentos para el fallido (1, 5 y 25 min); el rebote es definitivo al primero.
+        for (var i = 0; i < 4; i++)
+        {
+            await api.App.Services.GetRequiredService<DespachadorCorreos>().DespacharPendientesAsync(ct);
+            api.Reloj.Ahora = api.Reloj.Ahora.AddMinutes(30);
+        }
+
+        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(c => c.Id == id, ct))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.SinNotificar);
+        (await api.EnDbAsync(db => db.AvisosConductor.AnyAsync(a => a.ComparendoId == id, ct))).Should().Be(queda);
     }
 }
