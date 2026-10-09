@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Flit.Comparendos.Api.Infraestructura.Archivos;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
@@ -37,7 +36,7 @@ public sealed record CorreoNuevo
 /// registro y su píxel, y el BCC como copia oculta (S-59). El HTML enviado se guarda como archivo para auditoría.
 /// Todo queda en el contexto: lo confirma el SaveChanges de quien llama, en su misma transacción.
 /// </summary>
-public sealed class ServicioCorreo(ComparendosDb db, IAlmacenArchivos almacen, Reloj reloj, IConfiguration configuration)
+public sealed class ServicioCorreo(ComparendosDb db, Comun.RegistroArchivos archivos, Reloj reloj, IConfiguration configuration)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -107,23 +106,6 @@ public sealed class ServicioCorreo(ComparendosDb db, IAlmacenArchivos almacen, R
         return cierre >= 0 ? html.Insert(cierre, pixel) : html + pixel;
     }
 
-    public async Task<Guid> GuardarAsync(Guid? tenantId, string dominio, string nombre, string contentType, byte[] contenido, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(contenido);
-        var guardado = await almacen.GuardarAsync(tenantId ?? Guid.Empty, dominio, nombre, contentType, contenido, ct).ConfigureAwait(false);
-        var archivo = new Archivo
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            Referencia = guardado.Referencia,
-            Dominio = dominio,
-            NombreOriginal = nombre.Length > 255 ? nombre[^255..] : nombre,
-            ContentType = contentType,
-            TamanoBytes = guardado.Tamano,
-            Sha256 = guardado.Sha256,
-            CreadoEn = reloj.Ahora,
-        };
-        db.Archivos.Add(archivo);
-        return archivo.Id;
-    }
+    public Task<Guid> GuardarAsync(Guid? tenantId, string dominio, string nombre, string contentType, byte[] contenido, CancellationToken ct) =>
+        archivos.GuardarAsync(tenantId, dominio, nombre, contentType, contenido, ct);
 }

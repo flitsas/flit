@@ -10,6 +10,7 @@ public static class Modulos
     {
         ArgumentNullException.ThrowIfNull(configuration);
         services.AddScoped<Comun.Auditoria>();
+        services.AddScoped<Comun.RegistroArchivos>();
         services.AddScoped<Catalogos.MapeadorOt>();
         services.AddScoped<Comparendos.Timeline>();
         services.AddScoped<Comparendos.AccesoComparendo>();
@@ -52,6 +53,7 @@ public static class Modulos
     {
         var api = app.MapGroup(prefijo);
         api.MapGet("/sesion", Sesion.Obtener).RequireAuthorization(Plataforma.AutorizacionExtensions.PoliticaUsuario);
+        Comun.ArchivosEndpoints.Map(api);
         Monitoreo.MonitoreoEndpoints.Map(api);
         Catalogos.CatalogosEndpoints.Map(api);
         Ingesta.IngestaEndpoints.Map(api);
@@ -59,6 +61,7 @@ public static class Modulos
         Ingesta.AlertasYLogEndpoints.Map(api);
         Bandeja.BandejaEndpoints.Map(api);
         Comparendos.DetalleEndpoints.Map(api);
+        Configuracion.EmpresasEndpoints.Map(api);
         return app;
     }
 }
