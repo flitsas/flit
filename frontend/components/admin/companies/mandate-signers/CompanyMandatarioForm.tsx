@@ -146,7 +146,6 @@ export function CompanyMandatarioForm({
   // AC5: se avisa antes de guardar que cambiar de Persona natural descarta forma de firma y vigencia.
   const descartaDatos = editing != null && (editing.signerModel ?? "natural") === "natural" && !esNatural;
 
-  const conBiometria = esNatural && signatureMethod === "biometria";
   const datosDeValidacion = {
     editing,
     metodo: signatureMethod,
@@ -236,8 +235,9 @@ export function CompanyMandatarioForm({
         errores.documentNumber = esJuridica ? "Escribe el NIT." : "Escribe el número de documento.";
       }
     }
-    // HU #13248 — con validación de identidad el enlace se envía al correo: es obligatorio.
-    if (esNatural && signatureMethod === "biometria" && !email.trim()) {
+    // El correo es obligatorio en toda Persona natural: ahí llega el enlace de validación (VID), también si
+    // después pasa de baúl a validación de identidad.
+    if (esNatural && !email.trim()) {
       errores.email = "Escribe el correo: ahí enviamos el enlace de validación.";
     }
     if (selected.length === 0) {
@@ -466,13 +466,13 @@ export function CompanyMandatarioForm({
               {esNatural && (
                 <div>
                   <label htmlFor="mandatario-email" className="mb-1.5 block text-xs font-semibold">
-                    Correo{conBiometria ? " (obligatorio)" : " (opcional)"}
+                    Correo (obligatorio)
                   </label>
                   <input
                     id="mandatario-email"
                     type="email"
-                    required={conBiometria}
-                    aria-required={conBiometria ? true : undefined}
+                    required
+                    aria-required
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
@@ -484,7 +484,7 @@ export function CompanyMandatarioForm({
                   />
                   <FieldError id="mandatario-email-error" message={fieldErrors.email} />
                   <p id="mandatario-email-ayuda" className="mt-1 text-xs leading-tight opacity-70">
-                    {conBiometria ? "Aquí le llega el enlace para validar su identidad." : "Es un dato de contacto."}
+                    Aquí le llega el enlace para validar su identidad.
                   </p>
                 </div>
               )}

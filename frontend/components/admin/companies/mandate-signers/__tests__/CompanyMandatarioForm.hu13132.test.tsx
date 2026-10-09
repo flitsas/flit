@@ -356,6 +356,10 @@ describe("HU #13132 AC6 — mandatario anterior sin modelo explícito", () => {
     expect(radio("Persona natural")).toBeChecked();
     expect(radio("Baúl de firmas")).toBeChecked();
     expect(screen.getByLabelText("Nombre completo")).toHaveValue("Ana Restrepo");
+    // Sin correo guardado: ahora es obligatorio en Persona natural, así que se pide antes de guardar.
+    await user.click(guardar());
+    expect(onSubmit).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText(/^Correo/), "ana@example.com");
     await user.click(guardar());
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
