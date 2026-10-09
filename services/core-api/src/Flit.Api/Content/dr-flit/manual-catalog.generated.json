@@ -1189,7 +1189,7 @@
           ],
           "bullets": [
             "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
-            "Roles y permisos: consulta qué puede hacer cada rol. Para tu perfil es de solo lectura; los roles del sistema los crea y edita el equipo FLIT (Super Admin).",
+            "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
             "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4)."
           ],
           "callouts": []
@@ -1221,12 +1221,23 @@
         },
         {
           "id": "roles",
-          "title": "4. Roles y permisos (solo lectura)",
+          "title": "4. Roles y permisos",
           "paragraphs": [
-            "Consulta los roles disponibles para tu compañía y qué incluye cada uno. Crear, editar o desactivar roles del sistema es exclusivo del Super Admin; si necesitas un ajuste, contáctalo."
+            "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona."
           ],
-          "bullets": [],
-          "callouts": []
+          "bullets": [
+            "1. Pulsa «Nuevo rol».",
+            "2. Escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
+            "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar.",
+            "4. Pulsa «Crear rol». Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Un rol que ya tiene usuarios no se puede eliminar: primero cambia a esas personas de rol. Si intentas dar un permiso que no tienes, el sistema te avisa y no guarda el cambio."
+            }
+          ]
         },
         {
           "id": "ict",

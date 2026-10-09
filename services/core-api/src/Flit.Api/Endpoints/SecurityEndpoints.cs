@@ -84,7 +84,8 @@ public static class SecurityEndpoints
                 var superAdminRole = await db.Roles
                     .AsNoTracking()
                     .FirstOrDefaultAsync(
-                        r => r.Code == AdminAuthorization.SuperAdminRole && r.IsActive && r.DeletedAt == null,
+                        r => r.Code == AdminAuthorization.SuperAdminRole && r.IsActive && r.DeletedAt == null
+                            && r.TenantId == null,
                         cancellationToken);
 
                 var isFlitInvite = superAdminRole is not null && requestedRoleIds.Contains(superAdminRole.Id);
@@ -135,7 +136,10 @@ public static class SecurityEndpoints
                         // (code, target_entity_type) en todo el sistema).
                         var adminRole = await db.Roles
                             .AsNoTracking()
-                            .FirstOrDefaultAsync(r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null, cancellationToken);
+                            .FirstOrDefaultAsync(
+                                r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null
+                                    && (r.TenantId == null || r.TenantId == targetTenantId),
+                                cancellationToken);
 
                         if (adminRole is null)
                             return Results.Json(
@@ -155,7 +159,8 @@ public static class SecurityEndpoints
                         // AssignRoleHandler rechazaría después (RoleTargetEntityTypeMismatch).
                         var selectedRoles = await db.Roles
                             .AsNoTracking()
-                            .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                            .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null
+                                && (r.TenantId == null || r.TenantId == targetTenantId))
                             .ToListAsync(cancellationToken);
 
                         if (selectedRoles.Count != requestedRoleIds.Count)
@@ -478,7 +483,8 @@ public static class SecurityEndpoints
             // método lo usa la pantalla RBAC de SuperAdmin, que sí necesita ver TODOS los roles.
             // HU #12964/#12967: el admin de cada producto (admin_tramites, admin_comparendos…) no se ofrece;
             // lo crea y lo quita el espejo de AdminCompany hasta que el hub asigne un rol por producto (B-12).
-            var roles = (await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken))
+            // HU #13441: globales + propios del tenant del caller; nunca los de otra compañía.
+            var roles = (await roleRepo.ListVisibleToTenantAsync(tenantId, targetEntityType, cancellationToken))
                 .Where(r => r.IsActive
                     && !string.Equals(r.Code, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase)
                     && !ProductRoleCodes.IsProductAdmin(r.Code))
@@ -492,6 +498,9 @@ public static class SecurityEndpoints
         // existentes a sus usuarios). Antes de esta HU existían aquí POST/PUT-permissions/DELETE
         // restringidos a AdminCompanyPolicy — se eliminaron junto con
         // SetTenantRolePermissionsHandler e InsufficientPermissionsForDelegationException.
+        // HU #13441/#13442: solo AdminCompany (y SuperAdmin) gestionan roles, y únicamente los propios del tenant,
+        // vía SecurityTenantRolesEndpoints. ot_admin y el resto de roles reciben 403; el GET de arriba y la
+        // asignación de roles a usuarios (UserAdminPolicy) no cambian.
 
         // HU #10506 AC1/AC2 — PUT /users/{userId}/role — asigna un rol ADICIONAL (ya no
         // reemplaza los demás roles activos del usuario, a diferencia de HU #10164).
@@ -1211,6 +1220,9 @@ public static class SecurityEndpoints
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.DeleteUser, "user", "USER", "userId"));
 
+        // HU #13441: gestión de roles propios de la compañía (AdminCompanyPolicy por endpoint).
+        SecurityTenantRolesEndpoints.Map(group);
+
         return app;
     }
 
@@ -1283,7 +1295,7 @@ public static class SecurityEndpoints
         roleIds.Count > 0
         && await db.Roles
             .AsNoTracking()
-            .AnyAsync(r => roleIds.Contains(r.Id) && r.Code == AdminAuthorization.SuperAdminRole, ct);
+            .AnyAsync(r => roleIds.Contains(r.Id) && r.Code == AdminAuthorization.SuperAdminRole && r.TenantId == null, ct);
 
     private static IResult SuperAdminRoleNotAssignable() =>
         Results.Json(
