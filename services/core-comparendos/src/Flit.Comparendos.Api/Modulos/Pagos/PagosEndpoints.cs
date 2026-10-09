@@ -196,14 +196,22 @@ public static class PagosEndpoints
         var carga = await db.CargasMasivasPagos.AsNoTracking().FirstAsync(c => c.Id == id, ct).ConfigureAwait(false);
         var filas = await db.CargaMasivaPagosFilas.AsNoTracking().Where(f => f.CargaId == id && f.NumeroFila > 0).OrderBy(f => f.NumeroFila)
             .Select(f => new { f.NumeroFila, f.Valida, f.Errores, f.Datos }).ToListAsync(ct).ConfigureAwait(false);
-        return new { carga.Id, carga.NombreArchivo, estado = carga.Estado.ToString(), carga.TotalFilas, carga.FilasValidas, carga.FilasInvalidas, carga.CargadoEn, filas };
+        // Una carga rechazada completa guarda su motivo en la fila 0.
+        var motivoRechazo = carga.Estado == EstadoCargaMasiva.Rechazada
+            ? (await db.CargaMasivaPagosFilas.AsNoTracking().Where(f => f.CargaId == id && f.NumeroFila == 0).Select(f => f.Errores).FirstOrDefaultAsync(ct).ConfigureAwait(false))?.FirstOrDefault()
+            : null;
+        return new { carga.Id, carga.NombreArchivo, estado = carga.Estado.ToString(), motivoRechazo, carga.TotalFilas, carga.FilasValidas, carga.FilasInvalidas, carga.CargadoEn, filas };
     }
 
     private static async Task<IResult> Cargas(UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
     {
         var tenant = usuario.EmpresaLectura(null, obligatoria: false);
         return Results.Ok(await db.CargasMasivasPagos.AsNoTracking().Where(c => tenant == null || c.TenantId == tenant).OrderByDescending(c => c.CargadoEn).Take(50)
-            .Select(c => new { c.Id, c.NombreArchivo, estado = c.Estado.ToString(), c.TotalFilas, c.FilasValidas, c.FilasInvalidas, c.CargadoPor, c.CargadoEn }).ToListAsync(ct).ConfigureAwait(false));
+            .Select(c => new
+            {
+                c.Id, c.NombreArchivo, estado = c.Estado.ToString(), c.TotalFilas, c.FilasValidas, c.FilasInvalidas, c.CargadoPor, c.CargadoEn,
+                motivoRechazo = db.CargaMasivaPagosFilas.Where(f => f.CargaId == c.Id && f.NumeroFila == 0).Select(f => f.Errores[0]).FirstOrDefault(),
+            }).ToListAsync(ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> Carga(Guid id, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)

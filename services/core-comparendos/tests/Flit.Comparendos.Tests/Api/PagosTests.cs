@@ -120,7 +120,12 @@ public sealed class PagosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         var r = await cliente.PostAsync("/api/v1/comparendos/pagos/cargas", form, ct);
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await r.Content.ReadAsStringAsync(ct)).Should().Contain("tipo_pago").And.Contain("CARGA_RECHAZADA");
-        (await api.EnDbAsync(db => db.CargasMasivasPagos.SingleAsync(c => c.TenantId == empresa))).Estado.Should().Be(EstadoCargaMasiva.Rechazada);
+        var rechazada = await api.EnDbAsync(db => db.CargasMasivasPagos.SingleAsync(c => c.TenantId == empresa));
+        rechazada.Estado.Should().Be(EstadoCargaMasiva.Rechazada);
+        var detalle = await (await cliente.GetAsync($"/api/v1/comparendos/pagos/cargas/{rechazada.Id}", ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        detalle.GetProperty("motivoRechazo").GetString().Should().Contain("tipo_pago");
+        var historial = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/pagos/cargas", ct);
+        historial.EnumerateArray().Single().GetProperty("motivoRechazo").GetString().Should().Contain("tipo_pago");
 
         var plantilla = await cliente.GetAsync("/api/v1/comparendos/pagos/plantilla", ct);
         plantilla.StatusCode.Should().Be(HttpStatusCode.OK);
