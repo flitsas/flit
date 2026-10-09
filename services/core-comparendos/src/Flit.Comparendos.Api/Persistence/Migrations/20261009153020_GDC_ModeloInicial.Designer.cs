@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Comparendos.Api.Persistence.Migrations
 {
     [DbContext(typeof(ComparendosDb))]
-    [Migration("20261009145847_GDC_ModeloInicial")]
+    [Migration("20261009153020_GDC_ModeloInicial")]
     partial class GDC_ModeloInicial
     {
         /// <inheritdoc />
@@ -1281,6 +1281,12 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<string>("MotivoFallo")
                         .HasColumnType("text")
                         .HasColumnName("motivo_fallo");
+
+                    b.Property<string>("PlantillaClave")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("plantilla_clave");
 
                     b.Property<Guid?>("PlantillaVersionId")
                         .HasColumnType("uuid")

@@ -1,8 +1,9 @@
-# core-comparendos — servicio de plataforma (comparendos, Epic #13316, HU #13340).
+# core-comparendos — Gestión de Comparendos (Epic #12878), nacido de la plantilla de servicio (HU #13340).
 # Build context: services/   +   contexto con nombre «contracts» = contracts/proto
 #   docker build -f services/core-comparendos/Dockerfile --build-context contracts=contracts/proto services
 #
-# Solo copia lo que compila: su código, el SDK de plataforma y los tipos comunes de los contratos. Replica la estructura
+# Solo copia lo que compila: su código, el SDK de plataforma, los tipos comunes de los contratos y el contrato de
+# Notificaciones (envía sus correos por gRPC). Replica la estructura
 # del repo bajo /services para que las ProjectReference relativas resuelvan igual que en local.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -12,6 +13,8 @@ COPY core-api/Directory.Build.props core-api/Directory.Packages.props /services/
 COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
+COPY core-notificaciones/Directory.Build.props core-notificaciones/Directory.Packages.props /services/core-notificaciones/
+COPY core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts/ /services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/
 COPY core-comparendos/src/ ./src/
 RUN dotnet publish src/Flit.Comparendos.Api/Flit.Comparendos.Api.csproj \

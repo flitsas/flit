@@ -24,13 +24,6 @@ public interface IAlertasIntegracion
     Task FalloDelTrabajoAsync(CicloIngesta ciclo, Exception falla, CancellationToken ct);
 }
 
-internal sealed class SinAlertas : IAlertasIntegracion
-{
-    public Task FallosDelCicloAsync(CicloIngesta ciclo, IReadOnlyList<(ConsultaFuente Consulta, IReadOnlyList<Guid> Empresas)> fallos, CancellationToken ct) => Task.CompletedTask;
-
-    public Task FalloDelTrabajoAsync(CicloIngesta ciclo, Exception falla, CancellationToken ct) => Task.CompletedTask;
-}
-
 /// <summary>
 /// Un ciclo de ingesta de un canal (§6.4.2): arma las claves únicas de todas las empresas (o de una, si es manual),
 /// consulta cada clave una sola vez (RN-033), guarda cada consulta con su respuesta cruda, y reparte el resultado a

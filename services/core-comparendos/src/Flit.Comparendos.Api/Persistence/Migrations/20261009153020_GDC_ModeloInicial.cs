@@ -367,6 +367,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     destinatarios = table.Column<string>(type: "jsonb", nullable: false),
                     asunto = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
                     cuerpo_html_archivo_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    plantilla_clave = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
                     plantilla_version_id = table.Column<Guid>(type: "uuid", nullable: true),
                     estado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     cantidad_reintentos = table.Column<short>(type: "smallint", nullable: false),

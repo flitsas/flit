@@ -455,6 +455,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.Property(x => x.RemitenteNombre).HasMaxLength(120);
             e.Property(x => x.Destinatarios).HasColumnType("jsonb");
             e.Property(x => x.Asunto).HasMaxLength(300);
+            e.Property(x => x.PlantillaClave).HasMaxLength(80);
             e.Property(x => x.EntregaIdPlataforma).HasMaxLength(64);
             e.Property(x => x.ResultadoPlataforma).HasMaxLength(60);
             e.HasIndex(x => new { x.TenantId, x.CreadoEn });

@@ -1,3 +1,4 @@
+using Flit.Platform.Sdk.Grpc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Comparendos.Api.Modulos;
@@ -17,13 +18,28 @@ public static class Modulos
         services.AddScoped<Ingesta.Reconciliador>();
         services.AddScoped<Ingesta.CicloDeIngesta>();
         services.AddScoped<Trabajos.IEjecutorTrabajo>(sp => sp.GetRequiredService<Ingesta.CicloDeIngesta>());
-        services.TryAddScoped<Ingesta.IAlertasIntegracion, Ingesta.SinAlertas>();
+        services.AddScoped<Ingesta.IAlertasIntegracion, Ingesta.AlertasIntegracion>();
+
+        // Correo (HU #13484): por Notificaciones si hay dirección; si no, al log (local).
+        services.AddScoped<Correo.ServicioCorreo>();
+        services.AddSingleton<Correo.DespachadorCorreos>();
+        if (configuration["Comparendos:Notificaciones:Address"] is { Length: > 0 } notificaciones)
+        {
+            services.AddFlitGrpcClient<Flit.Notificaciones.Grpc.V1.NotificacionesService.NotificacionesServiceClient>(
+                configuration, new Uri(notificaciones), "platform.notificaciones.send", o => o.Deadline = TimeSpan.FromSeconds(60));
+            services.AddScoped<Correo.IEnvioCorreo, Correo.EnvioPorNotificaciones>();
+        }
+        else
+        {
+            services.AddScoped<Correo.IEnvioCorreo, Correo.EnvioConsola>();
+        }
 
         services.AddSingleton<Trabajos.ColaTrabajos>();
         if (configuration.GetValue("Comparendos:Trabajos:Habilitados", true))
         {
             services.AddHostedService<Trabajos.ProgramadorTrabajos>();
             services.AddHostedService<Trabajos.ProcesadorTrabajos>();
+            services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
         }
         return services;
     }
@@ -35,6 +51,8 @@ public static class Modulos
         Monitoreo.MonitoreoEndpoints.Map(api);
         Catalogos.CatalogosEndpoints.Map(api);
         Ingesta.IngestaEndpoints.Map(api);
+        Correo.CorreoEndpoints.Map(api);
+        Ingesta.AlertasYLogEndpoints.Map(api);
         return app;
     }
 }

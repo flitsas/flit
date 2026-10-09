@@ -478,6 +478,9 @@ jobs:
             services/core-identity/Directory.Build.props
             services/core-identity/Directory.Packages.props
             services/core-identity/src/Flit.Platform.Grpc.Contracts
+            services/core-notificaciones/Directory.Build.props
+            services/core-notificaciones/Directory.Packages.props
+            services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
             contracts/proto
 
       - name: Extract metadata — core-comparendos

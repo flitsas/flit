@@ -16,11 +16,14 @@
     <ProjectReference Include="..\..\..\core-api\src\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
     <ProjectReference Include="..\Flit.Comparendos.Grpc.Contracts\Flit.Comparendos.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\Flit.Comparendos.Domain\Flit.Comparendos.Domain.csproj" />
+    <ProjectReference Include="..\..\..\core-notificaciones\src\Flit.Notificaciones.Grpc.Contracts\Flit.Notificaciones.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="System.IO.Packaging" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

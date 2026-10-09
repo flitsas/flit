@@ -1279,6 +1279,12 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("motivo_fallo");
 
+                    b.Property<string>("PlantillaClave")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("plantilla_clave");
+
                     b.Property<Guid?>("PlantillaVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("plantilla_version_id");

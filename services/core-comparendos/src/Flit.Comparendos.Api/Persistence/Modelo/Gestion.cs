@@ -120,6 +120,9 @@ public sealed class ComunicacionSaliente
     public string Destinatarios { get; set; } = "{}";
     public string Asunto { get; set; } = string.Empty;
     public Guid CuerpoHtmlArchivoId { get; set; }
+
+    /// <summary>Clave con que se armó (comparendos.aviso_1, comparendos.dp_ot…), para el registro de Notificaciones.</summary>
+    public string PlantillaClave { get; set; } = string.Empty;
     public Guid? PlantillaVersionId { get; set; }
     public EstadoComunicacion Estado { get; set; } = EstadoComunicacion.Pendiente;
     public short CantidadReintentos { get; set; }
