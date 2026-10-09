@@ -96,6 +96,75 @@ public sealed class CreateMandateSignerOtSigningMeansTests
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };
 
+    // ── El OT registra su propio mandatario (sin compañías): la firma es del baúl del OT ──────────────────────────
+
+    private static CreateMandateSignerCommand AltaDelOt(Guid? firma) =>
+        new()
+        {
+            TransitOfficeId = Office,
+            FullName = "Ana Restrepo",
+            DocumentNumber = "1020304050",
+            CompanyTenantIds = [],
+            DocumentType = "CC",
+            Email = "ana@flit.test",
+            TransitOfficeIds = [Office],
+            SignatureVaultId = firma,
+            SignatureMethod = "baul",
+            ValidateSigningMeans = true,
+            CompanyVisibility = OtCompanyVisibility.WholeNetwork,
+        };
+
+    [Fact]
+    public async Task SinCompanias_ConFirmaElegidaDelBaulDelOt_SeRegistraConEsaFirma()
+    {
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+        var firma = await SeedFirmaAsync(ctx, MandateSignerHandlerTests.OtTenant, "1020304050");
+
+        var result = await Handler(ctx).HandleAsync(AltaDelOt(firma), Ct);
+
+        result.IsValid.Should().BeTrue(string.Join(" | ", result.Errors.Select(e => e.Message)));
+        result.SigningMeans.Should().Be("baul");
+        (await new DbMandateSignerReader(ctx).GetByIdAsync(result.MandateSignerId!.Value, Ct))!
+            .SignatureVaultId.Should().Be(firma);
+    }
+
+    [Fact]
+    public async Task SinCompanias_SinElegirFirma_LaResuelveEnElBaulDelOt()
+    {
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+        var firma = await SeedFirmaAsync(ctx, MandateSignerHandlerTests.OtTenant, "1020304050");
+
+        var result = await Handler(ctx).HandleAsync(AltaDelOt(null), Ct);
+
+        result.IsValid.Should().BeTrue(string.Join(" | ", result.Errors.Select(e => e.Message)));
+        (await new DbMandateSignerReader(ctx).GetByIdAsync(result.MandateSignerId!.Value, Ct))!
+            .SignatureVaultId.Should().Be(firma);
+    }
+
+    [Fact]
+    public async Task SinCompanias_ConFirmaDelBaulDeUnaCompania_SeRechaza()
+    {
+        // El OT no puede tomar la firma del baúl de una compañía para su propio mandatario.
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+        var firma = await SeedFirmaAsync(ctx, CompanyA, "1020304050");
+
+        var result = await Handler(ctx).HandleAsync(AltaDelOt(firma), Ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("signatureVaultId");
+    }
+
+    [Fact]
+    public async Task SinCompanias_SinFirmaEnElBaulDelOt_SeRechazaPidiendoLaFirma()
+    {
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+
+        var result = await Handler(ctx).HandleAsync(AltaDelOt(null), Ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("signatureVaultId");
+    }
+
     [Fact]
     public async Task ConFirmaDelBaulDeLaCompania_SeRegistra_YQuedaGuardadaLaFirma()
     {

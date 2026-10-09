@@ -138,7 +138,8 @@ export function OtMandatosSection({
     const payload = decodeJwtPayload(getToken());
     return isSuperAdmin(payload) || isOtAdmin(payload);
   });
-  const [signerCompanyId, setSignerCompanyId] = useState<string | null>(null);
+  // Alta desde el panel de configuración: con compañía, el mandatario de esa empresa; con `null`, el del propio OT.
+  const [registro, setRegistro] = useState<{ companyId: string | null } | null>(null);
   // Alta directa desde la pestaña Mandatarios: el organismo queda fijo y las compañías son opcionales.
   const [creating, setCreating] = useState(false);
   // HU #13139 — edición del mandatario desde la lista (solo si el servidor lo permite por rol y origen).
@@ -518,7 +519,9 @@ export function OtMandatosSection({
           lockedCompany={panel.company ?? null}
           signersRevision={signerEpoch}
           lastCreatedSignerId={lastCreatedSignerId}
-          onRegisterSigner={canRegisterSigner ? (companyId) => setSignerCompanyId(companyId) : undefined}
+          onRegisterSigner={
+            canRegisterSigner ? (companyId) => setRegistro({ companyId: companyId ?? null }) : undefined
+          }
           onClose={() => {
             setPanel(null);
             void load({ silent: true });
@@ -548,6 +551,8 @@ export function OtMandatosSection({
               email: input.email,
               companyTenantIds: [],
               transitOfficeIds: [transitOfficeId],
+              // Firma del baúl del propio OT, elegida o capturada en el formulario.
+              signatureVaultId: input.signatureVaultId,
               signerModel: input.signerModel,
               signatureMethod: input.signatureMethod,
               validityKind: input.validityKind,
@@ -567,25 +572,27 @@ export function OtMandatosSection({
         />
       ) : null}
 
-      {signerCompanyId ? (
+      {registro ? (
         <CompanyMandatarioForm
           variant="hub"
           offices={[{ transitOfficeId, code: office.code, name: office.name }]}
           editing={null}
           initialOfficeIds={[transitOfficeId]}
           restrictToOfficeIds={[transitOfficeId]}
-          ownerCompanyIds={[signerCompanyId]}
+          ownerCompanyIds={registro.companyId ? [registro.companyId] : []}
           overlayClassName="z-[80]"
-          onCancel={() => setSignerCompanyId(null)}
+          onCancel={() => setRegistro(null)}
           onSubmit={async (input: CompanyMandateSignerInput) => {
             const saved = await createMandateSigner(transitOfficeId, {
               fullName: input.fullName,
               documentType: input.documentType,
               documentNumber: input.documentNumber,
               email: input.email,
-              companyTenantIds: [signerCompanyId],
+              companyTenantIds: registro.companyId ? [registro.companyId] : [],
               transitOfficeIds: [transitOfficeId],
-              // HU #13132 — modelo, forma de firma y vigencia (el baúl lo resuelve el servidor).
+              // Mandatario del OT: firma del baúl del propio OT. El de una compañía la resuelve el servidor en su baúl.
+              signatureVaultId: registro.companyId ? undefined : input.signatureVaultId,
+              // HU #13132 — modelo, forma de firma y vigencia.
               signerModel: input.signerModel,
               signatureMethod: input.signatureMethod,
               validityKind: input.validityKind,
@@ -594,7 +601,7 @@ export function OtMandatosSection({
               // HU #13181 — compañías asociadas elegidas en el formulario.
               officeCompanies: input.officeCompanies,
             });
-            setSignerCompanyId(null);
+            setRegistro(null);
             setLastCreatedSignerId(saved.id);
             setSignerEpoch((n) => n + 1);
             const base =
@@ -628,6 +635,8 @@ export function OtMandatosSection({
               email: input.email,
               companyTenantIds: editingSigner.companyTenantIds,
               transitOfficeIds: [transitOfficeId],
+              // Solo el mandatario del propio OT gestiona aquí su firma del baúl (el formulario no la manda para otros).
+              signatureVaultId: input.signatureVaultId ?? undefined,
               signerModel: input.signerModel,
               signatureMethod: input.signatureMethod,
               validityKind: input.validityKind,

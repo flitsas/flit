@@ -509,6 +509,9 @@ public static class AdminMandateSignersEndpoints
             ValidTo = request.ValidTo,
             // HU #13179 — ausente ⇒ no se tocan; cada organismo presente reemplaza su conjunto.
             OfficeCompanies = request.OfficeCompanies,
+            // Firma del baúl del OT para su propio mandatario: solo se gestiona si el hub la manda.
+            SignatureVaultId = request.SignatureVaultId,
+            ActualizaFirma = request.SignatureVaultId is not null,
             UpdatedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),

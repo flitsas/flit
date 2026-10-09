@@ -102,7 +102,7 @@ describe("MandatoOtConfigForm", () => {
     expect(screen.queryByTestId("mandato-ot-default-signer")).not.toBeInTheDocument();
   });
 
-  it("permite registrar el mandatario default del OT desde el panel", async () => {
+  it("registra el mandatario general en el propio OT, sin elegir una empresa", async () => {
     const onRegisterSigner = vi.fn();
     listCompanyOtMandateRules.mockResolvedValue([
       {
@@ -125,8 +125,11 @@ describe("MandatoOtConfigForm", () => {
     );
 
     const cta = await screen.findByTestId("mandato-ot-register-signer");
+    // El OT es dueño de su mandatario general: ya no se pregunta qué empresa lo registra.
+    expect(screen.queryByTestId("mandato-ot-register-host-company")).not.toBeInTheDocument();
+    expect(screen.queryByText("Empresa que registra a la persona")).not.toBeInTheDocument();
     cta.click();
-    expect(onRegisterSigner).toHaveBeenCalledWith("cia-1");
+    expect(onRegisterSigner).toHaveBeenCalledWith();
   });
   describe("HU #13174 formatos desde el catálogo del backend", () => {
     const renderCon = (formatos: MandatoFormatosState, office = funza) =>

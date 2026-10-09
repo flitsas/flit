@@ -79,8 +79,8 @@ export function CompanyMandatarioForm({
   onResend,
 }: {
   /**
-   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía (sin selector del
-   * baúl, el servidor resuelve la firma) y el organismo queda fijo.
+   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía y el organismo queda fijo.
+   * El mandatario del propio OT elige o captura su firma en el baúl del OT.
    * HU #13132: modelo, forma de firma y vigencia igual que en la compañía.
    */
   variant?: "company" | "hub";
@@ -136,6 +136,12 @@ export function CompanyMandatarioForm({
   // Verdadero cuando el Admin de Compañía no tiene hijas: no hay lista y el mandatario es solo suyo.
   const [sinRed, setSinRed] = useState(false);
   const isHub = variant === "hub";
+  // El OT es dueño del mandatario que registra para sí (sin compañías): su firma con baúl se elige o se captura en el
+  // baúl del propio OT. Uno de una compañía editado desde el hub conserva la firma que eligió la compañía.
+  const baulDelOt =
+    isHub && (editing ? (editing.companyTenantIds ?? []).length === 0 : ownerCompanyIds.length === 0);
+  const organismoDelHub = restrictToOfficeIds?.[0] ?? offices[0]?.transitOfficeId;
+  const conSelectorBaul = !isHub || baulDelOt;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ErroresMandatario>({});
@@ -254,7 +260,7 @@ export function CompanyMandatarioForm({
           validTo,
           signatureVaultId,
         },
-        { exigeSelectorBaul: !isHub },
+        { exigeSelectorBaul: conSelectorBaul },
       ),
     );
     setFieldErrors(errores);
@@ -265,7 +271,7 @@ export function CompanyMandatarioForm({
       return;
     }
 
-    const conBaul = esNatural && signatureMethod === "baul" && !isHub;
+    const conBaul = esNatural && signatureMethod === "baul" && conSelectorBaul;
     setSaving(true);
     try {
       await onSubmit({
@@ -283,7 +289,7 @@ export function CompanyMandatarioForm({
           validTo,
           signatureVaultId,
         }),
-        signatureVaultId: isHub ? undefined : conBaul ? signatureVaultId : null,
+        signatureVaultId: !conSelectorBaul ? undefined : conBaul ? signatureVaultId : null,
         // Sin lista (Admin de Compañía sin red) no se envía nada: aplica solo a su compañía.
         officeCompanies:
           fuenteAsociadas && !sinRed
@@ -533,13 +539,13 @@ export function CompanyMandatarioForm({
                 />
               )}
 
-              {signatureMethod === "baul" && isHub && (
+              {signatureMethod === "baul" && !conSelectorBaul && (
                 <p className="text-xs leading-tight opacity-70" data-testid="mandatario-hub-firma-nota">
                   Se usa la firma que la persona tenga vigente en el baúl de la empresa.
                 </p>
               )}
 
-              {signatureMethod === "baul" && !isHub && (
+              {signatureMethod === "baul" && conSelectorBaul && (
                 <div>
                   <label htmlFor="lr-sig-vault" className="mb-1.5 block text-xs font-semibold">
                     Firma del baúl
@@ -547,6 +553,7 @@ export function CompanyMandatarioForm({
                   <SignatureVaultSelector
                     tenantId={tenantId ?? ""}
                     networkHeadId={networkHeadId}
+                    transitOfficeId={baulDelOt ? organismoDelHub : undefined}
                     documentType={documentType}
                     documentNumber={documentNumber}
                     value={signatureVaultId}
