@@ -15,6 +15,13 @@ describe("comparendosNav", () => {
     expect(keys).toEqual(expect.arrayContaining(["ocr", "dashboard", "productividad"]));
   });
 
+  it("OCR exige el permiso de ver paquetes y el prompt es solo del SuperAdmin", () => {
+    const nav = comparendosNav({ ...SIN_CAPACIDADES, ocr: true });
+    expect(nav.items.find((i) => i.key === "ocr")).toMatchObject({ href: "/ocr", permission: "comparendos.ocr.ver" });
+    const prompt = nav.items.find((i) => i.key === "flit")?.children?.find((c) => c.key === "adm-ocr");
+    expect(prompt).toMatchObject({ href: "/admin/ocr/prompts", superAdminOnly: true });
+  });
+
   it("los envíos masivos de DP dependen de la capacidad y del permiso", () => {
     expect(comparendosNav(SIN_CAPACIDADES).items.map((i) => i.key)).not.toContain("dp-lotes");
     const lotes = comparendosNav({ ...SIN_CAPACIDADES, derechosPeticion: true }).items.find((i) => i.key === "dp-lotes");

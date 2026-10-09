@@ -101,7 +101,7 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
         { key: "adm-municipios", label: "Fuentes municipales", href: "/admin/municipios", section: "administracion", icon: ClipboardList, superAdminOnly: true },
         { key: "adm-alertas", label: "Alertas de integración", href: "/admin/alertas", section: "administracion", icon: Bell, superAdminOnly: true },
         { key: "adm-scheduler", label: "Horario de avisos", href: "/admin/scheduler", section: "administracion", icon: Timer, superAdminOnly: true },
-        { key: "adm-ocr", label: "Prompt OCR", href: "/admin/ocr", section: "administracion", icon: Receipt, superAdminOnly: true },
+        { key: "adm-ocr", label: "Prompt OCR", href: "/admin/ocr/prompts", section: "administracion", icon: Receipt, superAdminOnly: true },
         { key: "adm-calendario", label: "Calendario", href: "/admin/calendario", section: "administracion", icon: CalendarDays, superAdminOnly: true },
       ],
     },
