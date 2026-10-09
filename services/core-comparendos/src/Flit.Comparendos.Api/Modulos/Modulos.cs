@@ -7,6 +7,7 @@ public static class Modulos
     {
         ArgumentNullException.ThrowIfNull(configuration);
         services.AddScoped<Comun.Auditoria>();
+        services.AddScoped<Catalogos.MapeadorOt>();
         return services;
     }
 
@@ -15,6 +16,7 @@ public static class Modulos
         var api = app.MapGroup(prefijo);
         api.MapGet("/sesion", Sesion.Obtener).RequireAuthorization(Plataforma.AutorizacionExtensions.PoliticaUsuario);
         Monitoreo.MonitoreoEndpoints.Map(api);
+        Catalogos.CatalogosEndpoints.Map(api);
         return app;
     }
 }

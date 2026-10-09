@@ -47,3 +47,13 @@ public sealed class NumeroComparendoTests
     public void Normalizar_conserva_prefijo_y_quita_separadores(string texto, string? esperado) =>
         NumeroComparendo.Normalizar(texto).Should().Be(esperado);
 }
+
+public sealed class TextoNormalizadoTests
+{
+    [Theory]
+    [InlineData("Secretaría  Distrital de Movilidad de Bogotá ", "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA")]
+    [InlineData("F. DPTAL TTO VICHADA/PUERTO CARREÑO", "F. DPTAL TTO VICHADA/PUERTO CARRENO")]
+    [InlineData(null, "")]
+    public void De_quita_tildes_y_espacios(string? texto, string esperado) =>
+        Flit.Comparendos.Domain.Textos.TextoNormalizado.De(texto).Should().Be(esperado);
+}
