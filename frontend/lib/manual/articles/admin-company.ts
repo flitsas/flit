@@ -154,7 +154,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         title: "3. Convenio con el organismo",
         paragraphs: [
           "Cuando existe un convenio comercial registrado entre tu compañía y el organismo, el contrato de mandato no lleva recuadro de firma del mandatario: firma solo el mandante. Los datos del mandatario siguen en el cuerpo del contrato.",
-          "Sin convenio, el recuadro del mandatario lleva su firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad, con el sello «Validación de identidad» y su certificado, igual que el mandante. Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Sin convenio, el recuadro del mandatario lleva su firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
         ],
       },
     ],
