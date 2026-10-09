@@ -3,6 +3,7 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Identity;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
@@ -52,7 +53,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
     /// <summary>Identidad de un mandatario: su estado (ADR-0050), certificado y hasta cuándo vale.</summary>
     private sealed record IdentidadResuelta(
-        string Status, string? Certificado, DateTimeOffset? ValidUntil, string? RubricaPath = null)
+        string Status, string? Certificado, DateTimeOffset? ValidUntil, string? RubricaPath = null,
+        ProcedureInstanceBiometricValidation? Validacion = null)
     {
         public bool Vigente => Status == IdentityVigenciaEstados.AprobadaVigente;
     }
@@ -183,7 +185,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     firma?.Valida ?? true, firma?.Motivo,
                     s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId),
                     VaultTenantIds: tenantsVinculados.GetValueOrDefault(s.Id),
-                    RubricaIdentidadPath: vigentes.GetValueOrDefault(s.Id)?.RubricaPath);
+                    RubricaIdentidadPath: vigentes.GetValueOrDefault(s.Id)?.RubricaPath,
+                    SelloIdentidad: SelloDe(vigentes.GetValueOrDefault(s.Id), s.ValidityKind, s.ValidTo));
             }),
         ];
     }
@@ -248,8 +251,18 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             // HU #13180b — el default del OT no está vinculado a la compañía del trámite: su baúl vive en sus propias compañías.
             VaultTenantIds: (await LoadLinkedTenantsAsync([signer.Id], cancellationToken).ConfigureAwait(false))
                 .GetValueOrDefault(signer.Id),
-            RubricaIdentidadPath: vigente?.RubricaPath);
+            RubricaIdentidadPath: vigente?.RubricaPath,
+            SelloIdentidad: SelloDe(vigente, signer.ValidityKind, signer.ValidTo));
     }
+
+    /// <summary>
+    /// Sello del mandatario con la leyenda de las partes. «Vence» es el fin de su vigencia por rango; con vigencia
+    /// fija no aparece (su validación no vence a los 30 días, HU #13130b).
+    /// </summary>
+    private static string? SelloDe(IdentidadResuelta? vigente, string? validityKind, DateOnly? validTo) =>
+        vigente?.Validacion is { } v
+            ? IdentidadSelloText.BuildMandatario(v, validityKind == MandateValidityKinds.Range ? validTo : null)
+            : null;
 
     /// <summary>
     /// HU #13180b — tenants de las compañías con vínculo ACTIVO de cada mandatario (en cualquier organismo): ahí
@@ -343,7 +356,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         foreach (var (signerId, result) in resueltos)
         {
             map[signerId] = new IdentidadResuelta(
-                result.Status, result.CertificateHash, result.ValidUntil, result.SignatureImagePath);
+                result.Status, result.CertificateHash, result.ValidUntil, result.SignatureImagePath, result.Validacion);
         }
 
         return map;

@@ -73,7 +73,12 @@ public sealed record MandateSignerCandidate(
     /// Ruta del PNG de la rúbrica de su validación de identidad PROPIA aprobada (Kyverum). El mandato la estampa
     /// cuando no firma con el baúl, igual que la del mandante. Nula sin validación aprobada o sin rúbrica.
     /// </summary>
-    string? RubricaIdentidadPath = null)
+    string? RubricaIdentidadPath = null,
+    /// <summary>
+    /// Sello de su validación propia con la misma leyenda que el de las partes (documento, UUID, firma y aprobación).
+    /// Nulo sin validación aprobada: el mandato cae al sello corto.
+    /// </summary>
+    string? SelloIdentidad = null)
 {
     /// <summary>
     /// Tenants donde buscar su firma del baúl, en orden: primero el de la compañía del trámite (comportamiento

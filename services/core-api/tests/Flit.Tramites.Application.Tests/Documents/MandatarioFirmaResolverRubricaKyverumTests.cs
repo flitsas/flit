@@ -50,6 +50,20 @@ public sealed class MandatarioFirmaResolverRubricaKyverumTests
     }
 
     [Fact]
+    public async Task ConSelloCompleto_UsaLaMismaLeyendaQueLasPartes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string sello = "Validación biométrica CC 1020304050\nUUID u-1\nFirma hash-abc\nAprob 2026/10/08";
+
+        var resultado = await MandatarioFirmaResolver.ResolveAsync(
+            NullSignatureVaultPolicy.Instance, StorageCon(RubricaPath, Rubrica), TenantId,
+            Candidato() with { SelloIdentidad = sello }, cancellationToken: ct);
+
+        resultado.Sello.Should().Be(sello);
+        resultado.FirmaIdentidad.Should().Equal(Rubrica);
+    }
+
+    [Fact]
     public async Task SinRutaDeRubrica_QuedaSoloElSello()
     {
         var ct = TestContext.Current.CancellationToken;

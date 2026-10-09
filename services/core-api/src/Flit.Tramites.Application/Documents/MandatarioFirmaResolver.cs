@@ -106,7 +106,11 @@ public static class MandatarioFirmaResolver
             : signer.CertificadoIdentidad.Trim();
         var rubrica = await LeerRubricaAsync(storage, signer.RubricaIdentidadPath, onVaultError, cancellationToken)
             .ConfigureAwait(false);
-        return new Resultado(null, $"Validación de identidad\nFirma {certificado}", null, FirmaIdentidad: rubrica);
+        // Misma leyenda que el sello de las partes cuando se conoce la validación; si no, el sello corto de siempre.
+        var sello = string.IsNullOrWhiteSpace(signer.SelloIdentidad)
+            ? $"Validación de identidad\nFirma {certificado}"
+            : signer.SelloIdentidad;
+        return new Resultado(null, sello, null, FirmaIdentidad: rubrica);
     }
 
     /// <summary>
