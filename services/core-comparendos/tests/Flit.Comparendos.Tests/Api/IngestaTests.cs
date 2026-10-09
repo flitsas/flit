@@ -29,7 +29,7 @@ public sealed class FuenteDePrueba : IFuenteComparendos
     }
 }
 
-public sealed class ApiConFuente : ApiDePrueba
+public class ApiConFuente : ApiDePrueba
 {
     public FuenteDePrueba Fuente { get; } = new();
 

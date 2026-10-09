@@ -34,6 +34,15 @@ public static class Modulos
         services.AddScoped<Trabajos.IEjecutorTrabajo, Contraventor.ReintentoContraventor>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
+        // OCR (HUs #13469–#13471): Anthropic si hay llave; si no, el modo simulado (local, DEV sin llave).
+        services.AddScoped<Ocr.ServicioOcr>();
+        services.AddSingleton<Ocr.ProcesadorOcr>();
+        services.Configure<Ocr.OpcionesAnthropic>(configuration.GetSection(Ocr.OpcionesAnthropic.Seccion));
+        if (configuration[$"{Ocr.OpcionesAnthropic.Seccion}:ApiKey"] is { Length: > 0 })
+            services.AddHttpClient<Ocr.IProveedorOcr, Ocr.ProveedorOcrAnthropic>(h => h.Timeout = TimeSpan.FromMinutes(3));
+        else
+            services.AddSingleton<Ocr.IProveedorOcr, Ocr.ProveedorOcrSimulado>();
+
         // Ingesta (HU #13460, #13461). Las fuentes reales se conectan al final (Feature #13464); mientras tanto, simulada.
         services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteSimulada>();
         services.AddScoped<Ingesta.Reconciliador>();
@@ -63,6 +72,7 @@ public static class Modulos
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
             services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
             services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
+            services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorOcr>());
         }
         return services;
     }
@@ -91,6 +101,8 @@ public static class Modulos
         DerechosPeticion.DpEndpoints.Map(api);
         DerechosPeticion.LotesDpEndpoints.Map(api);
         Pagos.PagosEndpoints.Map(api);
+        Ocr.OcrEndpoints.Map(api);
+        Ocr.PromptsOcrEndpoints.Map(api);
         return app;
     }
 }
