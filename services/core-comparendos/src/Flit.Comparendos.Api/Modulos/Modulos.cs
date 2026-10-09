@@ -109,6 +109,7 @@ public static class Modulos
         var api = app.MapGroup(prefijo);
         api.MapGet("/sesion", Sesion.Obtener).RequireAuthorization(Plataforma.AutorizacionExtensions.PoliticaUsuario);
         Comun.ArchivosEndpoints.Map(api);
+        Comun.AuditoriaEndpoints.Map(api);
         Monitoreo.MonitoreoEndpoints.Map(api);
         Catalogos.CatalogosEndpoints.Map(api);
         Ingesta.IngestaEndpoints.Map(api);
