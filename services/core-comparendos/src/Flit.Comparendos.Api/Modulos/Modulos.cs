@@ -34,6 +34,10 @@ public static class Modulos
         services.AddScoped<Trabajos.IEjecutorTrabajo, Contraventor.ReintentoContraventor>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
+        // Reportes (HU #13498).
+        services.AddScoped<Reportes.ServicioReportes>();
+        services.AddScoped<Trabajos.IEjecutorTrabajo, Reportes.ReportesAutomaticos>();
+
         // OCR (HUs #13469–#13471): Anthropic si hay llave; si no, el modo simulado (local, DEV sin llave).
         services.AddScoped<Ocr.ServicioOcr>();
         services.AddSingleton<Ocr.ProcesadorOcr>();
@@ -103,6 +107,7 @@ public static class Modulos
         Pagos.PagosEndpoints.Map(api);
         Ocr.OcrEndpoints.Map(api);
         Ocr.PromptsOcrEndpoints.Map(api);
+        Reportes.ReportesEndpoints.Map(api);
         return app;
     }
 }

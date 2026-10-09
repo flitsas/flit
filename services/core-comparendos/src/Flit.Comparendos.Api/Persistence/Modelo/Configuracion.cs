@@ -200,6 +200,9 @@ public sealed class AlertaConfiguracion : Auditada
     public int UmbralFallosCiclo { get; set; }
     public string PlantillaAsunto { get; set; } = "[GDC ALERTA] Fallo en migración {FUENTE} — {TIMESTAMP}";
     public string RemitenteNombre { get; set; } = "FLIT Comparendos";
+
+    /// <summary>Lista interna de FLIT que recibe en copia oculta los reportes automáticos (S-61).</summary>
+    public List<string> CorreosInternosReportes { get; set; } = [];
 }
 
 public sealed class AlertaDestinatario : Auditada

@@ -42,6 +42,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("alertas_habilitadas");
 
+                    b.PrimitiveCollection<List<string>>("CorreosInternosReportes")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("correos_internos_reportes");
+
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");

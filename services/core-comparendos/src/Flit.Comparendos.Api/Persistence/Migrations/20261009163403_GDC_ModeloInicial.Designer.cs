@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Comparendos.Api.Persistence.Migrations
 {
     [DbContext(typeof(ComparendosDb))]
-    [Migration("20261009153020_GDC_ModeloInicial")]
+    [Migration("20261009163403_GDC_ModeloInicial")]
     partial class GDC_ModeloInicial
     {
         /// <inheritdoc />
@@ -44,6 +44,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<bool>("AlertasHabilitadas")
                         .HasColumnType("boolean")
                         .HasColumnName("alertas_habilitadas");
+
+                    b.PrimitiveCollection<List<string>>("CorreosInternosReportes")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("correos_internos_reportes");
 
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")

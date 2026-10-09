@@ -17,7 +17,7 @@ namespace Flit.Comparendos.Api.Modulos.Ingesta;
 /// </summary>
 public static class AlertasYLogEndpoints
 {
-    public sealed record ConfigAlertas(bool AlertasHabilitadas, int UmbralFallosCiclo, string PlantillaAsunto, string RemitenteNombre);
+    public sealed record ConfigAlertas(bool AlertasHabilitadas, int UmbralFallosCiclo, string PlantillaAsunto, string RemitenteNombre, IReadOnlyList<string>? CorreosInternosReportes = null);
 
     public sealed record DestinatarioDto(Guid Id, string Correo, string Nombre, string TipoAlerta, bool Activo);
 
@@ -44,19 +44,24 @@ public static class AlertasYLogEndpoints
     private static async Task<IResult> ObtenerConfig(ComparendosDb db, CancellationToken ct)
     {
         var c = await db.AlertaConfiguraciones.AsNoTracking().FirstAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new ConfigAlertas(c.AlertasHabilitadas, c.UmbralFallosCiclo, c.PlantillaAsunto, c.RemitenteNombre));
+        return Results.Ok(new ConfigAlertas(c.AlertasHabilitadas, c.UmbralFallosCiclo, c.PlantillaAsunto, c.RemitenteNombre, c.CorreosInternosReportes));
     }
 
     private static async Task<IResult> GuardarConfig(ConfigAlertas pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, CancellationToken ct)
     {
         if (pedido.UmbralFallosCiclo < 0 || string.IsNullOrWhiteSpace(pedido.PlantillaAsunto) || pedido.PlantillaAsunto.Length > 200)
             throw new ReglaException("ALERTAS_INVALIDAS", "El umbral no puede ser negativo y el asunto es obligatorio (hasta 200 caracteres).");
+        var internos = pedido.CorreosInternosReportes?.Select(x => x.Trim().ToLowerInvariant()).Where(x => x.Length > 0).Distinct().ToList();
+        if (internos is not null && internos.Any(x => !System.Net.Mail.MailAddress.TryCreate(x, out _)))
+            throw new ReglaException("CORREO_INVALIDO", "Hay un correo inválido en la lista interna de reportes.");
         var c = await db.AlertaConfiguraciones.FirstAsync(ct).ConfigureAwait(false);
         var cambios = Auditoria.Diferencias(("alertas_habilitadas", c.AlertasHabilitadas, pedido.AlertasHabilitadas), ("umbral_fallos_ciclo", c.UmbralFallosCiclo, pedido.UmbralFallosCiclo),
-            ("plantilla_asunto", c.PlantillaAsunto, pedido.PlantillaAsunto.Trim()), ("remitente_nombre", c.RemitenteNombre, pedido.RemitenteNombre.Trim()));
+            ("plantilla_asunto", c.PlantillaAsunto, pedido.PlantillaAsunto.Trim()), ("remitente_nombre", c.RemitenteNombre, pedido.RemitenteNombre.Trim()),
+            ("correos_internos_reportes", string.Join(", ", c.CorreosInternosReportes), string.Join(", ", internos ?? c.CorreosInternosReportes)));
         if (cambios.Length > 0)
         {
             (c.AlertasHabilitadas, c.UmbralFallosCiclo, c.PlantillaAsunto, c.RemitenteNombre) = (pedido.AlertasHabilitadas, pedido.UmbralFallosCiclo, pedido.PlantillaAsunto.Trim(), pedido.RemitenteNombre.Trim());
+            c.CorreosInternosReportes = internos ?? c.CorreosInternosReportes;
             (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
             auditoria.Registrar(null, "alerta_configuracion", 1, "ACTUALIZAR", cambios);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);

@@ -25,6 +25,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     umbral_fallos_ciclo = table.Column<int>(type: "integer", nullable: false),
                     plantilla_asunto = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     remitente_nombre = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    correos_internos_reportes = table.Column<List<string>>(type: "text[]", nullable: false),
                     creado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     creado_por = table.Column<Guid>(type: "uuid", nullable: true),
                     actualizado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
