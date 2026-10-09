@@ -51,9 +51,19 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return readResponse<T>(response);
 }
 
+/** Resultado de una descarga: el archivo ya se entregó, o la API la aceptó para generarla en segundo plano (202). */
+export interface ResultadoDescarga {
+  aceptado: boolean;
+  mensaje?: string;
+}
+
 /** Descarga un archivo (Excel, PDF) de la API y lo entrega al navegador con el nombre que diga el servidor. */
-export async function apiDownload(path: string, fallbackName: string, query?: Query): Promise<void> {
+export async function apiDownload(path: string, fallbackName: string, query?: Query): Promise<ResultadoDescarga> {
   const response = await fetch(buildUrl(path, query));
+  if (response.status === 202) {
+    const data = (await safeJson(response)) as { mensaje?: string } | null;
+    return { aceptado: true, mensaje: data?.mensaje };
+  }
   if (!response.ok) await readResponse<never>(response);
   const blob = await response.blob();
   const disposition = response.headers.get("content-disposition") ?? "";
@@ -65,6 +75,7 @@ export async function apiDownload(path: string, fallbackName: string, query?: Qu
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+  return { aceptado: false };
 }
 
 async function readResponse<T>(response: Response): Promise<T> {
