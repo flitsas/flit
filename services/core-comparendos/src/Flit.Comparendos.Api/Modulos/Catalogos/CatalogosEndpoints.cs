@@ -3,6 +3,7 @@ using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Modelo;
 using Flit.Comparendos.Domain.Textos;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,6 +43,7 @@ public static class CatalogosEndpoints
         admin.MapPatch("/organismos/{id:guid}", CambiarOrganismo);
         admin.MapGet("/organismos/alias", ListarAlias);
         admin.MapPost("/organismos/alias", CrearAlias);
+        admin.MapGet("/organismos/sin-mapear", SinMapear);
         admin.MapDelete("/organismos/alias/{id:guid}", BorrarAlias);
         admin.MapGet("/municipios", ListarMunicipios);
         admin.MapPost("/municipios", CrearMunicipio);
@@ -117,7 +119,23 @@ public static class CatalogosEndpoints
         return Results.Ok(await q.OrderBy(a => a.Texto).ToListAsync(ct).ConfigureAwait(false));
     }
 
-    private static async Task<IResult> CrearAlias(NuevoAlias pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, CancellationToken ct)
+    /// <summary>§7.21: textos de secretaría que llegaron sin organismo, con cuántos comparendos activos afectan (para crear su alias).</summary>
+    private static async Task<IResult> SinMapear(ComparendosDb db, CancellationToken ct)
+    {
+        var crudos = await db.Comparendos.AsNoTracking().Where(c => c.OrganismoTransitoId == null && c.SecretariaTexto != null)
+            .GroupBy(c => c.SecretariaTexto!).Select(g => new { Texto = g.Key, Total = g.Count(), Activos = g.Count(c => c.Activo), Empresas = g.Select(c => c.TenantId).Distinct().Count() })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(crudos.GroupBy(x => TextoNormalizado.De(x.Texto)).Select(g => new
+        {
+            textoNormalizado = g.Key,
+            variantes = g.Select(x => x.Texto).OrderBy(x => x, StringComparer.Ordinal),
+            comparendos = g.Sum(x => x.Total),
+            activos = g.Sum(x => x.Activos),
+            empresas = g.Max(x => x.Empresas),
+        }).OrderByDescending(x => x.activos));
+    }
+
+    private static async Task<IResult> CrearAlias(NuevoAlias pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, Comparendos.Timeline timeline, CancellationToken ct)
     {
         var texto = TextoNormalizado.De(pedido.Texto);
         if (texto.Length is 0 or > 250)
@@ -131,10 +149,18 @@ public static class CatalogosEndpoints
         db.OrganismosTransitoAlias.Add(alias);
         auditoria.Registrar(null, "organismo_transito_alias", alias.Id, "CREAR", new CambioCampo("texto", null, texto));
 
-        // Los comparendos que llegaron con ese texto y sin OT quedan asociados ahora.
-        var huerfanos = await db.Comparendos.Where(c => c.OrganismoTransitoId == null && c.SecretariaTexto != null).ToListAsync(ct).ConfigureAwait(false);
-        foreach (var c in huerfanos.Where(c => TextoNormalizado.De(c.SecretariaTexto) == texto))
+        // Los comparendos que llegaron con ese texto y sin OT quedan asociados ahora, con su evento (RN-009). Primero los
+        // textos crudos distintos (pocos), luego solo los comparendos de esos textos.
+        var crudos = await db.Comparendos.Where(c => c.OrganismoTransitoId == null && c.SecretariaTexto != null).Select(c => c.SecretariaTexto!).Distinct()
+            .ToListAsync(ct).ConfigureAwait(false);
+        var coincidentes = crudos.Where(t => TextoNormalizado.De(t) == texto).ToList();
+        var nombre = await db.OrganismosTransito.Where(o => o.Id == pedido.OrganismoTransitoId).Select(o => o.Nombre).FirstAsync(ct).ConfigureAwait(false);
+        foreach (var c in await db.Comparendos.Where(c => c.OrganismoTransitoId == null && coincidentes.Contains(c.SecretariaTexto!)).ToListAsync(ct).ConfigureAwait(false))
+        {
             c.OrganismoTransitoId = pedido.OrganismoTransitoId;
+            timeline.Agregar(c, TipoEventoTimeline.DatosActualizados, $"Organismo de tránsito asignado: {nombre} (alias creado para «{c.SecretariaTexto}»).",
+                Comparendos.Actor.De(usuario), new { organismo = pedido.OrganismoTransitoId, alias = alias.Id });
+        }
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}/admin/organismos/alias/{alias.Id}", alias.Id);
     }
