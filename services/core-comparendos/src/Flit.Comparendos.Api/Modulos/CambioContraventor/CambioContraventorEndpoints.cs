@@ -2,6 +2,7 @@ using Flit.Comparendos.Api.Modulos.Comparendos;
 using Flit.Comparendos.Api.Modulos.Correo;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Comparendos.Api.Modulos.CambioContraventor;
@@ -39,15 +40,17 @@ public static class CambioContraventorEndpoints
         var solicitud = await servicio.SolicitarAsync(c, Comparendos.Actor.De(usuario), ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         var estado = await despachador.DespacharAsync(solicitud.ComunicacionId!.Value, ct).ConfigureAwait(false);
-        if (solicitud.Aviso4ComunicacionId is { } aviso4)
-            await despachador.DespacharAsync(aviso4, ct).ConfigureAwait(false);
+        // Si el OT recibió la solicitud, la reacción del despachador dejó el aviso 4 listo: se envía ya.
+        var aviso4 = await db.SolicitudesCambio.AsNoTracking().Where(s => s.Id == solicitud.Id).Select(s => s.Aviso4ComunicacionId).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (aviso4 is { } a4)
+            await despachador.DespacharAsync(a4, ct).ConfigureAwait(false);
         return Results.Ok(new { solicitud.Id, solicitud.NumeroIntento, correoOt = estado.ToString() });
     }
 
     private static async Task<IResult> ReenviarAviso4(Guid id, AccesoComparendo acceso, ServicioCambioContraventor servicio, UsuarioActual usuario, ComparendosDb db, DespachadorCorreos despachador, CancellationToken ct)
     {
         var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
-        var solicitud = await db.SolicitudesCambio.Where(s => s.ComparendoId == id).OrderByDescending(s => s.NumeroIntento).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+        var solicitud = await db.SolicitudesCambio.Where(s => s.ComparendoId == id && s.Estado != EstadoSolicitudCambio.EnvioFallido).OrderByDescending(s => s.NumeroIntento).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw new ReglaException("SIN_SOLICITUD", "El aviso 4 solo se envía cuando hay una solicitud de cambio de contraventor.");
         var comunicacion = await servicio.EnviarAviso4Async(c, solicitud, Comparendos.Actor.De(usuario), ct).ConfigureAwait(false)
             ?? throw new ReglaException("SIN_CORREO_CONDUCTOR", "El conductor no tiene correo.");

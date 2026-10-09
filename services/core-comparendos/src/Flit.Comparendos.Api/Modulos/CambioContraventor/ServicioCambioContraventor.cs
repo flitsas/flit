@@ -142,7 +142,7 @@ public sealed class ServicioCambioContraventor(
             $"Solicitud de cambio de contraventor (intento {intento}) enviada a {ot.Nombre} ({string.Join(", ", ot.CorreosRadicacion)}).", actor,
             new { intento, ot = ot.Nombre, anexos = anexos.Select(a => a.Nombre) }, "cambio_contraventor_solicitud", solicitud.Id);
 
-        solicitud.Aviso4ComunicacionId = await EnviarAviso4Async(c, solicitud, actor, ct).ConfigureAwait(false);
+        // §6.10 pasos 3-4: el aviso 4 al conductor sale solo cuando la plataforma acepta el correo al OT (ReaccionCambioContraventor).
         return solicitud;
     }
 
@@ -222,16 +222,28 @@ public sealed class ServicioCambioContraventor(
 }
 
 /// <summary>Si el correo de la solicitud al OT falla del todo, la solicitud queda «envío fallido» y el comparendo vuelve a su estado anterior.</summary>
-internal sealed class ReaccionCambioContraventor(ComparendosDb db, Timeline timeline) : IReaccionCorreo
+internal sealed class ReaccionCambioContraventor(ComparendosDb db, Timeline timeline, ServicioCambioContraventor servicio) : IReaccionCorreo
 {
     public async Task AlTerminarAsync(ComunicacionSaliente comunicacion, ResultadoEnvioCorreo resultado, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(comunicacion);
-        if (comunicacion.Tipo != TipoComunicacion.CambioContraventorOt || comunicacion.Estado is EstadoComunicacion.Enviado)
+        if (comunicacion.Tipo != TipoComunicacion.CambioContraventorOt || comunicacion.Estado is EstadoComunicacion.Pendiente)
             return;
         var s = await db.SolicitudesCambio.FirstOrDefaultAsync(x => x.ComunicacionId == comunicacion.Id && x.Estado == EstadoSolicitudCambio.Solicitado, ct).ConfigureAwait(false);
         if (s is null)
             return;
+        if (comunicacion.Estado is EstadoComunicacion.Enviado)
+        {
+            // La plataforma aceptó la solicitud al OT: ahora sí sale el aviso 4 al conductor (queda PENDIENTE para el despachador).
+            if (s.Aviso4ComunicacionId is null)
+            {
+                var comparendo = await db.Comparendos.Include(x => x.Contraventor).FirstAsync(x => x.Id == s.ComparendoId, ct).ConfigureAwait(false);
+                s.Aviso4ComunicacionId = await servicio.EnviarAviso4Async(comparendo, s, Actor.Sistema, ct).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
         var c = await db.Comparendos.FirstAsync(x => x.Id == s.ComparendoId, ct).ConfigureAwait(false);
         var anterior = await db.SolicitudesCambio.AnyAsync(x => x.ComparendoId == c.Id && x.Id != s.Id && x.Estado == EstadoSolicitudCambio.RechazadoOt, ct).ConfigureAwait(false);
         s.Estado = EstadoSolicitudCambio.EnvioFallido;
