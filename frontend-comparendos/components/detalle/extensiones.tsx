@@ -1,0 +1,31 @@
+import type { ReactNode } from "react";
+import type { SesionComparendos } from "@/lib/sesion";
+import type { DetalleComparendo } from "@/lib/tipos";
+
+/** Lo que recibe cada extensión del detalle: el comparendo cargado, cómo recargarlo y la sesión. */
+export interface ContextoDetalle {
+  detalle: DetalleComparendo;
+  recargar: () => void;
+  sesion: SesionComparendos | null;
+  /** El SuperAdmin solo lee: las extensiones de operación no deben mostrarse (Excel S2). */
+  soloLectura: boolean;
+}
+
+/**
+ * Puntos de extensión del detalle del comparendo. Cada Feature agrega aquí su parte sin tocar el modal:
+ * - `acciones`: botones del encabezado (asignar contraventor, enviar aviso, generar DP, registrar pago…).
+ * - `contraventor`: dentro del acordeón Contraventor (editar, consultar API, cargar documentos).
+ * - `cambioContraventor`: bloque de cambio de contraventor (solicitar, registrar rechazo o aceptación).
+ * - `dp`: acordeón Resolución OT / DP (tipologías procedentes, generar DP, registrar respuesta).
+ * - `pago`: bloque Pago (registrar pago).
+ */
+export interface ExtensionesDetalle {
+  acciones?: (ctx: ContextoDetalle) => ReactNode;
+  contraventor?: (ctx: ContextoDetalle) => ReactNode;
+  cambioContraventor?: (ctx: ContextoDetalle) => ReactNode;
+  dp?: (ctx: ContextoDetalle) => ReactNode;
+  pago?: (ctx: ContextoDetalle) => ReactNode;
+}
+
+/** Extensiones registradas por defecto. Vacío hasta que lleguen las Features de contraventor, avisos, DP y pagos. */
+export const EXTENSIONES_DETALLE: ExtensionesDetalle = {};

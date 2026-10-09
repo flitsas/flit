@@ -7,6 +7,7 @@ import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
 import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
 import { PanelFiltros } from "@/components/bandeja/PanelFiltros";
+import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -40,6 +41,7 @@ export default function Bandeja() {
   const [orden, setOrden] = useState("");
   const [descendente, setDescendente] = useState(false);
   const [exportando, setExportando] = useState(false);
+  const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const pg = usePaginacion(50);
   const { setPage } = pg;
 
@@ -153,6 +155,7 @@ export default function Bandeja() {
             columns={COLUMNAS_BANDEJA}
             rows={lista.datos?.items ?? []}
             getRowKey={(f) => f.id}
+            onRowClick={(f) => setSeleccionado(f.id)}
             status={lista.estado}
             errorMessage={lista.error ?? undefined}
             onRetry={lista.recargar}
@@ -168,6 +171,15 @@ export default function Bandeja() {
           />
         </>
       )}
+
+      <DetalleComparendo
+        id={seleccionado}
+        onCerrar={() => setSeleccionado(null)}
+        onCambio={() => {
+          lista.recargar();
+          contadores.recargar();
+        }}
+      />
     </section>
   );
 }
