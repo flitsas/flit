@@ -28,6 +28,8 @@ En local se usan los mismos puertos que en DEV (así un número sirve en los dos
 | Consultas (`core-consultas`) | `4026` · gRPC `8084` | 4026 | 5026 | 6026 | Proveedores externos (RUNT, Verifik, Kyverum, Fasecolda, RUES) |
 | Notificaciones (`core-notificaciones`) | `4027` · gRPC `8085` | 4027 | 5027 | 6027 | Correo (SMTP, API de Renting), webhooks salientes, mensajes muertos |
 | RabbitMQ | `5672` · consola `15672` | — | — | — | Bus de eventos y trabajos |
+| Comparendos (`frontend-comparendos`) | `4023` | 4023 | 5023 | 6023 | App web de Gestión de Comparendos |
+| API de Comparendos (`core-comparendos`) | `4028` · gRPC `8086` | 4028 | 5028 | 6028 | Ingesta, bandeja, DP, avisos, OCR, pagos, reportes |
 
 En los servidores los puertos los pone el CD (`.github/workflows/cd.yml`, paso `env`); en local, cada
 `launchSettings.json` y los comandos de abajo. Todo por `http://127.0.0.1:<puerto>`.
@@ -174,6 +176,32 @@ identidad con el gateway arriba prueba el respaldo: en unos 3 s todo sigue por `
 
 En el servidor esto no se arma a mano: es el servicio `core-identity` del compose (perfil `identity`, su propia imagen)
 y la bandera `FLIT_IDENTITY_CLUSTER_ENABLED` del gateway.
+
+## 6. Comparendos
+
+Necesita la API (tokens y migraciones de plataforma), el broker y el gateway (§5): la app llama `/api/v1/comparendos/*`
+por el gateway, que lo manda a core-comparendos.
+
+```bash
+cp services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.json.example \
+   services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.json   # y llena los CAMBIAR
+cd services/core-comparendos/src/Flit.Comparendos.Api && dotnet build && \
+ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Comparendos.Api.dll
+
+cp frontend-comparendos/.env.example frontend-comparendos/.env.local
+pnpm dev:comparendos        # http://127.0.0.1:4023
+```
+
+- Al arrancar migra su esquema `comparendos`, siembra calendario 2015–2040, organismos, tipologías, plantillas, prompt
+  OCR v1 y trabajos, y registra su manifiesto de permisos en la plataforma.
+- En `Development` todo lo externo se simula: SmartCloud y la fuente municipal (claves que terminan en `000` simulan
+  una caída), la API de contratos de Renting (placa par = conductor de prueba, impar = sin contrato, `0` = error) y el
+  OCR sin llave. Fuera de Dev nada se simula salvo `Comparendos:Simulacion:Habilitada=true`.
+- Para ver el producto en el hub, la empresa necesita Comparendos encendido (Compañías → Productos) y el usuario un rol
+  con permisos `comparendos.*` (`admin_comparendos`). Las capacidades (DP, OCR, reportes…) las enciende el SuperAdmin en
+  Comparendos → Parametrizador.
+- Pruebas: `cd services/core-comparendos && dotnet test` (Postgres local; crea y borra una base por clase) y
+  `pnpm test:comparendos`.
 
 ## Qué probar
 
