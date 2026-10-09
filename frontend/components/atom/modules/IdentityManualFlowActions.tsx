@@ -254,7 +254,7 @@ function ManualFlowConfirmDialog({
   const titulo = accion === 'activar' ? 'Activar flujo manual' : 'Regenerar enlace';
   const texto =
     accion === 'activar'
-      ? 'Se enviará al cliente un enlace de captura por correo (vale 24 horas).'
+      ? 'Se enviará al cliente un enlace de captura por correo. El enlace caduca en 24 horas.'
       : 'El enlace anterior dejará de funcionar y se enviará uno nuevo por correo.';
 
   return createPortal(
