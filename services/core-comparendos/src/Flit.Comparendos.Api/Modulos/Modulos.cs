@@ -15,6 +15,8 @@ public static class Modulos
         services.AddScoped<Comparendos.Timeline>();
         services.AddScoped<Comparendos.AccesoComparendo>();
         services.AddScoped<Bandeja.ConsultaBandeja>();
+        services.AddScoped<Configuracion.ResolutorRepresentante>();
+        services.AddScoped<Configuracion.PermisosOt>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
         // Ingesta (HU #13460, #13461). Las fuentes reales se conectan al final (Feature #13464); mientras tanto, simulada.
@@ -63,6 +65,7 @@ public static class Modulos
         Comparendos.DetalleEndpoints.Map(api);
         Configuracion.EmpresasEndpoints.Map(api);
         Configuracion.TipologiasEndpoints.Map(api);
+        Configuracion.RepresentantesEndpoints.Map(api);
         return app;
     }
 }
