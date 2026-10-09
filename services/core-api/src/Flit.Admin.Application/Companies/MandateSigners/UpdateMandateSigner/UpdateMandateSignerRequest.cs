@@ -26,4 +26,9 @@ public sealed record UpdateMandateSignerRequest(
     /// HU #13179 — compañías asociadas por organismo. Ausente ⇒ no se tocan; cada organismo presente
     /// reemplaza su conjunto (lista vacía las retira).
     /// </summary>
-    IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.MandateSignerOfficeCompanies>? OfficeCompanies = null);
+    IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>
+    /// Firma del baúl del propio OT elegida para un mandatario del organismo (sin compañías). Ausente ⇒ la firma
+    /// guardada no se toca.
+    /// </summary>
+    Guid? SignatureVaultId = null);

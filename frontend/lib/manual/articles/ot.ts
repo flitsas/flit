@@ -580,16 +580,16 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Solo el administrador del organismo (Admin OT) puede registrar mandatarios; el Operador OT no ve el botón.",
         ],
         bullets: [
-          "En la pestaña «Mandatarios», pulsa «Nuevo mandatario». El organismo queda fijo: es el tuyo. El Super Admin llega al mismo lugar desde Plataforma → Mandatos → Configuración por organismo → Acciones → «Mandatarios del organismo». También puedes registrar desde «Compañías» → Acciones → «Editar mandatario» → «Registrar mandatario», indicando la empresa si hay varias.",
+          "En la pestaña «Mandatarios», pulsa «Nuevo mandatario». El organismo queda fijo: es el tuyo. El Super Admin llega al mismo lugar desde Plataforma → Mandatos → Configuración por organismo → Acciones → «Mandatarios del organismo». También puedes registrarlo desde la tarjeta del mandatario general («Editar mandatario» → «Registrar mandatario»): queda registrado en tu organismo, sin pedirte una empresa, porque el mandatario general es del OT. Desde «Compañías» → Acciones → «Editar mandatario», el enlace «Registrar mandatario» de cada compañía lo registra para esa compañía.",
           "Elige el modelo: Persona natural (nombre completo, tipo y número de documento, correo opcional, forma de firma y vigencia), Persona jurídica (nombre y NIT de la entidad) o Formato en blanco (sin datos: el sistema solo entrega el PDF sin firma).",
-          "En Persona natural elige la forma de firma: Baúl de firmas (se usa la firma vigente que la persona tenga en el baúl de la empresa) o Validación de identidad. Luego la vigencia: Fija, o Rango de fechas con inicio y fin (el fin no puede ser anterior al inicio).",
+          "En Persona natural elige la forma de firma: Baúl de firmas o Validación de identidad. Con Baúl de firmas, el mandatario de tu organismo usa el baúl de firmas del propio OT: elige su firma vigente o, si no tiene, captúrala ahí mismo con «Capturar firma» (trazo, código hash y vigencia). El mandatario que registras para una compañía usa la firma vigente que la persona tenga en el baúl de esa compañía. Luego la vigencia: Fija, o Rango de fechas con inicio y fin (el fin no puede ser anterior al inicio).",
           "Compañías asociadas (opcional): ves la lista completa de compañías de FLIT, sin páginas; escribe parte del nombre o del NIT para filtrarla, marca las compañías a las que también aplica el mandatario (quedan como chips arriba, con contador y una «x» para quitarlas) y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Solo se muestran nombre y NIT. Si no marcas ninguna, el mandatario queda en el organismo y puedes asignarlo después. Si una compañía no se puede asociar (por ejemplo, está inactiva), el formulario te dice el motivo junto a ella y conservas lo escrito.",
           "El correo es obligatorio: ahí enviamos el enlace para que la persona valide su identidad (si eliges Validación de identidad, al guardar; el formulario lo avisa). Pulsa «Guardar». Verás el aviso «Mandatario registrado» y la persona queda lista para elegirla como general o como default de la empresa.",
         ],
         callouts: [
           {
             variant: "info",
-            text: "Desde el organismo no se ve el baúl de firmas de la empresa, por eso no hay selector de firma. Si eliges Baúl de firmas y la persona no tiene firma vigente allí, o si eliges Validación de identidad, el sistema te lo indica al guardar; el mensaje aparece junto al campo y conservas lo escrito.",
+            text: "Desde el organismo no se ve el baúl de firmas de una compañía: cuando registras el mandatario para una compañía no hay selector de firma, y si la persona no tiene firma vigente en ese baúl el sistema te lo indica al guardar. El mensaje aparece junto al campo y conservas lo escrito.",
           },
           {
             variant: "info",

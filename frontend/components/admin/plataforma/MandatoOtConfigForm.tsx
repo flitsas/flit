@@ -84,8 +84,11 @@ export interface MandatoOtConfigFormProps {
    * nunca le radicó): el panel la muestra sin mandatario definido en vez de quedar vacío.
    */
   lockedCompany?: { id: string; name: string; nit: string } | null;
-  /** Abre el alta de mandatario de esa empresa (hub OT). */
-  onRegisterSigner?: (companyTenantId: string) => void;
+  /**
+   * Abre el alta de mandatario (hub OT): con compañía, el mandatario de esa empresa; sin ella, el del propio
+   * organismo (el general), que el OT registra para sí.
+   */
+  onRegisterSigner?: (companyTenantId?: string) => void;
   /**
    * HU #13151 - permite al Super Admin editar el tipo de mandato de cada compania. Solo lo activa
    * Plataforma; el hub del OT no lo pasa.
@@ -149,7 +152,6 @@ export function MandatoOtConfigForm({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [otDefaultSignerId, setOtDefaultSignerId] = useState(office.defaultMandateSignerId ?? "");
-  const [hostCompanyId, setHostCompanyId] = useState("");
   // HU #13151 - edicion del tipo de mandato por compania.
   const [typeEditId, setTypeEditId] = useState<string | null>(null);
   const [resetRuleId, setResetRuleId] = useState<string | null>(null);
@@ -257,13 +259,6 @@ export function MandatoOtConfigForm({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
     void loadCompanyRules();
   }, [loadCompanyRules, signersRevision]);
-
-  useEffect(() => {
-    if (!hostCompanyId && companyRules[0]) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- preselección al cargar empresas
-      setHostCompanyId(companyRules[0].companyTenantId);
-    }
-  }, [companyRules, hostCompanyId]);
 
   useEffect(() => {
     if (lastCreatedSignerId) {
@@ -1051,41 +1046,13 @@ export function MandatoOtConfigForm({
                 </span>
                 {onRegisterSigner ? (
                   <div className="flex flex-col gap-1.5 pt-1">
-                    {companyRules.length > 1 ? (
-                      <label className="block space-y-1">
-                        <span className="text-[11px] font-semibold text-[#162244] dark:text-white">
-                          Empresa que registra a la persona
-                        </span>
-                        <select
-                          value={hostCompanyId}
-                          onChange={(e) => setHostCompanyId(e.target.value)}
-                          disabled={busy}
-                          data-testid="mandato-ot-register-host-company"
-                          className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
-                        >
-                          {companyRules.map((row) => (
-                            <option key={row.companyTenantId} value={row.companyTenantId}>
-                              {row.companyName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
+                    {/* El OT es dueño del mandatario general: se registra en el propio organismo, no en una compañía. */}
                     <button
                       type="button"
                       className="w-fit text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
                       disabled={busy}
                       data-testid="mandato-ot-register-signer"
-                      onClick={() => {
-                        const companyId = hostCompanyId || companyRules[0]?.companyTenantId;
-                        if (!companyId) {
-                          setError(
-                            "Para registrar el mandatario del OT hace falta al menos una empresa habilitada en este organismo.",
-                          );
-                          return;
-                        }
-                        onRegisterSigner(companyId);
-                      }}
+                      onClick={() => onRegisterSigner()}
                     >
                       Registrar mandatario
                     </button>

@@ -328,7 +328,8 @@ public sealed class AdminOtMandatesNetworkScopeTests
         db.MandateSignerCompanies.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSignerTransitOffices.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSigners.Where(m => signerIds.Contains(m.Id)).ExecuteDelete();
-        db.SignatureVault.Where(v => v.TenantId == _head || v.TenantId == _child).ExecuteDelete();
+        db.SignatureVault.Where(v => v.TenantId == _head || v.TenantId == _child || v.TenantId == _otTenantA)
+            .ExecuteDelete();
         db.TenantConfigAuditLogs.Where(l => l.ChangedBy == _otUserA).ExecuteDelete();
 
         db.CompanyOtMandateRules.RemoveRange(db.CompanyOtMandateRules.Where(r =>
@@ -688,5 +689,68 @@ public sealed class AdminOtMandatesNetworkScopeTests
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var contenido = await response.Content.ReadAsStringAsync(Ct);
         contenido.Should().Contain("companyTenantIds").And.NotContain("signatureVaultId");
+    }
+
+    // ── Baúl de firmas del propio OT: su mandatario (sin compañías) firma con el baúl del organismo ─────────────
+
+    [Fact]
+    public async Task BaulDelOt_ElAdminOt_ListaLasFirmasDelBaulDeSuOrganismo()
+    {
+        AuthenticateOtUser();
+        var firma = await SeedFirmaAsync(_otTenantA);
+
+        var response = await _client.GetAsync(
+            $"/api/v1/admin/transit-offices/{_officeA}/signature-vault?documentType=CC&documentNumber={Documento}&soloVigentes=true",
+            Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        var ids = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("data").EnumerateArray()
+            .Select(e => e.GetProperty("id").GetGuid());
+        ids.Should().ContainSingle().Which.Should().Be(firma);
+    }
+
+    [Fact]
+    public async Task BaulDelOt_OtroOrganismo_Es403()
+    {
+        AuthenticateOtUser();
+
+        var response = await _client.GetAsync($"/api/v1/admin/transit-offices/{_officeB}/signature-vault", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task BaulDelOt_ElOperadorOt_NoLoGestiona()
+    {
+        AuthenticateOtUser("ot_operator");
+
+        var response = await _client.GetAsync($"/api/v1/admin/transit-offices/{_officeA}/signature-vault", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task BaulDelOt_AltaDelMandatarioDelOtSinCompanias_ConFirmaDelBaulDelOt_Es201()
+    {
+        AuthenticateOtUser();
+        var firma = await SeedFirmaAsync(_otTenantA);
+
+        var response = await PostModeloAsync(_officeA, _otTenantA, new
+        {
+            fullName = "Ana Restrepo",
+            documentNumber = Documento,
+            documentType = "CC",
+            email = "ana@flit.test",
+            companyTenantIds = Array.Empty<Guid>(),
+            transitOfficeIds = new[] { _officeA },
+            signerModel = "natural",
+            signatureMethod = "baul",
+            signatureVaultId = firma,
+            validityKind = "fixed",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement
+            .GetProperty("signingMeans").GetString().Should().Be("baul");
     }
 }

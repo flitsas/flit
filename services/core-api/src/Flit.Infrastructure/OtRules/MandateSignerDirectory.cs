@@ -253,7 +253,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
     /// <summary>
     /// HU #13180b — tenants de las compañías con vínculo ACTIVO de cada mandatario (en cualquier organismo): ahí
-    /// puede vivir su firma del baúl.
+    /// puede vivir su firma del baúl. Al final va el tenant del ORGANISMO dueño del mandatario: el que el OT registra
+    /// para sí mismo (sin compañías) guarda su firma en el baúl del OT.
     /// </summary>
     private async Task<Dictionary<Guid, IReadOnlyList<Guid>>> LoadLinkedTenantsAsync(
         List<Guid> signerIds, CancellationToken cancellationToken)
@@ -265,13 +266,22 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         var links = await _context.MandateSignerCompanies.AsNoTracking()
             .Where(c => signerIds.Contains(c.MandateSignerId) && c.IsActive)
-            .Select(c => new { c.MandateSignerId, c.CompanyTenantId })
+            .Select(c => new { c.MandateSignerId, TenantId = c.CompanyTenantId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var organismos = await (
+            from s in _context.MandateSigners.AsNoTracking()
+            join p in _context.TransitOfficeProfiles.AsNoTracking() on s.TransitOfficeId equals p.TransitOfficeId
+            where signerIds.Contains(s.Id)
+            select new { MandateSignerId = s.Id, p.TenantId })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return links
+            .Concat(organismos)
             .GroupBy(l => l.MandateSignerId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(l => l.CompanyTenantId).Distinct()]);
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(l => l.TenantId).Distinct()]);
     }
 
     /// <summary>
