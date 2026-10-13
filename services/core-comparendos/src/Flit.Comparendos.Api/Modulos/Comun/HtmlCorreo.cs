@@ -6,17 +6,20 @@ namespace Flit.Comparendos.Api.Modulos.Comun;
 /// <summary>Marco HTML sencillo y compatible con clientes de correo para los avisos internos de FLIT (alertas, reportes).</summary>
 public static class HtmlCorreo
 {
-    public static string Envolver(string titulo, string cuerpoHtml, string? pie = null)
+    /// <param name="marcaFlit">false para las comunicaciones del conjunto Renting: ni el color ni el pie mencionan a FLIT
+    /// (D9, 2026-10-13: como en Trámites, la empresa le escribe a su gente sin rastro de FLIT).</param>
+    public static string Envolver(string titulo, string cuerpoHtml, string? pie = null, bool marcaFlit = true)
     {
+        var encabezado = marcaFlit ? "#162744" : "#3A4250";
         var sb = new StringBuilder();
         sb.Append("<!doctype html><html><body style=\"margin:0;padding:0;background:#F4F6FA;font-family:Arial,Helvetica,sans-serif;color:#162744\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:24px\">");
         sb.Append("<table role=\"presentation\" width=\"640\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#FFFFFF;border-radius:12px;border:1px solid #DFE5ED\">");
-        sb.Append("<tr><td style=\"background:#162744;color:#FFFFFF;padding:18px 24px;border-radius:12px 12px 0 0;font-size:18px;font-weight:bold\">")
+        sb.Append("<tr><td style=\"background:").Append(encabezado).Append(";color:#FFFFFF;padding:18px 24px;border-radius:12px 12px 0 0;font-size:18px;font-weight:bold\">")
             .Append(WebUtility.HtmlEncode(titulo)).Append("</td></tr>");
         sb.Append("<tr><td style=\"padding:24px;font-size:14px;line-height:1.5\">").Append(cuerpoHtml).Append("</td></tr>");
         sb.Append("<tr><td style=\"padding:16px 24px;font-size:12px;color:#5B6B82;border-top:1px solid #DFE5ED\">")
-            .Append(WebUtility.HtmlEncode(pie ?? "FLIT · Gestión de Comparendos. Correo automático, no lo respondas.")).Append("</td></tr>");
+            .Append(WebUtility.HtmlEncode(pie ?? (marcaFlit ? "FLIT · Gestión de Comparendos. Correo automático, no lo respondas." : "Correo automático, no lo respondas."))).Append("</td></tr>");
         sb.Append("</table></td></tr></table></body></html>");
         return sb.ToString();
     }

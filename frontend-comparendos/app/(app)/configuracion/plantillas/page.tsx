@@ -37,7 +37,7 @@ function Visor({ plantilla, onCerrar }: { plantilla: PlantillaResumen; onCerrar:
             </p>
           )}
         </aside>
-        <VistaPrevia contenido={version.datos ? { tipo: plantilla.tipo, asunto: version.datos.asunto, cuerpoHtml: version.datos.cuerpoHtml } : null} />
+        <VistaPrevia contenido={version.datos ? { tipo: plantilla.tipo, conjunto: plantilla.conjunto, asunto: version.datos.asunto, cuerpoHtml: version.datos.cuerpoHtml } : null} />
       </div>
     </Modal>
   );

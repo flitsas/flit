@@ -23,7 +23,7 @@ public static class PlantillasEndpoints
 
     public sealed record VersionDto(Guid Id, Guid PlantillaId, int NumeroVersion, string Estado, string? Asunto, string CuerpoHtml, IReadOnlyList<string> VariablesUsadas, string? NotaCambio, DateTimeOffset? PublicadaEn);
 
-    public sealed record VistaPrevia(string Tipo, string? Asunto, string CuerpoHtml, Guid? ComparendoId, string? Formato);
+    public sealed record VistaPrevia(string Tipo, string? Asunto, string CuerpoHtml, Guid? ComparendoId, string? Formato, string? Conjunto = null);
 
     public sealed record NuevaPlantilla(string Conjunto, string Tipo, Guid? TipologiaId);
 
@@ -110,7 +110,8 @@ public static class PlantillasEndpoints
         var valores = pedido.ComparendoId is { } id
             ? await contexto.DeAsync(await acceso.ParaLeerAsync(id, ct).ConfigureAwait(false), null, ct).ConfigureAwait(false)
             : ContextoPlantilla.Ejemplo();
-        var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores);
+        var conjunto = Enum.TryParse<ConjuntoPlantillas>(pedido.Conjunto, true, out var c) ? c : ConjuntoPlantillas.Flit;
+        var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores, conjunto);
         if (string.Equals(pedido.Formato, "pdf", StringComparison.OrdinalIgnoreCase) && !ServicioPlantillas.EsCorreo(tipo))
             return Results.File(ServicioPlantillas.Pdf(armado, "VISTA PREVIA"), "application/pdf");
         return Results.Ok(new { armado.Asunto, armado.Html, desconocidas = validacion.Desconocidas });

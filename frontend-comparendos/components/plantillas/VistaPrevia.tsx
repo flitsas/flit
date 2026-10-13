@@ -11,6 +11,8 @@ interface Contenido {
   asunto: string | null;
   cuerpoHtml: string;
   comparendoId?: string | null;
+  /** Renting arma los correos sin marca de FLIT (D9). */
+  conjunto?: string | null;
 }
 
 type Resultado = { correo: { asunto: string | null; html: string; desconocidas: string[] } } | { pdf: string };
@@ -23,7 +25,7 @@ export function VistaPrevia({ contenido, alto = 560 }: { contenido: Contenido | 
   const clave = contenido ? JSON.stringify(contenido) : null;
   const correo = contenido ? esPlantillaDeCorreo(contenido.tipo) : false;
   const vista = useCarga<Resultado>(clave, async (signal) => {
-    const body = { tipo: contenido!.tipo, asunto: contenido!.asunto, cuerpoHtml: contenido!.cuerpoHtml, comparendoId: contenido!.comparendoId ?? null, formato: correo ? "html" : "pdf" };
+    const body = { tipo: contenido!.tipo, asunto: contenido!.asunto, cuerpoHtml: contenido!.cuerpoHtml, comparendoId: contenido!.comparendoId ?? null, conjunto: contenido!.conjunto ?? null, formato: correo ? "html" : "pdf" };
     if (correo) return { correo: await apiFetch<{ asunto: string | null; html: string; desconocidas: string[] }>("/plantillas/vista-previa", { method: "POST", body, signal }) };
     return { pdf: URL.createObjectURL(await apiPostBlob("/plantillas/vista-previa", body, signal)) };
   });

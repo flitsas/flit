@@ -84,9 +84,21 @@ public sealed record ValidacionPlantilla(IReadOnlyList<string> Usadas, IReadOnly
 /// Plantillas con variables <c>{{grupo.nombre}}</c>: extracción, validación contra el catálogo y reemplazo. Los valores
 /// se escapan como HTML (salvo las variables marcadas como HTML, p. ej. la imagen de la firma); una variable sin valor
 /// queda vacía.
+/// <para>
+/// Bloques condicionales: <c>{{#si variable}}…{{#sino}}…{{/si}}</c> (con valor) y
+/// <c>{{#si variable == "texto"}}…{{/si}}</c> o <c>!=</c> (comparación exacta, sin distinguir mayúsculas). Se pueden
+/// anidar; <c>{{#sino}}</c> es opcional. Así un mismo texto cubre fotomulta o comparendo físico, con o sin conductor, etc.
+/// </para>
 /// </summary>
 public static partial class MotorPlantillas
 {
+    // Bloque más interno: su cuerpo no abre otro {{#si}}. Se reemplaza de adentro hacia afuera.
+    [GeneratedRegex(@"\{\{#si\s+([a-z_]+(?:\.[a-z_0-9]+)?)\s*(?:(==|!=)\s*""([^""]*)""\s*)?\}\}((?:(?!\{\{#si\s).)*?)\{\{/si\}\}", RegexOptions.CultureInvariant | RegexOptions.Singleline)]
+    private static partial Regex BloqueRegex();
+
+    [GeneratedRegex(@"\{\{\s*(#si\b[^}]*|#sino|/si)\s*\}\}", RegexOptions.CultureInvariant)]
+    private static partial Regex EtiquetaBloqueRegex();
+
     [GeneratedRegex(@"\{\{\s*([a-z_]+(?:\.[a-z_0-9]+)?)\s*\}\}", RegexOptions.CultureInvariant)]
     private static partial Regex VariableRegex();
 
@@ -97,21 +109,40 @@ public static partial class MotorPlantillas
     {
         var usadas = new List<string>();
         var desconocidas = new List<string>();
+        void Usar(string nombre)
+        {
+            if (VariablesPlantilla.Existe(nombre))
+            {
+                if (!usadas.Contains(nombre))
+                    usadas.Add(nombre);
+            }
+            else if (!desconocidas.Contains(nombre))
+            {
+                desconocidas.Add(nombre);
+            }
+        }
+
         foreach (var texto in textos.Where(t => !string.IsNullOrEmpty(t)))
         {
-            foreach (Match m in CualquierLlaveRegex().Matches(texto!))
+            // Los bloques bien formados se validan por su variable; lo que sobre ({{#si}} sin cerrar, {{/si}} suelto)
+            // queda como «desconocida» y la versión no se puede publicar.
+            var resto = texto!;
+            while (BloqueRegex().Match(resto) is { Success: true } b)
             {
-                var nombre = m.Groups[1].Value.Trim();
-                if (VariablesPlantilla.Existe(nombre))
-                {
-                    if (!usadas.Contains(nombre))
-                        usadas.Add(nombre);
-                }
-                else if (!desconocidas.Contains(nombre))
-                {
-                    desconocidas.Add(nombre);
-                }
+                Usar(b.Groups[1].Value);
+                resto = resto[..b.Index] + b.Groups[4].Value.Replace("{{#sino}}", string.Empty, StringComparison.Ordinal) + resto[(b.Index + b.Length)..];
             }
+
+            foreach (Match e in EtiquetaBloqueRegex().Matches(resto))
+            {
+                var etiqueta = e.Groups[1].Value.Trim() + " (bloque sin cerrar o mal formado)";
+                if (!desconocidas.Contains(etiqueta))
+                    desconocidas.Add(etiqueta);
+            }
+
+            resto = EtiquetaBloqueRegex().Replace(resto, string.Empty);
+            foreach (Match m in CualquierLlaveRegex().Matches(resto))
+                Usar(m.Groups[1].Value.Trim());
         }
 
         return new ValidacionPlantilla(usadas, desconocidas);
@@ -121,7 +152,22 @@ public static partial class MotorPlantillas
     {
         ArgumentNullException.ThrowIfNull(plantilla);
         ArgumentNullException.ThrowIfNull(valores);
-        return VariableRegex().Replace(plantilla, m =>
+        var texto = plantilla;
+        while (BloqueRegex().Match(texto) is { Success: true } b)
+        {
+            var valor = valores.TryGetValue(b.Groups[1].Value, out var v) ? v : null;
+            var cumple = b.Groups[2].Value switch
+            {
+                "==" => string.Equals(valor ?? string.Empty, b.Groups[3].Value, StringComparison.OrdinalIgnoreCase),
+                "!=" => !string.Equals(valor ?? string.Empty, b.Groups[3].Value, StringComparison.OrdinalIgnoreCase),
+                _ => !string.IsNullOrWhiteSpace(valor),
+            };
+            var partes = b.Groups[4].Value.Split("{{#sino}}", 2, StringSplitOptions.None);
+            var elegido = cumple ? partes[0] : partes.Length > 1 ? partes[1] : string.Empty;
+            texto = texto[..b.Index] + elegido + texto[(b.Index + b.Length)..];
+        }
+
+        return VariableRegex().Replace(texto, m =>
         {
             var nombre = m.Groups[1].Value;
             var valor = valores.TryGetValue(nombre, out var v) ? v ?? string.Empty : string.Empty;

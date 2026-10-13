@@ -47,6 +47,24 @@ public sealed class PlantillasTests(ApiDePrueba api) : IClassFixture<ApiDePrueba
     }
 
     [Fact]
+    public async Task D9_CorreoDeRenting_SinRastroDeFlit()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var cliente = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [Permisos.PlantillasVer]));
+        async Task<string> Html(string conjunto)
+        {
+            var r = await cliente.PostAsJsonAsync("/api/v1/comparendos/plantillas/vista-previa",
+                new { tipo = "CorreoAviso1", asunto = "Aviso {{comparendo.numero}}", cuerpoHtml = "<p>Hola {{conductor.nombres}}</p>", formato = "html", conjunto }, ct);
+            r.EnsureSuccessStatusCode();
+            return (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("html").GetString()!;
+        }
+
+        (await Html("Flit")).Should().Contain("FLIT");
+        (await Html("Renting")).Should().NotContainEquivalentOf("flit", "D9: las comunicaciones de Renting no llevan nada de FLIT");
+    }
+
+    [Fact]
     public async Task VistaPrevia_DelDpEnPdf()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

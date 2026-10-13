@@ -14,7 +14,8 @@ public sealed record Armado(Guid VersionId, string? Asunto, string Html);
 
 /// <summary>
 /// Elige la versión publicada de una plantilla para el conjunto de la empresa (si Renting no tiene la suya, la de FLIT,
-/// S-23) y la arma con los valores del comparendo. Los correos van dentro del marco HTML de FLIT.
+/// S-23) y la arma con los valores del comparendo. Los correos van dentro del marco HTML: el de FLIT, o uno neutro sin
+/// rastro de FLIT para el conjunto Renting (D9), aunque el texto venga de la plantilla de FLIT por respaldo.
 /// </summary>
 public sealed class ServicioPlantillas(ComparendosDb db)
 {
@@ -37,15 +38,20 @@ public sealed class ServicioPlantillas(ComparendosDb db)
     {
         var version = await PublicadaAsync(conjunto, tipo, tipologiaId, ct).ConfigureAwait(false)
             ?? throw new ReglaException("SIN_PLANTILLA", $"No hay una plantilla publicada de «{tipo}» para el conjunto de la empresa.");
-        return Armar(version, tipo, valores);
+        return Armar(version, tipo, valores, conjunto);
     }
 
-    public static Armado Armar(PlantillaVersion version, TipoPlantilla tipo, IReadOnlyDictionary<string, string?> valores)
+    public static Armado Armar(PlantillaVersion version, TipoPlantilla tipo, IReadOnlyDictionary<string, string?> valores, ConjuntoPlantillas conjunto = ConjuntoPlantillas.Flit)
     {
         ArgumentNullException.ThrowIfNull(version);
         var cuerpo = MotorPlantillas.Renderizar(version.CuerpoHtml, valores);
         var asunto = version.Asunto is null ? null : MotorPlantillas.Renderizar(version.Asunto, valores, html: false);
-        return new Armado(version.Id, asunto, EsCorreo(tipo) ? HtmlCorreo.Envolver(asunto ?? "Comparendos", cuerpo, valores.GetValueOrDefault("empresa.razon_social") is { Length: > 0 } e ? $"{e} · Comunicación enviada con FLIT." : null) : cuerpo);
+        if (!EsCorreo(tipo))
+            return new Armado(version.Id, asunto, cuerpo);
+        var empresa = valores.GetValueOrDefault("empresa.razon_social") is { Length: > 0 } e ? e : null;
+        var flit = conjunto == ConjuntoPlantillas.Flit;
+        var pie = empresa is null ? null : flit ? $"{empresa} · Comunicación enviada con FLIT." : $"{empresa} · Correo automático, no lo respondas.";
+        return new Armado(version.Id, asunto, HtmlCorreo.Envolver(asunto ?? (flit ? "Comparendos" : empresa ?? "Comparendos"), cuerpo, pie, flit));
     }
 
     public static bool EsCorreo(TipoPlantilla tipo) => tipo.ToString().StartsWith("Correo", StringComparison.Ordinal);

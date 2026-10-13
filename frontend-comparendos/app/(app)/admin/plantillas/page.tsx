@@ -169,7 +169,7 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
         </div>
 
         <VistaPrevia
-          contenido={actual ? { tipo: plantilla.tipo, asunto: correo ? (vista?.asunto ?? actual.asunto) || null : null, cuerpoHtml: vista?.cuerpoHtml ?? actual.cuerpoHtml } : null}
+          contenido={actual ? { tipo: plantilla.tipo, conjunto: plantilla.conjunto, asunto: correo ? (vista?.asunto ?? actual.asunto) || null : null, cuerpoHtml: vista?.cuerpoHtml ?? actual.cuerpoHtml } : null}
         />
       </div>
     </Modal>
