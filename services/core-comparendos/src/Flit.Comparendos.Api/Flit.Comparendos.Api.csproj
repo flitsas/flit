@@ -27,6 +27,7 @@
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="System.IO.Packaging" />
     <PackageReference Include="QuestPDF" />
+    <PackageReference Include="BitMiracle.LibTiff.NET" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

@@ -302,6 +302,9 @@ public sealed class DocumentoOcr
     public Guid TenantId { get; set; }
     public Guid PaqueteId { get; set; }
     public Guid ArchivoId { get; set; }
+
+    /// <summary>El TIFF que se subió, cuando <see cref="ArchivoId"/> es su conversión a PNG o PDF.</summary>
+    public Guid? ArchivoOriginalId { get; set; }
     public string NombreArchivo { get; set; } = string.Empty;
     public string TipoArchivo { get; set; } = "IMAGE";
     public EstadoDocumentoOcr Estado { get; set; } = EstadoDocumentoOcr.Pendiente;

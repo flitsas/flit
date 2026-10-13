@@ -24,9 +24,12 @@ public sealed class OcrDePrueba : IProveedorOcr
 
     public int Llamadas => _llamadas;
 
+    public ConcurrentBag<(string ContentType, byte[] Contenido)> Recibidos { get; } = [];
+
     public Task<ResultadoOcr> ExtraerAsync(byte[] contenido, string contentType, string prompt, string modelo, CancellationToken ct)
     {
         Interlocked.Increment(ref _llamadas);
+        Recibidos.Add((contentType, contenido));
         var clave = Encoding.UTF8.GetString(contenido);
         if (!Guion.TryGetValue(clave, out var cola) || cola.Count == 0)
             return Task.FromResult(ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "sin guion"));
@@ -292,5 +295,61 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
 
         // Se devuelve la v1 publicada para no afectar a las demás pruebas de la clase.
         (await super.PostAsync($"/api/v1/comparendos/admin/ocr/prompts/{v1.GetProperty("id").GetGuid()}/publicar", null, ct)).EnsureSuccessStatusCode();
+    }
+
+    /// <summary>TIFF de prueba en memoria (RGB, una franja por fila).</summary>
+    private static byte[] Tiff(int paginas)
+    {
+        var ms = new MemoryStream();
+        using (var t = BitMiracle.LibTiff.Classic.Tiff.ClientOpen("x.tif", "w", ms, new BitMiracle.LibTiff.Classic.TiffStream()))
+        {
+            for (var p = 0; p < paginas; p++)
+            {
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.IMAGEWIDTH, 4);
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.IMAGELENGTH, 3);
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.SAMPLESPERPIXEL, 3);
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.BITSPERSAMPLE, 8);
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.PHOTOMETRIC, BitMiracle.LibTiff.Classic.Photometric.RGB);
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.PLANARCONFIG, BitMiracle.LibTiff.Classic.PlanarConfig.CONTIG);
+                t.SetField(BitMiracle.LibTiff.Classic.TiffTag.ROWSPERSTRIP, 3);
+                if (paginas > 1)
+                    t.SetField(BitMiracle.LibTiff.Classic.TiffTag.SUBFILETYPE, BitMiracle.LibTiff.Classic.FileType.PAGE);
+                for (var y = 0; y < 3; y++)
+                    t.WriteScanline(Enumerable.Repeat((byte)(60 * (y + p)), 12).ToArray(), y);
+                t.WriteDirectory();
+            }
+        }
+
+        return ms.ToArray();
+    }
+
+    [Fact]
+    public async Task Tiff_SeConvierte_YElOriginalQuedaComoEvidencia()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await EmpresaOcrAsync();
+        var form = new MultipartFormDataContent { { new StringContent("TIFF"), "nombre" }, { new StringContent("true"), "iniciar" } };
+        form.Add(new ByteArrayContent(Tiff(1)), "archivos", "una.tif");
+        form.Add(new ByteArrayContent(Tiff(2)), "archivos", "dos.tiff");
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", form, ct), ct)).GetProperty("id").GetGuid();
+        api.Ocr.Recibidos.Clear();
+        await api.ProcesarAsync();
+
+        var docs = await DocumentosAsync(paquete);
+        (docs["una.tif"].TipoArchivo, docs["dos.tiff"].TipoArchivo).Should().Be(("IMAGE", "PDF"));
+        docs.Values.Should().OnlyContain(d => d.ArchivoOriginalId != null && d.ArchivoOriginalId != d.ArchivoId);
+        var tipos = await api.EnDbAsync(db => db.Archivos.Where(a => docs.Values.Select(d => d.ArchivoId).Contains(a.Id)).Select(a => a.ContentType).ToListAsync(ct));
+        tipos.Should().BeEquivalentTo("image/png", "application/pdf");
+        var originales = await api.EnDbAsync(db => db.Archivos.Where(a => docs.Values.Select(d => d.ArchivoOriginalId).Contains(a.Id)).Select(a => a.ContentType).ToListAsync(ct));
+        originales.Should().OnlyContain(t => t == "image/tiff");
+        api.Ocr.Recibidos.Select(r => r.ContentType).Should().BeEquivalentTo("image/png", "application/pdf");
+        api.Ocr.Recibidos.Single(r => r.ContentType == "image/png").Contenido.Take(4).Should().Equal(0x89, 0x50, 0x4E, 0x47);
+
+        var malo = new MultipartFormDataContent { { new StringContent("Roto"), "nombre" } };
+        malo.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("no es un tiff")), "archivos", "roto.tif");
+        var r = await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", malo, ct);
+        r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await r.Content.ReadAsStringAsync(ct)).Should().Contain("roto.tif");
     }
 }

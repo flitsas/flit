@@ -1,4 +1,8 @@
 <Project>
   <!-- Epic #13316 — versiones de paquetes centralizadas: las mismas que core-api, como en core-identity. -->
   <Import Project="..\core-api\Directory.Packages.props" />
+  <ItemGroup>
+    <!-- OCR: los TIFF se convierten a PNG/PDF antes de mandarlos al LLM (Anthropic no admite TIFF). LibTiff.Net es BSD. -->
+    <PackageVersion Include="BitMiracle.LibTiff.NET" Version="2.4.649" />
+  </ItemGroup>
 </Project>

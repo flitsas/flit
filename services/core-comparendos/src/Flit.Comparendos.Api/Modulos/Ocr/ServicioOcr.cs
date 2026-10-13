@@ -56,6 +56,21 @@ public sealed class ServicioOcr(
             throw new ReglaException("ARCHIVOS_INVALIDOS", $"Solo se aceptan JPG, PNG, TIFF o PDF de hasta 20 MB. Revisa: {string.Join(", ", invalidos.Take(10))}{(invalidos.Count > 10 ? "…" : string.Empty)}.");
         var prompt = await PromptPublicadoAsync(ct).ConfigureAwait(false);
 
+        // Los TIFF se convierten antes de nada (el LLM y el navegador no los leen); uno ilegible rechaza el paquete.
+        var tiffs = new Dictionary<IFormFile, Infraestructura.Imagenes.TiffConvertido>();
+        foreach (var f in lista.Where(f => RegistroArchivos.TipoDe(f) == "image/tiff"))
+        {
+            await using var s = f.OpenReadStream();
+            using var m = new MemoryStream();
+            await s.CopyToAsync(m, ct).ConfigureAwait(false);
+            if (Infraestructura.Imagenes.ConversorTiff.Convertir(m.ToArray()) is { } convertido)
+                tiffs[f] = convertido;
+        }
+
+        var ilegibles = lista.Where(f => RegistroArchivos.TipoDe(f) == "image/tiff" && !tiffs.ContainsKey(f)).Select(f => f.FileName).ToList();
+        if (ilegibles.Count > 0)
+            throw new ReglaException("ARCHIVOS_INVALIDOS", $"No se pudieron leer estos TIFF: {string.Join(", ", ilegibles.Take(10))}.");
+
         var paquete = new PaqueteOcr
         {
             Id = Guid.CreateVersion7(), TenantId = tenant, Nombre = nombre.Trim(), CantidadDocumentos = lista.Count, CantidadPendientes = lista.Count,
@@ -65,10 +80,19 @@ public sealed class ServicioOcr(
         foreach (var f in lista)
         {
             var tipo = RegistroArchivos.TipoDe(f);
-            var archivo = await archivos.SubirAsync(tenant, "ocr", f, Formatos, ct, usuario, MaximoBytes).ConfigureAwait(false);
+            var original = await archivos.SubirAsync(tenant, "ocr", f, Formatos, ct, usuario, MaximoBytes).ConfigureAwait(false);
+            var archivo = original;
+            Guid? archivoOriginal = null;
+            if (tiffs.TryGetValue(f, out var convertido))
+            {
+                archivo = await archivos.GuardarAsync(tenant, "ocr", Path.ChangeExtension(Path.GetFileName(f.FileName), convertido.Extension), convertido.ContentType,
+                    convertido.Contenido, ct, usuario).ConfigureAwait(false);
+                (archivoOriginal, tipo) = (original, convertido.ContentType);
+            }
+
             db.DocumentosOcr.Add(new DocumentoOcr
             {
-                Id = Guid.CreateVersion7(), TenantId = tenant, PaqueteId = paquete.Id, ArchivoId = archivo,
+                Id = Guid.CreateVersion7(), TenantId = tenant, PaqueteId = paquete.Id, ArchivoId = archivo, ArchivoOriginalId = archivoOriginal,
                 NombreArchivo = Path.GetFileName(f.FileName) is { Length: > 255 } largo ? largo[^255..] : Path.GetFileName(f.FileName),
                 TipoArchivo = tipo == "application/pdf" ? "PDF" : "IMAGE",
             });

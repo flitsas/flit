@@ -1288,6 +1288,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
                     paquete_id = table.Column<Guid>(type: "uuid", nullable: false),
                     archivo_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    archivo_original_id = table.Column<Guid>(type: "uuid", nullable: true),
                     nombre_archivo = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     tipo_archivo = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
                     estado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),

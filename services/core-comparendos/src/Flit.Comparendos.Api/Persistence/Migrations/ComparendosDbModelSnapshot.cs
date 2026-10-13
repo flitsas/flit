@@ -2000,6 +2000,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("archivo_id");
 
+                    b.Property<Guid?>("ArchivoOriginalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("archivo_original_id");
+
                     b.PrimitiveCollection<List<string>>("CamposFaltantes")
                         .IsRequired()
                         .HasColumnType("text[]")
