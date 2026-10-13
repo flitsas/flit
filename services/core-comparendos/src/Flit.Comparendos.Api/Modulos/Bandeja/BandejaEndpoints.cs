@@ -78,9 +78,18 @@ public static class BandejaEndpoints
     private static async Task<IResult> MisExportaciones(UsuarioActual usuario, ComparendosDb db, Reloj reloj, CancellationToken ct)
     {
         var lista = await db.Exportaciones.AsNoTracking().Where(e => e.SolicitadaPor == usuario.Id).OrderByDescending(e => e.CreadoEn).Take(50).ToListAsync(ct).ConfigureAwait(false);
+        // Los filtros con que se pidió cada una (§7.26), con el nombre de los NIT y organismos para mostrarlos.
+        var filtros = lista.ToDictionary(e => e.Id, e => ExportacionBandeja.Deserializar(e.Filtros).Filtros);
+        var nits = filtros.Values.SelectMany(f => f.Nits ?? []).Distinct().ToList();
+        var ots = filtros.Values.SelectMany(f => f.Organismos ?? []).Distinct().ToList();
+        var nombres = (await db.IdentificacionesMonitoreadas.AsNoTracking().Where(i => nits.Contains(i.Id)).Select(i => new { i.Id, Texto = i.NumeroBase }).ToListAsync(ct).ConfigureAwait(false))
+            .Concat(await db.OrganismosTransito.AsNoTracking().Where(o => ots.Contains(o.Id)).Select(o => new { o.Id, Texto = o.Nombre }).ToListAsync(ct).ConfigureAwait(false))
+            .ToDictionary(x => x.Id, x => x.Texto);
         return Results.Ok(lista.Select(e => new
         {
             e.Id,
+            filtros = filtros[e.Id],
+            nombres = (filtros[e.Id].Nits ?? []).Concat(filtros[e.Id].Organismos ?? []).Where(nombres.ContainsKey).ToDictionary(id => id, id => nombres[id]),
             e.TotalFilas,
             estado = (e.Estado == EstadoExportacion.Lista && e.ExpiraEn < reloj.Ahora ? EstadoExportacion.Expirada : e.Estado).ToString(),
             e.CreadoEn,

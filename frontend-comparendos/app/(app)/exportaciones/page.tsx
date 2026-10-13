@@ -4,6 +4,8 @@ import { DataTable, StatusBadge, usePaginacion, type StatusTone } from "@flit/ui
 import { Encabezado } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { CAMBIO_CONTRAVENTOR, ESTADO_LEGAL, ESTADO_PROCESO, FUENTE, ULTIMO_AVISO } from "@/lib/etiquetas";
+import { describirFiltros } from "@/lib/filtros";
 import { formatoFechaHora } from "@/lib/format/date";
 import type { Exportacion } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -44,6 +46,21 @@ export default function MisExportaciones() {
         emptyMessage="Todavía no tienes exportaciones."
         columns={[
           { key: "creada", header: "Pedida", render: (e) => formatoFechaHora(e.creadoEn) },
+          {
+            key: "filtros",
+            header: "Filtros",
+            render: (e) => (
+              <span className="text-xs">
+                {describirFiltros(e.filtros, e.nombres, {
+                  estadoLegal: ESTADO_LEGAL,
+                  estadoProceso: ESTADO_PROCESO,
+                  ultimoAviso: ULTIMO_AVISO,
+                  cambioContraventor: CAMBIO_CONTRAVENTOR,
+                  fuente: FUENTE,
+                })}
+              </span>
+            ),
+          },
           { key: "filas", header: "Filas", align: "right", render: (e) => e.totalFilas?.toLocaleString("es-CO") ?? "—" },
           { key: "estado", header: "Estado", render: (e) => <StatusBadge label={ESTADOS[e.estado]?.texto ?? e.estado} tone={ESTADOS[e.estado]?.tono ?? "neutral"} /> },
           { key: "vence", header: "Disponible hasta", render: (e) => formatoFechaHora(e.expiraEn) },

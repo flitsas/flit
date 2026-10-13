@@ -112,3 +112,85 @@ export function resumenPagina(pagina: number, tamano: number, mostradas: number,
   const desde = (pagina - 1) * tamano + 1;
   return `Mostrando ${desde}–${desde + mostradas - 1} de ${total}`;
 }
+
+/** Los filtros tal como se guardan con una exportación (FiltrosBandeja del backend, en camelCase). */
+export interface FiltrosGuardados {
+  nits?: string[] | null;
+  placa?: string | null;
+  numero?: string | null;
+  organismos?: string[] | null;
+  imposicionDesde?: string | null;
+  imposicionHasta?: string | null;
+  notificacionDesde?: string | null;
+  notificacionHasta?: string | null;
+  registroDesde?: string | null;
+  registroHasta?: string | null;
+  estadoLegal?: string[] | null;
+  estadoProceso?: string[] | null;
+  ultimoAviso?: string[] | null;
+  cambioContraventor?: string[] | null;
+  fuente?: string[] | null;
+  conContraventor?: boolean | null;
+  pagado?: boolean | null;
+  conDp?: boolean | null;
+  resultadoDp?: string | null;
+  activos?: string | null;
+  cobroCoactivo?: boolean | null;
+  sinGestion?: boolean | null;
+  rapido?: string | null;
+  juridico?: string | null;
+}
+
+const RAPIDO_TEXTO: Record<string, string> = {
+  ProximosAVencer: "Próximos a vencer",
+  SinContraventor: "Sin contraventor",
+  RechazadosOt: "Rechazados por OT",
+  Radar: "Radar de vencimientos",
+};
+const JURIDICO_TEXTO: Record<string, string> = { CaducidadInmediata: "Caducidad inmediata", NoImpugnables: "No impugnables", C038: "C-038" };
+const RESULTADO_DP_TEXTO: Record<string, string> = { Favorable: "Favorable", Desfavorable: "Desfavorable", SinRespuesta: "Enviado, sin respuesta" };
+
+/**
+ * «Mis exportaciones» (§7.26): los filtros con que se pidió una exportación, en texto. `etiquetas` traduce los valores de
+ * cada lista (estado legal, proceso…) y `nombres` los ids de NIT y organismo. Sin filtros: «Sin filtros».
+ */
+export function describirFiltros(
+  f: FiltrosGuardados,
+  nombres: Record<string, string>,
+  etiquetas: Partial<Record<"estadoLegal" | "estadoProceso" | "ultimoAviso" | "cambioContraventor" | "fuente", Record<string, { texto: string }>>>,
+): string {
+  const partes: string[] = [];
+  const lista = (titulo: string, v: string[] | null | undefined, mapa?: Record<string, { texto: string }>) => {
+    if (v?.length) partes.push(`${titulo}: ${v.map((x) => mapa?.[x]?.texto ?? nombres[x] ?? x).join(", ")}`);
+  };
+  const rango = (titulo: string, desde?: string | null, hasta?: string | null) => {
+    if (desde || hasta) partes.push(`${titulo}: ${desde ?? "…"} a ${hasta ?? "…"}`);
+  };
+  const si = (v: boolean | null | undefined, verdadero: string, falso: string) => {
+    if (v === true) partes.push(verdadero);
+    else if (v === false) partes.push(falso);
+  };
+  if (f.rapido) partes.push(RAPIDO_TEXTO[f.rapido] ?? f.rapido);
+  if (f.juridico) partes.push(JURIDICO_TEXTO[f.juridico] ?? f.juridico);
+  lista("NIT", f.nits);
+  if (f.placa?.trim()) partes.push(`Placa: ${f.placa.trim().toUpperCase()}`);
+  if (f.numero?.trim()) partes.push(`Número: ${f.numero.trim()}`);
+  lista("Organismo", f.organismos);
+  rango("Imposición", f.imposicionDesde, f.imposicionHasta);
+  rango("Notificación", f.notificacionDesde, f.notificacionHasta);
+  rango("Registro", f.registroDesde, f.registroHasta);
+  lista("Estado legal", f.estadoLegal, etiquetas.estadoLegal);
+  lista("Estado del proceso", f.estadoProceso, etiquetas.estadoProceso);
+  lista("Último aviso", f.ultimoAviso, etiquetas.ultimoAviso);
+  lista("Cambio de contraventor", f.cambioContraventor, etiquetas.cambioContraventor);
+  lista("Fuente", f.fuente, etiquetas.fuente);
+  si(f.conContraventor, "Con contraventor", "Sin contraventor");
+  si(f.pagado, "Pagados", "Sin pagar");
+  si(f.conDp, "Con DP", "Sin DP");
+  if (f.resultadoDp) partes.push(`Resultado del DP: ${RESULTADO_DP_TEXTO[f.resultadoDp] ?? f.resultadoDp}`);
+  si(f.cobroCoactivo, "En cobro coactivo", "Sin cobro coactivo");
+  if (f.sinGestion) partes.push("Sin gestión");
+  if (f.activos === "inactivos") partes.push("Solo inactivos");
+  else if (f.activos === "todos") partes.push("Activos e inactivos");
+  return partes.length ? partes.join(" · ") : "Sin filtros";
+}

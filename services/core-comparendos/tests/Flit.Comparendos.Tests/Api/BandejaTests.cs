@@ -133,4 +133,29 @@ public sealed class BandejaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         var inactivo = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}", ct);
         inactivo.GetProperty("estadoProceso").GetString().Should().Be("Inactivado");
     }
+
+    [Fact]
+    public async Task E4_MisExportaciones_MuestranLosFiltrosConQueSePidieron()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid();
+        var usuario = new UsuarioDePrueba(empresa, Lectura);
+        var bogota = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
+        var filtros = new Flit.Comparendos.Api.Modulos.Bandeja.FiltrosBandeja { Placa = "ABC123", Organismos = [bogota], Rapido = "Radar" };
+        await api.EnDbAsync(async db =>
+        {
+            db.Exportaciones.Add(new Flit.Comparendos.Api.Persistence.Modelo.Exportacion
+            {
+                Id = Guid.NewGuid(), TenantId = empresa, SolicitadaPor = usuario.Id, CreadoEn = DateTimeOffset.UtcNow,
+                Filtros = Flit.Comparendos.Api.Modulos.Bandeja.ExportacionBandeja.Serializar(empresa, filtros, usuario.Email),
+            });
+            await db.SaveChangesAsync(ct);
+        });
+
+        var e = (await api.Cliente(usuario).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/exportaciones", ct)).EnumerateArray().Single();
+        e.GetProperty("filtros").GetProperty("placa").GetString().Should().Be("ABC123");
+        e.GetProperty("filtros").GetProperty("rapido").GetString().Should().Be("Radar");
+        e.GetProperty("nombres").GetProperty(bogota.ToString()).GetString().Should().NotBeNullOrWhiteSpace("el organismo se muestra con su nombre");
+    }
 }

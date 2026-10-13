@@ -335,6 +335,8 @@ export interface AliasOt {
 
 export interface Exportacion {
   id: string;
+  filtros: import("@/lib/filtros").FiltrosGuardados;
+  nombres: Record<string, string>;
   totalFilas: number | null;
   estado: string;
   creadoEn: string;
