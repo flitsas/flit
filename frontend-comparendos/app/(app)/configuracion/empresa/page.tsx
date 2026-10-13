@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { InlineAlert, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { ConsultasEmpresa } from "@/components/consultas/ConsultasAdmin";
+import { TipologiasEmpresa } from "@/components/consultas/TipologiasEmpresa";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
@@ -205,6 +206,7 @@ export default function EmpresaYCorreo() {
         {sesion?.usuario.esSuperAdmin && <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />}
         <Configuracion key={empresa ?? "propia"} empresa={empresa} />
         {(!sesion?.usuario.esSuperAdmin || empresa) && <ConsultasEmpresa key={`consultas:${empresa ?? "propia"}`} empresa={empresa} />}
+        {(!sesion?.usuario.esSuperAdmin || empresa) && <TipologiasEmpresa key={`tipologias:${empresa ?? "propia"}`} empresa={empresa} />}
       </section>
     </Requiere>
   );
