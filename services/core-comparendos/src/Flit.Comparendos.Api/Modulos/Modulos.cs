@@ -39,6 +39,10 @@ public static class Modulos
         services.AddScoped<Contraventor.ServicioContraventor>();
         services.AddScoped<Portal.ServicioPortal>();
         services.AddScoped<Avisos.ServicioAvisos>();
+        services.AddScoped<Avisos.FotoFotomulta>();
+        services.AddSingleton<Avisos.IDescargaFoto, Avisos.DescargaFotoHttp>();
+        services.AddHttpClient(Avisos.DescargaFotoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(Avisos.DescargaFotoHttp.Manejador);
         services.AddScoped<CambioContraventor.ServicioCambioContraventor>();
         services.AddScoped<DerechosPeticion.ServicioDp>();
         services.AddScoped<Correo.IReaccionCorreo, DerechosPeticion.ReaccionDp>();

@@ -28,6 +28,7 @@ public sealed class ServicioAvisos(
     CalendarioService calendario,
     Capacidades capacidades,
     Timeline timeline,
+    FotoFotomulta foto,
     Reloj reloj)
 {
     /// <summary>Elegibilidad común E(c) (§6.6) con el motivo cuando no aplica.</summary>
@@ -88,6 +89,7 @@ public sealed class ServicioAvisos(
         var plantilla = tipo switch { TipoAviso.Aviso1 => TipoPlantilla.CorreoAviso1, TipoAviso.Aviso2 => TipoPlantilla.CorreoAviso2, _ => TipoPlantilla.CorreoAviso3 };
         var comunicacion = tipo switch { TipoAviso.Aviso1 => TipoComunicacion.Aviso1, TipoAviso.Aviso2 => TipoComunicacion.Aviso2, _ => TipoComunicacion.Aviso3 };
         var armado = await plantillas.ArmarAsync(config.ConjuntoPlantillas, plantilla, null, valores, ct).ConfigureAwait(false);
+        var adjunto = await foto.ParaAvisoAsync(c, ct).ConfigureAwait(false);
         var enviados = await correo.RegistrarAsync(new CorreoNuevo
         {
             TenantId = c.TenantId,
@@ -100,6 +102,7 @@ public sealed class ServicioAvisos(
             Bcc = EmpresasEndpoints.CopiasPara(config.Bcc, comunicacion),
             Asunto = armado.Asunto ?? "Comparendo",
             Html = armado.Html,
+            Adjuntos = adjunto is null ? [] : [adjunto],
             Canal = config.CanalCorreo,
             RemitenteNombre = config.RemitenteNombre ?? config.EmpresaNombre,
             CreadoPor = actor.UsuarioId,
@@ -130,8 +133,8 @@ public sealed class ServicioAvisos(
             c.EstadoNotificacionConductor = nuevo;
         c.Gestionado = true;
         timeline.Agregar(c, TipoEventoTimeline.AvisoEnviado,
-            $"{Nombre(tipo)} {(disparo == Disparo.Manual ? "enviado a mano" : "enviado por el scheduler")} a {c.Contraventor.Correo} ({(porcentaje > 0 ? $"descuento del {porcentaje}%" : "sin descuento")}).",
-            actor, new { tipo = tipo.ToString(), ventana = ventana.ToString(), destinatario = c.Contraventor.Correo }, "comunicacion_saliente", enviados[0].Id);
+            $"{Nombre(tipo)} {(disparo == Disparo.Manual ? "enviado a mano" : "enviado por el scheduler")} a {c.Contraventor.Correo} ({(porcentaje > 0 ? $"descuento del {porcentaje}%" : "sin descuento")}){(adjunto is null ? string.Empty : ", con la foto de la fotomulta")}.",
+            actor, new { tipo = tipo.ToString(), ventana = ventana.ToString(), destinatario = c.Contraventor.Correo, foto = adjunto is not null }, "comunicacion_saliente", enviados[0].Id);
         return aviso;
     }
 

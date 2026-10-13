@@ -125,4 +125,46 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         var destinos = await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id && a.TipoAviso == TipoAviso.Aviso1).Select(a => a.CorreoDestino).ToListAsync(ct));
         destinos.Should().BeEquivalentTo("juan@ejemplo.com", "ana@ejemplo.com");
     }
+
+    [Fact]
+    public async Task D7_LaFotoDeLaFotomulta_VaAdjunta_YSiNoSePuedeTraer_ElAvisoSaleIgual()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api);
+        api.Fotos.PorUrl["https://simit.test/foto/AV-F1.jpg"] = [0xFF, 0xD8, 0xFF, 0xE0];
+        var ids = await IngresarAsync(api, empresa,
+            Item("AV-F1") with { FotoEvidenciaUrl = "https://simit.test/foto/AV-F1.jpg" },
+            Item("AV-F2") with { FotoEvidenciaUrl = "https://simit.test/foto/no-existe.jpg" });
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        foreach (var id in ids.Values)
+        {
+            (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
+            {
+                tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@ejemplo.com", declaracionTratamientoDatos = true,
+            }, ct)).EnsureSuccessStatusCode();
+        }
+
+        await SchedulerAsync(empresa);
+
+        async Task<List<string>> Adjuntos(Guid id) => await api.EnDbAsync(db =>
+            (from c in db.Comunicaciones where c.ComparendoId == id join a in db.ComunicacionAdjuntos on c.Id equals a.ComunicacionId select a.Nombre).ToListAsync(ct));
+        (await Adjuntos(ids["AVF1"])).Should().Equal("fotomulta-AV-F1.jpg");
+        (await AvisosAsync(ids["AVF2"])).Should().ContainSingle("sin la foto el aviso sale igual");
+        (await Adjuntos(ids["AVF2"])).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1", false)]
+    [InlineData("10.1.2.3", false)]
+    [InlineData("172.20.0.5", false)]
+    [InlineData("192.168.1.10", false)]
+    [InlineData("169.254.169.254", false)]
+    [InlineData("::1", false)]
+    [InlineData("fd00::1", false)]
+    [InlineData("::ffff:10.0.0.1", false)]
+    [InlineData("200.21.70.10", true)]
+    public void D7_SoloSeDescargaDeDireccionesPublicas(string ip, bool publica) =>
+        DescargaFotoHttp.EsPublica(System.Net.IPAddress.Parse(ip)).Should().Be(publica);
 }

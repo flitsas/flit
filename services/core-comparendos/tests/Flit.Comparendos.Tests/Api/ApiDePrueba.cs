@@ -50,6 +50,9 @@ public class ApiDePrueba : IAsyncLifetime
     public WebApplication App { get; private set; } = null!;
     public RelojDePrueba Reloj { get; } = new();
 
+    /// <summary>Fotos de fotomulta por URL; una URL que no esté aquí falla (el aviso sale sin foto).</summary>
+    public FotosDePrueba Fotos { get; } = new();
+
     /// <summary>Reemplazos de servicios que agregan las clases derivadas (fuentes simuladas, correo, etc.).</summary>
     protected virtual void Reemplazar(IServiceCollection services)
     {
@@ -98,6 +101,7 @@ public class ApiDePrueba : IAsyncLifetime
         }, s =>
         {
             s.AddSingleton<TimeProvider>(Reloj);
+            s.AddSingleton<Flit.Comparendos.Api.Modulos.Avisos.IDescargaFoto>(Fotos);
             Reemplazar(s);
         });
         await Program.MigrateAsync(App);
@@ -175,4 +179,12 @@ public class ApiDePrueba : IAsyncLifetime
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { keys = new[] { jwk } })) });
         }
     }
+}
+
+public sealed class FotosDePrueba : Flit.Comparendos.Api.Modulos.Avisos.IDescargaFoto
+{
+    public System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> PorUrl { get; } = new(StringComparer.Ordinal);
+
+    public Task<Flit.Comparendos.Api.Modulos.Correo.AdjuntoCorreo?> DescargarAsync(string url, CancellationToken ct) =>
+        Task.FromResult(PorUrl.TryGetValue(url, out var b) ? new Flit.Comparendos.Api.Modulos.Correo.AdjuntoCorreo("foto.jpg", "image/jpeg", b) : null);
 }
