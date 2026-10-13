@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AccionesAviso } from "@/components/detalle/AccionesAviso";
 import { AccionesCambio } from "@/components/detalle/AccionesCambio";
 import { AccionesConductor } from "@/components/detalle/AccionesConductor";
 import { AccionesDp } from "@/components/detalle/AccionesDp";
@@ -36,6 +37,7 @@ export interface ExtensionesDetalle {
  * pago (HU #13494).
  */
 export const EXTENSIONES_DETALLE: ExtensionesDetalle = {
+  acciones: (ctx) => <AccionesAviso ctx={ctx} />,
   contraventor: (ctx) => <AccionesConductor ctx={ctx} />,
   cambioContraventor: (ctx) => <AccionesCambio ctx={ctx} />,
   dp: (ctx) => <AccionesDp ctx={ctx} />,

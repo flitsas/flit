@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Download, Send, SlidersHorizontal } from "lucide-react";
+import { Download, Mail, Send, SlidersHorizontal } from "lucide-react";
 import { DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
+import { EnvioMasivoAviso } from "@/components/bandeja/EnvioMasivoAviso";
 import { EnvioMasivoDp } from "@/components/bandeja/EnvioMasivoDp";
 import { PanelFiltros } from "@/components/bandeja/PanelFiltros";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -51,6 +52,9 @@ export default function Bandeja() {
   const pg = usePaginacion(50);
   const { setPage } = pg;
   const puedeLote = !esSuperAdmin && tienePermiso(sesion, P.dpEnviarMasivo) && capacidades(sesion).derechosPeticion;
+  const puedeAvisos = !esSuperAdmin && tienePermiso(sesion, P.avisosEnviar);
+  const seleccionable = puedeLote || puedeAvisos;
+  const [envioAviso, setEnvioAviso] = useState(false);
 
   const setFiltros = (f: FiltrosBandeja) => {
     setFiltrosEstado(f);
@@ -182,16 +186,24 @@ export default function Bandeja() {
             )}
           </div>
 
-          {puedeLote && marcados.size > 0 && (
+          {seleccionable && marcados.size > 0 && (
             <div className="flex flex-wrap items-center gap-3 text-xs">
               <span className="font-semibold">
                 {marcados.size} seleccionado{marcados.size === 1 ? "" : "s"}
                 {marcados.size > MAXIMO_LOTE && ` (máximo ${MAXIMO_LOTE} por envío)`}
               </span>
-              <button type="button" className={controlCls(true)} onClick={() => setEnvioMasivo(true)}>
-                <Send className="h-3.5 w-3.5" aria-hidden />
-                Enviar derecho de petición
-              </button>
+              {puedeLote && (
+                <button type="button" className={controlCls(true)} onClick={() => setEnvioMasivo(true)}>
+                  <Send className="h-3.5 w-3.5" aria-hidden />
+                  Enviar derecho de petición
+                </button>
+              )}
+              {puedeAvisos && (
+                <button type="button" className={controlCls(true)} onClick={() => setEnvioAviso(true)}>
+                  <Mail className="h-3.5 w-3.5" aria-hidden />
+                  Enviar aviso
+                </button>
+              )}
               <button type="button" className="font-semibold text-[#3B4FD6] hover:underline" onClick={() => setMarcados(new Map())}>
                 Quitar selección
               </button>
@@ -202,7 +214,7 @@ export default function Bandeja() {
 
           <DataTable
             ariaLabel="Comparendos"
-            columns={puedeLote ? [columnaSeleccion, ...COLUMNAS_BANDEJA] : COLUMNAS_BANDEJA}
+            columns={seleccionable ? [columnaSeleccion, ...COLUMNAS_BANDEJA] : COLUMNAS_BANDEJA}
             rows={pagina}
             getRowKey={(f) => f.id}
             onRowClick={(f) => setSeleccionado(f.id)}
@@ -231,6 +243,16 @@ export default function Bandeja() {
         }}
       />
       {envioMasivo && <EnvioMasivoDp filas={[...marcados.values()]} onCerrar={() => setEnvioMasivo(false)} />}
+      {envioAviso && (
+        <EnvioMasivoAviso
+          filas={[...marcados.values()]}
+          onCerrar={() => setEnvioAviso(false)}
+          onHecho={() => {
+            lista.recargar();
+            contadores.recargar();
+          }}
+        />
+      )}
     </section>
   );
 }
