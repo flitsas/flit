@@ -38,6 +38,17 @@ export const ULTIMO_AVISO: Record<string, Etiqueta> = {
   Aviso3: { texto: "Aviso 3", tono: "warning" },
 };
 
+// «Último hito de notificación» (§4.9): reemplaza al estado acumulativo de la Epic. Mismo texto que el Excel
+// (ConsultaBandeja.TextoHito).
+export const ULTIMO_HITO: Record<string, Etiqueta> = {
+  SinProcesar: { texto: "Sin procesar", tono: "neutral" },
+  DpEnviado: { texto: "Notificado a secretaría — derecho de petición", tono: "info" },
+  Aviso1: { texto: "Notificación al conductor 1 — aviso inicial", tono: "info" },
+  Aviso2: { texto: "Notificación al conductor 2 — descuento 25%", tono: "info" },
+  Aviso3: { texto: "Notificación al conductor 3 — sin descuento", tono: "warning" },
+  Aviso4: { texto: "Notificación 4 — solicitud de cambio de contraventor", tono: "info" },
+};
+
 export const CAMBIO_CONTRAVENTOR: Record<string, Etiqueta> = {
   NoAplica: { texto: "No aplica", tono: "neutral" },
   SinSolicitar: { texto: "Sin solicitar", tono: "neutral" },
@@ -197,6 +208,7 @@ export const estadoComunicacion = (v: string | null | undefined) => de(ESTADO_CO
 
 export const estadoLegal = (v: string | null | undefined) => de(ESTADO_LEGAL, v);
 export const estadoProceso = (v: string | null | undefined) => de(ESTADO_PROCESO, v);
+export const ultimoHito = (v: string | null | undefined) => de(ULTIMO_HITO, v);
 export const ultimoAviso = (v: string | null | undefined) => de(ULTIMO_AVISO, v);
 export const cambioContraventor = (v: string | null | undefined) => de(CAMBIO_CONTRAVENTOR, v);
 export const ventanaDescuento = (v: string | null | undefined) => de(VENTANA_DESCUENTO, v);

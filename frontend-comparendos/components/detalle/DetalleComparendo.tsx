@@ -16,6 +16,7 @@ import {
   cambioContraventor,
   estadoDp,
   estadoProceso,
+  ultimoHito,
   estadoSolicitud,
   fuente,
   resultadoDp,
@@ -397,6 +398,7 @@ export function DetalleComparendo({
           <div className="flex flex-col gap-3 rounded-2xl bg-[#F4F7FC] p-4 dark:bg-white/5">
             <div className="flex flex-wrap items-center gap-2">
               <Chip e={estadoProceso(d.estadoProceso)} />
+              <Chip e={ultimoHito(d.ultimoHito)} />
               <StatusBadge label={textoSemaforo(d.situacion.estadoLegal, d.situacion.diasHabilesRestantes)} tone={tonoSemaforo(d.situacion.estadoLegal, d.situacion.proximoAVencer)} />
               <Chip e={ventanaDescuento(d.situacion.ventanaDescuento)} />
               {d.situacion.finDescuentoVigente && <span className="text-xs opacity-70">hasta {formatoFecha(d.situacion.finDescuentoVigente)}</span>}

@@ -61,6 +61,7 @@ public static class DetalleEndpoints
             c.Numero,
             c.Placa,
             estadoProceso = ConsultaBandeja.EstadoProceso(c, dp?.RespuestaSentido),
+            ultimoHito = ConsultaBandeja.UltimoHito(c),
             situacion = new
             {
                 estadoLegal = s.Estado.ToString(),

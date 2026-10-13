@@ -10,7 +10,7 @@ import {
   resultadoDp,
   textoSemaforo,
   tonoSemaforo,
-  ultimoAviso,
+  ultimoHito,
 } from "@/lib/etiquetas";
 import { formatoFecha, formatoFechaHora, formatoPesos } from "@/lib/format/date";
 import type { FilaBandeja } from "@/lib/tipos";
@@ -60,7 +60,7 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
     header: "Contraventor",
     render: (f) => (f.contraventorNombre ? <span>{f.contraventorNombre}</span> : <Chip e={consultaContraventor(f.estadoConsultaContraventor)} />),
   },
-  { key: "aviso", header: "Último aviso", render: (f) => <Chip e={ultimoAviso(f.ultimoAviso)} /> },
+  { key: "aviso", header: "Último hito de notificación", render: (f) => <Chip e={ultimoHito(f.ultimoHito)} /> },
   { key: "cambio", header: "Cambio de contraventor", render: (f) => <Chip e={cambioContraventor(f.cambioContraventor)} /> },
   {
     key: "dp",

@@ -120,6 +120,7 @@ public sealed record FilaBandeja(
     string? ContraventorNombre,
     string EstadoConsultaContraventor,
     string UltimoAviso,
+    string UltimoHito,
     string CambioContraventor,
     string? DpRadicado,
     string? DpEstado,
@@ -342,7 +343,7 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
                 c.Activo && !c.Pagado && !c.TieneDp && s.ProximoAVencer,
                 Plazos.Ventana(s, c).ToString(), s.FinDescuentoVigente,
                 EstadoProceso(c, x.Dp?.RespuestaSentido), c.EstadoGestion.ToString(), x.Contraventor, c.EstadoConsultaContraventor.ToString(),
-                c.EstadoNotificacionConductor.ToString(), c.EstadoCambioContraventor.ToString(),
+                c.EstadoNotificacionConductor.ToString(), UltimoHito(c), c.EstadoCambioContraventor.ToString(),
                 x.Dp?.Radicado, x.Dp?.Estado.ToString(), x.Dp?.RespuestaSentido?.ToString(),
                 c.Pagado, c.Activo, c.MotivoInactivacion?.ToString(), c.EnCobroCoactivo, c.EsFotomulta != false, c.UltimoEventoEn, c.CreadoEn);
         }).ToList();
@@ -369,6 +370,31 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
             _ => "SinProcesar",
         };
     }
+
+    /// <summary>
+    /// Etiqueta «Último hito de notificación» (§4.9, reemplaza al estado acumulativo de la Epic): el hito más avanzado
+    /// en el orden de la tabla de la spec. Aviso 4 = se pidió el cambio de contraventor a la secretaría.
+    /// </summary>
+    public static string UltimoHito(Comparendo c)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        if (c.EstadoCambioContraventor is EstadoCambioContraventor.Solicitado or EstadoCambioContraventor.RechazadoOt or EstadoCambioContraventor.AceptadoOt)
+            return "Aviso4";
+        if (c.EstadoNotificacionConductor != EstadoNotificacionConductor.SinNotificar)
+            return c.EstadoNotificacionConductor.ToString();
+        return c.TieneDp || c.EstadoGestion is EstadoGestion.DpEnviado or EstadoGestion.RespuestaOt ? "DpEnviado" : "SinProcesar";
+    }
+
+    /// <summary>Texto de la etiqueta para el Excel (el mismo del frontend, lib/etiquetas.ts).</summary>
+    public static string TextoHito(string hito) => hito switch
+    {
+        "Aviso4" => "Notificación 4 — solicitud de cambio de contraventor",
+        "Aviso3" => "Notificación al conductor 3 — sin descuento",
+        "Aviso2" => "Notificación al conductor 2 — descuento 25%",
+        "Aviso1" => "Notificación al conductor 1 — aviso inicial",
+        "DpEnviado" => "Notificado a secretaría — derecho de petición",
+        _ => "Sin procesar",
+    };
 
     private static List<T>? Enums<T>(string[]? valores)
         where T : struct, Enum =>

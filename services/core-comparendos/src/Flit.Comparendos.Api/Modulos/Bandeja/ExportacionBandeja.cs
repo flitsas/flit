@@ -28,7 +28,7 @@ public sealed class ExportacionBandeja(ConsultaBandeja consulta)
     [
         ("Número", 22), ("Placa", 10), ("NIT consultado", 14), ("Titular", 30), ("Organismo de tránsito", 34), ("Fecha imposición", 13), ("Fecha notificación", 13),
         ("Valor total", 14), ("Fuente", 11), ("Estado legal", 13), ("Días hábiles restantes", 10), ("Ventana de descuento", 14), ("Fin del descuento", 13),
-        ("Estado del proceso", 18), ("Contraventor", 28), ("Último aviso", 12), ("Cambio de contraventor", 16), ("Radicado DP", 18), ("Resultado DP", 14),
+        ("Estado del proceso", 18), ("Contraventor", 28), ("Último hito de notificación", 30), ("Cambio de contraventor", 16), ("Radicado DP", 18), ("Resultado DP", 14),
         ("Pagado", 8), ("Activo", 8), ("Cobro coactivo", 10),
     ];
 
@@ -44,7 +44,7 @@ public sealed class ExportacionBandeja(ConsultaBandeja consulta)
                 Cell.Of(f.Numero), Cell.Of(f.Placa), Cell.Of(f.NitConsultado), Cell.Of(f.Titular), Cell.Of(f.Organismo ?? f.SecretariaTexto),
                 Fecha(f.FechaImposicion), Fecha(f.FechaNotificacion), f.ValorTotal is { } v ? Cell.Of((double)v) : Cell.Empty, Cell.Of(f.Fuente),
                 Cell.Of(f.EstadoLegal), f.DiasHabilesRestantes is { } d ? Cell.Of(d) : Cell.Empty, Cell.Of(f.VentanaDescuento), Fecha(f.FinDescuentoVigente),
-                Cell.Of(f.EstadoProceso), Cell.Of(f.ContraventorNombre), Cell.Of(f.UltimoAviso), Cell.Of(f.CambioContraventor), Cell.Of(f.DpRadicado),
+                Cell.Of(f.EstadoProceso), Cell.Of(f.ContraventorNombre), Cell.Of(ConsultaBandeja.TextoHito(f.UltimoHito)), Cell.Of(f.CambioContraventor), Cell.Of(f.DpRadicado),
                 Cell.Of(f.DpResultado), Cell.Of(f.Pagado ? "Sí" : "No"), Cell.Of(f.Activo ? "Sí" : "No"), Cell.Of(f.EnCobroCoactivo ? "Sí" : "No"),
             ]).ToList());
         return TabularWorkbookWriter.Write([hoja]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cambioContraventor, estadoProceso, textoSemaforo, tonoSemaforo } from "@/lib/etiquetas";
+import { cambioContraventor, estadoProceso, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
 import { aQuery, contarFiltros, FILTROS_VACIOS, resumenPagina } from "@/lib/filtros";
 
 describe("semáforo legal", () => {
@@ -19,6 +19,12 @@ describe("semáforo legal", () => {
 });
 
 describe("etiquetas §4.9", () => {
+  it("«Último hito de notificación» nombra el DP y el aviso 4 (matriz 0.28)", () => {
+    expect(ultimoHito("DpEnviado").texto).toBe("Notificado a secretaría — derecho de petición");
+    expect(ultimoHito("Aviso4").texto).toBe("Notificación 4 — solicitud de cambio de contraventor");
+    expect(ultimoHito("SinProcesar").tono).toBe("neutral");
+  });
+
   it("usa los colores acordados", () => {
     expect(estadoProceso("RespuestaFavorable").tono).toBe("success");
     expect(estadoProceso("DerechoPeticion").tono).toBe("info");

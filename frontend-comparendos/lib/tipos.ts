@@ -32,6 +32,7 @@ export interface FilaBandeja {
   contraventorNombre: string | null;
   estadoConsultaContraventor: string;
   ultimoAviso: string;
+  ultimoHito: string;
   cambioContraventor: string;
   dpRadicado: string | null;
   dpEstado: string | null;
@@ -128,6 +129,7 @@ export interface DetalleComparendo {
   numero: string;
   placa: string | null;
   estadoProceso: string;
+  ultimoHito: string;
   situacion: {
     estadoLegal: string;
     diasHabilesRestantes: number | null;
