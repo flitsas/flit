@@ -155,6 +155,24 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         (await Adjuntos(ids["AVF2"])).Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task E33_LaPrimeraApertura_QuedaEnElTimeline_UnaSolaVez()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, ids) = await PrepararAsync("AV-P1");
+        var id = ids["AVP1"];
+        await SchedulerAsync(empresa);
+        var correo = await api.EnDbAsync(db => db.Comunicaciones.SingleAsync(x => x.ComparendoId == id, ct));
+
+        for (var i = 0; i < 2; i++)
+            (await api.Anonimo().GetAsync($"/api/v1/comparendos/publico/t/{correo.Id:N}.gif", ct)).EnsureSuccessStatusCode();
+
+        (await api.EnDbAsync(db => db.Comunicaciones.SingleAsync(x => x.Id == correo.Id, ct))).Aperturas.Should().Be(2);
+        var eventos = await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.ComunicacionEstado && t.RelacionadoId == correo.Id).ToListAsync(ct));
+        eventos.Should().ContainSingle().Which.Descripcion.Should().StartWith("Se abrió el correo");
+    }
+
     [Theory]
     [InlineData("127.0.0.1", false)]
     [InlineData("10.1.2.3", false)]
