@@ -4,6 +4,7 @@ using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Identificadores;
 using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,7 +40,8 @@ public static class EmpresasEndpoints
         string ConjuntoPlantillas,
         bool RequiereRepresentanteLegal,
         IReadOnlyList<string> DestinatariosReportes,
-        IReadOnlyList<string> CorreosAlertaOperativa);
+        IReadOnlyList<string> CorreosAlertaOperativa,
+        string? EmpresaNit);
 
     public sealed record NuevaEmpresa(Guid Id, string Nombre);
 
@@ -52,7 +54,8 @@ public static class EmpresasEndpoints
         string TipoIntegracionConductor,
         string ConjuntoPlantillas,
         bool RequiereRepresentanteLegal,
-        string? EmpresaNombre);
+        string? EmpresaNombre,
+        string? EmpresaNit = null);
 
     public sealed record CambioCorreo(
         string CanalCorreo,
@@ -82,7 +85,8 @@ public static class EmpresasEndpoints
         ArgumentNullException.ThrowIfNull(c);
         return new(c.TenantId, c.EmpresaNombre, c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess,
             c.HasReportesModule, c.NotificationChannel.ToString(), c.CanalCorreo.ToString(), c.RemitenteNombre, c.CorreoRespuesta, Copias(c.Cc), Copias(c.Bcc),
-            c.TipoIntegracionConductor.ToString(), c.ConjuntoPlantillas.ToString(), c.RequiereRepresentanteLegal, c.DestinatariosReportes, c.CorreosAlertaOperativa);
+            c.TipoIntegracionConductor.ToString(), c.ConjuntoPlantillas.ToString(), c.RequiereRepresentanteLegal, c.DestinatariosReportes, c.CorreosAlertaOperativa,
+            c.EmpresaNit is { } nit ? $"{nit}-{Nit.DigitoVerificacion(nit)}" : null);
     }
 
     public static IReadOnlyList<CopiaDto> Copias(string json) =>
@@ -160,6 +164,15 @@ public static class EmpresasEndpoints
             throw new ReglaException("CONJUNTO_INVALIDO", "El conjunto de plantillas debe ser Flit o Renting.");
 
         var nombre = string.IsNullOrWhiteSpace(pedido.EmpresaNombre) ? c.EmpresaNombre : pedido.EmpresaNombre.Trim();
+        var nit = c.EmpresaNit;
+        if (!string.IsNullOrWhiteSpace(pedido.EmpresaNit))
+        {
+            var separado = Nit.Separar(pedido.EmpresaNit) ?? throw new ReglaException("NIT_INVALIDO", "El NIT de la empresa no es válido.");
+            if (separado.Dv is { } dv && dv != Nit.DigitoVerificacion(separado.Base))
+                throw new ReglaException("NIT_INVALIDO", $"El dígito de verificación de {separado.Base} es {Nit.DigitoVerificacion(separado.Base)}, no {dv}.");
+            nit = separado.Base;
+        }
+
         var cambios = Auditoria.Diferencias(
             ("has_right_petition_module", c.HasRightPetitionModule, pedido.HasRightPetitionModule),
             ("allows_contravener_consultation", c.AllowsContravenerConsultation, pedido.AllowsContravenerConsultation),
@@ -169,7 +182,8 @@ public static class EmpresasEndpoints
             ("tipo_integracion_conductor", c.TipoIntegracionConductor, integracion),
             ("conjunto_plantillas", c.ConjuntoPlantillas, conjunto),
             ("requiere_representante_legal", c.RequiereRepresentanteLegal, pedido.RequiereRepresentanteLegal),
-            ("empresa_nombre", c.EmpresaNombre, nombre));
+            ("empresa_nombre", c.EmpresaNombre, nombre),
+            ("empresa_nit", c.EmpresaNit, nit));
         if (cambios.Length == 0)
             return Results.Ok(Dto(c));
 
@@ -178,7 +192,7 @@ public static class EmpresasEndpoints
             && pedido.AllowsContravenerConsultation && integracion == TipoIntegracionConductor.ApiRenting;
         (c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess, c.HasReportesModule) =
             (pedido.HasRightPetitionModule, pedido.AllowsContravenerConsultation, pedido.AllowsContravenerChange, pedido.HasOcrAccess, pedido.HasReportesModule);
-        (c.TipoIntegracionConductor, c.ConjuntoPlantillas, c.RequiereRepresentanteLegal, c.EmpresaNombre) = (integracion, conjunto, pedido.RequiereRepresentanteLegal, nombre);
+        (c.TipoIntegracionConductor, c.ConjuntoPlantillas, c.RequiereRepresentanteLegal, c.EmpresaNombre, c.EmpresaNit) = (integracion, conjunto, pedido.RequiereRepresentanteLegal, nombre, nit);
         (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
         auditoria.Registrar(id, "configuracion_empresa", id, "ACTUALIZAR", cambios);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

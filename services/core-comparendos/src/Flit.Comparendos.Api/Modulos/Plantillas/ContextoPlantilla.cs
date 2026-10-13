@@ -101,7 +101,7 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
             ["rl.correo"] = rl?.Correo,
             ["rl.firma_imagen"] = extras.FirmaPng is { Length: > 0 } firma ? $"<img src=\"data:image/png;base64,{Convert.ToBase64String(firma)}\" width=\"180\" />" : string.Empty,
             ["empresa.razon_social"] = config?.EmpresaNombre,
-            ["empresa.nit"] = null,
+            ["empresa.nit"] = config?.EmpresaNit is { } empresaNit ? $"{empresaNit}-{Nit.DigitoVerificacion(empresaNit)}" : null,
             ["empresa.correo_respuesta"] = config?.CorreoRespuesta ?? rl?.Correo,
             ["dp.radicado"] = extras.Radicado,
             ["dp.fecha"] = Formato.Fecha(extras.FechaDp ?? hoy),

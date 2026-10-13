@@ -12,6 +12,7 @@ export interface CapacidadesForm {
   conjuntoPlantillas: string;
   requiereRepresentanteLegal: boolean;
   empresaNombre: string | null;
+  empresaNit: string | null;
 }
 
 /** El cuerpo de PUT /admin/empresas/{id}/capacidades a partir de la configuración leída. */
@@ -26,6 +27,7 @@ export function capacidadesDeConfiguracion(c: ConfiguracionEmpresa): Capacidades
     conjuntoPlantillas: c.conjuntoPlantillas,
     requiereRepresentanteLegal: c.requiereRepresentanteLegal,
     empresaNombre: c.empresaNombre,
+    empresaNit: c.empresaNit,
   };
 }
 

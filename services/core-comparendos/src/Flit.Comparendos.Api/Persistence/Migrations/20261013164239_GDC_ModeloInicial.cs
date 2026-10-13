@@ -415,6 +415,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 {
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
                     empresa_nombre = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    empresa_nit = table.Column<string>(type: "character varying(15)", maxLength: 15, nullable: true),
                     has_right_petition_module = table.Column<bool>(type: "boolean", nullable: false),
                     allows_contravener_consultation = table.Column<bool>(type: "boolean", nullable: false),
                     allows_contravener_change = table.Column<bool>(type: "boolean", nullable: false),

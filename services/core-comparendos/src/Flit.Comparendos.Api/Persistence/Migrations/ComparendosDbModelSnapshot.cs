@@ -1548,6 +1548,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("destinatarios_reportes");
 
+                    b.Property<string>("EmpresaNit")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("empresa_nit");
+
                     b.Property<string>("EmpresaNombre")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")

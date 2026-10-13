@@ -7,6 +7,9 @@ public sealed class ConfiguracionEmpresa : Auditada
 {
     public Guid TenantId { get; set; }
     public string? EmpresaNombre { get; set; }
+
+    /// <summary>NIT de la gestora (base sin DV), para el membrete de los documentos ({{empresa.nit}}).</summary>
+    public string? EmpresaNit { get; set; }
     public bool HasRightPetitionModule { get; set; }
     public bool AllowsContravenerConsultation { get; set; }
     public bool AllowsContravenerChange { get; set; }

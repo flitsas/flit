@@ -40,6 +40,26 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
     }
 
     [Fact]
+    public async Task NitDeLaEmpresa_SeValidaYSeMuestraConDv()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid();
+        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora NIT" }, ct)).EnsureSuccessStatusCode();
+        var url = $"/api/v1/comparendos/admin/empresas/{empresa}/capacidades";
+        object Con(string nit) => new
+        {
+            hasRightPetitionModule = true, allowsContravenerConsultation = false, allowsContravenerChange = false, hasOcrAccess = false, hasReportesModule = false,
+            tipoIntegracionConductor = "Manual", conjuntoPlantillas = "Flit", requiereRepresentanteLegal = true, empresaNombre = "Gestora NIT", empresaNit = nit,
+        };
+
+        (await Super.PutAsJsonAsync(url, Con("900123456-1"), ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "el DV de 900123456 es 8");
+        var r = await Super.PutAsJsonAsync(url, Con("900.123.456"), ct);
+        r.EnsureSuccessStatusCode();
+        (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("empresaNit").GetString().Should().Be("900123456-8");
+    }
+
+    [Fact]
     public async Task AC2_AdminDeGestora_NoActivaCapacidades_PeroEditaSuCorreo()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

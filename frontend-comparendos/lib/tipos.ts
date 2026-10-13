@@ -375,6 +375,8 @@ export interface ConfiguracionEmpresa {
   requiereRepresentanteLegal: boolean;
   destinatariosReportes: string[];
   correosAlertaOperativa: string[];
+  /** Con DV («900123456-8»); sale en el membrete de los documentos ({{empresa.nit}}). */
+  empresaNit: string | null;
 }
 
 export interface AuditoriaConfiguracion {
