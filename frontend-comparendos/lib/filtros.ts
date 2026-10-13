@@ -24,6 +24,8 @@ export interface FiltrosBandeja {
   conContraventor: TriEstado;
   pagado: TriEstado;
   conDp: TriEstado;
+  /** Sentido de la respuesta del OT al DP (§7.1): Favorable, Desfavorable o SinRespuesta. */
+  resultadoDp: "" | "Favorable" | "Desfavorable" | "SinRespuesta";
   activos: "activos" | "inactivos" | "todos";
   cobroCoactivo: TriEstado;
   sinGestion: boolean;
@@ -50,6 +52,7 @@ export const FILTROS_VACIOS: FiltrosBandeja = {
   conContraventor: "",
   pagado: "",
   conDp: "",
+  resultadoDp: "",
   activos: "activos",
   cobroCoactivo: "",
   sinGestion: false,
@@ -80,6 +83,7 @@ export function aQuery(f: FiltrosBandeja, extra: Query = {}): Query {
     conContraventor: f.conContraventor || undefined,
     pagado: f.pagado || undefined,
     conDp: f.conDp || undefined,
+    resultadoDp: f.resultadoDp || undefined,
     activos: f.activos === "activos" ? undefined : f.activos,
     cobroCoactivo: f.cobroCoactivo || undefined,
     sinGestion: f.sinGestion ? true : undefined,
@@ -93,7 +97,7 @@ export function aQuery(f: FiltrosBandeja, extra: Query = {}): Query {
 export function contarFiltros(f: FiltrosBandeja): number {
   let n = 0;
   for (const v of [f.nits, f.organismos, f.estadoLegal, f.estadoProceso, f.ultimoAviso, f.cambioContraventor, f.fuente]) if (v.length) n++;
-  for (const v of [f.placa, f.numero, f.conContraventor, f.pagado, f.conDp, f.cobroCoactivo]) if (v.trim()) n++;
+  for (const v of [f.placa, f.numero, f.conContraventor, f.pagado, f.conDp, f.resultadoDp, f.cobroCoactivo]) if (v.trim()) n++;
   if (f.imposicionDesde || f.imposicionHasta) n++;
   if (f.notificacionDesde || f.notificacionHasta) n++;
   if (f.registroDesde || f.registroHasta) n++;

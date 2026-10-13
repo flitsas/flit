@@ -125,6 +125,12 @@ public sealed class DerechosPeticionTests(ApiConFuente api) : IClassFixture<ApiC
         (await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/dp/respuesta", Formulario(), ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
         var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}", ct);
         detalle.GetProperty("estadoProceso").GetString().Should().Be("RespuestaFavorable");
+
+        async Task<IEnumerable<string?>> Bandeja(string resultado) =>
+            (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos?resultadoDp={resultado}", ct)).GetProperty("items").EnumerateArray().Select(f => f.GetProperty("id").GetString());
+        (await Bandeja("Favorable")).Should().Contain(id.ToString(), "el filtro «resultado del DP» de la bandeja (§7.1)");
+        (await Bandeja("Desfavorable")).Should().NotContain(id.ToString());
+        (await Bandeja("SinRespuesta")).Should().NotContain(id.ToString());
     }
 
     [Fact]

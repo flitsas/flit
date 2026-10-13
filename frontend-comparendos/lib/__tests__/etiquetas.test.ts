@@ -47,6 +47,8 @@ describe("filtros de la bandeja", () => {
 
   it("cuenta los filtros aplicados del panel", () => {
     expect(contarFiltros(FILTROS_VACIOS)).toBe(0);
+    expect(aQuery({ ...FILTROS_VACIOS, resultadoDp: "SinRespuesta" }).resultadoDp).toBe("SinRespuesta");
+    expect(contarFiltros({ ...FILTROS_VACIOS, resultadoDp: "Favorable" })).toBe(1);
     expect(contarFiltros({ ...FILTROS_VACIOS, placa: "X", imposicionDesde: "2026-01-01", activos: "todos" })).toBe(3);
   });
 

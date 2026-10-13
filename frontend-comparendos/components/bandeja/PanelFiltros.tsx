@@ -109,6 +109,15 @@ export function PanelFiltros({ filtros, onCambio, empresa }: { filtros: FiltrosB
       <Tri etiqueta="Contraventor" valor={filtros.conContraventor} onCambio={(v) => set("conContraventor", v)} si="Con contraventor" no="Sin contraventor" />
       <Tri etiqueta="Pago" valor={filtros.pagado} onCambio={(v) => set("pagado", v)} si="Pagados" no="Sin pago" />
       <Tri etiqueta="Derecho de petición" valor={filtros.conDp} onCambio={(v) => set("conDp", v)} si="Con DP" no="Sin DP" />
+      <label className={ETIQUETA_CLS}>
+        Resultado del DP
+        <select className={INPUT_CLS} value={filtros.resultadoDp} onChange={(e) => set("resultadoDp", e.target.value as FiltrosBandeja["resultadoDp"])}>
+          <option value="">Todos</option>
+          <option value="Favorable">Favorable</option>
+          <option value="Desfavorable">Desfavorable</option>
+          <option value="SinRespuesta">Enviado, sin respuesta</option>
+        </select>
+      </label>
       <Tri etiqueta="Cobro coactivo" valor={filtros.cobroCoactivo} onCambio={(v) => set("cobroCoactivo", v)} si="En cobro coactivo" no="Sin cobro coactivo" />
       <label className={ETIQUETA_CLS}>
         Estado
