@@ -55,7 +55,7 @@ public sealed class ServicioDp(
         var estado = (await calendario.MotorAsync(ct).ConfigureAwait(false)).Evaluar(Plazos.Fechas(c), reloj.Hoy).Estado.ToString();
         var habilitadas = await (from t in db.Tipologias.AsNoTracking()
                                  join h in db.TipologiasEmpresa.AsNoTracking() on t.Id equals h.TipologiaId
-                                 where h.TenantId == c.TenantId && h.Habilitada && t.Activo
+                                 where h.TenantId == c.TenantId && h.Habilitada
                                  select t).ToListAsync(ct).ConfigureAwait(false);
         return habilitadas.Select(t => (t, t.EstadosLegalesPermitidos.Contains(estado))).OrderByDescending(x => x.Item2).ThenBy(x => x.t.Codigo).ToList();
     }
@@ -83,7 +83,8 @@ public sealed class ServicioDp(
         Si(!c.Activo, "COMPARENDO_INACTIVO", "El comparendo está inactivo.");
         Si(c.Pagado, "COMPARENDO_PAGADO", "El comparendo está marcado como pagado: no admite derecho de petición.");
         Si(!reintento && await db.DerechosPeticion.AnyAsync(d => d.ComparendoId == c.Id, ct).ConfigureAwait(false), "YA_TIENE_DP", "El comparendo ya tiene un derecho de petición: solo admite uno.");
-        Si(!t.Activo || !habilitada, "TIPOLOGIA_NO_HABILITADA", "La tipología no está habilitada para tu empresa.");
+        // Epic #12977: desactivar una tesis del catálogo respeta a las empresas que ya la tenían; solo deja de ofrecerse.
+        Si(!habilitada, "TIPOLOGIA_NO_HABILITADA", "La tipología no está habilitada para tu empresa.");
         Si(!t.EstadosLegalesPermitidos.Contains(estado.ToString()), "ESTADO_LEGAL_NO_PERMITIDO", $"«{t.Nombre}» no procede cuando el comparendo está {Formato.EstadoLegal(estado).ToLowerInvariant()}.");
         Si(masivo && !t.PermiteMasivo, "TIPOLOGIA_SIN_MASIVO", "La tipología no admite envío masivo.");
         Si(ot is null, "OT_SIN_MAPEAR", "El comparendo no tiene organismo de tránsito identificado.");

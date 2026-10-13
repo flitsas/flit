@@ -17,7 +17,7 @@ public sealed class TipologiasTests(ApiDePrueba api) : IClassFixture<ApiDePrueba
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var catalogo = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/tipologias", TestContext.Current.CancellationToken);
-        catalogo.GetArrayLength().Should().Be(11);
+        catalogo.EnumerateArray().Count(t => t.GetProperty("codigo").GetString() != "DP-RET").Should().Be(11, "el fixture es compartido y otra prueba crea DP-RET");
         var dpr = catalogo.EnumerateArray().Single(t => t.GetProperty("codigo").GetString() == "DPR");
         dpr.GetProperty("estadosLegalesPermitidos").EnumerateArray().Select(e => e.GetString()).Should().Equal("Prescrito");
         dpr.GetProperty("plazoRespuestaOtDiasHabiles").GetInt32().Should().Be(15);
@@ -63,5 +63,33 @@ public sealed class TipologiasTests(ApiDePrueba api) : IClassFixture<ApiDePrueba
 
         (await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [Permisos.ConfiguracionEditar])).PostAsJsonAsync("/api/v1/comparendos/admin/tipologias", new { codigo = "X" }, ct))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    /// <summary>Epic #12977: desactivar una tesis del catálogo respeta a las empresas que ya la tenían; deja de ofrecerse a las demás.</summary>
+    [Fact]
+    public async Task Desactivar_RespetaALasQueYaLaTenian()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var r = await Super.PostAsJsonAsync("/api/v1/comparendos/admin/tipologias", new
+        {
+            codigo = "dp-ret", nombre = "Tesis que se retira", descripcionJuridica = "Fundamento de prueba.", prefijoRadicado = "RET",
+            estadosLegalesPermitidos = new[] { "EnTiempo" }, permiteMasivo = false, plazoRespuestaOtDiasHabiles = 15,
+        }, ct);
+        var t = await r.Content.ReadFromJsonAsync<JsonElement>(ct);
+        var id = t.GetProperty("id").GetGuid();
+        (await Super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{a}/tipologias/{id}", new { habilitada = true }, ct)).EnsureSuccessStatusCode();
+
+        (await Super.PutAsJsonAsync($"/api/v1/comparendos/admin/tipologias/{id}", new
+        {
+            codigo = "DP-RET", nombre = "Tesis que se retira", descripcionJuridica = "Fundamento de prueba.", prefijoRadicado = "RET",
+            estadosLegalesPermitidos = new[] { "EnTiempo" }, permiteMasivo = false, plazoRespuestaOtDiasHabiles = 15, activo = false,
+        }, ct)).EnsureSuccessStatusCode();
+
+        var deA = await api.Cliente(new UsuarioDePrueba(a, [])).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/tipologias?soloHabilitadas=true", ct);
+        deA.EnumerateArray().Select(x => x.GetProperty("codigo").GetString()).Should().Contain("DP-RET", "la empresa que la tenía la conserva");
+        var nueva = await Super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{b}/tipologias/{id}", new { habilitada = true }, ct);
+        nueva.StatusCode.Should().Be(HttpStatusCode.Conflict, "ya no se habilita a más empresas");
     }
 }

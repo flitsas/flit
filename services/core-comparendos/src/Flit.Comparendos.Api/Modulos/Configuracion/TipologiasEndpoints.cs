@@ -44,7 +44,8 @@ public static class TipologiasEndpoints
     {
         var tenant = usuario.EmpresaLectura(empresa);
         var habilitadas = await db.TipologiasEmpresa.AsNoTracking().Where(h => h.TenantId == tenant && h.Habilitada).Select(h => h.TipologiaId).ToListAsync(ct).ConfigureAwait(false);
-        var catalogo = await db.Tipologias.AsNoTracking().Where(t => t.Activo).OrderBy(t => t.Codigo).ToListAsync(ct).ConfigureAwait(false);
+        // Una tesis desactivada en el catálogo sigue apareciendo para la empresa que ya la tenía (Epic #12977).
+        var catalogo = await db.Tipologias.AsNoTracking().Where(t => t.Activo || habilitadas.Contains(t.Id)).OrderBy(t => t.Codigo).ToListAsync(ct).ConfigureAwait(false);
         var lista = catalogo.Select(t => Dto(t, habilitadas.Contains(t.Id))).Where(t => soloHabilitadas != true || t.Habilitada == true);
         return Results.Ok(lista);
     }
@@ -137,7 +138,7 @@ public static class TipologiasEndpoints
     {
         var t = await db.Tipologias.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La tipología");
         if (pedido.Habilitada && !t.Activo)
-            throw ReglaException.Conflicto("TIPOLOGIA_INACTIVA", "La tipología está desactivada en el catálogo.");
+            throw ReglaException.Conflicto("TIPOLOGIA_INACTIVA", "La tipología está desactivada en el catálogo: ya no se habilita a más empresas (las que la tenían la conservan).");
         var h = await db.TipologiasEmpresa.FirstOrDefaultAsync(x => x.TenantId == empresa && x.TipologiaId == id, ct).ConfigureAwait(false);
         var antes = h?.Habilitada ?? false;
         if (antes == pedido.Habilitada)
