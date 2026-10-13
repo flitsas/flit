@@ -35,6 +35,8 @@ public static class Program
     /// <param name="reemplazos">Pruebas: cambia servicios después de registrarlos todos (fuentes, correo, reloj).</param>
     internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? reemplazos = null)
     {
+        // QuestPDF exige la licencia antes del primer documento, sea un DP (HtmlAPdf) o un TIFF convertido (ConversorTiff).
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
         ServicioSettings.Validate(builder.Configuration);
@@ -96,6 +98,7 @@ public static class Program
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+app.UseMiddleware<LecturasSuperAdmin>();
         app.UseRateLimiter();
 
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();

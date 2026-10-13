@@ -14,6 +14,7 @@ public sealed class AccesoComparendo(ComparendosDb db, UsuarioActual usuario)
         var c = await q.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
         if (c is null || (!usuario.EsSuperAdmin && c.TenantId != usuario.EmpresaId))
             throw ReglaException.NoEncontrado("El comparendo");
+        usuario.AnotarLectura(c.TenantId);
         return c;
     }
 

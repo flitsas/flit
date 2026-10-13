@@ -87,6 +87,19 @@ public sealed class UsuarioActual(IHttpContextAccessor http, IPlatformTenantAcce
 
     public bool EsSuperAdmin => PlatformPrincipal.IsSuperAdmin(User);
 
+    /// <summary>
+    /// Empresas cuya información leyó el SuperAdmin en esta petición. <see cref="LecturasSuperAdmin"/> las deja en la
+    /// auditoría al terminar (§2.4: toda lectura entre gestoras queda registrada).
+    /// </summary>
+    public HashSet<Guid> EmpresasLeidas { get; } = [];
+
+    /// <summary>Anota que el SuperAdmin leyó datos de una empresa (no hace nada para los demás usuarios).</summary>
+    public void AnotarLectura(Guid empresa)
+    {
+        if (EsSuperAdmin)
+            EmpresasLeidas.Add(empresa);
+    }
+
     public Guid? EmpresaId => Tenant.TenantId;
 
     public string? EmpresaNombre => User.FindFirstValue("company_name") ?? User.FindFirstValue("tenant_name");
@@ -115,6 +128,8 @@ public sealed class UsuarioActual(IHttpContextAccessor http, IPlatformTenantAcce
         {
             if (pedida is null && obligatoria)
                 throw new ReglaException("EMPRESA_REQUERIDA", "Elige una empresa para ver su información.", StatusCodes.Status400BadRequest);
+            if (pedida is { } leida)
+                AnotarLectura(leida);
             return pedida;
         }
 

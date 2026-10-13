@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Api.Plataforma;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 
@@ -31,5 +32,27 @@ public sealed class AuditoriaTests(ApiConFuente api) : IClassFixture<ApiConFuent
         var global = await super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/auditoria?global=true&entidad=calendario_dia", ct);
         global.GetProperty("items").EnumerateArray().Should().Contain(i => i.GetProperty("entidadId").GetString() == "2026-11-04");
         (await super.PutAsJsonAsync("/api/v1/comparendos/admin/calendario/2026-11-04", new { esFestivo = false }, ct)).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task B8_LaLecturaDelSuperAdmin_QuedaAuditadaEnLaEmpresa_YLaDeLaGestoraNo()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = await EmpresaAsync(api);
+        var id = (await IngresarAsync(api, empresa, Item("AUD-1"))).Values.Single();
+        var superUsuario = new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true);
+        var super = api.Cliente(superUsuario);
+        var gestora = new UsuarioDePrueba(empresa, [Permisos.BandejaVer]);
+
+        (await super.GetAsync($"/api/v1/comparendos/comparendos?empresa={empresa}", ct)).EnsureSuccessStatusCode();
+        (await super.GetAsync($"/api/v1/comparendos/comparendos/{id}", ct)).EnsureSuccessStatusCode();
+        (await api.Cliente(gestora).GetAsync($"/api/v1/comparendos/comparendos/{id}", ct)).EnsureSuccessStatusCode();
+
+        var lecturas = await api.EnDbAsync(db => db.AuditoriasConfiguracion.Where(a => a.TenantId == empresa && a.Accion == "LEER").ToListAsync(ct));
+        lecturas.Should().OnlyContain(a => a.Entidad == "lectura_superadmin" && a.UsuarioId != gestora.Id, "la gestora leyendo lo suyo no se audita");
+        lecturas = lecturas.Where(a => a.UsuarioId == superUsuario.Id).ToList();
+        lecturas.Should().HaveCount(2);
+        lecturas.Select(a => a.EntidadId).Should().Contain($"/api/v1/comparendos/comparendos/{id}");
     }
 }
