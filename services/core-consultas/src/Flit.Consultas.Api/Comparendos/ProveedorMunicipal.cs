@@ -11,13 +11,14 @@ namespace Flit.Consultas.Api.Comparendos;
 /// <summary>
 /// Dirección de la API municipal: <c>MUNICIPAL_INFRACCIONES_BASE_URL</c>, <c>MUNICIPAL_INFRACCIONES_PATH</c> y
 /// <c>MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS</c> (en V1, <c>MUNICIPALITY_INFRACTION_API_BASE_URL</c>,
-/// <c>MUNICIPALITY_GET_INFRACTION_PATH</c> y su timeout). Sin dirección, el proveedor queda no conectado.
+/// <c>MUNICIPALITY_GET_INFRACTION_PATH</c> y su timeout). Sin dirección o sin ruta, el proveedor queda no conectado:
+/// ninguna de las dos tiene valor por defecto.
 /// </summary>
-internal sealed record MunicipalOpciones(Uri? BaseUrl, string Ruta, int TimeoutSegundos)
+internal sealed record MunicipalOpciones(Uri? BaseUrl, string? Ruta, int TimeoutSegundos)
 {
     public static MunicipalOpciones Desde(IConfiguration c) => new(
         c["MUNICIPAL_INFRACCIONES_BASE_URL"] is { Length: > 0 } u ? new Uri(u) : null,
-        c["MUNICIPAL_INFRACCIONES_PATH"] is { Length: > 0 } r ? r : "/infraction/api/Infraccion/EntregarInfraccion",
+        c["MUNICIPAL_INFRACCIONES_PATH"] is { Length: > 0 } r ? r : null,
         int.TryParse(c["MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS"], CultureInfo.InvariantCulture, out var t) && t > 0 ? t : 60);
 }
 
@@ -39,7 +40,13 @@ internal sealed class ProveedorMunicipal(IHttpClientFactory http, MunicipalOpcio
 
     public IReadOnlyList<CanalComparendos> Canales => [CanalComparendos.MunicipalIdentificacion];
 
-    public string? NoConectado => opciones.BaseUrl is null ? "Falta la dirección de la API municipal (MUNICIPAL_INFRACCIONES_BASE_URL)." : null;
+    public string? NoConectado => (opciones.BaseUrl, opciones.Ruta) switch
+    {
+        (null, null) => "Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_BASE_URL, MUNICIPAL_INFRACCIONES_PATH.",
+        (null, _) => "Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_BASE_URL.",
+        (_, null) => "Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_PATH.",
+        _ => null,
+    };
 
     public async Task<ConsultarComparendosResponse> ConsultarAsync(ConsultarComparendosRequest pedido, CancellationToken ct)
     {

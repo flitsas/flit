@@ -77,7 +77,10 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
                 ["Verifik:BaseUrl"] = "https://verifik.prueba",
                 ["Consultations:ComparendosSimulados"] = "true",
                 ["SMARTCLOUD_ACCESS_KEY"] = ClaveSmartCloud,
-                ["MUNICIPAL_INFRACCIONES_BASE_URL"] = "http://municipal.prueba",
+                ["SMARTCLOUD_URL_IDENTIFICACION"] = "https://www3.simit.org.co/ServiciosSimit/EstadoCuentaIdentificacion",
+            ["SMARTCLOUD_URL_PLACA"] = "https://www3.simit.org.co/ServiciosSimit/EstadoCuentaPlaca",
+            ["MUNICIPAL_INFRACCIONES_BASE_URL"] = "http://municipal.prueba",
+            ["MUNICIPAL_INFRACCIONES_PATH"] = "/infraction/api/Infraccion/EntregarInfraccion",
                 [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
             });
             b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_key));
@@ -213,6 +216,16 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
         (parcial.Resultado, parcial.TipoError).Should().Be((esperado, tipo));
         if (parcial.HasMensajeError)
             parcial.MensajeError.Should().NotContain(ClaveSmartCloud);
+    }
+
+    [Fact]
+    public void HU13465_DireccionesSoloDelEnv_SinElLasElProveedorQuedaNoConectado()
+    {
+        var vacia = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["SMARTCLOUD_ACCESS_KEY"] = "X" }).Build();
+        new ProveedorSmartCloud(null!, SmartCloudOpciones.Desde(vacia)).NoConectado.Should()
+            .Be("Falta configurar SmartCloud: SMARTCLOUD_URL_IDENTIFICACION, SMARTCLOUD_URL_PLACA.", "las direcciones del SIMIT no van quemadas en el código");
+        new ProveedorMunicipal(null!, MunicipalOpciones.Desde(vacia)).NoConectado.Should()
+            .Be("Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_BASE_URL, MUNICIPAL_INFRACCIONES_PATH.");
     }
 
     [Fact]

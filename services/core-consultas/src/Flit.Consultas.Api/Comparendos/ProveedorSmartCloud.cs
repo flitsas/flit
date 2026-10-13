@@ -12,14 +12,14 @@ namespace Flit.Consultas.Api.Comparendos;
 /// <summary>
 /// Credenciales y direcciones de SmartCloud. Mismas variables de entorno que el BackCrudSmartCloud de V1, renombradas
 /// sin el prefijo de V1: <c>SMARTCLOUD_ACCESS_KEY</c>, <c>SMARTCLOUD_URL_IDENTIFICACION</c>, <c>SMARTCLOUD_URL_PLACA</c>
-/// y <c>SMARTCLOUD_TIMEOUT_SECONDS</c>.
+/// y <c>SMARTCLOUD_TIMEOUT_SECONDS</c>. Las direcciones no tienen valor por defecto: salen solo del <c>.env</c>.
 /// </summary>
-internal sealed record SmartCloudOpciones(string ClaveAcceso, Uri UrlIdentificacion, Uri UrlPlaca, int TimeoutSegundos)
+internal sealed record SmartCloudOpciones(string ClaveAcceso, Uri? UrlIdentificacion, Uri? UrlPlaca, int TimeoutSegundos)
 {
     public static SmartCloudOpciones Desde(IConfiguration c) => new(
         c["SMARTCLOUD_ACCESS_KEY"]?.Trim() ?? string.Empty,
-        new Uri(c["SMARTCLOUD_URL_IDENTIFICACION"] is { Length: > 0 } i ? i : "https://www3.simit.org.co/ServiciosSimit/EstadoCuentaIdentificacion"),
-        new Uri(c["SMARTCLOUD_URL_PLACA"] is { Length: > 0 } p ? p : "https://www3.simit.org.co/ServiciosSimit/EstadoCuentaPlaca"),
+        c["SMARTCLOUD_URL_IDENTIFICACION"] is { Length: > 0 } i ? new Uri(i) : null,
+        c["SMARTCLOUD_URL_PLACA"] is { Length: > 0 } p ? new Uri(p) : null,
         int.TryParse(c["SMARTCLOUD_TIMEOUT_SECONDS"], CultureInfo.InvariantCulture, out var t) && t > 0 ? t : 60);
 }
 
@@ -52,7 +52,19 @@ internal sealed class ProveedorSmartCloud(IHttpClientFactory http, SmartCloudOpc
 
     public IReadOnlyList<CanalComparendos> Canales => Fuente.Simit;
 
-    public string? NoConectado => opciones.ClaveAcceso.Length == 0 ? "Falta la clave de acceso de SmartCloud (SMARTCLOUD_ACCESS_KEY)." : null;
+    public string? NoConectado
+    {
+        get
+        {
+            string[] faltan = [.. new[]
+            {
+                opciones.ClaveAcceso.Length == 0 ? "SMARTCLOUD_ACCESS_KEY" : null,
+                opciones.UrlIdentificacion is null ? "SMARTCLOUD_URL_IDENTIFICACION" : null,
+                opciones.UrlPlaca is null ? "SMARTCLOUD_URL_PLACA" : null,
+            }.OfType<string>()];
+            return faltan.Length == 0 ? null : $"Falta configurar SmartCloud: {string.Join(", ", faltan)}.";
+        }
+    }
 
     public async Task<ConsultarComparendosResponse> ConsultarAsync(ConsultarComparendosRequest pedido, CancellationToken ct)
     {

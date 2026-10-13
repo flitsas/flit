@@ -100,9 +100,21 @@ el producto.
 **Fuentes (HU #13520).** Van por core-consultas (`FuentesComparendosService`, el mismo gRPC 8084 y scope
 `platform.consultas` que ya tiene `svc-comparendos`). Para usar Verifik SIMIT en un ambiente: en core-consultas
 `Consultations__VerifikSimitMode=real` y la llave `VERIFIK_*` (las mismas de Trámites). SmartCloud (los servicios SOAP
-del SIMIT) y la API municipal usan el contrato del BackCrudSmartCloud de V1: en el `.env`, `SMARTCLOUD_ACCESS_KEY`
-(el `SMART_CLOUD_ACCESS_KEY` de V1) y `MUNICIPAL_INFRACCIONES_BASE_URL` (el `MUNICIPALITY_INFRACTION_API_BASE_URL` de
-V1). Vacías, aparecen como «no conectados». La fuente municipal solo consulta por identificación.
+del SIMIT) y la API municipal usan el contrato del BackCrudSmartCloud de V1. Todo va en el `.env` y nada tiene valor
+por defecto en el código:
+
+| Variable | Valor |
+|---|---|
+| `SMARTCLOUD_ACCESS_KEY` | La clave de V1 (`SMART_CLOUD_ACCESS_KEY`). Secreta |
+| `SMARTCLOUD_URL_IDENTIFICACION` | `https://www3.simit.org.co/ServiciosSimit/EstadoCuentaIdentificacion` |
+| `SMARTCLOUD_URL_PLACA` | `https://www3.simit.org.co/ServiciosSimit/EstadoCuentaPlaca` |
+| `MUNICIPAL_INFRACCIONES_BASE_URL` | La de V1 (`MUNICIPALITY_INFRACTION_API_BASE_URL`) o la nueva |
+| `MUNICIPAL_INFRACCIONES_PATH` | `/infraction/api/Infraccion/EntregarInfraccion` (contrato de V1) |
+
+Los timeouts (`*_TIMEOUT_SECONDS`) son opcionales: 60 s. Si falta alguna de las otras, la fuente aparece como «no
+conectada» con el nombre de la variable que falta. La fuente municipal solo consulta por identificación.
+Probado contra el SIMIT real el 2026-10-13: no pide registrar la IP, solo la clave. El día del despliegue, confirmar
+con una consulta desde la VPS.
 
 `NOTIFICACIONES_REMOTO_ADDRESS` (la misma de core-api) apunta los correos a core-notificaciones. Si quedara vacía, los
 correos se escriben en el log y no salen: revisarla.
