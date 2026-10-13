@@ -13,7 +13,7 @@ contracts/proto/
 └── flit/
     ├── platform/v1/               # tipos comunes: Placa, Vin, DocumentoIdentidad, CodigoError
     ├── identidad/v1/              # IdentidadService (lo atiende core-identity)
-    ├── consultas/v1/              # ConsultasService (lo atiende core-consultas)
+    ├── consultas/v1/              # ConsultasService y FuentesComparendosService (los atiende core-consultas)
     └── notificaciones/v1/         # NotificacionesService (lo atiende core-notificaciones)
 ```
 
