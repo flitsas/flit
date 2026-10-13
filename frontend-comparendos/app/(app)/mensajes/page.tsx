@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Download, RotateCcw } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -120,9 +121,10 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
   );
 }
 
-/** Centro de Mensajes (HU #13486, §7.7): todo lo que Comparendos envió, con su estado, aperturas y reintento de fallidos. */
-export default function CentroMensajes() {
+function Centro() {
   const { sesion } = useSesion();
+  // ?mensaje=<id> abre su detalle (enlace desde el timeline del comparendo, §7.2).
+  const params = useSearchParams();
   const superAdmin = !!sesion?.usuario.esSuperAdmin;
   const pg = usePaginacion(25);
   const [empresa, setEmpresa] = useState<string | null>(null);
@@ -133,7 +135,7 @@ export default function CentroMensajes() {
   const [hasta, setHasta] = useState("");
   const [comparendo, setComparendo] = useState("");
   const [placa, setPlaca] = useState("");
-  const [abierto, setAbierto] = useState<string | null>(null);
+  const [abierto, setAbierto] = useState<string | null>(() => params.get("mensaje"));
   const [verComparendo, setVerComparendo] = useState<string | null>(null);
 
   const filtros = { empresa: internas ? undefined : (empresa ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
@@ -160,89 +162,98 @@ export default function CentroMensajes() {
   };
 
   return (
-    <Requiere permiso={P.mensajesVer}>
-      <section className="flex flex-col gap-4">
-        <Encabezado titulo="Centro de mensajes" descripcion="Los correos que envió Comparendos: a quién, cuándo, si llegaron y si posiblemente se abrieron." />
-        {superAdmin && (
-          <div className="flex flex-wrap items-end gap-4">
-            {!internas && <SelectorEmpresa valor={empresa} onCambio={filtrar(setEmpresa)} />}
-            <Interruptor etiqueta="Solo alertas internas de FLIT" activo={internas} onCambio={filtrar(setInternas)} />
-          </div>
-        )}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <label className={ETIQUETA_CLS}>
-            Tipo
-            <select className={INPUT_CLS} value={tipo} onChange={(e) => filtrar(setTipo)(e.target.value)}>
-              <option value="">Todos</option>
-              {opciones(TIPO_COMUNICACION).map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.texto}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={ETIQUETA_CLS}>
-            Estado
-            <select className={INPUT_CLS} value={estado} onChange={(e) => filtrar(setEstado)(e.target.value)}>
-              <option value="">Todos</option>
-              {opciones(ESTADO_COMUNICACION).map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.texto}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={ETIQUETA_CLS}>
-            Desde
-            <input type="date" className={INPUT_CLS} value={desde} onChange={(e) => filtrar(setDesde)(e.target.value)} />
-          </label>
-          <label className={ETIQUETA_CLS}>
-            Hasta
-            <input type="date" className={INPUT_CLS} value={hasta} onChange={(e) => filtrar(setHasta)(e.target.value)} />
-          </label>
-          <label className={ETIQUETA_CLS}>
-            Comparendo
-            <input className={INPUT_CLS} value={comparendo} onChange={(e) => filtrar(setComparendo)(e.target.value)} />
-          </label>
-          <label className={ETIQUETA_CLS}>
-            Placa
-            <input className={INPUT_CLS} value={placa} onChange={(e) => filtrar(setPlaca)(e.target.value.toUpperCase())} />
-          </label>
+    <section className="flex flex-col gap-4">
+      <Encabezado titulo="Centro de mensajes" descripcion="Los correos que envió Comparendos: a quién, cuándo, si llegaron y si posiblemente se abrieron." />
+      {superAdmin && (
+        <div className="flex flex-wrap items-end gap-4">
+          {!internas && <SelectorEmpresa valor={empresa} onCambio={filtrar(setEmpresa)} />}
+          <Interruptor etiqueta="Solo alertas internas de FLIT" activo={internas} onCambio={filtrar(setInternas)} />
         </div>
-        <DataTable
-          ariaLabel="Mensajes enviados"
-          rows={lista.datos?.items ?? []}
-          getRowKey={(m) => m.id}
-          status={lista.estado}
-          errorMessage={lista.error ?? undefined}
-          onRetry={lista.recargar}
-          onRowClick={(m) => setAbierto(m.id)}
-          emptyMessage="No hay mensajes con esos filtros."
-          columns={[
-            { key: "fecha", header: "Fecha", render: (m) => formatoFechaHora(m.enviadoEn ?? m.creadoEn) },
-            { key: "tipo", header: "Tipo", render: (m) => TIPO_COMUNICACION[m.tipo] ?? m.tipo },
-            { key: "dest", header: "Destinatarios", render: (m) => resumenDestinatarios(leerDestinatarios(m.destinatarios)) },
-            { key: "asunto", header: "Asunto", render: (m) => <span className="line-clamp-2">{m.asunto}</span> },
-            {
-              key: "estado",
-              header: "Estado",
-              render: (m) => (
-                <span className="flex flex-wrap gap-1">
-                  <Chip e={estadoComunicacion(m.estado)} title={m.motivoFallo ?? undefined} />
-                  {m.desviado && <StatusBadge label="Desviado" tone="warning" />}
-                </span>
-              ),
-            },
-            { key: "reintentos", header: "Reintentos", align: "right", render: (m) => m.reintentos },
-            { key: "apertura", header: "Posiblemente abierto", render: (m) => (m.abiertoEn ? formatoFechaHora(m.abiertoEn) : "—") },
-            { key: "comparendo", header: "Comparendo", render: (m) => m.comparendo ?? "—" },
-          ]}
-          pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
-        />
-        <p className="text-[11px] opacity-60">La apertura es un dato informativo: no constituye prueba de notificación.</p>
-        {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={setVerComparendo} />}
-        <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} onCambio={lista.recargar} />
-      </section>
+      )}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <label className={ETIQUETA_CLS}>
+          Tipo
+          <select className={INPUT_CLS} value={tipo} onChange={(e) => filtrar(setTipo)(e.target.value)}>
+            <option value="">Todos</option>
+            {opciones(TIPO_COMUNICACION).map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.texto}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Estado
+          <select className={INPUT_CLS} value={estado} onChange={(e) => filtrar(setEstado)(e.target.value)}>
+            <option value="">Todos</option>
+            {opciones(ESTADO_COMUNICACION).map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.texto}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Desde
+          <input type="date" className={INPUT_CLS} value={desde} onChange={(e) => filtrar(setDesde)(e.target.value)} />
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Hasta
+          <input type="date" className={INPUT_CLS} value={hasta} onChange={(e) => filtrar(setHasta)(e.target.value)} />
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Comparendo
+          <input className={INPUT_CLS} value={comparendo} onChange={(e) => filtrar(setComparendo)(e.target.value)} />
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Placa
+          <input className={INPUT_CLS} value={placa} onChange={(e) => filtrar(setPlaca)(e.target.value.toUpperCase())} />
+        </label>
+      </div>
+      <DataTable
+        ariaLabel="Mensajes enviados"
+        rows={lista.datos?.items ?? []}
+        getRowKey={(m) => m.id}
+        status={lista.estado}
+        errorMessage={lista.error ?? undefined}
+        onRetry={lista.recargar}
+        onRowClick={(m) => setAbierto(m.id)}
+        emptyMessage="No hay mensajes con esos filtros."
+        columns={[
+          { key: "fecha", header: "Fecha", render: (m) => formatoFechaHora(m.enviadoEn ?? m.creadoEn) },
+          { key: "tipo", header: "Tipo", render: (m) => TIPO_COMUNICACION[m.tipo] ?? m.tipo },
+          { key: "dest", header: "Destinatarios", render: (m) => resumenDestinatarios(leerDestinatarios(m.destinatarios)) },
+          { key: "asunto", header: "Asunto", render: (m) => <span className="line-clamp-2">{m.asunto}</span> },
+          {
+            key: "estado",
+            header: "Estado",
+            render: (m) => (
+              <span className="flex flex-wrap gap-1">
+                <Chip e={estadoComunicacion(m.estado)} title={m.motivoFallo ?? undefined} />
+                {m.desviado && <StatusBadge label="Desviado" tone="warning" />}
+              </span>
+            ),
+          },
+          { key: "reintentos", header: "Reintentos", align: "right", render: (m) => m.reintentos },
+          { key: "apertura", header: "Posiblemente abierto", render: (m) => (m.abiertoEn ? formatoFechaHora(m.abiertoEn) : "—") },
+          { key: "comparendo", header: "Comparendo", render: (m) => m.comparendo ?? "—" },
+        ]}
+        pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
+      />
+      <p className="text-[11px] opacity-60">La apertura es un dato informativo: no constituye prueba de notificación.</p>
+      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={setVerComparendo} />}
+      <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} onCambio={lista.recargar} />
+    </section>
+  );
+}
+
+/** Centro de Mensajes (HU #13486, §7.7): todo lo que Comparendos envió, con su estado, aperturas y reintento de fallidos. */
+export default function CentroMensajes() {
+  return (
+    <Requiere permiso={P.mensajesVer}>
+      <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
+        <Centro />
+      </Suspense>
     </Requiere>
   );
 }

@@ -1,13 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { MessageSquarePlus } from "lucide-react";
 import { InlineAlert } from "@flit/ui";
+import { useSesion } from "@/components/ComparendosShell";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { EVENTO_TIMELINE } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
+import { P } from "@/lib/nav";
+import { tienePermiso } from "@/lib/sesion";
 import type { EventoTimeline } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
@@ -25,6 +29,8 @@ const COLOR_ACTOR: Record<string, string> = {
  */
 export function Timeline({ comparendoId, puedeObservar, onCambio }: { comparendoId: string; puedeObservar: boolean; onCambio?: () => void }) {
   const toast = useToast();
+  const { sesion } = useSesion();
+  const verMensajes = tienePermiso(sesion, P.mensajesVer);
   const [tipo, setTipo] = useState("");
   const [nota, setNota] = useState("");
   const [escribiendo, setEscribiendo] = useState(false);
@@ -98,6 +104,12 @@ export function Timeline({ comparendoId, puedeObservar, onCambio }: { comparendo
               </span>
             </div>
             <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{e.descripcion}</p>
+            {/* §7.2: el evento lleva a lo que lo originó cuando tiene pantalla propia (hoy, los correos del Centro de mensajes). */}
+            {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
+              <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-[#557EFF] hover:underline">
+                Ver el correo
+              </Link>
+            )}
           </li>
         ))}
       </ol>
