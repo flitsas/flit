@@ -62,6 +62,10 @@ public sealed class BaseProductoTests(ApiDePrueba api) : IClassFixture<ApiDePrue
         festivos2026.Should().Be(18);
         organismos.Should().Be(298);
         trabajos.Should().Be(4, "la ingesta no tiene cron global: cada empresa tiene su agenda (HU #13521)");
+        // Correos de radicación importados de V1 (traffic_secretaries.notifier_email): sin ellos no sale ningún DP.
+        var conCorreo = await api.EnDbAsync(db => db.OrganismosTransito.CountAsync(o => o.CorreosRadicacion.Count > 0));
+        conCorreo.Should().Be(267);
+        (await api.EnDbAsync(db => db.OrganismosTransito.SingleAsync(o => o.Codigo == "11001000"))).CorreosRadicacion.Should().Equal("judicial@movilidadbogota.gov.co");
         tipologias.Should().Be(11);
     }
 

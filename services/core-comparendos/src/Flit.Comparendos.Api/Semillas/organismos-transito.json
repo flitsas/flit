@@ -1,2982 +1,3816 @@
 [
-{
-"id": "978fbaa4-fd88-5ef9-a4ab-100fbdb7f731",
-"codigo": "10000030",
-"nombre": "CENTRO DE SERVICIOS DE MOVILIDAD CALLE 13",
-"departamentoCodigo": "11",
-"municipioCodigo": "11001",
-"activo": true,
-"municipio": "BOGOTA",
-"departamento": "BOGOTA D.C."
-},
-{
-"id": "aaaaaaaa-0001-4000-8000-000000000001",
-"codigo": "11001000",
-"nombre": "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA",
-"departamentoCodigo": "11",
-"municipioCodigo": "11001",
-"activo": true,
-"municipio": "BOGOTA",
-"departamento": "BOGOTA D.C."
-},
-{
-"id": "aaaaaaaa-0001-4000-8000-000000000006",
-"codigo": "13001000",
-"nombre": "DPTO ADTVO TTOyTTE DIST CARTAGENA",
-"departamentoCodigo": "13",
-"municipioCodigo": "13001",
-"activo": true,
-"municipio": "CARTAGENA",
-"departamento": "BOLIVAR"
-},
-{
-"id": "d11cc704-03e1-5fab-9c03-8f26462f469c",
-"codigo": "13052000",
-"nombre": "STRIA MCPAL TTEyTTO ARJONA",
-"departamentoCodigo": "13",
-"municipioCodigo": "13052",
-"activo": true,
-"municipio": "ARJONA",
-"departamento": "BOLIVAR"
-},
-{
-"id": "81aa9125-7790-5924-9b41-2e4a0d949f59",
-"codigo": "13222000",
-"nombre": "INSTITUTO MUNICIPAL DE TRANSITO Y TRANSPORTE DE CLEMENCIA BOLIVAR",
-"departamentoCodigo": "13",
-"municipioCodigo": "13222",
-"activo": true,
-"municipio": "CLEMENCIA",
-"departamento": "BOLIVAR"
-},
-{
-"id": "7057f642-1316-5131-a210-8c44c0c85ff2",
-"codigo": "13244000",
-"nombre": "INSTITUTO DE MOVILIDAD DE EL CARMEN DE BOLIVAR",
-"departamentoCodigo": "13",
-"municipioCodigo": "13244",
-"activo": true,
-"municipio": "EL CARMEN DE BOLIVAR",
-"departamento": "BOLIVAR"
-},
-{
-"id": "6eb5b304-b170-5029-8a66-49a7cde030f3",
-"codigo": "13430000",
-"nombre": "F. MCPAL TTOyTTE TERRESTRE MAGANGUE",
-"departamentoCodigo": "13",
-"municipioCodigo": "13430",
-"activo": true,
-"municipio": "MAGANGUE",
-"departamento": "BOLIVAR"
-},
-{
-"id": "a2c71553-2f96-5c7c-8dc1-03870c01cd83",
-"codigo": "13468000",
-"nombre": "INSP TTO MOMPOX",
-"departamentoCodigo": "13",
-"municipioCodigo": "13468",
-"activo": true,
-"municipio": "MOMPOS",
-"departamento": "BOLIVAR"
-},
-{
-"id": "8f5ab33c-8211-5d2e-b337-c8a7a0f07803",
-"codigo": "13657000",
-"nombre": "DPTO TTOyTTE MCPAL SAN JUAN DE NEPOMUCENO",
-"departamentoCodigo": "13",
-"municipioCodigo": "13657",
-"activo": true,
-"municipio": "SAN JUAN NEPOMUCENO",
-"departamento": "BOLIVAR"
-},
-{
-"id": "a214e4d9-22fa-5b54-908d-b6736f63914e",
-"codigo": "13683000",
-"nombre": "MUNICIPIO DE SANTA ROSA DEL SUR DE BOLIVAR",
-"departamentoCodigo": "13",
-"municipioCodigo": "13688",
-"activo": true,
-"municipio": "SANTA ROSA DEL SUR",
-"departamento": "BOLIVAR"
-},
-{
-"id": "25ec4f9e-b0ed-585d-9e5b-64ee7bf2c174",
-"codigo": "13683001",
-"nombre": "SECRETARIA DE MOVILIDAD DEL DEPARTAMENTO DE BOLIVAR",
-"departamentoCodigo": "13",
-"municipioCodigo": "13683",
-"activo": true,
-"municipio": "SANTA ROSA",
-"departamento": "BOLIVAR"
-},
-{
-"id": "b00e0d60-3ab5-5275-a316-1c68859200aa",
-"codigo": "13836000",
-"nombre": "STRIA TTOYTTE MCPAL TURBACO",
-"departamentoCodigo": "13",
-"municipioCodigo": "13836",
-"activo": true,
-"municipio": "TURBACO",
-"departamento": "BOLIVAR"
-},
-{
-"id": "1ddb9438-33f5-5030-b7a2-07d391674b41",
-"codigo": "15001000",
-"nombre": "STRIA DE TTOyTTE TUNJA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15001",
-"activo": true,
-"municipio": "TUNJA",
-"departamento": "BOYACA"
-},
-{
-"id": "01ed4ec7-ec12-5147-a5ff-b6519907db8f",
-"codigo": "15176000",
-"nombre": "STRIA MCPAL  TTOyTTE CHIQUINQUIRÁ",
-"departamentoCodigo": "15",
-"municipioCodigo": "15176",
-"activo": true,
-"municipio": "CHIQUINQUIRA",
-"departamento": "BOYACA"
-},
-{
-"id": "27d51a49-edd5-5a89-b866-f8551f2d22f3",
-"codigo": "15204000",
-"nombre": "ITBOY - DIST TTO No 1/COMBITA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15204",
-"activo": true,
-"municipio": "COMBITA - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "dee010c2-f38a-5127-9d9b-8622160886f0",
-"codigo": "15238000",
-"nombre": "STRIA MCPAL TTOyTTE DUITAMA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15238",
-"activo": true,
-"municipio": "DUITAMA",
-"departamento": "BOYACA"
-},
-{
-"id": "72d768b4-a649-50be-97b1-d5b64d25fc11",
-"codigo": "15299000",
-"nombre": "STRIA TTOyTTE MCPAL GARAGOA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15299",
-"activo": true,
-"municipio": "GARAGOA",
-"departamento": "BOYACA"
-},
-{
-"id": "bc23f60e-7bef-5c16-a835-132ee9d17d07",
-"codigo": "15322000",
-"nombre": "ITBOY - DIST TTO No. 6/GUATEQUE",
-"departamentoCodigo": "15",
-"municipioCodigo": "15322",
-"activo": true,
-"municipio": "GUATEQUE - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "7d5061de-86f3-5d01-808f-f8deb78aa650",
-"codigo": "15407000",
-"nombre": "ITBOY - DIST TTO No. 10/VILLA DE LEYVA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15407",
-"activo": true,
-"municipio": "VILLA DE LEYVA - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "a230efb3-7675-5d3f-9096-34467ca878a8",
-"codigo": "15455000",
-"nombre": "ITBOY - DIST TTO No. 9/MIRAFLORES",
-"departamentoCodigo": "15",
-"municipioCodigo": "15455",
-"activo": true,
-"municipio": "MIRAFLORES - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "6f1eb8ac-f99d-509a-8be4-6b711b73bd63",
-"codigo": "15469000",
-"nombre": "ITBOY - DIST TTO No. 5/MONIQUIRA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15469",
-"activo": true,
-"municipio": "MONIQUIRA - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "dfcfb93d-70e0-5bdc-b388-1880838e4e37",
-"codigo": "15491000",
-"nombre": "ITBOY - DIST TTO No. 2/ NOBSA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15491",
-"activo": true,
-"municipio": "NOBSA - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "b051a3bf-014e-55b6-97f9-daaa2936f147",
-"codigo": "15516000",
-"nombre": "STRIA TTOyTTE MCPAL PAIPA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15516",
-"activo": true,
-"municipio": "PAIPA",
-"departamento": "BOYACA"
-},
-{
-"id": "ff2647cd-3452-5dc3-a980-3d8d7166859b",
-"codigo": "15572000",
-"nombre": "INSP TTOyTTE MCPAL PUERTO BOYACA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15572",
-"activo": true,
-"municipio": "PUERTO BOYACA",
-"departamento": "BOYACA"
-},
-{
-"id": "cdb7efc9-1b54-515c-81dc-f23556f344ed",
-"codigo": "15599000",
-"nombre": "ITBOY - DIST TTO No. 11/RAMIRIQUI",
-"departamentoCodigo": "15",
-"municipioCodigo": "15599",
-"activo": true,
-"municipio": "RAMIRIQUI - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "0b00c783-de15-58ca-8249-fd9a5368ab6a",
-"codigo": "15632000",
-"nombre": "ITBOY - DIST TTO No. 4/SABOYA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15632",
-"activo": true,
-"municipio": "SABOYA - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "d0d0b4c8-8d1d-525e-bc8e-f353da6b446c",
-"codigo": "15693000",
-"nombre": "ITBOY - DIST DE TTO SANTA ROSA DE VITERBO",
-"departamentoCodigo": "15",
-"municipioCodigo": "15693",
-"activo": true,
-"municipio": "SANTA ROSA DE VITERBO - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "3ea0e6b1-3cdd-523b-9e3b-b75105ee55f3",
-"codigo": "15753000",
-"nombre": "ITBOY - DIST TTO No. 7/SOATA",
-"departamentoCodigo": "15",
-"municipioCodigo": "15753",
-"activo": true,
-"municipio": "SOATA - BOYACA",
-"departamento": "BOYACÁ"
-},
-{
-"id": "384136d5-db05-55a3-a9a7-cb436d41d2bd",
-"codigo": "15759000",
-"nombre": "INST TTOyTTE MCPAL SOGAMOSO",
-"departamentoCodigo": "15",
-"municipioCodigo": "15759",
-"activo": true,
-"municipio": "SOGAMOSO",
-"departamento": "BOYACA"
-},
-{
-"id": "31991383-8efb-5743-837b-853d4c991ff9",
-"codigo": "17001000",
-"nombre": "SECRETARÍA DE MOVILIDAD DE MANIZALES",
-"departamentoCodigo": "17",
-"municipioCodigo": "17001",
-"activo": true,
-"municipio": "MANIZALES",
-"departamento": "CALDAS"
-},
-{
-"id": "037abacf-5f44-5cbd-8fe2-c4e305d09b67",
-"codigo": "17013000",
-"nombre": "INSP TTEyTTO AGUADAS",
-"departamentoCodigo": "17",
-"municipioCodigo": "17013",
-"activo": true,
-"municipio": "AGUADAS",
-"departamento": "CALDAS"
-},
-{
-"id": "1fe25759-acd8-5303-82a1-89a251dfb319",
-"codigo": "17042000",
-"nombre": "STRIA TTEyTTO ANSERMA",
-"departamentoCodigo": "17",
-"municipioCodigo": "17042",
-"activo": true,
-"municipio": "ANSERMA",
-"departamento": "CALDAS"
-},
-{
-"id": "f16d5054-358f-5c8d-9d7b-434129814f0c",
-"codigo": "17050000",
-"nombre": "UND TTO CALDAS/ARANZAZU",
-"departamentoCodigo": "17",
-"municipioCodigo": "17050",
-"activo": true,
-"municipio": "ARANZAZU - CALDAS",
-"departamento": "CALDAS"
-},
-{
-"id": "03adccf3-4194-5bd5-a51a-cffab614bfcf",
-"codigo": "17174000",
-"nombre": "STRIA MCPAL TTOyTTE CHINCHINA",
-"departamentoCodigo": "17",
-"municipioCodigo": "17174",
-"activo": true,
-"municipio": "CHINCHINA",
-"departamento": "CALDAS"
-},
-{
-"id": "f3dd68b3-f02d-51f4-85de-05d485486c6a",
-"codigo": "17380000",
-"nombre": "INPS TTOYTTE LA DORADA",
-"departamentoCodigo": "17",
-"municipioCodigo": "17380",
-"activo": true,
-"municipio": "LA DORADA",
-"departamento": "CALDAS"
-},
-{
-"id": "3789e793-e3c5-5338-b6c8-b316fbc5170e",
-"codigo": "17433000",
-"nombre": "DIR MCPAL TTOyTTE MANZANARES",
-"departamentoCodigo": "17",
-"municipioCodigo": "17433",
-"activo": true,
-"municipio": "MANZANARES",
-"departamento": "CALDAS"
-},
-{
-"id": "0a28e48e-7eb3-5005-bc90-8bf248a38026",
-"codigo": "17486000",
-"nombre": "STRIA TTO MOV MCPAL NEIRA/CALDAS",
-"departamentoCodigo": "17",
-"municipioCodigo": "17486",
-"activo": true,
-"municipio": "NEIRA",
-"departamento": "CALDAS"
-},
-{
-"id": "8749ef16-9e94-5492-927f-a283167d5e10",
-"codigo": "17614000",
-"nombre": "SUB STRIA MOVILIDAD RIOSUCIO",
-"departamentoCodigo": "17",
-"municipioCodigo": "17614",
-"activo": true,
-"municipio": "RIOSUCIO",
-"departamento": "CALDAS"
-},
-{
-"id": "f23ccc8a-2c57-5b6f-b0d0-85b981b7c287",
-"codigo": "17653000",
-"nombre": "STRIA TTOyTTE SALAMINA",
-"departamentoCodigo": "17",
-"municipioCodigo": "17653",
-"activo": true,
-"municipio": "SALAMINA",
-"departamento": "CALDAS"
-},
-{
-"id": "9c72d4a3-ad80-531a-b440-b1b2cafce305",
-"codigo": "17777000",
-"nombre": "STRIA MOV MCPAL SUPIA/CALDAS",
-"departamentoCodigo": "17",
-"municipioCodigo": "17777",
-"activo": true,
-"municipio": "SUPIA",
-"departamento": "CALDAS"
-},
-{
-"id": "92f0d4b7-fd48-523d-a86e-5e6b40832c67",
-"codigo": "17873000",
-"nombre": "UNIDAD TTO CALDAS/VILLAMARIA",
-"departamentoCodigo": "17",
-"municipioCodigo": "17873",
-"activo": true,
-"municipio": "VILLAMARIA - CALDAS",
-"departamento": "CALDAS"
-},
-{
-"id": "84a58c8c-e346-5ea0-a4b7-beb3cb69a220",
-"codigo": "17877000",
-"nombre": "STRIA MOV MCPAL VITERBO/CALDAS",
-"departamentoCodigo": "17",
-"municipioCodigo": "17877",
-"activo": true,
-"municipio": "VITERBO",
-"departamento": "CALDAS"
-},
-{
-"id": "d5bef58e-0f2c-564a-882b-51f82716f8c5",
-"codigo": "18001000",
-"nombre": "STRIA TTOyTTE MCPAL FLORENCIA",
-"departamentoCodigo": "18",
-"municipioCodigo": "18001",
-"activo": true,
-"municipio": "FLORENCIA",
-"departamento": "CAQUETA"
-},
-{
-"id": "078a44a9-4e12-5aad-9261-f0c98ba07a6e",
-"codigo": "18094000",
-"nombre": "DIR TTOyTTE DPTAL CAQUETA/BELEN DE LOS ANDAQUIES",
-"departamentoCodigo": "18",
-"municipioCodigo": "18094",
-"activo": true,
-"municipio": "BELEN DE LOS ANDAQUIES - CAQUETA",
-"departamento": "CAQUETÁ"
-},
-{
-"id": "b7c4ee84-24d0-5a88-8f6c-0cdbee201339",
-"codigo": "18256000",
-"nombre": "DIR TTOYTTE DPTAL CAQUETA/EL PAUJIL",
-"departamentoCodigo": "18",
-"municipioCodigo": "18256",
-"activo": true,
-"municipio": "FLORENCIA - CAQUETA",
-"departamento": "CAQUETÁ"
-},
-{
-"id": "4d018af6-8c56-5ff4-a3ac-7784ef0b10ea",
-"codigo": "18753000",
-"nombre": "DIR TTOyTTE DPTAL CAQUETA/SAN VIC CAGUAN",
-"departamentoCodigo": "18",
-"municipioCodigo": "18753",
-"activo": true,
-"municipio": "SAN VICENTE DEL CAGUAN - CAQUETA",
-"departamento": "CAQUETÁ"
-},
-{
-"id": "4e87f8c8-b0f3-5a60-8a7b-25670eb907ef",
-"codigo": "19001000",
-"nombre": "STRIA TTOyTTE MCPAL POPAYAN",
-"departamentoCodigo": "19",
-"municipioCodigo": "19001",
-"activo": true,
-"municipio": "POPAYAN",
-"departamento": "CAUCA"
-},
-{
-"id": "4a46222e-b98c-51ee-9822-4c2c0aa4834e",
-"codigo": "19100000",
-"nombre": "STRIA TTOyTTE MCPAL BOLIVAR",
-"departamentoCodigo": "19",
-"municipioCodigo": "19100",
-"activo": true,
-"municipio": "BOLIVAR",
-"departamento": "CAUCA"
-},
-{
-"id": "50f57f60-962e-5c85-96db-aaf5a81a0f1d",
-"codigo": "19142000",
-"nombre": "STRIA TTOyTTE MCPAL CALOTO",
-"departamentoCodigo": "19",
-"municipioCodigo": "19142",
-"activo": true,
-"municipio": "CALOTO",
-"departamento": "CAUCA"
-},
-{
-"id": "649d316f-ac21-5b3e-b159-af46bebbd144",
-"codigo": "19256000",
-"nombre": "STRIA TTOYTTE MCPAL EL TAMBO",
-"departamentoCodigo": "19",
-"municipioCodigo": "19256",
-"activo": true,
-"municipio": "EL TAMBO",
-"departamento": "CAUCA"
-},
-{
-"id": "ebb3bb3b-59c1-595d-9c76-f5503f0cc50e",
-"codigo": "19455000",
-"nombre": "STRIA TTOyTTE MCPAL MIRANDA",
-"departamentoCodigo": "19",
-"municipioCodigo": "19455",
-"activo": true,
-"municipio": "MIRANDA",
-"departamento": "CAUCA"
-},
-{
-"id": "d401b4a1-a657-59f2-9e80-9c49597df7d8",
-"codigo": "19532000",
-"nombre": "STRIA TTO MCPAL PATIA",
-"departamentoCodigo": "19",
-"municipioCodigo": "19532",
-"activo": true,
-"municipio": "PATIA",
-"departamento": "CAUCA"
-},
-{
-"id": "d02df8ea-9830-5a19-9653-ffb904513ebe",
-"codigo": "19548000",
-"nombre": "STRIA TTOyTTE MCPAL PIENDAMO",
-"departamentoCodigo": "19",
-"municipioCodigo": "19548",
-"activo": true,
-"municipio": "PIENDAMO",
-"departamento": "CAUCA"
-},
-{
-"id": "0cfa69f0-a230-57fb-b570-8f245ce28fe7",
-"codigo": "19573000",
-"nombre": "STRIA TTO MCPAL PUERTO TEJADA",
-"departamentoCodigo": "19",
-"municipioCodigo": "19573",
-"activo": true,
-"municipio": "PUERTO TEJADA",
-"departamento": "CAUCA"
-},
-{
-"id": "d6317c96-aecb-5d57-b892-1f6f3e9924ad",
-"codigo": "19698000",
-"nombre": "STRIA TTOyTTE MPAL SANTANDER QUILICHAO",
-"departamentoCodigo": "19",
-"municipioCodigo": "19698",
-"activo": true,
-"municipio": "SANTANDER DE QUILICHAO",
-"departamento": "CAUCA"
-},
-{
-"id": "d92b4cce-7d8a-57a7-a764-47d9fcde50b5",
-"codigo": "19807000",
-"nombre": "STRIA TTOyTTE MCPAL TIMBIO",
-"departamentoCodigo": "19",
-"municipioCodigo": "19807",
-"activo": true,
-"municipio": "TIMBIO",
-"departamento": "CAUCA"
-},
-{
-"id": "f8754301-bc3f-5727-a1c3-b491d79f402c",
-"codigo": "19845000",
-"nombre": "STRIA DE MOVILIDAD DEL MUNICIPIO DE VILLA RICA CAUCA",
-"departamentoCodigo": "19",
-"municipioCodigo": "19845",
-"activo": true,
-"municipio": "VILLA RICA",
-"departamento": "CAUCA"
-},
-{
-"id": "53f89618-56b1-596b-a831-77e08f566094",
-"codigo": "20001000",
-"nombre": "INST MCPAL TTOyTTE VALLEDUPAR",
-"departamentoCodigo": "20",
-"municipioCodigo": "20001",
-"activo": true,
-"municipio": "VALLEDUPAR",
-"departamento": "CESAR"
-},
-{
-"id": "089c8500-d58f-50b1-9331-ec0c72aa97d2",
-"codigo": "20011000",
-"nombre": "INST MCPAL TTOyTTE AGUACHICA",
-"departamentoCodigo": "20",
-"municipioCodigo": "20011",
-"activo": true,
-"municipio": "AGUACHICA",
-"departamento": "CESAR"
-},
-{
-"id": "2a66d203-b085-52bb-b6e9-8e6260ac2ea8",
-"codigo": "20013000",
-"nombre": "STRIA TTEyTTO MCPAL AGUSTIN CODAZZI",
-"departamentoCodigo": "20",
-"municipioCodigo": "20013",
-"activo": true,
-"municipio": "AGUSTIN CODAZZI",
-"departamento": "CESAR"
-},
-{
-"id": "7683ddef-444d-5803-88d9-7969816b9a31",
-"codigo": "20060000",
-"nombre": "STRIA MCPAL TTOyTTE BOSCONIA",
-"departamentoCodigo": "20",
-"municipioCodigo": "20060",
-"activo": true,
-"municipio": "BOSCONIA",
-"departamento": "CESAR"
-},
-{
-"id": "01503ffc-e97a-5e20-a4f7-7fcdaa435f68",
-"codigo": "20228000",
-"nombre": "STRIA DE TTOyTTE MCPAL CURUMANI",
-"departamentoCodigo": "20",
-"municipioCodigo": "20228",
-"activo": true,
-"municipio": "CURUMANI",
-"departamento": "CESAR"
-},
-{
-"id": "c5c0a4c7-16e7-50db-a82a-a857515b1e35",
-"codigo": "20250000",
-"nombre": "STRIA DE TTO y TTE DE EL PASO-CESAR",
-"departamentoCodigo": "20",
-"municipioCodigo": "20250",
-"activo": true,
-"municipio": "EL PASO",
-"departamento": "CESAR"
-},
-{
-"id": "3d35e464-7d36-5157-a0c8-9dfb6898fce6",
-"codigo": "20400000",
-"nombre": "MUNICIPIO DE LA JAGUA DE IBIRICO",
-"departamentoCodigo": "20",
-"municipioCodigo": "20400",
-"activo": true,
-"municipio": "LA JAGUA DE IBIRICO",
-"departamento": "CESAR"
-},
-{
-"id": "1c0afe7f-3d8d-5242-8d00-2bbd74f5fd92",
-"codigo": "20621000",
-"nombre": "STRIA TTOyTTE MCPAL LA PAZ",
-"departamentoCodigo": "20",
-"municipioCodigo": "20621",
-"activo": true,
-"municipio": "LA PAZ",
-"departamento": "CESAR"
-},
-{
-"id": "ef5146f5-7519-51d2-9c99-37ec81373844",
-"codigo": "20710001",
-"nombre": "INST DTAL DE TTO CESAR/SAN ALBERTO",
-"departamentoCodigo": "20",
-"municipioCodigo": "20710",
-"activo": true,
-"municipio": "SAN ALBERTO",
-"departamento": "CESAR"
-},
-{
-"id": "711f5296-9072-5532-be22-c6b0888b7785",
-"codigo": "20750000",
-"nombre": "INST DTAL DE TTO CESAR/SAN DIEGO",
-"departamentoCodigo": "20",
-"municipioCodigo": "20750",
-"activo": true,
-"municipio": "SAN DIEGO",
-"departamento": "CESAR"
-},
-{
-"id": "ecca5475-5191-562e-8bb1-dc3745982c81",
-"codigo": "20770000",
-"nombre": "STRIA TTOyTTE MCPAL SAN MARTÍN/CESAR",
-"departamentoCodigo": "20",
-"municipioCodigo": "20770",
-"activo": true,
-"municipio": "SAN MARTIN",
-"departamento": "CESAR"
-},
-{
-"id": "f19d5780-8807-5508-9615-c20914e3ee84",
-"codigo": "23001000",
-"nombre": "STRIA MCPAL TTEyTTO MONTERIA",
-"departamentoCodigo": "23",
-"municipioCodigo": "23001",
-"activo": true,
-"municipio": "MONTERIA",
-"departamento": "CORDOBA"
-},
-{
-"id": "0c053c34-6abf-5ceb-97b9-a5da0d72ff96",
-"codigo": "23162000",
-"nombre": "INST TTOyTTE DE CERETE",
-"departamentoCodigo": "23",
-"municipioCodigo": "23162",
-"activo": true,
-"municipio": "CERETE",
-"departamento": "CORDOBA"
-},
-{
-"id": "39a36071-04f0-5e45-b0b3-76a4f7ee7397",
-"codigo": "23182000",
-"nombre": "STRIA DPTAL TTOyTTE CORDOBA/CHINU",
-"departamentoCodigo": "23",
-"municipioCodigo": "23182",
-"activo": true,
-"municipio": "CHINU - CORDOBA",
-"departamento": "CÓRDOBA"
-},
-{
-"id": "e34dc666-014b-5e00-b820-ac1cc91b802d",
-"codigo": "23350000",
-"nombre": "STRIA DPTAL TTOyTTE CORDOBA/APARTADA",
-"departamentoCodigo": "23",
-"municipioCodigo": "23350",
-"activo": true,
-"municipio": "LA APARTADA - CORDOBA",
-"departamento": "CÓRDOBA"
-},
-{
-"id": "8d3c67f1-0fab-5a8d-9015-84a33ccb566a",
-"codigo": "23417000",
-"nombre": "INSP TTOyTTE LORICA",
-"departamentoCodigo": "23",
-"municipioCodigo": "23417",
-"activo": true,
-"municipio": "LORICA",
-"departamento": "CORDOBA"
-},
-{
-"id": "df2a301c-a7d2-55de-8f3a-785c3379ed30",
-"codigo": "23555000",
-"nombre": "STRIA MCPAL TTEyTTO PLANETA RICA",
-"departamentoCodigo": "23",
-"municipioCodigo": "23555",
-"activo": true,
-"municipio": "PLANETA RICA",
-"departamento": "CORDOBA"
-},
-{
-"id": "a3f6bc69-579b-51f7-8144-920ab23cd0ac",
-"codigo": "23660000",
-"nombre": "INSP TTOyTTE MCPAL SAHAGUN",
-"departamentoCodigo": "23",
-"municipioCodigo": "23660",
-"activo": true,
-"municipio": "SAHAGUN",
-"departamento": "CORDOBA"
-},
-{
-"id": "49ec6a2c-b96e-51fa-9e09-681984bef626",
-"codigo": "25053000",
-"nombre": "STRIA TTEy MOV CUND/ARBELAEZ",
-"departamentoCodigo": "25",
-"municipioCodigo": "25053",
-"activo": true,
-"municipio": "ARBELAEZ - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "1ea9c4e4-ba95-5a7c-ba23-c89b3e0c5e89",
-"codigo": "25126000",
-"nombre": "STRIA TTO TTEyMOV MCPAL CAJICA/CUND",
-"departamentoCodigo": "25",
-"municipioCodigo": "25126",
-"activo": true,
-"municipio": "CAJICA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "5edb4379-0d5b-541d-8e7f-333e6fc55558",
-"codigo": "25126001",
-"nombre": "STRIA DPTAL TTEyTTO CUND/CAJICA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25126",
-"activo": true,
-"municipio": "CAJICA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "d8b2e481-9228-5ee2-a2ed-fe4263fe829e",
-"codigo": "25151000",
-"nombre": "STRIA TTEy MOV CUND/CAQUEZA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25151",
-"activo": true,
-"municipio": "CAQUEZA - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "1436197e-2c35-5a6a-bc1b-c3bb4f3abb96",
-"codigo": "25175000",
-"nombre": "SECRETARIA DE  MOVILIDAD MUNICIPAL DE CHIA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25175",
-"activo": true,
-"municipio": "CHIA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "d58b29d8-ff94-5630-8ee3-213d1acf0401",
-"codigo": "25178000",
-"nombre": "STRIA TTEyMOV CUND/CHIPAQUE",
-"departamentoCodigo": "25",
-"municipioCodigo": "25178",
-"activo": true,
-"municipio": "CHIPAQUE",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "16e2bd5c-700e-5c6d-bb2f-a054e161ca0d",
-"codigo": "25183000",
-"nombre": "STRIA TTEyMOV CUND/CHOCONTA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25183",
-"activo": true,
-"municipio": "CHOCONTA - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "66283b7e-c2c1-5ed7-a791-1613f257d684",
-"codigo": "25214000",
-"nombre": "STRIA TTEyMOV CUNDINAMARCA/COTA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25214",
-"activo": true,
-"municipio": "COTA - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "b9b0ac25-832d-5f11-a5fb-357720a6dbfd",
-"codigo": "25260000",
-"nombre": "STRIA TTEyMOV CUND/EL ROSAL",
-"departamentoCodigo": "25",
-"municipioCodigo": "25260",
-"activo": true,
-"municipio": "EL ROSAL - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "a597849d-d83d-57a8-9d40-4f29a4925ab3",
-"codigo": "25269000",
-"nombre": "STRIA TTO MCPAL FACATATIVA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25269",
-"activo": true,
-"municipio": "FACATATIVA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "eeacc872-a522-56bb-9150-70776b094009",
-"codigo": "25286000",
-"nombre": "STRIA TTOyTTE MCPAL FUNZA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25286",
-"activo": true,
-"municipio": "FUNZA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "2dfd7fd4-af51-5d35-b0bf-948083920e3e",
-"codigo": "25290000",
-"nombre": "STRIA DE MOVILIDAD MPAL FUSAGASUGA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25290",
-"activo": true,
-"municipio": "FUSAGASUGA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "5fe4b6bb-fbcc-536e-83c6-69ee6f87f860",
-"codigo": "25307000",
-"nombre": "STRIA TTOyTTE MCPAL GIRARDOT",
-"departamentoCodigo": "25",
-"municipioCodigo": "25307",
-"activo": true,
-"municipio": "GIRARDOT",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "51480198-944c-5b4e-af90-927dc0ca501a",
-"codigo": "25320000",
-"nombre": "STRIA TTOyTTE MCPAL DE GUADUAS",
-"departamentoCodigo": "25",
-"municipioCodigo": "25320",
-"activo": true,
-"municipio": "GUADUAS",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "9549a469-1745-5677-904d-416a77307e99",
-"codigo": "25377000",
-"nombre": "STRIA TTOyTTE MCPAL LA CALERA/CUND",
-"departamentoCodigo": "25",
-"municipioCodigo": "25377",
-"activo": true,
-"municipio": "LA CALERA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "3438fa51-fcb0-5fc1-9a77-15c2c0bc0717",
-"codigo": "25377001",
-"nombre": "STRIA TTEyMOV CUND/LA CALERA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25377",
-"activo": true,
-"municipio": "LA CALERA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "98a25dcc-465b-5758-82ed-26bc1016fdc1",
-"codigo": "25386000",
-"nombre": "SECRETARIA DE TRÁNSITO-DEL MUNICIPIO DE LA MESA-CUNDINAMARCA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25386",
-"activo": true,
-"municipio": "LA MESA - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "c67c2786-560d-541d-bf7c-01f8c26ddbdf",
-"codigo": "25430000",
-"nombre": "STRIA TTOYTTE MCPAL DE MADRID",
-"departamentoCodigo": "25",
-"municipioCodigo": "25430",
-"activo": true,
-"municipio": "MADRID",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "7081d86b-70a5-59e3-b319-2340a20603d6",
-"codigo": "25473000",
-"nombre": "SECRETARÍA DE MOVILIDAD DEL MUNICIPIO DE MOSQUERA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25473",
-"activo": true,
-"municipio": "MOSQUERA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "91b32b59-4b59-5561-bd02-3527d482d10d",
-"codigo": "25513000",
-"nombre": "STRIA TTOyTTE MCPAL PACHO",
-"departamentoCodigo": "25",
-"municipioCodigo": "25513",
-"activo": true,
-"municipio": "PACHO",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "b466eaf5-2005-5878-9f34-5335e3b98c9b",
-"codigo": "25572000",
-"nombre": "STRIA TTEyMOV CUND/PUERTO SALGAR",
-"departamentoCodigo": "25",
-"municipioCodigo": "25572",
-"activo": true,
-"municipio": "PUERTO SALGAR - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "70e0c0b7-a6d7-5958-bb24-033b29a0f62c",
-"codigo": "25612000",
-"nombre": "STRIA TTEyMOV CUND/RICAURTE",
-"departamentoCodigo": "25",
-"municipioCodigo": "25612",
-"activo": true,
-"municipio": "RICAURTE",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "bf308ae8-9683-5b8e-82e0-9bd71ca55801",
-"codigo": "25740000",
-"nombre": "STRIA TTEy MOV CUND/SIBATE",
-"departamentoCodigo": "25",
-"municipioCodigo": "25740",
-"activo": true,
-"municipio": "SIBATE",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "d730ed80-7b79-55ff-b232-8e33029c26be",
-"codigo": "25743000",
-"nombre": "SECRETARIA DE TRANSITO Y TRANSPORTE MUNICIPIO DE SILVANIA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25743",
-"activo": true,
-"municipio": "SILVANIA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "91349bb1-1785-52e2-aac1-044d3de5c0a2",
-"codigo": "25754000",
-"nombre": "STRIA MCPAL DE SOACHA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25754",
-"activo": true,
-"municipio": "SOACHA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "1d85179b-cdb5-5dc2-af79-05c7ea7f0a87",
-"codigo": "25758000",
-"nombre": "STRIA TTOyMOV MCPAL SOPO/CUND",
-"departamentoCodigo": "25",
-"municipioCodigo": "25758",
-"activo": true,
-"municipio": "SOPO",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "d0e00d9f-13cc-5d7f-8d62-448fc163fac6",
-"codigo": "25843000",
-"nombre": "STRIA TTOyTTE MCPAL UBATE",
-"departamentoCodigo": "25",
-"municipioCodigo": "25843",
-"activo": true,
-"municipio": "UBATE",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "dab116f8-7777-5e0c-91bc-e10b3c75d906",
-"codigo": "25875000",
-"nombre": "STRIA TTEyMOV CUND/VILLETA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25875",
-"activo": true,
-"municipio": "VILLETA - CUNDINAMARCA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "3d438442-5dac-5aa4-b91c-ee40dea8c792",
-"codigo": "25899000",
-"nombre": "SECRETARIA DE TRANSPORTE Y MOVILIDAD DE ZIPAQUIRA",
-"departamentoCodigo": "25",
-"municipioCodigo": "25899",
-"activo": true,
-"municipio": "ZIPAQUIRA",
-"departamento": "CUNDINAMARCA"
-},
-{
-"id": "d5fabaff-dbd5-5505-bc45-178a51b6875d",
-"codigo": "27001000",
-"nombre": "STRIA MOVyTTO QUIBDO",
-"departamentoCodigo": "27",
-"municipioCodigo": "27001",
-"activo": true,
-"municipio": "QUIBDO",
-"departamento": "CHOCO"
-},
-{
-"id": "30419835-e9af-5cad-be8b-0ea7fe304f20",
-"codigo": "27361000",
-"nombre": "DIR TTEyTTO DPTAL CHOCO/ISTMINA",
-"departamentoCodigo": "27",
-"municipioCodigo": "27361",
-"activo": true,
-"municipio": "ISTMINA - CHOCO",
-"departamento": "CHOCÓ"
-},
-{
-"id": "0d522f52-0b64-56a4-ab72-11bcaf944d0c",
-"codigo": "41001000",
-"nombre": "SECRETARIA DE MOVILIDAD DE NEIVA",
-"departamentoCodigo": "41",
-"municipioCodigo": "41001",
-"activo": true,
-"municipio": "NEIVA",
-"departamento": "HUILA"
-},
-{
-"id": "b8e0ee97-1369-50ce-8d60-481414d22539",
-"codigo": "41016000",
-"nombre": "STRIA TTOyTTE MCPAL AIPE/HUILA",
-"departamentoCodigo": "41",
-"municipioCodigo": "41016",
-"activo": true,
-"municipio": "AIPE",
-"departamento": "HUILA"
-},
-{
-"id": "7c5e7793-5e69-5923-b680-903560733e6b",
-"codigo": "41132000",
-"nombre": "INST DE TTOyTTE DE CAMPOALEGRE HUILA ITTC",
-"departamentoCodigo": "41",
-"municipioCodigo": "41132",
-"activo": true,
-"municipio": "CAMPOALEGRE",
-"departamento": "HUILA"
-},
-{
-"id": "da751c4c-aa3f-5517-b8bc-490b3147a2b9",
-"codigo": "41298000",
-"nombre": "STRIA MCPAL TTOyTTE GARZON",
-"departamentoCodigo": "41",
-"municipioCodigo": "41298",
-"activo": true,
-"municipio": "GARZON",
-"departamento": "HUILA"
-},
-{
-"id": "ce93c9bd-e932-58c7-adf0-e9dc035a4f76",
-"codigo": "41319000",
-"nombre": "STRIA INFR PROD TTOyTTE MPAL GUADALUPE",
-"departamentoCodigo": "41",
-"municipioCodigo": "41319",
-"activo": true,
-"municipio": "GUADALUPE",
-"departamento": "HUILA"
-},
-{
-"id": "3d4e8266-7749-52ab-891f-068bcc9bfdee",
-"codigo": "41396000",
-"nombre": "STRIA MCPAL TTOyTTE LA PLATA",
-"departamentoCodigo": "41",
-"municipioCodigo": "41396",
-"activo": true,
-"municipio": "LA PLATA",
-"departamento": "HUILA"
-},
-{
-"id": "382ba6ef-04a6-52a6-bcc0-40dd0185322b",
-"codigo": "41524000",
-"nombre": "UND MCPAL TTOyTTE PALERMO",
-"departamentoCodigo": "41",
-"municipioCodigo": "41524",
-"activo": true,
-"municipio": "PALERMO",
-"departamento": "HUILA"
-},
-{
-"id": "31076133-408c-5573-abf1-2418fb334bb3",
-"codigo": "41551000",
-"nombre": "INST TTOyTTE DE PITALITO - INTRAPITALITO",
-"departamentoCodigo": "41",
-"municipioCodigo": "41551",
-"activo": true,
-"municipio": "PITALITO",
-"departamento": "HUILA"
-},
-{
-"id": "cf39f146-0398-549d-a883-3762d60f0bf2",
-"codigo": "41615000",
-"nombre": "INSTITUTO DE TRANSPORTES Y TRÁNSITO DEL HUILA/RIVERA",
-"departamentoCodigo": "41",
-"municipioCodigo": "41615",
-"activo": true,
-"municipio": "RIVERA",
-"departamento": "HUILA"
-},
-{
-"id": "c3534643-8858-5b94-81dc-ca18979fa4b4",
-"codigo": "41807000",
-"nombre": "INST TTOyTTE DPTAL HUILA/TIMANA",
-"departamentoCodigo": "41",
-"municipioCodigo": "41807",
-"activo": true,
-"municipio": "TIMANA - HUILA",
-"departamento": "HUILA"
-},
-{
-"id": "d69cc7a9-a600-54c6-aba8-600af897af01",
-"codigo": "44001000",
-"nombre": "INST. DE TT0, TTE y MOVILIDAD DISTRITAL DE RIOHACHA",
-"departamentoCodigo": "44",
-"municipioCodigo": "44001",
-"activo": true,
-"municipio": "RIOHACHA",
-"departamento": "LA GUAJIRA"
-},
-{
-"id": "6f67763a-fd24-59e8-846a-79ba06770d2b",
-"codigo": "44035000",
-"nombre": "INST TTOYTTE DEL MUNICIPIO DE ALBANIA",
-"departamentoCodigo": "44",
-"municipioCodigo": "44035",
-"activo": true,
-"municipio": "ALBANIA",
-"departamento": "LA GUAJIRA"
-},
-{
-"id": "2796c7b1-8798-5e6b-ad83-60cd3273ddb7",
-"codigo": "44279000",
-"nombre": "INSTITUTO DE TRANSITO Y TRANSPORTE DE FONSECA LA GUAJIRA",
-"departamentoCodigo": "44",
-"municipioCodigo": "44279",
-"activo": true,
-"municipio": "FONSECA",
-"departamento": "LA GUAJIRA"
-},
-{
-"id": "18ce2a78-2cba-5bc6-b21e-303c7ed12241",
-"codigo": "44378000",
-"nombre": "DPTO ADTVO TTOyTTE GUAJIRA/HATONUEVO",
-"departamentoCodigo": "44",
-"municipioCodigo": "44378",
-"activo": true,
-"municipio": "HATONUEVO - LA GUAJIRA",
-"departamento": "LA GUAJIRA"
-},
-{
-"id": "f8491717-df50-5a66-b27f-ace468d02af2",
-"codigo": "44430000",
-"nombre": "INST MCPAL TTOyTTE MAICAO",
-"departamentoCodigo": "44",
-"municipioCodigo": "44430",
-"activo": true,
-"municipio": "MAICAO",
-"departamento": "LA GUAJIRA"
-},
-{
-"id": "3a607aed-da7d-5336-9a21-d6bda1d6be59",
-"codigo": "47001000",
-"nombre": "U TEC CONT/VIG/ REG TTOyTTE SANTA MARTA",
-"departamentoCodigo": "47",
-"municipioCodigo": "47001",
-"activo": true,
-"municipio": "SANTA MARTA",
-"departamento": "MAGDALENA"
-},
-{
-"id": "aadb5f51-da47-5f12-9365-434302029291",
-"codigo": "47053000",
-"nombre": "INST MCPAL TTO DE ARACATACA - IMTARAC",
-"departamentoCodigo": "47",
-"municipioCodigo": "47053",
-"activo": true,
-"municipio": "ARACATACA",
-"departamento": "MAGDALENA"
-},
-{
-"id": "41832d26-f1e8-539a-a970-e2dcc19b1ace",
-"codigo": "47189000",
-"nombre": "INST TTOyTTE MCPAL CIENAGA",
-"departamentoCodigo": "47",
-"municipioCodigo": "47189",
-"activo": true,
-"municipio": "CIENAGA",
-"departamento": "MAGDALENA"
-},
-{
-"id": "24622e93-a3f5-503f-bbf1-3df1c8d5f02c",
-"codigo": "47245000",
-"nombre": "INST MCPAL TTOyTTE EL BANCO",
-"departamentoCodigo": "47",
-"municipioCodigo": "47245",
-"activo": true,
-"municipio": "EL BANCO",
-"departamento": "MAGDALENA"
-},
-{
-"id": "8eafd472-da35-58c9-97a9-7688aab2188a",
-"codigo": "47288000",
-"nombre": "INST MCPAL TTOyTTE FUNDACION",
-"departamentoCodigo": "47",
-"municipioCodigo": "47288",
-"activo": true,
-"municipio": "FUNDACION",
-"departamento": "MAGDALENA"
-},
-{
-"id": "e01ec60d-f24a-5b6e-bfaf-6661970e7426",
-"codigo": "47555000",
-"nombre": "STRIA TTOyTTE MCPAL PLATO - MAGDALENA",
-"departamentoCodigo": "47",
-"municipioCodigo": "47555",
-"activo": true,
-"municipio": "PLATO",
-"departamento": "MAGDALENA"
-},
-{
-"id": "fb8f1a5a-e53d-5f51-b4aa-8e8abb6bfd35",
-"codigo": "47745000",
-"nombre": "TRÁNSITO DPTAL DEL MAGDALENA/SITIONUEVO",
-"departamentoCodigo": "47",
-"municipioCodigo": "47745",
-"activo": true,
-"municipio": "SITIONUEVO - MAGDALENA",
-"departamento": "MAGDALENA"
-},
-{
-"id": "38da7c7b-3a1a-5f1e-848c-70287bf1fbb5",
-"codigo": "47980000",
-"nombre": "STRIA TTOyTTE MCPAL ZONA BANANERA MAGDALENA",
-"departamentoCodigo": "47",
-"municipioCodigo": "47980",
-"activo": true,
-"municipio": "ZONA BANANERA",
-"departamento": "MAGDALENA"
-},
-{
-"id": "cd50ac67-d6e9-5ac5-8ac7-0438ba54e421",
-"codigo": "50001000",
-"nombre": "STRIA TTOyTTE MCPAL VILLAVICENCIO",
-"departamentoCodigo": "50",
-"municipioCodigo": "50001",
-"activo": true,
-"municipio": "VILLAVICENCIO",
-"departamento": "META"
-},
-{
-"id": "077c9bf5-9b9b-50f0-b47d-5ad39feaeb90",
-"codigo": "50006000",
-"nombre": "INST TTOyTTE ACACIAS",
-"departamentoCodigo": "50",
-"municipioCodigo": "50006",
-"activo": true,
-"municipio": "ACACIAS",
-"departamento": "META"
-},
-{
-"id": "aaaaaaaa-0001-4000-8000-000000000002",
-"codigo": "5001000",
-"nombre": "STRIA DE TTOyTTE MEDELLIN",
-"departamentoCodigo": "05",
-"municipioCodigo": "05001",
-"activo": true,
-"municipio": "MEDELLIN",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "ecfed340-51b4-5f9d-bf95-787ac2f836f4",
-"codigo": "5031000",
-"nombre": "STRIA TTOyTTE MCPAL AMALFI",
-"departamentoCodigo": "05",
-"municipioCodigo": "05031",
-"activo": true,
-"municipio": "AMALFI",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "4aaa6788-d12b-509a-aee0-eef9795c07c5",
-"codigo": "50313000",
-"nombre": "STRIA MCPAL TTO GRANADA",
-"departamentoCodigo": "50",
-"municipioCodigo": "50313",
-"activo": true,
-"municipio": "GRANADA",
-"departamento": "META"
-},
-{
-"id": "d3fda703-f116-5636-98a5-16f7a8b81ac4",
-"codigo": "50318000",
-"nombre": "INST DPTAL TTOyTTE META/GUAMAL",
-"departamentoCodigo": "50",
-"municipioCodigo": "50318",
-"activo": true,
-"municipio": "GUAMAL - META",
-"departamento": "META"
-},
-{
-"id": "fb8a4e75-556a-5b96-a0bc-1dc687b1a7a9",
-"codigo": "5034000",
-"nombre": "INSP TTOyTTE ANDES",
-"departamentoCodigo": "05",
-"municipioCodigo": "05034",
-"activo": true,
-"municipio": "ANDES",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "345a58b1-029c-56a3-9c68-61ca2159e031",
-"codigo": "5042000",
-"nombre": "STRIA TTEyTTO MCPAL SANTA FE ANTIOQUIA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05042",
-"activo": true,
-"municipio": "SANTAFE DE ANTIOQUIA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "740c4c48-5a0f-5ba5-ab5c-c8f1b439a3fe",
-"codigo": "5045000",
-"nombre": "STRIA MCPAL TTEyTTO APARTADO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05045",
-"activo": true,
-"municipio": "APARTADO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "7b4609c5-a816-540b-a923-041432ebce47",
-"codigo": "50573000",
-"nombre": "INST DPTAL TTOyTTE META/PUERTO LOPEZ",
-"departamentoCodigo": "50",
-"municipioCodigo": "50573",
-"activo": true,
-"municipio": "PUERTO LOPEZ - META",
-"departamento": "META"
-},
-{
-"id": "91e3b769-4bc0-582f-94d9-5be94b3c0559",
-"codigo": "50606000",
-"nombre": "INST DPTAL TTOyTTE META/RESTREPO",
-"departamentoCodigo": "50",
-"municipioCodigo": "50606",
-"activo": true,
-"municipio": "RESTREPO - META",
-"departamento": "META"
-},
-{
-"id": "dd68d155-3b43-56d4-b93c-aeb18fbaf0da",
-"codigo": "50606001",
-"nombre": "INST DPTAL TTOyTTE  META/RESTREPO",
-"departamentoCodigo": "50",
-"municipioCodigo": "50606",
-"activo": true,
-"municipio": "RESTREPO",
-"departamento": "META"
-},
-{
-"id": "6e96c215-2443-5666-8ed6-c4749ac3861c",
-"codigo": "5079000",
-"nombre": "DIR TTEyTTO  MCPAL BARBOSA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05079",
-"activo": true,
-"municipio": "BARBOSA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "8cef5e91-c23c-5092-83e6-94306cdc7644",
-"codigo": "5088000",
-"nombre": "STRIA TTEyTTO BELLO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05088",
-"activo": true,
-"municipio": "BELLO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "1074b370-9fcc-5d50-ad01-2603ec4bbf40",
-"codigo": "5101000",
-"nombre": "INSP MCPAL TTO CIUDAD BOLIVAR",
-"departamentoCodigo": "05",
-"municipioCodigo": "05101",
-"activo": true,
-"municipio": "CIUDAD BOLIVAR",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "beffba04-045f-5ab0-b283-c60aa7bb9a2c",
-"codigo": "5129000",
-"nombre": "STRIA TTEyTTO MCPAL CALDAS/ANTIOQUIA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05129",
-"activo": true,
-"municipio": "CALDAS",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "65da6c5d-2273-56dd-8657-bf6145cdbb15",
-"codigo": "5147000",
-"nombre": "STRIA DE TTOyTTE CAREPA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05147",
-"activo": true,
-"municipio": "CAREPA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "5adb92c2-156f-5467-8a1f-fd03cd23dbbc",
-"codigo": "5148000",
-"nombre": "INSP MCPAL TTOyTTE CARMEN DE VIBORAL",
-"departamentoCodigo": "05",
-"municipioCodigo": "05148",
-"activo": true,
-"municipio": "EL CARMEN DE VIBORAL",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "ade9f38b-a256-573f-af9c-cc25fca972d4",
-"codigo": "5154000",
-"nombre": "STRIA TTOYTTE CAUCASIA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05154",
-"activo": true,
-"municipio": "CAUCASIA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "99a0bec6-a9da-578b-a6a1-73dc57775a4b",
-"codigo": "5172000",
-"nombre": "SECRETARÍA DE TTOYTTE MCPAL CHIGORODO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05172",
-"activo": true,
-"municipio": "CHIGORODO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "4682015f-d5e3-57ea-801f-e463e0a0fd2e",
-"codigo": "52001000",
-"nombre": "DPTO ADTVO TTOYTTE MCPAL PASTO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52001",
-"activo": true,
-"municipio": "PASTO",
-"departamento": "NARINO"
-},
-{
-"id": "777ac311-8ad1-5219-9ef0-47edb412fb27",
-"codigo": "52110000",
-"nombre": "STRIA TTOyTTE MCPAL BUESACO/NARIÑO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52110",
-"activo": true,
-"municipio": "BUESACO",
-"departamento": "NARINO"
-},
-{
-"id": "d640174d-e9d2-5e13-a05d-251ce8e79894",
-"codigo": "52110001",
-"nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/BUESACO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52110",
-"activo": true,
-"municipio": "BUESACO",
-"departamento": "NARINO"
-},
-{
-"id": "a7c180ce-2267-56f7-8287-391350f1040a",
-"codigo": "5212000",
-"nombre": "STRIA TTEyTTO COPACABANA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05212",
-"activo": true,
-"municipio": "COPACABANA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "514159d2-a093-5dcc-97aa-26ae3ed942a0",
-"codigo": "52240000",
-"nombre": "STRIA TTOyTTE MCPAL CHACHAGUI NARIÑO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52240",
-"activo": true,
-"municipio": "CHACHAGUI",
-"departamento": "NARINO"
-},
-{
-"id": "c6841e1b-df59-52a7-9351-466ae183e7e9",
-"codigo": "52317000",
-"nombre": "SUBSTRIA TTOyTTE DTAL NARIÑO/GUACHUCAL",
-"departamentoCodigo": "52",
-"municipioCodigo": "52317",
-"activo": true,
-"municipio": "GUACHUCAL - NARIÑO",
-"departamento": "NARIÑO"
-},
-{
-"id": "e9649d3c-b69f-516f-af03-02e0492795d5",
-"codigo": "52354000",
-"nombre": "SUB STARIA TTOyTTE DPTAL NARIÑO/IMUES",
-"departamentoCodigo": "52",
-"municipioCodigo": "52354",
-"activo": true,
-"municipio": "IMUES - NARIÑO",
-"departamento": "NARIÑO"
-},
-{
-"id": "a1deab26-3fc6-5d95-ad78-4e454cae8bbe",
-"codigo": "52356000",
-"nombre": "STRIA TTOyTTE MCPAL IPIALES",
-"departamentoCodigo": "52",
-"municipioCodigo": "52356",
-"activo": true,
-"municipio": "IPIALES",
-"departamento": "NARINO"
-},
-{
-"id": "c0fece49-7c79-5410-8236-4738e315a161",
-"codigo": "5237000",
-"nombre": "DIR TTO MCPAL DONMATIAS",
-"departamentoCodigo": "05",
-"municipioCodigo": "05237",
-"activo": true,
-"municipio": "DON MATIAS",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "fca23c58-23ee-5bfa-9a5d-73173a36a029",
-"codigo": "52399000",
-"nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/LA UNION",
-"departamentoCodigo": "52",
-"municipioCodigo": "52399",
-"activo": true,
-"municipio": "LA UNION - NARIÑO",
-"departamento": "NARIÑO"
-},
-{
-"id": "08749895-62c8-5844-a0fa-1f34b0372ea9",
-"codigo": "52480000",
-"nombre": "STRIA TTOYTTE MCPAL NARIÑO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52480",
-"activo": true,
-"municipio": "NARINO",
-"departamento": "NARINO"
-},
-{
-"id": "1f7fe317-b65f-5830-a3b8-46b262a03e28",
-"codigo": "5250000",
-"nombre": "STRIA TTOyTTE DEL MCPIO DEL BAGRE",
-"departamentoCodigo": "05",
-"municipioCodigo": "05250",
-"activo": true,
-"municipio": "EL BAGRE",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "a75a2976-315b-5633-8a37-f3f418d117bd",
-"codigo": "52585000",
-"nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/PUPIALES",
-"departamentoCodigo": "52",
-"municipioCodigo": "52585",
-"activo": true,
-"municipio": "PUPIALES - NARIÑO",
-"departamento": "NARIÑO"
-},
-{
-"id": "708488b4-111e-54c1-aebf-2900a472f609",
-"codigo": "52612000",
-"nombre": "STRIA TTOYTTE MCPAL RICAURTE",
-"departamentoCodigo": "52",
-"municipioCodigo": "52612",
-"activo": true,
-"municipio": "RICAURTE",
-"departamento": "NARINO"
-},
-{
-"id": "69f48545-a7cf-5201-9198-6e3b3fab9a99",
-"codigo": "5266000",
-"nombre": "STRIA TTEyTTO ENVIGADO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05266",
-"activo": true,
-"municipio": "ENVIGADO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "90a6823c-b815-565b-93ab-66016cbd4b2d",
-"codigo": "52678000",
-"nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/SAMANIEGO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52678",
-"activo": true,
-"municipio": "SAMANIEGO - NARIÑO",
-"departamento": "NARIÑO"
-},
-{
-"id": "b57a118a-6a12-5c63-9da5-9ae00d03c217",
-"codigo": "52683000",
-"nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/SANDONA",
-"departamentoCodigo": "52",
-"municipioCodigo": "52683",
-"activo": true,
-"municipio": "SANDONA - NARIÑO",
-"departamento": "NARIÑO"
-},
-{
-"id": "1820b710-7d78-56f6-8620-70bcd7a49358",
-"codigo": "52788000",
-"nombre": "STRIA TTOyTTE DPTAL TANGUA/NARIÑO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52788",
-"activo": true,
-"municipio": "TANGUA",
-"departamento": "NARINO"
-},
-{
-"id": "4cdb43da-0ff4-576c-88a6-98989102d60d",
-"codigo": "52835000",
-"nombre": "STRIA TTEyTTO MCPAL TUMACO",
-"departamentoCodigo": "52",
-"municipioCodigo": "52835",
-"activo": true,
-"municipio": "TUMACO",
-"departamento": "NARINO"
-},
-{
-"id": "d0a75b85-10d3-59ca-a47a-c7eec8471c54",
-"codigo": "52838000",
-"nombre": "STRIA TT0yTTE MCPAL TUQUERRES",
-"departamentoCodigo": "52",
-"municipioCodigo": "52838",
-"activo": true,
-"municipio": "TUQUERRES",
-"departamento": "NARINO"
-},
-{
-"id": "db7a04a4-be38-5906-83d1-5214037b54eb",
-"codigo": "5284000",
-"nombre": "STRIA TTEyTTO MCPAL FRONTINO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05284",
-"activo": true,
-"municipio": "FRONTINO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "d7894e55-8f77-5cfb-a885-2103ed441560",
-"codigo": "52885001",
-"nombre": "TRÁNSITO DPTAL NARIÑO/YACUANQUER",
-"departamentoCodigo": "52",
-"municipioCodigo": "52885",
-"activo": true,
-"municipio": "YACUANQUER",
-"departamento": "NARINO"
-},
-{
-"id": "4bdcdc26-ba63-5600-994a-32f1f4926147",
-"codigo": "5308000",
-"nombre": "STRIA TTEyTTO GIRARDOTA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05308",
-"activo": true,
-"municipio": "GIRARDOTA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "5b9af975-748c-53a5-bac0-6b5ab8f8001c",
-"codigo": "5318000",
-"nombre": "STRIA DE MOVILIDAD DEL MCPIO DE GUARNE",
-"departamentoCodigo": "05",
-"municipioCodigo": "05318",
-"activo": true,
-"municipio": "GUARNE",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "d31bc0e1-738d-5973-94d0-45d36f928c88",
-"codigo": "5360000",
-"nombre": "STRIA TTEyTTO ITAGUI",
-"departamentoCodigo": "05",
-"municipioCodigo": "05360",
-"activo": true,
-"municipio": "ITAGUI",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "304acea5-7a61-5043-82df-465899d3c80c",
-"codigo": "5376000",
-"nombre": "INSP TTO MCPAL LA CEJA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05376",
-"activo": true,
-"municipio": "LA CEJA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "df8637d6-eafd-5514-8876-b4a0785d808e",
-"codigo": "5380000",
-"nombre": "STRIA TTOYTTE MCPAL LA ESTRELLA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05380",
-"activo": true,
-"municipio": "LA ESTRELLA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "f19a2cdf-c1b3-55a2-a452-dc716caa9072",
-"codigo": "54001000",
-"nombre": "DPTO ADTVO TTOyTTE MCPAL CUCUTA",
-"departamentoCodigo": "54",
-"municipioCodigo": "54001",
-"activo": true,
-"municipio": "CUCUTA",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "0b03729e-88a2-5d2a-bb04-635d85aa00a3",
-"codigo": "54206000",
-"nombre": "INSP DE TT0 y TTE CONVENCION",
-"departamentoCodigo": "54",
-"municipioCodigo": "54206",
-"activo": true,
-"municipio": "CONVENCION",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "f956c17a-9395-5e32-a78b-776865cd5022",
-"codigo": "54261000",
-"nombre": "STRIA TTO DPTAL NTE SANTANDER/EL ZULIA",
-"departamentoCodigo": "54",
-"municipioCodigo": "54261",
-"activo": true,
-"municipio": "EL ZULIA - N. DE SANTANDER",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "7d3933dd-475e-565c-a6ef-bdde107a4846",
-"codigo": "5440000",
-"nombre": "STRIA DE TTOYTTE DEL MCPIO DE MARINILLA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05440",
-"activo": true,
-"municipio": "MARINILLA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "6da391e3-f747-578d-9a56-7c16c2ce52fb",
-"codigo": "54405000",
-"nombre": "INST TTOyTTE DEL MUNICIPIO DE LOS PATIOS",
-"departamentoCodigo": "54",
-"municipioCodigo": "54405",
-"activo": true,
-"municipio": "LOS PATIOS",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "4f73ee22-bfc9-5630-928f-6cd9675e3dee",
-"codigo": "54498000",
-"nombre": "STRIA MOVyTTO OCAÑA",
-"departamentoCodigo": "54",
-"municipioCodigo": "54498",
-"activo": true,
-"municipio": "OCAÑA",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "c48ac782-c693-5321-bb64-46614df06cb6",
-"codigo": "54518000",
-"nombre": "STRIA MCPAL TTOyTTE PAMPLONA",
-"departamentoCodigo": "54",
-"municipioCodigo": "54518",
-"activo": true,
-"municipio": "PAMPLONA",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "96b9fb82-0f2d-5052-8807-8bc220e90ff2",
-"codigo": "54874000",
-"nombre": "DPTO ADTVO TTEyTTO VILLA DEL ROSARIO",
-"departamentoCodigo": "54",
-"municipioCodigo": "54874",
-"activo": true,
-"municipio": "VILLA DEL ROSARIO",
-"departamento": "NORTE DE SANTANDER"
-},
-{
-"id": "8cca2f5a-3520-50f0-a598-6316a4d091d3",
-"codigo": "5490000",
-"nombre": "STRIA TTOyTTE MCPAL NECOCLÍ/ANTIOQUIA",
-"departamentoCodigo": "05",
-"municipioCodigo": "00549",
-"activo": true,
-"municipio": "NECOCLI",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "169883ba-90cc-5392-9125-23a88ab008bd",
-"codigo": "5579000",
-"nombre": "INSP TTO PUERTO BERRIO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05579",
-"activo": true,
-"municipio": "PUERTO BERRIO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "66b24fb8-538f-5a7d-bfa1-9a35bbe055fa",
-"codigo": "5591000",
-"nombre": "STRIA TTOyTTE MCPAL DE PUERTO TRIUNFO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05591",
-"activo": true,
-"municipio": "PUERTO TRIUNFO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "a03222b8-627d-5940-a1db-7b1f3eba322b",
-"codigo": "5615000",
-"nombre": "SDT SUBSECRETARÍA DE MOVILIDAD RIONEGRO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05615",
-"activo": true,
-"municipio": "RIONEGRO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "ba575641-ea48-5cd2-ac51-ebba02584ba5",
-"codigo": "5631000",
-"nombre": "STRIA TTOyTTE MCPAL SABANETA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05631",
-"activo": true,
-"municipio": "SABANETA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "d144971e-6209-5931-b025-d0625b5a4969",
-"codigo": "5656001",
-"nombre": "TRÁNSITO DPTAL DE ANTIOQUIA/SAN JERONIMO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05656",
-"activo": true,
-"municipio": "SAN JERONIMO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "9922e675-9c95-52d7-be76-e4a7a05f5708",
-"codigo": "5686000",
-"nombre": "STRIA TTO MCPAL SANTA ROSA DE OSOS",
-"departamentoCodigo": "05",
-"municipioCodigo": "05686",
-"activo": true,
-"municipio": "SANTA ROSA DE OSOS",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "97016ea8-be23-5ffa-a9b6-e856a2b8a258",
-"codigo": "5697000",
-"nombre": "STRIA TTOyTTE EL SANTUARIO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05697",
-"activo": true,
-"municipio": "EL SANTUARIO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "832bd9ac-50ae-5b79-8c18-34e295b8c604",
-"codigo": "5736000",
-"nombre": "STRIA TTOyTTE MCPAL SEGOVIA",
-"departamentoCodigo": "05",
-"municipioCodigo": "05736",
-"activo": true,
-"municipio": "SEGOVIA",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "4c25178a-e878-5a11-a632-7d45190e2681",
-"codigo": "5756000",
-"nombre": "INSP TTOYTTE MCPAL SONSON",
-"departamentoCodigo": "05",
-"municipioCodigo": "05756",
-"activo": true,
-"municipio": "SONSON",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "328915f0-0bed-59b7-b1d7-5db8e9111284",
-"codigo": "5837000",
-"nombre": "INSP MCPAL TTO TURBO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05837",
-"activo": true,
-"municipio": "TURBO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "46d49071-4218-5da8-bec1-6ef9c2825e4e",
-"codigo": "5847000",
-"nombre": "STRIA TTOyTTE MCPAL URRAO",
-"departamentoCodigo": "05",
-"municipioCodigo": "05847",
-"activo": true,
-"municipio": "URRAO",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "f1e6e518-f59b-592f-8d60-1b9a814a2647",
-"codigo": "5858000",
-"nombre": "ALCALDIA MPAL DE VEGACHI",
-"departamentoCodigo": "05",
-"municipioCodigo": "05858",
-"activo": true,
-"municipio": "VEGACHI",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "63786320-2654-56ea-acd7-e3ae67497189",
-"codigo": "5887000",
-"nombre": "SECRETARIA DE MOVILIDAD DE YARUMAL",
-"departamentoCodigo": "05",
-"municipioCodigo": "05887",
-"activo": true,
-"municipio": "YARUMAL",
-"departamento": "ANTIOQUIA"
-},
-{
-"id": "445f873e-a522-5810-b291-e14d1d0e2fa5",
-"codigo": "63001000",
-"nombre": "STRIA DE TTOYTTE MCPAL ARMENIA",
-"departamentoCodigo": "63",
-"municipioCodigo": "63001",
-"activo": true,
-"municipio": "ARMENIA",
-"departamento": "QUINDIO"
-},
-{
-"id": "ddf6fd45-c662-5bd4-9f88-179216cc852b",
-"codigo": "63130000",
-"nombre": "INSP TTOyTTE CALARCA",
-"departamentoCodigo": "63",
-"municipioCodigo": "63130",
-"activo": true,
-"municipio": "CALARCA",
-"departamento": "QUINDIO"
-},
-{
-"id": "098273a5-fd37-5489-8292-b2681c40c007",
-"codigo": "63190000",
-"nombre": "INST DPTAL DE TTO QUINDIO/CIRCASIA",
-"departamentoCodigo": "63",
-"municipioCodigo": "63190",
-"activo": true,
-"municipio": "CIRCASIA - QUINDIO",
-"departamento": "QUINDÍO"
-},
-{
-"id": "e9380ec4-f19d-501f-bea2-823244ea5e31",
-"codigo": "63401000",
-"nombre": "STRIA TTOyTTE MCPAL LA TEBAIDA",
-"departamentoCodigo": "63",
-"municipioCodigo": "63401",
-"activo": true,
-"municipio": "LA TEBAIDA",
-"departamento": "QUINDIO"
-},
-{
-"id": "3ee4c34e-903a-54e1-9319-5c6759710f53",
-"codigo": "63594000",
-"nombre": "INS DE TTOyTTE QUIMBAYA",
-"departamentoCodigo": "63",
-"municipioCodigo": "63594",
-"activo": true,
-"municipio": "QUIMBAYA",
-"departamento": "QUINDIO"
-},
-{
-"id": "9e038db6-8144-5da9-b543-dc58e5806db1",
-"codigo": "66001000",
-"nombre": "INSTITUTO DE MOVILIDAD DE PEREIRA",
-"departamentoCodigo": "66",
-"municipioCodigo": "66001",
-"activo": true,
-"municipio": "PEREIRA",
-"departamento": "RISARALDA"
-},
-{
-"id": "63052d0e-31a1-54f7-b281-512bc3666edd",
-"codigo": "66170000",
-"nombre": "STRIA MCPAL TTOyTTE DOSQUEBRADAS",
-"departamentoCodigo": "66",
-"municipioCodigo": "66170",
-"activo": true,
-"municipio": "DOSQUEBRADAS",
-"departamento": "RISARALDA"
-},
-{
-"id": "b4336c8e-dc9e-5105-a43c-167a67b5dc4f",
-"codigo": "66400000",
-"nombre": "STRIA MCPAL TTOyTTE LA VIRGINIA",
-"departamentoCodigo": "66",
-"municipioCodigo": "66400",
-"activo": true,
-"municipio": "LA VIRGINIA",
-"departamento": "RISARALDA"
-},
-{
-"id": "9deb795c-0b33-5b0d-8e1a-d9ef32516c29",
-"codigo": "66682000",
-"nombre": "STRIA TTO y GOB MCPAL SANTA ROSA CABAL",
-"departamentoCodigo": "66",
-"municipioCodigo": "66682",
-"activo": true,
-"municipio": "SANTA ROSA DE CABAL",
-"departamento": "RISARALDA"
-},
-{
-"id": "aaaaaaaa-0001-4000-8000-000000000005",
-"codigo": "68001000",
-"nombre": "DIR TTOyTTE BUCARAMANGA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68001",
-"activo": true,
-"municipio": "BUCARAMANGA",
-"departamento": "SANTANDER"
-},
-{
-"id": "f76c325e-187e-574e-931c-77b1cd8d45fd",
-"codigo": "68077000",
-"nombre": "INSP MCPAL TTOyTTE BARBOSA/STDER",
-"departamentoCodigo": "68",
-"municipioCodigo": "68077",
-"activo": true,
-"municipio": "BARBOSA",
-"departamento": "SANTANDER"
-},
-{
-"id": "879c2dbe-f8fa-5a8a-a121-48ada05267f6",
-"codigo": "68079000",
-"nombre": "STRIA TTOyTTE MCPAL BARICHARA/SANTANDER",
-"departamentoCodigo": "68",
-"municipioCodigo": "68079",
-"activo": true,
-"municipio": "BARICHARA",
-"departamento": "SANTANDER"
-},
-{
-"id": "08c227fc-aeb9-5db1-b086-e4a2ed323000",
-"codigo": "68081000",
-"nombre": "INSP TTOyTTE BARRANCABERMEJA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68081",
-"activo": true,
-"municipio": "BARRANCABERMEJA",
-"departamento": "SANTANDER"
-},
-{
-"id": "55b9de34-c6f6-58da-a710-554991bf0369",
-"codigo": "68167000",
-"nombre": "INST TTOyTTE CHARALA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68167",
-"activo": true,
-"municipio": "CHARALA",
-"departamento": "SANTANDER"
-},
-{
-"id": "5524cbc1-548a-554f-b092-aec94b722809",
-"codigo": "68190000",
-"nombre": "STRIA TTOyTTE MCPAL CIMITARRA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68190",
-"activo": true,
-"municipio": "CIMITARRA",
-"departamento": "SANTANDER"
-},
-{
-"id": "b590c670-cb76-52ea-9a71-d3d4e0c10ea4",
-"codigo": "68276000",
-"nombre": "DIR TTOyTTE FLORIDABLANCA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68276",
-"activo": true,
-"municipio": "FLORIDABLANCA",
-"departamento": "SANTANDER"
-},
-{
-"id": "6937c17f-2ed4-5bec-8262-14d3d28c829d",
-"codigo": "68307000",
-"nombre": "STRIA MCPAL TTOyTTE GIRON",
-"departamentoCodigo": "68",
-"municipioCodigo": "68307",
-"activo": true,
-"municipio": "GIRON",
-"departamento": "SANTANDER"
-},
-{
-"id": "0612c33d-a2c0-5c3e-bc2b-054698f48882",
-"codigo": "68406000",
-"nombre": "STARIA TTO Y MOVILIDAD DEL MCPIO DE LEBRIJA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68406",
-"activo": true,
-"municipio": "LEBRIJA",
-"departamento": "SANTANDER"
-},
-{
-"id": "0e745b34-a58e-5c00-8e54-3a3908492294",
-"codigo": "68432000",
-"nombre": "STRIA TTOyTTE MCPAL MALAGA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68432",
-"activo": true,
-"municipio": "MALAGA",
-"departamento": "SANTANDER"
-},
-{
-"id": "fd557bfd-fc5a-58d0-a690-558a56cb8f77",
-"codigo": "68500000",
-"nombre": "STRIA TTOyTTE MCPAL DE OIBA",
-"departamentoCodigo": "68",
-"municipioCodigo": "68500",
-"activo": true,
-"municipio": "OIBA",
-"departamento": "SANTANDER"
-},
-{
-"id": "0943a1cc-fd13-548e-a89a-c8f27c8702ac",
-"codigo": "68547000",
-"nombre": "STRIA TTOyMOV PIEDECUESTA/SANTANDER",
-"departamentoCodigo": "68",
-"municipioCodigo": "68547",
-"activo": true,
-"municipio": "PIEDECUESTA",
-"departamento": "SANTANDER"
-},
-{
-"id": "3feb4293-d9b6-53d6-b59a-16921007a9ad",
-"codigo": "68572000",
-"nombre": "STRIA TTOyTTE MCPAL PUENTE NACIONAL/SANTANDER",
-"departamentoCodigo": "68",
-"municipioCodigo": "68572",
-"activo": true,
-"municipio": "PUENTE NACIONAL",
-"departamento": "SANTANDER"
-},
-{
-"id": "a540b12c-a48f-584b-ba14-70c1cc1a43a4",
-"codigo": "68655000",
-"nombre": "STRIA TTOyTTE MCPAL SABANA DE TORRES",
-"departamentoCodigo": "68",
-"municipioCodigo": "68655",
-"activo": true,
-"municipio": "SABANA DE TORRES",
-"departamento": "SANTANDER"
-},
-{
-"id": "00612b4c-4225-519d-a3d2-0b9467151f2e",
-"codigo": "68679000",
-"nombre": "INSP MCPAL TTOyTTE SAN GIL",
-"departamentoCodigo": "68",
-"municipioCodigo": "68679",
-"activo": true,
-"municipio": "SAN GIL",
-"departamento": "SANTANDER"
-},
-{
-"id": "f8f69758-788f-5723-b2bd-b8ecaf9febcd",
-"codigo": "68689000",
-"nombre": "INS MCPAL TTOyTTE SAN VICENTE CHUCURI",
-"departamentoCodigo": "68",
-"municipioCodigo": "68689",
-"activo": true,
-"municipio": "SAN VICENTE DE CHUCURI",
-"departamento": "SANTANDER"
-},
-{
-"id": "140d2ed3-29b6-5fc8-9139-dda5b15956f7",
-"codigo": "68755000",
-"nombre": "STRIA TTOyTTE MCPAL EL SOCORRO",
-"departamentoCodigo": "68",
-"municipioCodigo": "68755",
-"activo": true,
-"municipio": "SOCORRO",
-"departamento": "SANTANDER"
-},
-{
-"id": "41040ba9-2abe-59ba-9423-af308b55ed6e",
-"codigo": "68861000",
-"nombre": "STRIA TTOyTTE VELEZ",
-"departamentoCodigo": "68",
-"municipioCodigo": "68861",
-"activo": true,
-"municipio": "VELEZ",
-"departamento": "SANTANDER"
-},
-{
-"id": "cff7869a-a7f2-57f8-80ab-0bfaa6f594a5",
-"codigo": "70001000",
-"nombre": "STRIA MCPAL TTEyTTO SINCELEJO",
-"departamentoCodigo": "70",
-"municipioCodigo": "70001",
-"activo": true,
-"municipio": "SINCELEJO",
-"departamento": "SUCRE"
-},
-{
-"id": "edf41c5b-f97d-5e8a-bf57-2a5ca22616fd",
-"codigo": "70215000",
-"nombre": "INS MCPAL DE TyTO DE COROZAL",
-"departamentoCodigo": "70",
-"municipioCodigo": "70215",
-"activo": true,
-"municipio": "COROZAL",
-"departamento": "SUCRE"
-},
-{
-"id": "08a3a8be-5545-5b64-a4ca-fb297596d3cc",
-"codigo": "70670000",
-"nombre": "SECRETARIA DPTAL TTOyTTE SUCRE/SAMPUES",
-"departamentoCodigo": "70",
-"municipioCodigo": "70670",
-"activo": true,
-"municipio": "SAMPUES - SUCRE",
-"departamento": "SUCRE"
-},
-{
-"id": "5f9e305a-9b09-56a1-a9eb-7fb7f37afefb",
-"codigo": "70713000",
-"nombre": "STRIA DE TTOyTTE MCPAL SAN ONOFRE",
-"departamentoCodigo": "70",
-"municipioCodigo": "70713",
-"activo": true,
-"municipio": "SAN ONOFRE",
-"departamento": "SUCRE"
-},
-{
-"id": "c07fe916-4de0-5f60-bebb-dd21bb636cbd",
-"codigo": "70742000",
-"nombre": "INST TTO Y TTE DEL MUNICIPIO DE SINCÉ",
-"departamentoCodigo": "70",
-"municipioCodigo": "70742",
-"activo": true,
-"municipio": "SINCE",
-"departamento": "SUCRE"
-},
-{
-"id": "625a949c-b0ac-5f67-85d0-cd75a4d7d4c6",
-"codigo": "73001000",
-"nombre": "STRIA MCPAL TTOyTTE IBAGUE",
-"departamentoCodigo": "73",
-"municipioCodigo": "73001",
-"activo": true,
-"municipio": "IBAGUE",
-"departamento": "TOLIMA"
-},
-{
-"id": "502022a2-9a4c-5728-b717-c2512bd48200",
-"codigo": "73026000",
-"nombre": "DPTO ADTVO TTOyTTE TOLIMA/ ALVARADO",
-"departamentoCodigo": "73",
-"municipioCodigo": "73026",
-"activo": true,
-"municipio": "ALVARADO - TOLIMA",
-"departamento": "TOLIMA"
-},
-{
-"id": "79b3a1a9-61fb-5f45-b75f-9b10ed4bb798",
-"codigo": "73055000",
-"nombre": "DPTO ADTVO TTOyTTE TOLIMA/GUAYABAL",
-"departamentoCodigo": "73",
-"municipioCodigo": "73055",
-"activo": true,
-"municipio": "ARMERO - TOLIMA",
-"departamento": "TOLIMA"
-},
-{
-"id": "29a74d7f-949e-5f0a-8084-b35f98986282",
-"codigo": "73168000",
-"nombre": "INST DE TTO MCPAL CHAPARRAL",
-"departamentoCodigo": "73",
-"municipioCodigo": "73168",
-"activo": true,
-"municipio": "CHAPARRAL",
-"departamento": "TOLIMA"
-},
-{
-"id": "a28bef72-d020-571a-9bf1-2f6b48c0ce3c",
-"codigo": "73268000",
-"nombre": "STRIA MCPAL TTOyTTE ESPINAL",
-"departamentoCodigo": "73",
-"municipioCodigo": "73268",
-"activo": true,
-"municipio": "ESPINAL",
-"departamento": "TOLIMA"
-},
-{
-"id": "d3b18a23-e4a2-5d5c-9af8-da29d980af51",
-"codigo": "73283000",
-"nombre": "STRIA TTOyTTE MCPAL FRESNO",
-"departamentoCodigo": "73",
-"municipioCodigo": "73283",
-"activo": true,
-"municipio": "FRESNO",
-"departamento": "TOLIMA"
-},
-{
-"id": "83a7b12f-68fe-54f3-acb9-689e0c0ab697",
-"codigo": "73319000",
-"nombre": "DPTO ADTVO TTOyTTE TOLIMA/GUAMO",
-"departamentoCodigo": "73",
-"municipioCodigo": "73319",
-"activo": true,
-"municipio": "GUAMO - TOLIMA",
-"departamento": "TOLIMA"
-},
-{
-"id": "15876029-0a9b-5af0-835e-54878c76d653",
-"codigo": "73349000",
-"nombre": "STRIA MCPAL TTOyTTE HONDA",
-"departamentoCodigo": "73",
-"municipioCodigo": "73349",
-"activo": true,
-"municipio": "HONDA",
-"departamento": "TOLIMA"
-},
-{
-"id": "252eca71-b378-5a9e-8ce9-1822bd5221ef",
-"codigo": "73411000",
-"nombre": "STRIA TTOyTTE MCPAL LIBANO",
-"departamentoCodigo": "73",
-"municipioCodigo": "73411",
-"activo": true,
-"municipio": "LIBANO",
-"departamento": "TOLIMA"
-},
-{
-"id": "77ebf295-d212-5072-85bf-d0fcdf005c3b",
-"codigo": "73443000",
-"nombre": "STRIA DE TTOyTTE MCPAL DE SAN SEBASTIAN DE MARIQUITA TOLIMA",
-"departamentoCodigo": "73",
-"municipioCodigo": "73443",
-"activo": true,
-"municipio": "MARIQUITA",
-"departamento": "TOLIMA"
-},
-{
-"id": "ac2f72ba-6e52-5422-a69e-3b5a23796527",
-"codigo": "73449000",
-"nombre": "STRIA GOB TTOyTTE MELGAR",
-"departamentoCodigo": "73",
-"municipioCodigo": "73449",
-"activo": true,
-"municipio": "MELGAR",
-"departamento": "TOLIMA"
-},
-{
-"id": "cf5bf8e6-fa98-5654-b354-6c9948f27691",
-"codigo": "73504000",
-"nombre": "DPTO ADTVO TTOyTTE TOLIMA/ORTEGA",
-"departamentoCodigo": "73",
-"municipioCodigo": "73504",
-"activo": true,
-"municipio": "ORTEGA - TOLIMA",
-"departamento": "TOLIMA"
-},
-{
-"id": "943f525b-69aa-5258-b330-24beed7ecddb",
-"codigo": "73585000",
-"nombre": "DPTO ADTVO TTOyTTE TOLIMA/PURIFICACIÓN",
-"departamentoCodigo": "73",
-"municipioCodigo": "73585",
-"activo": true,
-"municipio": "PURIFICACION - TOLIMA",
-"departamento": "TOLIMA"
-},
-{
-"id": "aaaaaaaa-0001-4000-8000-000000000003",
-"codigo": "76001000",
-"nombre": "STRIA MCPAL TTO CALI",
-"departamentoCodigo": "76",
-"municipioCodigo": "76001",
-"activo": true,
-"municipio": "CALI",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "a52879d3-8e57-5456-91ca-35957af33a4c",
-"codigo": "76020000",
-"nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/ALCALA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76020",
-"activo": true,
-"municipio": "BOGOTA, D.C. - BOGOTA / ALCALÁ",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "a7fede7e-d92f-5f4c-b4b8-95e868034514",
-"codigo": "76036000",
-"nombre": "STRIA TTOyTTE ANDALUCIA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76036",
-"activo": true,
-"municipio": "ANDALUCIA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "251b2b5d-35cd-527a-ae62-a9ddfc71fc79",
-"codigo": "76041000",
-"nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/ANSERMANUEVO",
-"departamentoCodigo": "76",
-"municipioCodigo": "76041",
-"activo": true,
-"municipio": "ANSERMANUEVO - VALLE DEL CAUCA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "c0705318-06e4-56e5-8726-15a365c01d57",
-"codigo": "76100000",
-"nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/BOLIVAR",
-"departamentoCodigo": "76",
-"municipioCodigo": "76100",
-"activo": true,
-"municipio": "BOLIVAR - VALLE DEL CAUCA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "f871be49-017b-5529-81f1-1ac5c4efb446",
-"codigo": "76109000",
-"nombre": "STRIA TTOyTTE MCPAL BUENAVENTURA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76109",
-"activo": true,
-"municipio": "BUENAVENTURA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "02cf6096-661b-5d81-9a1a-20da54ac160d",
-"codigo": "76111000",
-"nombre": "INSP TTEyTTO GUADALAJARA DE BUGA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76111",
-"activo": true,
-"municipio": "GUADALAJARA DE BUGA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "7d92c333-adaf-530c-9869-ebca491cb8fe",
-"codigo": "76113000",
-"nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/BUGALAGRANDE",
-"departamentoCodigo": "76",
-"municipioCodigo": "76113",
-"activo": true,
-"municipio": "BUGALAGRANDE - VALLE DEL CAUCA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "02f07c3b-2175-5a49-87c8-9304f610a0e1",
-"codigo": "76122000",
-"nombre": "STRIA MCPAL TTOyTTE CAICEDONIA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76122",
-"activo": true,
-"municipio": "CAICEDONIA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "26720643-6a63-59af-bfe4-66bf7e39bbdc",
-"codigo": "76130000",
-"nombre": "STRIA TTOyTTE MCPAL CANDELARIA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76130",
-"activo": true,
-"municipio": "CANDELARIA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "f3b366c9-0027-5282-bb13-17a4605b0f16",
-"codigo": "76147000",
-"nombre": "STRIA DE TTOyTTE CARTAGO",
-"departamentoCodigo": "76",
-"municipioCodigo": "76147",
-"activo": true,
-"municipio": "CARTAGO",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "69667d04-3c25-5a62-b900-aee7148893b7",
-"codigo": "76233000",
-"nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/DAGUA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76233",
-"activo": true,
-"municipio": "DAGUA - VALLE DEL CAUCA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "157b9828-8f0b-57be-8ff8-786c27cab591",
-"codigo": "76248000",
-"nombre": "STRIA MCPAL TTOyTTE EL CERRITO",
-"departamentoCodigo": "76",
-"municipioCodigo": "76248",
-"activo": true,
-"municipio": "EL CERRITO",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "ec8e449f-52b0-5a0b-959e-306af3366873",
-"codigo": "76275000",
-"nombre": "STRIA TTOyTTE FLORIDA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76275",
-"activo": true,
-"municipio": "FLORIDA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "8f93fe66-e328-5336-a180-e0ce9cf35ebe",
-"codigo": "76306000",
-"nombre": "STRIA DE TTOyTTE MCPAL DE GINEBRA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76306",
-"activo": true,
-"municipio": "GINEBRA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "00e6f21d-86ad-5cb9-a113-f0ba6dab56df",
-"codigo": "76318000",
-"nombre": "STRIA TTOyTTE MCPAL GUACARI",
-"departamentoCodigo": "76",
-"municipioCodigo": "76318",
-"activo": true,
-"municipio": "GUACARI",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "d6beae9d-1db7-518f-a274-963c1561c334",
-"codigo": "76364000",
-"nombre": "STRIA TTOyTTE MCPAL JAMUNDI",
-"departamentoCodigo": "76",
-"municipioCodigo": "76364",
-"activo": true,
-"municipio": "JAMUNDI",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "977e709c-ba1c-5666-be30-29d808093400",
-"codigo": "76377000",
-"nombre": "DIR TTOyTTE LA CUMBRE",
-"departamentoCodigo": "76",
-"municipioCodigo": "76377",
-"activo": true,
-"municipio": "LA CUMBRE",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "73dcc54c-c472-5278-bdea-b24772f577a3",
-"codigo": "76400000",
-"nombre": "STRIA TTO MCPAL LA UNION",
-"departamentoCodigo": "76",
-"municipioCodigo": "76400",
-"activo": true,
-"municipio": "LA UNION",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "c638ee27-2be1-59ea-b3a8-7d848215a835",
-"codigo": "76520000",
-"nombre": "STRIA TTOyTTE PALMIRA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76520",
-"activo": true,
-"municipio": "PALMIRA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "35afd417-25bd-5df2-8fc7-b9bb7bb3efec",
-"codigo": "76563000",
-"nombre": "STRIA TTOyTTE MCPAL PRADERA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76563",
-"activo": true,
-"municipio": "PRADERA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "991cb838-fb72-51f2-a4de-241ef2425f6e",
-"codigo": "76622000",
-"nombre": "INSP TTOyTTE ROLDANILLO",
-"departamentoCodigo": "76",
-"municipioCodigo": "76622",
-"activo": true,
-"municipio": "ROLDANILLO",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "bb780b62-a485-5422-876a-1e62a4dd29c5",
-"codigo": "76736000",
-"nombre": "STRIA TTOyTTE SEVILLA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76736",
-"activo": true,
-"municipio": "SEVILLA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "a5562503-23ce-53f0-9ef8-2b10e22724cb",
-"codigo": "76834000",
-"nombre": "STRIA TTO MCPAL TULUA",
-"departamentoCodigo": "76",
-"municipioCodigo": "76834",
-"activo": true,
-"municipio": "TULUA",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "f82d73a1-63cf-5313-98f3-f02fadf628bd",
-"codigo": "76869000",
-"nombre": "SECRETARIA DE MOVILIDAD MUNICIPAL DE VIJES",
-"departamentoCodigo": "76",
-"municipioCodigo": "76869",
-"activo": true,
-"municipio": "VIJES",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "856af541-49b6-5b8a-b4bc-ea5a4fac44a8",
-"codigo": "76890000",
-"nombre": "MUNICIPIO DE YOTOCO",
-"departamentoCodigo": "76",
-"municipioCodigo": "76890",
-"activo": true,
-"municipio": "YOTOCO",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "373c7514-a0ad-5704-a321-8d71fb1c4c86",
-"codigo": "76892000",
-"nombre": "STRIA TTOyTTE YUMBO",
-"departamentoCodigo": "76",
-"municipioCodigo": "76892",
-"activo": true,
-"municipio": "YUMBO",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "fa9f094d-a8fb-52d1-9962-8abd7dea8ae5",
-"codigo": "76895000",
-"nombre": "INSP TTOyTTE ZARZAL",
-"departamentoCodigo": "76",
-"municipioCodigo": "76895",
-"activo": true,
-"municipio": "ZARZAL",
-"departamento": "VALLE DEL CAUCA"
-},
-{
-"id": "aaaaaaaa-0001-4000-8000-000000000004",
-"codigo": "8001000",
-"nombre": "STRIA DTAL TTO BARRANQUILLA",
-"departamentoCodigo": "08",
-"municipioCodigo": "08001",
-"activo": true,
-"municipio": "BARRANQUILLA",
-"departamento": "ATLANTICO"
-},
-{
-"id": "38487a59-3207-5d57-b448-5524b1c094ab",
-"codigo": "8078001",
-"nombre": "INSTITUTO DE TRÁNSITO DEL ATLANTICO/BARANOA",
-"departamentoCodigo": "08",
-"municipioCodigo": "08078",
-"activo": true,
-"municipio": "BARANOA",
-"departamento": "ATLANTICO"
-},
-{
-"id": "0f67510c-8040-5dab-965c-3af090886bda",
-"codigo": "81001000",
-"nombre": "INST TTOyTTE ARAUCA/ARAUCA",
-"departamentoCodigo": "81",
-"municipioCodigo": "81001",
-"activo": true,
-"municipio": "ARAUCA - ARAUCA",
-"departamento": "ARAUCA"
-},
-{
-"id": "65375663-6f46-524d-ab70-09faf7a170e3",
-"codigo": "81001001",
-"nombre": "INST TTOyTTE  ARAUCA/ARAUCA",
-"departamentoCodigo": "81",
-"municipioCodigo": "81001",
-"activo": true,
-"municipio": "ARAUCA",
-"departamento": "ARAUCA"
-},
-{
-"id": "695a3686-cd4a-52f7-8075-8f69d0b04027",
-"codigo": "81065000",
-"nombre": "INST MOVyTTE MCPAL DE ARAUQUITA",
-"departamentoCodigo": "81",
-"municipioCodigo": "81065",
-"activo": true,
-"municipio": "ARAUQUITA",
-"departamento": "ARAUCA"
-},
-{
-"id": "0a9cb20b-25e7-5f85-9b82-dfc1ed9188de",
-"codigo": "81736000",
-"nombre": "STRIA TTOyTTE MCPAL SARAVENA",
-"departamentoCodigo": "81",
-"municipioCodigo": "81736",
-"activo": true,
-"municipio": "SARAVENA",
-"departamento": "ARAUCA"
-},
-{
-"id": "639fefc3-73dc-59f1-85ee-100a60c64661",
-"codigo": "81794000",
-"nombre": "INST MOVyTTE MCPAL TAME",
-"departamentoCodigo": "81",
-"municipioCodigo": "81794",
-"activo": true,
-"municipio": "TAME",
-"departamento": "ARAUCA"
-},
-{
-"id": "4f826d49-48b8-53e6-a94e-b9432919fe67",
-"codigo": "8296000",
-"nombre": "STRIA MCPAL TTOyTTE GALAPA",
-"departamentoCodigo": "08",
-"municipioCodigo": "08296",
-"activo": true,
-"municipio": "GALAPA",
-"departamento": "ATLANTICO"
-},
-{
-"id": "774b6b2c-63dd-5256-bbaf-f74e03fed5b1",
-"codigo": "8433000",
-"nombre": "STRIA DE TTOyTTE MALAMBO",
-"departamentoCodigo": "08",
-"municipioCodigo": "08433",
-"activo": true,
-"municipio": "MALAMBO",
-"departamento": "ATLANTICO"
-},
-{
-"id": "13fb2ba9-ad11-565d-9222-da0b5dcbe6fc",
-"codigo": "85001000",
-"nombre": "STRIA TTOyTTE MCPAL YOPAL",
-"departamentoCodigo": "85",
-"municipioCodigo": "85001",
-"activo": true,
-"municipio": "YOPAL",
-"departamento": "CASANARE"
-},
-{
-"id": "3a367d93-f8cc-5a96-879f-7364ce410f3c",
-"codigo": "85010000",
-"nombre": "DIR DPTAL TTOyTTE CASANARE/AGUAZUL",
-"departamentoCodigo": "85",
-"municipioCodigo": "85010",
-"activo": true,
-"municipio": "AGUAZUL - CASANARE",
-"departamento": "CASANARE"
-},
-{
-"id": "1d95d028-4761-5e2c-94b3-31c95bb6857c",
-"codigo": "85440000",
-"nombre": "STRIA TTOyMOV MCPAL VILLANUEVA",
-"departamentoCodigo": "85",
-"municipioCodigo": "85440",
-"activo": true,
-"municipio": "VILLANUEVA",
-"departamento": "CASANARE"
-},
-{
-"id": "81ecdb8b-d704-5975-ac08-040800e669af",
-"codigo": "8573000",
-"nombre": "STRIA MCPAL TTOyTTE PUERTO COLOMBIA",
-"departamentoCodigo": "08",
-"municipioCodigo": "08573",
-"activo": true,
-"municipio": "PUERTO COLOMBIA",
-"departamento": "ATLANTICO"
-},
-{
-"id": "35d301eb-6f3a-5ac9-8b44-3855dac9e72c",
-"codigo": "86001000",
-"nombre": "STRIA TTOyTTE MOCOA",
-"departamentoCodigo": "86",
-"municipioCodigo": "86001",
-"activo": true,
-"municipio": "MOCOA",
-"departamento": "PUTUMAYO"
-},
-{
-"id": "78b1f63f-2f4c-5938-9642-ed2cb3a3fe79",
-"codigo": "86320000",
-"nombre": "STRIA TTOyTTE MCPAL ORITO",
-"departamentoCodigo": "86",
-"municipioCodigo": "86320",
-"activo": true,
-"municipio": "ORITO",
-"departamento": "PUTUMAYO"
-},
-{
-"id": "705ce7db-7c74-555a-8a8f-a5a749fa257f",
-"codigo": "8634000",
-"nombre": "STRIA MCPAL TTOyTTE SABANAGRANDE– ATLÁNTICO",
-"departamentoCodigo": "08",
-"municipioCodigo": "08634",
-"activo": true,
-"municipio": "SABANAGRANDE",
-"departamento": "ATLANTICO"
-},
-{
-"id": "b2131e68-5bd6-5ced-9e15-ea414ff4b624",
-"codigo": "8638000",
-"nombre": "STRIA TTO Y TTE MCPAL DE SABANALARGA",
-"departamentoCodigo": "08",
-"municipioCodigo": "08638",
-"activo": true,
-"municipio": "SABANALARGA",
-"departamento": "ATLANTICO"
-},
-{
-"id": "861ccc16-8a9e-5d8c-b600-dfad062a7b0c",
-"codigo": "86568000",
-"nombre": "INST MCPAL TTE Y MOVILIDAD-IMTRAM PTO ASIS",
-"departamentoCodigo": "86",
-"municipioCodigo": "86568",
-"activo": true,
-"municipio": "PUERTO ASIS",
-"departamento": "PUTUMAYO"
-},
-{
-"id": "70e72982-0f40-5cb3-92e4-6ed075e9ed8f",
-"codigo": "86749001",
-"nombre": "TRANSITO DPTAL DE PUTUMAYO/ SIBUNDOY",
-"departamentoCodigo": "86",
-"municipioCodigo": "86749",
-"activo": true,
-"municipio": "SIBUNDOY",
-"departamento": "PUTUMAYO"
-},
-{
-"id": "574170e6-96aa-599d-a32b-0a51b5442a9a",
-"codigo": "86865000",
-"nombre": "SRIA TTOyTTE MPAL VALLE GUAMUEZ/HORMIGA",
-"departamentoCodigo": "86",
-"municipioCodigo": "86865",
-"activo": true,
-"municipio": "VALLE DEL GUAMUEZ",
-"departamento": "PUTUMAYO"
-},
-{
-"id": "9fc0d03e-416d-5a45-89c4-b3273d1c6945",
-"codigo": "86885000",
-"nombre": "DEPTO ADMTVO DE TTO Y TTE PUTUMAYO",
-"departamentoCodigo": "86",
-"municipioCodigo": "86885",
-"activo": true,
-"municipio": "VILLAGARZON",
-"departamento": "PUTUMAYO"
-},
-{
-"id": "246b9b68-57df-5136-a328-b642bf6d9c25",
-"codigo": "8758000",
-"nombre": "INST MCPAL TTOYTTE SOLEDAD",
-"departamentoCodigo": "08",
-"municipioCodigo": "08758",
-"activo": true,
-"municipio": "SOLEDAD",
-"departamento": "ATLANTICO"
-},
-{
-"id": "1d1a4f7e-b807-544a-b925-b3edf319bf56",
-"codigo": "88001000",
-"nombre": "DIR DPTAL TTOyTTE SAN ANDRES ISLAS",
-"departamentoCodigo": "88",
-"municipioCodigo": "88001",
-"activo": true,
-"municipio": "SAN ANDRES - SAN ANDRES",
-"departamento": "ARCHIPIÉLAGO DE SAN ANDRÉS Y PROVIDENCIA"
-},
-{
-"id": "14b4c7d6-12c6-55ae-acb9-c1f57ad210cb",
-"codigo": "91001000",
-"nombre": "INSP MCPAL TTOyREG VIAL LETICIA",
-"departamentoCodigo": "91",
-"municipioCodigo": "91001",
-"activo": true,
-"municipio": "LETICIA",
-"departamento": "AMAZONAS"
-},
-{
-"id": "6463c4f0-27fd-543b-ac31-e420dfdd7585",
-"codigo": "94001000",
-"nombre": "STRIA TTOyTTE MCPAL INIRIDA",
-"departamentoCodigo": "94",
-"municipioCodigo": "94001",
-"activo": true,
-"municipio": "INIRIDA",
-"departamento": "GUAINIA"
-},
-{
-"id": "9d1eb955-39e1-5baf-8961-3cda57f25075",
-"codigo": "95001000",
-"nombre": "STRIA TTOyTTE MCPAL SAN JOSE GUAVIARE",
-"departamentoCodigo": "95",
-"municipioCodigo": "95001",
-"activo": true,
-"municipio": "SAN JOSE DEL GUAVIARE",
-"departamento": "GUAVIARE"
-},
-{
-"id": "d806ad56-63c6-56da-ba09-9153a1c2ade8",
-"codigo": "99001000",
-"nombre": "F. DPTAL TTO VICHADA/PUERTO CARREÑO",
-"departamentoCodigo": "99",
-"municipioCodigo": "99001",
-"activo": true,
-"municipio": "PUERTO CARREÑO - VICHADA",
-"departamento": "VICHADA"
-}
+ {
+  "id": "978fbaa4-fd88-5ef9-a4ab-100fbdb7f731",
+  "codigo": "10000030",
+  "nombre": "CENTRO DE SERVICIOS DE MOVILIDAD CALLE 13",
+  "departamentoCodigo": "11",
+  "municipioCodigo": "11001",
+  "activo": true,
+  "municipio": "BOGOTA",
+  "departamento": "BOGOTA D.C.",
+  "correosRadicacion": []
+ },
+ {
+  "id": "aaaaaaaa-0001-4000-8000-000000000001",
+  "codigo": "11001000",
+  "nombre": "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA",
+  "departamentoCodigo": "11",
+  "municipioCodigo": "11001",
+  "activo": true,
+  "municipio": "BOGOTA",
+  "departamento": "BOGOTA D.C.",
+  "correosRadicacion": [
+   "judicial@movilidadbogota.gov.co"
+  ]
+ },
+ {
+  "id": "aaaaaaaa-0001-4000-8000-000000000006",
+  "codigo": "13001000",
+  "nombre": "DPTO ADTVO TTOyTTE DIST CARTAGENA",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13001",
+  "activo": true,
+  "municipio": "CARTAGENA",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "notificacionesjudicialesadministrativo@cartagena.gov.co"
+  ]
+ },
+ {
+  "id": "d11cc704-03e1-5fab-9c03-8f26462f469c",
+  "codigo": "13052000",
+  "nombre": "STRIA MCPAL TTEyTTO ARJONA",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13052",
+  "activo": true,
+  "municipio": "ARJONA",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "notificacionjudicial@arjona-bolivar.gov.co"
+  ]
+ },
+ {
+  "id": "81aa9125-7790-5924-9b41-2e4a0d949f59",
+  "codigo": "13222000",
+  "nombre": "INSTITUTO MUNICIPAL DE TRANSITO Y TRANSPORTE DE CLEMENCIA BOLIVAR",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13222",
+  "activo": true,
+  "municipio": "CLEMENCIA",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "ofijuridica@clemencia-bolivar.gov.co"
+  ]
+ },
+ {
+  "id": "7057f642-1316-5131-a210-8c44c0c85ff2",
+  "codigo": "13244000",
+  "nombre": "INSTITUTO DE MOVILIDAD DE EL CARMEN DE BOLIVAR",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13244",
+  "activo": true,
+  "municipio": "EL CARMEN DE BOLIVAR",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "notificacionjudicial@elcarmen-bolivar.gov.co"
+  ]
+ },
+ {
+  "id": "6eb5b304-b170-5029-8a66-49a7cde030f3",
+  "codigo": "13430000",
+  "nombre": "F. MCPAL TTOyTTE TERRESTRE MAGANGUE",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13430",
+  "activo": true,
+  "municipio": "MAGANGUE",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "notificacionjudicial@magangue-bolivar.gov.co"
+  ]
+ },
+ {
+  "id": "a2c71553-2f96-5c7c-8dc1-03870c01cd83",
+  "codigo": "13468000",
+  "nombre": "INSP TTO MOMPOX",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13468",
+  "activo": true,
+  "municipio": "MOMPOS",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "buzonjudicial@santacruzdemompos-bolivar.gov.co"
+  ]
+ },
+ {
+  "id": "8f5ab33c-8211-5d2e-b337-c8a7a0f07803",
+  "codigo": "13657000",
+  "nombre": "DPTO TTOyTTE MCPAL SAN JUAN DE NEPOMUCENO",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13657",
+  "activo": true,
+  "municipio": "SAN JUAN NEPOMUCENO",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": []
+ },
+ {
+  "id": "a214e4d9-22fa-5b54-908d-b6736f63914e",
+  "codigo": "13683000",
+  "nombre": "MUNICIPIO DE SANTA ROSA DEL SUR DE BOLIVAR",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13688",
+  "activo": true,
+  "municipio": "SANTA ROSA DEL SUR",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": []
+ },
+ {
+  "id": "25ec4f9e-b0ed-585d-9e5b-64ee7bf2c174",
+  "codigo": "13683001",
+  "nombre": "SECRETARIA DE MOVILIDAD DEL DEPARTAMENTO DE BOLIVAR",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13683",
+  "activo": true,
+  "municipio": "SANTA ROSA",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": []
+ },
+ {
+  "id": "b00e0d60-3ab5-5275-a316-1c68859200aa",
+  "codigo": "13836000",
+  "nombre": "STRIA TTOYTTE MCPAL TURBACO",
+  "departamentoCodigo": "13",
+  "municipioCodigo": "13836",
+  "activo": true,
+  "municipio": "TURBACO",
+  "departamento": "BOLIVAR",
+  "correosRadicacion": [
+   "juridica@turbacobolivar.gov.co"
+  ]
+ },
+ {
+  "id": "1ddb9438-33f5-5030-b7a2-07d391674b41",
+  "codigo": "15001000",
+  "nombre": "STRIA DE TTOyTTE TUNJA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15001",
+  "activo": true,
+  "municipio": "TUNJA",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "juridicaydefensa@tunja.gov.co"
+  ]
+ },
+ {
+  "id": "01ed4ec7-ec12-5147-a5ff-b6519907db8f",
+  "codigo": "15176000",
+  "nombre": "STRIA MCPAL  TTOyTTE CHIQUINQUIRÁ",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15176",
+  "activo": true,
+  "municipio": "CHIQUINQUIRA",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "notificacionjudicial@chiquinquira-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "27d51a49-edd5-5a89-b866-f8551f2d22f3",
+  "codigo": "15204000",
+  "nombre": "ITBOY - DIST TTO No 1/COMBITA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15204",
+  "activo": true,
+  "municipio": "COMBITA - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "alcaldia@combita-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "dee010c2-f38a-5127-9d9b-8622160886f0",
+  "codigo": "15238000",
+  "nombre": "STRIA MCPAL TTOyTTE DUITAMA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15238",
+  "activo": true,
+  "municipio": "DUITAMA",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@duitama-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "72d768b4-a649-50be-97b1-d5b64d25fc11",
+  "codigo": "15299000",
+  "nombre": "STRIA TTOyTTE MCPAL GARAGOA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15299",
+  "activo": true,
+  "municipio": "GARAGOA",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@garagoa-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "bc23f60e-7bef-5c16-a835-132ee9d17d07",
+  "codigo": "15322000",
+  "nombre": "ITBOY - DIST TTO No. 6/GUATEQUE",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15322",
+  "activo": true,
+  "municipio": "GUATEQUE - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "notificacionjudicial@guateque-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "7d5061de-86f3-5d01-808f-f8deb78aa650",
+  "codigo": "15407000",
+  "nombre": "ITBOY - DIST TTO No. 10/VILLA DE LEYVA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15407",
+  "activo": true,
+  "municipio": "VILLA DE LEYVA - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "notificacionesjudiciales@villadeleyva-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "a230efb3-7675-5d3f-9096-34467ca878a8",
+  "codigo": "15455000",
+  "nombre": "ITBOY - DIST TTO No. 9/MIRAFLORES",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15455",
+  "activo": true,
+  "municipio": "MIRAFLORES - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "alcaldia@miraflores-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "6f1eb8ac-f99d-509a-8be4-6b711b73bd63",
+  "codigo": "15469000",
+  "nombre": "ITBOY - DIST TTO No. 5/MONIQUIRA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15469",
+  "activo": true,
+  "municipio": "MONIQUIRA - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "notificacionjudicial@moniquira-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "dfcfb93d-70e0-5bdc-b388-1880838e4e37",
+  "codigo": "15491000",
+  "nombre": "ITBOY - DIST TTO No. 2/ NOBSA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15491",
+  "activo": true,
+  "municipio": "NOBSA - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "notificacionesjudiciales@nobsa-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "b051a3bf-014e-55b6-97f9-daaa2936f147",
+  "codigo": "15516000",
+  "nombre": "STRIA TTOyTTE MCPAL PAIPA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15516",
+  "activo": true,
+  "municipio": "PAIPA",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "notificacionjudicial@paipa-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "ff2647cd-3452-5dc3-a980-3d8d7166859b",
+  "codigo": "15572000",
+  "nombre": "INSP TTOyTTE MCPAL PUERTO BOYACA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15572",
+  "activo": true,
+  "municipio": "PUERTO BOYACA",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "notificacionjudicial@puertoboyaca-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "cdb7efc9-1b54-515c-81dc-f23556f344ed",
+  "codigo": "15599000",
+  "nombre": "ITBOY - DIST TTO No. 11/RAMIRIQUI",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15599",
+  "activo": true,
+  "municipio": "RAMIRIQUI - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "alcaldia@ramiriqui-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "0b00c783-de15-58ca-8249-fd9a5368ab6a",
+  "codigo": "15632000",
+  "nombre": "ITBOY - DIST TTO No. 4/SABOYA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15632",
+  "activo": true,
+  "municipio": "SABOYA - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "notificacionjudicial@saboya-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "d0d0b4c8-8d1d-525e-bc8e-f353da6b446c",
+  "codigo": "15693000",
+  "nombre": "ITBOY - DIST DE TTO SANTA ROSA DE VITERBO",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15693",
+  "activo": true,
+  "municipio": "SANTA ROSA DE VITERBO - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "secretariageneralyjuridica@santarosadeviterbo-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "3ea0e6b1-3cdd-523b-9e3b-b75105ee55f3",
+  "codigo": "15753000",
+  "nombre": "ITBOY - DIST TTO No. 7/SOATA",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15753",
+  "activo": true,
+  "municipio": "SOATA - BOYACA",
+  "departamento": "BOYACÁ",
+  "correosRadicacion": [
+   "secgobierno@soata-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "384136d5-db05-55a3-a9a7-cb436d41d2bd",
+  "codigo": "15759000",
+  "nombre": "INST TTOyTTE MCPAL SOGAMOSO",
+  "departamentoCodigo": "15",
+  "municipioCodigo": "15759",
+  "activo": true,
+  "municipio": "SOGAMOSO",
+  "departamento": "BOYACA",
+  "correosRadicacion": [
+   "notificacionjudicial@sogamoso-boyaca.gov.co"
+  ]
+ },
+ {
+  "id": "31991383-8efb-5743-837b-853d4c991ff9",
+  "codigo": "17001000",
+  "nombre": "SECRETARÍA DE MOVILIDAD DE MANIZALES",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17001",
+  "activo": true,
+  "municipio": "MANIZALES",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "contacto@manizales.gov.co"
+  ]
+ },
+ {
+  "id": "037abacf-5f44-5cbd-8fe2-c4e305d09b67",
+  "codigo": "17013000",
+  "nombre": "INSP TTEyTTO AGUADAS",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17013",
+  "activo": true,
+  "municipio": "AGUADAS",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "juridica@aguadas-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "1fe25759-acd8-5303-82a1-89a251dfb319",
+  "codigo": "17042000",
+  "nombre": "STRIA TTEyTTO ANSERMA",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17042",
+  "activo": true,
+  "municipio": "ANSERMA",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "contactenos@anserma-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "f16d5054-358f-5c8d-9d7b-434129814f0c",
+  "codigo": "17050000",
+  "nombre": "UND TTO CALDAS/ARANZAZU",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17050",
+  "activo": true,
+  "municipio": "ARANZAZU - CALDAS",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "notificaciones.judiciales@aranzazu-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "03adccf3-4194-5bd5-a51a-cffab614bfcf",
+  "codigo": "17174000",
+  "nombre": "STRIA MCPAL TTOyTTE CHINCHINA",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17174",
+  "activo": true,
+  "municipio": "CHINCHINA",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "notificacionjudicial@chinchina-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "f3dd68b3-f02d-51f4-85de-05d485486c6a",
+  "codigo": "17380000",
+  "nombre": "INPS TTOYTTE LA DORADA",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17380",
+  "activo": true,
+  "municipio": "LA DORADA",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "notificaciones@ladorada-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "3789e793-e3c5-5338-b6c8-b316fbc5170e",
+  "codigo": "17433000",
+  "nombre": "DIR MCPAL TTOyTTE MANZANARES",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17433",
+  "activo": true,
+  "municipio": "MANZANARES",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "notificacionjudicial@manzanares-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "0a28e48e-7eb3-5005-bc90-8bf248a38026",
+  "codigo": "17486000",
+  "nombre": "STRIA TTO MOV MCPAL NEIRA/CALDAS",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17486",
+  "activo": true,
+  "municipio": "NEIRA",
+  "departamento": "CALDAS",
+  "correosRadicacion": []
+ },
+ {
+  "id": "8749ef16-9e94-5492-927f-a283167d5e10",
+  "codigo": "17614000",
+  "nombre": "SUB STRIA MOVILIDAD RIOSUCIO",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17614",
+  "activo": true,
+  "municipio": "RIOSUCIO",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "alcaldia@riosucio-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "f23ccc8a-2c57-5b6f-b0d0-85b981b7c287",
+  "codigo": "17653000",
+  "nombre": "STRIA TTOyTTE SALAMINA",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17653",
+  "activo": true,
+  "municipio": "SALAMINA",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "oficinajuridica@salamina-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "9c72d4a3-ad80-531a-b440-b1b2cafce305",
+  "codigo": "17777000",
+  "nombre": "STRIA MOV MCPAL SUPIA/CALDAS",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17777",
+  "activo": true,
+  "municipio": "SUPIA",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "alcaldia@supia-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "92f0d4b7-fd48-523d-a86e-5e6b40832c67",
+  "codigo": "17873000",
+  "nombre": "UNIDAD TTO CALDAS/VILLAMARIA",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17873",
+  "activo": true,
+  "municipio": "VILLAMARIA - CALDAS",
+  "departamento": "CALDAS",
+  "correosRadicacion": [
+   "notificacionjudicial@villamaria-caldas.gov.co"
+  ]
+ },
+ {
+  "id": "84a58c8c-e346-5ea0-a4b7-beb3cb69a220",
+  "codigo": "17877000",
+  "nombre": "STRIA MOV MCPAL VITERBO/CALDAS",
+  "departamentoCodigo": "17",
+  "municipioCodigo": "17877",
+  "activo": true,
+  "municipio": "VITERBO",
+  "departamento": "CALDAS",
+  "correosRadicacion": []
+ },
+ {
+  "id": "d5bef58e-0f2c-564a-882b-51f82716f8c5",
+  "codigo": "18001000",
+  "nombre": "STRIA TTOyTTE MCPAL FLORENCIA",
+  "departamentoCodigo": "18",
+  "municipioCodigo": "18001",
+  "activo": true,
+  "municipio": "FLORENCIA",
+  "departamento": "CAQUETA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@florencia-caqueta.gov.co"
+  ]
+ },
+ {
+  "id": "078a44a9-4e12-5aad-9261-f0c98ba07a6e",
+  "codigo": "18094000",
+  "nombre": "DIR TTOyTTE DPTAL CAQUETA/BELEN DE LOS ANDAQUIES",
+  "departamentoCodigo": "18",
+  "municipioCodigo": "18094",
+  "activo": true,
+  "municipio": "BELEN DE LOS ANDAQUIES - CAQUETA",
+  "departamento": "CAQUETÁ",
+  "correosRadicacion": [
+   "alcaldia@belendelosandaquies-caqueta.gov.co"
+  ]
+ },
+ {
+  "id": "b7c4ee84-24d0-5a88-8f6c-0cdbee201339",
+  "codigo": "18256000",
+  "nombre": "DIR TTOYTTE DPTAL CAQUETA/EL PAUJIL",
+  "departamentoCodigo": "18",
+  "municipioCodigo": "18256",
+  "activo": true,
+  "municipio": "FLORENCIA - CAQUETA",
+  "departamento": "CAQUETÁ",
+  "correosRadicacion": [
+   "notificacionesjudiciales@florencia-caqueta.gov.co"
+  ]
+ },
+ {
+  "id": "4d018af6-8c56-5ff4-a3ac-7784ef0b10ea",
+  "codigo": "18753000",
+  "nombre": "DIR TTOyTTE DPTAL CAQUETA/SAN VIC CAGUAN",
+  "departamentoCodigo": "18",
+  "municipioCodigo": "18753",
+  "activo": true,
+  "municipio": "SAN VICENTE DEL CAGUAN - CAQUETA",
+  "departamento": "CAQUETÁ",
+  "correosRadicacion": [
+   "contactenos@sanvicentedelcaguan-caqueta.gov.co"
+  ]
+ },
+ {
+  "id": "4e87f8c8-b0f3-5a60-8a7b-25670eb907ef",
+  "codigo": "19001000",
+  "nombre": "STRIA TTOyTTE MCPAL POPAYAN",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19001",
+  "activo": true,
+  "municipio": "POPAYAN",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "atencionalciudadano@popayan.gov.co"
+  ]
+ },
+ {
+  "id": "4a46222e-b98c-51ee-9822-4c2c0aa4834e",
+  "codigo": "19100000",
+  "nombre": "STRIA TTOyTTE MCPAL BOLIVAR",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19100",
+  "activo": true,
+  "municipio": "BOLIVAR",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "contactenos@bolivar-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "50f57f60-962e-5c85-96db-aaf5a81a0f1d",
+  "codigo": "19142000",
+  "nombre": "STRIA TTOyTTE MCPAL CALOTO",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19142",
+  "activo": true,
+  "municipio": "CALOTO",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "contactenos@caloto-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "649d316f-ac21-5b3e-b159-af46bebbd144",
+  "codigo": "19256000",
+  "nombre": "STRIA TTOYTTE MCPAL EL TAMBO",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19256",
+  "activo": true,
+  "municipio": "EL TAMBO",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "juridica@eltambo-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "ebb3bb3b-59c1-595d-9c76-f5503f0cc50e",
+  "codigo": "19455000",
+  "nombre": "STRIA TTOyTTE MCPAL MIRANDA",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19455",
+  "activo": true,
+  "municipio": "MIRANDA",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@miranda-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "d401b4a1-a657-59f2-9e80-9c49597df7d8",
+  "codigo": "19532000",
+  "nombre": "STRIA TTO MCPAL PATIA",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19532",
+  "activo": true,
+  "municipio": "PATIA",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@patia-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "d02df8ea-9830-5a19-9653-ffb904513ebe",
+  "codigo": "19548000",
+  "nombre": "STRIA TTOyTTE MCPAL PIENDAMO",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19548",
+  "activo": true,
+  "municipio": "PIENDAMO",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "alcaldia@piendamo-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "0cfa69f0-a230-57fb-b570-8f245ce28fe7",
+  "codigo": "19573000",
+  "nombre": "STRIA TTO MCPAL PUERTO TEJADA",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19573",
+  "activo": true,
+  "municipio": "PUERTO TEJADA",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@puertotejada.gov.co"
+  ]
+ },
+ {
+  "id": "d6317c96-aecb-5d57-b892-1f6f3e9924ad",
+  "codigo": "19698000",
+  "nombre": "STRIA TTOyTTE MPAL SANTANDER QUILICHAO",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19698",
+  "activo": true,
+  "municipio": "SANTANDER DE QUILICHAO",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@santanderdequilichao-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "d92b4cce-7d8a-57a7-a764-47d9fcde50b5",
+  "codigo": "19807000",
+  "nombre": "STRIA TTOyTTE MCPAL TIMBIO",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19807",
+  "activo": true,
+  "municipio": "TIMBIO",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "alcaldia@timbio-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "f8754301-bc3f-5727-a1c3-b491d79f402c",
+  "codigo": "19845000",
+  "nombre": "STRIA DE MOVILIDAD DEL MUNICIPIO DE VILLA RICA CAUCA",
+  "departamentoCodigo": "19",
+  "municipioCodigo": "19845",
+  "activo": true,
+  "municipio": "VILLA RICA",
+  "departamento": "CAUCA",
+  "correosRadicacion": [
+   "oficinajuridica@villarica-cauca.gov.co"
+  ]
+ },
+ {
+  "id": "53f89618-56b1-596b-a831-77e08f566094",
+  "codigo": "20001000",
+  "nombre": "INST MCPAL TTOyTTE VALLEDUPAR",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20001",
+  "activo": true,
+  "municipio": "VALLEDUPAR",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "juridica@valledupar-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "089c8500-d58f-50b1-9331-ec0c72aa97d2",
+  "codigo": "20011000",
+  "nombre": "INST MCPAL TTOyTTE AGUACHICA",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20011",
+  "activo": true,
+  "municipio": "AGUACHICA",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "notificacionjudicial@aguachica-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "2a66d203-b085-52bb-b6e9-8e6260ac2ea8",
+  "codigo": "20013000",
+  "nombre": "STRIA TTEyTTO MCPAL AGUSTIN CODAZZI",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20013",
+  "activo": true,
+  "municipio": "AGUSTIN CODAZZI",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "notificacionjudicial@agustincodazzi-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "7683ddef-444d-5803-88d9-7969816b9a31",
+  "codigo": "20060000",
+  "nombre": "STRIA MCPAL TTOyTTE BOSCONIA",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20060",
+  "activo": true,
+  "municipio": "BOSCONIA",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "notificacionjudicial@bosconia-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "01503ffc-e97a-5e20-a4f7-7fcdaa435f68",
+  "codigo": "20228000",
+  "nombre": "STRIA DE TTOyTTE MCPAL CURUMANI",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20228",
+  "activo": true,
+  "municipio": "CURUMANI",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "juridica@curumani-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "c5c0a4c7-16e7-50db-a82a-a857515b1e35",
+  "codigo": "20250000",
+  "nombre": "STRIA DE TTO y TTE DE EL PASO-CESAR",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20250",
+  "activo": true,
+  "municipio": "EL PASO",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "alcaldia@elpaso-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "3d35e464-7d36-5157-a0c8-9dfb6898fce6",
+  "codigo": "20400000",
+  "nombre": "MUNICIPIO DE LA JAGUA DE IBIRICO",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20400",
+  "activo": true,
+  "municipio": "LA JAGUA DE IBIRICO",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "juridica@lajaguadeibirico-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "1c0afe7f-3d8d-5242-8d00-2bbd74f5fd92",
+  "codigo": "20621000",
+  "nombre": "STRIA TTOyTTE MCPAL LA PAZ",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20621",
+  "activo": true,
+  "municipio": "LA PAZ",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "notificacionjudicial@lapazrobles-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "ef5146f5-7519-51d2-9c99-37ec81373844",
+  "codigo": "20710001",
+  "nombre": "INST DTAL DE TTO CESAR/SAN ALBERTO",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20710",
+  "activo": true,
+  "municipio": "SAN ALBERTO",
+  "departamento": "CESAR",
+  "correosRadicacion": []
+ },
+ {
+  "id": "711f5296-9072-5532-be22-c6b0888b7785",
+  "codigo": "20750000",
+  "nombre": "INST DTAL DE TTO CESAR/SAN DIEGO",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20750",
+  "activo": true,
+  "municipio": "SAN DIEGO",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "admin@sandiego-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "ecca5475-5191-562e-8bb1-dc3745982c81",
+  "codigo": "20770000",
+  "nombre": "STRIA TTOyTTE MCPAL SAN MARTÍN/CESAR",
+  "departamentoCodigo": "20",
+  "municipioCodigo": "20770",
+  "activo": true,
+  "municipio": "SAN MARTIN",
+  "departamento": "CESAR",
+  "correosRadicacion": [
+   "notificacionjudicial@sanmartin-cesar.gov.co"
+  ]
+ },
+ {
+  "id": "f19d5780-8807-5508-9615-c20914e3ee84",
+  "codigo": "23001000",
+  "nombre": "STRIA MCPAL TTEyTTO MONTERIA",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23001",
+  "activo": true,
+  "municipio": "MONTERIA",
+  "departamento": "CORDOBA",
+  "correosRadicacion": [
+   "atencionalciudadano@alcaldiamonteria.gov.co"
+  ]
+ },
+ {
+  "id": "0c053c34-6abf-5ceb-97b9-a5da0d72ff96",
+  "codigo": "23162000",
+  "nombre": "INST TTOyTTE DE CERETE",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23162",
+  "activo": true,
+  "municipio": "CERETE",
+  "departamento": "CORDOBA",
+  "correosRadicacion": [
+   "juridica@cerete-cordoba.gov.co"
+  ]
+ },
+ {
+  "id": "39a36071-04f0-5e45-b0b3-76a4f7ee7397",
+  "codigo": "23182000",
+  "nombre": "STRIA DPTAL TTOyTTE CORDOBA/CHINU",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23182",
+  "activo": true,
+  "municipio": "CHINU - CORDOBA",
+  "departamento": "CÓRDOBA",
+  "correosRadicacion": [
+   "notificacionjudicial@chinu-cordoba.gov.co"
+  ]
+ },
+ {
+  "id": "e34dc666-014b-5e00-b820-ac1cc91b802d",
+  "codigo": "23350000",
+  "nombre": "STRIA DPTAL TTOyTTE CORDOBA/APARTADA",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23350",
+  "activo": true,
+  "municipio": "LA APARTADA - CORDOBA",
+  "departamento": "CÓRDOBA",
+  "correosRadicacion": [
+   "alcaldia@laapartada-cordoba.gov.co"
+  ]
+ },
+ {
+  "id": "8d3c67f1-0fab-5a8d-9015-84a33ccb566a",
+  "codigo": "23417000",
+  "nombre": "INSP TTOyTTE LORICA",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23417",
+  "activo": true,
+  "municipio": "LORICA",
+  "departamento": "CORDOBA",
+  "correosRadicacion": [
+   "notificacionjudicial@santacruzdelorica-cordoba.gov.co"
+  ]
+ },
+ {
+  "id": "df2a301c-a7d2-55de-8f3a-785c3379ed30",
+  "codigo": "23555000",
+  "nombre": "STRIA MCPAL TTEyTTO PLANETA RICA",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23555",
+  "activo": true,
+  "municipio": "PLANETA RICA",
+  "departamento": "CORDOBA",
+  "correosRadicacion": [
+   "notificacionjudicial@planetarica-cordoba.gov.co"
+  ]
+ },
+ {
+  "id": "a3f6bc69-579b-51f7-8144-920ab23cd0ac",
+  "codigo": "23660000",
+  "nombre": "INSP TTOyTTE MCPAL SAHAGUN",
+  "departamentoCodigo": "23",
+  "municipioCodigo": "23660",
+  "activo": true,
+  "municipio": "SAHAGUN",
+  "departamento": "CORDOBA",
+  "correosRadicacion": [
+   "alcaldia@sahagun-cordoba.gov.co"
+  ]
+ },
+ {
+  "id": "49ec6a2c-b96e-51fa-9e09-681984bef626",
+  "codigo": "25053000",
+  "nombre": "STRIA TTEy MOV CUND/ARBELAEZ",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25053",
+  "activo": true,
+  "municipio": "ARBELAEZ - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@arbelaez-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "1ea9c4e4-ba95-5a7c-ba23-c89b3e0c5e89",
+  "codigo": "25126000",
+  "nombre": "STRIA TTO TTEyMOV MCPAL CAJICA/CUND",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25126",
+  "activo": true,
+  "municipio": "CAJICA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "sjurnotificaciones@cajica.gov.co"
+  ]
+ },
+ {
+  "id": "5edb4379-0d5b-541d-8e7f-333e6fc55558",
+  "codigo": "25126001",
+  "nombre": "STRIA DPTAL TTEyTTO CUND/CAJICA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25126",
+  "activo": true,
+  "municipio": "CAJICA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "d8b2e481-9228-5ee2-a2ed-fe4263fe829e",
+  "codigo": "25151000",
+  "nombre": "STRIA TTEy MOV CUND/CAQUEZA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25151",
+  "activo": true,
+  "municipio": "CAQUEZA - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@caqueza-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "1436197e-2c35-5a6a-bc1b-c3bb4f3abb96",
+  "codigo": "25175000",
+  "nombre": "SECRETARIA DE  MOVILIDAD MUNICIPAL DE CHIA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25175",
+  "activo": true,
+  "municipio": "CHIA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@chia.gov.co"
+  ]
+ },
+ {
+  "id": "d58b29d8-ff94-5630-8ee3-213d1acf0401",
+  "codigo": "25178000",
+  "nombre": "STRIA TTEyMOV CUND/CHIPAQUE",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25178",
+  "activo": true,
+  "municipio": "CHIPAQUE",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "16e2bd5c-700e-5c6d-bb2f-a054e161ca0d",
+  "codigo": "25183000",
+  "nombre": "STRIA TTEyMOV CUND/CHOCONTA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25183",
+  "activo": true,
+  "municipio": "CHOCONTA - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "contactenos@choconta-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "66283b7e-c2c1-5ed7-a791-1613f257d684",
+  "codigo": "25214000",
+  "nombre": "STRIA TTEyMOV CUNDINAMARCA/COTA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25214",
+  "activo": true,
+  "municipio": "COTA - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "judicial@alcaldiacota.gov.co"
+  ]
+ },
+ {
+  "id": "b9b0ac25-832d-5f11-a5fb-357720a6dbfd",
+  "codigo": "25260000",
+  "nombre": "STRIA TTEyMOV CUND/EL ROSAL",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25260",
+  "activo": true,
+  "municipio": "EL ROSAL - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@elrosal-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "a597849d-d83d-57a8-9d40-4f29a4925ab3",
+  "codigo": "25269000",
+  "nombre": "STRIA TTO MCPAL FACATATIVA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25269",
+  "activo": true,
+  "municipio": "FACATATIVA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@facatativa-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "eeacc872-a522-56bb-9150-70776b094009",
+  "codigo": "25286000",
+  "nombre": "STRIA TTOyTTE MCPAL FUNZA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25286",
+  "activo": true,
+  "municipio": "FUNZA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@funza-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "2dfd7fd4-af51-5d35-b0bf-948083920e3e",
+  "codigo": "25290000",
+  "nombre": "STRIA DE MOVILIDAD MPAL FUSAGASUGA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25290",
+  "activo": true,
+  "municipio": "FUSAGASUGA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@fusagasuga-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "5fe4b6bb-fbcc-536e-83c6-69ee6f87f860",
+  "codigo": "25307000",
+  "nombre": "STRIA TTOyTTE MCPAL GIRARDOT",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25307",
+  "activo": true,
+  "municipio": "GIRARDOT",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@girardot-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "51480198-944c-5b4e-af90-927dc0ca501a",
+  "codigo": "25320000",
+  "nombre": "STRIA TTOyTTE MCPAL DE GUADUAS",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25320",
+  "activo": true,
+  "municipio": "GUADUAS",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "juridico@guaduas-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "9549a469-1745-5677-904d-416a77307e99",
+  "codigo": "25377000",
+  "nombre": "STRIA TTOyTTE MCPAL LA CALERA/CUND",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25377",
+  "activo": true,
+  "municipio": "LA CALERA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@lacalera-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "3438fa51-fcb0-5fc1-9a77-15c2c0bc0717",
+  "codigo": "25377001",
+  "nombre": "STRIA TTEyMOV CUND/LA CALERA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25377",
+  "activo": true,
+  "municipio": "LA CALERA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "98a25dcc-465b-5758-82ed-26bc1016fdc1",
+  "codigo": "25386000",
+  "nombre": "SECRETARIA DE TRÁNSITO-DEL MUNICIPIO DE LA MESA-CUNDINAMARCA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25386",
+  "activo": true,
+  "municipio": "LA MESA - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "contactenos@lamesa-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "c67c2786-560d-541d-bf7c-01f8c26ddbdf",
+  "codigo": "25430000",
+  "nombre": "STRIA TTOYTTE MCPAL DE MADRID",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25430",
+  "activo": true,
+  "municipio": "MADRID",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "alcaldia@madrid-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "7081d86b-70a5-59e3-b319-2340a20603d6",
+  "codigo": "25473000",
+  "nombre": "SECRETARÍA DE MOVILIDAD DEL MUNICIPIO DE MOSQUERA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25473",
+  "activo": true,
+  "municipio": "MOSQUERA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@mosquera-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "91b32b59-4b59-5561-bd02-3527d482d10d",
+  "codigo": "25513000",
+  "nombre": "STRIA TTOyTTE MCPAL PACHO",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25513",
+  "activo": true,
+  "municipio": "PACHO",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@pacho-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "b466eaf5-2005-5878-9f34-5335e3b98c9b",
+  "codigo": "25572000",
+  "nombre": "STRIA TTEyMOV CUND/PUERTO SALGAR",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25572",
+  "activo": true,
+  "municipio": "PUERTO SALGAR - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "asesorjuridico@puertosalgar-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "70e0c0b7-a6d7-5958-bb24-033b29a0f62c",
+  "codigo": "25612000",
+  "nombre": "STRIA TTEyMOV CUND/RICAURTE",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25612",
+  "activo": true,
+  "municipio": "RICAURTE",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionjudicial@ricaurte-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "bf308ae8-9683-5b8e-82e0-9bd71ca55801",
+  "codigo": "25740000",
+  "nombre": "STRIA TTEy MOV CUND/SIBATE",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25740",
+  "activo": true,
+  "municipio": "SIBATE",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "juridica@sibate-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "d730ed80-7b79-55ff-b232-8e33029c26be",
+  "codigo": "25743000",
+  "nombre": "SECRETARIA DE TRANSITO Y TRANSPORTE MUNICIPIO DE SILVANIA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25743",
+  "activo": true,
+  "municipio": "SILVANIA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "oficinajuridica@silvania-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "91349bb1-1785-52e2-aac1-044d3de5c0a2",
+  "codigo": "25754000",
+  "nombre": "STRIA MCPAL DE SOACHA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25754",
+  "activo": true,
+  "municipio": "SOACHA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "contactenos@alcaldiasoacha.gov.co"
+  ]
+ },
+ {
+  "id": "1d85179b-cdb5-5dc2-af79-05c7ea7f0a87",
+  "codigo": "25758000",
+  "nombre": "STRIA TTOyMOV MCPAL SOPO/CUND",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25758",
+  "activo": true,
+  "municipio": "SOPO",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "d0e00d9f-13cc-5d7f-8d62-448fc163fac6",
+  "codigo": "25843000",
+  "nombre": "STRIA TTOyTTE MCPAL UBATE",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25843",
+  "activo": true,
+  "municipio": "UBATE",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@ubate-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "dab116f8-7777-5e0c-91bc-e10b3c75d906",
+  "codigo": "25875000",
+  "nombre": "STRIA TTEyMOV CUND/VILLETA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25875",
+  "activo": true,
+  "municipio": "VILLETA - CUNDINAMARCA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@villeta-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "3d438442-5dac-5aa4-b91c-ee40dea8c792",
+  "codigo": "25899000",
+  "nombre": "SECRETARIA DE TRANSPORTE Y MOVILIDAD DE ZIPAQUIRA",
+  "departamentoCodigo": "25",
+  "municipioCodigo": "25899",
+  "activo": true,
+  "municipio": "ZIPAQUIRA",
+  "departamento": "CUNDINAMARCA",
+  "correosRadicacion": [
+   "oficinaasesorajuridica@zipaquira-cundinamarca.gov.co"
+  ]
+ },
+ {
+  "id": "d5fabaff-dbd5-5505-bc45-178a51b6875d",
+  "codigo": "27001000",
+  "nombre": "STRIA MOVyTTO QUIBDO",
+  "departamentoCodigo": "27",
+  "municipioCodigo": "27001",
+  "activo": true,
+  "municipio": "QUIBDO",
+  "departamento": "CHOCO",
+  "correosRadicacion": [
+   "notificacionesjudiciales@quibdo-choco.gov.co"
+  ]
+ },
+ {
+  "id": "30419835-e9af-5cad-be8b-0ea7fe304f20",
+  "codigo": "27361000",
+  "nombre": "DIR TTEyTTO DPTAL CHOCO/ISTMINA",
+  "departamentoCodigo": "27",
+  "municipioCodigo": "27361",
+  "activo": true,
+  "municipio": "ISTMINA - CHOCO",
+  "departamento": "CHOCÓ",
+  "correosRadicacion": [
+   "notificacionjudicial@istmina-choco.gov.co"
+  ]
+ },
+ {
+  "id": "0d522f52-0b64-56a4-ab72-11bcaf944d0c",
+  "codigo": "41001000",
+  "nombre": "SECRETARIA DE MOVILIDAD DE NEIVA",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41001",
+  "activo": true,
+  "municipio": "NEIVA",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "notificaciones@alcaldianeiva.gov.co"
+  ]
+ },
+ {
+  "id": "b8e0ee97-1369-50ce-8d60-481414d22539",
+  "codigo": "41016000",
+  "nombre": "STRIA TTOyTTE MCPAL AIPE/HUILA",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41016",
+  "activo": true,
+  "municipio": "AIPE",
+  "departamento": "HUILA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "7c5e7793-5e69-5923-b680-903560733e6b",
+  "codigo": "41132000",
+  "nombre": "INST DE TTOyTTE DE CAMPOALEGRE HUILA ITTC",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41132",
+  "activo": true,
+  "municipio": "CAMPOALEGRE",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "sgeneral@campoalegre-huila.gov.co"
+  ]
+ },
+ {
+  "id": "da751c4c-aa3f-5517-b8bc-490b3147a2b9",
+  "codigo": "41298000",
+  "nombre": "STRIA MCPAL TTOyTTE GARZON",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41298",
+  "activo": true,
+  "municipio": "GARZON",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "notificacionjudicial@garzon-huila.gov.co"
+  ]
+ },
+ {
+  "id": "ce93c9bd-e932-58c7-adf0-e9dc035a4f76",
+  "codigo": "41319000",
+  "nombre": "STRIA INFR PROD TTOyTTE MPAL GUADALUPE",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41319",
+  "activo": true,
+  "municipio": "GUADALUPE",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "notificacionjudicial@guadalupe-huila.gov.co"
+  ]
+ },
+ {
+  "id": "3d4e8266-7749-52ab-891f-068bcc9bfdee",
+  "codigo": "41396000",
+  "nombre": "STRIA MCPAL TTOyTTE LA PLATA",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41396",
+  "activo": true,
+  "municipio": "LA PLATA",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "notificacionjudicial@laplata-huila.gov.co"
+  ]
+ },
+ {
+  "id": "382ba6ef-04a6-52a6-bcc0-40dd0185322b",
+  "codigo": "41524000",
+  "nombre": "UND MCPAL TTOyTTE PALERMO",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41524",
+  "activo": true,
+  "municipio": "PALERMO",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "alcaldia@palermo-huila.gov.co"
+  ]
+ },
+ {
+  "id": "31076133-408c-5573-abf1-2418fb334bb3",
+  "codigo": "41551000",
+  "nombre": "INST TTOyTTE DE PITALITO - INTRAPITALITO",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41551",
+  "activo": true,
+  "municipio": "PITALITO",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "juridico@alcaldiapitalito.gov.co"
+  ]
+ },
+ {
+  "id": "cf39f146-0398-549d-a883-3762d60f0bf2",
+  "codigo": "41615000",
+  "nombre": "INSTITUTO DE TRANSPORTES Y TRÁNSITO DEL HUILA/RIVERA",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41615",
+  "activo": true,
+  "municipio": "RIVERA",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "contactenos@rivera-huila.gov.co"
+  ]
+ },
+ {
+  "id": "c3534643-8858-5b94-81dc-ca18979fa4b4",
+  "codigo": "41807000",
+  "nombre": "INST TTOyTTE DPTAL HUILA/TIMANA",
+  "departamentoCodigo": "41",
+  "municipioCodigo": "41807",
+  "activo": true,
+  "municipio": "TIMANA - HUILA",
+  "departamento": "HUILA",
+  "correosRadicacion": [
+   "notificacionjudicial@timana-huila.gov.co"
+  ]
+ },
+ {
+  "id": "d69cc7a9-a600-54c6-aba8-600af897af01",
+  "codigo": "44001000",
+  "nombre": "INST. DE TT0, TTE y MOVILIDAD DISTRITAL DE RIOHACHA",
+  "departamentoCodigo": "44",
+  "municipioCodigo": "44001",
+  "activo": true,
+  "municipio": "RIOHACHA",
+  "departamento": "LA GUAJIRA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@riohacha-laguajira.gov.co"
+  ]
+ },
+ {
+  "id": "6f67763a-fd24-59e8-846a-79ba06770d2b",
+  "codigo": "44035000",
+  "nombre": "INST TTOYTTE DEL MUNICIPIO DE ALBANIA",
+  "departamentoCodigo": "44",
+  "municipioCodigo": "44035",
+  "activo": true,
+  "municipio": "ALBANIA",
+  "departamento": "LA GUAJIRA",
+  "correosRadicacion": [
+   "notificacionjudicial@albania-laguajira.gov.co"
+  ]
+ },
+ {
+  "id": "2796c7b1-8798-5e6b-ad83-60cd3273ddb7",
+  "codigo": "44279000",
+  "nombre": "INSTITUTO DE TRANSITO Y TRANSPORTE DE FONSECA LA GUAJIRA",
+  "departamentoCodigo": "44",
+  "municipioCodigo": "44279",
+  "activo": true,
+  "municipio": "FONSECA",
+  "departamento": "LA GUAJIRA",
+  "correosRadicacion": [
+   "notificacionjudicial@fonseca-guajira.gov.co"
+  ]
+ },
+ {
+  "id": "18ce2a78-2cba-5bc6-b21e-303c7ed12241",
+  "codigo": "44378000",
+  "nombre": "DPTO ADTVO TTOyTTE GUAJIRA/HATONUEVO",
+  "departamentoCodigo": "44",
+  "municipioCodigo": "44378",
+  "activo": true,
+  "municipio": "HATONUEVO - LA GUAJIRA",
+  "departamento": "LA GUAJIRA",
+  "correosRadicacion": [
+   "contactenos@hatonuevo-laguajira.gov.co"
+  ]
+ },
+ {
+  "id": "f8491717-df50-5a66-b27f-ace468d02af2",
+  "codigo": "44430000",
+  "nombre": "INST MCPAL TTOyTTE MAICAO",
+  "departamentoCodigo": "44",
+  "municipioCodigo": "44430",
+  "activo": true,
+  "municipio": "MAICAO",
+  "departamento": "LA GUAJIRA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@maicao-laguajira.gov.co"
+  ]
+ },
+ {
+  "id": "3a607aed-da7d-5336-9a21-d6bda1d6be59",
+  "codigo": "47001000",
+  "nombre": "U TEC CONT/VIG/ REG TTOyTTE SANTA MARTA",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47001",
+  "activo": true,
+  "municipio": "SANTA MARTA",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "notificacionesalcaldiadistrital@santamarta.gov.co"
+  ]
+ },
+ {
+  "id": "aadb5f51-da47-5f12-9365-434302029291",
+  "codigo": "47053000",
+  "nombre": "INST MCPAL TTO DE ARACATACA - IMTARAC",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47053",
+  "activo": true,
+  "municipio": "ARACATACA",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "notificacionjudicial@aracataca-magdalena.gov.co"
+  ]
+ },
+ {
+  "id": "41832d26-f1e8-539a-a970-e2dcc19b1ace",
+  "codigo": "47189000",
+  "nombre": "INST TTOyTTE MCPAL CIENAGA",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47189",
+  "activo": true,
+  "municipio": "CIENAGA",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "contactenos@cienaga-magdalena.gov.co"
+  ]
+ },
+ {
+  "id": "24622e93-a3f5-503f-bbf1-3df1c8d5f02c",
+  "codigo": "47245000",
+  "nombre": "INST MCPAL TTOyTTE EL BANCO",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47245",
+  "activo": true,
+  "municipio": "EL BANCO",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "oficinajuridica@elbanco-magdalena.gov.co"
+  ]
+ },
+ {
+  "id": "8eafd472-da35-58c9-97a9-7688aab2188a",
+  "codigo": "47288000",
+  "nombre": "INST MCPAL TTOyTTE FUNDACION",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47288",
+  "activo": true,
+  "municipio": "FUNDACION",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "ventanillaunica@fundacion-magdalena.gov.co"
+  ]
+ },
+ {
+  "id": "e01ec60d-f24a-5b6e-bfaf-6661970e7426",
+  "codigo": "47555000",
+  "nombre": "STRIA TTOyTTE MCPAL PLATO - MAGDALENA",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47555",
+  "activo": true,
+  "municipio": "PLATO",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "contactenos@plato-magdalena.gov.co"
+  ]
+ },
+ {
+  "id": "fb8f1a5a-e53d-5f51-b4aa-8e8abb6bfd35",
+  "codigo": "47745000",
+  "nombre": "TRÁNSITO DPTAL DEL MAGDALENA/SITIONUEVO",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47745",
+  "activo": true,
+  "municipio": "SITIONUEVO - MAGDALENA",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": [
+   "notificacionjudicial@sitionuevo-magdalena.gov.co"
+  ]
+ },
+ {
+  "id": "38da7c7b-3a1a-5f1e-848c-70287bf1fbb5",
+  "codigo": "47980000",
+  "nombre": "STRIA TTOyTTE MCPAL ZONA BANANERA MAGDALENA",
+  "departamentoCodigo": "47",
+  "municipioCodigo": "47980",
+  "activo": true,
+  "municipio": "ZONA BANANERA",
+  "departamento": "MAGDALENA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "cd50ac67-d6e9-5ac5-8ac7-0438ba54e421",
+  "codigo": "50001000",
+  "nombre": "STRIA TTOyTTE MCPAL VILLAVICENCIO",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50001",
+  "activo": true,
+  "municipio": "VILLAVICENCIO",
+  "departamento": "META",
+  "correosRadicacion": [
+   "juridicanotificaciones@villavicencio.gov.co"
+  ]
+ },
+ {
+  "id": "077c9bf5-9b9b-50f0-b47d-5ad39feaeb90",
+  "codigo": "50006000",
+  "nombre": "INST TTOyTTE ACACIAS",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50006",
+  "activo": true,
+  "municipio": "ACACIAS",
+  "departamento": "META",
+  "correosRadicacion": [
+   "notificacionjudicial@acacias.gov.co"
+  ]
+ },
+ {
+  "id": "aaaaaaaa-0001-4000-8000-000000000002",
+  "codigo": "5001000",
+  "nombre": "STRIA DE TTOyTTE MEDELLIN",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05001",
+  "activo": true,
+  "municipio": "MEDELLIN",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notimedellin.oralidad@medellin.gov.co"
+  ]
+ },
+ {
+  "id": "ecfed340-51b4-5f9d-bf95-787ac2f836f4",
+  "codigo": "5031000",
+  "nombre": "STRIA TTOyTTE MCPAL AMALFI",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05031",
+  "activo": true,
+  "municipio": "AMALFI",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@amalfi-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "4aaa6788-d12b-509a-aee0-eef9795c07c5",
+  "codigo": "50313000",
+  "nombre": "STRIA MCPAL TTO GRANADA",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50313",
+  "activo": true,
+  "municipio": "GRANADA",
+  "departamento": "META",
+  "correosRadicacion": [
+   "notificacionesjudiciales@granada-meta.gov.co"
+  ]
+ },
+ {
+  "id": "d3fda703-f116-5636-98a5-16f7a8b81ac4",
+  "codigo": "50318000",
+  "nombre": "INST DPTAL TTOyTTE META/GUAMAL",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50318",
+  "activo": true,
+  "municipio": "GUAMAL - META",
+  "departamento": "META",
+  "correosRadicacion": [
+   "notificacionesjudiciales@guamal-meta.gov.co"
+  ]
+ },
+ {
+  "id": "fb8a4e75-556a-5b96-a0bc-1dc687b1a7a9",
+  "codigo": "5034000",
+  "nombre": "INSP TTOyTTE ANDES",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05034",
+  "activo": true,
+  "municipio": "ANDES",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "gobierno@andes-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "345a58b1-029c-56a3-9c68-61ca2159e031",
+  "codigo": "5042000",
+  "nombre": "STRIA TTEyTTO MCPAL SANTA FE ANTIOQUIA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05042",
+  "activo": true,
+  "municipio": "SANTAFE DE ANTIOQUIA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionjudicial@santafedeantioquia-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "740c4c48-5a0f-5ba5-ab5c-c8f1b439a3fe",
+  "codigo": "5045000",
+  "nombre": "STRIA MCPAL TTEyTTO APARTADO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05045",
+  "activo": true,
+  "municipio": "APARTADO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones_judiciales@apartado.gov.co"
+  ]
+ },
+ {
+  "id": "7b4609c5-a816-540b-a923-041432ebce47",
+  "codigo": "50573000",
+  "nombre": "INST DPTAL TTOyTTE META/PUERTO LOPEZ",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50573",
+  "activo": true,
+  "municipio": "PUERTO LOPEZ - META",
+  "departamento": "META",
+  "correosRadicacion": [
+   "juridica@puertolopez-meta.gov.co"
+  ]
+ },
+ {
+  "id": "91e3b769-4bc0-582f-94d9-5be94b3c0559",
+  "codigo": "50606000",
+  "nombre": "INST DPTAL TTOyTTE META/RESTREPO",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50606",
+  "activo": true,
+  "municipio": "RESTREPO - META",
+  "departamento": "META",
+  "correosRadicacion": [
+   "notificacionjudicial@restrepo-meta.gov.co"
+  ]
+ },
+ {
+  "id": "dd68d155-3b43-56d4-b93c-aeb18fbaf0da",
+  "codigo": "50606001",
+  "nombre": "INST DPTAL TTOyTTE  META/RESTREPO",
+  "departamentoCodigo": "50",
+  "municipioCodigo": "50606",
+  "activo": true,
+  "municipio": "RESTREPO",
+  "departamento": "META",
+  "correosRadicacion": []
+ },
+ {
+  "id": "6e96c215-2443-5666-8ed6-c4749ac3861c",
+  "codigo": "5079000",
+  "nombre": "DIR TTEyTTO  MCPAL BARBOSA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05079",
+  "activo": true,
+  "municipio": "BARBOSA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@barbosa.gov.co"
+  ]
+ },
+ {
+  "id": "8cef5e91-c23c-5092-83e6-94306cdc7644",
+  "codigo": "5088000",
+  "nombre": "STRIA TTEyTTO BELLO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05088",
+  "activo": true,
+  "municipio": "BELLO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "1074b370-9fcc-5d50-ad01-2603ec4bbf40",
+  "codigo": "5101000",
+  "nombre": "INSP MCPAL TTO CIUDAD BOLIVAR",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05101",
+  "activo": true,
+  "municipio": "CIUDAD BOLIVAR",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@ciudadbolivar-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "beffba04-045f-5ab0-b283-c60aa7bb9a2c",
+  "codigo": "5129000",
+  "nombre": "STRIA TTEyTTO MCPAL CALDAS/ANTIOQUIA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05129",
+  "activo": true,
+  "municipio": "CALDAS",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@caldasantioquia.gov.co"
+  ]
+ },
+ {
+  "id": "65da6c5d-2273-56dd-8657-bf6145cdbb15",
+  "codigo": "5147000",
+  "nombre": "STRIA DE TTOyTTE CAREPA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05147",
+  "activo": true,
+  "municipio": "CAREPA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionjudicial@carepa-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "5adb92c2-156f-5467-8a1f-fd03cd23dbbc",
+  "codigo": "5148000",
+  "nombre": "INSP MCPAL TTOyTTE CARMEN DE VIBORAL",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05148",
+  "activo": true,
+  "municipio": "EL CARMEN DE VIBORAL",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@alcaldiaelcarmen.gov.co"
+  ]
+ },
+ {
+  "id": "ade9f38b-a256-573f-af9c-cc25fca972d4",
+  "codigo": "5154000",
+  "nombre": "STRIA TTOYTTE CAUCASIA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05154",
+  "activo": true,
+  "municipio": "CAUCASIA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@caucasia-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "99a0bec6-a9da-578b-a6a1-73dc57775a4b",
+  "codigo": "5172000",
+  "nombre": "SECRETARÍA DE TTOYTTE MCPAL CHIGORODO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05172",
+  "activo": true,
+  "municipio": "CHIGORODO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionjudicial@chigorodo-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "4682015f-d5e3-57ea-801f-e463e0a0fd2e",
+  "codigo": "52001000",
+  "nombre": "DPTO ADTVO TTOYTTE MCPAL PASTO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52001",
+  "activo": true,
+  "municipio": "PASTO",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "contactenos@pasto.gov.co"
+  ]
+ },
+ {
+  "id": "777ac311-8ad1-5219-9ef0-47edb412fb27",
+  "codigo": "52110000",
+  "nombre": "STRIA TTOyTTE MCPAL BUESACO/NARIÑO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52110",
+  "activo": true,
+  "municipio": "BUESACO",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "alcaldia@buesaco-narino.gov.co"
+  ]
+ },
+ {
+  "id": "d640174d-e9d2-5e13-a05d-251ce8e79894",
+  "codigo": "52110001",
+  "nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/BUESACO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52110",
+  "activo": true,
+  "municipio": "BUESACO",
+  "departamento": "NARINO",
+  "correosRadicacion": []
+ },
+ {
+  "id": "a7c180ce-2267-56f7-8287-391350f1040a",
+  "codigo": "5212000",
+  "nombre": "STRIA TTEyTTO COPACABANA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05212",
+  "activo": true,
+  "municipio": "COPACABANA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "contactenos@copacabana.gov.co"
+  ]
+ },
+ {
+  "id": "514159d2-a093-5dcc-97aa-26ae3ed942a0",
+  "codigo": "52240000",
+  "nombre": "STRIA TTOyTTE MCPAL CHACHAGUI NARIÑO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52240",
+  "activo": true,
+  "municipio": "CHACHAGUI",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "notificacionjudicial@chachagui-narino.gov.co"
+  ]
+ },
+ {
+  "id": "c6841e1b-df59-52a7-9351-466ae183e7e9",
+  "codigo": "52317000",
+  "nombre": "SUBSTRIA TTOyTTE DTAL NARIÑO/GUACHUCAL",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52317",
+  "activo": true,
+  "municipio": "GUACHUCAL - NARIÑO",
+  "departamento": "NARIÑO",
+  "correosRadicacion": [
+   "contactenos@guachucal-narino.gov.co"
+  ]
+ },
+ {
+  "id": "e9649d3c-b69f-516f-af03-02e0492795d5",
+  "codigo": "52354000",
+  "nombre": "SUB STARIA TTOyTTE DPTAL NARIÑO/IMUES",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52354",
+  "activo": true,
+  "municipio": "IMUES - NARIÑO",
+  "departamento": "NARIÑO",
+  "correosRadicacion": [
+   "notificacionjudicial@imues-narino.gov.co"
+  ]
+ },
+ {
+  "id": "a1deab26-3fc6-5d95-ad78-4e454cae8bbe",
+  "codigo": "52356000",
+  "nombre": "STRIA TTOyTTE MCPAL IPIALES",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52356",
+  "activo": true,
+  "municipio": "IPIALES",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "notificacionesjudiciales@ipiales-narino.gov.co"
+  ]
+ },
+ {
+  "id": "c0fece49-7c79-5410-8236-4738e315a161",
+  "codigo": "5237000",
+  "nombre": "DIR TTO MCPAL DONMATIAS",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05237",
+  "activo": true,
+  "municipio": "DON MATIAS",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "contactenos@donmatias-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "fca23c58-23ee-5bfa-9a5d-73173a36a029",
+  "codigo": "52399000",
+  "nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/LA UNION",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52399",
+  "activo": true,
+  "municipio": "LA UNION - NARIÑO",
+  "departamento": "NARIÑO",
+  "correosRadicacion": [
+   "notificacionjudicial@launion-narino.gov.co"
+  ]
+ },
+ {
+  "id": "08749895-62c8-5844-a0fa-1f34b0372ea9",
+  "codigo": "52480000",
+  "nombre": "STRIA TTOYTTE MCPAL NARIÑO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52480",
+  "activo": true,
+  "municipio": "NARINO",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "alcaldia@narino-narino.gov.co"
+  ]
+ },
+ {
+  "id": "1f7fe317-b65f-5830-a3b8-46b262a03e28",
+  "codigo": "5250000",
+  "nombre": "STRIA TTOyTTE DEL MCPIO DEL BAGRE",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05250",
+  "activo": true,
+  "municipio": "EL BAGRE",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "alcaldia@elbagre-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "a75a2976-315b-5633-8a37-f3f418d117bd",
+  "codigo": "52585000",
+  "nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/PUPIALES",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52585",
+  "activo": true,
+  "municipio": "PUPIALES - NARIÑO",
+  "departamento": "NARIÑO",
+  "correosRadicacion": [
+   "secgobierno@pupiales-narino.gov.co"
+  ]
+ },
+ {
+  "id": "708488b4-111e-54c1-aebf-2900a472f609",
+  "codigo": "52612000",
+  "nombre": "STRIA TTOYTTE MCPAL RICAURTE",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52612",
+  "activo": true,
+  "municipio": "RICAURTE",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "notificacionjudicial@ricaurte-narino.gov.co"
+  ]
+ },
+ {
+  "id": "69f48545-a7cf-5201-9198-6e3b3fab9a99",
+  "codigo": "5266000",
+  "nombre": "STRIA TTEyTTO ENVIGADO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05266",
+  "activo": true,
+  "municipio": "ENVIGADO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones@juridica.envigado.gov.co"
+  ]
+ },
+ {
+  "id": "90a6823c-b815-565b-93ab-66016cbd4b2d",
+  "codigo": "52678000",
+  "nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/SAMANIEGO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52678",
+  "activo": true,
+  "municipio": "SAMANIEGO - NARIÑO",
+  "departamento": "NARIÑO",
+  "correosRadicacion": [
+   "contactenos@samaniego-narino.gov.co"
+  ]
+ },
+ {
+  "id": "b57a118a-6a12-5c63-9da5-9ae00d03c217",
+  "codigo": "52683000",
+  "nombre": "SUBSTRIA TTOyTTE DPTAL NARIÑO/SANDONA",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52683",
+  "activo": true,
+  "municipio": "SANDONA - NARIÑO",
+  "departamento": "NARIÑO",
+  "correosRadicacion": [
+   "notificacionjudicial@sandona-narino.gov.co"
+  ]
+ },
+ {
+  "id": "1820b710-7d78-56f6-8620-70bcd7a49358",
+  "codigo": "52788000",
+  "nombre": "STRIA TTOyTTE DPTAL TANGUA/NARIÑO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52788",
+  "activo": true,
+  "municipio": "TANGUA",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "contactenos@tangua-narino.gov.co"
+  ]
+ },
+ {
+  "id": "4cdb43da-0ff4-576c-88a6-98989102d60d",
+  "codigo": "52835000",
+  "nombre": "STRIA TTEyTTO MCPAL TUMACO",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52835",
+  "activo": true,
+  "municipio": "TUMACO",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "notificacionesjudiciales@tumaco-narino.gov.co"
+  ]
+ },
+ {
+  "id": "d0a75b85-10d3-59ca-a47a-c7eec8471c54",
+  "codigo": "52838000",
+  "nombre": "STRIA TT0yTTE MCPAL TUQUERRES",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52838",
+  "activo": true,
+  "municipio": "TUQUERRES",
+  "departamento": "NARINO",
+  "correosRadicacion": [
+   "juridica@tuquerres-narino.gov.co"
+  ]
+ },
+ {
+  "id": "db7a04a4-be38-5906-83d1-5214037b54eb",
+  "codigo": "5284000",
+  "nombre": "STRIA TTEyTTO MCPAL FRONTINO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05284",
+  "activo": true,
+  "municipio": "FRONTINO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "gobierno@frontino-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "d7894e55-8f77-5cfb-a885-2103ed441560",
+  "codigo": "52885001",
+  "nombre": "TRÁNSITO DPTAL NARIÑO/YACUANQUER",
+  "departamentoCodigo": "52",
+  "municipioCodigo": "52885",
+  "activo": true,
+  "municipio": "YACUANQUER",
+  "departamento": "NARINO",
+  "correosRadicacion": []
+ },
+ {
+  "id": "4bdcdc26-ba63-5600-994a-32f1f4926147",
+  "codigo": "5308000",
+  "nombre": "STRIA TTEyTTO GIRARDOTA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05308",
+  "activo": true,
+  "municipio": "GIRARDOTA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@girardota.gov.co"
+  ]
+ },
+ {
+  "id": "5b9af975-748c-53a5-bac0-6b5ab8f8001c",
+  "codigo": "5318000",
+  "nombre": "STRIA DE MOVILIDAD DEL MCPIO DE GUARNE",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05318",
+  "activo": true,
+  "municipio": "GUARNE",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones@guarne-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "d31bc0e1-738d-5973-94d0-45d36f928c88",
+  "codigo": "5360000",
+  "nombre": "STRIA TTEyTTO ITAGUI",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05360",
+  "activo": true,
+  "municipio": "ITAGUI",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificaciones@itagui.gov.co"
+  ]
+ },
+ {
+  "id": "304acea5-7a61-5043-82df-465899d3c80c",
+  "codigo": "5376000",
+  "nombre": "INSP TTO MCPAL LA CEJA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05376",
+  "activo": true,
+  "municipio": "LA CEJA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@laceja-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "df8637d6-eafd-5514-8876-b4a0785d808e",
+  "codigo": "5380000",
+  "nombre": "STRIA TTOYTTE MCPAL LA ESTRELLA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05380",
+  "activo": true,
+  "municipio": "LA ESTRELLA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@laestrella.gov.co"
+  ]
+ },
+ {
+  "id": "f19a2cdf-c1b3-55a2-a452-dc716caa9072",
+  "codigo": "54001000",
+  "nombre": "DPTO ADTVO TTOyTTE MCPAL CUCUTA",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54001",
+  "activo": true,
+  "municipio": "CUCUTA",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "notificaciones_judiciales@cucuta.gov.co"
+  ]
+ },
+ {
+  "id": "0b03729e-88a2-5d2a-bb04-635d85aa00a3",
+  "codigo": "54206000",
+  "nombre": "INSP DE TT0 y TTE CONVENCION",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54206",
+  "activo": true,
+  "municipio": "CONVENCION",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "contactenos@convencion-nortedesantander.gov.co"
+  ]
+ },
+ {
+  "id": "f956c17a-9395-5e32-a78b-776865cd5022",
+  "codigo": "54261000",
+  "nombre": "STRIA TTO DPTAL NTE SANTANDER/EL ZULIA",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54261",
+  "activo": true,
+  "municipio": "EL ZULIA - N. DE SANTANDER",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@elzulia-nortedesantander.gov.co"
+  ]
+ },
+ {
+  "id": "7d3933dd-475e-565c-a6ef-bdde107a4846",
+  "codigo": "5440000",
+  "nombre": "STRIA DE TTOYTTE DEL MCPIO DE MARINILLA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05440",
+  "activo": true,
+  "municipio": "MARINILLA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@marinilla-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "6da391e3-f747-578d-9a56-7c16c2ce52fb",
+  "codigo": "54405000",
+  "nombre": "INST TTOyTTE DEL MUNICIPIO DE LOS PATIOS",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54405",
+  "activo": true,
+  "municipio": "LOS PATIOS",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@lospatios-nortedesantander.gov.co"
+  ]
+ },
+ {
+  "id": "4f73ee22-bfc9-5630-928f-6cd9675e3dee",
+  "codigo": "54498000",
+  "nombre": "STRIA MOVyTTO OCAÑA",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54498",
+  "activo": true,
+  "municipio": "OCAÑA",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@ocana-nortedesantander.gov.co"
+  ]
+ },
+ {
+  "id": "c48ac782-c693-5321-bb64-46614df06cb6",
+  "codigo": "54518000",
+  "nombre": "STRIA MCPAL TTOyTTE PAMPLONA",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54518",
+  "activo": true,
+  "municipio": "PAMPLONA",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "contactenos@pamplona-nortedesantander.gov.co"
+  ]
+ },
+ {
+  "id": "96b9fb82-0f2d-5052-8807-8bc220e90ff2",
+  "codigo": "54874000",
+  "nombre": "DPTO ADTVO TTEyTTO VILLA DEL ROSARIO",
+  "departamentoCodigo": "54",
+  "municipioCodigo": "54874",
+  "activo": true,
+  "municipio": "VILLA DEL ROSARIO",
+  "departamento": "NORTE DE SANTANDER",
+  "correosRadicacion": [
+   "notificacionesjudiciales@villarosario.gov.co"
+  ]
+ },
+ {
+  "id": "8cca2f5a-3520-50f0-a598-6316a4d091d3",
+  "codigo": "5490000",
+  "nombre": "STRIA TTOyTTE MCPAL NECOCLÍ/ANTIOQUIA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "00549",
+  "activo": true,
+  "municipio": "NECOCLI",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "169883ba-90cc-5392-9125-23a88ab008bd",
+  "codigo": "5579000",
+  "nombre": "INSP TTO PUERTO BERRIO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05579",
+  "activo": true,
+  "municipio": "PUERTO BERRIO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@puertoberrio-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "66b24fb8-538f-5a7d-bfa1-9a35bbe055fa",
+  "codigo": "5591000",
+  "nombre": "STRIA TTOyTTE MCPAL DE PUERTO TRIUNFO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05591",
+  "activo": true,
+  "municipio": "PUERTO TRIUNFO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "alcaldia@puertotriunfo-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "a03222b8-627d-5940-a1db-7b1f3eba322b",
+  "codigo": "5615000",
+  "nombre": "SDT SUBSECRETARÍA DE MOVILIDAD RIONEGRO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05615",
+  "activo": true,
+  "municipio": "RIONEGRO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "juridica@rionegro.gov.co"
+  ]
+ },
+ {
+  "id": "ba575641-ea48-5cd2-ac51-ebba02584ba5",
+  "codigo": "5631000",
+  "nombre": "STRIA TTOyTTE MCPAL SABANETA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05631",
+  "activo": true,
+  "municipio": "SABANETA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@sabaneta.gov.co"
+  ]
+ },
+ {
+  "id": "d144971e-6209-5931-b025-d0625b5a4969",
+  "codigo": "5656001",
+  "nombre": "TRÁNSITO DPTAL DE ANTIOQUIA/SAN JERONIMO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05656",
+  "activo": true,
+  "municipio": "SAN JERONIMO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "9922e675-9c95-52d7-be76-e4a7a05f5708",
+  "codigo": "5686000",
+  "nombre": "STRIA TTO MCPAL SANTA ROSA DE OSOS",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05686",
+  "activo": true,
+  "municipio": "SANTA ROSA DE OSOS",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "alcaldia@santarosadeosos.gov.co"
+  ]
+ },
+ {
+  "id": "97016ea8-be23-5ffa-a9b6-e856a2b8a258",
+  "codigo": "5697000",
+  "nombre": "STRIA TTOyTTE EL SANTUARIO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05697",
+  "activo": true,
+  "municipio": "EL SANTUARIO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@elsantuario-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "832bd9ac-50ae-5b79-8c18-34e295b8c604",
+  "codigo": "5736000",
+  "nombre": "STRIA TTOyTTE MCPAL SEGOVIA",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05736",
+  "activo": true,
+  "municipio": "SEGOVIA",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionjudicial@segovia-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "4c25178a-e878-5a11-a632-7d45190e2681",
+  "codigo": "5756000",
+  "nombre": "INSP TTOYTTE MCPAL SONSON",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05756",
+  "activo": true,
+  "municipio": "SONSON",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "contactenos@sonson-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "328915f0-0bed-59b7-b1d7-5db8e9111284",
+  "codigo": "5837000",
+  "nombre": "INSP MCPAL TTO TURBO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05837",
+  "activo": true,
+  "municipio": "TURBO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionesjuridica@turbo-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "46d49071-4218-5da8-bec1-6ef9c2825e4e",
+  "codigo": "5847000",
+  "nombre": "STRIA TTOyTTE MCPAL URRAO",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05847",
+  "activo": true,
+  "municipio": "URRAO",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "gobierno@urrao-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "f1e6e518-f59b-592f-8d60-1b9a814a2647",
+  "codigo": "5858000",
+  "nombre": "ALCALDIA MPAL DE VEGACHI",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05858",
+  "activo": true,
+  "municipio": "VEGACHI",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "notificacionjudicial@vegachi-antioquia.gov.co"
+  ]
+ },
+ {
+  "id": "63786320-2654-56ea-acd7-e3ae67497189",
+  "codigo": "5887000",
+  "nombre": "SECRETARIA DE MOVILIDAD DE YARUMAL",
+  "departamentoCodigo": "05",
+  "municipioCodigo": "05887",
+  "activo": true,
+  "municipio": "YARUMAL",
+  "departamento": "ANTIOQUIA",
+  "correosRadicacion": [
+   "alcaldia@yarumal.gov.co",
+   "transito@yarumal.gov.co"
+  ]
+ },
+ {
+  "id": "445f873e-a522-5810-b291-e14d1d0e2fa5",
+  "codigo": "63001000",
+  "nombre": "STRIA DE TTOYTTE MCPAL ARMENIA",
+  "departamentoCodigo": "63",
+  "municipioCodigo": "63001",
+  "activo": true,
+  "municipio": "ARMENIA",
+  "departamento": "QUINDIO",
+  "correosRadicacion": [
+   "notificacionesjudiciales@armenia.gov.co"
+  ]
+ },
+ {
+  "id": "ddf6fd45-c662-5bd4-9f88-179216cc852b",
+  "codigo": "63130000",
+  "nombre": "INSP TTOyTTE CALARCA",
+  "departamentoCodigo": "63",
+  "municipioCodigo": "63130",
+  "activo": true,
+  "municipio": "CALARCA",
+  "departamento": "QUINDIO",
+  "correosRadicacion": [
+   "notificacionjudicial@calarca-quindio.gov.co"
+  ]
+ },
+ {
+  "id": "098273a5-fd37-5489-8292-b2681c40c007",
+  "codigo": "63190000",
+  "nombre": "INST DPTAL DE TTO QUINDIO/CIRCASIA",
+  "departamentoCodigo": "63",
+  "municipioCodigo": "63190",
+  "activo": true,
+  "municipio": "CIRCASIA - QUINDIO",
+  "departamento": "QUINDÍO",
+  "correosRadicacion": [
+   "notificacionjudicial@circasia-quindio.gov.co"
+  ]
+ },
+ {
+  "id": "e9380ec4-f19d-501f-bea2-823244ea5e31",
+  "codigo": "63401000",
+  "nombre": "STRIA TTOyTTE MCPAL LA TEBAIDA",
+  "departamentoCodigo": "63",
+  "municipioCodigo": "63401",
+  "activo": true,
+  "municipio": "LA TEBAIDA",
+  "departamento": "QUINDIO",
+  "correosRadicacion": [
+   "ventanillaunica@latebaida-quindio.gov.co"
+  ]
+ },
+ {
+  "id": "3ee4c34e-903a-54e1-9319-5c6759710f53",
+  "codigo": "63594000",
+  "nombre": "INS DE TTOyTTE QUIMBAYA",
+  "departamentoCodigo": "63",
+  "municipioCodigo": "63594",
+  "activo": true,
+  "municipio": "QUIMBAYA",
+  "departamento": "QUINDIO",
+  "correosRadicacion": [
+   "notificacionjudicial@quimbaya-quindio.gov.co"
+  ]
+ },
+ {
+  "id": "9e038db6-8144-5da9-b543-dc58e5806db1",
+  "codigo": "66001000",
+  "nombre": "INSTITUTO DE MOVILIDAD DE PEREIRA",
+  "departamentoCodigo": "66",
+  "municipioCodigo": "66001",
+  "activo": true,
+  "municipio": "PEREIRA",
+  "departamento": "RISARALDA",
+  "correosRadicacion": [
+   "notificaciones_judicialesalcaldia@pereira.gov.co"
+  ]
+ },
+ {
+  "id": "63052d0e-31a1-54f7-b281-512bc3666edd",
+  "codigo": "66170000",
+  "nombre": "STRIA MCPAL TTOyTTE DOSQUEBRADAS",
+  "departamentoCodigo": "66",
+  "municipioCodigo": "66170",
+  "activo": true,
+  "municipio": "DOSQUEBRADAS",
+  "departamento": "RISARALDA",
+  "correosRadicacion": [
+   "demandas@dosquebradas.gov.co"
+  ]
+ },
+ {
+  "id": "b4336c8e-dc9e-5105-a43c-167a67b5dc4f",
+  "codigo": "66400000",
+  "nombre": "STRIA MCPAL TTOyTTE LA VIRGINIA",
+  "departamentoCodigo": "66",
+  "municipioCodigo": "66400",
+  "activo": true,
+  "municipio": "LA VIRGINIA",
+  "departamento": "RISARALDA",
+  "correosRadicacion": [
+   "notificacionjudicial@lavirginia-risaralda.gov.co"
+  ]
+ },
+ {
+  "id": "9deb795c-0b33-5b0d-8e1a-d9ef32516c29",
+  "codigo": "66682000",
+  "nombre": "STRIA TTO y GOB MCPAL SANTA ROSA CABAL",
+  "departamentoCodigo": "66",
+  "municipioCodigo": "66682",
+  "activo": true,
+  "municipio": "SANTA ROSA DE CABAL",
+  "departamento": "RISARALDA",
+  "correosRadicacion": [
+   "notificacionjudicial@santarosadecabal-risaralda.gov.co"
+  ]
+ },
+ {
+  "id": "aaaaaaaa-0001-4000-8000-000000000005",
+  "codigo": "68001000",
+  "nombre": "DIR TTOyTTE BUCARAMANGA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68001",
+  "activo": true,
+  "municipio": "BUCARAMANGA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificaciones@bucaramanga.gov.co"
+  ]
+ },
+ {
+  "id": "f76c325e-187e-574e-931c-77b1cd8d45fd",
+  "codigo": "68077000",
+  "nombre": "INSP MCPAL TTOyTTE BARBOSA/STDER",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68077",
+  "activo": true,
+  "municipio": "BARBOSA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@barbosa-santander.gov.co"
+  ]
+ },
+ {
+  "id": "879c2dbe-f8fa-5a8a-a121-48ada05267f6",
+  "codigo": "68079000",
+  "nombre": "STRIA TTOyTTE MCPAL BARICHARA/SANTANDER",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68079",
+  "activo": true,
+  "municipio": "BARICHARA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": []
+ },
+ {
+  "id": "08c227fc-aeb9-5db1-b086-e4a2ed323000",
+  "codigo": "68081000",
+  "nombre": "INSP TTOyTTE BARRANCABERMEJA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68081",
+  "activo": true,
+  "municipio": "BARRANCABERMEJA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "defensajudicial@barrancabermeja.gov.co"
+  ]
+ },
+ {
+  "id": "55b9de34-c6f6-58da-a710-554991bf0369",
+  "codigo": "68167000",
+  "nombre": "INST TTOyTTE CHARALA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68167",
+  "activo": true,
+  "municipio": "CHARALA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@charala-santander.gov.co"
+  ]
+ },
+ {
+  "id": "5524cbc1-548a-554f-b092-aec94b722809",
+  "codigo": "68190000",
+  "nombre": "STRIA TTOyTTE MCPAL CIMITARRA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68190",
+  "activo": true,
+  "municipio": "CIMITARRA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@cimitarra-santander.gov.co"
+  ]
+ },
+ {
+  "id": "b590c670-cb76-52ea-9a71-d3d4e0c10ea4",
+  "codigo": "68276000",
+  "nombre": "DIR TTOyTTE FLORIDABLANCA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68276",
+  "activo": true,
+  "municipio": "FLORIDABLANCA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificaciones@floridablanca.gov.co"
+  ]
+ },
+ {
+  "id": "6937c17f-2ed4-5bec-8262-14d3d28c829d",
+  "codigo": "68307000",
+  "nombre": "STRIA MCPAL TTOyTTE GIRON",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68307",
+  "activo": true,
+  "municipio": "GIRON",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@giron-santander.gov.co"
+  ]
+ },
+ {
+  "id": "0612c33d-a2c0-5c3e-bc2b-054698f48882",
+  "codigo": "68406000",
+  "nombre": "STARIA TTO Y MOVILIDAD DEL MCPIO DE LEBRIJA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68406",
+  "activo": true,
+  "municipio": "LEBRIJA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@lebrija-santander.gov.co"
+  ]
+ },
+ {
+  "id": "0e745b34-a58e-5c00-8e54-3a3908492294",
+  "codigo": "68432000",
+  "nombre": "STRIA TTOyTTE MCPAL MALAGA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68432",
+  "activo": true,
+  "municipio": "MALAGA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionesjudiciales@malaga-santander.gov.co"
+  ]
+ },
+ {
+  "id": "fd557bfd-fc5a-58d0-a690-558a56cb8f77",
+  "codigo": "68500000",
+  "nombre": "STRIA TTOyTTE MCPAL DE OIBA",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68500",
+  "activo": true,
+  "municipio": "OIBA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "contactenos@oiba-santander.gov.co"
+  ]
+ },
+ {
+  "id": "0943a1cc-fd13-548e-a89a-c8f27c8702ac",
+  "codigo": "68547000",
+  "nombre": "STRIA TTOyMOV PIEDECUESTA/SANTANDER",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68547",
+  "activo": true,
+  "municipio": "PIEDECUESTA",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notijudicial@alcaldiadepiedecuesta.gov.co"
+  ]
+ },
+ {
+  "id": "3feb4293-d9b6-53d6-b59a-16921007a9ad",
+  "codigo": "68572000",
+  "nombre": "STRIA TTOyTTE MCPAL PUENTE NACIONAL/SANTANDER",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68572",
+  "activo": true,
+  "municipio": "PUENTE NACIONAL",
+  "departamento": "SANTANDER",
+  "correosRadicacion": []
+ },
+ {
+  "id": "a540b12c-a48f-584b-ba14-70c1cc1a43a4",
+  "codigo": "68655000",
+  "nombre": "STRIA TTOyTTE MCPAL SABANA DE TORRES",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68655",
+  "activo": true,
+  "municipio": "SABANA DE TORRES",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionjudicial@sabanadetorres-santander.gov.co"
+  ]
+ },
+ {
+  "id": "00612b4c-4225-519d-a3d2-0b9467151f2e",
+  "codigo": "68679000",
+  "nombre": "INSP MCPAL TTOyTTE SAN GIL",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68679",
+  "activo": true,
+  "municipio": "SAN GIL",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionesjudiciales@sangil.gov.co"
+  ]
+ },
+ {
+  "id": "f8f69758-788f-5723-b2bd-b8ecaf9febcd",
+  "codigo": "68689000",
+  "nombre": "INS MCPAL TTOyTTE SAN VICENTE CHUCURI",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68689",
+  "activo": true,
+  "municipio": "SAN VICENTE DE CHUCURI",
+  "departamento": "SANTANDER",
+  "correosRadicacion": []
+ },
+ {
+  "id": "140d2ed3-29b6-5fc8-9139-dda5b15956f7",
+  "codigo": "68755000",
+  "nombre": "STRIA TTOyTTE MCPAL EL SOCORRO",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68755",
+  "activo": true,
+  "municipio": "SOCORRO",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "juridicaexterna@socorro-santander.gov.co"
+  ]
+ },
+ {
+  "id": "41040ba9-2abe-59ba-9423-af308b55ed6e",
+  "codigo": "68861000",
+  "nombre": "STRIA TTOyTTE VELEZ",
+  "departamentoCodigo": "68",
+  "municipioCodigo": "68861",
+  "activo": true,
+  "municipio": "VELEZ",
+  "departamento": "SANTANDER",
+  "correosRadicacion": [
+   "notificacionesjudiciales@velez-santander.gov.co"
+  ]
+ },
+ {
+  "id": "cff7869a-a7f2-57f8-80ab-0bfaa6f594a5",
+  "codigo": "70001000",
+  "nombre": "STRIA MCPAL TTEyTTO SINCELEJO",
+  "departamentoCodigo": "70",
+  "municipioCodigo": "70001",
+  "activo": true,
+  "municipio": "SINCELEJO",
+  "departamento": "SUCRE",
+  "correosRadicacion": [
+   "contactenos@sincelejo.gov.co"
+  ]
+ },
+ {
+  "id": "edf41c5b-f97d-5e8a-bf57-2a5ca22616fd",
+  "codigo": "70215000",
+  "nombre": "INS MCPAL DE TyTO DE COROZAL",
+  "departamentoCodigo": "70",
+  "municipioCodigo": "70215",
+  "activo": true,
+  "municipio": "COROZAL",
+  "departamento": "SUCRE",
+  "correosRadicacion": [
+   "juridica@corozal-sucre.gov.co"
+  ]
+ },
+ {
+  "id": "08a3a8be-5545-5b64-a4ca-fb297596d3cc",
+  "codigo": "70670000",
+  "nombre": "SECRETARIA DPTAL TTOyTTE SUCRE/SAMPUES",
+  "departamentoCodigo": "70",
+  "municipioCodigo": "70670",
+  "activo": true,
+  "municipio": "SAMPUES - SUCRE",
+  "departamento": "SUCRE",
+  "correosRadicacion": [
+   "notificacionjudicial@sampues-sucre.gov.co"
+  ]
+ },
+ {
+  "id": "5f9e305a-9b09-56a1-a9eb-7fb7f37afefb",
+  "codigo": "70713000",
+  "nombre": "STRIA DE TTOyTTE MCPAL SAN ONOFRE",
+  "departamentoCodigo": "70",
+  "municipioCodigo": "70713",
+  "activo": true,
+  "municipio": "SAN ONOFRE",
+  "departamento": "SUCRE",
+  "correosRadicacion": [
+   "webmaster@sanonofre-sucre.gov.co"
+  ]
+ },
+ {
+  "id": "c07fe916-4de0-5f60-bebb-dd21bb636cbd",
+  "codigo": "70742000",
+  "nombre": "INST TTO Y TTE DEL MUNICIPIO DE SINCÉ",
+  "departamentoCodigo": "70",
+  "municipioCodigo": "70742",
+  "activo": true,
+  "municipio": "SINCE",
+  "departamento": "SUCRE",
+  "correosRadicacion": []
+ },
+ {
+  "id": "625a949c-b0ac-5f67-85d0-cd75a4d7d4c6",
+  "codigo": "73001000",
+  "nombre": "STRIA MCPAL TTOyTTE IBAGUE",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73001",
+  "activo": true,
+  "municipio": "IBAGUE",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@tolima.gov.co"
+  ]
+ },
+ {
+  "id": "502022a2-9a4c-5728-b717-c2512bd48200",
+  "codigo": "73026000",
+  "nombre": "DPTO ADTVO TTOyTTE TOLIMA/ ALVARADO",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73026",
+  "activo": true,
+  "municipio": "ALVARADO - TOLIMA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "contactenos@pasto.gov.co"
+  ]
+ },
+ {
+  "id": "79b3a1a9-61fb-5f45-b75f-9b10ed4bb798",
+  "codigo": "73055000",
+  "nombre": "DPTO ADTVO TTOyTTE TOLIMA/GUAYABAL",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73055",
+  "activo": true,
+  "municipio": "ARMERO - TOLIMA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "contactenos@armeroguayabal-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "29a74d7f-949e-5f0a-8084-b35f98986282",
+  "codigo": "73168000",
+  "nombre": "INST DE TTO MCPAL CHAPARRAL",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73168",
+  "activo": true,
+  "municipio": "CHAPARRAL",
+  "departamento": "TOLIMA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "a28bef72-d020-571a-9bf1-2f6b48c0ce3c",
+  "codigo": "73268000",
+  "nombre": "STRIA MCPAL TTOyTTE ESPINAL",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73268",
+  "activo": true,
+  "municipio": "ESPINAL",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "notificacionjudicial@elespinal-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "d3b18a23-e4a2-5d5c-9af8-da29d980af51",
+  "codigo": "73283000",
+  "nombre": "STRIA TTOyTTE MCPAL FRESNO",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73283",
+  "activo": true,
+  "municipio": "FRESNO",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "contactenos@fresno-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "83a7b12f-68fe-54f3-acb9-689e0c0ab697",
+  "codigo": "73319000",
+  "nombre": "DPTO ADTVO TTOyTTE TOLIMA/GUAMO",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73319",
+  "activo": true,
+  "municipio": "GUAMO - TOLIMA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "gobierno@elguamo-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "15876029-0a9b-5af0-835e-54878c76d653",
+  "codigo": "73349000",
+  "nombre": "STRIA MCPAL TTOyTTE HONDA",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73349",
+  "activo": true,
+  "municipio": "HONDA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@tolima.gov.co"
+  ]
+ },
+ {
+  "id": "252eca71-b378-5a9e-8ce9-1822bd5221ef",
+  "codigo": "73411000",
+  "nombre": "STRIA TTOyTTE MCPAL LIBANO",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73411",
+  "activo": true,
+  "municipio": "LIBANO",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@libano-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "77ebf295-d212-5072-85bf-d0fcdf005c3b",
+  "codigo": "73443000",
+  "nombre": "STRIA DE TTOyTTE MCPAL DE SAN SEBASTIAN DE MARIQUITA TOLIMA",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73443",
+  "activo": true,
+  "municipio": "MARIQUITA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "notificacionesjuridicas@sansebastiandemariquita-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "ac2f72ba-6e52-5422-a69e-3b5a23796527",
+  "codigo": "73449000",
+  "nombre": "STRIA GOB TTOyTTE MELGAR",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73449",
+  "activo": true,
+  "municipio": "MELGAR",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "juridica@melgar-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "cf5bf8e6-fa98-5654-b354-6c9948f27691",
+  "codigo": "73504000",
+  "nombre": "DPTO ADTVO TTOyTTE TOLIMA/ORTEGA",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73504",
+  "activo": true,
+  "municipio": "ORTEGA - TOLIMA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@ortega-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "943f525b-69aa-5258-b330-24beed7ecddb",
+  "codigo": "73585000",
+  "nombre": "DPTO ADTVO TTOyTTE TOLIMA/PURIFICACIÓN",
+  "departamentoCodigo": "73",
+  "municipioCodigo": "73585",
+  "activo": true,
+  "municipio": "PURIFICACION - TOLIMA",
+  "departamento": "TOLIMA",
+  "correosRadicacion": [
+   "contactenos@purificacion-tolima.gov.co"
+  ]
+ },
+ {
+  "id": "aaaaaaaa-0001-4000-8000-000000000003",
+  "codigo": "76001000",
+  "nombre": "STRIA MCPAL TTO CALI",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76001",
+  "activo": true,
+  "municipio": "CALI",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@cali.gov.co"
+  ]
+ },
+ {
+  "id": "a52879d3-8e57-5456-91ca-35957af33a4c",
+  "codigo": "76020000",
+  "nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/ALCALA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76020",
+  "activo": true,
+  "municipio": "BOGOTA, D.C. - BOGOTA / ALCALÁ",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "a7fede7e-d92f-5f4c-b4b8-95e868034514",
+  "codigo": "76036000",
+  "nombre": "STRIA TTOyTTE ANDALUCIA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76036",
+  "activo": true,
+  "municipio": "ANDALUCIA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@andalucia-valle.gov.co"
+  ]
+ },
+ {
+  "id": "251b2b5d-35cd-527a-ae62-a9ddfc71fc79",
+  "codigo": "76041000",
+  "nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/ANSERMANUEVO",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76041",
+  "activo": true,
+  "municipio": "ANSERMANUEVO - VALLE DEL CAUCA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@ansermanuevo-valle.gov.co"
+  ]
+ },
+ {
+  "id": "c0705318-06e4-56e5-8726-15a365c01d57",
+  "codigo": "76100000",
+  "nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/BOLIVAR",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76100",
+  "activo": true,
+  "municipio": "BOLIVAR - VALLE DEL CAUCA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@bolivar-valle.gov.co"
+  ]
+ },
+ {
+  "id": "f871be49-017b-5529-81f1-1ac5c4efb446",
+  "codigo": "76109000",
+  "nombre": "STRIA TTOyTTE MCPAL BUENAVENTURA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76109",
+  "activo": true,
+  "municipio": "BUENAVENTURA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificaciones_judiciales@buenaventura.gov.co"
+  ]
+ },
+ {
+  "id": "02cf6096-661b-5d81-9a1a-20da54ac160d",
+  "codigo": "76111000",
+  "nombre": "INSP TTEyTTO GUADALAJARA DE BUGA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76111",
+  "activo": true,
+  "municipio": "GUADALAJARA DE BUGA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificaciones@buga.gov.co"
+  ]
+ },
+ {
+  "id": "7d92c333-adaf-530c-9869-ebca491cb8fe",
+  "codigo": "76113000",
+  "nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/BUGALAGRANDE",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76113",
+  "activo": true,
+  "municipio": "BUGALAGRANDE - VALLE DEL CAUCA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "juridico@bugalagrande-valle.gov.co"
+  ]
+ },
+ {
+  "id": "02f07c3b-2175-5a49-87c8-9304f610a0e1",
+  "codigo": "76122000",
+  "nombre": "STRIA MCPAL TTOyTTE CAICEDONIA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76122",
+  "activo": true,
+  "municipio": "CAICEDONIA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@caicedonia-valle.gov.co"
+  ]
+ },
+ {
+  "id": "26720643-6a63-59af-bfe4-66bf7e39bbdc",
+  "codigo": "76130000",
+  "nombre": "STRIA TTOyTTE MCPAL CANDELARIA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76130",
+  "activo": true,
+  "municipio": "CANDELARIA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "contactenos@candelaria-valle.gov.co"
+  ]
+ },
+ {
+  "id": "f3b366c9-0027-5282-bb13-17a4605b0f16",
+  "codigo": "76147000",
+  "nombre": "STRIA DE TTOyTTE CARTAGO",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76147",
+  "activo": true,
+  "municipio": "CARTAGO",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@cartago.gov.co"
+  ]
+ },
+ {
+  "id": "69667d04-3c25-5a62-b900-aee7148893b7",
+  "codigo": "76233000",
+  "nombre": "STRIA MOVyTTE DPTAL VALLE DEL CAUCA/DAGUA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76233",
+  "activo": true,
+  "municipio": "DAGUA - VALLE DEL CAUCA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "contactenos@dagua-valle.gov.co"
+  ]
+ },
+ {
+  "id": "157b9828-8f0b-57be-8ff8-786c27cab591",
+  "codigo": "76248000",
+  "nombre": "STRIA MCPAL TTOyTTE EL CERRITO",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76248",
+  "activo": true,
+  "municipio": "EL CERRITO",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@elcerrito-valle.gov.co"
+  ]
+ },
+ {
+  "id": "ec8e449f-52b0-5a0b-959e-306af3366873",
+  "codigo": "76275000",
+  "nombre": "STRIA TTOyTTE FLORIDA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76275",
+  "activo": true,
+  "municipio": "FLORIDA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "juridica@florida-valle.gov.co"
+  ]
+ },
+ {
+  "id": "8f93fe66-e328-5336-a180-e0ce9cf35ebe",
+  "codigo": "76306000",
+  "nombre": "STRIA DE TTOyTTE MCPAL DE GINEBRA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76306",
+  "activo": true,
+  "municipio": "GINEBRA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@ginebra-valle.gov.co"
+  ]
+ },
+ {
+  "id": "00e6f21d-86ad-5cb9-a113-f0ba6dab56df",
+  "codigo": "76318000",
+  "nombre": "STRIA TTOyTTE MCPAL GUACARI",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76318",
+  "activo": true,
+  "municipio": "GUACARI",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@guacari-valle.gov.co"
+  ]
+ },
+ {
+  "id": "d6beae9d-1db7-518f-a274-963c1561c334",
+  "codigo": "76364000",
+  "nombre": "STRIA TTOyTTE MCPAL JAMUNDI",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76364",
+  "activo": true,
+  "municipio": "JAMUNDI",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@jamundi.gov.co"
+  ]
+ },
+ {
+  "id": "977e709c-ba1c-5666-be30-29d808093400",
+  "codigo": "76377000",
+  "nombre": "DIR TTOyTTE LA CUMBRE",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76377",
+  "activo": true,
+  "municipio": "LA CUMBRE",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "73dcc54c-c472-5278-bdea-b24772f577a3",
+  "codigo": "76400000",
+  "nombre": "STRIA TTO MCPAL LA UNION",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76400",
+  "activo": true,
+  "municipio": "LA UNION",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@launion-valle.gov.co"
+  ]
+ },
+ {
+  "id": "c638ee27-2be1-59ea-b3a8-7d848215a835",
+  "codigo": "76520000",
+  "nombre": "STRIA TTOyTTE PALMIRA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76520",
+  "activo": true,
+  "municipio": "PALMIRA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificaciones.judiciales@palmira.gov.co"
+  ]
+ },
+ {
+  "id": "35afd417-25bd-5df2-8fc7-b9bb7bb3efec",
+  "codigo": "76563000",
+  "nombre": "STRIA TTOyTTE MCPAL PRADERA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76563",
+  "activo": true,
+  "municipio": "PRADERA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "oficinajuridica@pradera-valle.gov.co"
+  ]
+ },
+ {
+  "id": "991cb838-fb72-51f2-a4de-241ef2425f6e",
+  "codigo": "76622000",
+  "nombre": "INSP TTOyTTE ROLDANILLO",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76622",
+  "activo": true,
+  "municipio": "ROLDANILLO",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@roldanillo-valle.gov.co"
+  ]
+ },
+ {
+  "id": "bb780b62-a485-5422-876a-1e62a4dd29c5",
+  "codigo": "76736000",
+  "nombre": "STRIA TTOyTTE SEVILLA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76736",
+  "activo": true,
+  "municipio": "SEVILLA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionesjudiciales@sevilla-valle.gov.co"
+  ]
+ },
+ {
+  "id": "a5562503-23ce-53f0-9ef8-2b10e22724cb",
+  "codigo": "76834000",
+  "nombre": "STRIA TTO MCPAL TULUA",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76834",
+  "activo": true,
+  "municipio": "TULUA",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "juridico@tulua.gov.co"
+  ]
+ },
+ {
+  "id": "f82d73a1-63cf-5313-98f3-f02fadf628bd",
+  "codigo": "76869000",
+  "nombre": "SECRETARIA DE MOVILIDAD MUNICIPAL DE VIJES",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76869",
+  "activo": true,
+  "municipio": "VIJES",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "856af541-49b6-5b8a-b4bc-ea5a4fac44a8",
+  "codigo": "76890000",
+  "nombre": "MUNICIPIO DE YOTOCO",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76890",
+  "activo": true,
+  "municipio": "YOTOCO",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@yotoco-valle.gov.co"
+  ]
+ },
+ {
+  "id": "373c7514-a0ad-5704-a321-8d71fb1c4c86",
+  "codigo": "76892000",
+  "nombre": "STRIA TTOyTTE YUMBO",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76892",
+  "activo": true,
+  "municipio": "YUMBO",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "judicial@yumbo.gov.co"
+  ]
+ },
+ {
+  "id": "fa9f094d-a8fb-52d1-9962-8abd7dea8ae5",
+  "codigo": "76895000",
+  "nombre": "INSP TTOyTTE ZARZAL",
+  "departamentoCodigo": "76",
+  "municipioCodigo": "76895",
+  "activo": true,
+  "municipio": "ZARZAL",
+  "departamento": "VALLE DEL CAUCA",
+  "correosRadicacion": [
+   "juridica@zarzal-valle.gov.co"
+  ]
+ },
+ {
+  "id": "aaaaaaaa-0001-4000-8000-000000000004",
+  "codigo": "8001000",
+  "nombre": "STRIA DTAL TTO BARRANQUILLA",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08001",
+  "activo": true,
+  "municipio": "BARRANQUILLA",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "notijudiciales@barranquilla.gov.co"
+  ]
+ },
+ {
+  "id": "38487a59-3207-5d57-b448-5524b1c094ab",
+  "codigo": "8078001",
+  "nombre": "INSTITUTO DE TRÁNSITO DEL ATLANTICO/BARANOA",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08078",
+  "activo": true,
+  "municipio": "BARANOA",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": []
+ },
+ {
+  "id": "0f67510c-8040-5dab-965c-3af090886bda",
+  "codigo": "81001000",
+  "nombre": "INST TTOyTTE ARAUCA/ARAUCA",
+  "departamentoCodigo": "81",
+  "municipioCodigo": "81001",
+  "activo": true,
+  "municipio": "ARAUCA - ARAUCA",
+  "departamento": "ARAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@arauca-arauca.gov.co"
+  ]
+ },
+ {
+  "id": "65375663-6f46-524d-ab70-09faf7a170e3",
+  "codigo": "81001001",
+  "nombre": "INST TTOyTTE  ARAUCA/ARAUCA",
+  "departamentoCodigo": "81",
+  "municipioCodigo": "81001",
+  "activo": true,
+  "municipio": "ARAUCA",
+  "departamento": "ARAUCA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "695a3686-cd4a-52f7-8075-8f69d0b04027",
+  "codigo": "81065000",
+  "nombre": "INST MOVyTTE MCPAL DE ARAUQUITA",
+  "departamentoCodigo": "81",
+  "municipioCodigo": "81065",
+  "activo": true,
+  "municipio": "ARAUQUITA",
+  "departamento": "ARAUCA",
+  "correosRadicacion": [
+   "notificacionjudicial@arauquita-arauca.gov.co"
+  ]
+ },
+ {
+  "id": "0a9cb20b-25e7-5f85-9b82-dfc1ed9188de",
+  "codigo": "81736000",
+  "nombre": "STRIA TTOyTTE MCPAL SARAVENA",
+  "departamentoCodigo": "81",
+  "municipioCodigo": "81736",
+  "activo": true,
+  "municipio": "SARAVENA",
+  "departamento": "ARAUCA",
+  "correosRadicacion": [
+   "juridica@saravena-arauca.gov.co"
+  ]
+ },
+ {
+  "id": "639fefc3-73dc-59f1-85ee-100a60c64661",
+  "codigo": "81794000",
+  "nombre": "INST MOVyTTE MCPAL TAME",
+  "departamentoCodigo": "81",
+  "municipioCodigo": "81794",
+  "activo": true,
+  "municipio": "TAME",
+  "departamento": "ARAUCA",
+  "correosRadicacion": [
+   "contactenos@tame-arauca.gov.co"
+  ]
+ },
+ {
+  "id": "4f826d49-48b8-53e6-a94e-b9432919fe67",
+  "codigo": "8296000",
+  "nombre": "STRIA MCPAL TTOyTTE GALAPA",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08296",
+  "activo": true,
+  "municipio": "GALAPA",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "notificacionesjudiciales@galapa-atlantico.gov.co"
+  ]
+ },
+ {
+  "id": "774b6b2c-63dd-5256-bbaf-f74e03fed5b1",
+  "codigo": "8433000",
+  "nombre": "STRIA DE TTOyTTE MALAMBO",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08433",
+  "activo": true,
+  "municipio": "MALAMBO",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "notificaciones_judiciales@malambo-atlantico.gov.co"
+  ]
+ },
+ {
+  "id": "13fb2ba9-ad11-565d-9222-da0b5dcbe6fc",
+  "codigo": "85001000",
+  "nombre": "STRIA TTOyTTE MCPAL YOPAL",
+  "departamentoCodigo": "85",
+  "municipioCodigo": "85001",
+  "activo": true,
+  "municipio": "YOPAL",
+  "departamento": "CASANARE",
+  "correosRadicacion": [
+   "notificacionesjudiciales@yopal-casanare.gov.co"
+  ]
+ },
+ {
+  "id": "3a367d93-f8cc-5a96-879f-7364ce410f3c",
+  "codigo": "85010000",
+  "nombre": "DIR DPTAL TTOyTTE CASANARE/AGUAZUL",
+  "departamentoCodigo": "85",
+  "municipioCodigo": "85010",
+  "activo": true,
+  "municipio": "AGUAZUL - CASANARE",
+  "departamento": "CASANARE",
+  "correosRadicacion": [
+   "notificaciones_judiciales@aguazul-casanare.gov.co"
+  ]
+ },
+ {
+  "id": "1d95d028-4761-5e2c-94b3-31c95bb6857c",
+  "codigo": "85440000",
+  "nombre": "STRIA TTOyMOV MCPAL VILLANUEVA",
+  "departamentoCodigo": "85",
+  "municipioCodigo": "85440",
+  "activo": true,
+  "municipio": "VILLANUEVA",
+  "departamento": "CASANARE",
+  "correosRadicacion": [
+   "notificacionjudicial@villanueva-casanare.gov.co"
+  ]
+ },
+ {
+  "id": "81ecdb8b-d704-5975-ac08-040800e669af",
+  "codigo": "8573000",
+  "nombre": "STRIA MCPAL TTOyTTE PUERTO COLOMBIA",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08573",
+  "activo": true,
+  "municipio": "PUERTO COLOMBIA",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "notificacionesjudiciales@puertocolombia-atlantico.gov.co"
+  ]
+ },
+ {
+  "id": "35d301eb-6f3a-5ac9-8b44-3855dac9e72c",
+  "codigo": "86001000",
+  "nombre": "STRIA TTOyTTE MOCOA",
+  "departamentoCodigo": "86",
+  "municipioCodigo": "86001",
+  "activo": true,
+  "municipio": "MOCOA",
+  "departamento": "PUTUMAYO",
+  "correosRadicacion": [
+   "juridica@mocoa-putumayo.gov.co",
+   "notificacionjudicial@mocoa-putumayo.gov.co"
+  ]
+ },
+ {
+  "id": "78b1f63f-2f4c-5938-9642-ed2cb3a3fe79",
+  "codigo": "86320000",
+  "nombre": "STRIA TTOyTTE MCPAL ORITO",
+  "departamentoCodigo": "86",
+  "municipioCodigo": "86320",
+  "activo": true,
+  "municipio": "ORITO",
+  "departamento": "PUTUMAYO",
+  "correosRadicacion": [
+   "juridicaycontratacion@orito-putumayo.gov.co"
+  ]
+ },
+ {
+  "id": "705ce7db-7c74-555a-8a8f-a5a749fa257f",
+  "codigo": "8634000",
+  "nombre": "STRIA MCPAL TTOyTTE SABANAGRANDE– ATLÁNTICO",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08634",
+  "activo": true,
+  "municipio": "SABANAGRANDE",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "contactenos@tame-arauca.gov.co"
+  ]
+ },
+ {
+  "id": "b2131e68-5bd6-5ced-9e15-ea414ff4b624",
+  "codigo": "8638000",
+  "nombre": "STRIA TTO Y TTE MCPAL DE SABANALARGA",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08638",
+  "activo": true,
+  "municipio": "SABANALARGA",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "notificacionjudicial@sabanalarga-atlantico.gov.co"
+  ]
+ },
+ {
+  "id": "861ccc16-8a9e-5d8c-b600-dfad062a7b0c",
+  "codigo": "86568000",
+  "nombre": "INST MCPAL TTE Y MOVILIDAD-IMTRAM PTO ASIS",
+  "departamentoCodigo": "86",
+  "municipioCodigo": "86568",
+  "activo": true,
+  "municipio": "PUERTO ASIS",
+  "departamento": "PUTUMAYO",
+  "correosRadicacion": [
+   "contactenos@puertoasis-putumayo.gov.co"
+  ]
+ },
+ {
+  "id": "70e72982-0f40-5cb3-92e4-6ed075e9ed8f",
+  "codigo": "86749001",
+  "nombre": "TRANSITO DPTAL DE PUTUMAYO/ SIBUNDOY",
+  "departamentoCodigo": "86",
+  "municipioCodigo": "86749",
+  "activo": true,
+  "municipio": "SIBUNDOY",
+  "departamento": "PUTUMAYO",
+  "correosRadicacion": []
+ },
+ {
+  "id": "574170e6-96aa-599d-a32b-0a51b5442a9a",
+  "codigo": "86865000",
+  "nombre": "SRIA TTOyTTE MPAL VALLE GUAMUEZ/HORMIGA",
+  "departamentoCodigo": "86",
+  "municipioCodigo": "86865",
+  "activo": true,
+  "municipio": "VALLE DEL GUAMUEZ",
+  "departamento": "PUTUMAYO",
+  "correosRadicacion": [
+   "juridica@valledelguamuez-putumayo.gov.co"
+  ]
+ },
+ {
+  "id": "9fc0d03e-416d-5a45-89c4-b3273d1c6945",
+  "codigo": "86885000",
+  "nombre": "DEPTO ADMTVO DE TTO Y TTE PUTUMAYO",
+  "departamentoCodigo": "86",
+  "municipioCodigo": "86885",
+  "activo": true,
+  "municipio": "VILLAGARZON",
+  "departamento": "PUTUMAYO",
+  "correosRadicacion": [
+   "despacho@villagarzon-putumayo.gov.co"
+  ]
+ },
+ {
+  "id": "246b9b68-57df-5136-a328-b642bf6d9c25",
+  "codigo": "8758000",
+  "nombre": "INST MCPAL TTOYTTE SOLEDAD",
+  "departamentoCodigo": "08",
+  "municipioCodigo": "08758",
+  "activo": true,
+  "municipio": "SOLEDAD",
+  "departamento": "ATLANTICO",
+  "correosRadicacion": [
+   "ofijuridicanotificaciones@soledad-atlantico.gov.co"
+  ]
+ },
+ {
+  "id": "1d1a4f7e-b807-544a-b925-b3edf319bf56",
+  "codigo": "88001000",
+  "nombre": "DIR DPTAL TTOyTTE SAN ANDRES ISLAS",
+  "departamentoCodigo": "88",
+  "municipioCodigo": "88001",
+  "activo": true,
+  "municipio": "SAN ANDRES - SAN ANDRES",
+  "departamento": "ARCHIPIÉLAGO DE SAN ANDRÉS Y PROVIDENCIA",
+  "correosRadicacion": []
+ },
+ {
+  "id": "14b4c7d6-12c6-55ae-acb9-c1f57ad210cb",
+  "codigo": "91001000",
+  "nombre": "INSP MCPAL TTOyREG VIAL LETICIA",
+  "departamentoCodigo": "91",
+  "municipioCodigo": "91001",
+  "activo": true,
+  "municipio": "LETICIA",
+  "departamento": "AMAZONAS",
+  "correosRadicacion": [
+   "contactenos@leticia-amazonas.gov.co"
+  ]
+ },
+ {
+  "id": "6463c4f0-27fd-543b-ac31-e420dfdd7585",
+  "codigo": "94001000",
+  "nombre": "STRIA TTOyTTE MCPAL INIRIDA",
+  "departamentoCodigo": "94",
+  "municipioCodigo": "94001",
+  "activo": true,
+  "municipio": "INIRIDA",
+  "departamento": "GUAINIA",
+  "correosRadicacion": [
+   "notificacionjudicial@inirida-guainia.gov.co"
+  ]
+ },
+ {
+  "id": "9d1eb955-39e1-5baf-8961-3cda57f25075",
+  "codigo": "95001000",
+  "nombre": "STRIA TTOyTTE MCPAL SAN JOSE GUAVIARE",
+  "departamentoCodigo": "95",
+  "municipioCodigo": "95001",
+  "activo": true,
+  "municipio": "SAN JOSE DEL GUAVIARE",
+  "departamento": "GUAVIARE",
+  "correosRadicacion": [
+   "notificacionjudicial@sanjosedelguaviare-guaviare.gov.co"
+  ]
+ },
+ {
+  "id": "d806ad56-63c6-56da-ba09-9153a1c2ade8",
+  "codigo": "99001000",
+  "nombre": "F. DPTAL TTO VICHADA/PUERTO CARREÑO",
+  "departamentoCodigo": "99",
+  "municipioCodigo": "99001",
+  "activo": true,
+  "municipio": "PUERTO CARREÑO - VICHADA",
+  "departamento": "VICHADA",
+  "correosRadicacion": [
+   "contactenos@puertocarreno-vichada.gov.co"
+  ]
+ }
 ]

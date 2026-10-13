@@ -56,16 +56,26 @@ public static class Semillas
         }
     }
 
-    private sealed record OrganismoSemilla(Guid Id, string Codigo, string Nombre, string? MunicipioCodigo, string? Municipio, string? Departamento, bool Activo);
+    private sealed record OrganismoSemilla(Guid Id, string Codigo, string Nombre, string? MunicipioCodigo, string? Municipio, string? Departamento, bool Activo, List<string>? CorreosRadicacion);
 
-    /// <summary>Organismos de tránsito del RUNT (los mismos ids y códigos que la plataforma), sin correos todavía [Excel J6].</summary>
+    /// <summary>
+    /// Organismos de tránsito del RUNT (los mismos ids y códigos que la plataforma) con sus correos de radicación
+    /// importados de V1 (<c>traffic_secretaries.notifier_email</c>, ver context/gdc/v1/correos-ot-importados.md) [Excel J6].
+    /// Un organismo que ya existe solo recibe correos si no tiene ninguno: lo que el SuperAdmin corrigió no se pisa.
+    /// </summary>
     private static async Task OrganismosAsync(ComparendosDb db, DateTimeOffset ahora, CancellationToken ct)
     {
         await using var stream = typeof(Semillas).Assembly.GetManifestResourceStream("Flit.Comparendos.Api.Semillas.organismos-transito.json")
             ?? throw new InvalidOperationException("Falta el recurso organismos-transito.json.");
         var semilla = await JsonSerializer.DeserializeAsync<List<OrganismoSemilla>>(stream, Json, ct).ConfigureAwait(false) ?? [];
-        var existentes = await db.OrganismosTransito.Select(o => o.Codigo).ToHashSetAsync(ct).ConfigureAwait(false);
-        foreach (var o in semilla.Where(o => !existentes.Contains(o.Codigo)))
+        var existentes = await db.OrganismosTransito.ToDictionaryAsync(o => o.Codigo, ct).ConfigureAwait(false);
+        foreach (var o in semilla.Where(o => existentes.ContainsKey(o.Codigo) && o.CorreosRadicacion is { Count: > 0 }))
+        {
+            if (existentes[o.Codigo].CorreosRadicacion.Count == 0)
+                existentes[o.Codigo].CorreosRadicacion = [.. o.CorreosRadicacion!];
+        }
+
+        foreach (var o in semilla.Where(o => !existentes.ContainsKey(o.Codigo)))
         {
             db.OrganismosTransito.Add(new OrganismoTransito
             {
@@ -76,6 +86,7 @@ public static class Semillas
                 Municipio = o.Municipio,
                 Departamento = o.Departamento,
                 ActivoPlataforma = o.Activo,
+                CorreosRadicacion = o.CorreosRadicacion ?? [],
                 SincronizadoEn = ahora,
                 CreadoEn = ahora,
             });
