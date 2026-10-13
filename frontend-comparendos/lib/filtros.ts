@@ -1,7 +1,8 @@
 // Filtros de la bandeja (§7.1) y su traducción a la query de GET /comparendos. Lógica pura y probada.
 import type { Query } from "@/lib/api";
 
-export type FiltroRapido = "ProximosAVencer" | "SinContraventor" | "RechazadosOt";
+/** «Radar» no está en la barra: llega desde el KPI del dashboard (§7.8). */
+export type FiltroRapido = "ProximosAVencer" | "SinContraventor" | "RechazadosOt" | "Radar";
 export type FiltroJuridico = "CaducidadInmediata" | "NoImpugnables" | "C038";
 export type TriEstado = "" | "true" | "false";
 

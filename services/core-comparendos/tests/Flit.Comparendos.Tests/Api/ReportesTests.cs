@@ -95,6 +95,8 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         (await Super.PostAsync("/api/v1/comparendos/admin/ingesta/trabajos/IngestaSimitNit/ejecutar", null, ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var radar = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/radar", ct);
         radar.EnumerateArray().Single().GetProperty("id").GetGuid().Should().Be(ids["R4"]);
+        var bandeja = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/comparendos?rapido=Radar", ct);
+        bandeja.GetProperty("items").EnumerateArray().Select(f => f.GetProperty("id").GetGuid()).Should().Equal([ids["R4"]], "el clic en el radar lleva a la bandeja con el mismo criterio (§7.8)");
 
         var p = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/productividad?desde=2026-10-01&hasta=2026-10-09", ct);
         var fila = p.GetProperty("filas").EnumerateArray().Single();

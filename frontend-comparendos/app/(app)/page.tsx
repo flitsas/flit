@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Download, Mail, Send, SlidersHorizontal } from "lucide-react";
 import { ActionsMenu, DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
@@ -39,11 +40,24 @@ const ORDENES = [
  * Bandeja unificada (HU #13499, §7.1): la misma para todos los roles; el SuperAdmin elige primero una gestora y solo lee.
  */
 export default function Bandeja() {
+  return (
+    <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
+      <ContenidoBandeja />
+    </Suspense>
+  );
+}
+
+function ContenidoBandeja() {
   const { sesion, cargando: cargandoSesion, error: errorSesion } = useSesion();
   const toast = useToast();
   const esSuperAdmin = !!sesion?.usuario.esSuperAdmin;
-  const [empresa, setEmpresa] = useState<string | null>(null);
-  const [filtros, setFiltrosEstado] = useState<FiltrosBandeja>(FILTROS_VACIOS);
+  // Desde el KPI «Radar de vencimientos» del dashboard llega ?rapido=Radar (y el NIT y la empresa elegidos allá).
+  const params = useSearchParams();
+  const [empresa, setEmpresa] = useState<string | null>(() => params.get("empresa"));
+  const [filtros, setFiltrosEstado] = useState<FiltrosBandeja>(() => {
+    const nit = params.get("nit");
+    return { ...FILTROS_VACIOS, rapido: params.get("rapido") === "Radar" ? "Radar" : null, nits: nit ? [nit] : [] };
+  });
   const [verPanel, setVerPanel] = useState(false);
   const [orden, setOrden] = useState("");
   const [descendente, setDescendente] = useState(false);

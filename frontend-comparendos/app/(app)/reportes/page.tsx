@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
+import { useRouter } from "next/navigation";
+import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { Encabezado } from "@/components/Pantalla";
 import { FiltrosPeriodo, periodoInicial, type Periodo } from "@/components/reportes/FiltrosPeriodo";
 import { GraficoBarras } from "@/components/reportes/GraficoBarras";
@@ -13,7 +13,7 @@ import { ETIQUETA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { etiquetaMes, formatoTasa, nombreMes, SERIES, valorSerie, type ComparendoRadar, type Dashboard as DatosDashboard, type Serie } from "@/lib/reportes";
+import { etiquetaMes, formatoTasa, nombreMes, SERIES, valorSerie, type Dashboard as DatosDashboard, type Serie } from "@/lib/reportes";
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -44,35 +44,6 @@ function Kpi({ titulo, valor, detalle, onClick }: { titulo: string; valor: strin
   );
 }
 
-/** Lista detrás del KPI «Radar de vencimientos»: sin DP ni pago y con la gestión venciendo en los próximos 7 días hábiles. */
-function Radar({ empresa, nit, onCerrar, onVer }: { empresa: string | null; nit: string | null; onCerrar: () => void; onVer: (id: string) => void }) {
-  const radar = useCarga(`radar:${empresa}:${nit}`, (signal) => apiFetch<ComparendoRadar[]>("/reportes/radar", { signal, query: { empresa, nit } }));
-  const pg = usePaginacion(10);
-  const filas = radar.datos ?? [];
-  return (
-    <Modal open onClose={onCerrar} title="Radar de vencimientos" description="Comparendos sin DP ni pago cuya ventana de gestión vence en los próximos 7 días hábiles." size="xl">
-      <DataTable
-        ariaLabel="Comparendos próximos a vencer"
-        rows={pg.paginar(filas)}
-        getRowKey={(c) => c.id}
-        onRowClick={(c) => onVer(c.id)}
-        status={radar.estado}
-        errorMessage={radar.error ?? undefined}
-        onRetry={radar.recargar}
-        emptyMessage="No hay comparendos próximos a vencer."
-        columns={[
-          { key: "numero", header: "Comparendo", render: (c) => <span className="font-semibold">{c.numero}</span> },
-          { key: "placa", header: "Placa", render: (c) => c.placa ?? "—" },
-          { key: "vence", header: "Vence la gestión", render: (c) => formatoFecha(c.fechaLimiteGestion) },
-          { key: "valor", header: "Valor", align: "right", render: (c) => formatoPesos(c.valorTotal) },
-          { key: "ot", header: "Secretaría", render: (c) => c.secretariaTexto ?? "—" },
-        ]}
-        pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
-      />
-    </Modal>
-  );
-}
-
 function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; valor: string | null; onCambio: (id: string | null) => void }) {
   const nits = useCarga(`nits-reporte:${empresa}`, (signal) => apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa } }));
   return (
@@ -95,8 +66,7 @@ function Contenido() {
   const [periodo, setPeriodo] = useState<Periodo>(periodoInicial);
   const [nit, setNit] = useState<string | null>(null);
   const [serie, setSerie] = useState<Serie>("ingresados");
-  const [verRadar, setVerRadar] = useState(false);
-  const [ver, setVer] = useState<string | null>(null);
+  const router = useRouter();
   const pg = usePaginacion(10);
 
   const datos = useCarga(JSON.stringify({ ...periodo, nit }), (signal) =>
@@ -157,7 +127,13 @@ function Contenido() {
               titulo="Radar de vencimientos"
               valor={d.kpis.radarCantidad.toLocaleString("es-CO")}
               detalle={`${formatoPesos(d.kpis.radarValor)} · vencen antes del ${formatoFecha(d.kpis.radarHasta)}`}
-              onClick={() => setVerRadar(true)}
+              onClick={() => {
+                // Clic en el radar → la bandeja filtrada con el mismo criterio (§7.8).
+                const q = new URLSearchParams({ rapido: "Radar" });
+                if (nit) q.set("nit", nit);
+                if (sesion?.usuario.esSuperAdmin && periodo.empresa) q.set("empresa", periodo.empresa);
+                router.push(`/?${q.toString()}`);
+              }}
             />
           </div>
 
@@ -214,8 +190,6 @@ function Contenido() {
         </>
       )}
 
-      {verRadar && <Radar empresa={periodo.empresa} nit={nit} onCerrar={() => setVerRadar(false)} onVer={(id) => { setVerRadar(false); setVer(id); }} />}
-      <DetalleComparendo id={ver} onCerrar={() => setVer(null)} />
     </section>
   );
 }

@@ -40,7 +40,7 @@ public sealed record FiltrosBandeja
     public bool? CobroCoactivo { get; init; }
     public bool? SinGestion { get; init; }
 
-    /// <summary>ProximosAVencer, SinContraventor o RechazadosOt (§6.11).</summary>
+    /// <summary>ProximosAVencer, SinContraventor o RechazadosOt (§6.11); Radar es el del dashboard (S-56), al que lleva su KPI.</summary>
     public string? Rapido { get; init; }
 
     /// <summary>CaducidadInmediata, NoImpugnables o C038 (§6.11; C-321 y pico y placa siguen sin definición, S-57).</summary>
@@ -282,6 +282,8 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
                     || c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoEncontrado
                     || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error)),
             "RechazadosOt" => q.Where(c => c.Activo && c.EstadoCambioContraventor == EstadoCambioContraventor.RechazadoOt),
+            // El mismo criterio que ServicioReportes.Radar: sin DP ni pago y la gestión vence en los próximos 7 días hábiles.
+            "Radar" => q.Where(c => c.Activo && !c.Pagado && !c.TieneDp && c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion && c.FechaLimiteGestion <= h.Mas7Habiles),
             _ => q,
         };
     }

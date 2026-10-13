@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Clock, UserX } from "lucide-react";
+import { AlertTriangle, Clock, UserX, X } from "lucide-react";
 import type { Contadores } from "@/lib/tipos";
 import type { FiltroJuridico, FiltroRapido } from "@/lib/filtros";
 
@@ -39,6 +39,19 @@ export function BarraFiltrosRapidos({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
+        {rapido === "Radar" && (
+          <button
+            type="button"
+            onClick={() => onRapido(null)}
+            aria-pressed
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#557EFF] bg-[#557EFF] px-3 text-xs font-semibold text-white"
+            title="Quitar el filtro del radar"
+          >
+            <Clock className="h-3.5 w-3.5" aria-hidden />
+            Radar de vencimientos (7 días hábiles)
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        )}
         {RAPIDOS.map((r) => {
           const activo = rapido === r.id;
           const Icono = r.icono;
