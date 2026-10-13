@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { History, Plus } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
+import { HistorialAuditoria } from "@/components/HistorialAuditoria";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
@@ -138,6 +139,11 @@ export default function Tipologias() {
   const toast = useToast();
   const lista = useCarga("tipologias-admin", (signal) => apiFetch<Tipologia[]>("/admin/tipologias", { signal }));
   const [editar, setEditar] = useState<Tipologia | "nueva" | null>(null);
+  const [historial, setHistorial] = useState(false);
+  const nombreTipologia = (id: string) => {
+    const t = lista.datos?.find((x) => x.id === id);
+    return t ? `${t.codigo} · ${t.nombre}` : "Tipología";
+  };
 
   return (
     <Requiere superAdmin>
@@ -146,10 +152,16 @@ export default function Tipologias() {
           titulo="Tipologías de derecho de petición"
           descripcion="Las tesis jurídicas que se pueden radicar, en qué estados legales proceden y con qué prefijo se radican."
           acciones={
-            <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEditar("nueva")}>
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Nueva tipología
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={controlCls(false)} onClick={() => setHistorial(true)}>
+                <History className="h-3.5 w-3.5" aria-hidden />
+                Historial de cambios
+              </button>
+              <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEditar("nueva")}>
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Nueva tipología
+              </button>
+            </div>
           }
         />
         <DataTable
@@ -193,6 +205,7 @@ export default function Tipologias() {
             }}
           />
         )}
+        {historial && <HistorialAuditoria entidad="tipologia_dp" titulo="Historial de cambios del catálogo de tipologías" nombre={nombreTipologia} onCerrar={() => setHistorial(false)} />}
       </section>
     </Requiere>
   );

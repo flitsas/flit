@@ -310,6 +310,11 @@ function Formulario({
                     onCambio={(v) => setEditados((e) => ({ ...e, [c.nombreCampo]: v }))}
                   />
                 </div>
+                {c.nombreCampo === "fecha_notificacion" && (
+                  <span className="text-[11px] font-normal opacity-70">
+                    En las fotomultas casi nunca viene impresa: se toma del sello de recibido o radicado de la empresa. Confírmala, porque de ella cuentan los plazos.
+                  </span>
+                )}
               </label>
             );
           })}
