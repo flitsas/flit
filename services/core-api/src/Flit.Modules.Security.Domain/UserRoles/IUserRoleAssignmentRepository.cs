@@ -42,4 +42,5 @@ public sealed record AssignRoleData(Guid TenantId, Guid UserId, Guid RoleId, Gui
 
 public sealed record UserRoleAssignmentSnapshot(Guid Id, Guid UserId, Guid RoleId);
 
-public sealed record RoleForAssignmentSnapshot(Guid Id, string TargetEntityType);
+/// <param name="TenantId">HU #13441: <c>null</c> = rol global; con valor = rol propio de esa compañía.</param>
+public sealed record RoleForAssignmentSnapshot(Guid Id, string TargetEntityType, Guid? TenantId = null);
