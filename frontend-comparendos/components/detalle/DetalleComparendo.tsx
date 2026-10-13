@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { FileWarning } from "lucide-react";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -372,8 +372,11 @@ export function DetalleComparendo({
   onCerrar,
   onCambio,
   extensiones = EXTENSIONES_DETALLE,
+  seccionInicial = null,
 }: {
   id: string | null;
+  /** Sección que se abre al llegar (acciones por fila de la bandeja). */
+  seccionInicial?: SeccionDetalle | null;
   onCerrar: () => void;
   /** Algo cambió (observación, inactivación…): la bandeja recarga. */
   onCambio?: () => void;
@@ -390,7 +393,11 @@ export function DetalleComparendo({
   const ctx: ContextoDetalle | null = d ? { detalle: d, recargar, sesion, soloLectura } : null;
   // Secciones abiertas desde el timeline; se olvidan al cambiar de comparendo.
   const [abiertas, setAbiertas] = useState<{ id: string | null; secciones: SeccionDetalle[] }>({ id: null, secciones: [] });
-  const secciones = abiertas.id === id ? abiertas.secciones : [];
+  const secciones = abiertas.id === id ? abiertas.secciones : seccionInicial ? [seccionInicial] : [];
+  const cargado = !!d;
+  useEffect(() => {
+    if (cargado && seccionInicial) document.getElementById(`detalle-${seccionInicial}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [cargado, id, seccionInicial]);
   const alternar = (s: SeccionDetalle) => (abrir: boolean) =>
     setAbiertas({ id, secciones: abrir ? [...secciones.filter((x) => x !== s), s] : secciones.filter((x) => x !== s) });
   const ir = (s: SeccionDetalle) => {

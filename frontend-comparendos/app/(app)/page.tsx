@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Download, Mail, Send, SlidersHorizontal } from "lucide-react";
-import { DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
+import { ActionsMenu, DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
 import { EnvioMasivoAviso } from "@/components/bandeja/EnvioMasivoAviso";
@@ -11,6 +11,7 @@ import { EnvioMasivoDp } from "@/components/bandeja/EnvioMasivoDp";
 import { PanelFiltros } from "@/components/bandeja/PanelFiltros";
 import { MultiSeleccion } from "@/components/ui/MultiSeleccion";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import type { SeccionDetalle } from "@/components/detalle/Timeline";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -48,6 +49,11 @@ export default function Bandeja() {
   const [descendente, setDescendente] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
+  const [seccion, setSeccion] = useState<SeccionDetalle | null>(null);
+  const abrir = (id: string, s: SeccionDetalle | null = null) => {
+    setSeccion(s);
+    setSeleccionado(id);
+  };
   // Selección para el envío masivo de DP: se conserva al cambiar de página, se limpia al cambiar los filtros.
   const [marcados, setMarcados] = useState<Map<string, FilaBandeja>>(new Map());
   const [envioMasivo, setEnvioMasivo] = useState(false);
@@ -128,6 +134,30 @@ export default function Bandeja() {
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => alternar([f], e.target.checked)}
       />
+    ),
+  };
+  // Acciones por fila (Epic GDC-8, §7.1): cada una abre el detalle en su sección, donde está la acción con su motivo de
+  // bloqueo. El SuperAdmin solo lee: ve el detalle.
+  const puedeDp = !esSuperAdmin && capacidades(sesion).derechosPeticion && tienePermiso(sesion, P.dpGenerar);
+  const puedePago = !esSuperAdmin && tienePermiso(sesion, P.pagosRegistrar);
+  const puedeContraventor = !esSuperAdmin && tienePermiso(sesion, P.contraventorAsignar);
+  const columnaAcciones: DataTableColumn<FilaBandeja> = {
+    key: "acciones",
+    header: <span className="sr-only">Acciones</span>,
+    render: (f) => (
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <ActionsMenu
+          ariaLabel={`Acciones del comparendo ${f.numero}`}
+          items={[
+            { key: "ver", label: "Ver detalle", onSelect: () => abrir(f.id) },
+            ...(puedeDp ? [{ key: "dp", label: "Derecho de petición", onSelect: () => abrir(f.id, "dp") }] : []),
+            ...(puedePago
+              ? [{ key: "pago", label: "Registrar pago", onSelect: () => abrir(f.id, "pago"), disabled: f.pagado, disabledReason: "Ya tiene un pago registrado." }]
+              : []),
+            ...(puedeContraventor ? [{ key: "contraventor", label: "Contraventor", onSelect: () => abrir(f.id, "contraventor") }] : []),
+          ]}
+        />
+      </div>
     ),
   };
   return (
@@ -235,10 +265,10 @@ export default function Bandeja() {
 
           <DataTable
             ariaLabel="Comparendos"
-            columns={seleccionable ? [columnaSeleccion, ...columnas] : columnas}
+            columns={[...(seleccionable ? [columnaSeleccion] : []), ...columnas, columnaAcciones]}
             rows={pagina}
             getRowKey={(f) => f.id}
-            onRowClick={(f) => setSeleccionado(f.id)}
+            onRowClick={(f) => abrir(f.id)}
             status={lista.estado}
             errorMessage={lista.error ?? undefined}
             onRetry={lista.recargar}
@@ -256,7 +286,9 @@ export default function Bandeja() {
       )}
 
       <DetalleComparendo
+        key={`${seleccionado}:${seccion ?? ""}`}
         id={seleccionado}
+        seccionInicial={seccion}
         onCerrar={() => setSeleccionado(null)}
         onCambio={() => {
           lista.recargar();
