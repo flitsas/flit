@@ -2,15 +2,18 @@
 
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Download } from "lucide-react";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { Chip } from "@/components/ui/Chip";
+import { controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
-import { avanceLote, ESTADO_ITEM_LOTE, ESTADO_LOTE } from "@/lib/dp";
+import { avanceLote, ESTADO_ITEM_LOTE, ESTADO_LOTE, hojaLote } from "@/lib/dp";
 import type { Etiqueta } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
 import { useCarga } from "@/lib/useCarga";
+import { buildXlsx, XLSX_MIME } from "@/lib/xlsx";
 
 interface Lote {
   id: string;
@@ -54,6 +57,16 @@ function Avance({ l }: { l: Lote }) {
   );
 }
 
+/** Descarga el resumen del lote como Excel (§7.3.2); se arma en el navegador con lo que ya está en pantalla. */
+function exportar(l: Lote & { items: ItemLote[] }) {
+  const url = URL.createObjectURL(new Blob([buildXlsx(hojaLote(l))], { type: XLSX_MIME }));
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = `envio-masivo-dp-${l.creadoEn.slice(0, 10)}.xlsx`;
+  enlace.click();
+  URL.revokeObjectURL(url);
+}
+
 function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const carga = useCarga(`lote-dp:${id}`, (signal) => apiFetch<Lote & { items: ItemLote[] }>(`/dp/lotes/${id}`, { signal }));
   const pg = usePaginacion(25);
@@ -72,6 +85,10 @@ function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
               <b>{l.enviados}</b> enviados · <b>{l.omitidos}</b> omitidos · <b>{l.fallidos}</b> fallidos de <b>{l.total}</b>
             </span>
             <Avance l={l} />
+            <button type="button" className={`${controlCls(false)} ml-auto`} disabled={items.length === 0} onClick={() => exportar(l)}>
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Exportar resumen
+            </button>
           </div>
           <DataTable
             ariaLabel="Comparendos del lote"

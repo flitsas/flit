@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarRespuestaDp, avanceLote, erroresRespuestaDp, ordenarTipologias, revisarLote, type FilaLote, type FormRespuestaDp } from "@/lib/dp";
+import { armarRespuestaDp, avanceLote, hojaLote, erroresRespuestaDp, ordenarTipologias, revisarLote, type FilaLote, type FormRespuestaDp } from "@/lib/dp";
 import { diaColombia } from "@/lib/format/date";
 
 const pdf = new File(["%PDF"], "respuesta.pdf", { type: "application/pdf" });
@@ -82,5 +82,22 @@ describe("día de Colombia", () => {
   it("un instante de madrugada UTC sigue siendo el día anterior en Bogotá", () => {
     expect(diaColombia("2026-10-09T03:00:00Z")).toBe("2026-10-08");
     expect(diaColombia(new Date("2026-10-09T15:00:00Z"))).toBe("2026-10-09");
+  });
+});
+
+describe("hojaLote", () => {
+  it("una fila por comparendo y los totales como nota, en hora de Colombia", () => {
+    const hoja = hojaLote({
+      estado: "Completado", total: 2, enviados: 1, omitidos: 1, fallidos: 0, creadoEn: "2026-10-13T15:04:00Z", terminadoEn: null,
+      items: [
+        { numero: "11001000000045678901", estado: "Enviado", radicado: "DC-261013100400-123", motivo: null },
+        { numero: "11001000000045678902", estado: "Omitido", radicado: null, motivo: "Ya tiene un DP" },
+      ],
+    });
+    expect(hoja.rows).toHaveLength(2);
+    expect(hoja.rows[0]?.[2]).toBe("DC-261013100400-123");
+    expect(hoja.rows[1]?.[3]).toBe("Ya tiene un DP");
+    expect(hoja.notes?.[0]).toContain("1 enviados, 1 omitidos y 0 fallidos de 2");
+    expect(hoja.notes?.[1]).toContain("13/10/2026 10:04");
   });
 });

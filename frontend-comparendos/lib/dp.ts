@@ -1,5 +1,6 @@
 // Lógica pura del derecho de petición (HU #13491, §7.3) y del envío masivo (§6.17). La API vuelve a validar todo.
 import type { Etiqueta } from "@/lib/etiquetas";
+import { bogotaClock, type XlsxSheet } from "@/lib/xlsx";
 
 export interface TipologiaComparendo {
   id: string;
@@ -119,4 +120,44 @@ export const ESTADO_ITEM_LOTE: Record<string, Etiqueta> = {
 export function avanceLote(l: { total: number; enviados: number; omitidos: number; fallidos: number }): number {
   if (l.total <= 0) return 100;
   return Math.min(100, Math.round(((l.enviados + l.omitidos + l.fallidos) / l.total) * 100));
+}
+
+export interface LoteResumen {
+  estado: string;
+  total: number;
+  enviados: number;
+  omitidos: number;
+  fallidos: number;
+  creadoEn: string;
+  terminadoEn: string | null;
+  items: { numero: string | null; estado: string; radicado: string | null; motivo: string | null }[];
+}
+
+/**
+ * Hoja con el resumen de un envío masivo (§7.3.2): un comparendo por fila con su resultado, y los totales del lote como
+ * nota al pie para que viajen dentro del archivo que se reenvía.
+ */
+export function hojaLote(l: LoteResumen): XlsxSheet {
+  const texto = (mapa: Record<string, Etiqueta>, v: string) => mapa[v]?.texto ?? v;
+  return {
+    name: "Envío masivo DP",
+    columns: [
+      { header: "Comparendo", width: 26 },
+      { header: "Resultado", width: 16 },
+      { header: "Radicado", width: 24 },
+      { header: "Motivo", width: 60 },
+    ],
+    rows: l.items.map((i) => [i.numero, texto(ESTADO_ITEM_LOTE, i.estado), i.radicado, i.motivo]),
+    notes: [
+      `Lote ${texto(ESTADO_LOTE, l.estado).toLowerCase()}: ${l.enviados} enviados, ${l.omitidos} omitidos y ${l.fallidos} fallidos de ${l.total}.`,
+      `Creado ${fechaHora(l.creadoEn)}${l.terminadoEn ? `; terminado ${fechaHora(l.terminadoEn)}` : ""} (hora de Colombia).`,
+    ],
+  };
+}
+
+function fechaHora(iso: string): string {
+  const d = bogotaClock(iso);
+  if (!d) return iso;
+  const dos = (n: number | undefined) => String(n ?? 0).padStart(2, "0");
+  return `${dos(d.day)}/${dos(d.month)}/${d.year} ${dos(d.hour)}:${dos(d.minute)}`;
 }
