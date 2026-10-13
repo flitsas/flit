@@ -102,7 +102,7 @@ public static class AvisosEndpoints
 /// envía a los comparendos elegibles el aviso que les toca. Máximo un aviso automático por comparendo y día; si
 /// coinciden, gana el de número mayor (S-53).
 /// </summary>
-public sealed partial class SchedulerAvisos(ComparendosDb db, ServicioAvisos avisos, CalendarioService calendario, Reloj reloj, ILogger<SchedulerAvisos> logger) : IEjecutorTrabajo
+public sealed partial class SchedulerAvisos(ComparendosDb db, ServicioAvisos avisos, CalendarioService calendario, Reloj reloj, IProductosHabilitados productos, ILogger<SchedulerAvisos> logger) : IEjecutorTrabajo
 {
     public bool Atiende(TipoTrabajo tipo) => tipo == TipoTrabajo.AvisosConductor;
 
@@ -118,12 +118,21 @@ public sealed partial class SchedulerAvisos(ComparendosDb db, ServicioAvisos avi
         var hoy = reloj.Hoy;
         var inicioHoy = new DateTimeOffset(hoy.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset).ToUniversalTime();
         var motor = await calendario.MotorAsync(ct).ConfigureAwait(false);
-        var ids = await db.Comparendos.AsNoTracking()
+        var candidatos = await db.Comparendos.AsNoTracking()
             .Where(c => c.Activo && !c.Pagado && !c.NotificadoFisicamente && c.Contraventor != null && c.Contraventor.Correo != null && c.FechaFinDescuento50 != null)
             .Where(c => solicitud.TenantId == null || c.TenantId == solicitud.TenantId)
             .Where(c => !db.AvisosConductor.Any(a => a.ComparendoId == c.Id && a.Disparo == Disparo.Programado && a.RegistradoEn >= inicioHoy))
-            .Select(c => c.Id).ToListAsync(ct).ConfigureAwait(false);
+            .Select(c => new { c.Id, c.TenantId }).ToListAsync(ct).ConfigureAwait(false);
 
+        // HU #13521: a una empresa sin el producto habilitado no le sale ningún aviso automático.
+        var habilitadas = new HashSet<Guid>();
+        foreach (var t in candidatos.Select(c => c.TenantId).Distinct())
+        {
+            if (await productos.ComparendosHabilitadoAsync(t, ct).ConfigureAwait(false))
+                habilitadas.Add(t);
+        }
+
+        var ids = candidatos.Where(c => habilitadas.Contains(c.TenantId)).Select(c => c.Id).ToList();
         foreach (var id in ids)
         {
             try

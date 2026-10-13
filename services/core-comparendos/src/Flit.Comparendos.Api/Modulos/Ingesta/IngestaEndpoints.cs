@@ -71,12 +71,12 @@ public static class IngestaEndpoints
     }
 
     /// <summary>Ejecución manual por empresa y canal, nunca por una sola clave (RN-038). Queda auditada y corre en segundo plano.</summary>
-    private static async Task<IResult> Ejecutar(EjecucionManual pedido, ColaTrabajos cola, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, CicloDeIngesta ciclos, CancellationToken ct)
+    private static async Task<IResult> Ejecutar(EjecucionManual pedido, ColaTrabajos cola, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, ElegibilidadConsultas elegibilidad, CancellationToken ct)
     {
         if (!Enum.TryParse<CanalIngesta>(pedido.Canal, true, out var canal))
             throw new ReglaException("CANAL_INVALIDO", "Elige SIMIT o municipal, por NIT o por placa.");
-        if (!ciclos.FuenteConectada(canal))
-            throw ReglaException.Conflicto("FUENTE_NO_CONECTADA", $"{Reconciliador.Etiqueta(canal)} no está conectada en este ambiente.");
+        if (await elegibilidad.MotivoManualAsync(pedido.EmpresaId, canal, ct).ConfigureAwait(false) is { } motivo)
+            throw ReglaException.Conflicto("CONSULTA_NO_HABILITADA", motivo);
         if (await db.CiclosIngesta.AnyAsync(c => c.Canal == canal && c.Resultado == ResultadoCiclo.EnCurso, ct).ConfigureAwait(false))
             throw ReglaException.Conflicto("CICLO_EN_CURSO", $"Ya hay un ciclo de {Reconciliador.Etiqueta(canal)} en curso.");
 

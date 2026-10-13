@@ -27,6 +27,10 @@
       // El manifiesto de permisos se registra en el gateway (o directo en core-api) al arrancar.
       "GatewayUrl": "http://127.0.0.1:4003"
     },
+    // Fuentes de comparendos por core-consultas (gRPC). Vacío: proveedor «simulado» local.
+    "Consultas": { "Address": "" },
+    // Productos habilitados por Identidad (gRPC). Vacío en Development: todas las empresas cuentan como habilitadas.
+    "Identidad": { "Address": "" },
     // Vacío: los correos solo se escriben en el log. Con core-notificaciones corriendo: "http://127.0.0.1:8085".
     "Notificaciones": { "Address": "" },
     // Vacío: OCR simulado. Con llave: llama a Anthropic con el modelo del prompt publicado (/admin/ocr/prompts).

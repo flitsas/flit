@@ -32,7 +32,7 @@ public interface IAlertasIntegracion
 /// </summary>
 public sealed partial class CicloDeIngesta(
     IServiceScopeFactory scopes,
-    IEnumerable<IFuenteComparendos> fuentes,
+    IFuenteComparendos fuente,
     CalendarioService calendario,
     IAlertasIntegracion alertas,
     Reloj reloj,
@@ -67,14 +67,15 @@ public sealed partial class CicloDeIngesta(
         await EjecutarAsync(Canal(solicitud.Tipo)!.Value, solicitud.Disparo, solicitud.TenantId, solicitud.UsuarioId, ct).ConfigureAwait(false);
     }
 
-    public bool FuenteConectada(CanalIngesta canal) => fuentes.Any(f => f.Atiende(canal));
-
     public async Task<Guid> EjecutarAsync(CanalIngesta canal, Disparo disparo, Guid? tenantManual, Guid? usuario, CancellationToken ct)
     {
-        // Sin fuente real ni simulada (QA/PDN antes de conectar SmartCloud y la municipal): no hay ciclo ni alerta.
-        if (!FuenteConectada(canal))
+        // HU #13521: solo empresas con el producto habilitado y el canal configurado (y activo, si es programado).
+        Dictionary<Guid, string> proveedores;
+        await using (var scope = scopes.CreateAsyncScope())
+            proveedores = await scope.ServiceProvider.GetRequiredService<ElegibilidadConsultas>().ProveedoresAsync(canal, disparo, tenantManual, ct).ConfigureAwait(false);
+        if (proveedores.Count == 0)
         {
-            LogSinFuente(logger, canal);
+            LogSinEmpresas(logger, canal);
             return Guid.Empty;
         }
 
@@ -103,7 +104,7 @@ public sealed partial class CicloDeIngesta(
 
         try
         {
-            await CorrerAsync(ciclo, ct).ConfigureAwait(false);
+            await CorrerAsync(ciclo, proveedores, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -117,15 +118,15 @@ public sealed partial class CicloDeIngesta(
             ciclo.FinEn = reloj.Ahora;
             if (ciclo.Resultado == ResultadoCiclo.EnCurso)
                 ciclo.Resultado = ResultadoCiclo.Fallido;
-            await CerrarAsync(ciclo).ConfigureAwait(false);
+            await CerrarAsync(ciclo, [.. proveedores.Keys]).ConfigureAwait(false);
         }
 
         return ciclo.Id;
     }
 
-    private sealed record ClaveMonitoreada(Guid TenantId, Guid? IdentificacionId, Guid? PlacaId, IReadOnlyList<ClaveConsulta> Variantes, string Etiqueta);
+    private sealed record ClaveMonitoreada(Guid TenantId, Guid? IdentificacionId, Guid? PlacaId, IReadOnlyList<ClaveConsulta> Variantes, string Etiqueta, string Proveedor = "");
 
-    private async Task CorrerAsync(CicloIngesta ciclo, CancellationToken ct)
+    private async Task CorrerAsync(CicloIngesta ciclo, Dictionary<Guid, string> proveedores, CancellationToken ct)
     {
         var porNit = ciclo.Canal is CanalIngesta.SimitNit or CanalIngesta.MunicipalNit;
         List<ClaveMonitoreada> monitoreadas;
@@ -151,14 +152,15 @@ public sealed partial class CicloDeIngesta(
             }
         }
 
-        var unicas = monitoreadas.SelectMany(m => m.Variantes).Distinct().ToList();
+        // Solo las empresas elegibles, cada una con el proveedor de su configuración (HU #13521).
+        monitoreadas = monitoreadas.Where(m => proveedores.ContainsKey(m.TenantId)).Select(m => m with { Proveedor = proveedores[m.TenantId] }).ToList();
+        var unicas = monitoreadas.SelectMany(m => m.Variantes.Select(v => (Clave: v, m.Proveedor))).Distinct().ToList();
         ciclo.ClavesTotal = unicas.Count;
-        var fuente = fuentes.LastOrDefault(f => f.Atiende(ciclo.Canal)) ?? throw new InvalidOperationException($"No hay fuente configurada para {ciclo.Canal}.");
 
-        // 1. Una sola llamada por clave única, con paralelismo acotado.
-        var cache = new ConcurrentDictionary<ClaveConsulta, IReadOnlyList<ConsultaHecha>>();
-        await Parallel.ForEachAsync(unicas, new ParallelOptions { MaxDegreeOfParallelism = Paralelismo, CancellationToken = ct }, async (clave, token) =>
-            cache[clave] = await ConsultarAsync(ciclo, fuente, clave, ciclo.Canal is CanalIngesta.MunicipalNit or CanalIngesta.MunicipalPlaca ? municipiosActivos : [], token).ConfigureAwait(false))
+        // 1. Una sola llamada por clave única y proveedor, con paralelismo acotado.
+        var cache = new ConcurrentDictionary<(ClaveConsulta Clave, string Proveedor), IReadOnlyList<ConsultaHecha>>();
+        await Parallel.ForEachAsync(unicas, new ParallelOptions { MaxDegreeOfParallelism = Paralelismo, CancellationToken = ct }, async (u, token) =>
+            cache[u] = await ConsultarAsync(ciclo, u.Clave, u.Proveedor, ciclo.Canal is CanalIngesta.MunicipalNit or CanalIngesta.MunicipalPlaca ? municipiosActivos : [], token).ConfigureAwait(false))
             .ConfigureAwait(false);
 
         var errores = cache.Values.SelectMany(v => v).Where(h => h.Parcial.Resultado == ResultadoConsulta.Error).ToList();
@@ -168,7 +170,7 @@ public sealed partial class CicloDeIngesta(
         var motor = await calendario.MotorAsync(ct).ConfigureAwait(false);
         foreach (var m in monitoreadas)
         {
-            var hechas = m.Variantes.SelectMany(v => cache.TryGetValue(v, out var h) ? h : []).ToList();
+            var hechas = m.Variantes.SelectMany(v => cache.TryGetValue((v, m.Proveedor), out var h) ? h : []).ToList();
             foreach (var grupo in hechas.GroupBy(h => h.Parcial.MunicipioCodigo))
             {
                 // RN-027: un fallo al repartir una clave no detiene las demás. Si otra clave de la misma empresa creó el
@@ -214,13 +216,13 @@ public sealed partial class CicloDeIngesta(
         }
     }
 
-    private async Task<IReadOnlyList<ConsultaHecha>> ConsultarAsync(CicloIngesta ciclo, IFuenteComparendos fuente, ClaveConsulta clave, List<string> municipiosActivos, CancellationToken ct)
+    private async Task<IReadOnlyList<ConsultaHecha>> ConsultarAsync(CicloIngesta ciclo, ClaveConsulta clave, string proveedor, List<string> municipiosActivos, CancellationToken ct)
     {
         RespuestaFuente respuesta;
         var inicio = reloj.Ahora;
         try
         {
-            respuesta = await fuente.ConsultarAsync(clave, ct).ConfigureAwait(false);
+            respuesta = await fuente.ConsultarAsync(clave, proveedor, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -325,7 +327,7 @@ public sealed partial class CicloDeIngesta(
         }).ConfigureAwait(false);
     }
 
-    private async Task CerrarAsync(CicloIngesta ciclo)
+    private async Task CerrarAsync(CicloIngesta ciclo, List<Guid> empresas)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
@@ -333,14 +335,18 @@ public sealed partial class CicloDeIngesta(
         var tipo = Trabajo(ciclo.Canal);
         await db.TrabajosProgramados.Where(t => t.Tipo == tipo)
             .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimoResultado, ciclo.Resultado), CancellationToken.None).ConfigureAwait(false);
+        {
+            await db.ConfiguracionConsultaCanales.Where(c => empresas.Contains(c.TenantId) && c.Canal == ciclo.Canal)
+                .ExecuteUpdateAsync(u => u.SetProperty(c => c.UltimoResultado, ciclo.Resultado), CancellationToken.None).ConfigureAwait(false);
+        }
         await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Falló el reparto de {Canal} para {Clave}; el ciclo sigue con las demás.")]
     private static partial void LogFalloReparto(ILogger logger, CanalIngesta canal, string clave, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Ciclo de {Canal} omitido: la fuente no está conectada en este ambiente.")]
-    private static partial void LogSinFuente(ILogger logger, CanalIngesta canal);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Ciclo de {Canal} omitido: ninguna empresa elegible (producto habilitado y consultas configuradas).")]
+    private static partial void LogSinEmpresas(ILogger logger, CanalIngesta canal);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Falló el ciclo de ingesta {Canal}.")]
     private static partial void LogFalloCiclo(ILogger logger, CanalIngesta canal, Exception ex);

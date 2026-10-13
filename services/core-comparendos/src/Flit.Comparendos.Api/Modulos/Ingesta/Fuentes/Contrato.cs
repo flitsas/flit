@@ -64,13 +64,26 @@ public sealed record RespuestaFuente(
         new([new ResultadoParcial(null, items.Count == 0 ? ResultadoConsulta.ExitosaVacia : ResultadoConsulta.ExitosaConDatos, items)], http, duracionMs, cuerpo);
 }
 
+/// <summary>Un proveedor de comparendos tal como lo reporta la plataforma (información interna de FLIT).</summary>
+public sealed record ProveedorFuente(string Clave, string Nombre, IReadOnlyList<CanalIngesta> Canales, bool Conectado, string? Motivo);
+
 /// <summary>
-/// Una fuente de comparendos (SmartCloud, municipal). Las reales viven tras la plataforma (Excel S4 propuesta) y se
-/// conectan al final con su información (WSDL, credenciales, esquema); mientras tanto el modo simulado sirve en DEV.
+/// Las fuentes de comparendos (HU #13520). En los ambientes se consultan por core-consultas
+/// (<c>FuentesComparendosService</c>): este producto decide qué, cuándo y con qué proveedor, según la configuración de
+/// cada empresa; core-consultas ejecuta. Sin core-consultas (local) hay un modo simulado, y fuera de DEV nada.
 /// </summary>
 public interface IFuenteComparendos
 {
-    bool Atiende(CanalIngesta canal);
+    Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct);
 
-    Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, CancellationToken ct);
+    Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct);
+}
+
+/// <summary>QA y PDN sin core-consultas configurado: no hay proveedores y no se consulta nada.</summary>
+public sealed class FuenteNoConectada : IFuenteComparendos
+{
+    public Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ProveedorFuente>>([]);
+
+    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct) =>
+        Task.FromResult(RespuestaFuente.Error(TipoErrorFuente.Excepcion, "Las fuentes de comparendos no están conectadas en este ambiente."));
 }

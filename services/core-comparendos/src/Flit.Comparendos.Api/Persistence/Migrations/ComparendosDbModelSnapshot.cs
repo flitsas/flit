@@ -672,13 +672,15 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_ciclo_ingesta");
 
-                    b.HasIndex("Canal")
+                    b.HasIndex("Canal", "InicioEn")
+                        .HasDatabaseName("ix_ciclo_ingesta_canal_inicio_en");
+
+                    b.HasIndex("Canal", "TenantIdManual")
                         .IsUnique()
                         .HasDatabaseName("ux_ciclo_ingesta_en_curso")
                         .HasFilter("resultado = 'EnCurso'");
 
-                    b.HasIndex("Canal", "InicioEn")
-                        .HasDatabaseName("ix_ciclo_ingesta_canal_inicio_en");
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("Canal", "TenantIdManual"), false);
 
                     b.ToTable("ciclo_ingesta", "comparendos");
                 });
@@ -1341,6 +1343,141 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasDatabaseName("ix_comunicacion_saliente_tenant_id_tipo_estado");
 
                     b.ToTable("comunicacion_saliente", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionConsultaCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por");
+
+                    b.Property<string>("Canal")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("canal");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.Property<bool>("Encendido")
+                        .HasColumnType("boolean")
+                        .HasColumnName("encendido");
+
+                    b.PrimitiveCollection<List<string>>("Horas")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("horas");
+
+                    b.Property<int?>("IntervaloMinutos")
+                        .HasColumnType("integer")
+                        .HasColumnName("intervalo_minutos");
+
+                    b.Property<string>("Modo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("modo");
+
+                    b.Property<string>("Proveedor")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("proveedor");
+
+                    b.Property<bool>("SoloDiasHabiles")
+                        .HasColumnType("boolean")
+                        .HasColumnName("solo_dias_habiles");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UltimaEjecucionEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultima_ejecucion_en");
+
+                    b.Property<string>("UltimoResultado")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ultimo_resultado");
+
+                    b.Property<TimeOnly?>("VentanaDesde")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("ventana_desde");
+
+                    b.Property<TimeOnly?>("VentanaHasta")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("ventana_hasta");
+
+                    b.HasKey("Id")
+                        .HasName("pk_configuracion_consulta_canal");
+
+                    b.HasIndex("TenantId", "Canal")
+                        .IsUnique()
+                        .HasDatabaseName("ix_configuracion_consulta_canal_tenant_id_canal");
+
+                    b.ToTable("configuracion_consulta_canal", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionConsultas", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("ActivadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activada_en");
+
+                    b.Property<Guid?>("ActivadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("activada_por");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("estado");
+
+                    b.HasKey("TenantId")
+                        .HasName("pk_configuracion_consultas");
+
+                    b.HasIndex("Estado")
+                        .HasDatabaseName("ix_configuracion_consultas_estado");
+
+                    b.ToTable("configuracion_consultas", "comparendos");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionEmpresa", b =>
@@ -3800,6 +3937,16 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_comparendo_fuente_comparendo_comparendo_id");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionConsultaCanal", b =>
+                {
+                    b.HasOne("Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionConsultas", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_configuracion_consulta_canal_configuracion_consultas_tenant");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConsultaFuente", b =>

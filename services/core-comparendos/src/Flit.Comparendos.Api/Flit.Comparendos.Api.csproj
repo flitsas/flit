@@ -17,6 +17,8 @@
     <ProjectReference Include="..\Flit.Comparendos.Grpc.Contracts\Flit.Comparendos.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\Flit.Comparendos.Domain\Flit.Comparendos.Domain.csproj" />
     <ProjectReference Include="..\..\..\core-notificaciones\src\Flit.Notificaciones.Grpc.Contracts\Flit.Notificaciones.Grpc.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identidad.Grpc.Contracts\Flit.Identidad.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

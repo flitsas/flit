@@ -173,6 +173,42 @@ public sealed class PlantillaVersion : Auditada
 }
 
 /// <summary>Trabajo programado (§3.10): expresión cron en hora de Colombia.</summary>
+/// <summary>
+/// Configuración de consultas de una empresa (HU #13521). Tener el producto encendido no dispara nada: se consulta solo
+/// con la configuración ACTIVA (la activa el SuperAdmin), el producto habilitado en la plataforma y la fuente conectada.
+/// </summary>
+public sealed class ConfiguracionConsultas : Auditada
+{
+    public Guid TenantId { get; set; }
+    public EstadoConfiguracionConsultas Estado { get; set; } = EstadoConfiguracionConsultas.Borrador;
+    public DateTimeOffset? ActivadaEn { get; set; }
+    public Guid? ActivadaPor { get; set; }
+}
+
+/// <summary>
+/// Un canal de la configuración de consultas: encendido, proveedor (información interna de FLIT: la empresa nunca lo
+/// ve) y agenda en hora de Colombia.
+/// </summary>
+public sealed class ConfiguracionConsultaCanal : Auditada
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public CanalIngesta Canal { get; set; }
+    public bool Encendido { get; set; }
+    public string Proveedor { get; set; } = string.Empty;
+    public Domain.Ingesta.ModoAgenda Modo { get; set; } = Domain.Ingesta.ModoAgenda.HorasFijas;
+    public List<string> Horas { get; set; } = [];
+    public int? IntervaloMinutos { get; set; }
+    public TimeOnly? VentanaDesde { get; set; }
+    public TimeOnly? VentanaHasta { get; set; }
+    public bool SoloDiasHabiles { get; set; }
+    public DateTimeOffset? UltimaEjecucionEn { get; set; }
+    public ResultadoCiclo? UltimoResultado { get; set; }
+
+    public Domain.Ingesta.AgendaConsultas Agenda() => new(Modo,
+        Horas.Select(Domain.Ingesta.AgendaConsultas.Hora).OfType<TimeOnly>().ToList(), IntervaloMinutos, VentanaDesde, VentanaHasta, SoloDiasHabiles);
+}
+
 public sealed class TrabajoProgramado : Auditada
 {
     public Guid Id { get; set; }

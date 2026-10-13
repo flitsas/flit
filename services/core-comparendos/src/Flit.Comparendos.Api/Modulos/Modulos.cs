@@ -69,9 +69,36 @@ public static class Modulos
         else
             services.AddSingleton<Ocr.IProveedorOcr, Ocr.ProveedorOcrNoConfigurado>();
 
-        // Ingesta (HU #13460, #13461). Las fuentes reales se conectan al final (Feature #13464); mientras tanto, simulada.
-        if (simulacion)
+        // Ingesta (HU #13460, #13461). Las fuentes van por core-consultas (HU #13520); sin él, simulada en DEV y nada fuera.
+        if (configuration["Comparendos:Consultas:Address"] is { Length: > 0 } consultas)
+        {
+            services.AddFlitGrpcClient<Flit.Consultas.Grpc.V1.FuentesComparendosService.FuentesComparendosServiceClient>(
+                configuration, new Uri(consultas), "platform.consultas", o => o.Deadline = TimeSpan.FromSeconds(90));
+            services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteCoreConsultas>();
+        }
+        else if (simulacion)
+        {
             services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteSimulada>();
+        }
+        else
+        {
+            services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteNoConectada>();
+        }
+
+        // Activación controlada (HU #13521): Identidad dice si la empresa tiene el producto; sin Identidad, solo DEV.
+        services.AddMemoryCache();
+        if (configuration["Comparendos:Identidad:Address"] is { Length: > 0 } identidad)
+        {
+            services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.IdentidadService.IdentidadServiceClient>(
+                configuration, new Uri(identidad), "platform.identidad.read", o => o.Deadline = TimeSpan.FromSeconds(10));
+            services.AddSingleton<Plataforma.IProductosHabilitados, Plataforma.ProductosHabilitadosIdentidad>();
+        }
+        else
+        {
+            services.AddSingleton<Plataforma.IProductosHabilitados>(new Plataforma.ProductosHabilitadosFijo(simulacion));
+        }
+
+        services.AddScoped<Ingesta.ElegibilidadConsultas>();
         services.AddScoped<Ingesta.Reconciliador>();
         services.AddScoped<Ingesta.CicloDeIngesta>();
         services.AddScoped<Trabajos.IEjecutorTrabajo>(sp => sp.GetRequiredService<Ingesta.CicloDeIngesta>());
@@ -110,6 +137,7 @@ public static class Modulos
         api.MapGet("/sesion", Sesion.Obtener).RequireAuthorization(Plataforma.AutorizacionExtensions.PoliticaUsuario);
         Comun.ArchivosEndpoints.Map(api);
         Comun.AuditoriaEndpoints.Map(api);
+        Configuracion.ConsultasEmpresaEndpoints.Map(api);
         Monitoreo.MonitoreoEndpoints.Map(api);
         Catalogos.CatalogosEndpoints.Map(api);
         Ingesta.IngestaEndpoints.Map(api);

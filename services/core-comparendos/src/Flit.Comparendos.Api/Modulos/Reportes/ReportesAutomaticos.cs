@@ -17,7 +17,7 @@ namespace Flit.Comparendos.Api.Modulos.Reportes;
 /// hoy) para las empresas con <c>has_reportes_module</c> y destinatarios. Un correo HTML a <c>destinatarios_reportes</c>
 /// con copia oculta a la lista interna de FLIT. Un mismo cierre no sale dos veces el mismo día.
 /// </summary>
-public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes reportes, ServicioCorreo correo, Reloj reloj) : IEjecutorTrabajo
+public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes reportes, ServicioCorreo correo, Reloj reloj, IProductosHabilitados productos) : IEjecutorTrabajo
 {
     public bool Atiende(TipoTrabajo tipo) => tipo is TipoTrabajo.ReporteSemanal or TipoTrabajo.ReporteMensual;
 
@@ -36,7 +36,8 @@ public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes repor
             .ToListAsync(ct).ConfigureAwait(false);
         foreach (var empresa in empresas)
         {
-            if (await db.Comunicaciones.AnyAsync(c => c.TenantId == empresa.TenantId && c.Tipo == tipo && c.CreadoEn >= inicioHoy, ct).ConfigureAwait(false))
+            if (await db.Comunicaciones.AnyAsync(c => c.TenantId == empresa.TenantId && c.Tipo == tipo && c.CreadoEn >= inicioHoy, ct).ConfigureAwait(false)
+                || !await productos.ComparendosHabilitadoAsync(empresa.TenantId, ct).ConfigureAwait(false))
                 continue;
             var a = new Alcance(empresa.TenantId, null, desde, hoy);
             var html = await ArmarAsync(a, empresa.EmpresaNombre ?? "la empresa", semanal, ct).ConfigureAwait(false);

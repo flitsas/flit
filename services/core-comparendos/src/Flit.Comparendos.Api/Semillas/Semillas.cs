@@ -87,10 +87,7 @@ public static class Semillas
     {
         (TipoTrabajo Tipo, string Cron, bool SoloHabiles)[] trabajos =
         [
-            (TipoTrabajo.IngestaSimitNit, "0 7,13 * * *", false),
-            (TipoTrabajo.IngestaSimitPlaca, "15 7,13 * * *", false),
-            (TipoTrabajo.IngestaMunicipalNit, "30 7,13 * * *", false),
-            (TipoTrabajo.IngestaMunicipalPlaca, "45 7,13 * * *", false),
+            // La ingesta no tiene cron global: cada empresa tiene su agenda de consultas (HU #13521).
             (TipoTrabajo.AvisosConductor, "*/15 * * * *", true),
             (TipoTrabajo.ReintentoContraventor, "0 6 * * *", false),
             (TipoTrabajo.ReporteSemanal, "0 17 * * 5", false),

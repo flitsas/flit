@@ -403,12 +403,10 @@ services:
       # no está conectado no inventa datos: los ciclos de ingesta se omiten, el OCR no acepta paquetes y la API de
       # contratos responde error.
       Comparendos__Simulacion__Habilitada: ${COMPARENDOS_SIMULACION:-}
-      # Fuentes de comparendos (#13029). Sin URL, la fuente queda en modo simulado (DEV) o apagada.
-      Comparendos__SmartCloud__UrlIdentificacion: ${URL_SMART_CLOUD_ACCOUNT_STATEMENT_ID:-}
-      Comparendos__SmartCloud__UrlPlaca: ${URL_SMART_CLOUD_ACCOUNT_STATEMENT_PLATE:-}
-      Comparendos__SmartCloud__ClaveAcceso: ${SMART_CLOUD_ACCESS_KEY:-}
-      Comparendos__Municipal__BaseUrl: ${MUNICIPALITY_INFRACTION_API_BASE_URL:-}
-      Comparendos__Municipal__Ruta: ${MUNICIPALITY_GET_INFRACTION_PATH:-}
+      # Las fuentes de comparendos (SmartCloud, municipal, Verifik) viven en core-consultas (HU #13520): este servicio
+      # solo decide qué, cuándo y con qué proveedor por empresa. Sus credenciales van en el bloque de core-consultas.
+      # Activación controlada (HU #13521): Identidad dice qué empresas tienen el producto. Vacío = ninguna (fuera de Dev).
+      Comparendos__Identidad__Address: ${COMPARENDOS_IDENTIDAD_ADDRESS:-}
       Comparendos__Renting__BaseUrl: ${COMPARENDOS_RENTING_API_URL:-}
       Comparendos__Renting__ApiKey: ${COMPARENDOS_RENTING_API_KEY:-}
     healthcheck:

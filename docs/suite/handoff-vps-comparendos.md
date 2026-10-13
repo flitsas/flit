@@ -88,7 +88,19 @@ COMPARENDOS_URL=https://dev.comparendos.flitsas.online      # sin prefijo en PDN
 # COMPARENDOS_FILE_MANAGER_CATEGORY=comparendos             # sin FILE_MANAGER_BASE_URL los archivos van a la base (solo DEV)
 # COMPARENDOS_OCR_API_KEY=                                  # llave de Anthropic; sin ella el OCR no acepta paquetes fuera de DEV
 # COMPARENDOS_SIMULACION=                                   # vacío = solo en Dev; true para una demo en QA; nunca en PDN
+COMPARENDOS_IDENTIDAD_ADDRESS=http://core-identity:8083     # obligatoria: sin ella ninguna empresa cuenta como habilitada
 ```
+
+**Activación controlada (HU #13521).** Encender el producto no consulta nada. Una empresa se consulta solo si: tiene
+Comparendos habilitado (Identidad, gRPC: requiere `CORE_IDENTITY_GRPC_PORT` en core-identity), el SuperAdmin le hizo
+su configuración de consultas en el parametrizador (canal, proveedor y agenda) y la pasó a **Activa**, y el proveedor
+está conectado en core-consultas. Los avisos, reportes y la consulta de contraventor también se saltan las empresas sin
+el producto.
+
+**Fuentes (HU #13520).** Van por core-consultas (`FuentesComparendosService`, el mismo gRPC 8084 y scope
+`platform.consultas` que ya tiene `svc-comparendos`). Para usar Verifik SIMIT en un ambiente: en core-consultas
+`Consultations__VerifikSimitMode=real` y la llave `VERIFIK_*` (las mismas de Trámites). SmartCloud y municipal
+aparecen como «no conectados» hasta tener contrato.
 
 `NOTIFICACIONES_REMOTO_ADDRESS` (la misma de core-api) apunta los correos a core-notificaciones. Si quedara vacía, los
 correos se escriben en el log y no salen: revisarla.
@@ -143,8 +155,8 @@ Trámites (§6.1 y §6.2 de handoff-vps-suite.md):
 
 | Pieza | Qué falta | Variables |
 |---|---|---|
-| SmartCloud por identificación y por placa (#13465, #13466) | WSDL, credenciales y una respuesta real de ejemplo | `URL_SMART_CLOUD_ACCOUNT_STATEMENT_ID`, `URL_SMART_CLOUD_ACCOUNT_STATEMENT_PLATE`, `SMART_CLOUD_ACCESS_KEY` |
-| API municipal (#13467) | Esquema de la respuesta y autenticación | `MUNICIPALITY_INFRACTION_API_BASE_URL`, `MUNICIPALITY_GET_INFRACTION_PATH` |
+| SmartCloud por identificación y por placa (#13465, #13466) | WSDL, credenciales y una respuesta real (también la de un NIT sin comparendos) | Adaptador en core-consultas; variables de core-consultas |
+| API municipal (#13467) | Esquema de la respuesta y autenticación | Adaptador en core-consultas; variables de core-consultas |
 | API de contratos de Renting | Contrato (placa + fecha → conductor) | `COMPARENDOS_RENTING_API_URL`, `COMPARENDOS_RENTING_API_KEY` |
 | OCR | Llave de Anthropic y comparación con una muestra real | `COMPARENDOS_OCR_API_KEY` |
 

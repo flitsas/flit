@@ -265,6 +265,14 @@ public enum OrigenDocumentoSoporte
     Sistema,
 }
 
+/// <summary>Configuración de consultas de una empresa (HU #13521): solo se consulta con ACTIVA.</summary>
+public enum EstadoConfiguracionConsultas
+{
+    Borrador,
+    Activa,
+    Pausada,
+}
+
 public enum TipoTrabajo
 {
     IngestaSimitNit,

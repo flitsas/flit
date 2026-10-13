@@ -37,6 +37,8 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<AlertaConfiguracion> AlertaConfiguraciones => Set<AlertaConfiguracion>();
     public DbSet<AlertaDestinatario> AlertaDestinatarios => Set<AlertaDestinatario>();
     public DbSet<PromptOcrVersion> PromptsOcr => Set<PromptOcrVersion>();
+    public DbSet<ConfiguracionConsultas> ConfiguracionesConsultas => Set<ConfiguracionConsultas>();
+    public DbSet<ConfiguracionConsultaCanal> ConfiguracionConsultaCanales => Set<ConfiguracionConsultaCanal>();
     public DbSet<Comparendo> Comparendos => Set<Comparendo>();
     public DbSet<ComparendoFuente> ComparendoFuentes => Set<ComparendoFuente>();
     public DbSet<ComparendoCambio> ComparendoCambios => Set<ComparendoCambio>();
@@ -251,6 +253,21 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasIndex(x => new { x.PlantillaId, x.NumeroVersion }).IsUnique();
             e.HasOne<Plantilla>().WithMany().HasForeignKey(x => x.PlantillaId);
         });
+        m.Entity<ConfiguracionConsultas>(e =>
+        {
+            e.ToTable("configuracion_consultas");
+            e.HasKey(x => x.TenantId);
+            e.HasIndex(x => x.Estado);
+        });
+        m.Entity<ConfiguracionConsultaCanal>(e =>
+        {
+            e.ToTable("configuracion_consulta_canal");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Proveedor).HasMaxLength(40);
+            e.Property(x => x.Modo).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(x => new { x.TenantId, x.Canal }).IsUnique();
+            e.HasOne<ConfiguracionConsultas>().WithMany().HasForeignKey(x => x.TenantId);
+        });
         m.Entity<TrabajoProgramado>(e =>
         {
             e.ToTable("trabajo_programado");
@@ -368,7 +385,8 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("ciclo_ingesta");
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.Canal, x.InicioEn });
-            e.HasIndex(x => x.Canal).IsUnique().HasFilter("resultado = 'EnCurso'").HasDatabaseName("ux_ciclo_ingesta_en_curso");
+            // Un ciclo en curso por canal y empresa (los programados corren por empresa, HU #13521).
+            e.HasIndex(x => new { x.Canal, x.TenantIdManual }).IsUnique().AreNullsDistinct(false).HasFilter("resultado = 'EnCurso'").HasDatabaseName("ux_ciclo_ingesta_en_curso");
         });
         m.Entity<ConsultaFuente>(e =>
         {

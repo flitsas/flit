@@ -61,7 +61,7 @@ public sealed class BaseProductoTests(ApiDePrueba api) : IClassFixture<ApiDePrue
         dias.Should().Be(new DateOnly(2040, 12, 31).DayNumber - new DateOnly(2015, 1, 1).DayNumber + 1);
         festivos2026.Should().Be(18);
         organismos.Should().Be(298);
-        trabajos.Should().Be(8);
+        trabajos.Should().Be(4, "la ingesta no tiene cron global: cada empresa tiene su agenda (HU #13521)");
         tipologias.Should().Be(11);
     }
 

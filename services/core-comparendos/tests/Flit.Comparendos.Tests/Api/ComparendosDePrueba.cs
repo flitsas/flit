@@ -20,7 +20,23 @@ public static class ComparendosDePrueba
             hasRightPetitionModule = dp, allowsContravenerConsultation = consulta, allowsContravenerChange = cambio, hasOcrAccess = ocr, hasReportesModule = reportes,
             tipoIntegracionConductor = integracion, conjuntoPlantillas = conjunto, requiereRepresentanteLegal = requiereRl, empresaNombre = "Gestora de prueba",
         })).EnsureSuccessStatusCode();
+        await ConsultasActivasAsync(api, empresa);
         return empresa;
+    }
+
+    /// <summary>HU #13521: los cuatro canales encendidos con la fuente de prueba y la configuración activada.</summary>
+    public static async Task ConsultasActivasAsync(ApiConFuente api, Guid empresa, string proveedor = "prueba")
+    {
+        var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
+        foreach (var canal in new[] { "SimitNit", "SimitPlaca", "MunicipalNit", "MunicipalPlaca" })
+        {
+            (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/consultas/canales/{canal}", new
+            {
+                encendido = true, proveedor = canal == "SimitNit" ? proveedor : "prueba", modo = "HorasFijas", horas = new[] { "07:00" }, soloDiasHabiles = false,
+            })).EnsureSuccessStatusCode();
+        }
+
+        (await super.PostAsync($"/api/v1/comparendos/admin/empresas/{empresa}/consultas/activar", null)).EnsureSuccessStatusCode();
     }
 
     /// <summary>Ingresa los comparendos por SIMIT con un NIT nuevo de la empresa y devuelve sus ids por número normalizado.</summary>

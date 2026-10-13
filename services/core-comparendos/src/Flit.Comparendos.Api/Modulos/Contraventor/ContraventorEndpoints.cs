@@ -87,7 +87,7 @@ public static class ContraventorEndpoints
 }
 
 /// <summary>Trabajo diario: reintenta la consulta de contraventor de lo pendiente o con error, hasta 3 intentos (S-35).</summary>
-public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioContraventor servicio, ILogger<ReintentoContraventor> logger) : IEjecutorTrabajo
+public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioContraventor servicio, IProductosHabilitados productos, ILogger<ReintentoContraventor> logger) : IEjecutorTrabajo
 {
     public bool Atiende(TipoTrabajo tipo) => tipo == TipoTrabajo.ReintentoContraventor;
 
@@ -97,6 +97,14 @@ public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioCont
         var empresas = await db.ConfiguracionesEmpresa.AsNoTracking()
             .Where(e => e.AllowsContravenerConsultation && e.TipoIntegracionConductor == TipoIntegracionConductor.ApiRenting)
             .Where(e => solicitud.TenantId == null || e.TenantId == solicitud.TenantId).Select(e => e.TenantId).ToListAsync(ct).ConfigureAwait(false);
+        var habilitadas = new List<Guid>();
+        foreach (var e in empresas)
+        {
+            if (await productos.ComparendosHabilitadoAsync(e, ct).ConfigureAwait(false))
+                habilitadas.Add(e);
+        }
+
+        empresas = habilitadas;
         var ids = await db.Comparendos.AsNoTracking()
             .Where(c => empresas.Contains(c.TenantId) && c.Activo && c.Contraventor == null && c.IntentosConsultaContraventor < 3
                 && (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error))

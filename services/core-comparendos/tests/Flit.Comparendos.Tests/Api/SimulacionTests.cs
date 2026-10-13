@@ -36,7 +36,7 @@ public sealed class SimulacionTests(ApiSinSimulacion api) : IClassFixture<ApiSin
 
         var manual = await super.PostAsJsonAsync("/api/v1/comparendos/admin/ingesta/ejecutar", new { canal = "SimitNit" }, ct);
         manual.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await manual.Content.ReadAsStringAsync(ct)).Should().Contain("FUENTE_NO_CONECTADA");
+        (await manual.Content.ReadAsStringAsync(ct)).Should().Contain("CONSULTA_NO_HABILITADA", "sin Identidad ni simulación ninguna empresa cuenta como habilitada");
 
         await using (var scope = api.App.Services.CreateAsyncScope())
             (await scope.ServiceProvider.GetRequiredService<CicloDeIngesta>().EjecutarAsync(CanalIngesta.SimitNit, Disparo.Programado, null, null, ct)).Should().Be(Guid.Empty);

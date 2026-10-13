@@ -68,6 +68,9 @@ internal sealed partial class ProgramadorTrabajos(IServiceScopeFactory scopes, C
         var trabajos = await db.TrabajosProgramados.AsNoTracking().Where(t => t.Activo).ToListAsync(ct).ConfigureAwait(false);
         foreach (var t in trabajos)
         {
+            // La ingesta ya no corre por un cron global: cada empresa tiene su agenda (HU #13521, abajo).
+            if (Ingesta.CicloDeIngesta.Canal(t.Tipo) is not null)
+                continue;
             if (t.SoloDiasHabiles && !habil)
                 continue;
             if (!ExpresionCron.EsValida(t.ExpresionCron, out _) || !ExpresionCron.Parse(t.ExpresionCron).Coincide(local))
@@ -78,6 +81,29 @@ internal sealed partial class ProgramadorTrabajos(IServiceScopeFactory scopes, C
                 .ExecuteUpdateAsync(u => u.SetProperty(x => x.UltimaEjecucionEn, ahora), ct).ConfigureAwait(false);
             if (ganado == 1)
                 await cola.EncolarAsync(new SolicitudTrabajo(t.Tipo, Disparo.Programado), ct).ConfigureAwait(false);
+        }
+
+        await AgendasDeEmpresasAsync(db, local, minuto, ahora, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #13521: la agenda de consultas de cada empresa (configuración ACTIVA y canal encendido). Una sola réplica gana
+    /// cada minuto por empresa y canal; el ciclo vuelve a comprobar que el producto siga habilitado.
+    /// </summary>
+    private async Task AgendasDeEmpresasAsync(ComparendosDb db, DateTime local, DateTimeOffset minuto, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var cal = await calendario.ActualAsync(ct).ConfigureAwait(false);
+        var canales = await (from c in db.ConfiguracionConsultaCanales.AsNoTracking()
+                             join cfg in db.ConfiguracionesConsultas.AsNoTracking() on c.TenantId equals cfg.TenantId
+                             where cfg.Estado == EstadoConfiguracionConsultas.Activa && c.Encendido && c.Proveedor != ""
+                             select c).ToListAsync(ct).ConfigureAwait(false);
+        foreach (var c in canales.Where(c => c.Agenda().Toca(local, cal)))
+        {
+            var ganado = await db.ConfiguracionConsultaCanales
+                .Where(x => x.Id == c.Id && (x.UltimaEjecucionEn == null || x.UltimaEjecucionEn < minuto))
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.UltimaEjecucionEn, ahora), ct).ConfigureAwait(false);
+            if (ganado == 1)
+                await cola.EncolarAsync(new SolicitudTrabajo(Ingesta.CicloDeIngesta.Trabajo(c.Canal), Disparo.Programado, c.TenantId), ct).ConfigureAwait(false);
         }
     }
 

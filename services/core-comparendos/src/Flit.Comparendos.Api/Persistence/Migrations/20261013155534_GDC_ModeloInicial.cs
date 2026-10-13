@@ -390,6 +390,25 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "configuracion_consultas",
+                schema: "comparendos",
+                columns: table => new
+                {
+                    tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    estado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    activada_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    activada_por = table.Column<Guid>(type: "uuid", nullable: true),
+                    creado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    creado_por = table.Column<Guid>(type: "uuid", nullable: true),
+                    actualizado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    actualizado_por = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_configuracion_consultas", x => x.tenant_id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "configuracion_empresa",
                 schema: "comparendos",
                 columns: table => new
@@ -1172,6 +1191,41 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "configuracion_consulta_canal",
+                schema: "comparendos",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    canal = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    encendido = table.Column<bool>(type: "boolean", nullable: false),
+                    proveedor = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    modo = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    horas = table.Column<List<string>>(type: "text[]", nullable: false),
+                    intervalo_minutos = table.Column<int>(type: "integer", nullable: true),
+                    ventana_desde = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
+                    ventana_hasta = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
+                    solo_dias_habiles = table.Column<bool>(type: "boolean", nullable: false),
+                    ultima_ejecucion_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    ultimo_resultado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: true),
+                    creado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    creado_por = table.Column<Guid>(type: "uuid", nullable: true),
+                    actualizado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    actualizado_por = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_configuracion_consulta_canal", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_configuracion_consulta_canal_configuracion_consultas_tenant",
+                        column: x => x.tenant_id,
+                        principalSchema: "comparendos",
+                        principalTable: "configuracion_consultas",
+                        principalColumn: "tenant_id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "organismo_transito_alias",
                 schema: "comparendos",
                 columns: table => new
@@ -1421,9 +1475,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 name: "ux_ciclo_ingesta_en_curso",
                 schema: "comparendos",
                 table: "ciclo_ingesta",
-                column: "canal",
+                columns: new[] { "canal", "tenant_id_manual" },
                 unique: true,
-                filter: "resultado = 'EnCurso'");
+                filter: "resultado = 'EnCurso'")
+                .Annotation("Npgsql:NullsDistinct", false);
 
             migrationBuilder.CreateIndex(
                 name: "ix_comparendo_avisos",
@@ -1563,6 +1618,19 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 schema: "comparendos",
                 table: "comunicacion_saliente",
                 columns: new[] { "tenant_id", "tipo", "estado" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_configuracion_consulta_canal_tenant_id_canal",
+                schema: "comparendos",
+                table: "configuracion_consulta_canal",
+                columns: new[] { "tenant_id", "canal" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_configuracion_consultas_estado",
+                schema: "comparendos",
+                table: "configuracion_consultas",
+                column: "estado");
 
             migrationBuilder.CreateIndex(
                 name: "ix_consulta_fuente_ciclo_id_canal_clave_consultada_municipio_c",
@@ -1957,6 +2025,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 schema: "comparendos");
 
             migrationBuilder.DropTable(
+                name: "configuracion_consulta_canal",
+                schema: "comparendos");
+
+            migrationBuilder.DropTable(
                 name: "configuracion_empresa",
                 schema: "comparendos");
 
@@ -2078,6 +2150,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "trabajo_programado",
+                schema: "comparendos");
+
+            migrationBuilder.DropTable(
+                name: "configuracion_consultas",
                 schema: "comparendos");
 
             migrationBuilder.DropTable(

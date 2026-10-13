@@ -20,11 +20,19 @@ public sealed class FuenteDePrueba : IFuenteComparendos
     public ConcurrentDictionary<string, Func<RespuestaFuente>> Respuestas { get; } = new();
     public ConcurrentDictionary<string, int> Llamadas { get; } = new();
 
-    public bool Atiende(CanalIngesta canal) => true;
+    public ConcurrentDictionary<string, string> ProveedorUsado { get; } = new();
 
-    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, CancellationToken ct)
+    public Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ProveedorFuente>>([
+            new ProveedorFuente("prueba", "Fuente de prueba", [CanalIngesta.SimitNit, CanalIngesta.SimitPlaca, CanalIngesta.MunicipalNit, CanalIngesta.MunicipalPlaca], true, null),
+            new ProveedorFuente("otra", "Otra fuente de prueba", [CanalIngesta.SimitNit], true, null),
+            new ProveedorFuente("sin_contrato", "Sin contrato", [CanalIngesta.SimitNit], false, "Falta el contrato."),
+        ]);
+
+    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct)
     {
         Llamadas.AddOrUpdate($"{clave.Canal}:{clave.Clave}", 1, (_, n) => n + 1);
+        ProveedorUsado[$"{clave.Canal}:{clave.Clave}"] = proveedor;
         return Task.FromResult(Respuestas.TryGetValue($"{clave.Canal}:{clave.Clave}", out var r) ? r() : RespuestaFuente.Exitosa([]));
     }
 }
@@ -37,9 +45,34 @@ public class ApiConFuente : ApiDePrueba
 
     public async Task<Guid> CicloAsync(CanalIngesta canal, Guid? empresa = null)
     {
+        await ConfigurarConsultasAsync();
         await using var scope = App.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<CicloDeIngesta>().EjecutarAsync(canal, empresa is null ? Disparo.Programado : Disparo.Manual, empresa, null, CancellationToken.None);
     }
+
+    /// <summary>
+    /// HU #13521: toda empresa que monitorea algo y no tiene configuración de consultas queda con los cuatro canales
+    /// encendidos con la fuente de prueba y activa (las pruebas de ingesta no son sobre el configurador).
+    /// </summary>
+    public Task ConfigurarConsultasAsync() => EnDbAsync(async db =>
+    {
+        var conConfig = await db.ConfiguracionesConsultas.Select(c => c.TenantId).ToListAsync();
+        var tenants = (await db.IdentificacionesMonitoreadas.Select(n => n.TenantId).Distinct().ToListAsync())
+            .Concat(await db.PlacasMonitoreadas.Select(p => p.TenantId).Distinct().ToListAsync()).Distinct().Except(conConfig).ToList();
+        foreach (var t in tenants)
+        {
+            db.ConfiguracionesConsultas.Add(new ConfiguracionConsultas { TenantId = t, Estado = EstadoConfiguracionConsultas.Activa, CreadoEn = DateTimeOffset.UtcNow });
+            foreach (var c in new[] { CanalIngesta.SimitNit, CanalIngesta.SimitPlaca, CanalIngesta.MunicipalNit, CanalIngesta.MunicipalPlaca })
+            {
+                db.ConfiguracionConsultaCanales.Add(new ConfiguracionConsultaCanal
+                {
+                    Id = Guid.NewGuid(), TenantId = t, Canal = c, Encendido = true, Proveedor = "prueba", Horas = ["07:00"], CreadoEn = DateTimeOffset.UtcNow,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    });
 }
 
 /// <summary>HU #13460 (trabajos y ciclos) y HU #13461 (reconciliación).</summary>
@@ -227,12 +260,18 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         var ct = TestContext.Current.CancellationToken;
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
 
-        (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/ingesta/trabajos/IngestaSimitNit", new { expresionCron = "99 * * * *" }, ct))
+        (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/ingesta/trabajos/ReporteSemanal", new { expresionCron = "99 * * * *" }, ct))
             .StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-        var ok = await super.PatchAsJsonAsync("/api/v1/comparendos/admin/ingesta/trabajos/IngestaSimitNit", new { expresionCron = "0 6,12 * * 1-5" }, ct);
+        var ok = await super.PatchAsJsonAsync("/api/v1/comparendos/admin/ingesta/trabajos/ReporteSemanal", new { expresionCron = "0 6,12 * * 1-5" }, ct);
         (await ok.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("expresionCron").GetString().Should().Be("0 6,12 * * 1-5");
 
-        var empresa = Guid.NewGuid();
+        // HU #13521: sin el canal configurado no hay ejecución manual; con él (aun en borrador) sí.
+        var empresa = await ComparendosDePrueba.EmpresaAsync(api);
+        await api.EnDbAsync(db => db.ConfiguracionConsultaCanales.Where(c => c.TenantId == empresa && c.Canal == CanalIngesta.MunicipalPlaca).ExecuteDeleteAsync(ct));
+        var sin = await super.PostAsJsonAsync("/api/v1/comparendos/admin/ingesta/ejecutar", new { canal = "MunicipalPlaca", empresaId = empresa }, ct);
+        sin.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await sin.Content.ReadAsStringAsync(ct)).Should().Contain("CONSULTA_NO_HABILITADA");
+        await ComparendosDePrueba.ConsultasActivasAsync(api, empresa);
         (await super.PostAsJsonAsync("/api/v1/comparendos/admin/ingesta/ejecutar", new { canal = "MunicipalPlaca", empresaId = empresa }, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.Accion == "EJECUTAR_MANUAL" && a.TenantId == empresa, ct))).Should().BeTrue();
     }
@@ -241,14 +280,28 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
 /// <summary>HU #13460 — el programador encola cada trabajo una sola vez por minuto aunque revisen dos réplicas.</summary>
 public sealed class ProgramadorTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
 {
+    /// <summary>HU #13521: la agenda de cada empresa; solo la ACTIVA con el canal encendido, una vez por minuto.</summary>
     [Fact]
     public async Task DosRevisionesDelMismoMinuto_EncolanUnaSolaVez()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
-        await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.IngestaSimitNit)
-            .ExecuteUpdateAsync(u => u.SetProperty(t => t.ExpresionCron, "* * * * *").SetProperty(t => t.UltimaEjecucionEn, (DateTimeOffset?)null)));
-        await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo != TipoTrabajo.IngestaSimitNit)
-            .ExecuteUpdateAsync(u => u.SetProperty(t => t.Activo, false)));
+        api.Reloj.Hoy(new DateOnly(2026, 10, 13));
+        var hora = Flit.Comparendos.Domain.Tiempo.ColombiaTime.From(api.Reloj.Ahora).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        var (activa, borrador, apagada) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await api.EnDbAsync(async db =>
+        {
+            await db.TrabajosProgramados.ExecuteUpdateAsync(u => u.SetProperty(t => t.Activo, false));
+            foreach (var (t, estado, encendido) in new[] { (activa, EstadoConfiguracionConsultas.Activa, true), (borrador, EstadoConfiguracionConsultas.Borrador, true), (apagada, EstadoConfiguracionConsultas.Activa, false) })
+            {
+                db.ConfiguracionesConsultas.Add(new Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionConsultas { TenantId = t, Estado = estado, CreadoEn = api.Reloj.Ahora });
+                db.ConfiguracionConsultaCanales.Add(new Flit.Comparendos.Api.Persistence.Modelo.ConfiguracionConsultaCanal
+                {
+                    Id = Guid.NewGuid(), TenantId = t, Canal = CanalIngesta.SimitNit, Encendido = encendido, Proveedor = "simulado", Horas = [hora, "23:59"], CreadoEn = api.Reloj.Ahora,
+                });
+            }
+
+            await db.SaveChangesAsync();
+        });
 
         var cola = api.App.Services.GetRequiredService<Flit.Comparendos.Api.Modulos.Trabajos.ColaTrabajos>();
         var replica1 = ActivatorUtilities.CreateInstance<Flit.Comparendos.Api.Modulos.Trabajos.ProgramadorTrabajos>(api.App.Services);
@@ -267,6 +320,7 @@ public sealed class ProgramadorTests(ApiDePrueba api) : IClassFixture<ApiDePrueb
         {
         }
 
-        leidas.Should().ContainSingle().Which.Tipo.Should().Be(TipoTrabajo.IngestaSimitNit);
+        var unica = leidas.Should().ContainSingle().Subject;
+        (unica.Tipo, unica.TenantId).Should().Be((TipoTrabajo.IngestaSimitNit, (Guid?)activa));
     }
 }

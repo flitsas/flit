@@ -65,7 +65,7 @@ public sealed class PortalTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         (await revocado.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString().Should().Be("Este enlace no está disponible.");
 
         var (_, otro) = await EmitirAsync();
-        await api.EnDbAsync(db => db.PortalEnlaces.Where(p => p.TokenHash == ServicioPortal.Hash(otro)).ExecuteUpdateAsync(u => u.SetProperty(p => p.ExpiraEn, DateTimeOffset.UtcNow.AddDays(-1))));
+        await api.EnDbAsync(db => db.PortalEnlaces.Where(p => p.TokenHash == ServicioPortal.Hash(otro)).ExecuteUpdateAsync(u => u.SetProperty(p => p.ExpiraEn, api.Reloj.Ahora.AddDays(-1))));
         (await api.Anonimo().GetAsync($"/api/v1/comparendos/publico/portal/{otro}", ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

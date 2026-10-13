@@ -31,9 +31,13 @@ public sealed class FuenteSimulada(Reloj reloj) : IFuenteComparendos
         ("C35", "No realizar la revisión técnico-mecánica en el plazo legal.", 604100m),
     ];
 
-    public bool Atiende(CanalIngesta canal) => true;
+    public const string Clave = "simulado";
 
-    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, CancellationToken ct)
+    public Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ProveedorFuente>>([new ProveedorFuente(Clave, "Simulado (solo DEV, sin core-consultas)",
+            [CanalIngesta.SimitNit, CanalIngesta.SimitPlaca, CanalIngesta.MunicipalNit, CanalIngesta.MunicipalPlaca], true, null)]);
+
+    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(clave);
         if (clave.Clave.EndsWith("000", StringComparison.Ordinal))
