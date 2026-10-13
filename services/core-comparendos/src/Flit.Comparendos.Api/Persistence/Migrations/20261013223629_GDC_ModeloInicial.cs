@@ -455,6 +455,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     origen = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     motivo = table.Column<string>(type: "text", nullable: true),
                     usuario_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    actor_nombre = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     registrado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>

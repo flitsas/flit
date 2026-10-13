@@ -69,6 +69,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             Origen = origen,
             Motivo = motivo?.Trim(),
             UsuarioId = actor.UsuarioId,
+            ActorNombre = actor.Nombre,
             RegistradoEn = ahora,
         });
 

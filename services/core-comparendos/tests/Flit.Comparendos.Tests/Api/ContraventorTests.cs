@@ -45,6 +45,8 @@ public sealed class ContraventorTests(ApiConFuente api) : IClassFixture<ApiConFu
         var historial = detalle.GetProperty("historialContraventor");
         historial.GetArrayLength().Should().Be(2);
         historial[0].GetProperty("motivo").GetString().Should().Be("Contrato cedido");
+        historial[0].GetProperty("actorNombre").GetString().Should().NotBeNullOrWhiteSpace("la traza dice quién reemplazó al conductor");
+        historial[0].GetProperty("datosAnteriores").GetString().Should().Contain("Conductor 111", "y quién era antes");
     }
 
     [Fact]

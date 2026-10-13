@@ -1779,6 +1779,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ActorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("actor_nombre");
+
                     b.Property<Guid>("ComparendoId")
                         .HasColumnType("uuid")
                         .HasColumnName("comparendo_id");

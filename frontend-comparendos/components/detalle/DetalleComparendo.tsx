@@ -166,6 +166,17 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
   );
 }
 
+/** «Nombre (CC 123)» desde la foto JSON que guarda el historial de conductores. */
+function conductorDeFoto(json: string | null): string | null {
+  if (!json) return null;
+  try {
+    const f = JSON.parse(json) as { nombres?: string; tipoDocumento?: string; numeroDocumento?: string };
+    return [f.nombres, f.numeroDocumento ? `(${f.tipoDocumento ?? ""} ${f.numeroDocumento})`.replace("( ", "(") : null].filter(Boolean).join(" ") || null;
+  } catch {
+    return null;
+  }
+}
+
 function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
   const k = d.contraventor;
   const consulta = consultaContraventor(d.estadoConsultaContraventor);
@@ -214,12 +225,22 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
       {d.historialContraventor.length > 0 && (
         <div className="flex flex-col gap-1">
           <h4 className="text-[11px] font-semibold uppercase opacity-60">Historial de conductores</h4>
-          {d.historialContraventor.map((h) => (
-            <p key={h.id} className="text-xs">
-              {formatoFechaHora(h.registradoEn)} · {ORIGEN_CONTRAVENTOR[h.origen] ?? h.origen}
-              {h.motivo ? ` · ${h.motivo}` : ""}
-            </p>
-          ))}
+          {d.historialContraventor.map((h) => {
+            const anterior = conductorDeFoto(h.datosAnteriores);
+            const nuevo = conductorDeFoto(h.datosNuevos);
+            return (
+              <div key={h.id} className="text-xs">
+                <p>
+                  {formatoFechaHora(h.registradoEn)} · {ORIGEN_CONTRAVENTOR[h.origen] ?? h.origen}
+                  {h.actorNombre ? ` · ${h.actorNombre}` : ""}
+                </p>
+                <p className="opacity-70">
+                  {anterior ? `${anterior} → ${nuevo ?? "—"}` : `Asignado: ${nuevo ?? "—"}`}
+                  {h.motivo ? ` · Motivo: ${h.motivo}` : ""}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

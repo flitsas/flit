@@ -179,7 +179,7 @@ export interface DetalleComparendo {
   tieneDp: boolean;
   gestionado: boolean;
   contraventor: Contraventor | null;
-  historialContraventor: { id: string; origen: string; motivo: string | null; datosAnteriores: string | null; datosNuevos: string; registradoEn: string }[];
+  historialContraventor: { id: string; origen: string; motivo: string | null; datosAnteriores: string | null; datosNuevos: string; actorNombre: string | null; registradoEn: string }[];
   documentos: { id: string; tipo: string; vigente: boolean; creadoEn: string; archivoId: string; nombre: string; contentType: string }[];
   solicitudesCambio: {
     id: string;

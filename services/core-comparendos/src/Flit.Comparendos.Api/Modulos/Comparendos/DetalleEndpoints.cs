@@ -41,7 +41,7 @@ public static class DetalleEndpoints
         var fuentes = await db.ComparendoFuentes.AsNoTracking().Where(f => f.ComparendoId == id).OrderBy(f => f.PrimeraVezEn)
             .Select(f => new { canal = f.Canal.ToString(), f.MunicipioCodigo, f.Presente, f.PrimeraVezEn, f.UltimaVezVistaEn, f.AusenteDesde }).ToListAsync(ct).ConfigureAwait(false);
         var historial = await db.ContraventorHistorial.AsNoTracking().Where(h => h.ComparendoId == id).OrderByDescending(h => h.RegistradoEn)
-            .Select(h => new { h.Id, origen = h.Origen.ToString(), h.Motivo, h.DatosAnteriores, h.DatosNuevos, h.RegistradoEn }).ToListAsync(ct).ConfigureAwait(false);
+            .Select(h => new { h.Id, origen = h.Origen.ToString(), h.Motivo, h.DatosAnteriores, h.DatosNuevos, h.ActorNombre, h.RegistradoEn }).ToListAsync(ct).ConfigureAwait(false);
         var documentos = await (from d in db.DocumentosSoporte.AsNoTracking()
                                 join a in db.Archivos.AsNoTracking() on d.ArchivoId equals a.Id
                                 where d.ComparendoId == id

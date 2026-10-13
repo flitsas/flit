@@ -32,6 +32,9 @@ public sealed class ContraventorHistorial
     public OrigenContraventor Origen { get; set; }
     public string? Motivo { get; set; }
     public Guid? UsuarioId { get; set; }
+
+    /// <summary>Quién lo hizo (usuario, «Sistema» o «Conductor» desde el portal), para la traza del detalle.</summary>
+    public string? ActorNombre { get; set; }
     public DateTimeOffset RegistradoEn { get; set; }
 }
 

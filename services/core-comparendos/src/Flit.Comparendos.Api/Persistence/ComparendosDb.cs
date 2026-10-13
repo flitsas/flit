@@ -433,6 +433,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasKey(x => x.Id);
             e.Property(x => x.DatosAnteriores).HasColumnType("jsonb");
             e.Property(x => x.DatosNuevos).HasColumnType("jsonb");
+            e.Property(x => x.ActorNombre).HasMaxLength(200);
             e.HasIndex(x => new { x.ComparendoId, x.RegistradoEn });
         });
         m.Entity<DocumentoSoporte>(e =>
