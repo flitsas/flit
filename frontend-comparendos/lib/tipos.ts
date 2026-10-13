@@ -212,7 +212,7 @@ export interface DetalleComparendo {
       respuestaRegistradaEn: string | null;
     } | null;
   } | null;
-  pago: { tipo: string; valorPagado: number; fechaPago: string; comprobanteArchivoId: string | null; origen: string; registradoEn: string } | null;
+  pago: { tipo: string; valorPagado: number; fechaPago: string; comprobanteArchivoId: string | null; origen: string; registradoEn: string; registradoPorNombre: string | null } | null;
   fuentes: { canal: string; municipioCodigo: string | null; presente: boolean; primeraVezEn: string; ultimaVezVistaEn: string; ausenteDesde: string | null }[];
   creadoEn: string;
   ultimoEventoEn: string;

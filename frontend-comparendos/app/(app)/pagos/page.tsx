@@ -23,6 +23,7 @@ interface Carga {
   filasValidas: number;
   filasInvalidas: number;
   cargadoEn: string;
+  cargadoPorNombre: string | null;
 }
 
 interface ResumenCarga extends Carga {
@@ -192,6 +193,7 @@ function CargaPagos() {
           columns={[
             { key: "fecha", header: "Cargada", render: (c) => formatoFechaHora(c.cargadoEn) },
             { key: "archivo", header: "Archivo", render: (c) => <span className="font-semibold">{c.nombreArchivo}</span> },
+            { key: "por", header: "Cargada por", render: (c) => c.cargadoPorNombre ?? "—" },
             { key: "estado", header: "Estado", render: (c) => <Chip e={estado(c.estado)} /> },
             { key: "total", header: "Filas", align: "right", render: (c) => c.totalFilas },
             { key: "validas", header: "Registradas", align: "right", render: (c) => c.filasValidas },

@@ -39,7 +39,7 @@ public static class PagosEndpoints
         var pago = new Pago
         {
             Id = Guid.CreateVersion7(), TenantId = c.TenantId, ComparendoId = c.Id, TipoPago = tipo, ValorPagado = valor, FechaPago = fecha, ComprobanteArchivoId = comprobante,
-            Origen = origen, CargaMasivaId = carga, RegistradoPor = usuario, RegistradoEn = ahora,
+            Origen = origen, CargaMasivaId = carga, RegistradoPor = usuario, RegistradoPorNombre = actor.Nombre, RegistradoEn = ahora,
         };
         c.Pagado = true;
         c.Gestionado = true;

@@ -242,6 +242,7 @@ public sealed class Pago
     public OrigenPago Origen { get; set; }
     public Guid? CargaMasivaId { get; set; }
     public Guid RegistradoPor { get; set; }
+    public string? RegistradoPorNombre { get; set; }
     public DateTimeOffset RegistradoEn { get; set; }
     public string? LegacyV1Id { get; set; }
 }

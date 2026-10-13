@@ -49,6 +49,9 @@ public sealed class PagosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         c.Gestionado.Should().BeTrue();
         var pago = await api.EnDbAsync(db => db.Pagos.SingleAsync(p => p.ComparendoId == id));
         (pago.TipoPago, pago.ValorPagado, pago.Origen).Should().Be((TipoPago.BC, 302050m, OrigenPago.Manual));
+        pago.RegistradoPorNombre.Should().NotBeNullOrWhiteSpace("el bloque de pago dice quién lo registró (§7.2)");
+        var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}", ct);
+        detalle.GetProperty("pago").GetProperty("registradoPorNombre").GetString().Should().Be(pago.RegistradoPorNombre);
         (await api.EnDbAsync(db => db.Timeline.AnyAsync(e => e.ComparendoId == id && e.Tipo == TipoEventoTimeline.PagoRegistrado))).Should().BeTrue();
 
         var otra = await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/pago", Pago("PC", "100", "2026-10-08"), ct);

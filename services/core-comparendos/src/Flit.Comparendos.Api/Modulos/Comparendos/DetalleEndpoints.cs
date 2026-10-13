@@ -129,7 +129,7 @@ public static class DetalleEndpoints
                     sentido = dp.RespuestaSentido.ToString(), origen = dp.RespuestaOrigen?.ToString(), dp.RespuestaRadicadoOt, dp.RespuestaFecha, dp.RespuestaArchivoId, dp.RespuestaRegistradaEn,
                 },
             },
-            pago = pago is null ? null : new { tipo = pago.TipoPago.ToString(), pago.ValorPagado, pago.FechaPago, pago.ComprobanteArchivoId, origen = pago.Origen.ToString(), pago.RegistradoEn },
+            pago = pago is null ? null : new { tipo = pago.TipoPago.ToString(), pago.ValorPagado, pago.FechaPago, pago.ComprobanteArchivoId, origen = pago.Origen.ToString(), pago.RegistradoEn, pago.RegistradoPorNombre },
             fuentes,
             c.CreadoEn,
             c.UltimoEventoEn,

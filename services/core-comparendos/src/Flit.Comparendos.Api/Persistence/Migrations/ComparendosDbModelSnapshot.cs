@@ -2907,6 +2907,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("registrado_por");
 
+                    b.Property<string>("RegistradoPorNombre")
+                        .HasColumnType("text")
+                        .HasColumnName("registrado_por_nombre");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");

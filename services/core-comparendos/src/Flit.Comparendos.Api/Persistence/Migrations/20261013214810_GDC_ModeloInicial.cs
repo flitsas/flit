@@ -758,6 +758,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     origen = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     carga_masiva_id = table.Column<Guid>(type: "uuid", nullable: true),
                     registrado_por = table.Column<Guid>(type: "uuid", nullable: false),
+                    registrado_por_nombre = table.Column<string>(type: "text", nullable: true),
                     registrado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     legacy_v1id = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: true)
                 },

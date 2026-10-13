@@ -285,7 +285,7 @@ function Pago({ d, extra }: { d: Detalle; extra?: ReactNode }) {
             ["Tipo", tipos[p.tipo] ?? p.tipo],
             ["Valor pagado", formatoPesos(p.valorPagado)],
             ["Fecha de pago", formatoFecha(p.fechaPago)],
-            ["Registrado", formatoFechaHora(p.registradoEn)],
+            ["Registrado", `${formatoFechaHora(p.registradoEn)}${p.registradoPorNombre ? ` · ${p.registradoPorNombre}` : ""}`],
             ["Comprobante", p.comprobanteArchivoId ? <Archivo key="c" id={p.comprobanteArchivoId} nombre="Comprobante" /> : null],
           ]}
         />
