@@ -51,4 +51,21 @@ public sealed class AliasTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         ids.Should().HaveCount(3);
         (await api.EnDbAsync(db => db.OrganismosTransitoAlias.AnyAsync(a => a.TextoNormalizado == "TEXTO QUE NINGUN ALIAS CONOCE", ct))).Should().BeFalse("el número no crea alias del texto");
     }
+
+    [Fact]
+    public async Task F10_SinCodigoExacto_ElMunicipioDiceElOt_SoloSiTieneUnoSolo()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api);
+        await IngresarAsync(api, empresa,
+            Item("70670001000012345678") with { Secretaria = "Sampues - Dptal Sucre" },
+            Item("A0912345") with { Secretaria = "Galapa" },
+            Item("B0912345") with { Secretaria = "Bogota" });
+        var ot = await api.EnDbAsync(db => db.Comparendos.Where(c => c.TenantId == empresa).ToDictionaryAsync(c => c.NumeroNormalizado, c => c.OrganismoTransitoId, ct));
+        ot["70670001000012345678"].Should().Be(Guid.Parse("08a3a8be-5545-5b64-a4ca-fb297596d3cc"), "la sede 70670001 del SIMIT es el OT 70670000, el único de Sampués");
+        ot["A0912345"].Should().Be(Guid.Parse("4f826d49-48b8-53e6-a94e-b9432919fe67"), "Galapa tiene un solo OT");
+        ot["B0912345"].Should().BeNull("Bogotá tiene varios OT: el municipio no alcanza para elegir");
+    }
 }

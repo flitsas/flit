@@ -11,16 +11,23 @@ namespace Flit.Comparendos.Api.Modulos.Catalogos;
 /// si no hay, coincidencia exacta con el nombre o el código del OT, que queda guardada como alias AUTOMATICO para la
 /// próxima vez. Si el texto no coincide, el número nacional del comparendo dice el OT: sus primeras 8 cifras son el
 /// código del organismo (V1, BackCrudInfraction trafficSecretaryRepository.findByInfractionNumber); aquí solo con
-/// coincidencia exacta, sin el recorte a 5 cifras de V1, y sin crear alias (el alias es del texto). Sin coincidencia,
-/// el comparendo queda sin OT (RN-044) hasta que el SuperAdmin cree el alias.
+/// coincidencia exacta y sin crear alias (el alias es del texto). Si el código exacto no está, se usa el municipio:
+/// las 5 primeras cifras del número (DIVIPOLA) o el texto igual al nombre del municipio, solo cuando ese municipio
+/// tiene un único OT en el catálogo. Lo pide la respuesta real del SIMIT: las sedes departamentales llegan con su
+/// código de oficina (70670001 frente a 70670000 del catálogo) y algunas secretarías solo con el municipio («Galapa»).
+/// Sin coincidencia, el comparendo queda sin OT (RN-044) hasta que el SuperAdmin cree el alias.
 /// </summary>
 public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
 {
     private readonly Dictionary<string, Guid?> _cache = new(StringComparer.Ordinal);
     private Dictionary<string, Guid>? _porCodigo;
+    private Dictionary<string, Guid>? _porDivipola;
+    private Dictionary<string, Guid>? _porMunicipio;
 
     public async Task<Guid?> MapearAsync(string? secretaria, CancellationToken ct, string? numeroComparendo = null) =>
-        await PorTextoAsync(secretaria, ct).ConfigureAwait(false) ?? await PorNumeroAsync(numeroComparendo, ct).ConfigureAwait(false);
+        await PorTextoAsync(secretaria, ct).ConfigureAwait(false)
+        ?? await PorNumeroAsync(numeroComparendo, ct).ConfigureAwait(false)
+        ?? await PorMunicipioAsync(secretaria, numeroComparendo, ct).ConfigureAwait(false);
 
     /// <summary>
     /// El OT según el número nacional del comparendo (≥ 16 dígitos: código del organismo de 8 cifras + consecutivo).
@@ -36,6 +43,25 @@ public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
             .Where(g => g.Count() == 1)
             .ToDictionary(g => g.Key, g => g.Single().Id, StringComparer.Ordinal);
         return _porCodigo.TryGetValue(numero[..8], out var id) ? id : null;
+    }
+
+    /// <summary>El único OT del municipio, por las 5 primeras cifras del número nacional o por el texto de la secretaría.</summary>
+    public async Task<Guid?> PorMunicipioAsync(string? secretaria, string? numero, CancellationToken ct)
+    {
+        if (_porDivipola is null || _porMunicipio is null)
+        {
+            var todos = await db.OrganismosTransito.AsNoTracking().Select(o => new { o.Id, o.Codigo, o.Municipio }).ToListAsync(ct).ConfigureAwait(false);
+            _porDivipola = todos.Where(o => o.Codigo.Length is > 0 and <= 8 && o.Codigo.All(char.IsAsciiDigit))
+                .GroupBy(o => o.Codigo.PadLeft(8, '0')[..5]).Where(g => g.Count() == 1)
+                .ToDictionary(g => g.Key, g => g.Single().Id, StringComparer.Ordinal);
+            _porMunicipio = todos.Select(o => (o.Id, Texto: TextoNormalizado.De(o.Municipio))).Where(o => o.Texto.Length > 0)
+                .GroupBy(o => o.Texto).Where(g => g.Count() == 1)
+                .ToDictionary(g => g.Key, g => g.Single().Id, StringComparer.Ordinal);
+        }
+
+        if (numero is { Length: >= 16 } && numero.All(char.IsAsciiDigit) && _porDivipola.TryGetValue(numero[..5], out var porNumero))
+            return porNumero;
+        return _porMunicipio.TryGetValue(TextoNormalizado.De(secretaria), out var porTexto) ? porTexto : null;
     }
 
     private async Task<Guid?> PorTextoAsync(string? secretaria, CancellationToken ct)
