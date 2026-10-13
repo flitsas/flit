@@ -79,7 +79,8 @@ public static class ConsultasEmpresaEndpoints
                 ["descripcion"] = agenda is not null && c!.Proveedor.Length > 0 ? agenda.Describir() : null,
                 ["ultimaConsulta"] = c?.UltimaEjecucionEn,
                 ["ultimoResultado"] = c?.UltimoResultado?.ToString(),
-                ["proximaConsulta"] = proxima,
+                // Con su zona (-05:00), igual que la última consulta lleva la suya: el cliente no adivina.
+                ["proximaConsulta"] = proxima is { } p ? new DateTimeOffset(p, Domain.Tiempo.ColombiaTime.Offset) : null,
                 ["proveedor"] = conProveedores ? c?.Proveedor : null,
             }.Where(kv => conProveedores || kv.Key != "proveedor").ToDictionary(kv => kv.Key, kv => kv.Value);
         }).ToList();

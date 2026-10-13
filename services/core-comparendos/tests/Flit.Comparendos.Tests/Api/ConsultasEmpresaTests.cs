@@ -131,7 +131,7 @@ public sealed class ConsultasEmpresaTests(ApiConProductos api) : IClassFixture<A
         vista.GetProperty("estado").GetString().Should().Be("Activa");
         var simit = vista.GetProperty("canales").EnumerateArray().Single(c => c.GetProperty("canal").GetString() == "SimitNit");
         simit.GetProperty("descripcion").GetString().Should().Be("Días hábiles a las 07:00, 13:00");
-        simit.GetProperty("proximaConsulta").GetDateTime().Should().Be(new DateTime(2026, 10, 13, 13, 0, 0), "son las 09:00 del martes 13");
+        simit.GetProperty("proximaConsulta").GetDateTimeOffset().Should().Be(new DateTimeOffset(2026, 10, 13, 13, 0, 0, TimeSpan.FromHours(-5)), "son las 09:00 del martes 13");
 
         var admin = await Super.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/admin/empresas/{empresa}/consultas", Ct);
         admin.GetProperty("productoHabilitado").GetBoolean().Should().BeTrue();
