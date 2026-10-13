@@ -99,8 +99,10 @@ el producto.
 
 **Fuentes (HU #13520).** Van por core-consultas (`FuentesComparendosService`, el mismo gRPC 8084 y scope
 `platform.consultas` que ya tiene `svc-comparendos`). Para usar Verifik SIMIT en un ambiente: en core-consultas
-`Consultations__VerifikSimitMode=real` y la llave `VERIFIK_*` (las mismas de Trámites). SmartCloud y municipal
-aparecen como «no conectados» hasta tener contrato.
+`Consultations__VerifikSimitMode=real` y la llave `VERIFIK_*` (las mismas de Trámites). SmartCloud (los servicios SOAP
+del SIMIT) y la API municipal usan el contrato del BackCrudSmartCloud de V1: en el `.env`, `SMARTCLOUD_ACCESS_KEY`
+(el `SMART_CLOUD_ACCESS_KEY` de V1) y `MUNICIPAL_INFRACCIONES_BASE_URL` (el `MUNICIPALITY_INFRACTION_API_BASE_URL` de
+V1). Vacías, aparecen como «no conectados». La fuente municipal solo consulta por identificación.
 
 `NOTIFICACIONES_REMOTO_ADDRESS` (la misma de core-api) apunta los correos a core-notificaciones. Si quedara vacía, los
 correos se escriben en el log y no salen: revisarla.
@@ -155,8 +157,8 @@ Trámites (§6.1 y §6.2 de handoff-vps-suite.md):
 
 | Pieza | Qué falta | Variables |
 |---|---|---|
-| SmartCloud por identificación y por placa (#13465, #13466) | WSDL, credenciales y una respuesta real (también la de un NIT sin comparendos) | Adaptador en core-consultas; variables de core-consultas |
-| API municipal (#13467) | Esquema de la respuesta y autenticación | Adaptador en core-consultas; variables de core-consultas |
+| SmartCloud por identificación y por placa (#13465, #13466) | Conector hecho. Falta una consulta real que confirme que la placa también lleva la clave delante y qué `error_Cod` devuelve el SIMIT para «sin comparendos» | `SMARTCLOUD_ACCESS_KEY` en core-consultas |
+| API municipal (#13467) | Conector hecho con el contrato de V1. Falta confirmar que sigue vigente (o el contrato nuevo) | `MUNICIPAL_INFRACCIONES_BASE_URL` en core-consultas |
 | API de contratos de Renting | Contrato (placa + fecha → conductor) | `COMPARENDOS_RENTING_API_URL`, `COMPARENDOS_RENTING_API_KEY` |
 | OCR | Llave de Anthropic y comparación con una muestra real | `COMPARENDOS_OCR_API_KEY` |
 

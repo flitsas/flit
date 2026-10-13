@@ -54,16 +54,65 @@ internal static class Fuente
 
     public static string Pesos(decimal v) => v.ToString("0.00", CultureInfo.InvariantCulture);
 
-    /// <summary>Fechas de proveedores: ISO, dd/MM/yyyy o con hora. Null si no se entiende (no se inventa).</summary>
-    public static string? Fecha(string? s)
+    private static readonly string[] FormatosFecha =
+    [
+        "yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ss.fffZ", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss.f", "yyyy-MM-dd HH:mm",
+        "dd/MM/yyyy", "d/M/yyyy", "dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy HH:mm", "d/M/yyyy H:mm", "dd-MM-yyyy",
+    ];
+
+    private static readonly Dictionary<string, int> Meses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["enero"] = 1, ["febrero"] = 2, ["marzo"] = 3, ["abril"] = 4, ["mayo"] = 5, ["junio"] = 6, ["julio"] = 7, ["agosto"] = 8,
+        ["septiembre"] = 9, ["setiembre"] = 9, ["octubre"] = 10, ["noviembre"] = 11, ["diciembre"] = 12,
+    };
+
+    private static DateTime? Instante(string? s)
     {
         if (string.IsNullOrWhiteSpace(s))
             return null;
         var t = s.Trim();
-        string[] formatos = ["yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ss.fffZ", "yyyy-MM-dd HH:mm:ss", "dd/MM/yyyy", "d/M/yyyy", "dd/MM/yyyy HH:mm:ss", "dd-MM-yyyy"];
-        if (DateTime.TryParseExact(t, formatos, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var d))
-            return d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        return DateTimeOffset.TryParse(t, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var o) ? o.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null;
+        if (DateTime.TryParseExact(t, FormatosFecha, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var d))
+            return d;
+
+        // La fuente municipal escribe «5 de Marzo de 2025» (V1, municipalityInfractionService.ts, parseStringDate).
+        var m = System.Text.RegularExpressions.Regex.Match(t, @"^(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de|del)\s+(\d{4})", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m.Success && Meses.TryGetValue(m.Groups[2].Value, out var mes)
+            && int.TryParse(m.Groups[1].Value, CultureInfo.InvariantCulture, out var dia) && int.TryParse(m.Groups[3].Value, CultureInfo.InvariantCulture, out var anio)
+            && dia <= DateTime.DaysInMonth(anio, mes))
+            return new DateTime(anio, mes, dia, 0, 0, 0, DateTimeKind.Utc);
+
+        return DateTimeOffset.TryParse(t, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var o) ? o.UtcDateTime : null;
+    }
+
+    /// <summary>Fechas de proveedores: ISO, dd/MM/yyyy, con hora o «5 de Marzo de 2025». Null si no se entiende (no se inventa).</summary>
+    public static string? Fecha(string? s) => Instante(s)?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    /// <summary>La hora cuando la fecha la trae (HH:mm); null si no trae hora o es medianoche exacta (fecha sin hora).</summary>
+    public static string? Hora(string? s) =>
+        Instante(s) is { } d && d.TimeOfDay != TimeSpan.Zero ? d.ToString("HH:mm", CultureInfo.InvariantCulture) : null;
+
+    /// <summary>S/N, SI/NO, true/false, 1/0. Null si no se entiende.</summary>
+    public static bool? SiNo(string? s) => s?.Trim().ToUpperInvariant() switch
+    {
+        "S" or "SI" or "SÍ" or "TRUE" or "1" or "Y" => true,
+        "N" or "NO" or "FALSE" or "0" => false,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Un valor en pesos como texto: «604100», «604100.00», «604.100», «604.100,00» o «$ 604.100». Con coma, la coma es
+    /// decimal (es-CO); sin coma, un punto seguido de exactamente tres dígitos es de miles. Null si no se entiende.
+    /// </summary>
+    public static string? PesosDeTexto(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            return null;
+        var t = s.Replace("$", string.Empty, StringComparison.Ordinal).Replace(" ", string.Empty, StringComparison.Ordinal).Trim();
+        if (t.Contains(',', StringComparison.Ordinal))
+            t = t.Replace(".", string.Empty, StringComparison.Ordinal).Replace(',', '.');
+        else if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^\d{1,3}(\.\d{3})+$"))
+            t = t.Replace(".", string.Empty, StringComparison.Ordinal);
+        return decimal.TryParse(t, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var v) ? Pesos(v) : null;
     }
 }
 
@@ -171,21 +220,6 @@ internal sealed class ProveedorVerifikSimit(IHttpClientFactory http, IOptions<Ve
         if ((m.EstadoComparendo ?? m.EstadoCartera) is { Length: > 0 } estado) c.EstadoFuente = estado.Trim();
         return c;
     }
-}
-
-/// <summary>Proveedor conocido pero sin contrato todavía (SmartCloud, fuente municipal): aparece como no conectado.</summary>
-internal sealed class ProveedorSinContrato(string clave, string nombre, CanalComparendos[] canales, string motivo) : IProveedorComparendos
-{
-    public string Clave => clave;
-
-    public string Nombre => nombre;
-
-    public IReadOnlyList<CanalComparendos> Canales => canales;
-
-    public string? NoConectado => motivo;
-
-    public Task<ConsultarComparendosResponse> ConsultarAsync(ConsultarComparendosRequest pedido, CancellationToken ct) =>
-        throw new InvalidOperationException(motivo);
 }
 
 /// <summary>

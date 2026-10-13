@@ -72,8 +72,7 @@ public static class Program
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
 
         // HU #13520: fuentes de Gestión de Comparendos (separadas de ConsultarMultas). Verifik SIMIT con las mismas
-        // credenciales de Trámites; SmartCloud y la fuente municipal entran cuando lleguen sus contratos; el simulado solo
-        // en DEV (Development o Consultations:ComparendosSimulados=true).
+        // credenciales de Trámites; el simulado solo en DEV (Development o Consultations:ComparendosSimulados=true).
         builder.Services.AddHttpClient(Comparendos.ProveedorVerifikSimit.HttpClientName, (sp, c) =>
         {
             var o = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Flit.Infrastructure.Consultations.VerifikOptions>>().Value;
@@ -81,10 +80,13 @@ public static class Program
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
         builder.Services.AddScoped<Comparendos.IProveedorComparendos, Comparendos.ProveedorVerifikSimit>();
-        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(new Comparendos.ProveedorSinContrato("smartcloud", "SmartCloud (SIMIT)",
-            Comparendos.Fuente.Simit, "Falta el contrato de SmartCloud (WSDL, credenciales y una respuesta real)."));
-        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(new Comparendos.ProveedorSinContrato("municipal", "API municipal",
-            Comparendos.Fuente.Municipal, "Falta el contrato de la API municipal (esquema y autenticación)."));
+        // SmartCloud = los SOAP del SIMIT y la API municipal, con el contrato del BackCrudSmartCloud de V1 (HU #13465-#13467).
+        var smartCloud = Comparendos.SmartCloudOpciones.Desde(builder.Configuration);
+        builder.Services.AddHttpClient(Comparendos.ProveedorSmartCloud.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(smartCloud.TimeoutSegundos));
+        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSmartCloud(sp.GetRequiredService<IHttpClientFactory>(), smartCloud));
+        var municipal = Comparendos.MunicipalOpciones.Desde(builder.Configuration);
+        builder.Services.AddHttpClient(Comparendos.ProveedorMunicipal.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(municipal.TimeoutSegundos));
+        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorMunicipal(sp.GetRequiredService<IHttpClientFactory>(), municipal));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 

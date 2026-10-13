@@ -480,6 +480,15 @@ services:
       RUES_API_KEY: ${RUES_API_KEY:-}
       RUES_AUTH_SCHEME: ${RUES_AUTH_SCHEME:-Bearer}
       RUES_TIMEOUT_SECONDS: ${RUES_TIMEOUT_SECONDS:-30}
+      # HU #13465-#13467: fuentes de Gestión de Comparendos. SmartCloud = los SOAP del SIMIT (clave de acceso de V1,
+      # SMART_CLOUD_ACCESS_KEY); la API municipal, la de V1 (MUNICIPALITY_INFRACTION_API_BASE_URL). Vacías = no conectadas.
+      SMARTCLOUD_ACCESS_KEY: ${SMARTCLOUD_ACCESS_KEY:-}
+      SMARTCLOUD_URL_IDENTIFICACION: ${SMARTCLOUD_URL_IDENTIFICACION:-https://www3.simit.org.co/ServiciosSimit/EstadoCuentaIdentificacion}
+      SMARTCLOUD_URL_PLACA: ${SMARTCLOUD_URL_PLACA:-https://www3.simit.org.co/ServiciosSimit/EstadoCuentaPlaca}
+      SMARTCLOUD_TIMEOUT_SECONDS: ${SMARTCLOUD_TIMEOUT_SECONDS:-60}
+      MUNICIPAL_INFRACCIONES_BASE_URL: ${MUNICIPAL_INFRACCIONES_BASE_URL:-}
+      MUNICIPAL_INFRACCIONES_PATH: ${MUNICIPAL_INFRACCIONES_PATH:-/infraction/api/Infraccion/EntregarInfraccion}
+      MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS: ${MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS:-60}
     healthcheck:
       # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]
