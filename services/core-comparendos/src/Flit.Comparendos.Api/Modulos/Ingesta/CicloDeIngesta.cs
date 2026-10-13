@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using Flit.Comparendos.Api.Infraestructura.Archivos;
 using Flit.Comparendos.Api.Modulos.Calendario;
+using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Modulos.Ingesta.Fuentes;
 using Flit.Comparendos.Api.Modulos.Trabajos;
 using Flit.Comparendos.Api.Persistence;
@@ -124,7 +125,9 @@ public sealed partial class CicloDeIngesta(
         return ciclo.Id;
     }
 
-    private sealed record ClaveMonitoreada(Guid TenantId, Guid? IdentificacionId, Guid? PlacaId, IReadOnlyList<ClaveConsulta> Variantes, string Etiqueta, string Proveedor = "");
+    /// <param name="Documento">Número de la identificación consultada (sin DV); null en los canales por placa.</param>
+    /// <param name="EtiquetaLog">Etiqueta para logs y nombres de archivo: el documento de una persona va enmascarado (RN-011).</param>
+    private sealed record ClaveMonitoreada(Guid TenantId, Guid? IdentificacionId, Guid? PlacaId, IReadOnlyList<ClaveConsulta> Variantes, string Etiqueta, string EtiquetaLog, string? Documento, string Proveedor = "");
 
     private async Task CorrerAsync(CicloIngesta ciclo, Dictionary<Guid, string> proveedores, CancellationToken ct)
     {
@@ -142,13 +145,15 @@ public sealed partial class CicloDeIngesta(
                 monitoreadas = nits.Select(n => new ClaveMonitoreada(n.TenantId, n.Id, null,
                     (n.TipoDocumento == TipoDocumento.NIT ? Nit.Variantes(n.NumeroBase) : [n.NumeroBase])
                         .Select(v => new ClaveConsulta(ciclo.Canal, n.TipoDocumento, v)).ToList(),
-                    n.DigitoVerificacion is { } dv ? $"{n.TipoDocumento} {n.NumeroBase}-{dv}" : $"{n.TipoDocumento} {n.NumeroBase}")).ToList();
+                    n.DigitoVerificacion is { } dv ? $"{n.TipoDocumento} {n.NumeroBase}-{dv}" : $"{n.TipoDocumento} {n.NumeroBase}",
+                    n.TipoDocumento == TipoDocumento.NIT ? $"NIT {n.NumeroBase}" : $"{n.TipoDocumento} {HtmlCorreo.Enmascarar(n.NumeroBase)}",
+                    n.NumeroBase)).ToList();
             }
             else
             {
                 var placas = await db.PlacasMonitoreadas.AsNoTracking().Where(p => p.Activo)
                     .Where(p => ciclo.TenantIdManual == null || p.TenantId == ciclo.TenantIdManual).ToListAsync(ct).ConfigureAwait(false);
-                monitoreadas = placas.Select(p => new ClaveMonitoreada(p.TenantId, null, p.Id, [new ClaveConsulta(ciclo.Canal, null, p.Placa)], $"placa {p.Placa}")).ToList();
+                monitoreadas = placas.Select(p => new ClaveMonitoreada(p.TenantId, null, p.Id, [new ClaveConsulta(ciclo.Canal, null, p.Placa)], $"placa {p.Placa}", $"placa {p.Placa}", null)).ToList();
             }
         }
 
@@ -187,7 +192,7 @@ public sealed partial class CicloDeIngesta(
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        LogFalloReparto(logger, ciclo.Canal, m.Etiqueta, ex);
+                        LogFalloReparto(logger, ciclo.Canal, m.EtiquetaLog, ex);
                         ciclo.ClavesError++;
                         break;
                     }
@@ -230,10 +235,12 @@ public sealed partial class CicloDeIngesta(
                 ex.Message, duracionMs: (int)(reloj.Ahora - inicio).TotalMilliseconds);
         }
 
-        // Municipal: un municipio activo que no vino en la respuesta cuenta como error de ese municipio (S-48).
+        // Municipal: un municipio activo que no vino en la respuesta cuenta como error de ese municipio (S-48), y lo que
+        // traiga de un municipio desactivado en el parametrizador no se procesa (§6.4.1).
         var parciales = respuesta.Parciales.ToList();
         if (municipiosActivos.Count > 0 && parciales.All(p => p.MunicipioCodigo is not null))
         {
+            parciales.RemoveAll(p => !municipiosActivos.Contains(p.MunicipioCodigo!));
             foreach (var faltante in municipiosActivos.Where(m => parciales.All(p => p.MunicipioCodigo != m)))
                 parciales.Add(new ResultadoParcial(faltante, ResultadoConsulta.Error, [], TipoErrorFuente.RespuestaInvalida, "El municipio no vino en la respuesta."));
         }
@@ -244,13 +251,14 @@ public sealed partial class CicloDeIngesta(
         if (respuesta.CuerpoCrudo is { Length: > 0 } cuerpo)
         {
             var almacen = scope.ServiceProvider.GetRequiredService<IAlmacenArchivos>();
-            var guardado = await almacen.GuardarAsync(Guid.Empty, "respuesta_fuente", $"{ciclo.Canal}-{clave.Clave}.txt", respuesta.ContentType ?? "text/plain", Encoding.UTF8.GetBytes(cuerpo), ct).ConfigureAwait(false);
+            var nombre = $"{ciclo.Canal}-{(clave.TipoDocumento is null or TipoDocumento.NIT ? clave.Clave : HtmlCorreo.Enmascarar(clave.Clave).Replace('*', 'x'))}.txt";
+            var guardado = await almacen.GuardarAsync(Guid.Empty, "respuesta_fuente", nombre, respuesta.ContentType ?? "text/plain", Encoding.UTF8.GetBytes(cuerpo), ct).ConfigureAwait(false);
             var archivo = new Archivo
             {
                 Id = Guid.CreateVersion7(),
                 Referencia = guardado.Referencia,
                 Dominio = "respuesta_fuente",
-                NombreOriginal = $"{ciclo.Canal}-{clave.Clave}.txt",
+                NombreOriginal = nombre,
                 ContentType = respuesta.ContentType ?? "text/plain",
                 TamanoBytes = guardado.Tamano,
                 Sha256 = guardado.Sha256,
@@ -314,7 +322,7 @@ public sealed partial class CicloDeIngesta(
             if (exitosas.Count > 0)
             {
                 var reconciliador = scope.ServiceProvider.GetRequiredService<Reconciliador>();
-                var clave = new ClaveEmpresa(m.TenantId, ciclo.Canal, m.IdentificacionId, m.PlacaId, municipio, m.Etiqueta);
+                var clave = new ClaveEmpresa(m.TenantId, ciclo.Canal, m.IdentificacionId, m.PlacaId, municipio, m.Etiqueta, m.Documento);
                 var c = await reconciliador.AplicarAsync(clave, ciclo.Id, exitosas.SelectMany(h => h.Parcial.Items).ToList(), reconciliar, motor, ct).ConfigureAwait(false);
                 (log.CantidadObtenidas, log.CantidadNuevas, log.CantidadActualizadas, log.CantidadSinCambios) = (c.Obtenidas, c.Nuevas, c.Actualizadas, c.SinCambios);
                 (log.CantidadDuplicadasOtraFuente, log.CantidadInactivadas, log.CantidadReactivadas, log.CantidadDpFavorableAutomatico) = (c.DuplicadasOtraFuente, c.Inactivadas, c.Reactivadas, c.DpFavorableAutomatico);

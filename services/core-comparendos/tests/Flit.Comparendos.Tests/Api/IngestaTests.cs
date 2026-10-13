@@ -214,6 +214,40 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     }
 
     [Fact]
+    public async Task HU13461_GuardaLaIdentificacionConsultada()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaConNit("900444666");
+        api.Fuente.Respuestas["SimitNit:900444666"] = () => RespuestaFuente.Exitosa([Item("C-0044")]);
+        await api.CicloAsync(CanalIngesta.SimitNit, empresa);
+        (await Comparendo(empresa, "C0044"))!.NitConsultado.Should().Be("900444666", "la bandeja y el export muestran qué identificación lo trajo");
+    }
+
+    [Fact]
+    public async Task HU13467_MunicipioDesactivado_NoSeProcesa()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaConNit("900444777");
+        await api.EnDbAsync(async db =>
+        {
+            db.MunicipiosFuente.AddRange(
+                new MunicipioFuente { Id = Guid.NewGuid(), CodigoFuente = "PRB-ACT", Nombre = "Municipio activo de prueba", Activo = true },
+                new MunicipioFuente { Id = Guid.NewGuid(), CodigoFuente = "PRB-INA", Nombre = "Municipio desactivado de prueba", Activo = false });
+            await db.SaveChangesAsync();
+        });
+        api.Fuente.Respuestas["MunicipalNit:900444777"] = () => new RespuestaFuente(
+        [
+            new ResultadoParcial("PRB-ACT", ResultadoConsulta.ExitosaConDatos, [Item("M-0001")]),
+            new ResultadoParcial("PRB-INA", ResultadoConsulta.ExitosaConDatos, [Item("M-0002")]),
+        ], 200, 10, null);
+
+        await api.CicloAsync(CanalIngesta.MunicipalNit, empresa);
+
+        (await Comparendo(empresa, "M0001")).Should().NotBeNull();
+        (await Comparendo(empresa, "M0002")).Should().BeNull("el SuperAdmin desactivó ese municipio en el parametrizador");
+    }
+
+    [Fact]
     public async Task HU13461_Reaparece_SeReactivaSalvoInactivadoPorOperador()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

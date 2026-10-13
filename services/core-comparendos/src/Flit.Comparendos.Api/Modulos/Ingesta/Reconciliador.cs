@@ -17,7 +17,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Comparendos.Api.Modulos.Ingesta;
 
 /// <summary>La clave monitoreada de una empresa que se está reconciliando (un NIT con sus variantes, o una placa).</summary>
-public sealed record ClaveEmpresa(Guid TenantId, CanalIngesta Canal, Guid? IdentificacionId, Guid? PlacaId, string? MunicipioCodigo, string Etiqueta);
+/// <param name="Documento">Identificación consultada (sin DV), para <c>nit_consultado</c>; null en los canales por placa.</param>
+public sealed record ClaveEmpresa(Guid TenantId, CanalIngesta Canal, Guid? IdentificacionId, Guid? PlacaId, string? MunicipioCodigo, string Etiqueta, string? Documento = null);
 
 /// <summary>Contadores de una clave para el log de migración.</summary>
 public sealed class Contadores
@@ -112,6 +113,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
             UltimoEventoEn = ahora,
         };
         AplicarCampos(c, item);
+        c.NitConsultado = clave.Documento;
         c.EnCobroCoactivo = EsCobroCoactivo(c.EstadoFuente);
         if (c.NombreInfractor is null && clave.IdentificacionId is { } idNit)
         {
@@ -145,6 +147,8 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
             }
         }
 
+        // La identificación que lo trajo primero se conserva; si entró por placa, la primera que lo reporte la llena.
+        c.NitConsultado ??= clave.Documento;
         foto.Presente = true;
         foto.AusenteDesde = null;
         foto.UltimaVezVistaEn = ahora;
