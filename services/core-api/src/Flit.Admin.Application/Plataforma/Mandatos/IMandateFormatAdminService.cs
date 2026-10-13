@@ -107,4 +107,15 @@ public interface IMandateFormatAdminService
         UpdateMandateFormatRequest request,
         Guid? userId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// «Restablecer redacción de fábrica»: descarta la plantilla editada por el Super Admin y el formato vuelve al texto
+    /// original del sistema. Conserva el nombre, el tipo y el historial de versiones. <c>formato_sin_plantilla</c> si el
+    /// formato no tiene redacción propia.
+    /// </summary>
+    Task<MandateFormatUpdateResult> ResetTemplateAsync(
+        string code,
+        long? rowVersion,
+        Guid? userId,
+        CancellationToken ct = default);
 }

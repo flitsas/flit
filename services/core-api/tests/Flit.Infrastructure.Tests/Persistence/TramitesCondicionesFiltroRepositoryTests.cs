@@ -714,7 +714,7 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
             Cond(TramitesQueryFieldCatalog.Transformacion, QueryOperator.EsAlguno, "true"));
 
         prendaSegunSql.Should().Equal(segunElDominio(i =>
-            TramiteMarcas.TienePrenda(conPrendaVigente.Contains(i.Id), i.ProcedureType?.Code)));
+            TramiteMarcas.TienePrenda(conPrendaVigente.Contains(i.Id), i.ProcedureType?.Code, i.FieldValues)));
         transfSegunSql.Should().Equal(segunElDominio(i => TramiteMarcas.TieneTransformacion(
             i.FieldValues.ToDictionary(fv => fv.FieldKey, fv => fv.ValueText),
             i.ProcedureType?.Code)));
@@ -772,5 +772,64 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
 
         refs.Should().Equal("R1");
         total.Should().Be(1);
+    }
+
+    // ── Bug #13445 (D2) — la señal RUNT marca y filtra igual ─────────────────────────────────
+
+    private static ProcedureInstance ConDetalleRunt(string reference, string? json, string? texto = null)
+    {
+        var instancia = Instancia(reference);
+        instancia.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ProcedureInstanceId = instancia.Id,
+            FieldKey = RuntGravamenSignal.DetalleKey,
+            ValueText = texto,
+            ValueJson = json,
+            CreatedAt = Base,
+        });
+        return instancia;
+    }
+
+    [Fact]
+    public async Task Prenda_LaSenalRuntMarcaYElFiltroDevuelveLoMismoQueElDominio()
+    {
+        // D2: «Con prenda» = el vehículo tiene prenda (RUNT o decisión). El filtro repite el predicado
+        // del ícono; aquí se exige que coincidan sobre las formas reales de la señal.
+        await using var db = NewContext(nameof(Prenda_LaSenalRuntMarcaYElFiltroDevuelveLoMismoQueElDominio));
+        var omitida = ConCampo("R4", RuntGravamenSignal.GravamenesKey, "SI");
+        db.ProcedureInstances.AddRange(
+            ConCampo("R1", RuntGravamenSignal.PrendasKey, " si "),
+            ConCampo("R2", RuntGravamenSignal.GravamenesKey, "NO"),
+            ConDetalleRunt("R3", """[{"nombreAcreedor":"BANCO DE PRUEBA","numeroDocumentoAcreedor":"900000001"}]"""),
+            omitida,
+            ConDetalleRunt("R5", "[]"),
+            ConDetalleRunt("R6", null, """[{"idPrenda":"77"}]"""),
+            Instancia("R7"));
+        // Omitir NO quita la marca si el RUNT reporta gravamen (aceptado en D2).
+        db.ProcedureInstancePrendas.Add(Decision(omitida, PrendaDecision.Omitir));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var universo = await db.ProcedureInstances
+            .Include(i => i.ProcedureType).Include(i => i.FieldValues)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        var conPrendaVigente = db.ProcedureInstancePrendas
+            .Where(p => p.Estado == PrendaEstado.Vigente
+                && p.Decision != PrendaDecision.SinPrenda && p.Decision != PrendaDecision.Omitir)
+            .Select(p => p.ProcedureInstanceId)
+            .ToHashSet();
+
+        var (conMarca, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"));
+        var (sinMarca, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "false"));
+
+        // El orden de la página no es lo que se prueba aquí (R4 se inserta primero): se comparan conjuntos.
+        conMarca.Should().BeEquivalentTo(["R1", "R3", "R4", "R6"]);
+        sinMarca.Should().BeEquivalentTo(["R2", "R5", "R7"]);
+        conMarca.Order().Should().Equal(universo
+            .Where(i => TramiteMarcas.TienePrenda(conPrendaVigente.Contains(i.Id), i.ProcedureType?.Code, i.FieldValues))
+            .Select(i => i.ReferenceNumber).Order());
     }
 }

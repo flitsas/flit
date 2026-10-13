@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Entities;
 
 namespace Flit.Tramites.Domain.Tramites.Services;
 
@@ -55,9 +56,23 @@ public static class TramiteMarcas
     /// lote (la decisión vive en su propia tabla); aquí se le suma el tipo, porque un
     /// <c>LEVANTAMIENTO_PRENDA</c> es un trámite de prenda desde que se abre, antes de que nadie
     /// capture la decisión.
+    ///
+    /// <para><b>Bug #13445 (D2) — tercer disparador: el RUNT.</b> La marca significa «el vehículo tiene
+    /// prenda», no «el gestor decidió algo»: si la consulta RUNT reporta gravamen
+    /// (<see cref="RuntGravamenSignal.Reporta(IEnumerable{ProcedureInstanceFieldValue})"/>) el
+    /// trámite se marca en todos los canales, aunque la decisión sea <c>omitir</c> o aún no exista.
+    /// El filtro SQL (<c>ProcedureInstanceFiltroSql.TienePrenda</c>) repite este predicado.</para>
     /// </summary>
-    public static bool TienePrenda(bool hayDecisionVigente, string? tipoCodigo) =>
-        hayDecisionVigente || ProcedureTypeLayers.EsTipoPrendaBase(tipoCodigo);
+    /// <param name="hayDecisionVigente">Decisión vigente distinta de <c>omitir</c>/<c>sin_prenda</c>.</param>
+    /// <param name="tipoCodigo">Código del TIPO; un tipo de prenda marca por sí solo.</param>
+    /// <param name="fieldValues">Valores del formulario de la instancia (señal <c>runt_*</c>).</param>
+    public static bool TienePrenda(
+        bool hayDecisionVigente,
+        string? tipoCodigo,
+        IEnumerable<ProcedureInstanceFieldValue> fieldValues) =>
+        hayDecisionVigente
+        || ProcedureTypeLayers.EsTipoPrendaBase(tipoCodigo)
+        || RuntGravamenSignal.Reporta(fieldValues);
 
     /// <summary>
     /// Un valor de formulario cuenta como afirmativo. Mismo criterio que la consulta de la empresa

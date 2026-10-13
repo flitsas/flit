@@ -519,4 +519,50 @@ public sealed class MandateSignerDefaultResolverTests
         r.Signer!.Id.Should().Be(IdOtro);
         r.Level.Should().Be(MandateSignerLevel.AsociadoDeOtraCompania);
     }
+
+    // Enmienda 2026-10-08 (ADR-0066) — el OT asigna a la compañía uno de SUS mandatarios: ese es el nivel 1.
+    private static readonly Guid IdAsignadoOt = Guid.Parse("cccccccc-1111-4000-8000-000000000077");
+
+    [Fact]
+    public void AsignadoPorElOt_GanaAlPropioDeLaCompania_ConNivelOtParaCompania()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdCompania, MandateSignerOrigins.Compania)], Cand(IdDefaultOt), null, null,
+            IdAsignadoOt, Cand(IdAsignadoOt));
+
+        r.Signer!.Id.Should().Be(IdAsignadoOt);
+        r.Level.Should().Be(MandateSignerLevel.OtParaCompania);
+    }
+
+    [Fact]
+    public void AsignadoPorElOt_GanaAunqueHayaUnVinculoHeredadoDeOrigenOrganismo()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOt, MandateSignerOrigins.Organismo)], null, null, null, IdAsignadoOt, Cand(IdAsignadoOt));
+
+        r.Signer!.Id.Should().Be(IdAsignadoOt);
+        r.Level.Should().Be(MandateSignerLevel.OtParaCompania);
+    }
+
+    [Fact]
+    public void AsignadoPorElOt_SinFirmaValida_SeDescarta_YFirmaElDeLaCompania()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdCompania, MandateSignerOrigins.Compania)], null, null, null,
+            IdAsignadoOt, Cand(IdAsignadoOt, firmaValida: false, motivo: "mandatario_fuera_de_vigencia"));
+
+        r.Signer!.Id.Should().Be(IdCompania);
+        r.Level.Should().Be(MandateSignerLevel.PropioDeCompania);
+        r.Descartados.Should().ContainSingle(d => d.SignerId == IdAsignadoOt && d.Level == MandateSignerLevel.OtParaCompania);
+    }
+
+    [Fact]
+    public void LaEleccionExplicitaAlAprobar_SigueGanandoAlAsignadoPorElOt()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdCompania, MandateSignerOrigins.Compania)], null, IdCompania, null, IdAsignadoOt, Cand(IdAsignadoOt));
+
+        r.Signer!.Id.Should().Be(IdCompania);
+        r.Level.Should().Be(MandateSignerLevel.Explicita);
+    }
 }

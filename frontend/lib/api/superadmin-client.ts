@@ -13,7 +13,7 @@ import type {
   UpdateConformationProfileRequest,
   UpdateProcedureTypeRequest,
 } from './types/procedure-parametrization';
-import { sessionAwareBase } from '@/lib/api/base-url';
+import { apiBaseForPageRoot, sessionAwareBase } from '@/lib/api/base-url';
 import { getToken } from './client';
 import { fetchAllCompanies } from './admin-companies';
 
@@ -77,8 +77,9 @@ export interface CompanyItem {
 
 // Misma resolución de base que lib/api/client.ts: sin env en dev local → origen del
 // frontend (rewrites Next → core-api :4003).
+// Con la raíz de la página: en app.flitsas.com la API es api.flitsas.com (ver apiBaseForPageRoot).
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
+  apiBaseForPageRoot(process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '');
 
 function resolveBaseUrl(): string {
   return (

@@ -75,8 +75,14 @@ public static class IctPayloadNormalizer
         return master;
     }
 
-    /// <summary>Códigos RUNT de transformación del catálogo (12-ICT-catalogs-parity.sql).</summary>
-    private static readonly int[] KnownTransformationCodes = [5, 9, 17];
+    /// <summary>
+    /// Códigos de transformación válidos en <c>more_transaction_transaction_type[].transactionType</c>: el
+    /// catálogo ICT <b>Tipo Trámite</b> (Bug #13445, D6), no códigos RUNT — 5 blindaje, 6 cambio de
+    /// carrocería, 7 cambio de color, 9 conversión de combustible. 8/10/11 son trámites, no
+    /// transformaciones. Activos en <c>ict.external_integration_transformation_type</c>
+    /// (27-ICT-transformation-type-tipo-tramite.sql); el 17 del catálogo viejo quedó inactivo.
+    /// </summary>
+    private static readonly int[] KnownTransformationCodes = [5, 6, 7, 9];
 
     /// <summary>
     /// Aplana <c>more_transaction_transaction_type</c> al puente master↔transformación. Se ignoran

@@ -590,7 +590,7 @@ public sealed class CompanyMandateSignerHandlerTests
         var result = await create.HandleAsync(
             Compania,
             new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null, SignatureMethod: "baul"),
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@example.com", SignatureMethod: "baul"),
             null,
             ct);
 
@@ -613,7 +613,7 @@ public sealed class CompanyMandateSignerHandlerTests
         var result = await create.HandleAsync(
             Compania,
             new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@example.com",
                 PhysicalSignatureOfficeIds: [OtMedellin],
                 SignatureMethod: "baul"),
             null,
@@ -722,9 +722,9 @@ public sealed class CompanyMandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Alta_ConFirmaDelBaul_SeAcepta_AunqueNoTengaCorreo()
+    public async Task Alta_ConFirmaDelBaul_SinCorreo_SeRechaza()
     {
-        // AC2
+        // AC2 — antes el baúl eximía del correo; ahora es obligatorio en toda Persona natural.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = NewContext();
         await SeedAsync(ctx, ct);
@@ -738,8 +738,9 @@ public sealed class CompanyMandateSignerHandlerTests
                 SignatureMethod: "baul"),
             null, ct);
 
-        result.IsValid.Should().BeTrue();
-        (await list.HandleAsync(Compania, ct)).Should().ContainSingle();
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("email");
+        (await list.HandleAsync(Compania, ct)).Should().BeEmpty();
     }
 
     /// <summary>Mandatario legado: solo con correo, sin forma de firma (backfill nulo), sin baúl ni firma física.</summary>

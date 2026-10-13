@@ -131,7 +131,7 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
 
     public ICollection<ExternalIntegrationActor> Actors { get; } = [];
 
-    /// <summary>Transformaciones RUNT declaradas por el gestor (more_transaction_transaction_type).</summary>
+    /// <summary>Transformaciones declaradas por el gestor (more_transaction_transaction_type, catálogo Tipo Trámite 5/6/7/9).</summary>
     public ICollection<ExternalIntegrationMasterTransformation> Transformations { get; } = [];
 
     /// <summary>

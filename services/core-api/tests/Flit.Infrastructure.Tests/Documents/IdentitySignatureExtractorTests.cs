@@ -154,6 +154,35 @@ public sealed class IdentitySignatureExtractorTests
         CountTransparent(decoded).Should().BeGreaterThan(decoded.Width * decoded.Height / 2);
     }
 
+    // Certificado de Kyverum de octubre de 2026: la rúbrica viene en 1192x540 (~644 mil píxeles), por encima del tope
+    // anterior de 400 mil. Quedaba fuera, ganaba el logo y la captura se omitía para partes y mandatario.
+    [Fact]
+    public void RubricaEnAltaResolucion1192x540_ConLogoYFotosVerticales_SeExtrae()
+    {
+        var rubric = KyverumRubric(1192, 540, out var mask);
+        var photo = PhotoJpeg(960, 1280);
+        var crop = new IdentitySignatureExtractor().TryExtract(BuildPdf(
+            new PdfImageSpec("/ImLogo", 676, 200, LogoRgb(676, 200), "/DeviceRGB", "/FlateDecode"),
+            new PdfImageSpec("/ImFoto1", 960, 1280, photo, "/DeviceRGB", "/DCTDecode"),
+            new PdfImageSpec("/ImFoto2", 960, 1280, photo, "/DeviceRGB", "/DCTDecode"),
+            new PdfImageSpec("/ImSig", 1192, 540, rubric, "/DeviceRGB", "/FlateDecode", mask),
+            new PdfImageSpec("/ImQr", 132, 132, QrGray(132), "/DeviceGray", "/FlateDecode")));
+
+        crop.Should().NotBeNull("la rúbrica en alta resolución debe extraerse");
+        using var decoded = Image.Load<Rgba32>(crop!.PngBytes);
+        decoded.Width.Should().Be(1192, "debe elegir la rúbrica y no el logo 676x200");
+        decoded.Height.Should().Be(540);
+    }
+
+    [Theory]
+    [InlineData(1192, 540, true)]
+    [InlineData(672, 270, true)]
+    [InlineData(1280, 960, false)]
+    [InlineData(960, 1280, false)]
+    [InlineData(132, 132, false)]
+    public void FormaDeRubrica_AdmiteAltaResolucion_YDejaFueraFotosYQr(int width, int height, bool esperado) =>
+        IdentitySignatureExtractor.IsSignatureShapedForTests(width, height).Should().Be(esperado);
+
     [Fact]
     public void Bug13304_LayoutAnterior_RubricaConSMaskFotosYQr_SigueEligiendoLaRubrica()
     {

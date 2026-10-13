@@ -6,6 +6,8 @@ import { getToken } from "@/lib/api/client";
 import type { JwtPayload } from "@/lib/auth/jwt";
 import {
   canReadIctLogs,
+  canReadIctReportes,
+  canReadIctTrazabilidad,
   canReadLogQx,
   decodeJwtPayload,
   isOtAdmin,
@@ -59,6 +61,8 @@ export function useNavigableModules(enabled = true): {
         isOtAdmin: isOtAdmin(claims),
         canReadLogQx: canReadLogQx(claims),
         canReadIctLogs: canReadIctLogs(claims),
+        canReadIctTrazabilidad: canReadIctTrazabilidad(claims),
+        canReadIctReportes: canReadIctReportes(claims),
       }),
     // `codesKey` mantiene estable la dependencia: `codes` es un array nuevo en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps

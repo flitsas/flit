@@ -1036,12 +1036,12 @@ public sealed class GenerarFurHandler(
     /// vigente, y si no el sello de su validación de identidad. Best-effort: cualquier fallo deja la
     /// línea de firma en blanco, nunca rompe la generación del mandato.
     /// </summary>
-    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos)> ResolveMandatarioFirmaAsync(
+    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, byte[]? FirmaIdentidad)> ResolveMandatarioFirmaAsync(
         FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
     {
         // La precedencia vive en MandatarioFirmaResolver: el simulador de mandatos la comparte para
         // mostrar el documento tal como saldría del trámite (Feature #11702).
-        var (firma, sello, metadatos, _) = await MandatarioFirmaResolver
+        var (firma, sello, metadatos, _, firmaIdentidad) = await MandatarioFirmaResolver
             .ResolveAsync(
                 _vaultPolicy,
                 storage,
@@ -1051,7 +1051,54 @@ public sealed class GenerarFurHandler(
                 ct)
             .ConfigureAwait(false);
 
-        return (firma, sello, metadatos);
+        return (firma, sello, metadatos, firmaIdentidad);
+    }
+
+    /// <summary>
+    /// Respaldo de la rúbrica del MANDATARIO, como <see cref="TryCaptureIdentitySignatureAsync"/> para las partes. La
+    /// captura al terminar la validación puede no guardar la imagen (certificado aún no disponible, o un recorte que no
+    /// la reconocía) y la outbox no reintenta. Solo actúa si firma con su validación propia vigente, sin baúl y sin
+    /// rúbrica: toma su validación propia más reciente con el documento actual (la misma que decide su vigencia),
+    /// descarga el certificado y captura. Devuelve el candidato con la ruta de la rúbrica si se capturó.
+    /// </summary>
+    private async Task<MandateSignerCandidate> TryCaptureMandatarioRubricaAsync(
+        MandateSignerCandidate signer, Guid instanceId, CancellationToken ct)
+    {
+        if (identitySignatureCapture is null
+            || !signer.FirmaValida
+            || !signer.IdentityVigente
+            || !string.IsNullOrWhiteSpace(signer.RubricaIdentidadPath)
+            || signer.SignatureVaultId is not null
+            || string.IsNullOrWhiteSpace(signer.Documento))
+            return signer;
+
+        try
+        {
+            var tipo = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento.Trim();
+            var propias = await repo.ListMandatarioValidationsAsync([signer.Id], ct).ConfigureAwait(false);
+            var ultima = propias.FirstOrDefault(v => BiometricRules.DocumentoCoincide(v, tipo, signer.Documento.Trim()));
+            if (ultima is null || !EsKyverumConId(ultima) || !string.IsNullOrWhiteSpace(ultima.SignatureImagePath))
+                return signer;
+
+            // La lista es de solo lectura: la captura escribe sobre la validación rastreada.
+            var bio = await repo.GetBiometricByIdAsync(ultima.Id, ct).ConfigureAwait(false);
+            if (bio is null)
+                return signer;
+
+            var cert = await certClient.DownloadCertificateAsync(bio.KyverumVerificationId!, ct).ConfigureAwait(false);
+            if (cert is null || cert.Content.Length == 0)
+                return signer;
+
+            var outcome = await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
+            return outcome == IdentitySignatureCaptureOutcome.Captured
+                ? signer with { RubricaIdentidadPath = bio.SignatureImagePath }
+                : signer;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            GenerarFurLog.CertificadoDescargaFallo(logger, ex, instanceId);
+            return signer;
+        }
     }
 
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
@@ -1347,9 +1394,13 @@ public sealed class GenerarFurHandler(
                         // la línea en blanco aunque el mandatario tuviera firma en el baúl o identidad
                         // validada. Misma precedencia que el resto de documentos: imagen del baúl > sello
                         // de identidad > línea.
-                        var (firma, sello, metadatos) =
+                        // Igual que las partes en el FUR: si su validación propia no guardó la rúbrica al terminar, se
+                        // captura ahora del certificado de Kyverum (best-effort; nunca bloquea el mandato).
+                        signer = await TryCaptureMandatarioRubricaAsync(signer, instance.Id, ct).ConfigureAwait(false);
+                        var (firma, sello, metadatos, firmaIdentidad) =
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
-                        mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
+                        mandatario = new MandatarioFirmante(
+                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad);
 
                         if (enBorrador)
                             instance.MandateSignerId = signerId;

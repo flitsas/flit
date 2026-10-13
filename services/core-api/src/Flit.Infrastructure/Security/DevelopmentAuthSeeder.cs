@@ -135,6 +135,7 @@ public static class DevelopmentAuthSeeder
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
+        await SeedIctTrazabilidadYReportesPermissionsAsync(db, cancellationToken);
         await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
@@ -1429,6 +1430,87 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
+    /// Bug #13445, punto 4 (decisión D10) — permisos propios de Trazabilidad ICT (<c>ict.trazabilidad.read</c>)
+    /// y Reportes ICT (<c>ict.reportes.read</c>), en el módulo <c>ict-logs</c>, concedidos a SuperAdmin y a
+    /// <c>admin_tramites</c> (el rol de Trámites que acompaña a AdminCompany).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Logs ICT queda solo para SuperAdmin por regla de rol en core-ict, así que <c>ict.logs.read</c> NO se
+    /// concede aquí; tampoco <c>ict.pii.reveal</c> (D11): el administrador de la empresa ve la trazabilidad
+    /// enmascarada y el revelado lo abre quien administra los roles, caso por caso.
+    /// </para>
+    /// <para>
+    /// Paso propio e idempotente, como <see cref="SeedIctLogsPermissionsAsync"/>: corre en cada arranque con
+    /// <c>Seed:RbacCatalog</c> encendido, también sobre bases ya sembradas, y solo agrega lo que falta. El
+    /// módulo <c>ict-logs</c> es del producto <c>tramites</c> (DDL 120), por eso el grant va a
+    /// <c>admin_tramites</c> y no a AdminCompany (<c>tr_role_permissions_same_product</c> lo rechazaría).
+    /// </para>
+    /// </remarks>
+    private static async Task SeedIctTrazabilidadYReportesPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        // El módulo lo crea SeedIctLogsPermissionsAsync, que corre antes. Sin él no se crean permisos huérfanos.
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-logs" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            return;
+        }
+
+        (string Slug, string Name, string RoutePattern)[] permisos =
+        [
+            ("ict.trazabilidad.read", "Ver trazabilidad ICT", "/api/v1/ict/trazabilidad/tramites"),
+            ("ict.reportes.read", "Ver reportes ICT", "/api/v1/analytics/ict-reports"),
+        ];
+
+        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites];
+        var roles = await db.Roles
+            .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
+            .ToListAsync(ct);
+
+        foreach (var (slug, name, routePattern) in permisos)
+        {
+            var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+            if (action is null)
+            {
+                action = new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = module.Id,
+                    Slug = slug,
+                    Name = name,
+                    HttpMethod = "GET",
+                    RoutePattern = routePattern,
+                    IsActive = true,
+                    CreatedAt = now,
+                };
+                db.RbacActions.Add(action);
+                await db.SaveChangesAsync(ct);
+            }
+
+            foreach (var role in roles)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// Historial operativo por placa (Feature #12189, HU #12191) — módulo <c>historial-placa</c> +
     /// permiso <c>historial-placa.read</c> que protege <c>GET /api/v1/tramites/instances/plate-history</c>.
     /// Mismo patrón e idempotencia que <see cref="SeedIctLogsPermissionsAsync"/>: crea módulo y permiso
@@ -1889,7 +1971,7 @@ public static class DevelopmentAuthSeeder
     /// <summary>
     /// HU #12239 (Feature #12236) -- banners promocionales
     /// (ADR-0058-banners-tabla-global-sin-tenant-excepcion) -- modulo banners + permiso
-    /// banners.manage, concedido a SuperAdmin y AdminCompany. Metodo propio e idempotente,
+    /// banners.manage, concedido SOLO a SuperAdmin (HU #13438, Épica #12750). Metodo propio e idempotente,
     /// separado de SeedBaseModulesAsync por el mismo motivo que SeedGeneracionDocumentalPermissionsAsync
     /// (ese metodo hace early-return si el modulo dashboard ya existe).
     /// </summary>
@@ -1935,25 +2017,33 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        // HU #13438: la gestión de banners es exclusiva del Super Admin FLIT. Además de conceder el permiso a
+        // SuperAdmin, retira cualquier grant sobre otro rol (bases ya sembradas con AdminCompany o roles
+        // personalizados), de modo que el seeder converge al mismo estado que la migración 133.
+        var superAdminRoleIds = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .Select(r => r.Id)
+            .ToListAsync(ct);
+        foreach (var roleId in superAdminRoleIds)
         {
-            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
-            foreach (var role in roles)
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == roleId && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
             {
-                var alreadyGranted = await db.RoleGrants
-                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
-                if (!alreadyGranted)
+                db.RoleGrants.Add(new RoleGrant
                 {
-                    db.RoleGrants.Add(new RoleGrant
-                    {
-                        Id = Guid.CreateVersion7(),
-                        RoleId = role.Id,
-                        PermissionId = action.Id,
-                        CreatedAt = now,
-                    });
-                }
+                    Id = Guid.CreateVersion7(),
+                    RoleId = roleId,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
             }
         }
+
+        var strayGrants = await db.RoleGrants
+            .Where(g => g.PermissionId == action.Id && !superAdminRoleIds.Contains(g.RoleId))
+            .ToListAsync(ct);
+        db.RoleGrants.RemoveRange(strayGrants);
 
         await db.SaveChangesAsync(ct);
     }

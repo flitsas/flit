@@ -25,9 +25,12 @@ public static class IctReportsEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        // Bug #13445 (decisión D12): el grupo exige ict.reportes.read (concedido a admin_tramites);
+        // SuperAdmin pasa siempre por el bypass de PermissionAuthorizationHandler. /jobs y /jobs/export
+        // conservan además su chequeo propio de SuperAdmin dentro del handler.
         var group = app
             .MapGroup("/api/v1/analytics/ict-reports")
-            .RequireAuthorization()
+            .RequirePermission(IctReportesReadSlug)
             .WithTags("Analytics · Reportes de ICT en vivo");
 
         group.MapGet("/novedades", GetNovedadesAsync)
@@ -88,6 +91,9 @@ public static class IctReportsEndpoints
 
         return app;
     }
+
+    /// <summary>Permiso que abre Reportes ICT (Bug #13445, D12).</summary>
+    public const string IctReportesReadSlug = "ict.reportes.read";
 
     private const string ExcelContentType =
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

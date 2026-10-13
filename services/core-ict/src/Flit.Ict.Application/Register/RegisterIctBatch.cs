@@ -30,7 +30,8 @@ public sealed record RegisterPrincipalMandanteInput(
 /// <summary>
 /// Transformación declarada por el gestor (contrato v1: <c>more_transaction_transaction_type</c>).
 /// OJO: dentro de este arreglo el contrato usa camelCase (<c>transactionType</c>), a diferencia del
-/// resto del payload que es snake_case. <c>transactionType</c> es el CÓDIGO RUNT (5/9/17).
+/// resto del payload que es snake_case. <c>transactionType</c> usa el catálogo ICT Tipo Trámite
+/// (5 blindaje, 6 carrocería, 7 color, 9 combustible — Bug #13445), no códigos RUNT.
 /// </summary>
 public sealed record RegisterTransformationInput(
     [property: JsonPropertyName("transactionType")] int TransactionType,

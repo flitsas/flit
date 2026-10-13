@@ -68,4 +68,34 @@ internal static class TestTokenFactory
             SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
         });
     }
+
+    /// <summary>
+    /// Bug #13445 — token con rol (como <c>role</c> y <c>role_code</c>, igual que <c>RsaJwtTokenIssuer</c>),
+    /// tenant opcional y slugs en <c>permissions</c>: lo que evalúa <c>PermissionAuthorizationHandler</c>.
+    /// </summary>
+    public static string CreateTokenWithPermissions(string role, Guid? tenantId, params string[] permissions)
+    {
+        var claims = new List<Claim>
+        {
+            new("sub", "11111111-1111-1111-1111-111111111111"),
+            new("role", role),
+            new("role_code", role),
+        };
+        if (tenantId is { } tenant)
+        {
+            claims.Add(new Claim("tenant_id", tenant.ToString()));
+        }
+
+        claims.AddRange(permissions.Select(p => new Claim("permissions", p)));
+
+        var handler = new JsonWebTokenHandler();
+        return handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = "https://api.flit.co",
+            Audience = "flit-api",
+            Subject = new ClaimsIdentity(claims),
+            Expires = DateTime.UtcNow.AddHours(1),
+            SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
+        });
+    }
 }

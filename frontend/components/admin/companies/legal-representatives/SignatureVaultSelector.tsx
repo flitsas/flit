@@ -10,7 +10,9 @@ import { RL_COLOR, RL_INPUT_CLS, RL_GRADIENT } from "./rl-flit-styles";
 import { SignatureCapture } from "@/components/admin/companies/signature-vault/SignatureCapture";
 import type { SignatureVaultItem } from "@/lib/api/admin-signature-vault";
 import {
+  createOtSignatureVaultEntry,
   createSignatureVaultEntry,
+  fetchOtSignatureVaultByDocument,
   fetchSignatureVaultByDocument,
 } from "@/lib/api/admin-signature-vault";
 import { formatFechaCalendario } from "@/lib/format/date";
@@ -32,6 +34,11 @@ export interface SignatureVaultSelectorProps {
    */
   fullName?: string;
   nitEmpresa?: string | null;
+  /**
+   * Hub del OT: con el organismo, el selector lista y captura en el baúl del PROPIO OT (dueño del mandatario que
+   * registra para sí) en vez del de la compañía `tenantId`.
+   */
+  transitOfficeId?: string;
 }
 
 /**
@@ -60,6 +67,7 @@ export function SignatureVaultSelector({
   readOnly,
   fullName,
   nitEmpresa,
+  transitOfficeId,
 }: SignatureVaultSelectorProps) {
   const [items, setItems] = useState<SignatureVaultItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,14 +90,10 @@ export function SignatureVaultSelector({
       setLoading(true);
       setError(false);
       setFetched(false);
-      return fetchSignatureVaultByDocument(
-        tenantId,
-        documentType,
-        documentNumber,
-        true,
-        signal,
-        networkHeadId,
-      )
+      const consulta = transitOfficeId
+        ? fetchOtSignatureVaultByDocument(transitOfficeId, documentType, documentNumber, true, signal)
+        : fetchSignatureVaultByDocument(tenantId, documentType, documentNumber, true, signal, networkHeadId);
+      return consulta
         .then((list) => {
           if (signal?.aborted) return;
           setItems(list);
@@ -103,7 +107,7 @@ export function SignatureVaultSelector({
           }
         });
     },
-    [tenantId, networkHeadId, documentType, documentNumber],
+    [tenantId, networkHeadId, transitOfficeId, documentType, documentNumber],
   );
 
   useEffect(() => {
@@ -148,7 +152,7 @@ export function SignatureVaultSelector({
       // los documentos (FlitFirmaBaulSello). Sin él la línea se omite, así que una firma capturada
       // desde aquí salía sin trazabilidad verificable mientras la del baúl sí la llevaba.
       const codigo = codigoHash.trim();
-      const creada = await createSignatureVaultEntry(tenantId, {
+      const firma = {
         documentType,
         documentNumber,
         nitEmpresa: nitEmpresa ?? null,
@@ -157,7 +161,10 @@ export function SignatureVaultSelector({
         vigenciaDesde: desde,
         vigenciaHasta: hasta,
         artefactoFirmaBase64: artefacto,
-      }, networkHeadId);
+      };
+      const creada = transitOfficeId
+        ? await createOtSignatureVaultEntry(transitOfficeId, firma)
+        : await createSignatureVaultEntry(tenantId, firma, networkHeadId);
       await load();
       // AC3 — la firma recién capturada queda elegida; el guardado del representante la persiste.
       onChange(creada.id);

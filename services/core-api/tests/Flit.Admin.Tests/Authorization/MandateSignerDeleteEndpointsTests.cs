@@ -105,13 +105,23 @@ public sealed class MandateSignerDeleteEndpointsTests(WebApplicationFactory<Prog
     }
 
     [Fact]
-    public async Task El_Admin_OT_elimina_mandatarios_de_cualquier_origen_y_el_Admin_de_Compania_solo_los_suyos()
+    public async Task El_Admin_OT_elimina_solo_sus_mandatarios_y_el_Admin_de_Compania_solo_los_suyos()
     {
-        var organismo = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
+        var delOt = await SeedSignerAsync("Ana", []);
+        var deCompaniaOrganismo = await SeedSignerAsync("Carla", [(_companyA, "organismo")]);
         var cliente = await SeedSignerAsync("Beto", [(_companyA, "compania")]);
 
+        // El OT elimina el suyo (sin compañías); los de compañías le dan 403 mandatario_de_compania y no cambian.
         AuthenticateOt();
-        (await _client.DeleteAsync(Hub(organismo, "?confirmarImpacto=true"), Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await _client.DeleteAsync(Hub(delOt, "?confirmarImpacto=true"), Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        foreach (var deCompania in new[] { deCompaniaOrganismo, cliente })
+        {
+            var denegado = await _client.DeleteAsync(Hub(deCompania, "?confirmarImpacto=true"), Ct);
+            denegado.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await denegado.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString()
+                .Should().Be("mandatario_de_compania");
+            await AssertSignerUntouchedAsync(deCompania);
+        }
 
         AuthenticateCompanyA();
         (await _client.DeleteAsync(Company(_companyA, cliente, "?confirmarImpacto=true"), Ct))
@@ -137,7 +147,7 @@ public sealed class MandateSignerDeleteEndpointsTests(WebApplicationFactory<Prog
     {
         var signer = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
         await SeedDefaultsAsync(signer);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         var impacto = await _client.GetFromJsonAsync<JsonElement>(Hub(signer, "/impact"), Ct);
         var data = impacto.GetProperty("data");
@@ -169,7 +179,7 @@ public sealed class MandateSignerDeleteEndpointsTests(WebApplicationFactory<Prog
 
         var bitacora = await db.TenantConfigAuditLogs.AsNoTracking()
             .Where(l => l.TargetEntityId == signer && l.Module == "mandatarios").ToListAsync(Ct);
-        bitacora.Should().ContainSingle(l => l.FieldName == "deleted" && l.Operation == "delete" && l.ChangedBy == _otAdminUser);
+        bitacora.Should().ContainSingle(l => l.FieldName == "deleted" && l.Operation == "delete" && l.ChangedBy == _superAdminUser);
     }
 
     [Fact]
@@ -177,7 +187,7 @@ public sealed class MandateSignerDeleteEndpointsTests(WebApplicationFactory<Prog
     {
         var signer = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
         await SeedSignerAsync("Beto", [(_companyA, "compania")]);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
 
         (await _client.DeleteAsync(Hub(signer), Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }

@@ -155,12 +155,34 @@ export function canReadLogQx(payload: JwtPayload | null): boolean {
   return isSuperAdmin(payload) || hasPermission(payload, LOG_QX_READ_PERMISSION);
 }
 
-/** Permiso del submódulo de observabilidad ICT (HU10893). */
+/**
+ * Permiso histórico del submódulo de observabilidad ICT (HU10893). Desde el Bug #13445 ya NO abre Log ICT en la
+ * interfaz (es solo del SuperAdmin); se conserva porque el backend lo sigue emitiendo.
+ */
 export const ICT_LOGS_READ_PERMISSION = "ict.logs.read";
 
-/** Puede ver los logs/alertas de Integración con Terceros: permiso `ict.logs.read` o SuperAdmin. */
+/** Permiso de lectura de Trazabilidad ICT (Bug #13445, D10): lo tiene el Admin Company. */
+export const ICT_TRAZABILIDAD_READ_PERMISSION = "ict.trazabilidad.read";
+
+/** Permiso de lectura de Reportes ICT (Bug #13445, D10/D12): lo tiene el Admin Company. */
+export const ICT_REPORTES_READ_PERMISSION = "ict.reportes.read";
+
+/**
+ * Puede ver Log ICT (logs técnicos/alertas de Integración con Terceros): **solo SuperAdmin FLIT** (Bug #13445, D10).
+ * Tener `ict.logs.read` ya no basta.
+ */
 export function canReadIctLogs(payload: JwtPayload | null): boolean {
-  return isSuperAdmin(payload) || hasPermission(payload, ICT_LOGS_READ_PERMISSION);
+  return isSuperAdmin(payload);
+}
+
+/** Puede ver Trazabilidad ICT: permiso `ict.trazabilidad.read` o SuperAdmin (Bug #13445). */
+export function canReadIctTrazabilidad(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_TRAZABILIDAD_READ_PERMISSION);
+}
+
+/** Puede ver Reportes ICT: permiso `ict.reportes.read` o SuperAdmin (Bug #13445). */
+export function canReadIctReportes(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_REPORTES_READ_PERMISSION);
 }
 
 /** Permiso para administrar (CRUD) los clientes de integración ICT (ronda 2, Feature #10888). */
@@ -227,17 +249,13 @@ export function canAccessRuntConfirmation(payload: JwtPayload | null): boolean {
   return canManageRuntConfirmation(payload) || canReadRuntConfirmationHistory(payload);
 }
 
-/** Permiso del módulo de banners promocionales (Feature #12236, HU #12241). */
-export const BANNERS_MANAGE_PERMISSION = "banners.manage";
-
 /**
- * Puede administrar (listar/crear/editar/eliminar) banners promocionales: permiso
- * `banners.manage` o SuperAdmin (bypass total, igual que `RequirePermission` en
- * `AdminBannersEndpoints.cs`). El módulo NO es exclusivo de SuperAdmin: igual que
- * `generacion-documental.read`, cualquier rol con este permiso concedido debe entrar.
+ * Puede administrar (listar/crear/editar/eliminar) banners promocionales: SOLO el Super Admin FLIT
+ * (HU #13438/#13439, Épica #12750). Ningún otro rol puede tenerlo, ni siquiera con el permiso
+ * `banners.manage` en el token: el backend exige el rol (`SuperAdminPolicy`), no el permiso.
  */
 export function canManageBanners(payload: JwtPayload | null): boolean {
-  return isSuperAdmin(payload) || hasPermission(payload, BANNERS_MANAGE_PERMISSION);
+  return isSuperAdmin(payload);
 }
 
 /** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */

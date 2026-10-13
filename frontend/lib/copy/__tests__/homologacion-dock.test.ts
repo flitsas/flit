@@ -22,6 +22,8 @@ describe('homologación dock e Identidad (HU #12699)', () => {
       isOtAdmin: true,
       canReadLogQx: false,
       canReadIctLogs: false,
+      canReadIctTrazabilidad: false,
+      canReadIctReportes: false,
     });
     expect(withoutRead).not.toContain('validaciones');
 
@@ -31,6 +33,8 @@ describe('homologación dock e Identidad (HU #12699)', () => {
       isOtAdmin: true,
       canReadLogQx: false,
       canReadIctLogs: false,
+      canReadIctTrazabilidad: false,
+      canReadIctReportes: false,
     });
     expect(withRead).toContain('validaciones');
   });

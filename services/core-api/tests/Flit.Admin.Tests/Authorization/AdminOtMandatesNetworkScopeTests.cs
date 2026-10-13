@@ -328,8 +328,9 @@ public sealed class AdminOtMandatesNetworkScopeTests
         db.MandateSignerCompanies.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSignerTransitOffices.Where(x => signerIds.Contains(x.MandateSignerId)).ExecuteDelete();
         db.MandateSigners.Where(m => signerIds.Contains(m.Id)).ExecuteDelete();
-        db.SignatureVault.Where(v => v.TenantId == _head || v.TenantId == _child).ExecuteDelete();
-        db.TenantConfigAuditLogs.Where(l => l.ChangedBy == _otUserA).ExecuteDelete();
+        db.SignatureVault.Where(v => v.TenantId == _head || v.TenantId == _child || v.TenantId == _otTenantA)
+            .ExecuteDelete();
+        db.TenantConfigAuditLogs.Where(l => l.ChangedBy == _otUserA || l.ChangedBy == _superAdminUserId).ExecuteDelete();
 
         db.CompanyOtMandateRules.RemoveRange(db.CompanyOtMandateRules.Where(r =>
             r.TransitOfficeId == _officeA || r.TransitOfficeId == _officeB));
@@ -458,7 +459,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13129_AC2_natural_con_baul_y_rango_es_201_y_la_lista_trae_el_estado_calculado()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
         var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.AddHours(-5).Date);
         var firma = await SeedFirmaAsync(_head);
 
@@ -466,6 +467,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
         {
             fullName = "Ana Restrepo",
             documentNumber = Documento,
+            email = "ana@example.com",
             companyTenantIds = new[] { _head },
             transitOfficeIds = new[] { _officeA },
             signerModel = "natural",
@@ -494,7 +496,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13129_AC5_juridica_con_forma_de_firma_es_422_con_campo_y_mensaje()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
 
         var response = await PostModeloAsync(_officeA, _head, new
         {
@@ -516,7 +518,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13129_AC3_formato_en_blanco_es_201_sin_documento_ni_forma_de_firma()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
 
         var response = await PostModeloAsync(_officeA, _head, new
         {
@@ -536,7 +538,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13129_AC6_rango_invertido_es_422()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
 
         var response = await PostModeloAsync(_officeA, _head, new
         {
@@ -555,20 +557,25 @@ public sealed class AdminOtMandatesNetworkScopeTests
     }
 
     [Fact]
-    public async Task HU13123_AC1_ot_admin_registra_mandatario_con_firma_del_baul_de_la_compania_201()
+    public async Task HU13123_AC1_ot_admin_no_registra_mandatario_de_compania_403_y_el_SuperAdmin_si_201()
     {
-        AuthenticateOtUser();
         var firma = await SeedFirmaAsync(_head);
 
-        var response = await PostAltaAsync(_officeA, _head, firma);
+        AuthenticateOtUser();
+        var denegado = await PostAltaAsync(_officeA, _head, firma);
+        denegado.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await denegado.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString()
+            .Should().Be("mandatario_de_compania");
 
+        AuthenticateSuperAdmin();
+        var response = await PostAltaAsync(_officeA, _head, firma);
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]
     public async Task HU13123_AC1_firma_de_otra_persona_es_422_en_signatureVaultId()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
         var firmaOtraPersona = await SeedFirmaAsync(_head, documento: "9999999999");
 
         var response = await PostAltaAsync(_officeA, _head, firmaOtraPersona);
@@ -607,7 +614,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13123_AC4_compania_ya_con_mandatario_en_el_organismo_es_422_por_exclusividad()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
         var firma = await SeedFirmaAsync(_head);
         (await PostAltaAsync(_officeA, _head, firma)).StatusCode.Should().Be(HttpStatusCode.Created);
 
@@ -622,7 +629,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13123_AC5_con_baul_y_sin_firma_es_422_con_mensaje_de_falta_de_firma_del_baul()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
 
         var response = await PostAltaAsync(_officeA, _head, null);
 
@@ -633,7 +640,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13123_ajuste_sin_signatureVaultId_resuelve_la_firma_del_baul_y_no_expone_el_vault()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
         var firma = await SeedFirmaAsync(_head);
 
         var response = await PostAltaAsync(_officeA, _head, null);
@@ -648,7 +655,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13123_ajuste_sin_vault_con_firma_solo_en_otro_tenant_es_422()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
         await SeedFirmaAsync(_child);
 
         var response = await PostAltaAsync(_officeA, _head, null);
@@ -678,7 +685,7 @@ public sealed class AdminOtMandatesNetworkScopeTests
     [Fact]
     public async Task HU13123_AC7_compania_inexistente_es_422_sin_confirmar_su_existencia()
     {
-        AuthenticateOtUser();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías: la regla de negocio se prueba con el Super Admin
         // HU #13182b (D3, P7 del PO): el OT ya puede registrar el mandatario de CUALQUIER compañía activa aunque no esté
         // habilitada en su organismo (antes _child, fuera de su visibilidad, daba 422). Un id inexistente se sigue
         // rechazando, y antes que la firma: si se validara la firma primero, el 422 delataría que la compañía existe.
@@ -687,5 +694,68 @@ public sealed class AdminOtMandatesNetworkScopeTests
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var contenido = await response.Content.ReadAsStringAsync(Ct);
         contenido.Should().Contain("companyTenantIds").And.NotContain("signatureVaultId");
+    }
+
+    // ── Baúl de firmas del propio OT: su mandatario (sin compañías) firma con el baúl del organismo ─────────────
+
+    [Fact]
+    public async Task BaulDelOt_ElAdminOt_ListaLasFirmasDelBaulDeSuOrganismo()
+    {
+        AuthenticateOtUser();
+        var firma = await SeedFirmaAsync(_otTenantA);
+
+        var response = await _client.GetAsync(
+            $"/api/v1/admin/transit-offices/{_officeA}/signature-vault?documentType=CC&documentNumber={Documento}&soloVigentes=true",
+            Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        var ids = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("data").EnumerateArray()
+            .Select(e => e.GetProperty("id").GetGuid());
+        ids.Should().ContainSingle().Which.Should().Be(firma);
+    }
+
+    [Fact]
+    public async Task BaulDelOt_OtroOrganismo_Es403()
+    {
+        AuthenticateOtUser();
+
+        var response = await _client.GetAsync($"/api/v1/admin/transit-offices/{_officeB}/signature-vault", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task BaulDelOt_ElOperadorOt_NoLoGestiona()
+    {
+        AuthenticateOtUser("ot_operator");
+
+        var response = await _client.GetAsync($"/api/v1/admin/transit-offices/{_officeA}/signature-vault", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task BaulDelOt_AltaDelMandatarioDelOtSinCompanias_ConFirmaDelBaulDelOt_Es201()
+    {
+        AuthenticateOtUser();
+        var firma = await SeedFirmaAsync(_otTenantA);
+
+        var response = await PostModeloAsync(_officeA, _otTenantA, new
+        {
+            fullName = "Ana Restrepo",
+            documentNumber = Documento,
+            documentType = "CC",
+            email = "ana@flit.test",
+            companyTenantIds = Array.Empty<Guid>(),
+            transitOfficeIds = new[] { _officeA },
+            signerModel = "natural",
+            signatureMethod = "baul",
+            signatureVaultId = firma,
+            validityKind = "fixed",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement
+            .GetProperty("signingMeans").GetString().Should().Be("baul");
     }
 }

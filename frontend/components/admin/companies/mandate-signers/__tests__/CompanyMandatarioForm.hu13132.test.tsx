@@ -356,6 +356,10 @@ describe("HU #13132 AC6 — mandatario anterior sin modelo explícito", () => {
     expect(radio("Persona natural")).toBeChecked();
     expect(radio("Baúl de firmas")).toBeChecked();
     expect(screen.getByLabelText("Nombre completo")).toHaveValue("Ana Restrepo");
+    // Sin correo guardado: ahora es obligatorio en Persona natural, así que se pide antes de guardar.
+    await user.click(guardar());
+    expect(onSubmit).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText(/^Correo/), "ana@example.com");
     await user.click(guardar());
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -374,9 +378,10 @@ describe("HU #13132 AC6 — mandatario anterior sin modelo explícito", () => {
 });
 
 describe("HU #13132 — variante hub del organismo", () => {
-  it("ofrece forma de firma y vigencia pero no el selector del baúl", async () => {
+  it("el mandatario de una compañía registrado desde el hub no ofrece el selector del baúl", async () => {
+    // El de una compañía guarda su firma en el baúl de esa compañía: la resuelve el servidor.
     const user = userEvent.setup();
-    renderForm({ variant: "hub", restrictToOfficeIds: ["ot-1"] });
+    renderForm({ variant: "hub", restrictToOfficeIds: ["ot-1"], ownerCompanyIds: ["cia-1"] });
     await user.click(radio("Baúl de firmas"));
     expect(screen.queryByText("Firma del baúl")).not.toBeInTheDocument();
     expect(screen.getByTestId("mandatario-hub-firma-nota")).toBeInTheDocument();

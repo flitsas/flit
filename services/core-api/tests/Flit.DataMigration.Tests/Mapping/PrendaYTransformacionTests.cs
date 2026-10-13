@@ -72,7 +72,8 @@ public sealed class PrendaYTransformacionTests
             m.Prendas.Any(p => p.Estado == PrendaEstado.Vigente
                 && p.Decision != PrendaDecision.SinPrenda
                 && p.Decision != PrendaDecision.Omitir),
-            "TRASPASO_STANDARD");
+            "TRASPASO_STANDARD",
+            m.FieldValues);
 
     // ------------------------------------------------------------- AC1 — color, carrocería, combustible
 

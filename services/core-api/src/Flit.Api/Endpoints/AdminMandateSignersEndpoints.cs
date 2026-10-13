@@ -56,6 +56,7 @@ public static class AdminMandateSignersEndpoints
         // POST — alta de mandatario (RF22).
         group.MapPost("", CreateAsync)
             .WithName("AdminMandateSignersCreate")
+            .AddEndpointFilter<OtGestionaSoloSusMandatariosFilter>()
             // HU #13123 — escritura solo para ot_admin o SuperAdmin (gestor_tramites_ot recibe 403).
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Registra un mandatario en el organismo de tránsito")
@@ -67,6 +68,7 @@ public static class AdminMandateSignersEndpoints
         // PUT /{signerId} — edición (RF23, regenera huella).
         group.MapPut("/{mandateSignerId:guid}", UpdateAsync)
             .WithName("AdminMandateSignersUpdate")
+            .AddEndpointFilter<OtGestionaSoloSusMandatariosFilter>()
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Edita un mandatario (regenera la huella de integridad)")
             .Produces(StatusCodes.Status200OK)
@@ -78,6 +80,7 @@ public static class AdminMandateSignersEndpoints
         // POST /{signerId}/inactivate — baja lógica que libera compañías (RF24).
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateAsync)
             .WithName("AdminMandateSignersInactivate")
+            .AddEndpointFilter<OtGestionaSoloSusMandatariosFilter>()
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Inactiva un mandatario y libera sus compañías")
             .Produces(StatusCodes.Status204NoContent)
@@ -88,6 +91,7 @@ public static class AdminMandateSignersEndpoints
         // POST /{signerId}/reactivate — reactiva un mandatario inactivado y restaura sus vínculos (HU #13136).
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateAsync)
             .WithName("AdminMandateSignersReactivate")
+            .AddEndpointFilter<OtGestionaSoloSusMandatariosFilter>()
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Reactiva un mandatario inactivado y restaura sus vínculos sin desplazar el default vigente")
             .Produces(StatusCodes.Status200OK)
@@ -99,6 +103,7 @@ public static class AdminMandateSignersEndpoints
         // DELETE /{signerId} — eliminación (baja lógica deleted_at) con confirmación del impacto (HU #13135).
         group.MapDelete("/{mandateSignerId:guid}", DeleteAsync)
             .WithName("AdminMandateSignersDelete")
+            .AddEndpointFilter<OtGestionaSoloSusMandatariosFilter>()
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Elimina (baja lógica) un mandatario; con impacto exige confirmarImpacto=true")
             .Produces(StatusCodes.Status204NoContent)
@@ -134,6 +139,7 @@ public static class AdminMandateSignersEndpoints
 
         group.MapPost("/{mandateSignerId:guid}/identity-validation/resend", ResendIdentityAsync)
             .WithName("AdminMandateSignersIdentityValidationResend")
+            .AddEndpointFilter<OtGestionaSoloSusMandatariosFilter>()
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Reenvía la validación de identidad propia del mandatario (Persona natural con biometría)")
             .Produces(StatusCodes.Status200OK)
@@ -509,6 +515,9 @@ public static class AdminMandateSignersEndpoints
             ValidTo = request.ValidTo,
             // HU #13179 — ausente ⇒ no se tocan; cada organismo presente reemplaza su conjunto.
             OfficeCompanies = request.OfficeCompanies,
+            // Firma del baúl del OT para su propio mandatario: solo se gestiona si el hub la manda.
+            SignatureVaultId = request.SignatureVaultId,
+            ActualizaFirma = request.SignatureVaultId is not null,
             UpdatedBy = MandateEndpointHelpers.ResolveUserId(httpContext.User),
             ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),

@@ -5,7 +5,8 @@ namespace Flit.Tramites.Application.Documents;
 
 /// <summary>
 /// Resuelve CÓMO se estampa la firma del MANDATARIO en el Contrato Privado de Mandato (HU #11030):
-/// imagen del baúl si la tiene → sello de su validación de identidad vigente → nada (línea en blanco).
+/// imagen del baúl si la tiene → rúbrica de Kyverum + sello de su validación de identidad vigente → nada
+/// (línea en blanco).
 ///
 /// <para><b>Por qué es compartido.</b> Esta cadena vivía únicamente dentro de
 /// <c>FurCommand.TryGenerateMandatoAsync</c>. El simulador de mandatos (Feature #11702) tiene que
@@ -22,9 +23,13 @@ public static class MandatarioFirmaResolver
     /// <summary>Texto del sello cuando la aprobación no trae serie de certificado (igual que el sello de las partes).</summary>
     public const string SinCertificado = "no disponible";
 
-    /// <summary>Firma resuelta: imagen del baúl, o sello de texto, o ninguna de las dos.</summary>
+    /// <summary>
+    /// Firma resuelta: imagen del baúl, o sello de identidad (con la rúbrica de Kyverum en
+    /// <see cref="FirmaIdentidad"/> si la validación la trae), o ninguna.
+    /// </summary>
     public readonly record struct Resultado(
-        byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, string? MotivoSinFirma = null);
+        byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, string? MotivoSinFirma = null,
+        byte[]? FirmaIdentidad = null);
 
     public static async Task<Resultado> ResolveAsync(
         ISignatureVaultPolicy vaultPolicy,
@@ -96,9 +101,49 @@ public static class MandatarioFirmaResolver
             return new Resultado(null, null, null);
         }
 
-        var firmaIdentidad = string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
+        var certificado = string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
             ? SinCertificado
             : signer.CertificadoIdentidad.Trim();
-        return new Resultado(null, $"Validación de identidad\nFirma {firmaIdentidad}", null);
+        var rubrica = await LeerRubricaAsync(storage, signer.RubricaIdentidadPath, onVaultError, cancellationToken)
+            .ConfigureAwait(false);
+        // Misma leyenda que el sello de las partes cuando se conoce la validación; si no, el sello corto de siempre.
+        var sello = string.IsNullOrWhiteSpace(signer.SelloIdentidad)
+            ? $"Validación de identidad\nFirma {certificado}"
+            : signer.SelloIdentidad;
+        return new Resultado(null, sello, null, FirmaIdentidad: rubrica);
+    }
+
+    /// <summary>
+    /// Rúbrica de Kyverum de la validación propia del mandatario. Best-effort, como la del mandante: si no se puede
+    /// leer, el recuadro queda con el sello de texto.
+    /// </summary>
+    private static async Task<byte[]?> LeerRubricaAsync(
+        IAttachmentStorage storage, string? path, Action<Exception>? onError, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var stream = await storage.OpenReadAsync(path, cancellationToken).ConfigureAwait(false);
+            if (stream is null)
+            {
+                return null;
+            }
+
+            await using (stream.ConfigureAwait(false))
+            {
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+                return ms.Length > 0 ? ms.ToArray() : null;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            onError?.Invoke(ex);
+            return null;
+        }
     }
 }

@@ -56,7 +56,7 @@ public static class ManualCaptureEmailComposer
         Steps: ["Valida tus datos", "Realiza la validación biométrica", "Captura los datos del documento", "Firma"],
         ButtonLabel: "Verificar mi identidad",
         FallbackLinkIntro: "Si el botón no funciona, copia este enlace:",
-        FooterNote: $"El enlace es personal, de un solo uso y vale {ValidityHours} horas. Ábrelo en tu celular.");
+        FooterNote: $"El enlace es personal, de un solo uso y caduca en {ValidityHours} horas. Ábrelo en tu celular.");
 
     /// <summary>
     /// HU #13299 — variante «rechazo»: la revisión no aprobó la captura. El cliente recibe el motivo en texto legible (etiqueta de
@@ -85,7 +85,7 @@ public static class ManualCaptureEmailComposer
         Steps: ["Valida tus datos", "Realiza la validación biométrica", "Captura los datos del documento", "Firma"],
         ButtonLabel: "Repetir mi verificación",
         FallbackLinkIntro: "Si el botón no funciona, copia este enlace:",
-        FooterNote: $"El enlace es personal, de un solo uso y vale {ValidityHours} horas. Ábrelo en tu celular.",
+        FooterNote: $"El enlace es personal, de un solo uso y caduca en {ValidityHours} horas. Ábrelo en tu celular.",
         BannerText: $"No pudimos aprobar tu verificación. Motivo: {reasonLabel}.",
         BannerTone: IdentityEmailBannerTone.Warning);
 

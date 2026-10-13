@@ -84,15 +84,21 @@ public static class MandateSignerDefaultResolver
     /// <param name="eleccionOt">Elección explícita del OT al aprobar.</param>
     /// <param name="guardado">Firmante ya guardado en el trámite; si no es válido se ignora.</param>
     /// <param name="designadoRegla">
-    /// <c>default_mandate_signer_id</c> de la regla compañía×OT: ya no es un nivel, solo desempate transitorio si
-    /// un grupo de origen aún tiene N&gt;1 válidos.
+    /// <c>default_mandate_signer_id</c> de la regla compañía×OT. Además de ser el nivel 1 (ver
+    /// <paramref name="asignadoPorOt"/>), desempata si un grupo de origen aún tiene N&gt;1 válidos.
+    /// </param>
+    /// <param name="asignadoPorOt">
+    /// Mandatario DEL OT que el organismo asignó a esta compañía (la regla compañía×OT). Es el nivel 1, «el que configuró
+    /// el OT para la compañía» (P2): el OT no crea ni gestiona mandatarios de las compañías, solo asigna de los suyos.
+    /// Si no es válido se descarta con su motivo y sigue la prelación.
     /// </param>
     public static MandateSignerPrelacion Resolve(
         IReadOnlyList<MandateSignerCandidate> candidatos,
         MandateSignerCandidate? defaultDelOt,
         Guid? eleccionOt,
         Guid? guardado,
-        Guid? designadoRegla = null)
+        Guid? designadoRegla = null,
+        MandateSignerCandidate? asignadoPorOt = null)
     {
         ArgumentNullException.ThrowIfNull(candidatos);
 
@@ -117,6 +123,20 @@ public static class MandateSignerDefaultResolver
             else
             {
                 descartados.Add(new MandateSignerDiscard(c.Id, nivel, motivo));
+            }
+        }
+
+        if (asignadoPorOt is not null)
+        {
+            var motivo = MotivoDescarte(asignadoPorOt);
+            if (motivo is null)
+            {
+                // Va primero en su nivel: es la asignación explícita del OT para esta compañía.
+                validosPorNivel[MandateSignerLevel.OtParaCompania].Insert(0, asignadoPorOt);
+            }
+            else if (!descartados.Any(d => d.SignerId == asignadoPorOt.Id))
+            {
+                descartados.Add(new MandateSignerDiscard(asignadoPorOt.Id, MandateSignerLevel.OtParaCompania, motivo));
             }
         }
 
@@ -153,6 +173,12 @@ public static class MandateSignerDefaultResolver
             {
                 return new MandateSignerPrelacion(MandateSignerLevel.Explicita, match, validos, descartados);
             }
+        }
+
+        // Nivel 1 — el asignado por el OT gana su nivel aunque haya vínculos heredados de origen organismo.
+        if (asignadoPorOt is not null && validosPorNivel[MandateSignerLevel.OtParaCompania].Any(c => c.Id == asignadoPorOt.Id))
+        {
+            return new MandateSignerPrelacion(MandateSignerLevel.OtParaCompania, asignadoPorOt, validos, descartados);
         }
 
         // Niveles 1 a 3: un solo válido por nivel; varios sin designado ⇒ ambiguo (no se elige al azar).

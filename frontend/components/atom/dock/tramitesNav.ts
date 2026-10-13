@@ -1,8 +1,9 @@
 // Catálogo de navegación de Trámites para @flit/shell (B-13, HU #12989; guía del dock, Contrato A). Dice QUÉ existe y
 // QUIÉN lo ve; el dock de la suite lo filtra y lo dibuja. Las reglas son las del Shell anterior, entrada por entrada:
 // - módulos de la SPA (`/?m=…`): por módulo RBAC accesible (`/api/v1/security/modules`);
-// - administración de plataforma: solo SuperAdmin;
-// - Confirmación RUNT, Banners, LOG QX e ICT: por permiso del token (el SuperAdmin pasa siempre);
+// - administración de plataforma (incluye Banners, HU #13439): solo SuperAdmin;
+// - Confirmación RUNT, LOG QX, Trazabilidad ICT y Reportes ICT: por permiso del token (el SuperAdmin pasa
+//   siempre); Log ICT es solo del SuperAdmin (Bug #13445);
 // - las entradas que dependen del tipo de empresa (organismo de tránsito, cabeza de grupo, AdminCompany) solo se
 //   declaran para quien corresponde, porque el SuperAdmin las vería todas.
 import {
@@ -41,8 +42,8 @@ import {
   GENERACION_DOCUMENTAL_MODULE_CODE,
 } from "@/components/admin/generacion-documental/generacion-documental-nav";
 import {
-  BANNERS_MANAGE_PERMISSION,
-  ICT_LOGS_READ_PERMISSION,
+  ICT_REPORTES_READ_PERMISSION,
+  ICT_TRAZABILIDAD_READ_PERMISSION,
   LOG_QX_READ_PERMISSION,
   RUNT_CONFIRMATION_HISTORY_READ_PERMISSION,
   RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION,
@@ -131,7 +132,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
     superAdmin("auditoria", "Auditoría", "/?m=auditoria", ScrollText),
     {
       // Plataforma es contenedor: lo núcleo es del SuperAdmin; Confirmación RUNT (HU #12313, justo después de Tipos de
-      // trámites) y Banners (HU #12241) van por permiso, así que un rol con solo uno de ellos ve Plataforma con esa entrada.
+      // trámites) va por permiso, así que un rol con solo ese permiso ve Plataforma con esa entrada. Banners es solo SuperAdmin.
       key: "admin-plataforma",
       label: "Plataforma",
       href: "",
@@ -150,7 +151,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", Bell),
         // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
         superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", FileArchive),
-        { key: "admin-banners", label: "Banners", href: "/admin/banners", icon: ImageIcon, permission: BANNERS_MANAGE_PERMISSION },
+        superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
       ],
     },
     // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
@@ -195,16 +196,17 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   entries.push(
     { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: Radar, permission: LOG_QX_READ_PERMISSION },
     {
-      // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619).
+      // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619). Sin permiso propio, como
+      // Plataforma: `buildDock` lo muestra solo si le queda algún hijo visible. Log ICT es solo del SuperAdmin;
+      // Trazabilidad y Reportes van por su permiso, que tiene el Admin Company (Bug #13445, D10).
       key: "ict",
       label: "ICT",
       href: "",
       icon: Network,
-      permission: ICT_LOGS_READ_PERMISSION,
       children: [
-        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: Network, permission: ICT_LOGS_READ_PERMISSION },
-        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, permission: ICT_LOGS_READ_PERMISSION },
-        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, permission: ICT_LOGS_READ_PERMISSION },
+        superAdmin("ict-logs", "Log ICT", "/?m=ict-logs", Network),
+        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, permission: ICT_TRAZABILIDAD_READ_PERMISSION },
+        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, permission: ICT_REPORTES_READ_PERMISSION },
       ],
     },
   );

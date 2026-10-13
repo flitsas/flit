@@ -33,6 +33,6 @@ CREATE POLICY tenant_isolation ON ict.external_integration_master_transformation
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
 COMMENT ON COLUMN ict.external_integration_master_transformation_type.id_transformation_type
-    IS 'Código RUNT de la transformación (5/9/17), no la PK interna del catálogo.';
+    IS 'Código de la transformación en el catálogo ICT Tipo Trámite (5 blindaje, 6 carrocería, 7 color, 9 combustible), no la PK interna del catálogo.';
 COMMENT ON COLUMN ict.external_integration_master_transformation_type.description
     IS 'Valor libre del gestor para la transformación (p.ej. el color aplicado).';

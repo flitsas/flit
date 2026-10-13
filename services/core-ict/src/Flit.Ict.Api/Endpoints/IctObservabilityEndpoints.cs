@@ -5,7 +5,8 @@ namespace Flit.Ict.Api.Endpoints;
 
 /// <summary>
 /// Observabilidad ICT para el submódulo frontend (<c>/api/v1/ict/logs</c>, <c>/api/v1/ict/alerts</c>).
-/// El Gateway aplica JwtRequired (JWT de plataforma); aquí se verifica el permiso ict.logs.read.
+/// El Gateway aplica JwtRequired (JWT de plataforma). Bug #13445 (decisión D10): Logs ICT es SOLO del
+/// Super Administrador FLIT, por regla explícita de rol; el slug <c>ict.logs.read</c> no basta.
 /// </summary>
 public static class IctObservabilityEndpoints
 {
@@ -26,7 +27,7 @@ public static class IctObservabilityEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.IsSuperAdmin)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }
@@ -45,7 +46,7 @@ public static class IctObservabilityEndpoints
             CancellationToken ct) =>
         {
             var access = PlatformAccessReader.Read(context);
-            if (!access.HasIctLogsAccess)
+            if (!access.IsSuperAdmin)
             {
                 return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             }

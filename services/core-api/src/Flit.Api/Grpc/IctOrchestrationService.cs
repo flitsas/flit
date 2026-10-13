@@ -3,9 +3,11 @@ using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -31,6 +33,7 @@ public sealed class IctOrchestrationService(
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
     RunPreflightHandler preflightHandler,
+    RegistrarPrendaHandler prendaHandler,
     EnsureIdentityAndNotifyHandler identityNotifier,
     RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
@@ -182,18 +185,15 @@ public sealed class IctOrchestrationService(
             fieldItems.Add(new FieldValueInput(null, "owner_document_number", titular.DocumentNumber.Trim(), null));
         }
 
-        // Atributos "manuales" del traspaso que el frontend le pediría al gestor y que el contrato ICT v1
-        // NO trae (el master solo modela selling_price/vin/selling_date): se siembran con el default del
-        // caso estándar (no leasing, sin cambio de carrocería) para que el wizard no vuelva a solicitarlos.
-        // El gestor puede cambiarlos. accion_prenda se OMITE a propósito: es una decisión de negocio que
-        // depende de si el vehículo tiene gravamen (levantar/mantener) y no es derivable del payload ICT.
-        // TODO(ICT-MANUAL-ATTRS): derivar es_leasing/cambio_carroceria del tenant/transformaciones del
-        // master cuando ICT los capture (external_integration_master_transformation_type).
+        // Atributos "manuales" del traspaso que el frontend le pediría al gestor: se siembran con el default
+        // del caso estándar (no leasing, sin cambio de carrocería) para que el wizard no vuelva a
+        // solicitarlos, SOLO si core-ict no los mandó (Bug #13445: cambio_carroceria ya llega de las
+        // transformaciones del master, código 6 —Cambio de carrocería, catálogo Tipo Trámite—). La prenda no se siembra aquí: la resuelve
+        // IctPrendaResolver después del preflight, con la señal RUNT ya hidratada.
         var esTraspasoDraft = request.ProcedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
         if (esTraspasoDraft)
         {
-            fieldItems.Add(new FieldValueInput(null, "es_leasing", "false", null));
-            fieldItems.Add(new FieldValueInput(null, "cambio_carroceria", "false", null));
+            SembrarAtributosManualesTraspaso(fieldItems, request);
         }
 
         if (fieldItems.Count > 0)
@@ -261,6 +261,10 @@ public sealed class IctOrchestrationService(
             await CorrerPreflightIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
         }
 
+        // Bug #13445 (D1/D3) — prenda: DESPUÉS del preflight, que es quien deja la señal runt_* en los
+        // field_values. Automática solo en los casos de la matriz conservadora; el resto, aviso al gestor.
+        await ResolverPrendaIctAsync(reply, summary.Id, tenantId, createdBy, context.CancellationToken);
+
         // Identidad auto-iniciada — PARIDAD con el wizard manual (ensure → biométrica, TramiteWizard) y con
         // v1 (identityValidationService.validateIdentities). ICT no pasa por el wizard, así que se replica
         // aquí, DESPUÉS de materializar los actores: comprador siempre; vendedor solo en traspaso.
@@ -323,7 +327,147 @@ public sealed class IctOrchestrationService(
                 await CorrerPreflightIctAsync(reply, instanceId, tenantId, request, ct);
             }
         }
+
+        // Bug #13445 — si el intento previo se cayó antes de la prenda, se resuelve ahora. Con cualquier
+        // fila de prenda (vigente o no) no se toca: la pudo haber decidido el gestor.
+        var tienePrenda = await db.Set<ProcedureInstancePrenda>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(p => p.ProcedureInstanceId == instanceId && p.TenantId == tenantId, ct);
+        if (!tienePrenda)
+        {
+            var creador = await ResolveIctCreatorAsync(request.CreatedByUserId, tenantId, ct);
+            RefrescarRastreo();
+            await ResolverPrendaIctAsync(reply, instanceId, tenantId, creador, ct);
+        }
     }
+
+    /// <summary>
+    /// Bug #13445 — siembra <c>es_leasing</c>/<c>cambio_carroceria</c> = <c>"false"</c> del traspaso SOLO
+    /// para las claves que core-ict no mandó: si vino <c>cambio_carroceria="true"</c> (código 6, Cambio de carrocería, catálogo Tipo Trámite),
+    /// el default no la pisa.
+    /// </summary>
+    internal static void SembrarAtributosManualesTraspaso(List<FieldValueInput> fieldItems, CreateDraftFromIctRequest request)
+    {
+        foreach (var clave in new[] { "es_leasing", "cambio_carroceria" })
+        {
+            var vino = request.FieldValues.Any(f => string.Equals(f.FieldKey?.Trim(), clave, StringComparison.OrdinalIgnoreCase));
+            if (!vino)
+            {
+                fieldItems.Add(new FieldValueInput(null, clave, "false", null));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Bug #13445 — lee los field_values de la instancia (ya con la señal RUNT del preflight) y la familia del
+    /// tipo, resuelve con <see cref="IctPrendaResolver"/> y aplica. Best-effort: nada de esto tumba la
+    /// materialización. La decisión automática queda a nombre del usuario de servicio ICT del tenant
+    /// (<paramref name="creadorIct"/>, el mismo creador del borrador) para que sea trazable.
+    /// </summary>
+    private async Task ResolverPrendaIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, Guid creadorIct, CancellationToken ct)
+    {
+        IctPrendaResolucion resolucion;
+        try
+        {
+            RefrescarRastreo();
+            var familia = await db.Set<ProcedureInstance>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(p => p.Id == instanceId && p.TenantId == tenantId)
+                .Select(p => p.ProcedureType != null ? p.ProcedureType.Family : null)
+                .FirstOrDefaultAsync(ct);
+            var fieldValues = await db.Set<ProcedureInstanceFieldValue>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId)
+                .ToListAsync(ct);
+            resolucion = IctPrendaResolver.Resolver(fieldValues, ProcedureFamilyCodes.FromCodeOrOtros(familia));
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            var code = CodigoDeFallo(ex);
+            IctOrchestrationLog.StepFailed(logger, "prenda", code, ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "prenda_auto_error:" + code);
+            return;
+        }
+
+        await AplicarResolucionPrendaAsync(
+            reply,
+            resolucion,
+            input =>
+            {
+                RefrescarRastreo();
+                return prendaHandler.HandleAsync(instanceId, tenantId, input, userId: creadorIct, ct);
+            },
+            ex =>
+            {
+                RefrescarRastreo();
+                IctOrchestrationLog.StepFailed(logger, "prenda", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// Bug #13445 — aplica la resolución de prenda: <c>Auto</c> → <paramref name="registrar"/> (el
+    /// <see cref="RegistrarPrendaHandler"/>, con metadata <c>{"origen":"ict_auto","resolucion":…}</c> para
+    /// distinguir la decisión automática de la del gestor; sin PII); su error →
+    /// <c>prenda_auto_error:&lt;código&gt;</c>; <c>PendienteGestor</c> → <c>prenda_pendiente_gestor:&lt;motivo&gt;</c>;
+    /// discrepancia con el RUNT → <c>prenda_discrepancia_runt:&lt;motivo&gt;</c>. Los avisos llevan solo
+    /// códigos estables: el acreedor (PII) nunca sale en el reply ni en el log.
+    /// </summary>
+    internal static async Task AplicarResolucionPrendaAsync(
+        DraftReply reply,
+        IctPrendaResolucion resolucion,
+        Func<RegistrarPrendaInput, Task<(PrendaDto? Result, string? Error)>> registrar,
+        Action<Exception> alFallar,
+        CancellationToken ct)
+    {
+        switch (resolucion.Tipo)
+        {
+            case IctPrendaResolucionTipo.Auto:
+                try
+                {
+                    var (_, error) = await registrar(new RegistrarPrendaInput(
+                        resolucion.Decision!, resolucion.AcreedorNombre, resolucion.AcreedorDocumento,
+                        MetadataJson: MetadataPrendaAuto(resolucion)));
+                    if (error is not null)
+                    {
+                        AppendWarning(reply, "prenda_auto_error:" + error);
+                    }
+                }
+                catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+                {
+                    alFallar(ex);
+                    AppendWarning(reply, "prenda_auto_error:" + CodigoDeFallo(ex));
+                }
+
+                break;
+
+            case IctPrendaResolucionTipo.PendienteGestor:
+                AppendWarning(reply, "prenda_pendiente_gestor:" + resolucion.Motivo);
+                break;
+        }
+
+        if (resolucion.Discrepancia is not null)
+        {
+            AppendWarning(reply, "prenda_discrepancia_runt:" + resolucion.Discrepancia);
+        }
+    }
+
+    /// <summary>
+    /// Bug #13445 (revisión SEC) — metadata de la prenda decidida por el sistema: origen fijo
+    /// <c>ict_auto</c> y el caso de la matriz (la discrepancia avisada o, si no hay, la decisión). Solo
+    /// códigos estables: nunca el acreedor.
+    /// </summary>
+    internal static string MetadataPrendaAuto(IctPrendaResolucion resolucion) =>
+        System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string?>
+        {
+            ["origen"] = "ict_auto",
+            ["resolucion"] = resolucion.Discrepancia ?? resolucion.Decision,
+        });
 
     private async Task CompletarComercialAsync(
         DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)

@@ -422,3 +422,16 @@ sequenceDiagram
 - **D-7** Hasta que F3 escriba `configured_by_scope` en cada alta, las altas nuevas de una compañía caen en el default `organismo` y se verían como nivel 1. Ordenar F3 antes del paso a `block`, o que F4 lo escriba en las altas de compañía.
 - **D-8** RESUELTA en F7 (HU #13179): `GetCandidatesAsync` ya no acota por NIT del vendedor ni consulta `mandate_signer_represented_companies`; el parámetro `nitMandante` queda obsoleto e ignorado. El candidato de la compañía propietaria se incluye siempre.
 - **D-9** Numeración: dos `ADR-0050`, dos `ADR-0036`, dos `ADR-0053`, dos `ADR-0059`, dos `ADR-0060`, dos `ADR-0061`, y `docs/suite/adr-borradores` reserva 0062-0065. Conviene un único índice de ADRs.
+
+## Enmienda 2026-10-08 — el OT asigna de sus mandatarios (Propuesto)
+
+**Decisión del usuario (Líder Técnico).** El OT tiene mandatarios propios (registrados en el organismo, sin compañía dueña) y los gestiona. **No crea ni gestiona mandatarios de las compañías**: esos los registra y gestiona cada compañía. El OT solo **asigna** de los suyos: el mandatario general y, por compañía, el que firma sus trámites.
+
+Cambios sobre lo descrito arriba:
+
+- **Nivel 1 (`OtParaCompania`)** pasa a ser el mandatario del OT asignado a la compañía en `company_ot_mandate_rules.default_mandate_signer_id` («el que configuró el OT para la compañía», P2). `MandateSignerPrelacionLoader` lo carga por id (no está vinculado a la compañía) y `MandateSignerDefaultResolver` lo pone primero en su nivel; si no es válido se descarta con su motivo y sigue la prelación. Esto revierte el párrafo de §Reglas que lo reducía a desempate transitorio (sigue desempatando si un grupo tuviera N>1).
+- Los vínculos heredados de origen `organismo` con compañía dueña siguen contando como nivel 1 hasta que se migren; no se crean nuevos.
+- **Validación**: el mandatario general y el asignado por compañía deben ser del OT (activo, del organismo y sin vínculos activos en `mandate_signer_companies`); si no, `mandatario_default_invalido`.
+- **Permisos**: `OtGestionaSoloSusMandatariosFilter` rechaza con 403 `mandatario_de_compania` que un usuario que no sea Super Admin dé de alta desde el hub un mandatario con compañías, o edite, desactive, reactive, elimine o reenvíe la validación de uno de compañía. El listado del hub marca `puedeEditar`/`puedeEliminar = false` para el Admin OT en esos mandatarios. El Super Admin no tiene esta restricción.
+
+**Pendiente para el Líder Técnico:** decidir la migración de los vínculos de origen `organismo` que el OT creó para compañías antes de esta enmienda (conservarlos, convertirlos en asignaciones de un mandatario del OT, o retirarlos).

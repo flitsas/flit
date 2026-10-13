@@ -808,6 +808,10 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             entity.RowVersion));
     }
 
+    /// <summary>
+    /// El mandatario general del OT y el que el OT asigna a cada compañía son SUYOS: activos, del organismo y sin
+    /// compañía dueña. El OT no crea ni gestiona mandatarios de las compañías.
+    /// </summary>
     private async Task<bool> IsValidOtDefaultSignerAsync(
         Guid officeId,
         Guid mandateSignerId,
@@ -819,6 +823,12 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (!signerOk)
             return false;
 
+        var esDeUnaCompania = await _db.MandateSignerCompanies.AsNoTracking()
+            .AnyAsync(c => c.MandateSignerId == mandateSignerId && c.IsActive, ct)
+            .ConfigureAwait(false);
+        if (esDeUnaCompania)
+            return false;
+
         var primaryOffice = await _db.MandateSigners.AsNoTracking()
             .AnyAsync(s => s.Id == mandateSignerId && s.TransitOfficeId == officeId, ct)
             .ConfigureAwait(false);
@@ -834,42 +844,17 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             .ConfigureAwait(false);
     }
 
-    private async Task<bool> IsValidDefaultSignerAsync(
+    /// <summary>
+    /// El mandatario que el OT asigna a una compañía (nivel 1 de la prelación, P2): uno de los mandatarios del OT.
+    /// </summary>
+    private Task<bool> IsValidDefaultSignerAsync(
         Guid officeId,
         Guid companyTenantId,
         Guid mandateSignerId,
-        CancellationToken ct)
-    {
-        var signerOk = await _db.MandateSigners.AsNoTracking()
-            .AnyAsync(s => s.Id == mandateSignerId && s.IsActive && s.DeletedAt == null, ct)
-            .ConfigureAwait(false);
-        if (!signerOk)
-            return false;
-
-        var companyOk = await _db.MandateSignerCompanies.AsNoTracking()
-            .AnyAsync(
-                c => c.MandateSignerId == mandateSignerId
-                    && c.CompanyTenantId == companyTenantId
-                    && c.IsActive,
-                ct)
-            .ConfigureAwait(false);
-        if (!companyOk)
-            return false;
-
-        var primaryOffice = await _db.MandateSigners.AsNoTracking()
-            .AnyAsync(s => s.Id == mandateSignerId && s.TransitOfficeId == officeId, ct)
-            .ConfigureAwait(false);
-        if (primaryOffice)
-            return true;
-
-        return await _db.MandateSignerTransitOffices.AsNoTracking()
-            .AnyAsync(
-                l => l.MandateSignerId == mandateSignerId
-                    && l.TransitOfficeId == officeId
-                    && l.IsActive,
-                ct)
-            .ConfigureAwait(false);
-    }
+        CancellationToken ct) =>
+        companyTenantId == Guid.Empty
+            ? Task.FromResult(false)
+            : IsValidOtDefaultSignerAsync(officeId, mandateSignerId, ct);
 
     public async Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
         Guid officeId,

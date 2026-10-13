@@ -44,11 +44,14 @@ INSERT INTO ict.external_integration_guarantee_operation_type (id, name) VALUES
     (1,'Levantar'), (2,'Registrar'), (3,'Omitir')
 ON CONFLICT (id) DO NOTHING;
 
--- Transformaciones RUNT. OJO: dos identificadores, como en v1 —
---   id                     = PK interna (1,2,3), la que muestra el contrato como "ID"
---   id_transformation_type = CÓDIGO RUNT real (5,9,17), el que viaja en el payload del cliente
+-- Transformaciones. OJO: dos identificadores, como en v1 —
+--   id                     = PK interna, la que muestra el contrato como "ID"
+--   id_transformation_type = código que viaja en el payload del cliente
 --                            (more_transaction_transaction_type[].transactionType) y el que
---                            referencian las FKs.
+--                            referencian las FKs. Bug #13445: ese código es del catálogo ICT
+--                            Tipo Trámite (5 blindaje, 6 carrocería, 7 color, 9 combustible), NO
+--                            un código RUNT. La semilla de abajo (5 color/9/17) quedó mal
+--                            etiquetada; la corrige 27-ICT-transformation-type-tipo-tramite.sql.
 CREATE TABLE IF NOT EXISTS ict.external_integration_transformation_type (
     id                     integer NOT NULL,
     id_transformation_type integer NOT NULL,

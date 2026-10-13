@@ -2661,7 +2661,8 @@ public static partial class AdminOtEndpoints
         {
             var role = await db.Roles.AsNoTracking()
                 .FirstOrDefaultAsync(
-                    r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
+                    r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null
+                        && (r.TenantId == null || r.TenantId == tenantId),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -2677,7 +2678,8 @@ public static partial class AdminOtEndpoints
         else
         {
             var selectedRoles = await db.Roles.AsNoTracking()
-                .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null
+                    && (r.TenantId == null || r.TenantId == tenantId))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 

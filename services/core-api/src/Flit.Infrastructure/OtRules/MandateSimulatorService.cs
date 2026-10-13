@@ -271,7 +271,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
                     : default;
 
                 mandatario = new MandatarioFirmante(
-                    signer.Nombre, signer.Documento, firma.Firma, firma.Sello, firma.Metadatos);
+                    signer.Nombre, signer.Documento, firma.Firma, firma.Sello, firma.Metadatos, firma.FirmaIdentidad);
             }
         }
 

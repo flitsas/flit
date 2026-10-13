@@ -21,9 +21,9 @@ public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
         // asignable en una invitación ya no se valida contra el tenant, sino contra el catálogo
         // global (existe, activo, no borrado). tenantId se conserva en la firma de
         // IInvitationRepository para no romper otros consumidores fuera de esta HU.
-        _ = tenantId;
+        // HU #13441: un rol propio de otra compañía (tenant_id distinto) no es asignable; los globales (NULL) sí.
         return db.Roles.AnyAsync(
-            x => x.Id == roleId && x.IsActive && x.DeletedAt == null,
+            x => x.Id == roleId && x.IsActive && x.DeletedAt == null && (x.TenantId == null || x.TenantId == tenantId),
             cancellationToken);
     }
 

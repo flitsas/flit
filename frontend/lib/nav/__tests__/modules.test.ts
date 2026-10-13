@@ -17,6 +17,8 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
     isOtAdmin: false,
     canReadLogQx: false,
     canReadIctLogs: false,
+    canReadIctTrazabilidad: false,
+    canReadIctReportes: false,
   };
 
   it("incluye 'ayuda' aunque RBAC no la conceda", () => {
@@ -77,12 +79,19 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
     expect(
       resolveNavigableModuleIds({ ...base, canReadLogQx: true }),
     ).toContain("log-qx");
-    // Los tres espacios de ICT comparten el mismo gate: es el mismo público (Feature #11814).
-    expect(
-      resolveNavigableModuleIds({ ...base, canReadIctLogs: true }),
-    ).toEqual(expect.arrayContaining(["ict-logs", "ict-reportes", "ict-trazabilidad"]));
+    // Bug #13445: cada espacio de ICT con su gate (Log solo SuperAdmin; Trazabilidad y Reportes por su permiso).
+    const soloLog = resolveNavigableModuleIds({ ...base, canReadIctLogs: true });
+    expect(soloLog).toContain("ict-logs");
+    expect(soloLog).not.toContain("ict-reportes");
+    expect(soloLog).not.toContain("ict-trazabilidad");
+    const adminCompany = resolveNavigableModuleIds({ ...base, canReadIctTrazabilidad: true, canReadIctReportes: true });
+    expect(adminCompany).toEqual(expect.arrayContaining(["ict-reportes", "ict-trazabilidad"]));
+    expect(adminCompany).not.toContain("ict-logs");
     // Y sin el permiso no se cuela ninguno.
-    expect(resolveNavigableModuleIds(base)).not.toContain("ict-trazabilidad");
+    const nada = resolveNavigableModuleIds(base);
+    expect(nada).not.toContain("ict-logs");
+    expect(nada).not.toContain("ict-reportes");
+    expect(nada).not.toContain("ict-trazabilidad");
   });
 
   it("OT admin omite SPA homónimas del hub (otAdminSpaOmit)", () => {

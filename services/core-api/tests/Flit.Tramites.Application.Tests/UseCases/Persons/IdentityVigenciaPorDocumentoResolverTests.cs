@@ -202,6 +202,34 @@ public sealed class IdentityVigenciaPorDocumentoResolverTests
     }
 
     [Fact]
+    public async Task ResolveMandatarioAsync_PropiaAprobada_TraeLaRubricaDeKyverum_ParaEstamparlaEnElMandato()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var propia = Propia(BiometricEstados.Aprobado, Now.AddDays(-2));
+        propia.SignatureImagePath = "identity/rubrica.png";
+        SeedPropias(propia);
+
+        var result = await new IdentityVigenciaPorDocumentoResolver(_repo)
+            .ResolveMandatarioAsync(Signer, "CC", "123", Now, ct);
+
+        result.SignatureImagePath.Should().Be("identity/rubrica.png");
+    }
+
+    [Fact]
+    public async Task ResolveMandatarioAsync_EnCurso_NoTraeRubrica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var propia = Propia(BiometricEstados.EnProceso, Now.AddHours(-1));
+        propia.SignatureImagePath = "identity/rubrica.png";
+        SeedPropias(propia);
+
+        var result = await new IdentityVigenciaPorDocumentoResolver(_repo)
+            .ResolveMandatarioAsync(Signer, "CC", "123", Now, ct);
+
+        result.SignatureImagePath.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ResolveMandatarioAsync_SoloHayAprobacionDeOtroRol_SinValidacion_YNoConsultaPorDocumento()
     {
         // HU #13247 AC2/AC5 — comprador, vendedor o prevalidación aprobados con la misma cédula no cuentan: el repositorio

@@ -53,12 +53,33 @@ internal static class MandateSignerPrelacionLoader
             }
         }
 
-        var prelacion = MandateSignerDefaultResolver.Resolve(
-            candidatos, defaultDelOt, eleccionOt, guardado, config?.DefaultMandateSignerId);
+        // Nivel 1 — el mandatario del OT que el organismo asignó a esta compañía (regla compañía×OT). Es del OT, así que
+        // no está vinculado a la compañía: se carga por id, igual que el default del OT.
+        MandateSignerCandidate? asignadoPorOt = null;
+        if (config?.DefaultMandateSignerId is { } asignadoId && asignadoId != Guid.Empty)
+        {
+            asignadoPorOt = candidatos.FirstOrDefault(c => c.Id == asignadoId);
+            if (asignadoPorOt is null)
+            {
+                var porId = await directory.GetByIdAsync(asignadoId, ct).ConfigureAwait(false);
+                if (porId is not null)
+                {
+                    asignadoPorOt = (await EnriquecerBaulAsync([porId], vaultPolicy, tenantId, ct)
+                        .ConfigureAwait(false))[0];
+                }
+            }
+        }
 
-        var todos = defaultDelOt is not null && candidatos.All(c => c.Id != defaultDelOt.Id)
-            ? [.. candidatos, defaultDelOt]
-            : candidatos;
+        var prelacion = MandateSignerDefaultResolver.Resolve(
+            candidatos, defaultDelOt, eleccionOt, guardado, config?.DefaultMandateSignerId, asignadoPorOt);
+
+        List<MandateSignerCandidate> todos = [.. candidatos];
+        foreach (var extra in new[] { asignadoPorOt, defaultDelOt })
+        {
+            if (extra is not null && todos.All(c => c.Id != extra.Id))
+                todos.Add(extra);
+        }
+
         return (prelacion, todos);
     }
 

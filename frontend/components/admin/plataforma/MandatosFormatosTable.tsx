@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Pencil } from "lucide-react";
+import { Eye, Pencil, RotateCcw } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -15,6 +15,8 @@ export interface MandatosFormatosTableProps {
   previewing: string | null;
   onEdit: (code: string) => void;
   onPreview: (code: string) => void;
+  /** Pide confirmación para devolver el formato a su redacción de fábrica. Solo se ofrece si se editó la plantilla. */
+  onResetTemplate?: (formato: MandatoFormatView) => void;
 }
 
 /**
@@ -27,6 +29,7 @@ export function MandatosFormatosTable({
   previewing,
   onEdit,
   onPreview,
+  onResetTemplate,
 }: MandatosFormatosTableProps) {
   const pg = usePaginacion();
   const pageRows = pg.paginar([...formatos]);
@@ -86,6 +89,16 @@ export function MandatosFormatosTable({
                     icon: Eye,
                     label: `Ver documento del formato ${row.name}`,
                     onClick: () => onPreview(row.code),
+                    disabled: previewing !== null,
+                  },
+                ]
+              : []),
+            ...(onResetTemplate && !row.delegatesToOfficeTemplate && row.currentVersion > 0
+              ? [
+                  {
+                    icon: RotateCcw,
+                    label: `Restablecer formato ${row.name}`,
+                    onClick: () => onResetTemplate(row),
                     disabled: previewing !== null,
                   },
                 ]

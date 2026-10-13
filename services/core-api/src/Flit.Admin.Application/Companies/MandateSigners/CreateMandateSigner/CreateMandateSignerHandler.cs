@@ -97,7 +97,7 @@ public sealed class CreateMandateSignerHandler
                 MandateSignerModels.Natural, null, MandateValidityKinds.Fixed, null, null,
                 command.FullName, string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim(),
                 command.DocumentNumber.Trim());
-            inferred = await ResolveSigningMeansAsync(command, dummy, companyIds, cancellationToken)
+            inferred = await ResolveSigningMeansAsync(command, dummy, companyIds, BaulDelOt(otStatus), cancellationToken)
                 .ConfigureAwait(false);
             if (inferred.Error is null)
             {
@@ -163,7 +163,7 @@ public sealed class CreateMandateSignerHandler
         {
             var signing = inferred is { Error: null }
                 ? inferred
-                : await ResolveSigningMeansAsync(command, profile, companyIds, cancellationToken)
+                : await ResolveSigningMeansAsync(command, profile, companyIds, BaulDelOt(otStatus), cancellationToken)
                     .ConfigureAwait(false);
             if (signing.Error is not null)
             {
@@ -237,13 +237,21 @@ public sealed class CreateMandateSignerHandler
         MandateSignerValidationError? Error, Guid? SignatureVaultId, string? Means);
 
     /// <summary>
+    /// Tenant del organismo, cuyo baúl usa el mandatario que el OT registra para sí mismo (sin compañías): el OT es un
+    /// tenant y es el dueño de ese mandatario. <c>null</c> si el organismo no tiene tenant en FLIT.
+    /// </summary>
+    private static Guid? BaulDelOt(TransitOfficeOperationalStatusItem? otStatus) =>
+        otStatus is { HasTenant: true, TenantId: { } tenantId } ? tenantId : null;
+
+    /// <summary>
     /// HU #13123 + HU #13129 — mismas reglas que el alta de la compañía, ahora con forma de firma explícita
     /// (solo Persona natural).
     /// <para>
     /// <b>Biometría:</b> se guarda sin exigir una validación aprobada; la origina y vigila el módulo
     /// Identidad (HU #13130; una aprobación basta, sin ventana de 30 días, HU #13130b). <b>Baúl:</b> con <c>SignatureVaultId</c> se valida esa firma contra el
     /// tenant de la compañía (existe, es de esa persona, activa y vigente); sin él, el backend resuelve la
-    /// firma vigente de la persona (tipo + número) en el baúl de la compañía destino (el OT no ve el baúl).
+    /// firma vigente de la persona (tipo + número) en el baúl de la compañía destino. Sin compañías, el baúl es el
+    /// del propio OT, dueño del mandatario.
     /// Sin firma ⇒ 422 <c>signatureVaultId</c>. Con varias compañías y sin vault ⇒ 422. La firma física
     /// transitoria no aplica al alta del OT. Solo se devuelve el nombre del medio.
     /// </para>
@@ -252,6 +260,7 @@ public sealed class CreateMandateSignerHandler
         CreateMandateSignerCommand command,
         MandateSignerProfile profile,
         IReadOnlyList<Guid> companyIds,
+        Guid? otTenantId,
         CancellationToken cancellationToken)
     {
         var offices = command.TransitOfficeIds is { Count: > 0 }
@@ -263,7 +272,14 @@ public sealed class CreateMandateSignerHandler
         if (method != MandateSignatureMethods.Biometria
             && command.SignatureVaultId is { } vaultId && vaultId != Guid.Empty)
         {
-            if (distinctCompanies.Count != 1)
+            // Sin compañías, la firma es del baúl del propio OT (dueño del mandatario que registra para sí).
+            Guid? vaultTenant = distinctCompanies.Count switch
+            {
+                1 => distinctCompanies[0],
+                0 => otTenantId,
+                _ => null,
+            };
+            if (vaultTenant is null)
             {
                 return new SigningResolution(
                     new MandateSignerValidationError(
@@ -276,7 +292,7 @@ public sealed class CreateMandateSignerHandler
 
             var firmaError = await CreateCompanyMandateSignerHandler.ValidarFirmaAsync(
                 _vaultReader,
-                distinctCompanies[0],
+                vaultTenant.Value,
                 new CompanyMandateSignerRequest(
                     command.FullName,
                     command.DocumentNumber,
@@ -297,7 +313,7 @@ public sealed class CreateMandateSignerHandler
             return new SigningResolution(null, null, MeansBiometric);
         }
 
-        if (distinctCompanies.Count == 0)
+        if (distinctCompanies.Count == 0 && otTenantId is null)
         {
             return new SigningResolution(
                 new MandateSignerValidationError(
@@ -308,7 +324,7 @@ public sealed class CreateMandateSignerHandler
                 null);
         }
 
-        if (distinctCompanies.Count != 1)
+        if (distinctCompanies.Count > 1)
         {
             return new SigningResolution(
                 new MandateSignerValidationError("companyTenantIds", VariasCompaniasSinBaulMessage, null),
@@ -316,7 +332,7 @@ public sealed class CreateMandateSignerHandler
                 null);
         }
 
-        var companyTenant = distinctCompanies[0];
+        var companyTenant = distinctCompanies.Count == 1 ? distinctCompanies[0] : otTenantId!.Value;
         var documentNumber = profile.DocumentNumber ?? string.Empty;
 
         if (method != MandateSignatureMethods.Biometria && _vaultReader is not null)

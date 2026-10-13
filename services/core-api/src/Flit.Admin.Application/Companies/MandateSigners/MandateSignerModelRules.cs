@@ -42,9 +42,15 @@ public static class MandateSignerModelRules
     public const string MetodoRequeridoMessage =
         "Elija la forma de firma del mandatario: baúl de firmas o validación de identidad.";
 
-    /// <summary>HU #13246 — con biometría el enlace de captura viaja por correo: sin correo no hay validación posible.</summary>
-    public const string CorreoRequeridoConBiometriaMessage =
+    /// <summary>
+    /// Correo obligatorio para toda Persona natural. Con biometría el enlace de captura viaja por correo; con
+    /// baúl también se exige, porque pasar después a validación de identidad lanza la VID a ese correo.
+    /// </summary>
+    public const string CorreoRequeridoMessage =
         "Escribe el correo del mandatario: ahí enviamos el enlace para validar su identidad.";
+
+    /// <summary>HU #13246 — mismo texto que <see cref="CorreoRequeridoMessage"/>; lo usa el reenvío de la validación.</summary>
+    public const string CorreoRequeridoConBiometriaMessage = CorreoRequeridoMessage;
 
     public const string FechaInicioRequeridaMessage =
         "La fecha de inicio es obligatoria para la vigencia por rango.";
@@ -163,10 +169,11 @@ public static class MandateSignerModelRules
         DateOnly? to,
         string? email)
     {
-        // HU #13246 — correo obligatorio con biometría (con baúl es opcional).
-        if (method == MandateSignatureMethods.Biometria && string.IsNullOrWhiteSpace(email))
+        // Correo obligatorio para toda Persona natural, firme con baúl o con biometría (HU #13246 lo pedía
+        // solo con biometría): ahí llega la VID, también si después pasa de baúl a validación de identidad.
+        if (string.IsNullOrWhiteSpace(email))
         {
-            errors.Add(new MandateSignerValidationError("email", CorreoRequeridoConBiometriaMessage, null));
+            errors.Add(new MandateSignerValidationError("email", CorreoRequeridoMessage, null));
         }
 
         // Un método inválido ya se reportó arriba; aquí solo falta cuando no hay ninguno.

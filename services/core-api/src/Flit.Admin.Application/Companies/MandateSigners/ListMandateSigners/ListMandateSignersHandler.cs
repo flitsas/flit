@@ -59,8 +59,16 @@ public sealed class ListMandateSignersHandler
                 s.FirmaValidezOn(today)?.Valida,
                 s.FirmaValidezOn(today)?.Motivo,
                 s.Origin,
-                MandateSignerOriginRules.CanModify(query.ActorKind, s.Origin),
-                MandateSignerOriginRules.CanModify(query.ActorKind, s.Origin))),
+                PuedeGestionar(query.ActorKind, s),
+                PuedeGestionar(query.ActorKind, s))),
         ];
     }
+
+    /// <summary>
+    /// Además de la regla por origen, el Admin OT gestiona SOLO los mandatarios del organismo: los de una compañía (con
+    /// compañía dueña) los gestiona la compañía. Misma regla que <c>OtGestionaSoloSusMandatariosFilter</c> en la API.
+    /// </summary>
+    private static bool PuedeGestionar(MandateSignerActorKind actor, MandateSignerItem s) =>
+        MandateSignerOriginRules.CanModify(actor, s.Origin)
+        && !(actor == MandateSignerActorKind.OtAdmin && s.CompanyTenantIds.Count > 0);
 }

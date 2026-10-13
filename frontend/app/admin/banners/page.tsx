@@ -8,8 +8,7 @@ import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
-import { PermissionGate } from "@/components/auth/PermissionGate";
-import { BANNERS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
+import { usePermissions } from "@/hooks/usePermissions";
 import { BannerListTable } from "@/components/admin/banners/BannerListTable";
 import { BannerFormPanel } from "@/components/admin/banners/BannerFormPanel";
 import { BannerDeleteDialog } from "@/components/admin/banners/BannerDeleteDialog";
@@ -20,17 +19,19 @@ import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 /**
  * Consola admin de banners promocionales (HU #12241, Feature #12236): listado administrable
  * (AC1), alta/edición con vista previa en vivo (AC2), eliminación con confirmación (AC3) y guía
- * de tamaño recomendado en el formulario (AC4). El módulo completo está gateado por el permiso
- * `banners.manage` — el borde (middleware, `evaluateAdminAccess`) ya redirige a /403 a quien no
- * lo tiene; `PermissionGate` es la defensa en profundidad del lado del componente.
+ * de tamaño recomendado en el formulario (AC4). El módulo es exclusivo del Super Admin FLIT
+ * (HU #13439, Épica #12750) — el borde (middleware, `evaluateAdminAccess`) ya redirige a /403 a
+ * quien no lo es; aquí se repite la comprobación como defensa en profundidad del lado del componente.
  */
 export default function AdminBannersPage() {
+  const { isSuperAdmin } = usePermissions();
+
+  if (!isSuperAdmin) return <NoAccess />;
+
   return (
-    <PermissionGate permission={BANNERS_MANAGE_PERMISSION} fallback={<NoAccess />}>
-      <ToastProvider>
-        <BannersList />
-      </ToastProvider>
-    </PermissionGate>
+    <ToastProvider>
+      <BannersList />
+    </ToastProvider>
   );
 }
 

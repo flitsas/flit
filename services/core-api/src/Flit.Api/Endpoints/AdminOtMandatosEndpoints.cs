@@ -157,7 +157,11 @@ public static class AdminOtMandatosEndpoints
             MandateConfigWriteStatus.OfficeNotFound or MandateConfigWriteStatus.CompanyNotFound =>
                 Results.NotFound(),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
-                Results.BadRequest(new { error = "mandatario_default_invalido" }),
+                Results.BadRequest(new
+                {
+                    error = "mandatario_default_invalido",
+                    message = "Elige uno de los mandatarios del organismo. Los mandatarios de las compañías los gestiona cada compañía.",
+                }),
             // HU #13148 — rowVersion opcional en el hub: solo choca si el cliente lo envía y ya cambió.
             MandateConfigWriteStatus.Conflict =>
                 Results.Conflict(new { error = "row_version_conflict" }),

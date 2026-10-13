@@ -281,6 +281,7 @@ public sealed class MandatarioModeloVigenciaTests
                 TransitOfficeId = Office,
                 FullName = "Ana Restrepo",
                 DocumentNumber = "1020304050",
+                Email = "ana@example.com",
                 CompanyTenantIds = [CompanyA],
                 SignerModel = "natural",
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,

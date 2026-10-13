@@ -211,4 +211,43 @@ public sealed class MandateFormatAdminServiceTests
         all.Should().OnlyContain(f => f.RowVersion == null && f.CurrentVersion == 0);
         edit.Status.Should().Be(MandateFormatUpdateStatus.NotFound, "sin fila no se crea nada");
     }
+
+    // ── Restablecer redacción de fábrica ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Restablecer_FormatoConPlantillaEditada_VuelveAFabrica_ConservaNombreYTipo()
+    {
+        var (db, service) = await NewAsync();
+        await using var _ = db;
+        await service.UpdateAsync("bello", Req(0, name: "Bello 2026", body: "Contrato {{placa}}"), Author, Ct);
+
+        var result = await service.ResetTemplateAsync("bello", 0, Author, Ct);
+
+        result.Status.Should().Be(MandateFormatUpdateStatus.Ok);
+        result.Changed.Should().BeTrue();
+        result.Previous!.CurrentVersion.Should().Be(1);
+        result.Current!.CurrentVersion.Should().Be(0);
+        result.Current.Name.Should().Be("Bello 2026");
+    }
+
+    [Fact]
+    public async Task Restablecer_Auto_NoTieneRedaccionPropia_400()
+    {
+        var (db, service) = await NewAsync();
+        await using var _ = db;
+
+        var result = await service.ResetTemplateAsync("auto", 0, Author, Ct);
+
+        result.Status.Should().Be(MandateFormatUpdateStatus.BadRequest);
+        result.ErrorCode.Should().Be("formato_sin_plantilla");
+    }
+
+    [Fact]
+    public async Task Restablecer_CodigoFueraDelCatalogo_404()
+    {
+        var (db, service) = await NewAsync();
+        await using var _ = db;
+
+        (await service.ResetTemplateAsync("nuevo", 0, Author, Ct)).Status.Should().Be(MandateFormatUpdateStatus.NotFound);
+    }
 }

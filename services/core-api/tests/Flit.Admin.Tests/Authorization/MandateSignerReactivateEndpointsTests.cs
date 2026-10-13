@@ -31,7 +31,7 @@ public sealed class MandateSignerReactivateEndpointsTests(WebApplicationFactory<
     {
         var signer = await SeedSignerAsync("Ana", [(_companyA, "organismo"), (_companyB, "organismo")]);
         await SeedDefaultsAsync(signer);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
         (await _client.PostAsync(Hub(signer, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var response = await _client.PostAsync(Hub(signer, "/reactivate"), null, Ct);
@@ -53,7 +53,7 @@ public sealed class MandateSignerReactivateEndpointsTests(WebApplicationFactory<
     public async Task HU13136_AC4_el_conflicto_total_responde_409_mandatario_activo_existente()
     {
         var signer = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
         (await _client.PostAsync(Hub(signer, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
         await SeedSignerAsync("Beto", [(_companyA, "organismo")]);
 
@@ -70,7 +70,7 @@ public sealed class MandateSignerReactivateEndpointsTests(WebApplicationFactory<
     public async Task HU13136_AC5_reactivar_un_eliminado_es_404()
     {
         var signer = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
-        AuthenticateOt();
+        AuthenticateSuperAdmin(); // el OT no gestiona mandatarios de compañías
         (await _client.DeleteAsync(Hub(signer, "?confirmarImpacto=true"), Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         (await _client.PostAsync(Hub(signer, "/reactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);

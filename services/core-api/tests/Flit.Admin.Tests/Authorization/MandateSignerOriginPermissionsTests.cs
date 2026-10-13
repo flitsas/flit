@@ -83,17 +83,84 @@ public sealed class MandateSignerOriginPermissionsTests(WebApplicationFactory<Pr
     }
 
     [Fact]
-    public async Task AC1_Admin_OT_gestiona_mandatarios_de_cualquier_origen_en_su_organismo()
+    public async Task AC1_Admin_OT_gestiona_sus_mandatarios_y_no_los_de_compania_en_su_organismo()
     {
-        var organismo = await SeedSignerAsync("Ana", [(_companyA, "organismo")]);
-        var cliente = await SeedSignerAsync("Beto", [(_companyA, "compania")]);
+        var delOt = await SeedSignerAsync("Ana", []);
+        var deCompania = await SeedSignerAsync("Beto", [(_companyA, "compania")]);
         AuthenticateOt();
 
-        (await _client.PostAsync(Hub(organismo, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
-        (await _client.PostAsync(Hub(organismo, "/reactivate"), null, Ct)).IsSuccessStatusCode.Should().BeTrue();
-        (await _client.PostAsync(Hub(cliente, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
-        var put = await _client.PutAsJsonAsync(Hub(organismo), new { }, Ct);
+        (await _client.PostAsync(Hub(delOt, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await _client.PostAsync(Hub(delOt, "/reactivate"), null, Ct)).IsSuccessStatusCode.Should().BeTrue();
+        var put = await _client.PutAsJsonAsync(Hub(delOt), new { }, Ct);
         put.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+
+        var denegado = await _client.PostAsync(Hub(deCompania, "/inactivate"), null, Ct);
+        denegado.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await denegado.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString()
+            .Should().Be("mandatario_de_compania");
+    }
+
+    private string HubBase => $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers";
+
+    private object AltaCon(params Guid[] companias) => new
+    {
+        fullName = "Ana Restrepo",
+        documentNumber = "1020304050",
+        documentType = "CC",
+        companyTenantIds = companias,
+        transitOfficeIds = new[] { _officeA },
+        signerModel = "juridica",
+    };
+
+    [Fact]
+    public async Task Admin_OT_no_da_de_alta_un_mandatario_con_companias_403_y_sin_companias_201()
+    {
+        AuthenticateOt();
+
+        var conCompanias = await _client.PostAsJsonAsync(HubBase, AltaCon(_companyA), Ct);
+        conCompanias.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await conCompanias.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString()
+            .Should().Be("mandatario_de_compania");
+
+        var sinCompanias = await _client.PostAsJsonAsync(HubBase, AltaCon(), Ct);
+        sinCompanias.StatusCode.Should().Be(HttpStatusCode.Created, await sinCompanias.Content.ReadAsStringAsync(Ct));
+        var creado = (await sinCompanias.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+        _signerIds.Add(creado);
+    }
+
+    [Theory]
+    [InlineData("PUT")]
+    [InlineData("inactivate")]
+    [InlineData("DELETE")]
+    [InlineData("resend")]
+    public async Task Admin_OT_recibe_403_al_operar_un_mandatario_de_compania_y_este_no_cambia(string operacion)
+    {
+        var deCompania = await SeedSignerAsync("Beto", [(_companyA, "compania")]);
+        AuthenticateOt();
+
+        var response = operacion switch
+        {
+            "PUT" => await _client.PutAsJsonAsync(Hub(deCompania), new { }, Ct),
+            "inactivate" => await _client.PostAsync(Hub(deCompania, "/inactivate"), null, Ct),
+            "DELETE" => await _client.DeleteAsync(Hub(deCompania, "?confirmarImpacto=true"), Ct),
+            _ => await _client.PostAsync(Hub(deCompania, "/identity-validation/resend"), null, Ct),
+        };
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString()
+            .Should().Be("mandatario_de_compania");
+        await AssertSignerUntouchedAsync(deCompania);
+    }
+
+    [Fact]
+    public async Task Super_Admin_si_edita_e_inactiva_un_mandatario_de_compania_por_la_ruta_del_hub()
+    {
+        var deCompania = await SeedSignerAsync("Beto", [(_companyA, "compania")]);
+        AuthenticateSuperAdmin();
+
+        var put = await _client.PutAsJsonAsync(Hub(deCompania), new { }, Ct);
+        put.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        (await _client.PostAsync(Hub(deCompania, "/inactivate"), null, Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     // ── Escenario: usuario OT sin ot_admin y Gestor ─────────────────────────────────────────────
@@ -216,7 +283,15 @@ public sealed class MandateSignerOriginPermissionsTests(WebApplicationFactory<Pr
         await SeedGrantAsync(_companyA);   // Bug #12912: el organismo solo ve compañías con grant o trámites entregados.
         var url = $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers";
 
+        // Regla del OT: gestiona solo lo suyo (sin compañías); el de compañía llega sin permiso de editar ni eliminar.
         AuthenticateOt();
+        var lista = await ListAsync(url);
+        Flags(lista, organismo).Should().Be(("organismo", false, false));
+        var delOt = await SeedSignerAsync("Del OT", []);
+        var propio = Flags(await ListAsync(url), delOt);
+        propio.Edit.Should().BeTrue();
+        propio.Delete.Should().BeTrue();
+        AuthenticateSuperAdmin();
         Flags(await ListAsync(url), organismo).Should().Be(("organismo", true, true));
 
         AuthenticateOt("gestor_tramites_ot");

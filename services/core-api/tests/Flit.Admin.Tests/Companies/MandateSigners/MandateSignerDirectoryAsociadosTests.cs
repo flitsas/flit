@@ -165,6 +165,41 @@ public sealed class MandateSignerDirectoryAsociadosTests
         (await Directorio(ctx).GetByIdAsync(id, Ct))!.VaultTenantIds.Should().Equal([A]);
     }
 
+    // ── El OT es dueño de su mandatario: el baúl del propio OT también cuenta, al final ────────────────────────────
+
+    [Fact]
+    public async Task ElMandatarioDelOt_SinCompanias_BuscaSuFirmaEnElBaulDelOt()
+    {
+        await using var ctx = NewContext();
+        var otTenant = Guid.NewGuid();
+        SeedPerfilDelOt(ctx, otTenant);
+        var id = await SeedSignerAsync(ctx, "Mandatario del OT", owner: A, linkActive: false);
+
+        (await Directorio(ctx).GetByIdAsync(id, Ct))!.VaultTenantIds.Should().Equal([otTenant]);
+    }
+
+    [Fact]
+    public async Task ElBaulDelOt_VaDespuesDeLasCompaniasVinculadas()
+    {
+        await using var ctx = NewContext();
+        var otTenant = Guid.NewGuid();
+        SeedPerfilDelOt(ctx, otTenant);
+        var id = await SeedSignerAsync(ctx, "Ana", owner: A);
+
+        (await Directorio(ctx).GetByIdAsync(id, Ct))!.VaultTenantIds.Should().Equal([A, otTenant]);
+    }
+
+    private static void SeedPerfilDelOt(FlitDbContext ctx, Guid otTenant) =>
+        ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile
+        {
+            Id = Guid.NewGuid(),
+            TenantId = otTenant,
+            TransitOfficeId = Ot,
+            OperationMode = "dashboard",
+            QuipuxReadOnly = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
 
     private static FlitDbContext NewContext() =>

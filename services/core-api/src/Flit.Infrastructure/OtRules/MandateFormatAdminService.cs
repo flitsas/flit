@@ -140,6 +140,36 @@ internal sealed class MandateFormatAdminService(IMandateFormatRepository reposit
         };
     }
 
+    public async Task<MandateFormatUpdateResult> ResetTemplateAsync(
+        string code,
+        long? rowVersion,
+        Guid? userId,
+        CancellationToken ct = default)
+    {
+        var format = MandatoFormatCatalog.Find(code);
+        if (format is null)
+            return new(MandateFormatUpdateStatus.NotFound);
+
+        var setting = await repository.GetAsync(format.Code, ct).ConfigureAwait(false);
+        var before = ToView(format, setting);
+        if (setting is null)
+            return new(MandateFormatUpdateStatus.NotFound, "formato_sin_configuracion", before, before);
+
+        // auto delega en la plantilla de sistema del organismo: no hay redacción propia que restablecer.
+        if (!format.IsRedaction)
+            return new(MandateFormatUpdateStatus.BadRequest, "formato_sin_plantilla", before, before);
+
+        var saved = await repository.ResetTemplateAsync(format.Code, rowVersion, userId, ct).ConfigureAwait(false);
+        return saved.Status switch
+        {
+            MandateFormatWriteStatus.Ok => new(
+                MandateFormatUpdateStatus.Ok, null, before, ToView(format, saved.Setting), null, saved.Changed),
+            MandateFormatWriteStatus.Conflict => new(
+                MandateFormatUpdateStatus.Conflict, "row_version_conflict", before, before),
+            _ => new(MandateFormatUpdateStatus.NotFound, "template_code_invalido", before, before),
+        };
+    }
+
     private static MandateFormatView ToView(MandatoFormatDefinition f, MandateFormatSettingView? s) =>
         new(
             f.Code,

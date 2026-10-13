@@ -219,6 +219,8 @@ describe("registro del módulo en la navegación SPA", () => {
       isOtAdmin: false,
       canReadLogQx: false,
       canReadIctLogs: false,
+      canReadIctTrazabilidad: false,
+      canReadIctReportes: false,
     };
     expect(
       resolveNavigableModuleIds({ ...ctx, accessibleCodes: ["historial-placa"] }),
