@@ -2,6 +2,7 @@ import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import { apiBaseForPageRoot } from './base-url';
 import { uploadFileToPresignedUrl } from './presigned-upload';
+import type { DocumentosRedRespuesta } from './types-consolidado-lotes';
 import type {
   AceptarConsentimientoResult,
   ActorContactLookupInput,
@@ -213,6 +214,19 @@ export interface NetworkChildItem {
  */
 export function fetchNetworkChildren(signal?: AbortSignal): Promise<NetworkChildItem[]> {
   return request<NetworkChildItem[]>('/api/v1/tramites/network/children', { signal });
+}
+
+/**
+ * HU #13419 AC5 — ¿la cabeza tiene encendidos los documentos de red? (`GET
+ * /api/v1/tramites/network/documentos` → `200 { documentosRed }`). Mismas puertas y 403 que
+ * `/network/children`: el 403 se propaga como `TramitesApiError` y decide el llamador. Fail-closed:
+ * cualquier respuesta sin el booleano `true` cuenta como apagado.
+ */
+export async function fetchNetworkDocumentos(signal?: AbortSignal): Promise<boolean> {
+  const res = await request<DocumentosRedRespuesta | undefined>('/api/v1/tramites/network/documentos', {
+    signal,
+  });
+  return res?.documentosRed === true;
 }
 
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta

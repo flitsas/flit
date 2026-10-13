@@ -36,6 +36,21 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     client_max_body_size 50m;
 
+    # HU #13379 — partes del lote de consolidados en streaming (hasta ~250 MB). En este host la API va por el BFF de
+    # Trámites (modo oidc: el middleware reescribe /api/v1/* a /bff/api/v1/*, que reenvía al gateway con el Bearer de
+    # la sesión del servidor y devuelve el cuerpo en streaming). Por eso esta location va al FRONTEND y no al gateway:
+    # directo al gateway la petición llegaría sin Bearer (el navegador no tiene el token) y respondería 401.
+    # Lo único que cambia frente a `location /` es que nginx no bufferiza: sin esto volcaría la parte a su temp file
+    # del VPS antes de entregarla. Regex: gana sobre `location /`. Hereda los proxy_set_header del server{}.
+    location ~ ^/api/v1/consolidados/lotes/[^/]+/partes/[0-9]+$ {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 300s;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:4001;
     }

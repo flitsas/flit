@@ -15,6 +15,7 @@ import {
   FileSignature,
   FileSpreadsheet,
   FileStack,
+  FileArchive,
   FileText,
   FolderCog,
   Fingerprint,
@@ -148,6 +149,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", FileSignature),
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", FileText),
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", Bell),
+        // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
+        superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", FileArchive),
         superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
       ],
     },

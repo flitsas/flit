@@ -147,29 +147,14 @@ internal static class ConsolidadoEndpoints
     /// <summary>
     /// Traducción de los códigos de error de los generadores de consolidado a ProblemDetails. La
     /// comparten el POST de generación y el GET de entrega (HU #12785) para que un mismo fallo se
-    /// explique igual por las dos rutas.
+    /// explique igual por las dos rutas. Los textos viven en <see cref="ConsolidadoErrorTextos"/>
+    /// (HU #13375), compartidos con el lote de descarga masiva; el contrato HTTP no cambia.
     /// </summary>
-    internal static IResult ProblemFor(string error) => error switch
+    internal static IResult ProblemFor(string error)
     {
-        "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-        "migrado_solo_lectura" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Trámite migrado (solo lectura): no se regenera el consolidado."),
-        "modalidad_no_soportada" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El consolidado solo está disponible para matrícula inicial y traspaso."),
-        SubmitGate.FurRequerido => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes del consolidado."),
-        "sin_adjuntos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay adjuntos para consolidar."),
-        "adjunto_no_disponible" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Un adjunto del expediente no está disponible en almacenamiento."),
-        "mimetype_no_soportado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Un adjunto tiene un formato no soportado para el consolidado."),
-        "storage_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No se pudo guardar el consolidado en el almacenamiento de archivos. Intenta de nuevo en unos minutos."),
-        "organismo_requerido" => Results.Problem(
-            statusCode: 409,
-            title: "Conflict",
-            detail: "El organismo de tránsito del trámite no está seleccionado o no está activo "
-                + "en el sistema. Verifícalo antes de generar el expediente consolidado."),
-        // Cualquier otro código viaja tal cual: es mejor un motivo técnico que un éxito falso.
-        _ => Results.Problem(
-            statusCode: 409,
-            title: "Conflict",
-            detail: $"No se pudo generar el expediente consolidado: {error}."),
-    };
+        var problema = ConsolidadoErrorTextos.Problema(error);
+        return Results.Problem(statusCode: problema.StatusCode, title: problema.Title, detail: problema.Detail);
+    }
 
     /// <summary>Usuario autenticado (claim <c>sub</c>), para la generación en cascada de la impronta.</summary>
     private static Guid? ResolveUserId(System.Security.Claims.ClaimsPrincipal user)

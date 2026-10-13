@@ -305,6 +305,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow> BulkTramitesBatchRows =>
         Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow>();
 
+    // Trámites — motor de lotes de descarga masiva de consolidados (HU #13367, Feature #13306, ADR-0070)
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings> ConsolidadoExportSettings =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings>();
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatch> ConsolidadoExportBatches =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatch>();
+
+    // HU #13368: partes, ítems y auditoría append-only del lote (Ley 1581). La auditoría solo se inserta.
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchPart> ConsolidadoExportBatchParts =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchPart>();
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchItem> ConsolidadoExportBatchItems =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchItem>();
+    public DbSet<ConsolidadoExportAuditEntry> ConsolidadoExportAuditEntries => Set<ConsolidadoExportAuditEntry>();
+
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
         Set<ProcedureStateChangeEmailDispatch>();

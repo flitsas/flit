@@ -33,6 +33,30 @@ public static class NetworkDocumentsPolicy
             _ => DocumentsDisabled,
         };
     }
+
+    /// <summary>
+    /// Ajuste #13419 AC5 (HU #13417) — ¿la cabeza puede leer documentos de su red? Es <see cref="ValidateKind"/> con el
+    /// interruptor leído igual que en el alta del lote de red y en los documentos de un trámite: solo para una cabeza
+    /// CONCESIÓN (MARCA_BLANCA nunca lo consulta). <paramref name="scope"/> debe ser ya un grupo válido.
+    /// </summary>
+    /// <remarks>
+    /// Uso de ejemplo: <c>var documentosRed = await NetworkDocumentsPolicy.IsAvailableAsync(scope, switches, ct);</c>
+    /// </remarks>
+    public static async Task<bool> IsAvailableAsync(TenantScope scope, IHierarchySwitches switches, CancellationToken ct = default) =>
+        await ValidateAsync(scope, switches, ct).ConfigureAwait(false) is null;
+
+    /// <summary>
+    /// <c>null</c> si la cabeza puede leer documentos de la red; si no, <see cref="DocumentsDisabled"/>. Lee el
+    /// interruptor solo para CONCESIÓN.
+    /// </summary>
+    public static async Task<string?> ValidateAsync(TenantScope scope, IHierarchySwitches switches, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(switches);
+        var concesionEnabled = scope.GroupKind == GroupKind.Concesion
+            && await switches.IsNetworkDocumentsConcesionEnabledAsync(ct).ConfigureAwait(false);
+        return ValidateKind(scope, concesionEnabled);
+    }
 }
 
 /// <summary>

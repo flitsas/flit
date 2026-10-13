@@ -235,6 +235,8 @@ internal static class NetworkProcedureEndpoints
         group.MapNetworkAttachments();
         // HU #12555 — GET /children: clientes hijos vigentes de la cabeza (id + nombre), sin policy admin.
         group.MapNetworkChildren();
+        // Ajuste #13419 AC5 (HU #13417) — GET /documentos: ¿la cabeza puede leer documentos de su red? (sin auditoría).
+        group.MapNetworkDocumentos();
         // HU #12708 — Validación de Identidad de la red (solo lectura): por persona, historial y bitácora.
         group.MapNetworkIdentityValidations();
 
