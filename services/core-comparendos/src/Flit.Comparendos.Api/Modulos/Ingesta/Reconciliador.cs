@@ -120,7 +120,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
             c.NombreInfractor = await db.IdentificacionesMonitoreadas.Where(n => n.Id == idNit).Select(n => n.NombreTitular).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         }
 
-        c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct).ConfigureAwait(false);
+        c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct, c.NumeroNormalizado).ConfigureAwait(false);
         Plazos.Recalcular(c, motor, ahora);
         db.Comparendos.Add(c);
         db.ComparendoFuentes.Add(NuevaFoto(c, clave, cicloId, item, ahora));

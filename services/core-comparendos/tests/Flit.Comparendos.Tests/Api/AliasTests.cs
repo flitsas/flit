@@ -32,4 +32,23 @@ public sealed class AliasTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         (await api.EnDbAsync(db => db.Comparendos.SingleAsync(c => c.Id == id, ct))).OrganismoTransitoId.Should().Be(Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001"));
         (await api.EnDbAsync(db => db.Timeline.AnyAsync(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.DatosActualizados && t.Descripcion.Contains("alias"), ct))).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task F10_SinAlias_ElNumeroNacionalDiceElOt_SoloConCoincidenciaExacta()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api);
+        var ids = await IngresarAsync(api, empresa,
+            Item("05001000000012345678") with { Secretaria = "Texto que ningún alias conoce" },
+            Item("99999999000012345678") with { Secretaria = "Otro texto desconocido" },
+            Item("0500100") with { Secretaria = "Texto corto desconocido" });
+        var ot = await api.EnDbAsync(db => db.Comparendos.Where(c => c.TenantId == empresa).ToDictionaryAsync(c => c.NumeroNormalizado, c => c.OrganismoTransitoId, ct));
+        ot["05001000000012345678"].Should().Be(Guid.Parse("aaaaaaaa-0001-4000-8000-000000000002"), "Medellín es 5001000 en el catálogo: perdió el cero inicial");
+        ot["99999999000012345678"].Should().BeNull("ningún organismo tiene ese código");
+        ot["0500100"].Should().BeNull("un número corto no es el formato nacional");
+        ids.Should().HaveCount(3);
+        (await api.EnDbAsync(db => db.OrganismosTransitoAlias.AnyAsync(a => a.TextoNormalizado == "TEXTO QUE NINGUN ALIAS CONOCE", ct))).Should().BeFalse("el número no crea alias del texto");
+    }
 }

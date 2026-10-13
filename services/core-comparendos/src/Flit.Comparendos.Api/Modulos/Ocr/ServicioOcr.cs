@@ -420,7 +420,7 @@ public sealed class ServicioOcr(
             UltimoEventoEn = ahora,
         };
         Reconciliador.AplicarCampos(c, item);
-        c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct).ConfigureAwait(false);
+        c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct, c.NumeroNormalizado).ConfigureAwait(false);
         Plazos.Recalcular(c, await calendario.MotorAsync(ct).ConfigureAwait(false), ahora);
         db.Comparendos.Add(c);
         var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
