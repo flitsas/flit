@@ -27,7 +27,27 @@ const COLOR_ACTOR: Record<string, string> = {
  * Timeline del comparendo estilo guía de envío (§7.2): el evento más reciente arriba, filtro por tipo y «Agregar
  * observación» como un hito más (no se edita ni se borra).
  */
-export function Timeline({ comparendoId, puedeObservar, onCambio }: { comparendoId: string; puedeObservar: boolean; onCambio?: () => void }) {
+/** Secciones del detalle a las que lleva un evento sin pantalla propia (DP, pago, documentos del conductor). */
+export type SeccionDetalle = "dp" | "pago" | "contraventor";
+
+const ENLACE_SECCION: Record<string, { seccion: SeccionDetalle; texto: string }> = {
+  derecho_peticion: { seccion: "dp", texto: "Ver el derecho de petición" },
+  pago: { seccion: "pago", texto: "Ver el pago" },
+  documento_soporte: { seccion: "contraventor", texto: "Ver los documentos del conductor" },
+};
+
+export function Timeline({
+  comparendoId,
+  puedeObservar,
+  onCambio,
+  onIr,
+}: {
+  comparendoId: string;
+  puedeObservar: boolean;
+  onCambio?: () => void;
+  /** Abre la sección del detalle que originó el evento. */
+  onIr?: (seccion: SeccionDetalle) => void;
+}) {
   const toast = useToast();
   const { sesion } = useSesion();
   const verMensajes = tienePermiso(sesion, P.mensajesVer);
@@ -104,11 +124,16 @@ export function Timeline({ comparendoId, puedeObservar, onCambio }: { comparendo
               </span>
             </div>
             <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{e.descripcion}</p>
-            {/* §7.2: el evento lleva a lo que lo originó cuando tiene pantalla propia (hoy, los correos del Centro de mensajes). */}
+            {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
               <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-[#557EFF] hover:underline">
                 Ver el correo
               </Link>
+            )}
+            {e.relacionadoTipo && ENLACE_SECCION[e.relacionadoTipo] && onIr && (
+              <button type="button" className="text-[11px] font-semibold text-[#557EFF] hover:underline" onClick={() => onIr(ENLACE_SECCION[e.relacionadoTipo!]!.seccion)}>
+                {ENLACE_SECCION[e.relacionadoTipo]!.texto}
+              </button>
             )}
           </li>
         ))}

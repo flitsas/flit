@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { FileWarning } from "lucide-react";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { Timeline } from "@/components/detalle/Timeline";
+import { Timeline, type SeccionDetalle } from "@/components/detalle/Timeline";
 import { EXTENSIONES_DETALLE, type ContextoDetalle, type ExtensionesDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
 import { Acordeon, Datos } from "@/components/ui/Acordeon";
@@ -388,6 +388,15 @@ export function DetalleComparendo({
     onCambio?.();
   };
   const ctx: ContextoDetalle | null = d ? { detalle: d, recargar, sesion, soloLectura } : null;
+  // Secciones abiertas desde el timeline; se olvidan al cambiar de comparendo.
+  const [abiertas, setAbiertas] = useState<{ id: string | null; secciones: SeccionDetalle[] }>({ id: null, secciones: [] });
+  const secciones = abiertas.id === id ? abiertas.secciones : [];
+  const alternar = (s: SeccionDetalle) => (abrir: boolean) =>
+    setAbiertas({ id, secciones: abrir ? [...secciones.filter((x) => x !== s), s] : secciones.filter((x) => x !== s) });
+  const ir = (s: SeccionDetalle) => {
+    alternar(s)(true);
+    window.setTimeout(() => document.getElementById(`detalle-${s}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
 
   return (
     <Modal open={id !== null} onClose={onCerrar} title={d ? `Comparendo ${d.numero}` : "Comparendo"} size="2xl">
@@ -440,7 +449,7 @@ export function DetalleComparendo({
           <Acordeon titulo="Vehículo y compañía" abiertoInicial>
             <VehiculoYCompania d={d} />
           </Acordeon>
-          <Acordeon titulo="Contraventor">
+          <Acordeon titulo="Contraventor" id="detalle-contraventor" abierto={secciones.includes("contraventor")} onAlternar={alternar("contraventor")}>
             <Contraventor d={d} extra={!soloLectura ? extensiones.contraventor?.(ctx) : null} />
             <div className="mt-4 border-t border-[#EEF1F6] pt-3 dark:border-white/5">
               <h4 className="mb-2 text-xs font-semibold">Cambio de contraventor</h4>
@@ -448,12 +457,12 @@ export function DetalleComparendo({
             </div>
           </Acordeon>
           <Acordeon titulo="Timeline" abiertoInicial>
-            <Timeline comparendoId={d.id} puedeObservar={!soloLectura && tienePermiso(sesion, "comparendos.comparendo.observar")} onCambio={onCambio} />
+            <Timeline comparendoId={d.id} puedeObservar={!soloLectura && tienePermiso(sesion, "comparendos.comparendo.observar")} onCambio={onCambio} onIr={ir} />
           </Acordeon>
-          <Acordeon titulo="Resolución OT / derecho de petición">
+          <Acordeon titulo="Resolución OT / derecho de petición" id="detalle-dp" abierto={secciones.includes("dp")} onAlternar={alternar("dp")}>
             <ResolucionDp d={d} extra={!soloLectura ? extensiones.dp?.(ctx) : null} />
           </Acordeon>
-          <Acordeon titulo="Pago">
+          <Acordeon titulo="Pago" id="detalle-pago" abierto={secciones.includes("pago")} onAlternar={alternar("pago")}>
             <Pago d={d} extra={!soloLectura ? extensiones.pago?.(ctx) : null} />
           </Acordeon>
         </div>
