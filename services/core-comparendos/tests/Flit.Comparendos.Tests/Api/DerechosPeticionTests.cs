@@ -61,13 +61,13 @@ public sealed class DerechosPeticionTests(ApiConFuente api) : IClassFixture<ApiC
 
         var previa = await (await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp/vista-previa", new { tipologiaId = da }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         previa.GetProperty("puedeEnviar").GetBoolean().Should().BeTrue();
-        previa.GetProperty("radicado").GetString().Should().Be("DA-2026-XXXXXX");
+        previa.GetProperty("radicado").GetString().Should().Be("DA-XXXXXXXXXXXX-XXX");
         var pdf = await cliente.GetAsync($"/api/v1/comparendos/comparendos/{id}/dp/vista-previa.pdf?tipologiaId={da}", ct);
         (await pdf.Content.ReadAsByteArrayAsync(ct)).Take(4).Should().Equal("%PDF"u8.ToArray());
 
         var respuestaEnvio = await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp", new { tipologiaId = da }, ct);
         var envio = await respuestaEnvio.Content.ReadFromJsonAsync<JsonElement>(ct);
-        envio.GetProperty("radicado").GetString().Should().MatchRegex(@"^DA-2026-\d{6}$");
+        envio.GetProperty("radicado").GetString().Should().MatchRegex(@"^DA-261009090000-\d{3}$", "formato de la Epic #12980: PREFIJO-AAMMDDHHMMSS-mmm en hora de Colombia");
         envio.GetProperty("estado").GetString().Should().Be("Enviado");
         var c = await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == id, ct));
         c.EstadoGestion.Should().Be(EstadoGestion.DpEnviado);
@@ -141,6 +141,8 @@ public sealed class DerechosPeticionTests(ApiConFuente api) : IClassFixture<ApiC
         var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/dp/lotes/{lote.GetProperty("id").GetGuid()}", ct);
         detalle.GetProperty("estado").GetString().Should().Be("Completado");
         detalle.GetProperty("enviados").GetInt32().Should().Be(2);
+        var radicados = await api.EnDbAsync(db => db.DerechosPeticion.Where(d => d.TenantId == empresa).Select(d => d.Radicado).ToListAsync(ct));
+        radicados.Should().OnlyHaveUniqueItems("en el mismo milisegundo cada DP recibe su propio radicado").And.OnlyContain(r => r.StartsWith("DC-", StringComparison.Ordinal));
         detalle.GetProperty("omitidos").GetInt32().Should().Be(1);
         detalle.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("numero").GetString() == "LT-1").GetProperty("motivo").GetString().Should().Contain("ya tiene");
 

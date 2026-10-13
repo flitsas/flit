@@ -56,7 +56,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<ComunicacionAdjunto> ComunicacionAdjuntos => Set<ComunicacionAdjunto>();
     public DbSet<ComunicacionIntento> ComunicacionIntentos => Set<ComunicacionIntento>();
     public DbSet<DerechoPeticion> DerechosPeticion => Set<DerechoPeticion>();
-    public DbSet<ConsecutivoRadicado> ConsecutivosRadicado => Set<ConsecutivoRadicado>();
+    public DbSet<RadicadoReservado> RadicadosReservados => Set<RadicadoReservado>();
     public DbSet<LoteDp> LotesDp => Set<LoteDp>();
     public DbSet<LoteDpItem> LoteDpItems => Set<LoteDpItem>();
     public DbSet<Pago> Pagos => Set<Pago>();
@@ -509,11 +509,11 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasIndex(x => new { x.TenantId, x.FechaRadicacion });
             e.HasIndex(x => new { x.TenantId, x.RespuestaSentido });
         });
-        m.Entity<ConsecutivoRadicado>(e =>
+        m.Entity<RadicadoReservado>(e =>
         {
-            e.ToTable("consecutivo_radicado");
-            e.HasKey(x => new { x.Prefijo, x.Anio });
-            e.Property(x => x.Prefijo).HasMaxLength(6);
+            e.ToTable("radicado_reservado");
+            e.HasKey(x => x.Radicado);
+            e.Property(x => x.Radicado).HasMaxLength(40);
         });
         m.Entity<LoteDp>(e =>
         {

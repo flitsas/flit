@@ -442,20 +442,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "consecutivo_radicado",
-                schema: "comparendos",
-                columns: table => new
-                {
-                    prefijo = table.Column<string>(type: "character varying(6)", maxLength: 6, nullable: false),
-                    anio = table.Column<short>(type: "smallint", nullable: false),
-                    ultimo = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_consecutivo_radicado", x => new { x.prefijo, x.anio });
-                });
-
-            migrationBuilder.CreateTable(
                 name: "contraventor_historial",
                 schema: "comparendos",
                 columns: table => new
@@ -891,6 +877,19 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_prompt_ocr_version", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "radicado_reservado",
+                schema: "comparendos",
+                columns: table => new
+                {
+                    radicado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    reservado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_radicado_reservado", x => x.radicado);
                 });
 
             migrationBuilder.CreateTable(
@@ -2033,10 +2032,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 schema: "comparendos");
 
             migrationBuilder.DropTable(
-                name: "consecutivo_radicado",
-                schema: "comparendos");
-
-            migrationBuilder.DropTable(
                 name: "consulta_fuente",
                 schema: "comparendos");
 
@@ -2130,6 +2125,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "prompt_ocr_version",
+                schema: "comparendos");
+
+            migrationBuilder.DropTable(
+                name: "radicado_reservado",
                 schema: "comparendos");
 
             migrationBuilder.DropTable(

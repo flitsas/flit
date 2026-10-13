@@ -1592,27 +1592,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("configuracion_empresa", "comparendos");
                 });
 
-            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConsecutivoRadicado", b =>
-                {
-                    b.Property<string>("Prefijo")
-                        .HasMaxLength(6)
-                        .HasColumnType("character varying(6)")
-                        .HasColumnName("prefijo");
-
-                    b.Property<short>("Anio")
-                        .HasColumnType("smallint")
-                        .HasColumnName("anio");
-
-                    b.Property<int>("Ultimo")
-                        .HasColumnType("integer")
-                        .HasColumnName("ultimo");
-
-                    b.HasKey("Prefijo", "Anio")
-                        .HasName("pk_consecutivo_radicado");
-
-                    b.ToTable("consecutivo_radicado", "comparendos");
-                });
-
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConsultaFuente", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3420,6 +3399,23 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasFilter("publicada");
 
                     b.ToTable("prompt_ocr_version", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.RadicadoReservado", b =>
+                {
+                    b.Property<string>("Radicado")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("radicado");
+
+                    b.Property<DateTimeOffset>("ReservadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reservado_en");
+
+                    b.HasKey("Radicado")
+                        .HasName("pk_radicado_reservado");
+
+                    b.ToTable("radicado_reservado", "comparendos");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.RepresentanteLegal", b =>

@@ -190,12 +190,14 @@ public sealed class DerechoPeticion : Auditada
     public string? LegacyV1Id { get; set; }
 }
 
-/// <summary>Consecutivo del radicado por prefijo y año, global entre gestoras (§3.26).</summary>
-public sealed class ConsecutivoRadicado
+/// <summary>
+/// Radicado reservado (Epic #12980: <c>PREFIJO-AAMMDDHHMMSS-mmm</c>, global entre gestoras). La reserva es atómica entre
+/// réplicas: dos DP del mismo milisegundo nunca comparten número (en V1 un lote entero compartía uno).
+/// </summary>
+public sealed class RadicadoReservado
 {
-    public string Prefijo { get; set; } = string.Empty;
-    public short Anio { get; set; }
-    public int Ultimo { get; set; }
+    public string Radicado { get; set; } = string.Empty;
+    public DateTimeOffset ReservadoEn { get; set; }
 }
 
 public sealed class LoteDp

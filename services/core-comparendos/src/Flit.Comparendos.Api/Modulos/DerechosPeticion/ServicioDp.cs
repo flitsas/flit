@@ -118,7 +118,7 @@ public sealed class ServicioDp(
         return new PreparacionDp(t, bloqueos, advertencias, ot, rl, anexos, config, estado);
     }
 
-    /// <summary>El PDF del DP: con el radicado (envío) o enmascarado <c>PREFIJO-AAAA-XXXXXX</c> (vista previa).</summary>
+    /// <summary>El PDF del DP: con el radicado (envío) o enmascarado <c>PREFIJO-XXXXXXXXXXXX-XXX</c> (vista previa).</summary>
     public async Task<(byte[] Pdf, Guid VersionId)> DocumentoAsync(Comparendo c, PreparacionDp p, string radicado, bool vistaPrevia, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(p);
@@ -131,20 +131,35 @@ public sealed class ServicioDp(
     public static string RadicadoEnmascarado(TipologiaDp t, DateOnly hoy)
     {
         ArgumentNullException.ThrowIfNull(t);
-        return $"{t.PrefijoRadicado}-{hoy.Year}-XXXXXX";
+        return $"{t.PrefijoRadicado}-XXXXXXXXXXXX-XXX";
     }
 
-    /// <summary>Siguiente número del prefijo en el año, atómico entre réplicas (S-25: global, no por empresa).</summary>
+    /// <summary>Formato de la Epic #12980: prefijo, fecha y hora de Colombia al segundo y milisegundos.</summary>
+    public static string FormatoRadicado(string prefijo, DateTimeOffset momentoColombia) =>
+        $"{prefijo}-{momentoColombia.ToString("yyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture)}-{momentoColombia.Millisecond:D3}";
+
+    /// <summary>
+    /// Radicado del envío (Epic #12980: <c>PREFIJO-AAMMDDHHMMSS-mmm</c>). Se reserva con un INSERT atómico; si el
+    /// milisegundo ya está tomado (otro DP del lote u otra réplica), se corre al siguiente.
+    /// </summary>
     public async Task<string> AsignarRadicadoAsync(TipologiaDp t, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(t);
-        var anio = (short)reloj.Hoy.Year;
-        var n = await db.Database.SqlQuery<int>($"""
-            INSERT INTO comparendos.consecutivo_radicado (prefijo, anio, ultimo) VALUES ({t.PrefijoRadicado}, {anio}, 1)
-            ON CONFLICT (prefijo, anio) DO UPDATE SET ultimo = consecutivo_radicado.ultimo + 1
-            RETURNING ultimo AS "Value"
-            """).ToListAsync(ct).ConfigureAwait(false);
-        return $"{t.PrefijoRadicado}-{anio}-{n.Single():D6}";
+        var momento = reloj.AhoraColombia;
+        for (var intento = 0; intento < 1000; intento++, momento = momento.AddMilliseconds(1))
+        {
+            var candidato = FormatoRadicado(t.PrefijoRadicado, momento);
+            var ahora = reloj.Ahora;
+            var reservado = await db.Database.SqlQuery<string>($"""
+                INSERT INTO comparendos.radicado_reservado (radicado, reservado_en) VALUES ({candidato}, {ahora})
+                ON CONFLICT (radicado) DO NOTHING
+                RETURNING radicado AS "Value"
+                """).ToListAsync(ct).ConfigureAwait(false);
+            if (reservado.Count == 1)
+                return candidato;
+        }
+
+        throw new InvalidOperationException("No se pudo reservar un radicado único.");
     }
 
     /// <summary>
