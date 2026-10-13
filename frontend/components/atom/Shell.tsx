@@ -345,9 +345,8 @@ export function Shell({
 
   // Plataforma es contenedor (mismo patrón que Tránsito): cuelga los sub-módulos de
   // configuración de plataforma. Sus hijos "core" (tipos de trámite, mandatos, FUR,
-  // notificaciones) siguen exclusivos de SuperAdmin; Banners (HU #12241, Feature #12236)
-  // cuelga aparte del permiso `banners.manage` del JWT (bypass SuperAdmin incluido en
-  // `canManageBanners`), para que un AdminCompany con el módulo concedido también lo vea —
+  // notificaciones) son exclusivos de SuperAdmin, igual que Banners (HU #13439, Épica #12750:
+  // `canManageBanners` ya solo es verdadero para SuperAdmin). Confirmación RUNT va por permiso,
   // por eso el contenedor se construye con una lista de hijos armada dinámicamente en vez
   // de vivir dentro del bloque `if (currentUser?.isSuperAdmin)` de arriba.
   const platformaChildren: DockEntry[] = [];
