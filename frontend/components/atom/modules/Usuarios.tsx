@@ -29,6 +29,7 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
 import { IctClientsPanel } from "./users/IctClientsPanel";
+import { CompanyRolesPanel } from "./users/CompanyRolesPanel";
 import { ExternalClientsPanel } from "./users/ExternalClientsPanel";
 import {
   SuspendOrDeactivateModal,
@@ -77,7 +78,6 @@ export function Usuarios() {
   const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
   const pgEliminados = usePaginacion();
-  const pgRoles = usePaginacion();
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +104,9 @@ export function Usuarios() {
   const tabs = ALL_TABS.filter(
     (t) =>
       (t.id !== "eliminados" || isSuperAdmin) &&
+      // HU #13443: la gestión de roles es de SuperAdmin (atajo a RBAC) y de Admin de Compañía (roles propios).
+      // ot_admin y el resto de roles no ven la pestaña: asignan roles desde la edición del usuario.
+      (t.id !== "roles" || isSuperAdmin || isAdminCompany) &&
       (t.id !== "clientes-ict" || canManageIctClients) &&
       (t.id !== "clientes-integracion" || isSuperAdmin),
   );
@@ -549,66 +552,7 @@ export function Usuarios() {
         </div>
       )}
 
-      {tab === "roles" && !isSuperAdmin && (
-        <div className="flex flex-col gap-3">
-          {/* AC4 (HU #10509) — modo SOLO LECTURA para AdminCompany/OtAdmin: sin botones de
-              crear/editar/eliminar/desactivar. La gobernanza de roles es exclusiva de SuperAdmin. */}
-          <p className="text-xs opacity-60">
-            Roles disponibles para tu empresa. Solo el Super Admin puede crear, editar o desactivar roles.
-          </p>
-          {rolesLoading ? (
-            <CarLoaderModal label="Cargando roles…" />
-          ) : roles.length === 0 ? (
-            <div className="py-12 text-center text-sm opacity-60">
-              No hay roles configurados para este tenant. Contacta al Super Admin.
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table
-                  aria-label="Roles disponibles"
-                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
-                  className="text-xs"
-                >
-                  <thead>
-                    <tr>
-                      {["Código", "Nombre", "Descripción", "Permisos"].map((col, i, arr) => (
-                        <th
-                          key={col}
-                          scope="col"
-                          className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-center" : ""}`}
-                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pgRoles.paginar(roles).map((r) => (
-                      <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                        <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono opacity-80" style={{ borderColor: "#DFE5ED" }}>{r.code}</td>
-                        <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>{r.name}</td>
-                        <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>{r.description ?? "—"}</td>
-                        <td className="rounded-r-xl border-y border-r px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "#557EFF" }}>{r.permissionCount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination
-                page={pgRoles.page}
-                pageSize={pgRoles.pageSize}
-                totalCount={roles.length}
-                onPageChange={pgRoles.setPage}
-                onPageSizeChange={pgRoles.setPageSize}
-                noun="roles"
-                ariaLabel="Paginación de roles"
-              />
-            </>
-          )}
-        </div>
-      )}
+      {tab === "roles" && !isSuperAdmin && isAdminCompany && <CompanyRolesPanel onChanged={() => void loadRoles()} />}
 
       {open && (
         <InviteUserModal
