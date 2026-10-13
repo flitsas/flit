@@ -20,14 +20,26 @@ public sealed class ProductosDePrueba : IProductosHabilitados
     public Task<bool> ComparendosHabilitadoAsync(Guid tenant, CancellationToken ct) => Task.FromResult(!Apagadas.ContainsKey(tenant));
 }
 
+/// <summary>Identidad falsa para los usuarios: devuelve los que se le pongan, por empresa.</summary>
+public sealed class UsuariosDePrueba : IUsuariosEmpresa
+{
+    public ConcurrentDictionary<Guid, List<UsuarioConPermiso>> PorEmpresa { get; } = new();
+
+    public Task<IReadOnlyList<UsuarioConPermiso>> ConPermisoAsync(Guid tenant, string permiso, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<UsuarioConPermiso>>(PorEmpresa.GetValueOrDefault(tenant) ?? []);
+}
+
 public sealed class ApiConProductos : ApiConFuente
 {
     public ProductosDePrueba Productos { get; } = new();
+
+    public UsuariosDePrueba Usuarios { get; } = new();
 
     protected override void Reemplazar(IServiceCollection services)
     {
         base.Reemplazar(services);
         services.AddSingleton<IProductosHabilitados>(Productos);
+        services.AddSingleton<IUsuariosEmpresa>(Usuarios);
     }
 }
 
@@ -155,5 +167,24 @@ public sealed class ConsultasEmpresaTests(ApiConProductos api) : IClassFixture<A
         (await r.Content.ReadAsStringAsync(Ct)).Should().Contain(codigo);
         var activar = await Super.PostAsync($"/api/v1/comparendos/admin/empresas/{empresa}/consultas/activar", null, Ct);
         (await activar.Content.ReadAsStringAsync(Ct)).Should().Contain("SIN_CANALES");
+    }
+
+    /// <summary>S-12: sin correos de alerta configurados, la alerta sin representante legal va a quienes pueden gestionarlo.</summary>
+    [Fact]
+    public async Task AlertaSinRepresentante_VaALosUsuariosConPermiso()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        (await Super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001", new { correosRadicacion = new[] { "radicacion@movilidad.test" } }, Ct)).EnsureSuccessStatusCode();
+        var empresa = await ComparendosDePrueba.EmpresaAsync(api, dp: true, requiereRl: true);
+        api.Usuarios.PorEmpresa[empresa] = [new UsuarioConPermiso("admin@gestora.test", "Admin de la gestora")];
+        var dc = (await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/tipologias", Ct)).EnumerateArray().Single(t => t.GetProperty("codigo").GetString() == "DC").GetProperty("id").GetGuid();
+        (await Super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/tipologias/{dc}", new { habilitada = true }, Ct)).EnsureSuccessStatusCode();
+        var id = (await ComparendosDePrueba.IngresarAsync(api, empresa, ComparendosDePrueba.Item("RL-1", notificacion: new DateOnly(2025, 9, 1)))).Values.Single();
+
+        var r = await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer, Permisos.DpEnviar])).PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp", new { tipologiaId = dc }, Ct);
+        (await r.Content.ReadAsStringAsync(Ct)).Should().Contain("SIN_REPRESENTANTE_LEGAL");
+        var alerta = await api.EnDbAsync(db => db.Comunicaciones.SingleAsync(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.AlertaSinRepresentante, Ct));
+        alerta.Destinatarios.Should().Contain("admin@gestora.test");
     }
 }

@@ -67,7 +67,8 @@ public static class DpEndpoints
         var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
         var dp = await servicio.EnviarAsync(c, pedido.TipologiaId, Actor.De(usuario), loteId: null, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await despachador.DespacharAsync(dp.ComunicacionId!.Value, ct).ConfigureAwait(false);
+        foreach (var comunicacion in dp.ComunicacionIds)
+            await despachador.DespacharAsync(comunicacion, ct).ConfigureAwait(false);
         var estado = await db.DerechosPeticion.AsNoTracking().Where(d => d.Id == dp.Id).Select(d => d.Estado).FirstAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { dp.Id, dp.Radicado, estado = estado.ToString() });
     }
@@ -78,7 +79,8 @@ public static class DpEndpoints
         var dp = await db.DerechosPeticion.FirstOrDefaultAsync(d => d.ComparendoId == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("El derecho de petición");
         await servicio.ReintentarAsync(c, dp, Actor.De(usuario), ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await despachador.DespacharAsync(dp.ComunicacionId!.Value, ct).ConfigureAwait(false);
+        foreach (var comunicacion in dp.ComunicacionIds)
+            await despachador.DespacharAsync(comunicacion, ct).ConfigureAwait(false);
         var estado = await db.DerechosPeticion.AsNoTracking().Where(d => d.Id == dp.Id).Select(d => d.Estado).FirstAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { dp.Radicado, estado = estado.ToString() });
     }

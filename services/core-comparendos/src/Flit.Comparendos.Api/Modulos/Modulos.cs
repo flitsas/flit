@@ -92,10 +92,12 @@ public static class Modulos
             services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.IdentidadService.IdentidadServiceClient>(
                 configuration, new Uri(identidad), "platform.identidad.read", o => o.Deadline = TimeSpan.FromSeconds(10));
             services.AddSingleton<Plataforma.IProductosHabilitados, Plataforma.ProductosHabilitadosIdentidad>();
+            services.AddScoped<Plataforma.IUsuariosEmpresa, Plataforma.UsuariosEmpresaIdentidad>();
         }
         else
         {
             services.AddSingleton<Plataforma.IProductosHabilitados>(new Plataforma.ProductosHabilitadosFijo(simulacion));
+            services.AddSingleton<Plataforma.IUsuariosEmpresa, Plataforma.UsuariosEmpresaVacio>();
         }
 
         services.AddScoped<Ingesta.ElegibilidadConsultas>();

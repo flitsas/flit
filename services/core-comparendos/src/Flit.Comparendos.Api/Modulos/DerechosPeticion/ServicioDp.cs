@@ -43,7 +43,8 @@ public sealed class ServicioDp(
     RegistroArchivos archivos,
     CalendarioService calendario,
     Timeline timeline,
-    Reloj reloj)
+    Reloj reloj,
+    IUsuariosEmpresa usuarios)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -209,7 +210,8 @@ public sealed class ServicioDp(
             CreadoPor = actor.UsuarioId,
         };
         db.DerechosPeticion.Add(dp);
-        dp.ComunicacionId = await CorreoAlOtAsync(c, dp, p, pdf, actor, ct).ConfigureAwait(false);
+        dp.ComunicacionIds = await CorreoAlOtAsync(c, dp, p, pdf, actor, ct).ConfigureAwait(false);
+        dp.ComunicacionId = dp.ComunicacionIds[0];
         c.TieneDp = true;
         c.Gestionado = true;
         return dp;
@@ -226,10 +228,11 @@ public sealed class ServicioDp(
             throw new ReglaException(p.Bloqueos[0].Codigo, p.Bloqueos[0].Mensaje);
         var pdf = (await archivos.LeerAsync(dp.DocumentoArchivoId, ct).ConfigureAwait(false))?.Contenido ?? throw ReglaException.NoEncontrado("El documento del DP");
         dp.Estado = EstadoDp.Enviando;
-        dp.ComunicacionId = await CorreoAlOtAsync(c, dp, p, pdf, actor, ct).ConfigureAwait(false);
+        dp.ComunicacionIds = await CorreoAlOtAsync(c, dp, p, pdf, actor, ct).ConfigureAwait(false);
+        dp.ComunicacionId = dp.ComunicacionIds[0];
     }
 
-    private async Task<Guid> CorreoAlOtAsync(Comparendo c, DerechoPeticion dp, PreparacionDp p, byte[] pdf, Actor actor, CancellationToken ct)
+    private async Task<List<Guid>> CorreoAlOtAsync(Comparendo c, DerechoPeticion dp, PreparacionDp p, byte[] pdf, Actor actor, CancellationToken ct)
     {
         var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: p.Representante, Radicado: dp.Radicado, Tipologia: p.Tipologia), ct).ConfigureAwait(false);
         var cuerpo = await plantillas.ArmarAsync(p.Config.ConjuntoPlantillas, TipoPlantilla.CorreoDpOt, null, valores, ct).ConfigureAwait(false);
@@ -257,17 +260,28 @@ public sealed class ServicioDp(
             RemitenteNombre = p.Config.RemitenteNombre ?? p.Config.EmpresaNombre,
             CreadoPor = actor.UsuarioId,
         }, ct).ConfigureAwait(false);
-        return enviados[0].Id;
+        return [.. enviados.Select(e => e.Id)];
     }
 
-    /// <summary>Timeline DP_BLOQUEADO_SIN_RL y alerta a la empresa, como máximo una por día (S-12).</summary>
+    /// <summary>
+    /// Timeline DP_BLOQUEADO_SIN_RL y alerta a la empresa, como máximo una por día (S-12): a sus correos de alerta
+    /// operativa o, si no configuró ninguno, a los usuarios que pueden gestionar representantes (Identidad).
+    /// </summary>
     private async Task BloqueoSinRepresentanteAsync(Comparendo c, Actor actor, CancellationToken ct)
     {
         timeline.Agregar(c, TipoEventoTimeline.DpBloqueadoSinRl, "No se envió el derecho de petición: la empresa exige representante legal y no hay uno con permiso para firmar.", actor);
         var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
         var inicio = new DateTimeOffset(reloj.Hoy.ToDateTime(TimeOnly.MinValue), Domain.Tiempo.ColombiaTime.Offset).ToUniversalTime();
-        if (config.CorreosAlertaOperativa.Count == 0
-            || await db.Comunicaciones.AnyAsync(x => x.TenantId == c.TenantId && x.Tipo == TipoComunicacion.AlertaSinRepresentante && x.CreadoEn >= inicio, ct).ConfigureAwait(false))
+        if (await db.Comunicaciones.AnyAsync(x => x.TenantId == c.TenantId && x.Tipo == TipoComunicacion.AlertaSinRepresentante && x.CreadoEn >= inicio, ct).ConfigureAwait(false))
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        var para = config.CorreosAlertaOperativa.Count > 0
+            ? config.CorreosAlertaOperativa.Select(x => new Destinatario(x)).ToList()
+            : (await usuarios.ConPermisoAsync(c.TenantId, Permisos.RepresentantesGestionar, ct).ConfigureAwait(false)).Select(u => new Destinatario(u.Correo, u.Nombre)).ToList();
+        if (para.Count == 0)
         {
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             return;
@@ -282,7 +296,7 @@ public sealed class ServicioDp(
             Tipo = TipoComunicacion.AlertaSinRepresentante,
             Plantilla = "comparendos.alerta_sin_representante",
             PlantillaVersionId = armado.VersionId,
-            Para = config.CorreosAlertaOperativa.Select(x => new Destinatario(x)).ToList(),
+            Para = para,
             Asunto = armado.Asunto ?? "Falta el representante legal",
             Html = armado.Html,
             Canal = CanalCorreo.FlitSmtp,
@@ -327,11 +341,22 @@ internal sealed class ReaccionDp(ComparendosDb db, Timeline timeline, Calendario
         ArgumentNullException.ThrowIfNull(comunicacion);
         if (comunicacion.Tipo != TipoComunicacion.DpOt)
             return;
-        var dp = await db.DerechosPeticion.FirstOrDefaultAsync(d => d.ComunicacionId == comunicacion.Id && d.Estado == EstadoDp.Enviando, ct).ConfigureAwait(false);
+        var dp = await db.DerechosPeticion.FirstOrDefaultAsync(d => (d.ComunicacionIds.Contains(comunicacion.Id) || d.ComunicacionId == comunicacion.Id) && d.Estado == EstadoDp.Enviando, ct).ConfigureAwait(false);
         if (dp is null)
             return;
+
+        // Un OT con varios correos: se decide cuando todos terminaron. Enviado si al menos un buzón del OT lo recibió
+        // (el radicado llegó); envío fallido solo si fallaron todos, así el reintento nunca duplica a quien ya lo tiene.
+        var otras = dp.ComunicacionIds.Where(x => x != comunicacion.Id).ToList();
+        var estados = await db.Comunicaciones.AsNoTracking().Where(x => otras.Contains(x.Id)).Select(x => new { x.Destinatarios, x.Estado }).ToListAsync(ct).ConfigureAwait(false);
+        if (estados.Any(x => x.Estado == EstadoComunicacion.Pendiente))
+            return;
+        var algunaEnviada = comunicacion.Estado is EstadoComunicacion.Enviado or EstadoComunicacion.Entregado or EstadoComunicacion.Abierto
+            || estados.Any(x => x.Estado is EstadoComunicacion.Enviado or EstadoComunicacion.Entregado or EstadoComunicacion.Abierto);
+        var fallidas = estados.Count(x => x.Estado is EstadoComunicacion.Fallido or EstadoComunicacion.Rebotado)
+            + (comunicacion.Estado is EstadoComunicacion.Fallido or EstadoComunicacion.Rebotado ? 1 : 0);
         var c = await db.Comparendos.FirstAsync(x => x.Id == dp.ComparendoId, ct).ConfigureAwait(false);
-        if (comunicacion.Estado == EstadoComunicacion.Enviado)
+        if (algunaEnviada)
         {
             var plazo = await db.Tipologias.Where(t => t.Id == dp.TipologiaId).Select(t => t.PlazoRespuestaOtDiasHabiles).FirstAsync(ct).ConfigureAwait(false);
             dp.Estado = EstadoDp.Enviado;
@@ -339,7 +364,8 @@ internal sealed class ReaccionDp(ComparendosDb db, Timeline timeline, Calendario
             dp.FechaLimiteRespuestaOt = (await calendario.ActualAsync(ct).ConfigureAwait(false)).SumarHabiles(reloj.Hoy, plazo);
             if (c.EstadoGestion == EstadoGestion.SinGestion)
                 c.EstadoGestion = EstadoGestion.DpEnviado;
-            timeline.Agregar(c, TipoEventoTimeline.DpEnviado, $"Derecho de petición {dp.Radicado} enviado a {string.Join(", ", dp.CorreosDestino)}.",
+            timeline.Agregar(c, TipoEventoTimeline.DpEnviado,
+                $"Derecho de petición {dp.Radicado} enviado a {string.Join(", ", dp.CorreosDestino)}.{(fallidas > 0 ? $" {fallidas} de {dp.ComunicacionIds.Count} buzones del organismo no lo recibieron (ver el Centro de Mensajes)." : string.Empty)}",
                 Actor.Sistema, new { dp.Radicado, destinatarios = dp.CorreosDestino }, "derecho_peticion", dp.Id);
         }
         else

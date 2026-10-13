@@ -106,14 +106,14 @@ public sealed partial class ProcesadorLotesDp(IServiceScopeFactory scopes, TimeP
         var lote = await db.LotesDp.FirstAsync(l => l.Id == item.LoteId, ct).ConfigureAwait(false);
         var servicio = scope.ServiceProvider.GetRequiredService<ServicioDp>();
         var despachador = scope.ServiceProvider.GetRequiredService<Correo.DespachadorCorreos>();
-        Guid? comunicacion = null;
+        List<Guid> comunicaciones = [];
         try
         {
             var c = await db.Comparendos.Include(x => x.Contraventor).FirstOrDefaultAsync(x => x.Id == item.ComparendoId && x.TenantId == lote.TenantId, ct).ConfigureAwait(false)
                 ?? throw ReglaException.NoEncontrado("El comparendo");
             var dp = await servicio.EnviarAsync(c, lote.TipologiaId, new Actor(ActorTipo.Usuario, lote.CreadoPor, "Envío masivo"), lote.Id, ct).ConfigureAwait(false);
             item.DerechoPeticionId = dp.Id;
-            comunicacion = dp.ComunicacionId;
+            comunicaciones = dp.ComunicacionIds;
             lote.Enviados++;
         }
         catch (ReglaException ex)
@@ -141,7 +141,7 @@ public sealed partial class ProcesadorLotesDp(IServiceScopeFactory scopes, TimeP
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        if (comunicacion is { } id)
+        foreach (var id in comunicaciones)
             await despachador.DespacharAsync(id, ct).ConfigureAwait(false);
         return true;
     }

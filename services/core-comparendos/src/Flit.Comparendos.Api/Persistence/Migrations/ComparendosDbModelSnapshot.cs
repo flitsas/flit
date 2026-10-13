@@ -1840,6 +1840,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("comunicacion_id");
 
+                    b.PrimitiveCollection<List<Guid>>("ComunicacionIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("comunicacion_ids");
+
                     b.PrimitiveCollection<List<string>>("CorreosDestino")
                         .IsRequired()
                         .HasColumnType("text[]")

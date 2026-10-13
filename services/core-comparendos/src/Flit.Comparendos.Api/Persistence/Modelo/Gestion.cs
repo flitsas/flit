@@ -175,6 +175,9 @@ public sealed class DerechoPeticion : Auditada
     public Guid DocumentoArchivoId { get; set; }
     public bool FirmadoDigitalmente { get; set; }
     public Guid? ComunicacionId { get; set; }
+
+    /// <summary>Una comunicación por correo de radicación del OT (la plataforma no maneja varios destinatarios).</summary>
+    public List<Guid> ComunicacionIds { get; set; } = [];
     public Guid? LoteId { get; set; }
     public EstadoDp Estado { get; set; } = EstadoDp.Enviando;
     public DateOnly? FechaRadicacion { get; set; }

@@ -107,6 +107,32 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
         (await api.EnDbAsync(db => db.AvisosConductor.AnyAsync(a => a.ComparendoId == id, ct))).Should().Be(queda);
     }
 
+    /// <summary>Un OT con dos correos de radicación donde uno rebota: el DP queda enviado (el radicado llegó) y el timeline lo dice.</summary>
+    [Fact]
+    public async Task DpAOtConVariosCorreos_EnviadoSiAlMenosUnoLlega()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
+        (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001",
+            new { correosRadicacion = new[] { "radicacion@movilidad.test", "judicial@movilidad.test" } }, ct)).EnsureSuccessStatusCode();
+        var empresa = await EmpresaAsync(api, dp: true, requiereRl: false);
+        var dc = (await super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/tipologias", ct)).EnumerateArray().Single(t => t.GetProperty("codigo").GetString() == "DC").GetProperty("id").GetGuid();
+        (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/tipologias/{dc}", new { habilitada = true }, ct)).EnsureSuccessStatusCode();
+        var id = (await IngresarAsync(api, empresa, Item("VC-1", notificacion: new DateOnly(2025, 9, 1)))).Values.Single();
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer, Permisos.DpGenerar, Permisos.DpEnviar]));
+
+        var r = await (await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp", new { tipologiaId = dc }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        r.GetProperty("estado").GetString().Should().Be("Enviado");
+        var dp = await api.EnDbAsync(db => db.DerechosPeticion.SingleAsync(d => d.ComparendoId == id, ct));
+        dp.ComunicacionIds.Should().HaveCount(2);
+        (await api.EnDbAsync(db => db.Timeline.SingleAsync(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.DpEnviado, ct)))
+            .Descripcion.Should().Contain("1 de 2 buzones del organismo no lo recibieron");
+        await super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001",
+            new { correosRadicacion = new[] { "radicacion@movilidad.test" } }, ct);
+    }
+
     /// <summary>§6.17: si el correo al OT de un ítem falla, el lote termina con errores aunque el DP se haya creado.</summary>
     [Fact]
     public async Task LoteDp_CorreoAlOtFallido_QuedaCompletadoConErrores()

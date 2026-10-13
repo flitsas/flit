@@ -481,6 +481,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     documento_archivo_id = table.Column<Guid>(type: "uuid", nullable: false),
                     firmado_digitalmente = table.Column<bool>(type: "boolean", nullable: false),
                     comunicacion_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    comunicacion_ids = table.Column<List<Guid>>(type: "uuid[]", nullable: false),
                     lote_id = table.Column<Guid>(type: "uuid", nullable: true),
                     estado = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     fecha_radicacion = table.Column<DateOnly>(type: "date", nullable: true),
