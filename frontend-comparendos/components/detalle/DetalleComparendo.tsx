@@ -12,6 +12,7 @@ import { Chip } from "@/components/ui/Chip";
 import { BOTON_PELIGRO_CLS, controlCls, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import {
+  consultaContraventor,
   canal,
   cambioContraventor,
   estadoDp,
@@ -167,8 +168,16 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
 
 function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
   const k = d.contraventor;
+  const consulta = consultaContraventor(d.estadoConsultaContraventor);
   return (
     <div className="flex flex-col gap-4">
+      {/* §7.2: el estado de la consulta a la API de contratos, si la empresa la tiene (NoAplica = asignación manual). */}
+      {d.estadoConsultaContraventor !== "NoAplica" && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="opacity-60">Consulta a la API de contratos:</span>
+          <StatusBadge label={consulta.texto} tone={consulta.tono} />
+        </div>
+      )}
       {k ? (
         <Datos
           filas={[
