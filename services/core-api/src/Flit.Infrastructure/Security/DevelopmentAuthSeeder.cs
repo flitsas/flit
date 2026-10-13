@@ -112,6 +112,7 @@ public static class DevelopmentAuthSeeder
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
+        await SeedConsolidadoMasivoPermissionsAsync(db, cancellationToken); // Épica #13216 — HU13369
     }
 
     /// <summary>
@@ -1487,6 +1488,89 @@ public static class DevelopmentAuthSeeder
         // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. Se excluyen los roles
         // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
         string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador"];
+        var roles = await db.Roles
+            .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in roles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Descarga masiva de consolidados (épica #13216, HU #13369) — módulo <c>consolidado-masivo</c> +
+    /// permiso <c>consolidado-masivo.download</c> que protege <c>POST /api/v1/tramites/consolidados/lotes</c>
+    /// (y, con #13308, la creación desde la bandeja del OT). Calcado de
+    /// <see cref="SeedHistorialPlacaPermissionsAsync"/>: crea módulo y permiso si faltan y concede el
+    /// permiso sin duplicar si ya estaba concedido.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Grants directos: <c>SuperAdmin</c>, <c>AdminCompany</c>, <c>Radicador</c> y <c>ot_admin</c>
+    /// (ADR-0070 A3.5 y A5.4). Los demás roles del OT no lo reciben por defecto: se conceden por RBAC.
+    /// </para>
+    /// <para>
+    /// staging: sin multi-producto el Admin de Compañía es <c>AdminCompany</c> y recibe el grant directo (lo que
+    /// pidió el PO, Q4). En develop el grant va a <c>admin_tramites</c> y AdminCompany lo obtiene por el espejo del
+    /// DDL 120 (HU #12964), que staging aún no tiene.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedConsolidadoMasivoPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "consolidado-masivo" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "consolidado-masivo",
+                Name = "Descarga masiva de consolidados",
+                SortOrder = 13,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "consolidado-masivo.download", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "consolidado-masivo.download",
+                Name = "Descargar consolidados en lote",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/tramites/consolidados/lotes",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // staging: sin multi-producto el Admin de Compañía es AdminCompany; en develop es admin_tramites (DDL 120).
+        // Se excluyen los roles borrados lógicamente.
+        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador", "ot_admin"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);

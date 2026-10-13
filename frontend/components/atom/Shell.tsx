@@ -9,6 +9,7 @@ import {
   canReadIctReportes,
   canReadIctTrazabilidad,
   canReadLogQx,
+  canDescargarConsolidadosMasivo,
   decodeJwtPayload,
   isAdminCompany,
   isGroupParent,
@@ -65,6 +66,7 @@ import {
   Route,
   X,
   FileText,
+  FileArchive,
   ClipboardList,
   ListChecks,
   Monitor,
@@ -74,6 +76,7 @@ import {
   BadgeCheck,
   Timer,
 } from "lucide-react";
+import { LoteDescargaTracker, LoteDescargaTrackerProvider } from "@/components/shared/LoteDescargaTracker";
 
 export type ModuleId =
   | "dashboard"
@@ -177,6 +180,8 @@ function useCurrentUser() {
       canReadIctReportes: canReadIctReportes(payload),
       canManageBanners: canManageBanners(payload),
       canAccessRuntConfirmation: canAccessRuntConfirmation(payload),
+      // HU #13382 — el seguimiento del lote de descarga masiva solo se monta con el permiso (sin polling inútil).
+      puedeDescargaMasiva: canDescargarConsolidadosMasivo(payload),
     };
   });
   return user;
@@ -379,6 +384,14 @@ export function Shell({
         icon: Bell,
         active: pathname.startsWith("/admin/plataforma/notificaciones"),
         onClick: () => router.push("/admin/plataforma/notificaciones"),
+      },
+      // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
+      {
+        key: "admin-descarga-masiva",
+        label: "Descarga masiva",
+        icon: FileArchive,
+        active: pathname.startsWith("/admin/plataforma/descarga-masiva"),
+        onClick: () => router.push("/admin/plataforma/descarga-masiva"),
       },
     );
   }
@@ -583,7 +596,7 @@ export function Shell({
   const groups = buildDockGroups(entries);
   const atBottom = condensed;
 
-  return (
+  const shell = (
     <div
       className="h-screen w-full overflow-hidden flex flex-col"
       style={{
@@ -707,6 +720,10 @@ export function Shell({
           onHome={() => onNav("dashboard")}
           homeActive={!onAdminRoute && active === "dashboard"}
         />
+
+        {/* HU #13382 — aviso del lote arriba a la derecha del contenido: fuera de la barra superior,
+            del dock y del botón de Dr. FLIT. */}
+        <LoteDescargaTracker />
 
         {/* DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance). */}
         <DrFlitAssistant
@@ -836,6 +853,14 @@ export function Shell({
         Políticas de Privacidad y Términos de Uso · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
       </footer>
     </div>
+  );
+  // HU #13382 — seguimiento global del lote de descarga masiva: el provider envuelve todo para que
+  // cualquier página (p. ej. el listado al crear el lote o ante 409 `lote_activo`) pueda pedir que se
+  // muestre un lote con `useMostrarLoteDescarga`.
+  return (
+    <LoteDescargaTrackerProvider habilitado={Boolean(currentUser?.puedeDescargaMasiva)}>
+      {shell}
+    </LoteDescargaTrackerProvider>
   );
 }
 
