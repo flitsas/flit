@@ -93,6 +93,7 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 | `platform.notificaciones.send` | `notificaciones` | Encolar correos y otras notificaciones |
 | `platform.notificaciones.admin` | `notificaciones` | Administrar los mensajes muertos de Notificaciones (listar, reintentar, descartar); lo usa core-api para la consola del SuperAdmin |
 | `platform.tramites.ict` | `tramites` | Las llamadas de ICT a la orquestación de Trámites, que hoy usan un secreto compartido |
+| `platform.tramites.catalogos` | `tramites` | Leer catálogos de la plataforma que atiende `core-api` (hoy, los organismos de tránsito para la réplica de Comparendos) |
 
 - Cuando una llamada de servicio actúa por una empresa, envía la empresa en `X-Flit-Tenant-Id` (REST) o en la metadata `x-flit-tenant-id` (gRPC). El destino lo acepta **solo** con token de servicio válido y lo registra en la traza. Un token de usuario nunca puede usar esa cabecera.
 
@@ -163,6 +164,7 @@ Las llamadas síncronas de un servicio a otro usan gRPC en la red interna (ADR-0
 | `flit.consultas.v1.ValidacionIdentidadService` | `core-consultas` | `platform.consultas` | Las llamadas de Trámites a Kyverum Verify (crear validación, estado, certificado): el secreto de los avisos queda en Consultas |
 | `flit.notificaciones.v1.NotificacionesService` | `core-notificaciones` | `platform.notificaciones.send` | — (nuevo: envío directo de un correo ya armado, para el buzón de pruebas; lo normal es el trabajo del bus) |
 | `flit.notificaciones.v1.MensajesMuertosService` | `core-notificaciones` | `platform.notificaciones.admin` | — (nuevo: mensajes muertos de correos y webhooks) |
+| `flit.tramites.v1.CatalogosService` | `core-api` (puerto gRPC interno) | `platform.tramites.catalogos` | La lectura de `catalogs.transit_offices` por SQL desde otro servicio (ADR-0064): Comparendos replica el catálogo a diario |
 
 Los métodos se definen en los `.proto`; este contrato fija el servicio, quién lo atiende y su scope.
 

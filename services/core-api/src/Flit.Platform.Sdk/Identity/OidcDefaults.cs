@@ -25,6 +25,8 @@ public static class OidcDefaults
         // HU #13357: administración de mensajes muertos de Notificaciones (la usa la consola del SuperAdmin).
         ["platform.notificaciones.admin"] = ServiceAudiences.Notificaciones,
         ["platform.tramites.ict"] = ServiceAudiences.Tramites,
+        // HU #13459: catálogos de la plataforma por gRPC (organismos de tránsito para la réplica de Comparendos).
+        ["platform.tramites.catalogos"] = ServiceAudiences.Tramites,
     };
 
     /// <summary>Prefijo de los clientes de servicio (contrato §3, <c>svc-&lt;código&gt;</c>): su <c>sub</c> en el token.</summary>
