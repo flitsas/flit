@@ -202,6 +202,7 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
     [Theory]
     [InlineData("800000200", ResultadoFuente.ExitosaVacia, TipoErrorFuente.Unspecified)]
     [InlineData("800000777", ResultadoFuente.Error, TipoErrorFuente.EstadoNoOk)]
+    [InlineData("800000401", ResultadoFuente.Error, TipoErrorFuente.Autenticacion)]
     [InlineData("800000666", ResultadoFuente.Error, TipoErrorFuente.SoapFault)]
     [InlineData("800000500", ResultadoFuente.Error, TipoErrorFuente.HttpNoExitoso)]
     [InlineData("800000999", ResultadoFuente.Error, TipoErrorFuente.RespuestaInvalida)]
@@ -352,7 +353,8 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
             static HttpResponseMessage R(HttpStatusCode s, string body) => new(s) { Content = new StringContent(body, Encoding.UTF8, "text/xml") };
             return cuerpo switch
             {
-                _ when cuerpo.Contains("800000200", StringComparison.Ordinal) => R(HttpStatusCode.OK, Sobre("<error_Cod>0</error_Cod><error_Desc></error_Desc>")),
+                _ when cuerpo.Contains("800000200", StringComparison.Ordinal) => R(HttpStatusCode.OK, Sobre("<error_Cod>0</error_Cod><error_Desc>SIN ERRORES</error_Desc><estadoCuentaSuspensionLicencia/>")),
+                _ when cuerpo.Contains("800000401", StringComparison.Ordinal) => R(HttpStatusCode.OK, Sobre("<error_Cod>1</error_Cod><error_Desc>Usuario no permitido</error_Desc><estadoCuentaSuspensionLicencia/>")),
                 _ when cuerpo.Contains("800000777", StringComparison.Ordinal) => R(HttpStatusCode.OK, Sobre("<error_Cod>99</error_Cod><error_Desc>Documento CLAVE123800000777 no autorizado</error_Desc>")),
                 _ when cuerpo.Contains("800000666", StringComparison.Ordinal) => R(HttpStatusCode.InternalServerError,
                     """<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><S:Fault><faultcode>S:Server</faultcode><faultstring>Clave CLAVE123 inválida</faultstring></S:Fault></S:Body></S:Envelope>"""),

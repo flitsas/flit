@@ -29,9 +29,10 @@ internal sealed record SmartCloudOpciones(string ClaveAcceso, Uri UrlIdentificac
 /// (<c>smartCloudIdentificationService.ts</c>) y del XSD público del SIMIT: la clave de acceso va pegada antes del
 /// documento (<c>Documento = clave + número</c>), <c>TipoDocumento</c> es numérico y <c>Usuario</c> va vacío.
 /// <para>
-/// Lo que aún no se ha visto en una respuesta real (V1 nunca consultó por placa y nunca miró <c>error_Cod</c>): que la
-/// placa también lleve la clave delante y qué código devuelve el SIMIT para «sin comparendos». Por eso, sin filas y
-/// con un <c>error_Cod</c> distinto de vacío o cero, se responde error y no vacío: nunca se borra con una respuesta dudosa.
+/// Visto en el SIMIT real (2026-10-13): la placa también lleva la clave delante; «sin comparendos» es
+/// <c>error_Cod</c> 0 «SIN ERRORES» sin filas; sin la clave, o con una clave que no sirve, responde <c>error_Cod</c> 1
+/// «Usuario no permitido» (es autenticación). Cualquier otro código sin filas es error y no vacío: nunca se borra con
+/// una respuesta dudosa. Su firewall rechaza con 403 algunos User-Agent (el de Python); el HttpClient de .NET pasa.
 /// </para>
 /// </summary>
 internal sealed class ProveedorSmartCloud(IHttpClientFactory http, SmartCloudOpciones opciones) : IProveedorComparendos
@@ -119,7 +120,9 @@ internal sealed class ProveedorSmartCloud(IHttpClientFactory http, SmartCloudOpc
             if (filas.Count == 0 && errorCod is not null && errorCod.Trim('0').Length > 0)
             {
                 var desc = Hijo(salida, "error_Desc") ?? "sin descripción";
-                return Fuente.Error(Clave, TipoErrorFuente.EstadoNoOk, $"SmartCloud respondió el código {errorCod}: {desc}", codigo, reloj.ElapsedMilliseconds, cuerpo);
+                return errorCod.Trim() == "1"
+                    ? Fuente.Error(Clave, TipoErrorFuente.Autenticacion, $"SmartCloud no reconoce la clave de acceso: {desc}", codigo, reloj.ElapsedMilliseconds, cuerpo)
+                    : Fuente.Error(Clave, TipoErrorFuente.EstadoNoOk, $"SmartCloud respondió el código {errorCod}: {desc}", codigo, reloj.ElapsedMilliseconds, cuerpo);
             }
 
             var parcial = new ResultadoParcialFuente();
