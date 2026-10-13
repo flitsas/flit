@@ -65,6 +65,27 @@ public sealed class PlantillasTests(ApiDePrueba api) : IClassFixture<ApiDePrueba
     }
 
     [Fact]
+    public async Task CadaTesis_TieneSuTextoDeV1_ValidoYEnPdf()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var lector = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [Permisos.PlantillasVer]));
+        var dps = (await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/plantillas?tipo=DpDocumento&conjunto=Flit", ct)).EnumerateArray().ToList();
+        var cuerpos = new Dictionary<string, string>();
+        foreach (var dp in dps)
+        {
+            var version = await Super.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/plantillas/versiones/{dp.GetProperty("publicada").GetProperty("id").GetGuid()}", ct);
+            var cuerpo = version.GetProperty("cuerpoHtml").GetString()!;
+            cuerpos[dp.GetProperty("tipologia").GetString() ?? "?"] = cuerpo;
+            Flit.Comparendos.Domain.Plantillas.MotorPlantillas.Validar(cuerpo).Desconocidas.Should().BeEmpty();
+            var r = await lector.PostAsJsonAsync("/api/v1/comparendos/plantillas/vista-previa", new { tipo = "DpDocumento", cuerpoHtml = cuerpo, formato = "pdf" }, ct);
+            (await r.Content.ReadAsByteArrayAsync(ct)).Take(4).Should().Equal("%PDF"u8.ToArray());
+        }
+
+        cuerpos.Values.Distinct().Count().Should().BeGreaterThan(5, "cada tesis con texto en V1 lleva el suyo, no el genérico");
+    }
+
+    [Fact]
     public async Task VistaPrevia_DelDpEnPdf()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

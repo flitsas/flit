@@ -9,8 +9,10 @@ namespace Flit.Comparendos.Api.Semillas;
 
 /// <summary>
 /// Plantillas base del conjunto FLIT, versión 1 publicada (los archivos Semillas/Plantillas/*.html). El documento del DP
-/// se siembra una vez por tipología con el mismo texto; el fundamento sale del catálogo ({{dp.fundamento}}). Renting
-/// usa las de FLIT hasta que publique las suyas (S-23). Nunca se pisa una plantilla existente.
+/// se siembra una vez por tipología: con el texto jurídico de V1 de esa tesis si existe (Semillas/Plantillas/Tesis/
+/// &lt;código&gt;.html, ver context/gdc/v1/tesis-textos-v1.md; pendiente de revisión del abogado) o, si no, con el texto
+/// genérico cuyo fundamento sale del catálogo ({{dp.fundamento}}). Renting usa las de FLIT hasta que publique las suyas
+/// (S-23). Nunca se pisa una plantilla existente.
 /// </summary>
 internal static partial class PlantillasSemilla
 {
@@ -21,7 +23,14 @@ internal static partial class PlantillasSemilla
     {
         var asm = typeof(PlantillasSemilla).Assembly;
         var existentes = await db.Plantillas.Where(p => p.Conjunto == ConjuntoPlantillas.Flit).Select(p => new { p.Tipo, p.TipologiaId }).ToListAsync(ct).ConfigureAwait(false);
-        var tipologias = await db.Tipologias.Select(t => t.Id).ToListAsync(ct).ConfigureAwait(false);
+        var tipologias = await db.Tipologias.Select(t => new { t.Id, t.Codigo }).ToListAsync(ct).ConfigureAwait(false);
+        var tesis = new Dictionary<string, (string? Nombre, string Cuerpo)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var recurso in asm.GetManifestResourceNames().Where(n => n.Contains(".Semillas.Plantillas.Tesis.", StringComparison.Ordinal)))
+        {
+            var codigo = recurso[(recurso.LastIndexOf(".Tesis.", StringComparison.Ordinal) + ".Tesis.".Length)..^".html".Length];
+            tesis[codigo] = await LeerAsync(asm, recurso, ct).ConfigureAwait(false);
+        }
+
 
         foreach (var recurso in asm.GetManifestResourceNames().Where(n => n.Contains(".Semillas.Plantillas.", StringComparison.Ordinal)))
         {
@@ -29,25 +38,19 @@ internal static partial class PlantillasSemilla
             if (!Enum.TryParse<TipoPlantilla>(archivo, out var tipo))
                 continue;
 
-            await using var stream = asm.GetManifestResourceStream(recurso)!;
-            using var lector = new StreamReader(stream);
-            var texto = await lector.ReadToEndAsync(ct).ConfigureAwait(false);
-            string? nombre = null, asunto = null;
-            foreach (Match m in Encabezado().Matches(texto))
+            var (nombre, cuerpo) = await LeerAsync(asm, recurso, ct).ConfigureAwait(false);
+            var asunto = Asunto(asm, recurso);
+            if (tipo != TipoPlantilla.DpDocumento)
             {
-                if (m.Groups[1].Value == "nombre")
-                    nombre = m.Groups[2].Value;
-                else
-                    asunto = m.Groups[2].Value;
+                if (!existentes.Any(e => e.Tipo == tipo && e.TipologiaId == null))
+                    Crear(db, tipo, null, nombre ?? tipo.ToString(), asunto, cuerpo, ahora);
+                continue;
             }
 
-            var cuerpo = Encabezado().Replace(texto, string.Empty).Trim();
-            var destinos = tipo == TipoPlantilla.DpDocumento ? tipologias.Distinct().Select(t => (Guid?)t).ToList() : [null];
-            foreach (var tipologia in destinos)
+            foreach (var t in tipologias.Where(t => !existentes.Any(e => e.Tipo == tipo && e.TipologiaId == t.Id)))
             {
-                if (existentes.Any(e => e.Tipo == tipo && e.TipologiaId == tipologia))
-                    continue;
-                Crear(db, tipo, tipologia, nombre ?? tipo.ToString(), asunto, cuerpo, ahora);
+                var propio = tesis.TryGetValue(t.Codigo, out var x) ? x : ((string? Nombre, string Cuerpo)?)null;
+                Crear(db, tipo, t.Id, propio?.Nombre ?? nombre ?? tipo.ToString(), null, propio?.Cuerpo ?? cuerpo, ahora);
             }
         }
     }
@@ -61,6 +64,22 @@ internal static partial class PlantillasSemilla
         using var lector = new StreamReader(stream);
         var cuerpo = Encabezado().Replace(await lector.ReadToEndAsync(ct).ConfigureAwait(false), string.Empty).Trim();
         Crear(db, TipoPlantilla.DpDocumento, tipologiaId, "Derecho de petición", null, cuerpo, ahora);
+    }
+
+    private static async Task<(string? Nombre, string Cuerpo)> LeerAsync(System.Reflection.Assembly asm, string recurso, CancellationToken ct)
+    {
+        await using var stream = asm.GetManifestResourceStream(recurso)!;
+        using var lector = new StreamReader(stream);
+        var texto = await lector.ReadToEndAsync(ct).ConfigureAwait(false);
+        var nombre = Encabezado().Matches(texto).FirstOrDefault(m => m.Groups[1].Value == "nombre")?.Groups[2].Value;
+        return (nombre, Encabezado().Replace(texto, string.Empty).Trim());
+    }
+
+    private static string? Asunto(System.Reflection.Assembly asm, string recurso)
+    {
+        using var stream = asm.GetManifestResourceStream(recurso)!;
+        using var lector = new StreamReader(stream);
+        return Encabezado().Matches(lector.ReadToEnd()).FirstOrDefault(m => m.Groups[1].Value == "asunto")?.Groups[2].Value;
     }
 
     private static void Crear(ComparendosDb db, TipoPlantilla tipo, Guid? tipologia, string nombre, string? asunto, string cuerpo, DateTimeOffset ahora)
