@@ -395,6 +395,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
         Set<Entities.Admin.NotificationTestSettingsRow>();
 
+    // Feature #13508 (Épica #13272) — configuración multi-proveedor IA por herramienta (global SuperAdmin).
+    internal DbSet<Entities.Admin.AiToolProviderSettingsRow> AiToolProviderSettings =>
+        Set<Entities.Admin.AiToolProviderSettingsRow>();
+
+    internal DbSet<Entities.Admin.AiProviderTransitionRow> AiProviderTransitions =>
+        Set<Entities.Admin.AiProviderTransitionRow>();
+
     // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
     // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
     internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>

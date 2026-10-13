@@ -54,6 +54,7 @@ internal static class ApiEndpoints
         app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
         app.MapAdminPlataformaNotificacionesEndpoints();
         app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
+        app.MapAdminPlataformaAiEndpoints(); // Feature #13508 — Configuración multi-proveedor IA (HU #13509)
         app.MapAdminRuntConfirmationEndpoints();
         app.MapAdminLogQxEndpoints();
         app.MapAdminTransitOfficeTenantsEndpoints();
