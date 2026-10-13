@@ -64,4 +64,22 @@ public sealed class MensajesTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
         var r = await cliente.PostAsync($"/api/v1/comparendos/mensajes/{id}/reintentar", null, ct);
         (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("estado").GetString().Should().Be("Enviado");
     }
+
+    [Fact]
+    public async Task D36_FiltroPorCuentaDeSalida_YRemitenteEnLaFila()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid();
+        var id = await RegistrarAsync(empresa, TipoComunicacion.Aviso1);
+        await api.EnDbAsync(db => db.Comunicaciones.Where(c => c.Id == id)
+            .ExecuteUpdateAsync(u => u.SetProperty(c => c.CanalCorreo, CanalCorreo.EmpresaApi).SetProperty(c => c.RemitenteNombre, "Flota Prueba")));
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MensajesVer]));
+
+        var propia = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/mensajes?canal=EmpresaApi", ct);
+        var fila = propia.GetProperty("items").EnumerateArray().Should().ContainSingle().Subject;
+        (fila.GetProperty("id").GetGuid(), fila.GetProperty("remitente").GetString()).Should().Be((id, "Flota Prueba"));
+        (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/mensajes?canal=FlitSmtp", ct)).GetProperty("total").GetInt32().Should().Be(1);
+        (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/mensajes?canal=Email", ct)).GetProperty("total").GetInt32().Should().Be(2);
+    }
 }

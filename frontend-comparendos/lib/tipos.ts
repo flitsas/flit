@@ -501,6 +501,7 @@ export interface MensajeFila {
   tipo: string;
   canal: string;
   canalCorreo: string | null;
+  remitente: string | null;
   destinatarios: string;
   asunto: string;
   estado: string;

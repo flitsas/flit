@@ -14,7 +14,7 @@ namespace Flit.Comparendos.Api.Modulos.Correo;
 /// </summary>
 public static class MensajesEndpoints
 {
-    public sealed record MensajeFila(Guid Id, Guid? EmpresaId, Guid? ComparendoId, string? Comparendo, string Tipo, string Canal, string? CanalCorreo, string Destinatarios,
+    public sealed record MensajeFila(Guid Id, Guid? EmpresaId, Guid? ComparendoId, string? Comparendo, string Tipo, string Canal, string? CanalCorreo, string? Remitente, string Destinatarios,
         string Asunto, string Estado, int Reintentos, DateTimeOffset? AbiertoEn, int Aperturas, bool Desviado, DateTimeOffset CreadoEn, DateTimeOffset? EnviadoEn, string? MotivoFallo);
 
     public static void Map(RouteGroupBuilder api)
@@ -24,8 +24,8 @@ public static class MensajesEndpoints
         api.MapPost("/mensajes/{id:guid}/reintentar", Reintentar).RequirePermiso(Permisos.AvisosEnviar);
     }
 
-    private static async Task<IResult> Listar(Guid? empresa, bool? internas, string? tipo, string? estado, DateOnly? desde, DateOnly? hasta, string? comparendo, string? placa,
-        int? pagina, int? tamano, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
+    private static async Task<IResult> Listar(Guid? empresa, bool? internas, string? tipo, string? estado, string? canal, DateOnly? desde, DateOnly? hasta, string? comparendo,
+        string? placa, int? pagina, int? tamano, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
     {
         var (p, t) = Paginacion.Normalizar(pagina, tamano, 50);
         var q = db.Comunicaciones.AsNoTracking();
@@ -48,6 +48,16 @@ public static class MensajesEndpoints
         var estados = (estado ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => Enum.TryParse<EstadoComunicacion>(x, true, out var v) ? (EstadoComunicacion?)v : null).OfType<EstadoComunicacion>().ToList();
         if (estados.Count > 0)
             q = q.Where(c => estados.Contains(c.Estado));
+        // Canal (matriz D-36): el único canal de esta entrega es el correo [Excel C11], así que se filtra por la cuenta de
+        // salida (FLIT o la de la empresa). También acepta Email/Whatsapp/Sms para cuando lleguen.
+        foreach (var x in (canal ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Enum.TryParse<CanalCorreo>(x, true, out var cc))
+                q = q.Where(c => c.CanalCorreo == cc);
+            else if (Enum.TryParse<CanalComunicacion>(x, true, out var cm))
+                q = q.Where(c => c.Canal == cm);
+        }
+
         if (desde is { } d)
         {
             var inicio = new DateTimeOffset(d.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset).ToUniversalTime();
@@ -70,7 +80,7 @@ public static class MensajesEndpoints
         var total = await q.CountAsync(ct).ConfigureAwait(false);
         var filas = await q.OrderByDescending(c => c.CreadoEn).Skip((p - 1) * t).Take(t)
             .Select(c => new MensajeFila(c.Id, c.TenantId, c.ComparendoId, db.Comparendos.Where(x => x.Id == c.ComparendoId).Select(x => x.Numero).FirstOrDefault(), c.Tipo.ToString(),
-                c.Canal.ToString(), c.CanalCorreo.ToString(), c.Destinatarios, c.Asunto, c.Estado.ToString(), c.CantidadReintentos, c.AbiertoEn, c.Aperturas, c.Desviado, c.CreadoEn,
+                c.Canal.ToString(), c.CanalCorreo.ToString(), c.RemitenteNombre, c.Destinatarios, c.Asunto, c.Estado.ToString(), c.CantidadReintentos, c.AbiertoEn, c.Aperturas, c.Desviado, c.CreadoEn,
                 c.EnviadoEn, c.MotivoFallo))
             .ToListAsync(ct).ConfigureAwait(false);
         return Results.Ok(new Pagina<MensajeFila>(filas, total, p, t));

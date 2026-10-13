@@ -13,7 +13,7 @@ import { Chip } from "@/components/ui/Chip";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
-import { ESTADO_COMUNICACION, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
+import { CANAL_CORREO, ESTADO_COMUNICACION, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
 import { leerDestinatarios, resumenDestinatarios, sePuedeReintentar } from "@/lib/mensajes";
 import { P } from "@/lib/nav";
@@ -131,6 +131,7 @@ function Centro() {
   const [internas, setInternas] = useState(false);
   const [tipo, setTipo] = useState("");
   const [estado, setEstado] = useState("");
+  const [canal, setCanal] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [comparendo, setComparendo] = useState("");
@@ -138,7 +139,7 @@ function Centro() {
   const [abierto, setAbierto] = useState<string | null>(() => params.get("mensaje"));
   const [verComparendo, setVerComparendo] = useState<string | null>(null);
 
-  const filtros = { empresa: internas ? undefined : (empresa ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
+  const filtros = { empresa: internas ? undefined : (empresa ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, canal, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
   const lista = useCarga(`mensajes:${JSON.stringify(filtros)}:${pg.page}:${pg.pageSize}`, (signal) =>
     apiFetch<Pagina<MensajeFila>>("/mensajes", {
       signal,
@@ -147,6 +148,7 @@ function Centro() {
         internas: filtros.internas,
         tipo: tipo || undefined,
         estado: estado || undefined,
+        canal: canal || undefined,
         desde: desde || undefined,
         hasta: hasta || undefined,
         comparendo: filtros.comparendo || undefined,
@@ -170,7 +172,7 @@ function Centro() {
           <Interruptor etiqueta="Solo alertas internas de FLIT" activo={internas} onCambio={filtrar(setInternas)} />
         </div>
       )}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <label className={ETIQUETA_CLS}>
           Tipo
           <select className={INPUT_CLS} value={tipo} onChange={(e) => filtrar(setTipo)(e.target.value)}>
@@ -187,6 +189,17 @@ function Centro() {
           <select className={INPUT_CLS} value={estado} onChange={(e) => filtrar(setEstado)(e.target.value)}>
             <option value="">Todos</option>
             {opciones(ESTADO_COMUNICACION).map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.texto}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Cuenta de salida
+          <select className={INPUT_CLS} value={canal} onChange={(e) => filtrar(setCanal)(e.target.value)}>
+            <option value="">Todas</option>
+            {opciones(CANAL_CORREO).map((o) => (
               <option key={o.valor} value={o.valor}>
                 {o.texto}
               </option>
@@ -222,6 +235,16 @@ function Centro() {
         columns={[
           { key: "fecha", header: "Fecha", render: (m) => formatoFechaHora(m.enviadoEn ?? m.creadoEn) },
           { key: "tipo", header: "Tipo", render: (m) => TIPO_COMUNICACION[m.tipo] ?? m.tipo },
+          {
+            key: "remitente",
+            header: "Remitente",
+            render: (m) => (
+              <div className="flex flex-col">
+                <span>{m.remitente ?? "—"}</span>
+                {m.canalCorreo && <span className="text-[11px] opacity-60">{CANAL_CORREO[m.canalCorreo] ?? m.canalCorreo}</span>}
+              </div>
+            ),
+          },
           { key: "dest", header: "Destinatarios", render: (m) => resumenDestinatarios(leerDestinatarios(m.destinatarios)) },
           { key: "asunto", header: "Asunto", render: (m) => <span className="line-clamp-2">{m.asunto}</span> },
           {

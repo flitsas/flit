@@ -170,6 +170,12 @@ export const ESTADO_COMUNICACION: Record<string, Etiqueta> = {
   Fallido: { texto: "Fallido", tono: "danger" },
 };
 
+// Cuenta por la que salió el correo (matriz D-36): el único canal de esta entrega es el correo [Excel C11].
+export const CANAL_CORREO: Record<string, string> = {
+  FlitSmtp: "Cuenta de FLIT",
+  EmpresaApi: "Cuenta de la empresa",
+};
+
 export const TIPO_COMUNICACION: Record<string, string> = {
   Aviso1: "Aviso 1 al conductor",
   Aviso2: "Aviso 2 al conductor",
