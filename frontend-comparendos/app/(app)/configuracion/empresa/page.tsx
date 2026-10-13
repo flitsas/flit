@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { InlineAlert, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
+import { ConsultasEmpresa } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
@@ -203,6 +204,7 @@ export default function EmpresaYCorreo() {
         <Encabezado titulo="Empresa y correo" descripcion="Cómo salen los correos de la empresa: remitente, respuestas y copias." />
         {sesion?.usuario.esSuperAdmin && <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />}
         <Configuracion key={empresa ?? "propia"} empresa={empresa} />
+        {(!sesion?.usuario.esSuperAdmin || empresa) && <ConsultasEmpresa key={`consultas:${empresa ?? "propia"}`} empresa={empresa} />}
       </section>
     </Requiere>
   );

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { History, Plus } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SearchInput } from "@/components/SearchInput";
 import { useToast } from "@/components/Toast";
@@ -252,7 +253,36 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
   );
 }
 
-/** Parametrizador por empresa (HU #13476, §7.10): capacidades, integración, conjunto de plantillas y tipologías. */
+/** Capacidades (HU #13476) y consultas automáticas (HU #13522) de la empresa elegida. */
+function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: () => void }) {
+  const [pestana, setPestana] = useState<"capacidades" | "consultas">("capacidades");
+  return (
+    <div className="flex flex-col gap-4">
+      <div role="tablist" aria-label="Configuración de la empresa" className="flex gap-1 border-b border-[#E2E8F0] dark:border-white/10">
+        {(
+          [
+            ["capacidades", "Capacidades y tipologías"],
+            ["consultas", "Consultas automáticas"],
+          ] as const
+        ).map(([valor, etiqueta]) => (
+          <button
+            key={valor}
+            type="button"
+            role="tab"
+            aria-selected={pestana === valor}
+            onClick={() => setPestana(valor)}
+            className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${pestana === valor ? "border-[#3B4FD6] text-[#3B4FD6] dark:text-white" : "border-transparent opacity-70 hover:opacity-100"}`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+      {pestana === "capacidades" ? <Configuracion empresaId={empresaId} onGuardado={onGuardado} /> : <ConsultasAdmin empresaId={empresaId} />}
+    </div>
+  );
+}
+
+/** Parametrizador por empresa (HU #13476, §7.10): capacidades, integración, conjunto de plantillas, tipologías y consultas. */
 export default function Empresas() {
   const [buscar, setBuscar] = useState("");
   const [elegida, setElegida] = useState<string | null>(null);
@@ -301,7 +331,7 @@ export default function Empresas() {
         />
         {elegida && (
           <Modal open onClose={() => setElegida(null)} title={lista.datos?.find((e) => e.id === elegida)?.nombre ?? "Empresa"} size="2xl">
-            <Configuracion key={elegida} empresaId={elegida} onGuardado={lista.recargar} />
+            <Pestanas key={elegida} empresaId={elegida} onGuardado={lista.recargar} />
           </Modal>
         )}
         {nueva && (
