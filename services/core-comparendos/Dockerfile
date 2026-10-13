@@ -11,6 +11,7 @@ WORKDIR /services/core-comparendos
 COPY core-comparendos/global.json core-comparendos/Directory.Build.props core-comparendos/Directory.Packages.props ./
 COPY core-api/Directory.Build.props core-api/Directory.Packages.props /services/core-api/
 COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
+COPY core-api/src/Flit.Tramites.Grpc.Contracts/ /services/core-api/src/Flit.Tramites.Grpc.Contracts/
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
 COPY core-notificaciones/Directory.Build.props core-notificaciones/Directory.Packages.props /services/core-notificaciones/

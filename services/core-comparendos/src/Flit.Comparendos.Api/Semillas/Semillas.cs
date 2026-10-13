@@ -103,6 +103,7 @@ public static class Semillas
             (TipoTrabajo.ReintentoContraventor, "0 6 * * *", false),
             (TipoTrabajo.ReporteSemanal, "0 17 * * 5", false),
             (TipoTrabajo.ReporteMensual, "0 18 L * *", false),
+            (TipoTrabajo.SincronizacionOrganismos, "0 3 * * *", false),
         ];
         var existentes = await db.TrabajosProgramados.Select(t => t.Tipo).ToListAsync(ct).ConfigureAwait(false);
         foreach (var (tipo, cron, soloHabiles) in trabajos.Where(t => !existentes.Contains(t.Tipo)))

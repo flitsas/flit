@@ -121,6 +121,7 @@ export const TRABAJO: Record<string, string> = {
   ReintentoContraventor: "Reintento de consulta de conductor",
   ReporteSemanal: "Reporte semanal",
   ReporteMensual: "Reporte mensual",
+  SincronizacionOrganismos: "Réplica de organismos de tránsito",
 };
 
 export const TIPO_ALERTA: Record<string, string> = {

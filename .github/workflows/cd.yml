@@ -475,6 +475,7 @@ jobs:
             services/core-api/Directory.Build.props
             services/core-api/Directory.Packages.props
             services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Tramites.Grpc.Contracts
             services/core-identity/Directory.Build.props
             services/core-identity/Directory.Packages.props
             services/core-identity/src/Flit.Platform.Grpc.Contracts

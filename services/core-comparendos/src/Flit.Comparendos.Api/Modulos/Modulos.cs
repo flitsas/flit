@@ -124,6 +124,22 @@ public static class Modulos
             services.AddScoped<Correo.IEnvioCorreo, Correo.EnvioConsola>();
         }
 
+        // Réplica del catálogo de organismos de tránsito (HU #13459, S-66): gRPC de catálogos de core-api. Sin dirección,
+        // el trabajo no hace nada y queda la semilla.
+        if (configuration["Comparendos:Tramites:Address"] is { Length: > 0 } tramites)
+        {
+            services.AddFlitGrpcClient<Flit.Tramites.Grpc.V1.CatalogosService.CatalogosServiceClient>(
+                configuration, new Uri(tramites), "platform.tramites.catalogos", o => o.Deadline = TimeSpan.FromSeconds(60));
+            services.AddScoped<Catalogos.ICatalogoOrganismosPlataforma, Catalogos.CatalogoOrganismosGrpc>();
+        }
+        else
+        {
+            services.AddScoped<Catalogos.ICatalogoOrganismosPlataforma, Catalogos.CatalogoOrganismosNoConectado>();
+        }
+
+        services.AddScoped<Catalogos.SincronizacionOrganismos>();
+        services.AddScoped<Trabajos.IEjecutorTrabajo>(sp => sp.GetRequiredService<Catalogos.SincronizacionOrganismos>());
+
         services.AddSingleton<Trabajos.ColaTrabajos>();
         if (configuration.GetValue("Comparendos:Trabajos:Habilitados", true))
         {

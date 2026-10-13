@@ -283,6 +283,9 @@ public enum TipoTrabajo
     ReintentoContraventor,
     ReporteSemanal,
     ReporteMensual,
+
+    /// <summary>Réplica diaria del catálogo de organismos de tránsito de la plataforma (S-66, HU #13459).</summary>
+    SincronizacionOrganismos,
 }
 
 public enum Disparo
