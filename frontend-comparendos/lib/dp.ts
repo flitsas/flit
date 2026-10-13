@@ -23,6 +23,9 @@ export interface VistaPreviaDp {
   radicado: string;
   organismo: string | null;
   destinatarios: string[];
+  /** Copias que la empresa configuró para los DP (§7.3.1). */
+  cc: string[];
+  bcc: string[];
   representante: { nombres: string; cargo: string | null; numeroDocumento: string } | null;
   anexos: string[];
   estadoLegal: string;

@@ -58,9 +58,14 @@ public sealed class DerechosPeticionTests(ApiConFuente api) : IClassFixture<ApiC
         var (empresa, cliente) = await EmpresaConDpAsync(true, "DA");
         var id = (await IngresarAsync(api, empresa, Item("DP-1"))).Values.Single();
         var da = await TipologiaAsync("DA");
+        await api.EnDbAsync(db => db.ConfiguracionesEmpresa.Where(e => e.TenantId == empresa).ExecuteUpdateAsync(u => u
+            .SetProperty(e => e.Cc, """[{"correo":"juridico@gestora.test","tipos":["DpOt"]},{"correo":"solo-avisos@gestora.test","tipos":["Aviso1"]}]""")
+            .SetProperty(e => e.Bcc, """[{"correo":"archivo@gestora.test","tipos":[]}]"""), ct));
 
         var previa = await (await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp/vista-previa", new { tipologiaId = da }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         previa.GetProperty("puedeEnviar").GetBoolean().Should().BeTrue();
+        previa.GetProperty("cc").EnumerateArray().Select(x => x.GetString()).Should().Equal(["juridico@gestora.test"], "§7.3.1: solo las copias configuradas para los DP");
+        previa.GetProperty("bcc").EnumerateArray().Select(x => x.GetString()).Should().Equal("archivo@gestora.test");
         previa.GetProperty("radicado").GetString().Should().Be("DA-XXXXXXXXXXXX-XXX");
         var pdf = await cliente.GetAsync($"/api/v1/comparendos/comparendos/{id}/dp/vista-previa.pdf?tipologiaId={da}", ct);
         (await pdf.Content.ReadAsByteArrayAsync(ct)).Take(4).Should().Equal("%PDF"u8.ToArray());

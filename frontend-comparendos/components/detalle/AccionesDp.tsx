@@ -103,6 +103,8 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
               ["Estado legal hoy", estadoLegal(v.estadoLegal).texto],
               ["Organismo de tránsito", v.organismo],
               ["Se envía a", v.destinatarios.join(", ") || null],
+              ["Con copia (CC)", v.cc.length > 0 ? v.cc.join(", ") : null],
+              ["Copia oculta (CCO)", v.bcc.length > 0 ? v.bcc.join(", ") : null],
               ["Firma", v.representante ? `${v.representante.nombres}${v.representante.cargo ? ` (${v.representante.cargo})` : ""}` : null],
               ["Anexos", v.anexos.join(", ")],
             ]}

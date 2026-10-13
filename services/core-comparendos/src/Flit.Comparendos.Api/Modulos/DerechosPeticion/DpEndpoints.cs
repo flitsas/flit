@@ -46,6 +46,9 @@ public static class DpEndpoints
             radicado = ServicioDp.RadicadoEnmascarado(p.Tipologia, reloj.Hoy),
             organismo = p.Organismo?.Nombre,
             destinatarios = p.Organismo?.CorreosRadicacion ?? [],
+            // §7.3.1: también las copias que la empresa configuró para los DP (CC visibles, BCC ocultas al OT).
+            cc = Configuracion.EmpresasEndpoints.CopiasPara(p.Config.Cc, TipoComunicacion.DpOt),
+            bcc = Configuracion.EmpresasEndpoints.CopiasPara(p.Config.Bcc, TipoComunicacion.DpOt),
             representante = p.Representante is { } r ? new { r.Nombres, r.Cargo, r.NumeroDocumento } : null,
             anexos = p.Anexos.Select(a => a.Nombre).Prepend("Derecho de petición (PDF)"),
             estadoLegal = p.EstadoLegal.ToString(),
