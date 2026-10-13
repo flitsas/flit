@@ -87,3 +87,21 @@ public sealed class Capacidades(ComparendosDb db, Reloj reloj)
         _ => capacidad.ToString(),
     };
 }
+
+/// <summary>
+/// RN-005 / Excel S1: la capacidad se valida en cada endpoint, no solo en el menú. El filtro exige la capacidad de la
+/// empresa del usuario (403 CAPACIDAD_NO_HABILITADA); el SuperAdmin queda fuera porque lee cualquier empresa.
+/// </summary>
+public static class CapacidadEndpointExtensions
+{
+    public static TBuilder RequireCapacidad<TBuilder>(this TBuilder builder, Capacidad capacidad)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.AddEndpointFilter(async (contexto, siguiente) =>
+        {
+            var servicios = contexto.HttpContext.RequestServices;
+            var usuario = servicios.GetRequiredService<UsuarioActual>();
+            if (!usuario.EsSuperAdmin && usuario.EmpresaId is { } empresa)
+                await servicios.GetRequiredService<Capacidades>().ExigirAsync(empresa, capacidad, contexto.HttpContext.RequestAborted).ConfigureAwait(false);
+            return await siguiente(contexto).ConfigureAwait(false);
+        });
+}

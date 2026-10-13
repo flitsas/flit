@@ -15,7 +15,7 @@ public static class DpEndpoints
 
     public static void Map(RouteGroupBuilder api)
     {
-        var g = api.MapGroup("/comparendos/{id:guid}/dp");
+        var g = api.MapGroup("/comparendos/{id:guid}/dp").RequireCapacidad(Capacidad.DerechosPeticion);
         g.MapGet("/tipologias", Tipologias).RequirePermiso(Permisos.DpGenerar);
         g.MapPost("/vista-previa", VistaPrevia).RequirePermiso(Permisos.DpGenerar);
         g.MapGet("/vista-previa.pdf", VistaPreviaPdf).RequirePermiso(Permisos.DpGenerar);

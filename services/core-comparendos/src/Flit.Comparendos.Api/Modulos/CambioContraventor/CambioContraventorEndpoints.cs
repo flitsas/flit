@@ -14,10 +14,10 @@ public static class CambioContraventorEndpoints
     {
         var g = api.MapGroup("/comparendos/{id:guid}/cambio-contraventor");
         g.MapGet("/viabilidad", Viabilidad).RequirePermiso(Permisos.BandejaVer);
-        g.MapGet("/vista-previa", VistaPrevia).RequirePermiso(Permisos.CambioContraventorSolicitar);
-        g.MapPost("", Solicitar).RequirePermiso(Permisos.CambioContraventorSolicitar);
-        g.MapPost("/aviso4", ReenviarAviso4).RequirePermiso(Permisos.AvisosEnviar);
-        g.MapPost("/{solicitudId:guid}/respuesta", Responder).RequirePermiso(Permisos.CambioContraventorResponder).DisableAntiforgery();
+        g.MapGet("/vista-previa", VistaPrevia).RequirePermiso(Permisos.CambioContraventorSolicitar).RequireCapacidad(Capacidad.CambioContraventor);
+        g.MapPost("", Solicitar).RequirePermiso(Permisos.CambioContraventorSolicitar).RequireCapacidad(Capacidad.CambioContraventor);
+        g.MapPost("/aviso4", ReenviarAviso4).RequirePermiso(Permisos.AvisosEnviar).RequireCapacidad(Capacidad.CambioContraventor);
+        g.MapPost("/{solicitudId:guid}/respuesta", Responder).RequirePermiso(Permisos.CambioContraventorResponder).RequireCapacidad(Capacidad.CambioContraventor).DisableAntiforgery();
     }
 
     private static async Task<IResult> Viabilidad(Guid id, AccesoComparendo acceso, ServicioCambioContraventor servicio, CancellationToken ct)
