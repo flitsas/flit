@@ -34,6 +34,8 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(x => x.TargetEntityType).HasMaxLength(20).IsRequired().HasDefaultValue("COMPANY");
         builder.Property(x => x.IsActive).HasDefaultValue(true);
         builder.Property(x => x.RowVersion).IsConcurrencyToken();
+        // HU #13440: NULL = global; FK fk_roles_tenants y unicidad por tenant viven en el DDL 134.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id");
     }
 }
 

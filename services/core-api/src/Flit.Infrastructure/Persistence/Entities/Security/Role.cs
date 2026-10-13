@@ -20,4 +20,10 @@ public sealed class Role : Entities.Common.AuditableEntity
     public string TargetEntityType { get; set; } = "COMPANY";
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// HU #13440: <c>NULL</c> = rol global del catálogo FLIT; con valor = rol propio de esa compañía (FK a
+    /// <c>identity.tenants</c>, sin navegación). Los roles existentes quedan en <c>NULL</c>.
+    /// </summary>
+    public Guid? TenantId { get; set; }
 }
