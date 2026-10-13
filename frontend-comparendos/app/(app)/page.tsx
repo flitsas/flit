@@ -9,6 +9,7 @@ import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
 import { EnvioMasivoAviso } from "@/components/bandeja/EnvioMasivoAviso";
 import { EnvioMasivoDp } from "@/components/bandeja/EnvioMasivoDp";
 import { PanelFiltros } from "@/components/bandeja/PanelFiltros";
+import { MultiSeleccion } from "@/components/ui/MultiSeleccion";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
@@ -16,6 +17,7 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { controlCls, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { COLUMNA_FIJA, guardadas, guardar, ocultasDesde } from "@/lib/columnas";
 import { MAXIMO_LOTE } from "@/lib/dp";
 import { aQuery, contarFiltros, FILTROS_VACIOS, type FiltrosBandeja } from "@/lib/filtros";
 import { P } from "@/lib/nav";
@@ -55,6 +57,17 @@ export default function Bandeja() {
   const puedeAvisos = !esSuperAdmin && tienePermiso(sesion, P.avisosEnviar);
   const seleccionable = puedeLote || puedeAvisos;
   const [envioAviso, setEnvioAviso] = useState(false);
+  // Columnas configurables (§7.1): lo elegido en esta pantalla gana; si no, lo guardado para este usuario.
+  const usuarioId = sesion?.usuario.id ?? "";
+  const [preferencia, setPreferencia] = useState<{ usuario: string; ocultas: string[] } | null>(null);
+  const claves = COLUMNAS_BANDEJA.map((c) => c.key);
+  const ocultas = preferencia?.usuario === usuarioId ? preferencia.ocultas : guardadas(usuarioId, claves);
+  const columnas = COLUMNAS_BANDEJA.filter((c) => !ocultas.includes(c.key));
+  const cambiarColumnas = (visibles: string[]) => {
+    const nuevas = ocultasDesde(visibles, claves);
+    setPreferencia({ usuario: usuarioId, ocultas: nuevas });
+    guardar(usuarioId, nuevas);
+  };
 
   const setFiltros = (f: FiltrosBandeja) => {
     setFiltrosEstado(f);
@@ -169,6 +182,14 @@ export default function Bandeja() {
                 Limpiar filtros
               </button>
             )}
+            <div className="w-44">
+              <MultiSeleccion
+                etiqueta="Columnas"
+                opciones={COLUMNAS_BANDEJA.filter((c) => c.key !== COLUMNA_FIJA).map((c) => ({ valor: c.key, texto: typeof c.header === "string" ? c.header : c.key }))}
+                valores={columnas.map((c) => c.key).filter((k) => k !== COLUMNA_FIJA)}
+                onCambio={cambiarColumnas}
+              />
+            </div>
             <label className="ml-auto flex items-center gap-2 text-xs font-semibold">
               Ordenar
               <select className={`${INPUT_CLS} w-48`} value={orden} onChange={(e) => { setOrden(e.target.value); setPage(1); }}>
@@ -214,7 +235,7 @@ export default function Bandeja() {
 
           <DataTable
             ariaLabel="Comparendos"
-            columns={seleccionable ? [columnaSeleccion, ...COLUMNAS_BANDEJA] : COLUMNAS_BANDEJA}
+            columns={seleccionable ? [columnaSeleccion, ...columnas] : columnas}
             rows={pagina}
             getRowKey={(f) => f.id}
             onRowClick={(f) => setSeleccionado(f.id)}
@@ -222,7 +243,7 @@ export default function Bandeja() {
             errorMessage={lista.error ?? undefined}
             onRetry={lista.recargar}
             emptyMessage="No hay comparendos con estos filtros."
-            minWidth={1800}
+            minWidth={Math.max(900, columnas.length * 110)}
             pagination={{
               page: pg.page,
               pageSize: pg.pageSize,
