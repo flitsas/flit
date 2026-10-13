@@ -45,7 +45,7 @@ public sealed class UserRoleAssignmentRepository(FlitDbContext db) : IUserRoleAs
         return await db.Roles
             .AsNoTracking()
             .Where(r => r.Id == roleId && r.IsActive && r.DeletedAt == null)
-            .Select(r => new RoleForAssignmentSnapshot(r.Id, r.TargetEntityType))
+            .Select(r => new RoleForAssignmentSnapshot(r.Id, r.TargetEntityType, r.TenantId))
             .FirstOrDefaultAsync(ct);
     }
 

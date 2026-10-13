@@ -36,6 +36,10 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
         if (role is null)
             throw new RoleForAssignmentNotFoundException();
 
+        // HU #13441: un rol propio de otra compañía no existe para este tenant (no se revela).
+        if (role.TenantId is { } roleTenant && roleTenant != tenantId)
+            throw new RoleForAssignmentNotFoundException();
+
         // HU #10506: el rol solo puede asignarse en un tenant del mismo TargetEntityType
         // (COMPANY | TRANSIT_OFFICE) para el que fue definido.
         var tenantTargetEntityType = await repo.GetTenantTargetEntityTypeAsync(tenantId, ct);

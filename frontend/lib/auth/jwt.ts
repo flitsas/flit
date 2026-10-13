@@ -237,17 +237,13 @@ export function canAccessRuntConfirmation(payload: JwtPayload | null): boolean {
   return canManageRuntConfirmation(payload) || canReadRuntConfirmationHistory(payload);
 }
 
-/** Permiso del módulo de banners promocionales (Feature #12236, HU #12241). */
-export const BANNERS_MANAGE_PERMISSION = "banners.manage";
-
 /**
- * Puede administrar (listar/crear/editar/eliminar) banners promocionales: permiso
- * `banners.manage` o SuperAdmin (bypass total, igual que `RequirePermission` en
- * `AdminBannersEndpoints.cs`). El módulo NO es exclusivo de SuperAdmin: igual que
- * `generacion-documental.read`, cualquier rol con este permiso concedido debe entrar.
+ * Puede administrar (listar/crear/editar/eliminar) banners promocionales: SOLO el Super Admin FLIT
+ * (HU #13438/#13439, Épica #12750). Ningún otro rol puede tenerlo, ni siquiera con el permiso
+ * `banners.manage` en el token: el backend exige el rol (`SuperAdminPolicy`), no el permiso.
  */
 export function canManageBanners(payload: JwtPayload | null): boolean {
-  return isSuperAdmin(payload) || hasPermission(payload, BANNERS_MANAGE_PERMISSION);
+  return isSuperAdmin(payload);
 }
 
 /** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */
