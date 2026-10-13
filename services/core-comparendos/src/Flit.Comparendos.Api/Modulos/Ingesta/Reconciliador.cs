@@ -363,30 +363,36 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
     private static string Hash(ItemFuente item) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(item, Json))));
 
     /// <summary>La fuente sobrescribe todos sus campos (RN-024); el número normalizado no cambia.</summary>
+    /// <summary>
+    /// Escribe en el comparendo lo que trae la fuente (sobrescritura, Excel C2) sin borrar lo que no trae (D6, decisión
+    /// del 2026-10-13): un dato ausente en la fuente nunca deja en blanco lo que ya se tenía (por ejemplo lo que leyó el
+    /// OCR antes de que el comparendo apareciera en SIMIT).
+    /// </summary>
     public static void AplicarCampos(Comparendo c, ItemFuente i)
     {
         ArgumentNullException.ThrowIfNull(c);
         ArgumentNullException.ThrowIfNull(i);
+        static string? Texto(string? nuevo, string? actual) => string.IsNullOrWhiteSpace(nuevo) ? actual : nuevo.Trim();
         c.Numero = i.Numero.Trim();
-        c.Placa = Placa.Normalizar(i.Placa) ?? i.Placa?.Trim().ToUpperInvariant();
-        c.TipoDocumentoInfractor = i.TipoDocumentoInfractor;
-        c.NumeroDocumentoInfractor = i.NumeroDocumentoInfractor?.Trim();
-        c.NombreInfractor = i.NombreInfractor?.Trim() ?? c.NombreInfractor;
-        c.CodigoInfraccion = i.CodigoInfraccion is { Length: > 10 } largo ? largo[..10] : i.CodigoInfraccion?.Trim();
-        c.DescripcionInfraccion = i.DescripcionInfraccion?.Trim();
-        c.DireccionInfraccion = i.DireccionInfraccion?.Trim();
-        c.FechaImposicion = i.FechaImposicion;
-        c.HoraImposicion = i.HoraImposicion;
-        c.FechaNotificacion = i.FechaNotificacion;
-        c.EsFotomulta = i.EsFotomulta;
-        c.SecretariaTexto = i.Secretaria?.Trim();
-        c.TipoVehiculo = i.TipoVehiculo?.Trim();
-        c.ServicioVehiculo = i.ServicioVehiculo?.Trim();
-        c.ValorCapital = i.ValorCapital;
-        c.ValorAdicional = i.ValorAdicional;
-        c.ValorTotal = i.ValorTotal;
-        c.EstadoFuente = i.EstadoFuente?.Trim();
-        c.FotoEvidenciaUrl = i.FotoEvidenciaUrl;
+        c.Placa = Placa.Normalizar(i.Placa) ?? (string.IsNullOrWhiteSpace(i.Placa) ? c.Placa : i.Placa.Trim().ToUpperInvariant());
+        c.TipoDocumentoInfractor = i.TipoDocumentoInfractor ?? c.TipoDocumentoInfractor;
+        c.NumeroDocumentoInfractor = Texto(i.NumeroDocumentoInfractor, c.NumeroDocumentoInfractor);
+        c.NombreInfractor = Texto(i.NombreInfractor, c.NombreInfractor);
+        c.CodigoInfraccion = i.CodigoInfraccion is { Length: > 10 } largo ? largo[..10] : Texto(i.CodigoInfraccion, c.CodigoInfraccion);
+        c.DescripcionInfraccion = Texto(i.DescripcionInfraccion, c.DescripcionInfraccion);
+        c.DireccionInfraccion = Texto(i.DireccionInfraccion, c.DireccionInfraccion);
+        c.FechaImposicion = i.FechaImposicion ?? c.FechaImposicion;
+        c.HoraImposicion = i.HoraImposicion ?? c.HoraImposicion;
+        c.FechaNotificacion = i.FechaNotificacion ?? c.FechaNotificacion;
+        c.EsFotomulta = i.EsFotomulta ?? c.EsFotomulta;
+        c.SecretariaTexto = Texto(i.Secretaria, c.SecretariaTexto);
+        c.TipoVehiculo = Texto(i.TipoVehiculo, c.TipoVehiculo);
+        c.ServicioVehiculo = Texto(i.ServicioVehiculo, c.ServicioVehiculo);
+        c.ValorCapital = i.ValorCapital ?? c.ValorCapital;
+        c.ValorAdicional = i.ValorAdicional ?? c.ValorAdicional;
+        c.ValorTotal = i.ValorTotal ?? c.ValorTotal;
+        c.EstadoFuente = Texto(i.EstadoFuente, c.EstadoFuente);
+        c.FotoEvidenciaUrl = Texto(i.FotoEvidenciaUrl, c.FotoEvidenciaUrl);
     }
 
     private static void CopiarCampos(Comparendo de, Comparendo a)
