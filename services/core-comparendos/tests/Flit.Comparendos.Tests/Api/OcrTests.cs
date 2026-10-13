@@ -140,6 +140,9 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         var docA = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{docs["a.jpg"].Id}", ct), ct);
         docA.GetProperty("campos").EnumerateArray().Single(c => c.GetProperty("nombreCampo").GetString() == CamposOcr.DescripcionInfraccion)
             .GetProperty("valorFinal").GetString().Should().Be("Conducir a velocidad superior a la máxima permitida");
+        docA.GetProperty("proveedorModelo").ValueKind.Should().Be(JsonValueKind.Null, "la gestora no ve el proveedor ni el modelo");
+        var superA = await Json(await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).GetAsync($"/api/v1/comparendos/ocr/documentos/{docs["a.jpg"].Id}", ct), ct);
+        superA.GetProperty("proveedorModelo").GetString().Should().Contain("modelo-prueba");
         var docC = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{docs["c.pdf"].Id}", ct), ct);
         docC.GetProperty("duplicado").GetProperty("numero").GetString().Should().Be("OCR-EXISTE");
         (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{docs["c.pdf"].Id}/registrar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);

@@ -185,7 +185,9 @@ public static class OcrEndpoints
 
         return Results.Ok(new
         {
-            d.Id, d.PaqueteId, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, estado = d.Estado.ToString(), d.Intentos, d.ProveedorModelo, d.NumeroComparendoExtraido,
+            d.Id, d.PaqueteId, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, estado = d.Estado.ToString(), d.Intentos,
+            // El proveedor y el modelo son información interna de FLIT: la gestora nunca los ve.
+            proveedorModelo = usuario.EsSuperAdmin ? d.ProveedorModelo : null, d.NumeroComparendoExtraido,
             d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), d.MensajeError, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
             d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, d.FuenteDuplicado, duplicado,
             campos = campos.OrderBy(c => orden.GetValueOrDefault(c.NombreCampo, 99)).Select(c => new
