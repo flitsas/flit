@@ -224,6 +224,22 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     }
 
     [Fact]
+    public async Task HU13462_LaRespuestaSoloSeGuardaSiLaConsultaFalla_EnLaBaseYRecortada()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaConNit("900444888");
+        api.Fuente.Respuestas["SimitNit:900444888"] = () => RespuestaFuente.Exitosa([Item("C-0888")], cuerpo: "<xml>respuesta completa</xml>");
+        var exitosa = await api.CicloAsync(CanalIngesta.SimitNit, empresa);
+        api.Fuente.Respuestas["SimitNit:900444888"] = () => RespuestaFuente.Error(TipoErrorFuente.HttpNoExitoso, "La fuente respondió 502.", 502, cuerpo: new string('x', 5000));
+        var fallida = await api.CicloAsync(CanalIngesta.SimitNit, empresa);
+
+        var consultas = await api.EnDbAsync(db => db.ConsultasFuente.Where(c => c.ClaveConsultada == "900444888").ToDictionaryAsync(c => c.CicloId, c => c.RespuestaError));
+        consultas[exitosa].Should().BeNull("de una consulta exitosa no se guarda la respuesta: los comparendos ya quedan con sus datos");
+        consultas[fallida].Should().HaveLength(ConsultaFuente.MaxRespuestaError, "de la fallida queda el comienzo, para diagnosticar");
+        (await api.EnDbAsync(db => db.Archivos.AnyAsync(a => a.Dominio == "respuesta_fuente"))).Should().BeFalse("las respuestas de las fuentes no van al file-manager");
+    }
+
+    [Fact]
     public async Task HU13467_MunicipioDesactivado_NoSeProcesa()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

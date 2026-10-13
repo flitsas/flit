@@ -1011,7 +1011,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     tipo_error = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: true),
                     mensaje_error = table.Column<string>(type: "text", nullable: true),
                     cantidad_items = table.Column<int>(type: "integer", nullable: false),
-                    respuesta_archivo_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    respuesta_error = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: true),
                     duracion_ms = table.Column<int>(type: "integer", nullable: false),
                     consultado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },

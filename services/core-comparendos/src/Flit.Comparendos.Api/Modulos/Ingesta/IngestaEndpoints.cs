@@ -126,7 +126,7 @@ public static class IngestaEndpoints
         var ciclo = await db.CiclosIngesta.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("El ciclo");
         var logs = await db.LogMigracion.AsNoTracking().Where(l => l.CicloId == id).OrderBy(l => l.TenantId).ThenBy(l => l.Clave).ToListAsync(ct).ConfigureAwait(false);
         var consultas = await db.ConsultasFuente.AsNoTracking().Where(c => c.CicloId == id).OrderBy(c => c.ClaveConsultada)
-            .Select(c => new { c.Id, c.ClaveConsultada, c.MunicipioCodigo, c.HttpStatus, resultado = c.Resultado.ToString(), tipoError = c.TipoError.ToString(), c.MensajeError, c.CantidadItems, c.DuracionMs, tieneRespuesta = c.RespuestaArchivoId != null })
+            .Select(c => new { c.Id, c.ClaveConsultada, c.MunicipioCodigo, c.HttpStatus, resultado = c.Resultado.ToString(), tipoError = c.TipoError.ToString(), c.MensajeError, c.CantidadItems, c.DuracionMs, tieneRespuesta = c.RespuestaError != null })
             .ToListAsync(ct).ConfigureAwait(false);
         var empresas = await db.ConfiguracionesEmpresa.AsNoTracking().ToDictionaryAsync(e => e.TenantId, e => e.EmpresaNombre, ct).ConfigureAwait(false);
         return Results.Ok(new
@@ -154,13 +154,11 @@ public static class IngestaEndpoints
         });
     }
 
-    private static async Task<IResult> RespuestaCruda(Guid id, ComparendosDb db, IAlmacenArchivos almacen, CancellationToken ct)
+    /// <summary>El comienzo de la respuesta de una consulta fallida (solo esas la guardan).</summary>
+    private static async Task<IResult> RespuestaCruda(Guid id, ComparendosDb db, CancellationToken ct)
     {
-        var archivo = await (from c in db.ConsultasFuente
-                             join a in db.Archivos on c.RespuestaArchivoId equals a.Id
-                             where c.Id == id
-                             select a).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La respuesta");
-        var bytes = await almacen.LeerAsync(archivo.Referencia, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La respuesta");
-        return Results.File(bytes, archivo.ContentType, archivo.NombreOriginal);
+        var texto = await db.ConsultasFuente.AsNoTracking().Where(c => c.Id == id).Select(c => c.RespuestaError).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("La respuesta");
+        return Results.Text(texto, "text/plain", System.Text.Encoding.UTF8);
     }
 }

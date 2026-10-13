@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
-using Flit.Comparendos.Api.Infraestructura.Archivos;
 using Flit.Comparendos.Api.Modulos.Calendario;
 using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Modulos.Ingesta.Fuentes;
@@ -247,26 +245,9 @@ public sealed partial class CicloDeIngesta(
 
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
-        Guid? crudo = null;
-        if (respuesta.CuerpoCrudo is { Length: > 0 } cuerpo)
-        {
-            var almacen = scope.ServiceProvider.GetRequiredService<IAlmacenArchivos>();
-            var nombre = $"{ciclo.Canal}-{(clave.TipoDocumento is null or TipoDocumento.NIT ? clave.Clave : HtmlCorreo.Enmascarar(clave.Clave).Replace('*', 'x'))}.txt";
-            var guardado = await almacen.GuardarAsync(Guid.Empty, "respuesta_fuente", nombre, respuesta.ContentType ?? "text/plain", Encoding.UTF8.GetBytes(cuerpo), ct).ConfigureAwait(false);
-            var archivo = new Archivo
-            {
-                Id = Guid.CreateVersion7(),
-                Referencia = guardado.Referencia,
-                Dominio = "respuesta_fuente",
-                NombreOriginal = nombre,
-                ContentType = respuesta.ContentType ?? "text/plain",
-                TamanoBytes = guardado.Tamano,
-                Sha256 = guardado.Sha256,
-                CreadoEn = reloj.Ahora,
-            };
-            db.Archivos.Add(archivo);
-            crudo = archivo.Id;
-        }
+        var respuestaError = parciales.Any(p => p.Resultado == ResultadoConsulta.Error) && respuesta.CuerpoCrudo is { Length: > 0 } cuerpo
+            ? cuerpo[..Math.Min(cuerpo.Length, ConsultaFuente.MaxRespuestaError)]
+            : null;
 
         var hechas = parciales.Select(p => new ConsultaHecha(clave, new ConsultaFuente
         {
@@ -281,7 +262,7 @@ public sealed partial class CicloDeIngesta(
             TipoError = p.TipoError,
             MensajeError = p.MensajeError,
             CantidadItems = p.Items.Count,
-            RespuestaArchivoId = crudo,
+            RespuestaError = respuestaError,
             DuracionMs = respuesta.DuracionMs,
             ConsultadoEn = reloj.Ahora,
         }, p)).ToList();

@@ -395,6 +395,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasKey(x => x.Id);
             e.Property(x => x.ClaveConsultada).HasMaxLength(20);
             e.Property(x => x.MunicipioCodigo).HasMaxLength(60);
+            e.Property(x => x.RespuestaError).HasMaxLength(ConsultaFuente.MaxRespuestaError);
             e.HasIndex(x => new { x.CicloId, x.Canal, x.ClaveConsultada, x.MunicipioCodigo });
             e.HasOne<CicloIngesta>().WithMany().HasForeignKey(x => x.CicloId);
         });

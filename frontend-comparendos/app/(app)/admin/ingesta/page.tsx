@@ -193,9 +193,9 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
                     <button
                       type="button"
                       className="font-semibold text-[#3B4FD6] hover:underline"
-                      onClick={() => apiDownload(`/admin/ingesta/consultas/${c.id}/respuesta`, "respuesta.txt").catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"))}
+                      onClick={() => apiDownload(`/admin/ingesta/consultas/${c.id}/respuesta`, "respuesta-error.txt").catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"))}
                     >
-                      Respuesta
+                      Respuesta del error
                     </button>
                   ) : null,
               },

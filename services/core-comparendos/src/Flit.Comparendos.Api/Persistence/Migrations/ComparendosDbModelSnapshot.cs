@@ -1645,9 +1645,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("character varying(60)")
                         .HasColumnName("municipio_codigo");
 
-                    b.Property<Guid?>("RespuestaArchivoId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("respuesta_archivo_id");
+                    b.Property<string>("RespuestaError")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("respuesta_error");
 
                     b.Property<string>("Resultado")
                         .IsRequired()

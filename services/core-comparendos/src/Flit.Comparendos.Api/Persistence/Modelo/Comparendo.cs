@@ -132,7 +132,11 @@ public sealed class CicloIngesta
     public string? MensajeError { get; set; }
 }
 
-/// <summary>Una llamada real a la fuente; también es la caché del ciclo compartida entre gestoras (§3.12).</summary>
+/// <summary>
+/// Una llamada real a la fuente; también es la caché del ciclo compartida entre gestoras (MOD01 §10.6). Es el log de la
+/// consulta: no guarda la respuesta completa (los comparendos ya quedan con sus datos). Solo si la consulta falló queda
+/// el comienzo de lo que respondió la fuente, para diagnosticar.
+/// </summary>
 public sealed class ConsultaFuente
 {
     public Guid Id { get; set; }
@@ -146,9 +150,12 @@ public sealed class ConsultaFuente
     public TipoErrorFuente? TipoError { get; set; }
     public string? MensajeError { get; set; }
     public int CantidadItems { get; set; }
-    public Guid? RespuestaArchivoId { get; set; }
+    /// <summary>Los primeros <see cref="MaxRespuestaError"/> caracteres de la respuesta, solo cuando la consulta falló.</summary>
+    public string? RespuestaError { get; set; }
     public int DuracionMs { get; set; }
     public DateTimeOffset ConsultadoEn { get; set; }
+
+    public const int MaxRespuestaError = 4000;
 }
 
 /// <summary>Resultado por gestora y clave monitoreada en un ciclo (§3.12): lo que ve el log de migración.</summary>
