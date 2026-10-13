@@ -8,7 +8,7 @@ import type { LoteConsolidados } from "@/lib/api/types-consolidado-lotes";
 import { Shell } from "../Shell";
 
 // Uso de ejemplo:
-//   <Shell visibleModuleCodes={modulos}>{pagina}</Shell>
+//   <Shell active="dashboard" onNav={irA} visibleModuleCodes={modulos}>{pagina}</Shell>
 //   // el aviso del lote en curso trae «Cancelar» (nombre accesible «Cancelar la descarga»)
 
 const nav = vi.hoisted(() => ({ pathname: "/tramites" }));
@@ -76,7 +76,7 @@ describe("Shell + LoteDescargaTracker — cancelar (HU #13388)", () => {
     async (ruta) => {
       nav.pathname = ruta;
       render(
-        <Shell visibleModuleCodes={["tramites"]}>
+        <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
           <div>contenido</div>
         </Shell>,
       );

@@ -97,7 +97,7 @@ public sealed class ConsolidadoLoteParteStorageTests : IDisposable
         stored.SizeBytes.Should().Be((long)mib * MiB);
         stored.Sha256.Should().Be(shaOrigen);
 
-        // Relectura por OpenReadAsync (FileManagerDownloader): mismo tamaño y sha256.
+        // Relectura por OpenReadAsync (ConsolidadoLoteFileManager): mismo tamaño y sha256.
         await using var leido = await storage.OpenReadAsync(stored.StoragePath, ct);
         leido.Should().NotBeNull();
         var (tamano, sha) = await MedirAsync(leido!, ct);
@@ -217,9 +217,12 @@ public sealed class ConsolidadoLoteParteStorageTests : IDisposable
         await act.Should().ThrowAsync<ObjectDisposedException>();
 
         // Consumidores actuales (adjuntos, logos): siguen recibiendo un stream seekable en memoria.
+        // staging: no hay FileManagerDownloader (#13232, develop) ni lector bufferizado en ConsolidadoLoteFileManager;
+        // el lector bufferizado de adjuntos es FileManagerAttachmentStorage.OpenReadAsync.
         using var http = new HttpClient(stub) { BaseAddress = new Uri(Base) };
-        await using var buferizado = await FileManagerDownloader.OpenReadAsync(
-            http, new FileManagerOptions { BaseUrl = Base, FilesPath = "api/v1/files" }, stored.StoragePath, ct);
+        var adjuntos = new FileManagerAttachmentStorage(
+            http, Options.Create(new FileManagerOptions { BaseUrl = Base, FilesPath = "api/v1/files" }));
+        await using var buferizado = await adjuntos.OpenReadAsync(stored.StoragePath, ct);
         buferizado!.CanSeek.Should().BeTrue();
         buferizado.Length.Should().Be(MiB);
     }

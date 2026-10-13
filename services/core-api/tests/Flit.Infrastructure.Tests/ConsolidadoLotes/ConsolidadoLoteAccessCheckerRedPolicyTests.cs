@@ -98,7 +98,7 @@ public sealed class ConsolidadoLoteAccessCheckerRedPolicyTests : IDisposable
         db.Users.Add(new User { Id = Usuario, Email = "lote13418@it.test", DisplayName = "Admin cabeza", Status = "active" });
         db.Roles.AddRange(
             new Role { Id = RolDescarga, Code = "Gestor", Name = "Gestor", IsActive = true },
-            new Role { Id = RolAdminCompany, Code = NetworkScopePolicy.HeadAdminRole, Name = "Administrador", IsActive = true, ProductCode = "plataforma" });
+            new Role { Id = RolAdminCompany, Code = NetworkScopePolicy.HeadAdminRole, Name = "Administrador", IsActive = true });
         db.RbacActions.Add(new RbacAction { Id = Permiso, ModuleId = Guid.NewGuid(), Slug = ConsolidadoLotePermisos.Descargar, Name = "Descargar", IsActive = true });
         db.RoleGrants.Add(new RoleGrant { Id = Guid.NewGuid(), RoleId = RolDescarga, PermissionId = Permiso });
         db.UserRoleAssignments.AddRange(Asignacion(RolDescarga), Asignacion(RolAdminCompany));

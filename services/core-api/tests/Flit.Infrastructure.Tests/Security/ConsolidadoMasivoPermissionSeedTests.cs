@@ -19,10 +19,13 @@ namespace Flit.Infrastructure.Tests.Security;
 /// porque <c>SeedAsync</c> ejecuta scripts SQL crudos que el proveedor InMemory no soporta.
 /// </para>
 /// <para>
-/// Lo que se protege: grants directos a SuperAdmin, admin_tramites, Radicador y ot_admin (ADR-0070 A3.5 y A5.4),
-/// y NINGÚN grant directo a AdminCompany — que es de producto <c>plataforma</c> y haría fallar
-/// <c>security.tr_role_permissions_same_product</c> (DDL 120) en el arranque. AdminCompany lo recibe por el espejo
-/// AdminCompany → admin_tramites (cubierto contra PostgreSQL en <c>PlatformRbacTests</c>).
+/// Lo que se protege: grants directos a SuperAdmin, AdminCompany, Radicador y ot_admin (ADR-0070 A3.5 y A5.4),
+/// idempotentes y sin duplicar; los demás roles (del OT o de la compañía) no lo reciben por defecto.
+/// </para>
+/// <para>
+/// staging: sin multi-producto el Admin de Compañía es <c>AdminCompany</c> y recibe el grant directo; en develop es
+/// <c>admin_tramites</c> (DDL 120, HU #12964) y AdminCompany lo obtiene por el espejo AdminCompany → admin_tramites,
+/// con el disparador <c>security.tr_role_permissions_same_product</c>, que staging aún no tiene.
 /// </para>
 /// </remarks>
 public sealed class ConsolidadoMasivoPermissionSeedTests
@@ -33,15 +36,15 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
     // ── AC1 + AC4: módulo + permiso + grants a los cuatro roles ──────────────────────
 
     [Fact]
-    public async Task Seed_CreaModuloPermisoYLoConcedeASuperAdminAdminTramitesRadicadorYOtAdmin()
+    public async Task Seed_CreaModuloPermisoYLoConcedeASuperAdminAdminCompanyRadicadorYOtAdmin()
     {
         var ct = TestContext.Current.CancellationToken;
         var dbName = Guid.NewGuid().ToString();
 
         await using (var seed = NewContext(dbName))
         {
-            AddRole(seed, "SuperAdmin", product: "plataforma");
-            AddRole(seed, "admin_tramites");
+            AddRole(seed, "SuperAdmin");
+            AddRole(seed, "AdminCompany");
             AddRole(seed, "Radicador");
             AddRole(seed, "ot_admin", target: "TRANSIT_OFFICE");
             await seed.SaveChangesAsync(ct);
@@ -57,7 +60,6 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
             var module = await check.SecurityModules.SingleAsync(m => m.Code == ModuleCode, ct);
             module.Name.Should().Be("Descarga masiva de consolidados");
             module.IsActive.Should().BeTrue();
-            module.ProductCode.Should().Be("tramites", "la descarga masiva es una función de Trámites");
             module.SortOrder.Should().Be(13, "1..12 ya están ocupados por los módulos existentes");
 
             var action = await check.RbacActions.SingleAsync(a => a.Slug == ActionSlug, ct);
@@ -67,22 +69,21 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
             action.IsActive.Should().BeTrue();
 
             var grantedRoleCodes = await GrantedRoleCodesAsync(check, action.Id, ct);
-            grantedRoleCodes.Should().BeEquivalentTo(["SuperAdmin", "admin_tramites", "Radicador", "ot_admin"]);
+            grantedRoleCodes.Should().BeEquivalentTo(["SuperAdmin", "AdminCompany", "Radicador", "ot_admin"]);
         }
     }
 
-    // ── AC2: AdminCompany no recibe grant directo; admin_tramites sí ─────────────────
+    // ── AC2 (staging): AdminCompany recibe el grant directo, sin espejo ─────────────
 
     [Fact]
-    public async Task Seed_ConAdminCompanyPresente_NoLeConcedeGrantDirectoYSiAAdminTramites()
+    public async Task Seed_ConAdminCompanyPresente_LeConcedeElGrantDirecto()
     {
         var ct = TestContext.Current.CancellationToken;
         var dbName = Guid.NewGuid().ToString();
 
         await using (var seed = NewContext(dbName))
         {
-            AddRole(seed, "AdminCompany", product: "plataforma");
-            AddRole(seed, "admin_tramites");
+            AddRole(seed, "AdminCompany");
             await seed.SaveChangesAsync(ct);
         }
 
@@ -96,28 +97,28 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
             var action = await check.RbacActions.SingleAsync(a => a.Slug == ActionSlug, ct);
             var grantedRoleCodes = await GrantedRoleCodesAsync(check, action.Id, ct);
 
-            grantedRoleCodes.Should().NotContain("AdminCompany",
-                "AdminCompany es de producto plataforma: el grant directo tumbaría el arranque (DDL 120)");
-            grantedRoleCodes.Should().Contain("admin_tramites",
-                "AdminCompany obtiene el permiso por el espejo AdminCompany → admin_tramites");
+            grantedRoleCodes.Should().BeEquivalentTo(["AdminCompany"],
+                "staging: sin multi-producto el Admin de Compañía es AdminCompany y no hay espejo hacia admin_tramites");
         }
     }
 
-    // ── AC3 + AC4: ningún grant viola la regla de tr_role_permissions_same_product ──
+    // ── AC3 + AC4 (staging): solo los cuatro roles objetivo reciben grant ───────────
 
     [Fact]
-    public async Task Seed_NingunGrantCruzaDeProducto_SalvoSuperAdmin()
+    public async Task Seed_SoloConcedeALosCuatroRolesObjetivo_NoAOtrosRolesDeLaCompania()
     {
         var ct = TestContext.Current.CancellationToken;
         var dbName = Guid.NewGuid().ToString();
 
         await using (var seed = NewContext(dbName))
         {
-            AddRole(seed, "SuperAdmin", product: "plataforma");
-            AddRole(seed, "AdminCompany", product: "plataforma");
-            AddRole(seed, "admin_tramites");
+            AddRole(seed, "SuperAdmin");
+            AddRole(seed, "AdminCompany");
             AddRole(seed, "Radicador");
             AddRole(seed, "ot_admin", target: "TRANSIT_OFFICE");
+            AddRole(seed, "Auditor");
+            AddRole(seed, "Consulta");
+            AddRole(seed, "ot_operador", target: "TRANSIT_OFFICE");
             await seed.SaveChangesAsync(ct);
         }
 
@@ -128,19 +129,10 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
 
         await using (var check = NewContext(dbName))
         {
-            var module = await check.SecurityModules.SingleAsync(m => m.Code == ModuleCode, ct);
             var action = await check.RbacActions.SingleAsync(a => a.Slug == ActionSlug, ct);
-            var roleIds = await check.RoleGrants
-                .Where(g => g.PermissionId == action.Id)
-                .Select(g => g.RoleId)
-                .ToListAsync(ct);
-            var grantedRoles = await check.Roles.Where(r => roleIds.Contains(r.Id)).ToListAsync(ct);
-
-            // Réplica en memoria de security.trg_role_permissions_same_product (DDL 120): solo SuperAdmin cruza.
-            grantedRoles
-                .Where(r => r.Code != "SuperAdmin")
-                .Should().OnlyContain(r => r.ProductCode == module.ProductCode,
-                    "un grant a un rol de otro producto lanza check_violation en SaveChangesAsync");
+            var grantedRoleCodes = await GrantedRoleCodesAsync(check, action.Id, ct);
+            grantedRoleCodes.Should().BeEquivalentTo(["SuperAdmin", "AdminCompany", "Radicador", "ot_admin"],
+                "el resto de roles se conceden por RBAC, no por el seed");
         }
     }
 
@@ -184,8 +176,8 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
 
         await using (var seed = NewContext(dbName))
         {
-            AddRole(seed, "SuperAdmin", product: "plataforma");
-            AddRole(seed, "admin_tramites");
+            AddRole(seed, "SuperAdmin");
+            AddRole(seed, "AdminCompany");
             AddRole(seed, "Radicador");
             AddRole(seed, "ot_admin", target: "TRANSIT_OFFICE");
             await seed.SaveChangesAsync(ct);
@@ -223,8 +215,8 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
 
         await using (var seed = NewContext(dbName))
         {
-            AddRole(seed, "SuperAdmin", product: "plataforma");
-            AddRole(seed, "admin_tramites", deleted: true);
+            AddRole(seed, "SuperAdmin");
+            AddRole(seed, "AdminCompany", deleted: true);
             // "Radicador" y "ot_admin" no existen en este ambiente.
             AddRole(seed, "Auditor");
             await seed.SaveChangesAsync(ct);
@@ -254,7 +246,6 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
     private static void AddRole(
         FlitDbContext db,
         string code,
-        string product = "tramites",
         string target = "COMPANY",
         bool deleted = false) =>
         db.Roles.Add(new Role
@@ -263,7 +254,6 @@ public sealed class ConsolidadoMasivoPermissionSeedTests
             Code = code,
             Name = code,
             TargetEntityType = target,
-            ProductCode = product,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             DeletedAt = deleted ? DateTimeOffset.UtcNow : null,

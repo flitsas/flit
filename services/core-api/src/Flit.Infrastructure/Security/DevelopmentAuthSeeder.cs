@@ -1519,17 +1519,13 @@ public static class DevelopmentAuthSeeder
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Grants directos: <c>SuperAdmin</c>, <c>admin_tramites</c>, <c>Radicador</c> y <c>ot_admin</c>
+    /// Grants directos: <c>SuperAdmin</c>, <c>AdminCompany</c>, <c>Radicador</c> y <c>ot_admin</c>
     /// (ADR-0070 A3.5 y A5.4). Los demás roles del OT no lo reciben por defecto: se conceden por RBAC.
     /// </para>
     /// <para>
-    /// <b>AdminCompany NO recibe grant directo</b>, aunque el PO lo pidió (Q4). <c>AdminCompany</c> es de
-    /// producto <c>plataforma</c> y el módulo es de <c>tramites</c>: el disparador
-    /// <c>security.tr_role_permissions_same_product</c> (DDL 120, HU #12964) rechaza con
-    /// <c>check_violation</c> ese grant, y la excepción en <c>SaveChangesAsync</c> tumbaría el sembrado del
-    /// catálogo RBAC en el arranque de los tres ambientes. AdminCompany lo obtiene por el espejo
-    /// AdminCompany → <c>admin_tramites</c> del mismo DDL (backfill y <c>tr_ura_mirror_admin_tramites</c>).
-    /// <c>ot_admin</c> sí es de producto <c>tramites</c>, así que el disparador lo admite.
+    /// staging: sin multi-producto el Admin de Compañía es <c>AdminCompany</c> y recibe el grant directo (lo que
+    /// pidió el PO, Q4). En develop el grant va a <c>admin_tramites</c> y AdminCompany lo obtiene por el espejo del
+    /// DDL 120 (HU #12964), que staging aún no tiene.
     /// </para>
     /// </remarks>
     private static async Task SeedConsolidadoMasivoPermissionsAsync(FlitDbContext db, CancellationToken ct)
@@ -1572,8 +1568,9 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        // Sin AdminCompany (ver remarks). Se excluyen los roles borrados lógicamente.
-        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites, "Radicador", "ot_admin"];
+        // staging: sin multi-producto el Admin de Compañía es AdminCompany; en develop es admin_tramites (DDL 120).
+        // Se excluyen los roles borrados lógicamente.
+        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador", "ot_admin"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);

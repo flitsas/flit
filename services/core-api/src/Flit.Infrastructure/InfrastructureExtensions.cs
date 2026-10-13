@@ -505,7 +505,7 @@ public static class InfrastructureExtensions
         // Épica #13216 — HU13372: partes cifradas del lote; sin timeout global (lo aplica el adaptador por llamada).
         services.AddHttpClient<IConsolidadoLoteParteStorage, ConsolidadoLoteParteStorage>((sp, c) =>
         {
-            FileManagerDownloader.ConfigureClient(
+            ConsolidadoLoteFileManager.ConfigureClient(
                 c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "las partes del lote de consolidados");
             c.Timeout = Timeout.InfiniteTimeSpan;
         });

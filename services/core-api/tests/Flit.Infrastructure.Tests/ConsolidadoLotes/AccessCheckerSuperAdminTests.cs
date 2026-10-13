@@ -62,7 +62,7 @@ public sealed class AccessCheckerSuperAdminTests : IDisposable
     private static async Task<UserRoleAssignment> SeedAsync(FlitDbContext db)
     {
         db.Users.Add(new User { Id = SuperAdmin, Email = "sa13384@it.test", DisplayName = "Super Admin", Status = "active" });
-        db.Roles.Add(new Role { Id = RolSuperAdmin, Code = "SuperAdmin", Name = "Super Admin", IsActive = true, ProductCode = "plataforma" });
+        db.Roles.Add(new Role { Id = RolSuperAdmin, Code = "SuperAdmin", Name = "Super Admin", IsActive = true });
         var asignacion = new UserRoleAssignment
         {
             Id = Guid.NewGuid(),
