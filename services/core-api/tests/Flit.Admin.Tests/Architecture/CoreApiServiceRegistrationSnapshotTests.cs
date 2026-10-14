@@ -42,6 +42,9 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
             if (oidc)
             {
                 b.UseSetting("Suite:Oidc:Enabled", "true");
+                // Misma raíz que OidcServerTests: OidcClientSync escribe redirect_uris en el store
+                // compartido de CI; sin Environment=dev pisaría https://tramites.flitsas.online/...
+                b.UseSetting("Suite:Hosts:Environment", "dev");
                 b.UseSetting("Jwt:PersistSigningKey", "true");
                 b.UseSetting("Jwt:ValidateIssuedTokens", "true");
             }

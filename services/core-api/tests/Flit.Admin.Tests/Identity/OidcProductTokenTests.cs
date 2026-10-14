@@ -72,11 +72,22 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         return client;
     }
 
+    /// <summary>
+    /// Re-sincroniza clientes OIDC justo antes del code flow: otras suites (p. ej. snapshot con OIDC)
+    /// pueden haber reescrito <c>redirect_uris</c> en la base compartida de CI.
+    /// </summary>
+    private async Task<JsonElement> CodeFlowAsync(HttpClient client, string clientId, CancellationToken ct, string? redirect = null)
+    {
+        using (var scope = _factory.Services.CreateScope())
+            await EnsureOidcClientsAsync(scope.ServiceProvider);
+        return await OidcServerTests.CodeFlowAsync(client, clientId, ct, redirect ?? OidcServerTests.Callback);
+    }
+
     [Fact]
     public async Task TokenDeTramites_RolesYPermisosDeTramites_MasLosDePlataforma_ConLosClaimsDeSiempre()
     {
         var ct = TestContext.Current.CancellationToken;
-        var tokens = await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct);
+        var tokens = await CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct);
         var jwt = new JsonWebToken(tokens.GetProperty("access_token").GetString());
         var payload = JsonDocument.Parse(Base64UrlDecode(jwt.EncodedPayload)).RootElement;
 
@@ -100,7 +111,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     public async Task TokenDelHub_SoloRolesDePlataforma()
     {
         var ct = TestContext.Current.CancellationToken;
-        var tokens = await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "plataforma", ct, PlatformCallback);
+        var tokens = await CodeFlowAsync(await LoggedInAsync(ct), "plataforma", ct, PlatformCallback);
         var payload = JsonDocument.Parse(Base64UrlDecode(new JsonWebToken(tokens.GetProperty("access_token").GetString()).EncodedPayload)).RootElement;
 
         payload.GetProperty("aud").GetString().Should().Be("plataforma");
@@ -129,7 +140,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         (await AuthorizeErrorAsync(client, "tramites", ct)).Should().Be(("access_denied", "PRODUCT_ROLE_REQUIRED"));
 
         await RemoveAssignmentAsync(_platformRoleId);
-        var hub = await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "plataforma", ct, PlatformCallback);
+        var hub = await CodeFlowAsync(await LoggedInAsync(ct), "plataforma", ct, PlatformCallback);
         hub.GetProperty("access_token").GetString().Should().NotBeNullOrEmpty();
     }
 
@@ -138,7 +149,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     {
         var ct = TestContext.Current.CancellationToken;
         var client = await LoggedInAsync(ct);
-        var first = (await OidcServerTests.CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+        var first = (await CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
 
         var rotated = await OidcServerTests.RefreshAsync(client, first, ct);
         rotated.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -154,7 +165,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     {
         var ct = TestContext.Current.CancellationToken;
         var client = await LoggedInAsync(ct);
-        var refresh = (await OidcServerTests.CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+        var refresh = (await CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
 
         await RemoveAssignmentAsync(_tramitesRoleId);
         var response = await OidcServerTests.RefreshAsync(client, refresh, ct);
@@ -169,8 +180,8 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         var ct = TestContext.Current.CancellationToken;
         var browser = await LoggedInAsync(ct);
         var otherDevice = await LoggedInAsync(ct);
-        var refreshHere = (await OidcServerTests.CodeFlowAsync(browser, "tramites", ct)).GetProperty("refresh_token").GetString()!;
-        var refreshThere = (await OidcServerTests.CodeFlowAsync(otherDevice, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+        var refreshHere = (await CodeFlowAsync(browser, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+        var refreshThere = (await CodeFlowAsync(otherDevice, "tramites", ct)).GetProperty("refresh_token").GetString()!;
 
         var logout = await browser.GetAsync(
             $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
@@ -183,6 +194,8 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         (await OidcServerTests.RefreshAsync(browser, refreshHere, ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest, "la sesión de este navegador se cerró");
         (await OidcServerTests.RefreshAsync(otherDevice, refreshThere, ct)).StatusCode.Should().Be(HttpStatusCode.OK, "otro dispositivo conserva su sesión");
 
+        using (var scope = _factory.Services.CreateScope())
+            await EnsureOidcClientsAsync(scope.ServiceProvider);
         var reauthorize = await browser.GetAsync(OidcServerTests.AuthorizeUrl("tramites", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"), ct);
         reauthorize.Headers.Location!.AbsolutePath.Should().Be("/login", "la sesión del hub también se cerró");
     }
@@ -205,8 +218,8 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     {
         var ct = TestContext.Current.CancellationToken;
         var browser = await LoggedInAsync(ct);
-        await OidcServerTests.CodeFlowAsync(browser, "tramites", ct);
-        await OidcServerTests.CodeFlowAsync(browser, "tramites", ct);
+        await CodeFlowAsync(browser, "tramites", ct);
+        await CodeFlowAsync(browser, "tramites", ct);
 
         var logout = await browser.GetAsync(
             $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
@@ -222,7 +235,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     {
         var ct = TestContext.Current.CancellationToken;
         var client = await LoggedInAsync(ct);
-        var refresh = (await OidcServerTests.CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+        var refresh = (await CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
 
         await using (var db = NewDb())
             await db.Users.Where(u => u.Id == _userId).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, "inactive"), ct);
@@ -239,7 +252,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         await SetTramitesEnabledAsync(false);
         await MakeSuperAdminAsync();
 
-        var tokens = await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct);
+        var tokens = await CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct);
         var payload = JsonDocument.Parse(Base64UrlDecode(new JsonWebToken(tokens.GetProperty("access_token").GetString()).EncodedPayload)).RootElement;
 
         payload.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("code").GetString()).Should().Contain("SuperAdmin");
@@ -251,7 +264,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     public async Task LaApiAceptaElTokenDelHub()
     {
         var ct = TestContext.Current.CancellationToken;
-        var accessToken = (await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct)).GetProperty("access_token").GetString()!;
+        var accessToken = (await CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct)).GetProperty("access_token").GetString()!;
 
         var api = NewClient();
         api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -266,8 +279,8 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         var ct = TestContext.Current.CancellationToken;
         var browser = await LoggedInAsync(ct);
         var otherDevice = await LoggedInAsync(ct);
-        var tokenHere = (await OidcServerTests.CodeFlowAsync(browser, "tramites", ct)).GetProperty("access_token").GetString()!;
-        var tokenThere = (await OidcServerTests.CodeFlowAsync(otherDevice, "tramites", ct)).GetProperty("access_token").GetString()!;
+        var tokenHere = (await CodeFlowAsync(browser, "tramites", ct)).GetProperty("access_token").GetString()!;
+        var tokenThere = (await CodeFlowAsync(otherDevice, "tramites", ct)).GetProperty("access_token").GetString()!;
 
         async Task<HttpResponseMessage> MeAsync(string token)
         {
@@ -283,8 +296,10 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         (await MeAsync(tokenThere)).StatusCode.Should().Be(HttpStatusCode.OK, "otro dispositivo conserva su sesión");
     }
 
-    private static async Task<(string? Error, string? Description)> AuthorizeErrorAsync(HttpClient client, string clientId, CancellationToken ct)
+    private async Task<(string? Error, string? Description)> AuthorizeErrorAsync(HttpClient client, string clientId, CancellationToken ct)
     {
+        using (var scope = _factory.Services.CreateScope())
+            await EnsureOidcClientsAsync(scope.ServiceProvider);
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes("verificador-de-prueba-suficientemente-largo-123"))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var response = await client.GetAsync(OidcServerTests.AuthorizeUrl(clientId, challenge), ct);
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
