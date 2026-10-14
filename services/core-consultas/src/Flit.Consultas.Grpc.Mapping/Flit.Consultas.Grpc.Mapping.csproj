@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13316 (HU #13346) — traducción entre el resultado del módulo de consultas (ConsultationResult, con sus
+    certificaciones) y flit.consultas.v1.ResultadoConsulta, en los DOS sentidos: core-consultas responde con ToProto y
+    core-api (Trámites) vuelve al resultado de siempre con FromProto. Un solo lugar, para que la ida y vuelta sea fiel
+    (lo prueba Flit.Consultas.Tests).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Consultas.Grpc.Mapping</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Modules.Consultas\Flit.Modules.Consultas.csproj" />
+  </ItemGroup>
+
+</Project>

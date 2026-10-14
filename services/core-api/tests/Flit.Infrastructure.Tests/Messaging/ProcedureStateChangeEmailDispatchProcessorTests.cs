@@ -242,6 +242,26 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
     }
 
     [Fact]
+    public async Task HU13359_EncoladoParaNotificaciones_MarcaEncolado_YNoSeReintenta()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedDispatchAsync(dbName, "persona", "Ana", "ana@flit.test");
+
+        var sender = new RecordingSender { Encolar = true };
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+
+        await processor.ProcessPendingAsync(Ct);
+        await processor.ProcessPendingAsync(Ct);
+
+        await using var verify = NewContext(dbName);
+        var row = await verify.ProcedureStateChangeEmailDispatches.SingleAsync(Ct);
+        row.Status.Should().Be("encolado", "core-api solo lo dejó en cola: si llegó lo dice Notificaciones");
+        row.ProcessedAt.Should().NotBeNull();
+        sender.Messages.Should().ContainSingle("encolado ya salió de core-api");
+    }
+
+    [Fact]
     public async Task KillSwitchApagado_NoEnviaNiGastaAttempts()
     {
         var dbName = NewDbName();
@@ -599,6 +619,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
     {
         public List<EmailMessage> Messages { get; } = [];
         public bool Fail { get; set; }
+        public bool Encolar { get; set; }
 
         public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
         {
@@ -606,7 +627,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             return Task.FromResult(
                 Fail
                     ? EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable)
-                    : EmailSendResult.Sent);
+                    : Encolar ? EmailSendResult.Queued : EmailSendResult.Sent);
         }
     }
 }

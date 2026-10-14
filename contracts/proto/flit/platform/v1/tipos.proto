@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package flit.platform.v1;
+
+option csharp_namespace = "Flit.Platform.Grpc.V1";
+
+// Claves naturales comunes de la plataforma (ADR-0064, decisión 2). Los productos no comparten un
+// maestro de vehículos ni de personas: se integran por estas claves, con la misma normalización en
+// todos. El mensaje lleva el valor tal como lo tiene quien llama; quien recibe normaliza con
+// Flit.Platform.Contracts antes de comparar o guardar.
+
+// Placa de un vehículo. Forma canónica: sin espacios de borde y en mayúsculas invariantes (la misma
+// regla de PlacaNormalizer en Trámites).
+message Placa {
+  string valor = 1;
+}
+
+// Número de identificación vehicular (VIN). Forma canónica: sin espacios y en mayúsculas.
+message Vin {
+  string valor = 1;
+}
+
+// Documento de identidad de una persona natural o jurídica.
+message DocumentoIdentidad {
+  // Código del tipo de documento según el catálogo de tipos de documento de la plataforma
+  // (por ejemplo "CC", "CE", "PAS", "NIT"). Es texto y no un enum para no congelar el catálogo
+  // en el contrato: un tipo nuevo no obliga a publicar una versión nueva del paquete.
+  string tipo = 1;
+  // Número sin puntos, espacios ni dígito de verificación.
+  string numero = 2;
+}

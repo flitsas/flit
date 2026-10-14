@@ -6,8 +6,8 @@ info:
     Endpoints de plataforma de la FLIT Suite (contrato de plataforma v1, §6), servidos por core-api
     bajo /api/v1/platform. Productos de la suite, su habilitación por empresa y el manifiesto que
     registra cada producto (HU #12966, tarea B-06). Los errores siguen RFC 7807 con un campo `code`
-    estable (contrato §10). Las consultas externas compartidas (/platform/consultas) se documentan
-    cuando se implementen (frente C).
+    estable (contrato §10). Las consultas externas compartidas no son REST: las atiende core-consultas
+    por gRPC (flit.consultas.v1, contracts/proto; ADR-0065 y ADR-0070).
   license:
     name: Propietario FLIT
     url: https://flitsas.com

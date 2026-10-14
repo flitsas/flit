@@ -23,6 +23,8 @@ public static class PlatformModuleExtensions
         services.AddScoped<ListTenantProductsHandler>();
         // HU #12965 (B-05): implementación real del contrato §4.
         services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
+        // Epic #13316 (HU #13334): productos encendidos de una empresa, para el gRPC de Identidad.
+        services.AddScoped<ListEnabledProductsHandler>();
         // HU #12966 (B-06): me/apps y manifiesto. IProductHosts lo registra la API.
         services.AddScoped<ListMyAppsHandler>();
         services.AddScoped<ApplyProductManifestHandler>();

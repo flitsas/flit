@@ -172,8 +172,8 @@ public sealed class RuntConfirmationRunner(
             // resolución (la que llega primero manda, sin importar el documento) y Verifik responde
             // 409 a la segunda. Visto en dev el 2026-09-10 con JNH38H: los dos crudos salían byte a
             // byte iguales y el veredicto se daba con datos falsos.
-            var seller = plan.Seller is null ? null : await client.ConsultAsync(settings.ProviderKey, plan.Seller, ct).ConfigureAwait(false);
-            var primary = await client.ConsultAsync(settings.ProviderKey, plan.Primary!, ct).ConfigureAwait(false);
+            var seller = plan.Seller is null ? null : await client.ConsultAsync(settings.ProviderKey, plan.Seller with { TenantId = candidate.TenantId }, ct).ConfigureAwait(false);
+            var primary = await client.ConsultAsync(settings.ProviderKey, plan.Primary! with { TenantId = candidate.TenantId }, ct).ConfigureAwait(false);
             counters.ProviderCalls(plan.Seller is null ? 1 : 2);
 
             // AC4 — el crudo se guarda ANTES de evaluar, aunque el veredicto vaya a ser error.
@@ -213,7 +213,7 @@ public sealed class RuntConfirmationRunner(
             if (decision.TiebreakPlate is { } placa && (candidate.Buyer ?? candidate.Owner) is { } propietario)
             {
                 var tiebreakQuery = RuntRawQuery.ByPlate(placa, propietario);
-                var tiebreak = await client.ConsultAsync(settings.ProviderKey, tiebreakQuery, ct).ConfigureAwait(false);
+                var tiebreak = await client.ConsultAsync(settings.ProviderKey, tiebreakQuery with { TenantId = candidate.TenantId }, ct).ConfigureAwait(false);
                 counters.ProviderCalls(1);
                 sellerId = await SaveAsync(candidate, settings.ProviderKey, tiebreakQuery, tiebreak, queriedAt, ct).ConfigureAwait(false);
 

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13316 (ADR-0070) — tipos comunes de los contratos gRPC entre servicios (paquete flit.platform.v1):
+    claves naturales (Placa, Vin, DocumentoIdentidad) y motivos de error. La fuente es contracts/proto, validada
+    con buf en CI; aquí solo se genera el código C# con Grpc.Tools. Los proyectos de contratos de cada servicio
+    (Flit.<Servicio>.Grpc.Contracts) referencian este en lugar de volver a generar estos tipos.
+
+    Ojo con Docker: contracts/proto queda fuera del contexto ./services. El primer servicio que meta este proyecto
+    en su imagen amplía el contexto a la raíz del repo (ver contracts/proto/README.md).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Platform.Grpc.V1</RootNamespace>
+    <ProtoRoot>..\..\..\..\contracts\proto</ProtoRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="$(ProtoRoot)\flit\platform\v1\*.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

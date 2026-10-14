@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flit.Consultas.Api/Flit.Consultas.Api.csproj" />
+    <Project Path="src/Flit.Consultas.Grpc.Contracts/Flit.Consultas.Grpc.Contracts.csproj" />
+    <Project Path="src/Flit.Consultas.Grpc.Mapping/Flit.Consultas.Grpc.Mapping.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.Consultas.Tests/Flit.Consultas.Tests.csproj" />
+  </Folder>
+</Solution>

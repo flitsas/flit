@@ -42,6 +42,8 @@
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Domain\Flit.Modules.Quipux.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Platform\Flit.Modules.Platform.csproj" />
+    <!-- Epic #13316 (HU #13350): outbox del SDK para publicar en flit.tramites. -->
+    <ProjectReference Include="..\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
     <!-- Epic #13217 (HU #13231): entidades y configuraciones de identidad, compartidas con core-identity. -->
     <ProjectReference Include="..\Flit.Identity.Infrastructure\Flit.Identity.Infrastructure.csproj" />
     <!-- Contratos gRPC compartidos con core-ict (ICT). Plano C: core-api es CLIENTE de IctStateCallback

@@ -1,0 +1,104 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — trabajos de Notificaciones
+  version: 1.0.0
+  description: |
+    Trabajos en cola que recibe Notificaciones (core-notificaciones). A diferencia de un evento, un trabajo va
+    dirigido a un servicio concreto: el servicio que lo pide lo deja, vía su outbox (trabajo del SDK), en el
+    exchange `flit.notificaciones` (su usuario del broker tiene permiso de escritura ahí) y Notificaciones lo
+    procesa con reintentos y cola de mensajes muertos (ADR-0064). Mensajes en JSON con el sobre común
+    (comun/sobre.v1.yaml); el `producer` del sobre es el servicio que lo pide.
+    Decisión del Feature #13324 (2026-10-07): el correo llega YA ARMADO (asunto, HTML con el tema de la empresa,
+    adjuntos) y con el canal resuelto por quien lo pide; Notificaciones pone el transporte, los reintentos y el
+    registro de entregas.
+defaultContentType: application/json
+
+channels:
+  notificaciones.email.send:
+    description: Enviar un correo ya armado por el canal que resolvió quien lo pide.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.notificaciones, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: emailSend
+      message:
+        $ref: '#/components/messages/EmailSend'
+
+  notificaciones.webhook.send:
+    description: |
+      Entregar un webhook saliente ya armado y firmado por el servicio dueño de la suscripción (HU #13356): la llave
+      de firma no sale de ese servicio. Notificaciones hace el POST con el cuerpo exacto y las cabeceras, bloquea los
+      destinos internos (filtro anti-SSRF), reintenta y deja lo que no salió en notificaciones.webhooks.salientes.dlq.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.notificaciones, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: webhookSend
+      message:
+        $ref: '#/components/messages/WebhookSend'
+
+components:
+  messages:
+    EmailSend:
+      name: notificaciones.email.send
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [plantilla, canal, destinatario, asunto, html]
+                properties:
+                  plantilla:
+                    type: string
+                    description: Clave de la plantilla con la que se armó (security.invitation, tramites.aprobado, …); va al registro.
+                  canal:
+                    type: string
+                    enum: [flit_smtp, tenant_api]
+                    description: flit_smtp = SMTP de FLIT; tenant_api = API de correo de la empresa (Renting).
+                  destinatario:
+                    type: object
+                    required: [email, nombre]
+                    properties:
+                      email: { type: string, format: email }
+                      nombre: { type: string }
+                  asunto: { type: string }
+                  html: { type: string, description: Cuerpo final, con el tema de la empresa ya aplicado. }
+                  adjuntos:
+                    type: array
+                    items:
+                      type: object
+                      required: [nombre, contentType, contenidoBase64]
+                      properties:
+                        nombre: { type: string }
+                        contentType: { type: string }
+                        contenidoBase64: { type: string, contentEncoding: base64 }
+                  copiaOculta:
+                    type: array
+                    items: { type: string, format: email }
+                  remitenteNombre: { type: [string, 'null'] }
+                  tema: { type: [string, 'null'], description: "flit | brand (para el registro)" }
+                  temaVersion: { type: [integer, 'null'] }
+    WebhookSend:
+      name: notificaciones.webhook.send
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                required: [url, cuerpo, cabeceras, origen, evento]
+                properties:
+                  url: { type: string, format: uri }
+                  cuerpo: { type: string, description: JSON exacto que se firmó (no se re-serializa). }
+                  cabeceras:
+                    type: object
+                    additionalProperties: { type: string }
+                    description: "X-Webhook-Signature (sha256=<hex del HMAC-SHA256 del cuerpo>), X-Correlation-Id y las que espere el destino."
+                  origen: { type: string, enum: [ot, ict] }
+                  evento: { type: string, description: Tipo de evento del webhook (para el registro). }

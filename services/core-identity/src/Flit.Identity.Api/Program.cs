@@ -3,9 +3,13 @@ using Flit.Api.Identity;
 using Flit.Api.Middleware;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
+using Flit.Api.Telemetry;
+using Flit.Identity.Api.Grpc;
 using Flit.Identity.Web;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
+using Flit.Modules.Notificaciones;
+using Flit.Platform.Sdk.Messaging;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Network;
@@ -41,8 +45,11 @@ public static class Program
         var connectionString = builder.Configuration.GetConnectionString("Core")
             ?? throw new InvalidOperationException("ConnectionStrings:Core (PostgreSQL) es obligatoria.");
         AddIdentityServices(builder.Services, builder.Configuration, builder.Environment, connectionString);
+        builder.AddFlitTelemetry("flit-core-identity"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
+        builder.AddIdentidadGrpc(); // Epic #13316 · HU #13334 (solo con Identidad:GrpcPort)
 
         var app = builder.Build();
+        app.UseFlitCorrelationId(); // HU #13332: primero, para que todo el pipeline quede dentro de su alcance
         UseIdentityPipeline(app);
         return app;
     }
@@ -83,9 +90,12 @@ public static class Program
         services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<IdentityDbContext>());
         services.AddFlitDataProtection<IdentityDbContext>();
 
-        // Infraestructura compartida: login, llaves, correo (con el canal Renting), auditoría, Marca Blanca y productos.
-        services.AddRentingChannel(configuration);
+        // Infraestructura compartida: login, llaves, correo, auditoría, Marca Blanca y productos.
         services.AddIdentityLoginServices(configuration, environment);
+        // HU #13355/#13359 (Epic #13316): core-identity no tiene transportes de correo. Sus correos (recuperación de
+        // clave, activación) se dejan como trabajos por su outbox (identity.outbox), con el productor «plataforma» y su
+        // usuario del broker (Platform:Messaging, obligatorio).
+        services.AddFlitOutbox<IdentityDbContext>(configuration);
         services.AddIdentityAuditing();
         services.AddIdentityMarcaBlanca(configuration);
         services.AddBrandLogoReader(configuration);
@@ -130,6 +140,7 @@ public static class Program
                 : Results.Ok(new { status = "ready" })).AllowAnonymous();
 
         app.MapFlitIdentityEndpoints();
+        app.MapIdentidadGrpc(); // HU #13334: solo con Identidad:GrpcPort, y solo en ese puerto
     }
 }
 

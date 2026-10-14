@@ -181,13 +181,14 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
             ],
         };
 
+        // HU #13359: sin empresa, sale por Notificaciones con la empresa «plataforma»; «Success» es que quedó encolado.
         var envio = await _emailSender.SendAsync(message, ct).ConfigureAwait(false);
 
         // El mensaje del transporte ya es genérico por contrato (nunca host ni credenciales).
         return envio.Success
             ? new MandateSimulationResult(
                 MandateSimulationOutcome.Ok,
-                "Simulación enviada con el PDF adjunto.",
+                "Simulación enviada con el PDF adjunto: llega en unos segundos.",
                 documento.Content,
                 documento.FileName)
             : new MandateSimulationResult(MandateSimulationOutcome.SendFailed, envio.Message);
