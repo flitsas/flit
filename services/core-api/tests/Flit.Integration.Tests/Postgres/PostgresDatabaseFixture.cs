@@ -102,6 +102,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // que siembran las pruebas; la que lo necesite lo crea (PlatformRbacTests).
         "security.roles",
         // Feature #13508 / HU #13509: seed ocr + dr_flit y transición reason=seed (configuración, no catálogo).
+        // Clasificadas a propósito para HarnessBootstrapTests (no son catálogo preservado).
         "admin.ai_tool_provider_settings",
         "admin.ai_provider_transitions",
     };
