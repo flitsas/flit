@@ -278,6 +278,19 @@ services:
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
+    environment:
+      <<: *core-api-env
+      # HU #13378 (épica #13216, ADR-0070 D4) — directorio temporal dedicado del empaquetado de lotes de consolidados.
+      # Cada parte escribe a la vez su ZIP en claro (.zip.tmp) y su versión cifrada (.flz.tmp): hasta 2 × M, con
+      # M = max_mb_per_part. Montado en el volumen core-api-lotes-tmp (abajo) para no llenar la capa del contenedor.
+      # Espacio libre necesario en el disco del host que respalda el volumen: >= 600 MB con M por defecto (250 MB) y
+      # >= 4,5 GB si M = 2048 MB. Al arrancar, core-api borra los temporales huérfanos de ahí.
+      # Fuera del ancla a propósito: core-identity no empaqueta lotes.
+      ConsolidadoLotes__DirectorioTemporal: /var/tmp/flit-lotes
+    volumes:
+      # HU #13378 — temporales del empaquetado de lotes (ver ConsolidadoLotes__DirectorioTemporal arriba).
+      # El .pfx de Renting ya no se monta aquí: desde el corte (HU #13359) solo lo usa core-notificaciones.
+      - core-api-lotes-tmp:/var/tmp/flit-lotes
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
@@ -526,18 +539,7 @@ services:
       RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED: ${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-true}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
-    environment:
-      <<: *core-api-env
-      # HU #13378 (épica #13216, ADR-0070 D4) — directorio temporal dedicado del empaquetado de lotes de consolidados.
-      # Cada parte escribe a la vez su ZIP en claro (.zip.tmp) y su versión cifrada (.flz.tmp): hasta 2 × M, con
-      # M = max_mb_per_part. Montado en el volumen core-api-lotes-tmp (abajo) para no llenar la capa del contenedor.
-      # Espacio libre necesario en el disco del host que respalda el volumen: >= 600 MB con M por defecto (250 MB) y
-      # >= 4,5 GB si M = 2048 MB. Al arrancar, core-api borra los temporales huérfanos de ahí.
-      # Fuera del ancla a propósito: core-identity no empaqueta lotes.
-      ConsolidadoLotes__DirectorioTemporal: /var/tmp/flit-lotes
     volumes:
-      # HU #13378 — temporales del empaquetado de lotes (ver ConsolidadoLotes__DirectorioTemporal arriba).
-      - core-api-lotes-tmp:/var/tmp/flit-lotes
       # Certificado cliente mTLS del canal API Renting. Solo lectura; NUNCA dentro de la
       # imagen ni en el repositorio. Vence el 2027-03-22.
       # MISMA RUTA a ambos lados (host:contenedor) — ver RENTING_API_PFX_CERTIFICATE_PATH
@@ -941,11 +943,17 @@ services:
     cpus: ${OBSERVABILIDAD_CPUS:-0}
     logging: *default-logging
 
-# HU #13378 — volumen con nombre para los temporales del empaquetado de lotes de consolidados (solo core-api).
-# Contenido desechable (core-api lo limpia al arrancar), pero NO se borra con `down`: el CD no usa -v.
-# Requiere >= 600 MB libres con max_mb_per_part por defecto (250 MB) y >= 4,5 GB si max_mb_per_part = 2048.
+# Volúmenes con nombre. Un solo bloque `volumes:` en el archivo: YAML no admite la clave repetida y compose falla
+# con «mapping key "volumes" already defined».
 volumes:
+  # HU #13378 — temporales del empaquetado de lotes de consolidados (solo core-api).
+  # Contenido desechable (core-api lo limpia al arrancar), pero NO se borra con `down`: el CD no usa -v.
+  # Requiere >= 600 MB libres con max_mb_per_part por defecto (250 MB) y >= 4,5 GB si max_mb_per_part = 2048.
   core-api-lotes-tmp:
+  # HU #13332: datos de trazas y logs del perfil `observabilidad`.
+  observabilidad-datos:
+  # HU #13349: datos del broker (vhost, colas y mensajes durables).
+  rabbitmq-datos:
 
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
 # Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
@@ -973,8 +981,3 @@ networks:
     ipam:
       config:
         - subnet: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
-
-# HU #13332: datos de trazas y logs del perfil `observabilidad`.
-volumes:
-  observabilidad-datos:
-  rabbitmq-datos:
