@@ -421,4 +421,58 @@ public sealed class KyverumWebhookHandlerTests
         await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    // ── HU #13351: aviso verificado por Consultas, entregado por el bus ─────────────────────────────────────────
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoPorConsultas_AplicaElResultado_SinPedirFirmaNiSecreto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.WebhookSecretEncrypted = null; // con Kyverum por Consultas, Trámites no guarda el secreto
+
+        var (result, error) = await _handler.HandleVerifiedAsync(v.Id, Body(aprobado: true, score: 91), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.Score.Should().Be(91);
+        await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e => e.ValidationId == v.Id), ct);
+        await _kyverum.DidNotReceiveWithAnyArgs().GetStatusAsync(default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoDeUnIntentoRechazado_CuentaElIntento_ComoElWebhook()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = 3;
+
+        var (result, _) = await _handler.HandleVerifiedAsync(v.Id, Body(aprobado: false), ct);
+
+        result.Should().Be("ok");
+        v.Attempts.Should().Be(1);
+        v.Status.Should().Be(BiometricEstados.EnProceso, "aún quedan intentos");
+    }
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoDeUnaValidacionTerminada_NoSeReaplica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(BiometricEstados.Aprobado);
+
+        var (result, error) = await _handler.HandleVerifiedAsync(v.Id, Body(aprobado: false), ct);
+
+        (result, error).Should().Be(("ok", (string?)null));
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        await _events.DidNotReceiveWithAnyArgs().PublishAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoDeUnaValidacionDesconocida_NotFound()
+    {
+        var (_, error) = await _handler.HandleVerifiedAsync(Guid.NewGuid(), Body(aprobado: true), TestContext.Current.CancellationToken);
+
+        error.Should().Be("not_found");
+    }
 }

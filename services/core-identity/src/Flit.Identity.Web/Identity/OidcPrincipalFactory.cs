@@ -115,20 +115,27 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         return new OidcGrant(Finish(identity, product, scopes), null);
     }
 
-    /// <summary>Token de servicio (contrato §3): <c>sub</c> = cliente, <c>aud</c> = plataforma, los scopes pedidos.</summary>
+    /// <summary>
+    /// Token de servicio (contrato §3): <c>sub</c> = cliente, los scopes concedidos y, como <c>aud</c>, el servicio que
+    /// atiende cada scope (contrato v1.3, HU #13333). OpenIddict ya validó que el cliente tiene permiso para cada scope.
+    /// </summary>
     public static ClaimsPrincipal ForService(string clientId, IEnumerable<string> scopes)
     {
+        var granted = scopes.ToList();
         var identity = NewIdentity();
         identity.SetClaim(Claims.Subject, clientId);
-        return Finish(identity, ProductCodes.Plataforma, scopes);
+        return Finish(identity, OidcDefaults.AudiencesForServiceScopes(granted), granted);
     }
 
     private static ClaimsIdentity NewIdentity() =>
         new(OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Claims.Name, Claims.Role);
 
-    private static ClaimsPrincipal Finish(ClaimsIdentity identity, string audience, IEnumerable<string> scopes)
+    private static ClaimsPrincipal Finish(ClaimsIdentity identity, string audience, IEnumerable<string> scopes) =>
+        Finish(identity, [audience], scopes);
+
+    private static ClaimsPrincipal Finish(ClaimsIdentity identity, IReadOnlyList<string> audiences, IEnumerable<string> scopes)
     {
-        identity.SetAudiences(audience);
+        identity.SetAudiences([.. audiences]);
         identity.SetScopes(scopes);
         // Todo va al access token; el id token solo lleva lo estándar del usuario.
         identity.SetDestinations(claim => claim.Type is Claims.Subject or Claims.Email

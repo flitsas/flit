@@ -12,6 +12,8 @@
     <!-- La gramatica de consultas (QueryCondition, operadores) se comparte con el modulo de
          Consultas: el filtro del listado la reutiliza, aunque NO su motor. Ver HU #12106. -->
     <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
+    <!-- HU #13342 (Epic #13316): los hechos certificados y la lectura del RUNT los produce el módulo de consultas. -->
+    <ProjectReference Include="..\Flit.Modules.Consultas\Flit.Modules.Consultas.csproj" />
   </ItemGroup>
 
 </Project>

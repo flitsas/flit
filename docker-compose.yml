@@ -23,18 +23,14 @@ services:
       # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
       context: ./services
       dockerfile: core-api/Dockerfile
+      # HU #13344: contratos gRPC (contracts/proto) como contexto con nombre (COPY --from=contracts).
+      additional_contexts:
+        contracts: ./contracts/proto
     container_name: flit-backend-dev
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
-      # SMTP → Office365
-      Smtp__Host: smtp.office365.com
-      Smtp__Port: "587"
-      Smtp__UseStartTls: "true"
-      Smtp__DisableAuthentication: "false"
-      Smtp__DefaultSenderEmail: tramitesvehiculos@flitsas.com
-      Smtp__DefaultSenderPassword: "TramitesNoti2024*"
-      Smtp__DefaultSenderName: FLIT Tramites
+      # HU #13359: core-api ya no envía correos (el SMTP vive en core-notificaciones; ver docs/suite/local.md).
       # gRPC ICT (orquestación): endpoint dedicado SOLO HTTP/2 (h2c). Kestrel no multiplexa HTTP/1.1
       # y HTTP/2 en el mismo puerto en texto plano, por eso el gRPC va en un puerto aparte del REST 8081.
       Ict__GrpcPort: "8082"

@@ -91,7 +91,7 @@ public sealed class TenantParityTests(PostgresDatabaseFixture fixture) : Postgre
 
     /// <summary>
     /// AC1 — el filtro legado (<c>tenantId = S</c>) y <c>TenantScope.Single(S)</c> sobre la misma
-    /// consulta base producen los mismos ids en el mismo orden (Q01 y Q02 ≡ Q27).
+    /// consulta base producen los mismos ids en el mismo orden (Q01 y Q02 ≡ Q26).
     /// </summary>
     [PostgresFact]
     public async Task Filtro_legado_y_TenantScope_Single_son_equivalentes()

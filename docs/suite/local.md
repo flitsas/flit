@@ -25,13 +25,49 @@ En local se usan los mismos puertos que en DEV (así un número sirve en los dos
 | Gateway (`Flit.Gateway`) | `4002` | 4002 | 5002 | 6002 | Reparte `/api`, `/connect`, `/.well-known` (opcional en local) |
 | API (`core-api`) | `4003` | 4003 | 5003 | 6003 | La API de negocio (y, durante la transición, también el login) |
 | Identidad (`core-identity`) | `4025` | 4025 | 5025 | 6025 | Login (OIDC), usuarios, roles, productos |
+| Consultas (`core-consultas`) | `4026` · gRPC `8084` | 4026 | 5026 | 6026 | Proveedores externos (RUNT, Verifik, Kyverum, Fasecolda, RUES) |
+| Notificaciones (`core-notificaciones`) | `4027` · gRPC `8085` | 4027 | 5027 | 6027 | Correo (SMTP, API de Renting), webhooks salientes, mensajes muertos |
+| RabbitMQ | `5672` · consola `15672` | — | — | — | Bus de eventos y trabajos |
 
 En los servidores los puertos los pone el CD (`.github/workflows/cd.yml`, paso `env`); en local, cada
 `launchSettings.json` y los comandos de abajo. Todo por `http://127.0.0.1:<puerto>`.
 
+## Después del corte de Consultas y Notificaciones (Epic #13316)
+
+core-api ya no habla con proveedores ni manda correos: le pide eso a `core-consultas` y `core-notificaciones`, por gRPC
+y por RabbitMQ. **Sin los dos servicios y el broker, core-api no arranca.** Si tu `appsettings.Development.json` de
+core-api tiene llaves de proveedores o SMTP, ya no se usan: muévelas así.
+
+| Lo que tenías en core-api | Ahora va en | Archivo de ejemplo |
+|---|---|---|
+| `VERIFIK_*` / `Verifik:*`, `KYVERUM_RUNT_*` / `ImprontaRunt:*`, `KYVERUM_*` / `Kyverum:*`, `FASECOLDA_*`, `RUES_*`, modos `*_MODE` | core-consultas | `services/core-consultas/src/Flit.Consultas.Api/appsettings.Development.json.example` |
+| `Smtp:*`, `RENTING_API_*` / `Notifications:Renting:*`, certificado `.pfx` | core-notificaciones | `services/core-notificaciones/src/Flit.Notificaciones.Api/appsettings.Development.json.example` |
+| — (nuevo y obligatorio) `Consultas:Remoto`, `Notificaciones:Remoto`, `Tramites:Bus`, `Platform:*`, secretos de clientes de servicio | core-api | `services/core-api/src/Flit.Api/appsettings.Development.json.example` |
+
+Cada ejemplo se copia quitando `.example` (la copia está ignorada por git) y se reemplaza cada `CAMBIAR`. El secreto
+de un cliente de servicio (`svc-consultas`, por ejemplo) es el mismo en `Suite:Oidc:ServiceClients` de core-api y en el
+`Platform:ServiceClient:ClientSecret` de ese servicio. Las llaves de proveedores son las mismas de DEV; pídelas, no
+están en el repo.
+
+## 0. Broker
+
+```bash
+docker compose -f deploy/rabbitmq/docker-compose.local.yml up -d
+# Espera a que esté listo antes de crear usuarios (si no, el contenedor puede caerse con «.erlang.cookie: eacces»):
+until docker compose -f deploy/rabbitmq/docker-compose.local.yml exec -T rabbitmq rabbitmq-diagnostics -q check_running; do sleep 3; done
+export COMPOSE="docker compose -f deploy/rabbitmq/docker-compose.local.yml"
+deploy/rabbitmq/usuario-de-servicio.sh tramites "<clave-tramites>" notificaciones
+deploy/rabbitmq/usuario-de-servicio.sh consultas "<clave-consultas>"
+deploy/rabbitmq/usuario-de-servicio.sh notificaciones "<clave-notificaciones>"
+```
+
+Cada clave va en el `Platform:Messaging:ConnectionString` del servicio (`amqp://<servicio>:<clave>@127.0.0.1:5672/flit`).
+Los datos del broker quedan en un volumen; la próxima vez basta con `up -d`.
+
 ## 1. API
 
 La base se migra sola al arrancar (las DDL van dentro de las migraciones). Usa una base con los usuarios de demo.
+Antes, copia `appsettings.Development.json.example` a `appsettings.Development.json` y llénalo (ver arriba).
 
 ```bash
 cd services/core-api/src/Flit.Api
@@ -49,6 +85,27 @@ dotnet bin/Debug/net10.0/Flit.Api.dll
   propósito: el DEV de la VPS también corre en `Development`.
 - Los `Overrides` le dicen a la API dónde vive cada app: con ellos arma las direcciones de retorno del login y los
   enlaces del menú de productos (`me/apps`).
+- `Suite__Oidc__Enabled=true` también hace falta para los tokens de servicio: core-api los emite y con ellos se
+  hablan core-api, core-consultas y core-notificaciones.
+
+## 1b. Consultas y Notificaciones
+
+Después de la API (emite sus tokens y migra la base), cada uno con su `appsettings.Development.json` lleno:
+
+```bash
+cd services/core-consultas/src/Flit.Consultas.Api && dotnet build && \
+ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Consultas.Api.dll
+
+cd services/core-notificaciones/src/Flit.Notificaciones.Api && dotnet build && \
+ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Notificaciones.Api.dll
+```
+
+- **Los correos salen de verdad** con el SMTP que pongas: llegan a las personas de tu base. Para no mandar nada, deja
+  `Smtp:Host` vacío: en `Development` el correo se escribe en el log de core-notificaciones y no sale.
+- **Validación de identidad real** (`Biometrics:Provider` = `kyverum` en core-api): Kyverum avisa a core-consultas por
+  internet. Abre un túnel (`cloudflared tunnel --url http://127.0.0.1:4026`) y pon su dirección +
+  `/api/v1/consultas/avisos/kyverum-verify` en `Kyverum:WebhookCallbackUrl`. El túnel rápido cambia de dirección y a
+  veces se cae solo; si el aviso no llega, la conciliación de core-api aprueba la validación en unos minutos.
 
 ## 2. Hub
 
@@ -137,6 +194,11 @@ Usuarios de las semillas (`DevelopmentAuthSeeder.cs`): `demo@flit.local` (SuperA
 
 ## Problemas conocidos
 
+- **core-api no arranca y nombra `Consultas:Remoto:Address`, `Notificaciones:Remoto:Address`, `Tramites:Bus:Habilitado`
+  o `Platform:ServiceClient`:** falta la configuración nueva. Ver «Después del corte».
+- **«Consulta no disponible» en el asistente:** core-consultas no está arriba. Al levantarlo, puede seguir así unos 15 s
+  más (el cliente espera antes de volver a intentar).
+- **Un correo no llegó:** míralo en Plataforma → Mensajes muertos (SuperAdmin), que dice la causa del proveedor.
 - **Página en blanco o 431:** estás en `localhost`. Ver la regla de oro.
 - **«Abriendo tu sesión…» que no termina:** el hub y la API no están arriba, o la API no tiene los `Overrides` y
   rechaza la dirección de retorno.

@@ -105,6 +105,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // Clasificadas a propósito para HarnessBootstrapTests (no son catálogo preservado).
         "admin.ai_tool_provider_settings",
         "admin.ai_provider_transitions",
+        // HU #13367 (DDL 133): fila única de parámetros del motor de lotes de consolidados. Configuración, no
+        // catálogo (como runt_confirmation_settings): se trunca; la prueba que la necesite reaplica el DDL 133.
+        "tramites.consolidado_export_settings",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

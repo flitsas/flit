@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package flit.identidad.v1;
+
+option csharp_namespace = "Flit.Identidad.Grpc.V1";
+
+// Lo que los servicios de la plataforma consultan a Identidad (core-identity), para no leer sus tablas
+// (ADR-0064 decisión 1, contrato de plataforma v1.3 §6.1).
+//
+// Autenticación y alcance (ADR-0070, contrato §3):
+//   - metadata `authorization`: token de servicio con `aud=plataforma` y scope `platform.identidad.read`.
+//   - metadata `x-flit-tenant-id`: la empresa por la que se pregunta. Obligatoria en todos los métodos;
+//     sin ella el servidor responde INVALID_ARGUMENT. Un token de usuario se rechaza con UNAUTHENTICATED.
+// Ningún método devuelve datos de otra empresa que la de `x-flit-tenant-id`.
+service IdentidadService {
+  // Usuarios de la empresa: los que tienen al menos una asignación de rol vigente en ella. Si se indica
+  // `producto`, solo los que tienen rol en ese producto, y en `roles` solo vienen los de ese producto.
+  rpc ListarUsuariosEmpresa(ListarUsuariosEmpresaRequest) returns (ListarUsuariosEmpresaResponse);
+
+  // Un usuario de la empresa. NOT_FOUND si no existe o no pertenece a la empresa de `x-flit-tenant-id`.
+  rpc ObtenerUsuario(ObtenerUsuarioRequest) returns (ObtenerUsuarioResponse);
+
+  // Productos encendidos para la empresa, con la regla fail-closed de la jerarquía (ADR-0057): un
+  // producto cuenta como encendido solo si lo está para la empresa y para cada uno de sus ancestros.
+  // `plataforma` siempre viene encendido.
+  rpc ObtenerProductosHabilitados(ObtenerProductosHabilitadosRequest) returns (ObtenerProductosHabilitadosResponse);
+}
+
+message ListarUsuariosEmpresaRequest {
+  // Código de producto (contrato §1). Vacío = todos los usuarios de la empresa.
+  string producto = 1;
+  // Incluir usuarios que no están activos (pendientes de activar o inactivos). Por defecto, solo activos.
+  bool incluir_no_activos = 2;
+  // Paginación (AIP-158). page_size 0 = 50; el servidor no devuelve más de 200 por página.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListarUsuariosEmpresaResponse {
+  repeated Usuario usuarios = 1;
+  // Vacío cuando no hay más páginas.
+  string next_page_token = 2;
+}
+
+message ObtenerUsuarioRequest {
+  // Id del usuario (UUID).
+  string usuario_id = 1;
+  // Si se indica, en `roles` solo vienen los de ese producto.
+  string producto = 2;
+}
+
+message ObtenerUsuarioResponse {
+  Usuario usuario = 1;
+}
+
+message ObtenerProductosHabilitadosRequest {}
+
+message ObtenerProductosHabilitadosResponse {
+  // Códigos de producto encendidos (contrato §1), ordenados.
+  repeated string productos = 1;
+}
+
+message Usuario {
+  // Id del usuario (UUID).
+  string id = 1;
+  string email = 2;
+  string nombre = 3;
+  EstadoUsuario estado = 4;
+  // Roles vigentes del usuario en la empresa, filtrados por producto cuando el pedido lo indica.
+  repeated Rol roles = 5;
+}
+
+message Rol {
+  // Id del rol (UUID).
+  string id = 1;
+  // Código del rol, por ejemplo "Radicador" o "admin_tramites".
+  string codigo = 2;
+  // Producto al que pertenece el rol (contrato §1).
+  string producto = 3;
+}
+
+enum EstadoUsuario {
+  ESTADO_USUARIO_UNSPECIFIED = 0;
+  // Invitado; todavía no activó su cuenta.
+  ESTADO_USUARIO_PENDIENTE = 1;
+  ESTADO_USUARIO_ACTIVO = 2;
+  ESTADO_USUARIO_INACTIVO = 3;
+}

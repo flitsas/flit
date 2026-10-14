@@ -25,6 +25,12 @@
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
     <!-- Contratos gRPC compartidos con core-ict (ICT). El .csproj vive en services/core-ict/. -->
     <ProjectReference Include="..\..\..\core-ict\src\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />
+    <!-- Epic #13316 (HU #13344): cliente gRPC de core-consultas (contrato flit.consultas.v1, generado de contracts/proto). -->
+    <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
+    <!-- HU #13346: el resultado vuelve a ConsultationResult con el mismo mapeo que usa core-consultas. -->
+    <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Mapping\Flit.Consultas.Grpc.Mapping.csproj" />
+    <!-- HU #13357: cliente gRPC de core-notificaciones (mensajes muertos para el SuperAdmin). -->
+    <ProjectReference Include="..\..\..\core-notificaciones\src\Flit.Notificaciones.Grpc.Contracts\Flit.Notificaciones.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

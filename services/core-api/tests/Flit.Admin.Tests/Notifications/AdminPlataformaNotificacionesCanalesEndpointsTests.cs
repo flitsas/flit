@@ -2,19 +2,20 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Flit.Admin.Tests.Companies;
-using Flit.Infrastructure.Email;
-using Flit.Infrastructure.Notifications.Renting;
+using Flit.Admin.Domain.Companies.Settings;
+using Flit.Infrastructure.Notifications.Admin;
+using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Flit.Admin.Tests.Notifications;
 
 /// <summary>
 /// HU #11367 (Feature #11349) — <c>GET /api/v1/admin/plataforma/notificaciones/canales</c>: los
-/// dos canales de notificación con su remitente resuelto por configuración. Mismo patrón que
+/// dos canales de notificación con su remitente (HU #13359: el que informa core-notificaciones; aquí, un doble). Mismo patrón que
 /// <see cref="AdminPlataformaNotificacionesEndpointsTests"/> (HU #11366): host real vía
 /// <c>WebApplicationFactory&lt;Program&gt;</c>, sin necesidad de PostgreSQL (endpoint de solo
 /// lectura de configuración, no toca <c>FlitDbContext</c>).
@@ -52,75 +53,66 @@ public sealed class AdminPlataformaNotificacionesCanalesEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    // ── AC1 — dos canales, FLIT_SMTP es el default con el remitente de la config SMTP ──────
+    // ── AC1 — dos canales, FLIT_SMTP es el default con su remitente (HU #13359: el que informa Notificaciones) ──
 
     [Fact]
     public async Task AC1_Get_AsSuperAdmin_Returns200WithTwoChannelsAndFlitSmtpAsDefault()
     {
-        using var client = SuperAdminClient();
+        using var client = SuperAdminClient(new CanalesFalsos(rentingDisponible: false));
 
         var response = await client.GetAsync(CanalesUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ChannelsDto>(TestContext.Current.CancellationToken);
-        body.Should().NotBeNull();
-        body!.Channels.Should().HaveCount(2);
-        body.Channels.Select(c => c.Channel).Should().BeEquivalentTo(["FLIT_SMTP", "TENANT_API"]);
-
-        var emailSettings = _factory.Services.GetRequiredService<EmailSettings>();
+        body!.Channels.Select(c => c.Channel).Should().BeEquivalentTo(["FLIT_SMTP", "TENANT_API"]);
         var flitSmtp = body.Channels.Single(c => c.Channel == "FLIT_SMTP");
         flitSmtp.IsDefault.Should().BeTrue();
-        flitSmtp.SenderEmail.Should().Be(string.IsNullOrWhiteSpace(emailSettings.DefaultSenderEmail)
-            ? null
-            : emailSettings.DefaultSenderEmail);
-
-        var tenantApi = body.Channels.Single(c => c.Channel == "TENANT_API");
-        tenantApi.IsDefault.Should().BeFalse();
+        flitSmtp.IsConfigured.Should().BeTrue();
+        flitSmtp.SenderEmail.Should().Be("pruebas-smtp@flit.test");
+        body.Channels.Single(c => c.Channel == "TENANT_API").IsDefault.Should().BeFalse();
     }
 
-    // ── AC2/AC3 — el canal del cliente refleja fielmente su propia configuración ────────────
+    // ── AC2/AC3 + HU #11371 — el canal del cliente: su propio remitente y su disponibilidad real ──
 
-    [Fact]
-    public async Task AC2_AC3_Get_AsSuperAdmin_TenantApiChannelMatchesRentingChannelOptions()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AC2_AC3_TenantApi_TraeSuRemitente_YEstaConfiguradoSoloSiNotificacionesLoPuedeUsar(bool disponible)
     {
-        using var client = SuperAdminClient();
+        using var client = SuperAdminClient(new CanalesFalsos(disponible));
 
         var response = await client.GetAsync(CanalesUrl, TestContext.Current.CancellationToken);
-        var body = await response.Content.ReadFromJsonAsync<ChannelsDto>(TestContext.Current.CancellationToken);
-        var tenantApi = body!.Channels.Single(c => c.Channel == "TENANT_API");
-
-        var rentingOptions = _factory.Services.GetRequiredService<IOptions<RentingChannelOptions>>().Value;
-        var expectedEmail = string.IsNullOrWhiteSpace(rentingOptions.SendEmailSenderEmail)
-            ? null
-            : rentingOptions.SendEmailSenderEmail;
-        var expectedName = string.IsNullOrWhiteSpace(rentingOptions.SendEmailSenderUsername)
-            ? null
-            : rentingOptions.SendEmailSenderUsername;
-
-        tenantApi.SenderEmail.Should().Be(expectedEmail);
-        tenantApi.SenderName.Should().Be(expectedName);
-
-        // HU #11371 — IsConfigured sigue la MISMA regla de disponibilidad que decide el envío de
-        // prueba (adaptador Renting registrado en este ambiente), NO si el remitente está poblado.
-        // Deliberadamente no se asume aquí si el canal Renting está habilitado o no en este
-        // ambiente de pruebas (puede variar por máquina/CI vía RENTING_API_ENABLED) — lo único que
-        // se afirma es que ambas señales SIEMPRE coinciden.
-        using var scope = _factory.Services.CreateScope();
-        var rentingAdapterRegistered =
-            scope.ServiceProvider.GetService<IRentingEmailApiSender>() is not null;
-        tenantApi.IsConfigured.Should().Be(
-            rentingAdapterRegistered,
-            "IsConfigured refleja si el adaptador Renting está registrado en este ambiente, la MISMA regla que el envío de prueba");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<ChannelsDto>(TestContext.Current.CancellationToken);
+        var tenantApi = body!.Channels.Single(c => c.Channel == "TENANT_API");
+        tenantApi.SenderEmail.Should().Be("pruebas-renting@flit.test");
+        tenantApi.SenderName.Should().Be("FLIT Pruebas (Renting)");
+        tenantApi.IsConfigured.Should().Be(disponible, "la MISMA regla con la que se puede enviar por el canal");
     }
 
-    private HttpClient SuperAdminClient()
+    private HttpClient SuperAdminClient(ICanalesDeNotificaciones? canales = null)
     {
-        var client = _factory.CreateClient();
+        var factory = canales is null
+            ? _factory
+            : _factory.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddScoped(_ => canales)));
+        var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("SuperAdmin"));
         return client;
+    }
+
+    private sealed class CanalesFalsos(bool rentingDisponible) : ICanalesDeNotificaciones
+    {
+        public Task<IReadOnlyList<CanalDeNotificacion>> ListarAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<CanalDeNotificacion>>(
+            [
+                new(NotificationChannel.FlitSmtp, true, "pruebas-smtp@flit.test", "FLIT Pruebas (SMTP)", Consola: false),
+                new(NotificationChannel.TenantApi, rentingDisponible, "pruebas-renting@flit.test", "FLIT Pruebas (Renting)", Consola: false),
+            ]);
+
+        public Task<EmailSendResult> EnviarPruebaAsync(NotificationChannel canal, EmailMessage mensaje, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     private sealed record ChannelsDto(List<ChannelDto> Channels);

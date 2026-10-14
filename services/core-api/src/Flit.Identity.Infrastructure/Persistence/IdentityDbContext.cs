@@ -3,6 +3,7 @@ using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence;
@@ -62,5 +63,10 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(IdentityPersistence.Assembly);
         Configurations.Identity.OidcModel.Map(modelBuilder);
+
+        // HU #13355 (Epic #13316): outbox propia de core-identity (los correos que deja a Notificaciones). La tabla la crea
+        // core-api con la migración HU13355_IdentityOutbox, como el resto del esquema; no está en el modelo de core-api
+        // porque allí OutboxMessage ya es tramites.outbox (IdentityModelParityTests la excluye por eso).
+        modelBuilder.AddFlitOutbox("identity");
     }
 }

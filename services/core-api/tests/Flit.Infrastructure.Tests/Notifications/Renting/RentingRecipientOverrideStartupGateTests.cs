@@ -1,8 +1,9 @@
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Flit.Infrastructure;
+using System.Security.Cryptography;
 using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure;
+using Flit.Modules.Notificaciones;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -155,7 +156,7 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
     {
         // ADR-0044 — si alguien reintrodujera IHostEnvironment en la firma, este test lo detecta
         // sin depender de ningún valor de EnvironmentName: la prueba es que el PARÁMETRO no existe.
-        var method = typeof(IdentityInfrastructureExtensions).GetMethod(
+        var method = typeof(NotificacionesTransportesExtensions).GetMethod(
             "AddRentingChannel", BindingFlags.Public | BindingFlags.Static);
 
         method.Should().NotBeNull();

@@ -1,0 +1,61 @@
+{
+  // core-consultas en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado por
+  // git) y reemplaza cada CAMBIAR. Aquí van TODAS las llaves de proveedores que antes estaban en core-api.
+  "Urls": "http://127.0.0.1:4026",
+  "Servicio": { "GrpcPort": 8084 },
+  "ConnectionStrings": {
+    // La misma base de core-api; el servicio usa su esquema propio «consultas».
+    "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+
+  "Platform": {
+    // Valida los tokens que emite core-api. El emisor es la dirección del hub.
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-consultas-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      // deploy/rabbitmq/usuario-de-servicio.sh consultas <clave>
+      "ConnectionString": "amqp://consultas:CAMBIAR@127.0.0.1:5672/flit"
+    }
+  },
+
+  // Modo de cada consulta: «real» llama al proveedor, «mock» responde datos de prueba sin red.
+  "Consultations": {
+    "VerifikVehicleMode": "real",
+    "VerifikConductorMode": "real",
+    "VerifikSimitMode": "mock",
+    "VerifikRnmcMode": "mock",
+    "VerifikRuesMode": "mock",
+    "FasecoldaMode": "mock",
+    "IntempoMode": "mock"
+  },
+  "Verifik": {
+    "BaseUrl": "CAMBIAR",
+    "BearerToken": "CAMBIAR"
+  },
+  // Kyverum RUNT (vehículo, persona, impronta).
+  "ImprontaRunt": {
+    "BaseUrl": "https://runt.kyverum.com",
+    "ApiKey": "CAMBIAR"
+  },
+  // Kyverum Verify (validación de identidad). WebhookCallbackUrl solo hace falta si core-api usa Biometrics:Provider
+  // «kyverum»: es la dirección PÚBLICA (túnel) de este servicio + /api/v1/consultas/avisos/kyverum-verify.
+  "Kyverum": {
+    "BaseUrl": "https://verify.kyverum.com",
+    "ApiKey": "CAMBIAR",
+    "WebhookCallbackUrl": ""
+  },
+  // Solo si FasecoldaMode es «real».
+  "Fasecolda": {
+    "ApiBaseUrl": "",
+    "Username": "",
+    "Password": ""
+  },
+  // Certificado RUES: opcional; apagado, Trámites pide la carga manual.
+  "Rues": { "Enabled": false }
+}

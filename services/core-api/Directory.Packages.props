@@ -61,6 +61,23 @@
          línea 2.x compatible: 2.1.11 es la última 2.x y parchea CVE-2025-54575 (GHSA-rxmq-m78w-7wmc,
          DoS en decoder GIF) y los CVE previos de la 1.0.4. -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="2.1.11" />
+  </ItemGroup>
+
+  <!--
+    SUPRESIÓN TEMPORAL de NuGetAudit para SixLabors.ImageSharp 2.1.11 (HU #13371, épica #13216, 2026-10-07).
+    Cinco avisos publicados el 2026-10-07 cubren <= 4.1.1 sin 2.x parcheada; con TreatWarningsAsErrors
+    rompían restore/build (NU1902/NU1903). No se sube de versión: 3.x/4.x pasa a Six Labors Split License y
+    PdfSharpCore 1.3.65 exige la API 2.x (ver pin arriba). Superficie cerrada en código: toda decodificación
+    pasa por Flit.Infrastructure/Documents/PngJpegImageDecoding (firma PNG/JPEG + Configuration solo PNG/JPEG,
+    también antes de XImage.FromStream); los códecs TIFF/BigTIFF no son alcanzables y HistogramEqualization no
+    se usa. Se suprimen SOLO estas cinco URL (NuGetAudit y su nivel siguen activos para todo lo demás;
+    `dotnet list package -vulnerable` sigue mostrando el paquete). Retirar con la HU de fondo: licencia 4.x o
+    reemplazo por SkiaSharp.
+    Los cinco <NuGetAuditSuppress> viven en Directory.Build.props (los trajo develop en 51f48a474);
+    declararlos también aquí duplica los ítems y el restore falla con NU1508.
+  -->
+
+  <ItemGroup>
 
     <!-- AWS Cognito Identity Provider (ADR-0006 Provider Pattern +
          ADR-0008 clarificacion 2026-05-21). AWSSDK 3.7+ es AOT-friendly
@@ -87,6 +104,11 @@
          y GHSA-w3x6-4m5h-cxqf. 10.0.1 seguia marcado (NU1903); se sube a la ultima servicing
          10.0.10 (sin CVE). Alineado con Microsoft.AspNetCore.DataProtection 10.0.10 (NU1904). -->
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.11" />
+    <!-- Pin transitivo: System.Security.Cryptography.Pkcs 10.0.0 (via MailKit/MimeKit) quedó marcado el 2026-10-13 por
+         GHSA-846f-f764-76mx (alta, CVE-2026-84008) y GHSA-2fmv-rv2c-59x7 (moderada, CVE-2026-70162), ambos DoS;
+         corregidos en 10.0.13. Con TreatWarningsAsErrors (NU1902/NU1903) rompía el build de core-api, core-identity y
+         core-notificaciones, que importan este archivo. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
 
     <!-- Servidor OIDC del hub (FLIT Suite A-05, HU #12990; decisión de la espiga A-04, HU #12897).
          7.7.1 exige EF Core y Microsoft.Extensions 10.0.11 e IdentityModel 8.19.2: por eso se subieron
@@ -100,6 +122,20 @@
 
     <!-- gRPC server para la orquestación de creación de borrador desde core-ict (ICT). -->
     <PackageVersion Include="Grpc.AspNetCore" Version="2.71.0" />
+    <!-- Epic #13316 (ADR-0070) — contratos gRPC entre servicios generados desde contracts/proto. Mismas versiones que
+         services/core-ict/Directory.Packages.props, de donde ya llegaban a core-api a través de Flit.Ict.Grpc.Contracts:
+         no entra ningún paquete nuevo a la solución, solo se declara aquí la versión. -->
+    <PackageVersion Include="Google.Protobuf" Version="3.30.2" />
+    <PackageVersion Include="Grpc.Net.ClientFactory" Version="2.71.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.71.0" />
+    <!-- Epic #13316 (HU #13337) — SDK gRPC: errores con google.rpc.ErrorInfo, grpc.health.v1, reflection (solo DEV) y
+         circuito/reintentos. Polly.Core en la misma versión que ya llegaba transitiva (Microsoft.Extensions.Http.Polly). -->
+    <PackageVersion Include="Grpc.StatusProto" Version="2.71.0" />
+    <PackageVersion Include="Grpc.AspNetCore.HealthChecks" Version="2.71.0" />
+    <PackageVersion Include="Grpc.AspNetCore.Server.Reflection" Version="2.71.0" />
+    <PackageVersion Include="Polly.Core" Version="8.4.2" />
+    <!-- Epic #13316 (HU #13338, ADR-0064) — bus de eventos: publicador propio sobre RabbitMQ.Client (sin MassTransit). -->
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
 
     <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
          AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->

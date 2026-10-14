@@ -29,6 +29,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Flit.Identity.Infrastructure\Flit.Identity.Infrastructure.csproj" />
+    <!-- Epic #13316 (HU #13336): lo que no lee la base vive en el SDK de plataforma, que usan también los servicios nuevos. -->
+    <ProjectReference Include="..\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>

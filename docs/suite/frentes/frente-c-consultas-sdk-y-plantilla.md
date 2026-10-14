@@ -6,8 +6,8 @@
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
 > [contrato v1](../contrato-plataforma-v1.md) §3, §6 (consultas), §7 y §11, [plan maestro](../plan-maestro.md)
 > §3, §4.7, §4.8 y §4.10, [ADR-0061](../adr-borradores/ADR-0061-suite-productos-plataforma-y-monorepo.md),
-> [ADR-0064](../adr-borradores/ADR-0064-datos-separados-eventos-y-reportes.md),
-> [ADR-0065](../adr-borradores/ADR-0065-consultas-externas-capacidad-de-plataforma.md) y
+> [ADR-0064](../../decisions/ADR-0064-datos-separados-eventos-y-reportes.md),
+> [ADR-0065](../../decisions/ADR-0065-consultas-externas-capacidad-de-plataforma.md) y
 > `services/core-ict/` como precedente de servicio separado.
 
 ## Objetivo
