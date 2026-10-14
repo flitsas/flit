@@ -137,7 +137,7 @@ describe('modal de activación (AC4)', () => {
     await user.click(screen.getByRole('button', { name: 'Activar flujo manual' }));
     const dialog = screen.getByRole('dialog', { name: 'Activar flujo manual' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(within(dialog).getByText('Se enviará al cliente un enlace de captura por correo (vale 24 horas).')).toBeInTheDocument();
+    expect(within(dialog).getByText('Se enviará al cliente un enlace de captura por correo. El enlace caduca en 24 horas.')).toBeInTheDocument();
     expect(within(dialog).queryByText(/Se cancelará la validación de Kyverum/)).not.toBeInTheDocument();
   });
 

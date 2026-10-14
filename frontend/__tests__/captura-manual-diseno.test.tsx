@@ -153,6 +153,7 @@ describe("paso Firma alineado con Kyverum (HU #13295)", () => {
     expect(box).toHaveAttribute("tabindex", "0");
     expect(box).toHaveTextContent(AUTORIZACION_FIRMA_TEXT);
     expect(AUTORIZACION_FIRMA_TEXT).not.toMatch(/kyverum/i);
+    expect(AUTORIZACION_FIRMA_TEXT).not.toMatch(/responsable del tratamiento/i);
     expect(document.body.textContent).not.toMatch(/kyverum/i);
     expect(
       screen.getByText("Firma dentro del recuadro con el dedo o el mouse para autorizar y continuar con tu trámite."),

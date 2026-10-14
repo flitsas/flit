@@ -16,6 +16,7 @@ import {
   FileSignature,
   FileSpreadsheet,
   FileStack,
+  FileArchive,
   FileText,
   FolderCog,
   Fingerprint,
@@ -151,6 +152,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", Bell),
         // Epic #13316 (HU #13358): correos y webhooks que agotaron sus reintentos.
         superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", MailWarning),
+        // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
+        superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", FileArchive),
         superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
       ],
     },

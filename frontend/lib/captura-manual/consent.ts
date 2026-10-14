@@ -1,5 +1,7 @@
 // Textos literales del paso Datos (réplica de Kyverum, decisión del PO, Épica #13202).
 
+import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
+
 /**
  * Versión del TEXTO de consentimiento que este front renderiza. Debe coincidir con la vigente del backend
  * (`ManualCaptureConsent.TextVersion`, que devuelve el GET en `consentTextVersion`); al aceptar se envía la que
@@ -22,7 +24,8 @@ export const CAPTURE_TIPS = [
   "Usa el documento original.",
 ] as const;
 
-export const CONTACT_EMAIL = "samuel.cardenas@flitsas.com";
+// Bug #13449: canal de soporte de FLIT (el mismo de Ayuda y Dr. FLIT), no un correo personal.
+export const CONTACT_EMAIL = DR_FLIT_SUPPORT_EMAIL;
 
 export const LEGAL_FOOTER_PREFIX =
   "FLIT 2.0 guarda tus datos. Para conocerlos, corregirlos o pedir que se borren:";
@@ -31,6 +34,6 @@ export const LEGAL_FOOTER_PREFIX =
 // del PO); el resto sigue la captura del paso Firma del flujo real (2026-10-06).
 export const AUTORIZACION_FIRMA_TITLE = "Autorización de trámite digital";
 export const AUTORIZACION_FIRMA_TEXT =
-  "Declaro que adelanto esta verificación de forma libre y voluntaria. Autorizo a Flit (responsable del tratamiento) el tratamiento de mis datos personales, incluidos mis datos biométricos y mi firma, que son datos sensibles, únicamente para verificar mi identidad. Flit es quien guarda esos datos.";
+  "Declaro que adelanto esta verificación de forma libre y voluntaria. Autorizo a Flit el tratamiento de mis datos personales, incluidos mis datos biométricos y mi firma, que son datos sensibles, únicamente para verificar mi identidad. Flit es quien guarda esos datos.";
 export const AUTORIZACION_FIRMA_INSTRUCTION =
   "Firma dentro del recuadro con el dedo o el mouse para autorizar y continuar con tu trámite.";

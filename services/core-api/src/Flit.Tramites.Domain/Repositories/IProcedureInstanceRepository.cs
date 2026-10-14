@@ -728,6 +728,60 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// Épica #13216 (HU #13370) — TODOS los trámites que cumplen el filtro del listado, sin el tope de
+    /// página, en el mismo orden que <see cref="ListWithSummaryGraphFilteredAsync(Guid?, int, int, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, CancellationToken)"/>.
+    /// Misma base (<c>deleted_at IS NULL</c> + tenant), mismos filtros y mismo orden: solo cambia la
+    /// proyección (<see cref="ProcedureInstanceRef"/>, sin grafo) y la ausencia de <c>Skip/Take</c>.
+    /// <c>tenantId</c> <c>null</c> = todas las compañías (solo Super Admin; el guard vive en quien llama).
+    /// <para>Code review épica #13216 (Obs2): <paramref name="limite"/> corta la lectura en SQL (<c>LIMIT</c>, después
+    /// del mismo orden) para que el tope M1 no obligue a cargar toda la selección; <c>null</c> = sin límite.</para>
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántos trámites devolvería
+    /// <see cref="ListIdsFilteredAsync(Guid?, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, int?, CancellationToken)"/>
+    /// sin límite: misma base y mismo predicado, solo cambia la proyección (<c>COUNT</c>). Lo usa el 422
+    /// <c>seleccion_excede_tope</c> para informar el total sin cargar la selección.
+    /// </summary>
+    Task<int> CountIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13417 (épica #13216, ADR-0070 adenda v7) — selección del lote desde la vista de red: idéntica a
+    /// <see cref="ListIdsFilteredAsync(Guid?, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, int?, CancellationToken)"/>
+    /// (misma base, filtros, orden y <c>LIMIT</c>) pero el alcance entra por <see cref="TenantScope"/> con
+    /// <c>WhereTenantInScope</c>, como el listado de red: {cabeza} ∪ hijas, una sola hija tras <c>Narrow</c>, y un
+    /// conjunto de lectura vacío ⇒ cero filas. Con <c>IdsIncluidos</c> es la intersección en SQL de los ids del cuerpo
+    /// con el alcance (defensa contra ids inyectados). Nombre propio y no sobrecarga: <c>ListIdsFilteredAsync(null, …)</c>
+    /// (Super Admin) quedaría ambiguo.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredInScopeAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13417 — cuántos devolvería <see cref="ListIdsFilteredInScopeAsync"/> sin límite (mismo predicado contado en
+    /// SQL). Lo usa el 422 <c>seleccion_excede_tope</c> del lote de red.
+    /// </summary>
+    Task<int> CountIdsFilteredInScopeAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Las opciones de los filtros que dependen de los datos del tenant: los organismos con los que
     /// esta empresa tramita de verdad y los tipos de trámite que usa (HU #12106).
     ///

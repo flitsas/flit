@@ -43,6 +43,45 @@ public sealed class NetworkListProcedureInstancesHandler(
         return (items, total, null);
     }
 
+    /// <summary>
+    /// HU #13417 (épica #13216, ADR-0070 adenda v7) — el universo de <see cref="HandleAsync"/> resuelto en ids, sin
+    /// página: mismo <see cref="ListProcedureInstancesFilteredHandler.BuildFilter"/>, misma búsqueda rápida sobre el
+    /// alcance de red (propaga <see cref="BusquedaRapidaDemasiadoAmpliaException"/>) y mismo orden, así que su tamaño es
+    /// el <c>total</c> de <c>POST /network/instances/search</c> con el mismo filtro. <paramref name="alcance"/> es el
+    /// alcance YA validado y acotado (<c>Validate</c> → <c>ValidateRole</c> → <c>Narrow</c>, lo hace quien llama);
+    /// <paramref name="limite"/> corta la lectura en SQL (code review #13216, Obs2).
+    /// </summary>
+    public async Task<IReadOnlyList<ProcedureInstanceRef>> ResolveIdsAsync(
+        TenantScope alcance, ProcedureInstanceListRequest request, int? limite = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(alcance);
+        ArgumentNullException.ThrowIfNull(request);
+        var sortBy = ProcedureInstanceSortFields.Resolve(request.SortBy);
+        var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
+        var filter = ListProcedureInstancesFilteredHandler.BuildFilter(request);
+        filter = await AplicarBusquedaRapidaEnRedAsync(repo, busquedaRapida, alcance, request, filter, ct);
+
+        return await repo.ListIdsFilteredInScopeAsync(alcance, filter, sortBy, direction, limite, ct);
+    }
+
+    /// <summary>
+    /// HU #13417 — cuántos devolvería <see cref="ResolveIdsAsync"/> sin límite (mismo predicado contado en SQL). Con
+    /// <paramref name="soloIds"/> cuenta solo los de esa lista que cumplen el filtro (intersección vacía = 0 sin consultar).
+    /// </summary>
+    public async Task<int> CountIdsAsync(
+        TenantScope alcance, ProcedureInstanceListRequest request, IReadOnlyCollection<Guid>? soloIds = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(alcance);
+        ArgumentNullException.ThrowIfNull(request);
+        var filter = ListProcedureInstancesFilteredHandler.BuildFilter(request);
+        filter = await AplicarBusquedaRapidaEnRedAsync(repo, busquedaRapida, alcance, request, filter, ct);
+
+        if (ListProcedureInstancesFilteredHandler.AcotarAIds(filter, soloIds) is not { } acotado)
+            return 0;
+
+        return await repo.CountIdsFilteredInScopeAsync(alcance, acotado, ct);
+    }
+
     internal static async Task<ProcedureInstanceListFilter> AplicarBusquedaRapidaEnRedAsync(
         IProcedureInstanceRepository repo,
         BusquedaRapidaResolver? resolver,

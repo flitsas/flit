@@ -122,6 +122,14 @@ function auditDetailText(e: IdentityAuditEvent): string {
 }
 
 /**
+ * Bug #13449 — el tracking se lee de lo más reciente a lo más antiguo. El backend entrega los eventos en
+ * orden cronológico; aquí se invierte para mostrar (copia; empates por fecha conservan el último registrado arriba).
+ */
+function masRecientePrimero(events: IdentityAuditEvent[]): IdentityAuditEvent[] {
+  return [...events].reverse().sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
+}
+
+/**
  * Panel de tracking de identidad compartido (CF-07, Feature #11004, HU #11007). Extraído del
  * `IdentityAuditPanel` original de `BiometricStep` y generalizado para consumirse desde Validaciones,
  * Prevalidaciones y el propio trámite con un único punto de entrada: `validationId`.
@@ -189,7 +197,7 @@ export function IdentityValidationTrackingPanel({
       const res = network
         ? await tramitesClient.getNetworkIdentityAudit(validationId)
         : await tramitesClient.getBiometricAuditByValidation(validationId, tenantId ?? undefined);
-      setEvents(res.events);
+      setEvents(masRecientePrimero(res.events));
       setReferenced(res.referencedFromOtherProcedure ?? false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la bitácora.');
