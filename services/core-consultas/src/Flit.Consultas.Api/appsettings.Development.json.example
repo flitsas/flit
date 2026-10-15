@@ -57,5 +57,11 @@
     "Password": ""
   },
   // Certificado RUES: opcional; apagado, Trámites pide la carga manual.
-  "Rues": { "Enabled": false }
+  "Rues": { "Enabled": false },
+  // Fuentes de comparendos (HU #13465-#13467). Sin valor por defecto en el código: lo que falte deja la fuente «no conectada».
+  "SMARTCLOUD_ACCESS_KEY": "CAMBIAR (SMART_CLOUD_ACCESS_KEY de V1)",
+  "SMARTCLOUD_URL_IDENTIFICACION": "https://www3.simit.org.co/ServiciosSimit/EstadoCuentaIdentificacion",
+  "SMARTCLOUD_URL_PLACA": "https://www3.simit.org.co/ServiciosSimit/EstadoCuentaPlaca",
+  "MUNICIPAL_INFRACCIONES_BASE_URL": "http://ec2-44-206-131-113.compute-1.amazonaws.com",
+  "MUNICIPAL_INFRACCIONES_PATH": "/infraction/api/Infraccion/EntregarInfraccion"
 }

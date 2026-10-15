@@ -111,7 +111,7 @@ por defecto en el código:
 | `SMARTCLOUD_ACCESS_KEY` | La clave de V1 (`SMART_CLOUD_ACCESS_KEY`). Secreta |
 | `SMARTCLOUD_URL_IDENTIFICACION` | `https://www3.simit.org.co/ServiciosSimit/EstadoCuentaIdentificacion` |
 | `SMARTCLOUD_URL_PLACA` | `https://www3.simit.org.co/ServiciosSimit/EstadoCuentaPlaca` |
-| `MUNICIPAL_INFRACCIONES_BASE_URL` | La de V1 (`MUNICIPALITY_INFRACTION_API_BASE_URL`) o la nueva |
+| `MUNICIPAL_INFRACCIONES_BASE_URL` | `http://ec2-44-206-131-113.compute-1.amazonaws.com` (la de V1, `MUNICIPALITY_INFRACTION_API_BASE_URL`; la máquina de AWS sigue en producción) |
 | `MUNICIPAL_INFRACCIONES_PATH` | `/infraction/api/Infraccion/EntregarInfraccion` (contrato de V1) |
 
 Los timeouts (`*_TIMEOUT_SECONDS`) son opcionales: 60 s. Si falta alguna de las otras, la fuente aparece como «no
@@ -173,7 +173,7 @@ Trámites (§6.1 y §6.2 de handoff-vps-suite.md):
 | Pieza | Qué falta | Variables |
 |---|---|---|
 | SmartCloud por identificación y por placa (#13465, #13466) | Conector hecho. Falta una consulta real que confirme que la placa también lleva la clave delante y qué `error_Cod` devuelve el SIMIT para «sin comparendos» | `SMARTCLOUD_ACCESS_KEY` en core-consultas |
-| API municipal (#13467) | Conector hecho con el contrato de V1. Falta confirmar que sigue vigente (o el contrato nuevo) | `MUNICIPAL_INFRACCIONES_BASE_URL` en core-consultas |
+| API municipal (#13467) | Conector probado contra la API de V1 el 2026-10-15 (NIT de Bancolombia): responde por municipio, y un municipio caído (timeout, SSL, HTML) queda como error de ese municipio sin tocar los demás. Con `?placa=` responde vacío: la consulta por placa sigue sin confirmar | `MUNICIPAL_INFRACCIONES_BASE_URL` y `MUNICIPAL_INFRACCIONES_PATH` en core-consultas (valores de V1 arriba) |
 | API de contratos de Renting | Contrato (placa + fecha → conductor) | `COMPARENDOS_RENTING_API_URL`, `COMPARENDOS_RENTING_API_KEY` |
 | OCR | Llave de Anthropic y comparación con una muestra real | `COMPARENDOS_OCR_API_KEY` |
 

@@ -82,11 +82,13 @@ public sealed class CatalogosTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
-        var creado = await (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/municipios", new { codigoFuente = "CALI", nombre = "Cali" }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        // Los 8 municipios que responde hoy la API municipal de V1 vienen sembrados, con su organismo.
+        (await api.EnDbAsync(db => db.MunicipiosFuente.Where(m => m.CodigoFuente == "CALI" || m.CodigoFuente == "BELLO").CountAsync(m => m.OrganismoTransitoId != null, ct))).Should().Be(2);
+        var creado = await (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/municipios", new { codigoFuente = "PRB-MUNI", nombre = "Municipio de prueba" }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
 
         var cambio = await Super.PatchAsJsonAsync($"/api/v1/comparendos/admin/municipios/{creado.GetProperty("id").GetGuid()}", new { activo = false }, ct);
 
         (await cambio.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("activo").GetBoolean().Should().BeFalse();
-        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/municipios", new { codigoFuente = "CALI", nombre = "Otra" }, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/municipios", new { codigoFuente = "PRB-MUNI", nombre = "Otra" }, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 }

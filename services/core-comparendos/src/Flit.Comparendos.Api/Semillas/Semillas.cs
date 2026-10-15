@@ -25,6 +25,7 @@ public static class Semillas
         var ahora = time.GetUtcNow();
         await CalendarioAsync(db, ct).ConfigureAwait(false);
         await OrganismosAsync(db, ahora, ct).ConfigureAwait(false);
+        await MunicipiosFuenteAsync(db, ahora, ct).ConfigureAwait(false);
         await TrabajosAsync(db, ahora, ct).ConfigureAwait(false);
         await TipologiasSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
         await PromptOcrSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
@@ -89,6 +90,38 @@ public static class Semillas
                 CorreosRadicacion = o.CorreosRadicacion ?? [],
                 SincronizadoEn = ahora,
                 CreadoEn = ahora,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Catálogo de municipios de la API municipal (Epic GDC-2): los que responde hoy la API de V1
+    /// (BackCrudSmartCloud, consulta real del 2026-10-15), cada uno con su organismo. Solo si el catálogo está vacío: después
+    /// lo administra el SuperAdmin (activar, desactivar, agregar).
+    /// </summary>
+    private static async Task MunicipiosFuenteAsync(ComparendosDb db, DateTimeOffset ahora, CancellationToken ct)
+    {
+        if (await db.MunicipiosFuente.AnyAsync(ct).ConfigureAwait(false))
+            return;
+        (string Codigo, string Nombre, string Organismo)[] municipios =
+        [
+            ("BELLO", "Bello", "8cef5e91-c23c-5092-83e6-94306cdc7644"),
+            ("CALI", "Cali", "aaaaaaaa-0001-4000-8000-000000000003"),
+            ("ENVIGADO", "Envigado", "69f48545-a7cf-5201-9198-6e3b3fab9a99"),
+            ("ITAGUI", "Itagüí", "d31bc0e1-738d-5973-94d0-45d36f928c88"),
+            ("MANIZALES", "Manizales", "31991383-8efb-5743-837b-853d4c991ff9"),
+            ("MEDELLIN", "Medellín", "aaaaaaaa-0001-4000-8000-000000000002"),
+            ("RIONEGRO", "Rionegro", "a03222b8-627d-5940-a1db-7b1f3eba322b"),
+            ("SABANETA", "Sabaneta", "ba575641-ea48-5cd2-ac51-ebba02584ba5"),
+        ];
+        var existentes = await db.OrganismosTransito.Select(o => o.Id).ToListAsync(ct).ConfigureAwait(false);
+        foreach (var (codigo, nombre, organismo) in municipios)
+        {
+            var ot = Guid.Parse(organismo);
+            db.MunicipiosFuente.Add(new MunicipioFuente
+            {
+                Id = Guid.CreateVersion7(), CodigoFuente = codigo, Nombre = nombre, Activo = true,
+                OrganismoTransitoId = existentes.Contains(ot) || db.OrganismosTransito.Local.Any(o => o.Id == ot) ? ot : null, CreadoEn = ahora,
             });
         }
     }
