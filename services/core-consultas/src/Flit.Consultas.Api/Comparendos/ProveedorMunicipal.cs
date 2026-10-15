@@ -40,13 +40,7 @@ internal sealed class ProveedorMunicipal(IHttpClientFactory http, MunicipalOpcio
 
     public IReadOnlyList<CanalComparendos> Canales => [CanalComparendos.MunicipalIdentificacion];
 
-    public string? NoConectado => (opciones.BaseUrl, opciones.Ruta) switch
-    {
-        (null, null) => "Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_BASE_URL, MUNICIPAL_INFRACCIONES_PATH.",
-        (null, _) => "Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_BASE_URL.",
-        (_, null) => "Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_PATH.",
-        _ => null,
-    };
+    public string? NoConectado => opciones.BaseUrl is null || opciones.Ruta is null ? "La API municipal no está configurada en este ambiente." : null;
 
     public async Task<ConsultarComparendosResponse> ConsultarAsync(ConsultarComparendosRequest pedido, CancellationToken ct)
     {

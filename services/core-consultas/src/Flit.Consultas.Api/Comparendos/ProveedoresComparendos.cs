@@ -133,8 +133,8 @@ internal sealed class ProveedorVerifikSimit(IHttpClientFactory http, IOptions<Ve
     public IReadOnlyList<CanalComparendos> Canales => Fuente.Simit;
 
     public string? NoConectado =>
-        ConsultationProviderModeOptions.IsMock(modos.Value.VerifikSimitMode) ? "Verifik SIMIT está en modo mock en este ambiente (Consultations:VerifikSimitMode)."
-        : string.IsNullOrWhiteSpace(opciones.Value.ApiToken) ? "Falta la llave de Verifik (Verifik:BearerToken)."
+        ConsultationProviderModeOptions.IsMock(modos.Value.VerifikSimitMode) ? "Verifik SIMIT no está activo en este ambiente."
+        : string.IsNullOrWhiteSpace(opciones.Value.ApiToken) ? "Falta la llave de Verifik en este ambiente."
         : null;
 
     public async Task<ConsultarComparendosResponse> ConsultarAsync(ConsultarComparendosRequest pedido, CancellationToken ct)
@@ -249,7 +249,7 @@ internal sealed class ProveedorSimulado(TimeProvider time, bool habilitado) : IP
 
     public IReadOnlyList<CanalComparendos> Canales => [.. Fuente.Simit, .. Fuente.Municipal];
 
-    public string? NoConectado => habilitado ? null : "El proveedor simulado solo existe en DEV (Consultations:ComparendosSimulados).";
+    public string? NoConectado => habilitado ? null : "El proveedor simulado solo existe en el ambiente de desarrollo.";
 
     public Task<ConsultarComparendosResponse> ConsultarAsync(ConsultarComparendosRequest pedido, CancellationToken ct)
     {

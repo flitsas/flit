@@ -125,8 +125,9 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
               </option>
             ))}
           </select>
+          {/* B2-7: por qué un proveedor no está disponible, solo mientras se elige o si el elegido dejó de estarlo. */}
           {opciones
-            .filter((p) => !p.conectado)
+            .filter((p) => !p.conectado && (!f.proveedor || p.clave === f.proveedor))
             .map((p) => (
               <span key={p.clave} className="font-normal opacity-70">
                 {p.nombre}: {p.motivo ?? "no conectado"}

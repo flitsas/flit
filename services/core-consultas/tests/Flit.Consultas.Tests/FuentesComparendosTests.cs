@@ -225,7 +225,7 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
         new ProveedorSmartCloud(null!, SmartCloudOpciones.Desde(vacia)).NoConectado.Should()
             .Be("Falta configurar SmartCloud: SMARTCLOUD_URL_IDENTIFICACION, SMARTCLOUD_URL_PLACA.", "las direcciones del SIMIT no van quemadas en el código");
         new ProveedorMunicipal(null!, MunicipalOpciones.Desde(vacia)).NoConectado.Should()
-            .Be("Falta configurar la API municipal: MUNICIPAL_INFRACCIONES_BASE_URL, MUNICIPAL_INFRACCIONES_PATH.");
+            .Be("La API municipal no está configurada en este ambiente.");
     }
 
     [Fact]
