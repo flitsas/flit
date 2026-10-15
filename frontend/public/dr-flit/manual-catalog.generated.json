@@ -2282,7 +2282,7 @@
           "id": "companias",
           "title": "1. Compañías",
           "paragraphs": [
-            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
             "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:"
           ],
           "bullets": [
