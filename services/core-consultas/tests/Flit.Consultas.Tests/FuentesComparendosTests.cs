@@ -170,6 +170,9 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
         var r = await Consultar("simulado", CanalComparendos.SimitPlaca, placa: "XYZ987");
         r.Parciales.Single().Comparendos.Should().OnlyContain(c => c.Placa == "XYZ987");
+        // Como el SIMIT: número nacional de 20 dígitos que empieza con el código del organismo, para que Comparendos lo ubique.
+        string[] codigos = ["11001000", "05001000", "76001000", "08001000", "25754000"];
+        r.Parciales.Single().Comparendos.Should().OnlyContain(c => c.Numero.Length == 20 && c.Numero.All(char.IsAsciiDigit) && codigos.Contains(c.Numero.Substring(0, 8)));
         (await Consultar("simulado", CanalComparendos.SimitPlaca, placa: "ABC000")).Parciales.Single().Resultado.Should().Be(ResultadoFuente.Error);
     }
 

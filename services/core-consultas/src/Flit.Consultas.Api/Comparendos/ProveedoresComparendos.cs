@@ -228,10 +228,15 @@ internal sealed class ProveedorVerifikSimit(IHttpClientFactory http, IOptions<Ve
 /// </summary>
 internal sealed class ProveedorSimulado(TimeProvider time, bool habilitado) : IProveedorComparendos
 {
-    private static readonly string[] Secretarias =
+    /// <summary>
+    /// Código del organismo (8 cifras, las primeras del número nacional) y el nombre con que lo escribe la fuente. El
+    /// nombre no tiene que coincidir con el catálogo: como en el SIMIT real, el organismo se encuentra por el número.
+    /// </summary>
+    private static readonly (string Codigo, string Nombre)[] Secretarias =
     [
-        "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA", "SECRETARIA DE MOVILIDAD DE MEDELLIN", "SECRETARIA DE MOVILIDAD DE SANTIAGO DE CALI",
-        "SECRETARIA DE TRANSITO Y TRANSPORTE DE BARRANQUILLA", "SECRETARIA DE TRANSITO DE SOACHA",
+        ("11001000", "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA"), ("05001000", "SECRETARIA DE MOVILIDAD DE MEDELLIN"),
+        ("76001000", "SECRETARIA DE MOVILIDAD DE SANTIAGO DE CALI"), ("08001000", "SECRETARIA DE TRANSITO Y TRANSPORTE DE BARRANQUILLA"),
+        ("25754000", "SECRETARIA DE TRANSITO DE SOACHA"),
     ];
 
     private static readonly (string Codigo, string Descripcion, decimal Valor)[] Infracciones =
@@ -270,9 +275,13 @@ internal sealed class ProveedorSimulado(TimeProvider time, bool habilitado) : IP
             var fotomulta = b % 4 != 0;
             var dias = new[] { 2, 6, 14, 25, 45, 120, 400, 1200 }[hash[(i * 5) + 2] % 8];
             var imposicion = hoy.AddDays(-dias - (fotomulta ? 5 : 0));
+            var secretaria = Secretarias[hash[(i * 5) + 2] % Secretarias.Length];
             var c = new ComparendoDeFuente
             {
-                Numero = $"{(municipal ? "M" : string.Empty)}{1100100000000 + (BitConverter.ToUInt32(hash, i * 4 % 28) % 899999999)}",
+                // Número nacional de 20 dígitos: código del organismo + consecutivo (el municipal conserva su prefijo «M»).
+                Numero = municipal
+                    ? $"M{1100100000000 + (BitConverter.ToUInt32(hash, i * 4 % 28) % 899999999)}"
+                    : $"{secretaria.Codigo}{100000000000 + (BitConverter.ToUInt32(hash, i * 4 % 28) % 899999999):D12}",
                 Placa = porPlaca ? clave : $"{(char)('A' + (hash[(i * 5) + 4] % 26))}{(char)('A' + (b % 26))}{(char)('A' + (hash[i + 20] % 26))}{100 + (hash[i + 25] % 900)}",
                 TipoDocumentoInfractor = porPlaca ? "NIT" : (string.IsNullOrEmpty(pedido.TipoDocumento) ? "NIT" : pedido.TipoDocumento),
                 NumeroDocumentoInfractor = porPlaca ? "900123456" : clave,
@@ -283,7 +292,7 @@ internal sealed class ProveedorSimulado(TimeProvider time, bool habilitado) : IP
                 FechaImposicion = imposicion.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 HoraImposicion = $"{6 + (b % 14):00}:{b % 60:00}",
                 EsFotomulta = fotomulta,
-                Secretaria = Secretarias[hash[(i * 5) + 2] % Secretarias.Length],
+                Secretaria = secretaria.Nombre,
                 TipoVehiculo = "AUTOMOVIL",
                 ServicioVehiculo = "PARTICULAR",
                 ValorTotal = Fuente.Pesos(inf.Valor),
