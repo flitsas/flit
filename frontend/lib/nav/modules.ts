@@ -6,7 +6,6 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "dashboard",
   "tramites",
   "reportes",
-  "reportes-detallados",
   "validaciones",
   "historial-placa",
   "usuarios",
@@ -26,7 +25,6 @@ export const ALL_MODULE_IDS: ModuleId[] = [
 export const SPA_DOCK_MODULE_IDS: readonly ModuleId[] = [
   "tramites",
   "reportes",
-  "reportes-detallados",
   "validaciones",
   // HU #12194 — gate RBAC puro: solo aparece si `historial-placa` viene en accessibleCodes.
   "historial-placa",
@@ -42,9 +40,21 @@ export const SPA_DOCK_MODULE_IDS: readonly ModuleId[] = [
 export const OT_ADMIN_SPA_OMIT: ReadonlySet<string> = new Set([
   "tramites",
   "reportes",
-  "reportes-detallados",
   "usuarios",
 ]);
+
+/**
+ * HU #13582 (Épica #13271) — ids `?m=` retirados que aún llegan por marcadores o enlaces viejos, con su
+ * dirección nueva. Se redirige antes del gate de permisos: es la nueva dirección la que decide el acceso.
+ */
+export const LEGACY_MODULE_REDIRECTS: Readonly<Record<string, string>> = {
+  "reportes-detallados": "/?m=reportes&reportesTab=detallados",
+};
+
+/** Dirección nueva para un `?m=` retirado, o null si el id no está retirado. */
+export function legacyModuleRedirect(raw: string | null): string | null {
+  return raw ? (LEGACY_MODULE_REDIRECTS[raw] ?? null) : null;
+}
 
 /**
  * Único módulo universal de navegación: soporte real para cualquier usuario.
