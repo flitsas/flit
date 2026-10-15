@@ -185,6 +185,11 @@ por el gateway, que lo manda a core-comparendos.
 ```bash
 cp services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.json.example \
    services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.json   # y llena los CAMBIAR
+# Para el recorrido completo: Comparendos:Consultas:Address=http://127.0.0.1:8084 (fuentes por core-consultas, con el
+# proveedor «simulado» y los reales), Comparendos:Notificaciones:Address=http://127.0.0.1:8085 (con Smtp:Host vacío en
+# core-notificaciones el correo queda en su log) y Comparendos:Tramites:Address=http://127.0.0.1:8082 (réplica de
+# organismos; core-api con Ict__GrpcPort=8082 y Suite__Hosts__Overrides__comparendos=http://127.0.0.1:4023).
+# El gateway necesita los destinos locales de core-comparendos y core-consultas (están en su appsettings de ejemplo).
 cd services/core-comparendos/src/Flit.Comparendos.Api && dotnet build && \
 ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Comparendos.Api.dll
 
