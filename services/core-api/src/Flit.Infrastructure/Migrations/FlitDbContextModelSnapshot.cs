@@ -4810,9 +4810,11 @@ namespace Flit.Infrastructure.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
-                        .HasColumnName("code");
+                        .HasColumnName("code")
+                        .HasDefaultValueSql("identity.fn_next_tenant_code()");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -4839,6 +4841,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("legal_name");
+
+                    b.Property<string>("LegacyCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("legacy_code");
 
                     b.Property<Guid?>("ParentTenantId")
                         .HasColumnType("uuid")
