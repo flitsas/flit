@@ -60,6 +60,18 @@ public sealed class MonitoreoTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
     }
 
     [Fact]
+    public async Task PlacaAgregadaDesdeElOcr_QuedaConOrigenOcr()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var cliente = api.Cliente(Admin(Guid.NewGuid()));
+
+        var r = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/monitoreo/placas", new { placas = new[] { "OCR123" }, origen = "OCR" }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        r.GetProperty("agregadas")[0].GetProperty("origenRegistro").GetString().Should().Be("OCR", "§3.4: la placa que se agrega desde el flujo OCR queda con origen OCR");
+        (await cliente.PostAsJsonAsync("/api/v1/comparendos/monitoreo/placas", new { placas = new[] { "OCR124" }, origen = "OTRO" }, ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task OtraEmpresa_NoVeNiCambiaLoAjeno()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

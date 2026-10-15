@@ -31,7 +31,7 @@ export function OfertaPlacas({ placas }: { placas: string[] }) {
   const registrar = async () => {
     setEnviando(true);
     try {
-      const r = await apiFetch<ResultadoPlacas>("/monitoreo/placas", { method: "POST", body: { placas } });
+      const r = await apiFetch<ResultadoPlacas>("/monitoreo/placas", { method: "POST", body: { placas, origen: "OCR" } });
       const partes = [`${r.agregadas.length} placa(s) quedaron monitoreadas`];
       if (r.yaExistian.length) partes.push(`${r.yaExistian.join(", ")} ya estaba(n) monitoreada(s)`);
       if (r.invalidas.length) partes.push(`${r.invalidas.join(", ")} no es una placa válida`);

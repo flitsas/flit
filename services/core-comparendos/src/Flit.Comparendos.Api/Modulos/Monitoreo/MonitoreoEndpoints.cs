@@ -22,7 +22,8 @@ public static class MonitoreoEndpoints
 
     public sealed record CambioNit(bool? Activo, string? NombreTitular);
 
-    public sealed record NuevasPlacas(IReadOnlyList<string> Placas);
+    /// <summary>Placas nuevas; <c>Origen</c> = OCR cuando se agregan desde la revisión de un documento OCR (§3.4).</summary>
+    public sealed record NuevasPlacas(IReadOnlyList<string> Placas, string? Origen = null);
 
     public sealed record CambioPlaca(bool Activo);
 
@@ -148,6 +149,9 @@ public static class MonitoreoEndpoints
         var tenant = usuario.EmpresaOperacion();
         if (pedido.Placas is not { Count: > 0 and <= 5000 })
             throw new ReglaException("PLACAS_REQUERIDAS", "Envía entre 1 y 5.000 placas.");
+        var origen = (pedido.Origen ?? "ADMIN").Trim().ToUpperInvariant();
+        if (origen is not ("ADMIN" or "OCR"))
+            throw new ReglaException("ORIGEN_INVALIDO", "El origen de la placa es ADMIN u OCR.");
 
         var invalidas = new List<string>();
         var normalizadas = new List<string>();
@@ -170,6 +174,7 @@ public static class MonitoreoEndpoints
             Id = Guid.CreateVersion7(),
             TenantId = tenant,
             Placa = p,
+            OrigenRegistro = origen,
             CreadoEn = reloj.Ahora,
             CreadoPor = usuario.Id,
         }).ToList();
