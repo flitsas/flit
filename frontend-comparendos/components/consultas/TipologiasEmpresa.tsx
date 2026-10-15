@@ -2,6 +2,7 @@
 
 import { DataTable } from "@flit/ui";
 import { apiFetch } from "@/lib/api";
+import { estadoLegal } from "@/lib/etiquetas";
 import type { Tipologia } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
@@ -28,7 +29,7 @@ export function TipologiasEmpresa({ empresa }: { empresa?: string | null }) {
         columns={[
           { key: "codigo", header: "Código", render: (t) => <span className="font-mono font-semibold">{t.codigo}</span> },
           { key: "nombre", header: "Tipología", render: (t) => t.nombre },
-          { key: "estados", header: "Procede en", render: (t) => t.estadosLegalesPermitidos.join(", ") },
+          { key: "estados", header: "Procede en", render: (t) => t.estadosLegalesPermitidos.map((e) => estadoLegal(e).texto).join(", ") },
           { key: "plazo", header: "Plazo de respuesta del OT", align: "right", render: (t) => `${t.plazoRespuestaOtDiasHabiles} días hábiles` },
           { key: "masivo", header: "Envío masivo", render: (t) => (t.permiteMasivo ? "Sí" : "No") },
         ]}
