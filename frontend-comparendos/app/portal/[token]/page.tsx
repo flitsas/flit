@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 
 interface Portal {
   empresa: string | null;
+  /** Conjunto de plantillas de la empresa: con «Renting» el portal no lleva nada de FLIT (como sus correos, decisión D9). */
+  conjunto: "Flit" | "Renting";
   conductor: { nombres: string; documento: string } | null;
   comparendo: {
     numero: string;
@@ -62,15 +64,18 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
   }
 
   const c = portal.comparendo;
+  // La marca de la gestora (§7.17) es su conjunto de plantillas, igual que en los correos (HtmlCorreo.Envolver).
+  const marcaFlit = portal.conjunto !== "Renting";
+  const fondoEncabezado = marcaFlit ? "#162744" : "#3A4250";
   const color =
     portal.descuento.ventana === "Descuento50" ? "#00A86B" : portal.descuento.ventana === "Descuento25" ? "#D98A00" : "#C2410C";
   return (
     <main className="mx-auto flex min-h-full max-w-lg flex-col gap-4 bg-[#F4F6FA] px-4 py-6">
-      <header className="flex flex-col gap-1">
-        <p className="text-xs uppercase tracking-wide text-slate-500">{portal.empresa ?? "Comparendos"}</p>
-        <h1 className="text-xl font-semibold text-[#162744]">Comparendo {c.numero}</h1>
+      <header className="flex flex-col gap-1 rounded-xl px-4 py-4 text-white" style={{ background: fondoEncabezado }}>
+        <p className="text-xs uppercase tracking-wide opacity-80">{portal.empresa ?? (marcaFlit ? "FLIT" : "Comparendos")}</p>
+        <h1 className="text-xl font-semibold">Comparendo {c.numero}</h1>
         {portal.conductor && (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm opacity-90">
             {portal.conductor.nombres} · {portal.conductor.documento}
           </p>
         )}
@@ -109,7 +114,10 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
         </section>
       )}
 
-      <footer className="pb-6 text-center text-xs text-slate-500">Este enlace es personal y está disponible hasta el {formatoFecha(portal.vence)}.</footer>
+      <footer className="flex flex-col gap-1 pb-6 text-center text-xs text-slate-500">
+        <span>Este enlace es personal y está disponible hasta el {formatoFecha(portal.vence)}.</span>
+        <span>{marcaFlit ? "FLIT · Gestión de Comparendos" : (portal.empresa ?? "")}</span>
+      </footer>
     </main>
   );
 }

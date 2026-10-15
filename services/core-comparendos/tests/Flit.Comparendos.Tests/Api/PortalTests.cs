@@ -42,6 +42,7 @@ public sealed class PortalTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         var portal = await api.Anonimo().GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/publico/portal/{token}", ct);
         portal.GetProperty("conductor").GetProperty("documento").GetString().Should().Be("CC ****4050");
         portal.GetProperty("comparendo").GetProperty("organismo").GetString().Should().Be("SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA");
+        portal.GetProperty("conjunto").GetString().Should().Be("Flit", "el portal lleva la marca del conjunto de plantillas de la gestora (§7.17)");
         portal.GetProperty("descuento").GetProperty("texto").GetString().Should().StartWith("50% de descuento hasta el");
         portal.ToString().Should().NotContain("radicado").And.NotContain("representante");
 
