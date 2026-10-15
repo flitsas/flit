@@ -90,10 +90,23 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
             : d.ImplementationType?.FullName;
         if (impl is null)
         {
-            // Options de transporte que varían por SO / disponibilidad (NamedPipe Windows, Quic opcional).
             var service = d.ServiceType.FullName ?? string.Empty;
-            return service.Contains("NamedPipeTransportOptions", StringComparison.Ordinal)
-                   || service.Contains("QuicTransportOptions", StringComparison.Ordinal);
+            // NamedPipe: solo Windows.
+            if (service.Contains("NamedPipeTransportOptions", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            // Local Windows añade ConfigureNamedOptions<LoggerFilterOptions> genérico;
+            // en CI/Linux ya existe EventLogFiltersConfigureOptions (impl tipada) y se conserva.
+            if (service.Contains("LoggerFilterOptions", StringComparison.Ordinal)
+                && d.ImplementationInstance is not null
+                && d.ImplementationInstance.GetType().Name.StartsWith("ConfigureNamedOptions", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         return impl.Contains("NamedPipes", StringComparison.Ordinal)
