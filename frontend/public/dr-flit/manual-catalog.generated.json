@@ -2161,7 +2161,7 @@
             "Administración → Red de clientes (solo cabezas de red):"
           ],
           "bullets": [
-            "Agregar cliente a la red: razón social, NIT, código y tipo de compañía. Nace vinculado a tu red.",
+            "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
             "Activar / Desactivar cliente, con confirmación.",
             "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
             "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red."
@@ -2282,7 +2282,7 @@
           "id": "companias",
           "title": "1. Compañías",
           "paragraphs": [
-            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. «Crear compañía»: razón social, NIT, código único (máx. 32), tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
             "Abrir una fila lleva a la ficha completa de la compañía, con 7 pestañas:"
           ],
           "bullets": [
@@ -2316,7 +2316,7 @@
           "id": "organismos",
           "title": "3. Tránsito → Organismos",
           "paragraphs": [
-            "Catálogo de organismos de tránsito con código DIVIPOL, código integrador y departamento; filtra por estado, departamento o integrador. «Activar organismo de tránsito» crea su inquilino y lo deja operable; desde la fila entras a su hub, con 10 pestañas: Trámites (bandeja de decisión), Reglas, Documentos (prelación y etiquetas), Requisitos, Usuarios, Reportes, Mandatos, Validar impronta, Revocatorias (decidir las solicitudes que llegan del gestor) y Configuración (modo Quipux, ventana de revocatoria, feature flags)."
+            "Catálogo de organismos de tránsito con código DIVIPOL, código integrador y departamento; filtra por estado, departamento o integrador. «Activar organismo de tránsito» crea su inquilino (con su código consecutivo COMP-XXXX, asignado por el sistema) y lo deja operable; desde la fila entras a su hub, con 10 pestañas: Trámites (bandeja de decisión), Reglas, Documentos (prelación y etiquetas), Requisitos, Usuarios, Reportes, Mandatos, Validar impronta, Revocatorias (decidir las solicitudes que llegan del gestor) y Configuración (modo Quipux, ventana de revocatoria, feature flags)."
           ],
           "bullets": [],
           "callouts": [

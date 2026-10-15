@@ -1,5 +1,6 @@
 // Alta de compañía (#10118) — el modal valida requeridos en cliente, envía el
 // payload correcto vía onCreate y mapea los errores 422 del backend por campo.
+// HU #13607 — el formulario ya no pide el código: lo asigna el servidor (COMP-XXXX).
 //
 // Uso de ejemplo:
 //   render(<CreateCompanyDialog open onClose={fn} onCreate={fn} onCreated={fn} />);
@@ -27,7 +28,6 @@ describe("CreateCompanyDialog (#10118)", () => {
 
     expect(await screen.findByText(/la razón social es obligatoria/i)).toBeInTheDocument();
     expect(screen.getByText(/el nit es obligatorio/i)).toBeInTheDocument();
-    expect(screen.getByText(/el código es obligatorio/i)).toBeInTheDocument();
     expect(onCreate).not.toHaveBeenCalled();
   });
 
@@ -40,7 +40,6 @@ describe("CreateCompanyDialog (#10118)", () => {
 
     await user.type(screen.getByLabelText(/razón social/i), "Renting Andino S.A.S.");
     await user.type(screen.getByLabelText(/^nit$/i), "900123456-1");
-    await user.type(screen.getByLabelText(/código/i), "RENTANDINO");
     await user.selectOptions(screen.getByLabelText(/tipo de compañía/i), "CONCESIONARIO");
     await user.click(screen.getByRole("button", { name: /crear compañía/i }));
 
@@ -48,7 +47,6 @@ describe("CreateCompanyDialog (#10118)", () => {
       expect(onCreate).toHaveBeenCalledWith({
         razonSocial: "Renting Andino S.A.S.",
         nit: "900123456-1",
-        code: "RENTANDINO",
         tenantType: "CONCESIONARIO",
         estadoActivo: true,
       }),
@@ -62,17 +60,45 @@ describe("CreateCompanyDialog (#10118)", () => {
     const onCreate = vi
       .fn()
       .mockRejectedValue(
-        new ApiValidationError([{ field: "code", message: "Ya existe una compañía con ese código." }], 422),
+        new ApiValidationError([{ field: "nit", message: "Ya existe una compañía con ese NIT." }], 422),
       );
 
     render(<CreateCompanyDialog open onClose={vi.fn()} onCreate={onCreate} onCreated={onCreated} />);
 
     await user.type(screen.getByLabelText(/razón social/i), "Otra Compañía");
     await user.type(screen.getByLabelText(/^nit$/i), "900222333-4");
-    await user.type(screen.getByLabelText(/código/i), "DUPLICADO");
     await user.click(screen.getByRole("button", { name: /crear compañía/i }));
 
-    expect(await screen.findByText(/ya existe una compañía con ese código/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ya existe una compañía con ese nit/i)).toBeInTheDocument();
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  it("HU #13607: no muestra el campo Código ni lo envía", async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockResolvedValue({ ...createdCompany, code: "COMP-0577" });
+    render(<CreateCompanyDialog open onClose={vi.fn()} onCreate={onCreate} onCreated={vi.fn()} />);
+
+    expect(screen.queryByLabelText(/código/i)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/razón social/i), "Renting Andino S.A.S.");
+    await user.type(screen.getByLabelText(/^nit$/i), "900123456-1");
+    await user.click(screen.getByRole("button", { name: /crear compañía/i }));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    expect(onCreate.mock.calls[0][0]).not.toHaveProperty("code");
+  });
+
+  it("HU #13607: un error sin campo se muestra como alerta y no cierra el modal", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    const onCreate = vi.fn().mockRejectedValue(new Error("red caída"));
+    render(<CreateCompanyDialog open onClose={vi.fn()} onCreate={onCreate} onCreated={onCreated} />);
+
+    await user.type(screen.getByLabelText(/razón social/i), "Renting Andino S.A.S.");
+    await user.type(screen.getByLabelText(/^nit$/i), "900123456-1");
+    await user.click(screen.getByRole("button", { name: /crear compañía/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo crear la compañía/i);
     expect(onCreated).not.toHaveBeenCalled();
   });
 });
