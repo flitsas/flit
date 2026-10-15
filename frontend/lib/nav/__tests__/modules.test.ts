@@ -98,11 +98,10 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
     const valid = resolveNavigableModuleIds({
       ...base,
       isOtAdmin: true,
-      accessibleCodes: ["tramites", "reportes", "reportes-detallados", "usuarios", "validaciones"],
+      accessibleCodes: ["tramites", "reportes", "usuarios", "validaciones"],
     });
     expect(valid).not.toContain("tramites");
     expect(valid).not.toContain("reportes");
-    expect(valid).not.toContain("reportes-detallados");
     expect(valid).not.toContain("usuarios");
     expect(valid).toContain("validaciones");
     expect(valid).toContain("ayuda");

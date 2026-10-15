@@ -7,7 +7,6 @@ import { Dashboard } from "@/components/atom/modules/Dashboard";
 import { OtDashboard } from "@/components/atom/modules/OtDashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
-import { ReportesDetallados } from "@/components/atom/modules/ReportesDetallados";
 import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { HistorialPlaca } from "@/components/atom/modules/HistorialPlaca";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
@@ -22,6 +21,7 @@ import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import {
+  legacyModuleRedirect,
   planSpaModuleAccess,
   puedeDecidirAccesoAModulo,
   resolveNavigableModuleIds,
@@ -94,6 +94,15 @@ function HomeContent() {
     // Cuándo se puede decidir vive en `puedeDecidirAccesoAModulo`, con el porqué documentado allí:
     // esperar solo a `modulesLoading` evaluaba el permiso contra una lista vacía.
     if (!puedeDecidirAccesoAModulo({ hydrated, authed, modulesReady })) return;
+
+    // HU #13582 — un `?m=` retirado (p. ej. Reportes Detallados, hoy pestaña de Reportes) se lleva a su
+    // dirección nueva antes de evaluar permisos; ahí decide el gate normal. Va después de la espera de
+    // sesión: antes, sin sesión, este replace le ganaba al envío al login y la página quedaba en blanco.
+    const legacy = legacyModuleRedirect(rawModule);
+    if (legacy) {
+      router.replace(legacy, { scroll: false });
+      return;
+    }
 
     const plan = planSpaModuleAccess(rawModule, navigableIds);
 
@@ -172,7 +181,6 @@ function HomeContent() {
       )}
       {moduleReady && module === "tramites" && <Tramites />}
       {moduleReady && module === "reportes" && <Reportes />}
-      {moduleReady && module === "reportes-detallados" && <ReportesDetallados />}
       {moduleReady && module === "validaciones" && <Validaciones />}
       {/* HU #12194 — el gate real es RBAC (`historial-placa` en accessibleCodes, ya aplicado por
           resolveNavigableModuleIds); `isSuperAdmin` aquí solo decide si se pinta la columna de

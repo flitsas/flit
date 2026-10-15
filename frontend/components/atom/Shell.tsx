@@ -25,7 +25,6 @@ export type ModuleId =
   | "dashboard"
   | "tramites"
   | "reportes"
-  | "reportes-detallados"
   | "validaciones"
   | "historial-placa"
   | "usuarios"

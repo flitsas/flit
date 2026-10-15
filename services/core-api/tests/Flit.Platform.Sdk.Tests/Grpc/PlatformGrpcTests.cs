@@ -30,6 +30,13 @@ public sealed class PlatformGrpcTests : IAsyncLifetime
     private const string Scope = "platform.consultas";
     private const string Audience = "consultas";
 
+    /// <summary>
+    /// Plazo de las pruebas que no son sobre el plazo. El del SDK (3 s) es el de producción y se prueba aparte: con él,
+    /// la primera llamada de una prueba (token, JWKS, validación del JWT, JIT) podía pasar de 3 s en un runner cargado
+    /// del CI y fallar con DeadlineExceeded sin que nada estuviera roto (PR #593).
+    /// </summary>
+    private static readonly TimeSpan PlazoDePrueba = TimeSpan.FromSeconds(30);
+
     private readonly TestKeys _keys = new();
     private readonly JwksHandler _jwks = new();
     private readonly PruebaImpl.Contador _contador = new();
@@ -58,6 +65,20 @@ public sealed class PlatformGrpcTests : IAsyncLifetime
         _server.MapGrpcService<PruebaImpl>();
         _server.MapFlitGrpcPlatform(_server.Environment);
         await _server.StartAsync();
+        await CalentarAsync();
+    }
+
+    /// <summary>
+    /// Una llamada completa antes de cada prueba: deja en caché las llaves (JWKS) del servidor y compilado el camino
+    /// del interceptor, para que ninguna prueba pague el arranque en frío dentro de su plazo. El contador vuelve a cero
+    /// porque varias pruebas cuentan llegadas exactas.
+    /// </summary>
+    private async Task CalentarAsync()
+    {
+        using var client = Client();
+        await client.Get().EcoAsync(new EcoRequest { Modo = "ok" },
+            new Metadata { { "x-flit-tenant-id", Guid.NewGuid().ToString() } }, cancellationToken: TestContext.Current.CancellationToken);
+        _contador.Reiniciar();
     }
 
     public async ValueTask DisposeAsync() => await _server.DisposeAsync();
@@ -67,8 +88,10 @@ public sealed class PlatformGrpcTests : IAsyncLifetime
     [Fact]
     public async Task ElCliente_EnviaTokenEmpresaCorrelacionYTraceparent_ConDeadlineDe3s()
     {
+        new PlatformGrpcClientOptions().Deadline.Should().Be(TimeSpan.FromSeconds(3), "es el plazo por defecto del SDK");
+
         var tenant = Guid.NewGuid();
-        using var client = Client(http: Peticion(tenant, "corr-123"));
+        using var client = Client(http: Peticion(tenant, "corr-123"), configure: o => o.Deadline = TimeSpan.FromSeconds(3));
         using var activity = new Activity("prueba-sdk").Start();
 
         var eco = await client.Get().EcoAsync(new EcoRequest { Modo = "ok" }, cancellationToken: TestContext.Current.CancellationToken);
@@ -78,7 +101,9 @@ public sealed class PlatformGrpcTests : IAsyncLifetime
         eco.Tenant.Should().Be(tenant.ToString());
         eco.Correlation.Should().Be("corr-123");
         eco.Traceparent.Should().Contain(activity.TraceId.ToString());
-        eco.DeadlineMs.Should().BeInRange(2_000, 3_000);
+        // El servidor ve lo que queda del plazo al recibir la llamada: con el canal ya caliente son milisegundos menos
+        // de 3 s; el piso de 1 s deja holgura a un runner lento sin dejar de probar que el plazo viaja.
+        eco.DeadlineMs.Should().BeInRange(1_000, 3_000);
     }
 
     [Fact]
@@ -263,7 +288,11 @@ public sealed class PlatformGrpcTests : IAsyncLifetime
         services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor { HttpContext = http });
         if (clock is not null)
             services.AddSingleton<TimeProvider>(clock);
-        services.AddFlitGrpcClient<PruebaService.PruebaServiceClient>(config, new Uri("http://localhost"), Scope, configure)
+        services.AddFlitGrpcClient<PruebaService.PruebaServiceClient>(config, new Uri("http://localhost"), Scope, o =>
+            {
+                o.Deadline = PlazoDePrueba;
+                configure?.Invoke(o);
+            })
             .ConfigurePrimaryHttpMessageHandler(() => _server.GetTestServer().CreateHandler());
         services.AddHttpClient(ServiceTokenProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => tokenHandler);
         return new ClienteDePrueba(services.BuildServiceProvider(), tokenHandler);
@@ -342,6 +371,12 @@ internal sealed class PruebaImpl(PruebaImpl.Contador contador) : PruebaService.P
         public void Llegó() => Interlocked.Increment(ref _llamadas);
 
         public void FallarLasPrimeras(int n) => Volatile.Write(ref _fallarPrimeras, n);
+
+        public void Reiniciar()
+        {
+            Volatile.Write(ref _llamadas, 0);
+            Volatile.Write(ref _fallarPrimeras, 0);
+        }
 
         public bool DebeFallar() => Interlocked.Decrement(ref _fallarPrimeras) >= 0;
     }

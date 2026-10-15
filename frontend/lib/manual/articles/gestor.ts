@@ -772,6 +772,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         bullets: [
           "Resumen general: volumen por familia (Matrículas, Traspasos, Otros) y tiempos: el de tu equipo (creación → entrega) y el del organismo (entrega → decisión).",
           "Operación / Trámites: trámites creados por mes y categoría, y embudo de estados.",
+          "Reportes Detallados: tus trámites uno por uno, en una grilla que puedes filtrar y exportar (ver la sección 3).",
           "Organismo de Tránsito: entregados por organismo y por tipo de trámite.",
           "Uso del aplicativo: actividad de los usuarios en la plataforma.",
           "Productividad: rendimiento por gestor.",
@@ -805,9 +806,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       },
       {
         id: "detallados",
-        title: "3. Reportes Detallados (otro módulo)",
+        title: "3. Pestaña Reportes Detallados",
         paragraphs: [
-          "«Reportes Detallados» es una píldora aparte del dock, no una pestaña de Reportes. Sirve para segmentar trámite a trámite por persona, transformación, leasing u organismo. Consulta el artículo «Reportes Detallados» para el detalle.",
+          "«Reportes Detallados» es una pestaña de Reportes, justo después de «Operación / Trámites». Sirve para segmentar trámite a trámite por persona, transformación, leasing u organismo. Consulta el artículo «Reportes Detallados» para el detalle.",
+          "Esta pestaña trae sus propios filtros y su propio botón de descarga: mientras la tienes abierta, los filtros generales de Reportes se ocultan para que no haya dos juegos de filtros en pantalla.",
         ],
       },
       {
@@ -1010,13 +1012,13 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "grilla",
       "consulta detallada",
     ],
-    summary: "Qué es Reportes Detallados, cuándo usarlo en vez de Reportes y cómo entrar.",
+    summary: "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas y cómo entrar.",
     blocks: [
       {
         id: "que-es",
         title: "1. Qué es",
         paragraphs: [
-          "Reportes Detallados es un módulo aparte (píldora propia del dock, no una pestaña de Reportes) para consultar tus trámites trámite a trámite, en una grilla filtrable y exportable, en vez de ver solo totales agregados.",
+          "Reportes Detallados es una pestaña del módulo Reportes para consultar tus trámites uno por uno, en una grilla filtrable y exportable, en vez de ver solo totales agregados.",
           "Puedes segmentar por persona (documento o nombre), tipo y categoría de trámite, estado, radicado, organismo de tránsito, si el trámite tiene una transformación (por ejemplo, cambio de características del vehículo) y si es un trámite de leasing. Por defecto muestra los últimos 30 días.",
         ],
         callouts: [
@@ -1028,10 +1030,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       },
       {
         id: "cuando-usar",
-        title: "2. Cuándo usarlo frente a Reportes",
+        title: "2. Cuándo usarla frente a las demás pestañas",
         paragraphs: [],
         bullets: [
-          "Usa Reportes cuando necesites tendencias, volúmenes y tiempos agregados (por mes, por organismo, por gestor).",
+          "Usa las demás pestañas de Reportes cuando necesites tendencias, volúmenes y tiempos agregados (por mes, por organismo, por gestor).",
           "Usa Reportes Detallados cuando necesites identificar trámites puntuales que cumplen una condición específica (por ejemplo, todos los trámites de leasing con transformación pendientes en un organismo) para exportarlos y trabajarlos fila por fila.",
         ],
       },
@@ -1039,7 +1041,12 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "entrar",
         title: "3. Cómo entrar",
         paragraphs: [
-          "Píldora «Reportes Detallados» del dock, visible si tu rol tiene el permiso correspondiente. Si eres Administrador de una cabeza de red, el mismo selector de alcance de Trámites te deja consultar «Toda la red» o un cliente puntual.",
+          "Si eres Administrador de una cabeza de red, el selector de alcance de la pestaña es el mismo de Trámites: te deja consultar «Toda la red» o un cliente puntual.",
+        ],
+        bullets: [
+          "Paso 1: abre «Reportes» desde el dock.",
+          "Paso 2: elige la pestaña «Reportes Detallados». Solo aparece si tu rol tiene el permiso correspondiente.",
+          "Paso 3: ajusta los filtros de la pestaña y pulsa Buscar.",
         ],
       },
       {
