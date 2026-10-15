@@ -199,7 +199,7 @@ public sealed class CodigoTenantSecuencialTests
     // ── Modelo de EF ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void ElModeloDeclaraElDefaultDelCodigoYLaColumnaLegacy()
+    public void ElModeloDeclaraElDefaultDelCodigoYNoMapeaLaColumnaLegacy()
     {
         using var db = NewContext();
         var entidad = db.Model.FindEntityType(typeof(Tenant))!;
@@ -209,10 +209,9 @@ public sealed class CodigoTenantSecuencialTests
         code.ValueGenerated.Should().Be(ValueGenerated.OnAdd);
         code.GetMaxLength().Should().Be(32);
 
-        var legacy = entidad.FindProperty(nameof(Tenant.LegacyCode))!;
-        legacy.GetColumnName().Should().Be("legacy_code");
-        legacy.IsNullable.Should().BeTrue("los tenants creados después de la recodificación no tienen código anterior");
-        legacy.GetMaxLength().Should().Be(32);
+        // legacy_code es solo trazabilidad en la base. Si EF la mapeara, la incluiría en cada SELECT/INSERT y fallaría
+        // contra un esquema anterior a la migración 136 (pruebas de Down/Up de otras migraciones, CI de la HU #13604).
+        entidad.GetProperties().Select(p => p.GetColumnName()).Should().NotContain("legacy_code");
 
         entidad.GetIndexes().Single(i => i.GetDatabaseName() == "uq_tenants_code").IsUnique.Should().BeTrue();
     }

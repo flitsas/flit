@@ -476,7 +476,7 @@ public static class DevelopmentAuthSeeder
 
         // 1. Tenant OT-SABANETA
         var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == OtSabanetaTenantId || t.LegacyCode == "OT-SABANETA", cancellationToken);
+            .FirstOrDefaultAsync(t => t.Id == OtSabanetaTenantId || t.TaxId == "900273813-7", cancellationToken);
         if (tenant is null)
         {
             tenant = new Tenant
@@ -573,7 +573,7 @@ public static class DevelopmentAuthSeeder
 
         // 1. Tenant OT-ENVIGADO
         var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == OtEnvigadoTenantId || t.LegacyCode == "OT-ENVIGADO", cancellationToken);
+            .FirstOrDefaultAsync(t => t.Id == OtEnvigadoTenantId || t.TaxId == "900000266-5", cancellationToken);
         if (tenant is null)
         {
             tenant = new Tenant

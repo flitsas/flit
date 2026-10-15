@@ -4828,11 +4828,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("legal_name");
 
-                    b.Property<string>("LegacyCode")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("legacy_code");
-
                     b.Property<Guid?>("ParentTenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_tenant_id");

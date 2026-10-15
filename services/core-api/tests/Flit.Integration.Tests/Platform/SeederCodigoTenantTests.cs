@@ -67,7 +67,7 @@ public sealed class SeederCodigoTenantTests(PostgresDatabaseFixture fixture) : P
             .ToListAsync(ct);
 
         demos.Should().HaveCount(2);
-        demos.Should().OnlyContain(t => t.Code.StartsWith("COMP-") && t.LegacyCode == null);
+        demos.Should().OnlyContain(t => t.Code.StartsWith("COMP-"));
 
         // Los usuarios semilla quedan asociados como siempre: el AdminCompany en la compañía demo.
         var empresa = demos.Single(t => t.TaxId == DevelopmentAuthSeeder.DemoEmpresaTenantTaxId);
