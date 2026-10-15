@@ -55,7 +55,9 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
 
         // El transporte de correo (Smtp o consola) lo decide Smtp:Host, que en local suele venir del
         // appsettings.Development.json (fuera de git) y en CI no: es del ambiente, no del código, y queda fuera de la foto.
-        var actual = Describe(captured.Where(d => !EnvironmentDependent.Contains(d.ServiceType.FullName)));
+        // También se excluyen registros solo-Windows (NamedPipe/Quic/EventLog/Registry) para que el snapshot
+        // coincida entre CI Linux y desarrollo en Windows.
+        var actual = Describe(captured.Where(d => !IsEnvironmentDependent(d)));
         var path = Path.Combine(SourceDirectory(), snapshotFile);
         if (Environment.GetEnvironmentVariable("FLIT_UPDATE_DI_SNAPSHOT") == "1")
         {
@@ -75,6 +77,33 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .SelectMany(g => g.OrderBy(x => x.index).Select(x => $"{g.Key} => {Implementation(x.d)} ({x.d.Lifetime})"))
             .ToArray();
+
+    private static bool IsEnvironmentDependent(ServiceDescriptor d)
+    {
+        if (EnvironmentDependent.Contains(d.ServiceType.FullName))
+        {
+            return true;
+        }
+
+        var impl = d.IsKeyedService
+            ? d.KeyedImplementationType?.FullName
+            : d.ImplementationType?.FullName;
+        if (impl is null)
+        {
+            // Options de transporte que varían por SO / disponibilidad (NamedPipe Windows, Quic opcional).
+            var service = d.ServiceType.FullName ?? string.Empty;
+            return service.Contains("NamedPipeTransportOptions", StringComparison.Ordinal)
+                   || service.Contains("QuicTransportOptions", StringComparison.Ordinal);
+        }
+
+        return impl.Contains("NamedPipes", StringComparison.Ordinal)
+               || impl.Contains("QuicTransportFactory", StringComparison.Ordinal)
+               || impl.Contains("RegistryPolicyResolver", StringComparison.Ordinal)
+               || impl.Contains("EventLogLoggerProvider", StringComparison.Ordinal)
+               // Local Windows a veces registra ObjectPoolProvider como Singleton además/en vez de Transient.
+               || (impl.Contains("DefaultObjectPoolProvider", StringComparison.Ordinal)
+                   && d.Lifetime == ServiceLifetime.Singleton);
+    }
 
     private static string Implementation(ServiceDescriptor d)
     {
