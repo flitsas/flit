@@ -132,6 +132,65 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
         return (ActivateProviderResult.Ok, Map(row));
     }
 
+    public async Task RecordFailoverAsync(
+        string toolCode,
+        string fromProvider,
+        string toProvider,
+        string? detail,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedTool = AiToolCodes.Normalize(toolCode);
+        var from = AiProviderCodes.Normalize(fromProvider);
+        var to = AiProviderCodes.Normalize(toProvider);
+
+        var row = await db.AiToolProviderSettings
+            .FirstOrDefaultAsync(x => x.ToolCode == normalizedTool, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (row is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(row.ActiveProvider, to, StringComparison.Ordinal))
+        {
+            row.ActiveProvider = to;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        var occurredAt = DateTimeOffset.UtcNow;
+        var trimmedDetail = string.IsNullOrWhiteSpace(detail)
+            ? null
+            : detail.Trim()[..Math.Min(detail.Trim().Length, 1000)];
+
+        var transition = new AiProviderTransitionRow
+        {
+            Id = Guid.CreateVersion7(),
+            ToolCode = normalizedTool,
+            FromProvider = from,
+            ToProvider = to,
+            Reason = "failover_auto",
+            Detail = trimmedDetail,
+            ActorUserId = null,
+            OccurredAt = occurredAt,
+        };
+
+        var alert = new AiFailoverAlertRow
+        {
+            Id = Guid.CreateVersion7(),
+            TransitionId = transition.Id,
+            ToolCode = normalizedTool,
+            FromProvider = from,
+            ToProvider = to,
+            OccurredAt = occurredAt,
+        };
+
+        db.AiProviderTransitions.Add(transition);
+        db.AiFailoverAlerts.Add(alert);
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static AiToolProviderSettings Map(AiToolProviderSettingsRow row) =>
         new(
             row.Id,

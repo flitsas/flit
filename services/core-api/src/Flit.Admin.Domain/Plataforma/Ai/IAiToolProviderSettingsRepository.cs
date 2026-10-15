@@ -23,6 +23,17 @@ public interface IAiToolProviderSettingsRepository
         Guid? actorUserId,
         string? detail,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Failover automático (HU #13510): actualiza <c>active_provider</c>, inserta transición
+    /// <c>reason=failover_auto</c> y fila en <c>ai_failover_alerts</c>.
+    /// </summary>
+    Task RecordFailoverAsync(
+        string toolCode,
+        string fromProvider,
+        string toProvider,
+        string? detail,
+        CancellationToken cancellationToken = default);
 }
 
 public enum ActivateProviderResult
