@@ -86,12 +86,6 @@ export function Timeline({
             </option>
           ))}
         </select>
-        {puedeObservar && !escribiendo && (
-          <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEscribiendo(true)}>
-            <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
-            Agregar observación
-          </button>
-        )}
       </div>
 
       {escribiendo && (
@@ -138,6 +132,20 @@ export function Timeline({
           </li>
         ))}
       </ol>
+
+      {/* Epic GDC-8 / MOD06 §5.1: «Agregar observación» flota sobre el timeline y sigue a la vista al bajar por los eventos. */}
+      {puedeObservar && !escribiendo && (
+        <div className="pointer-events-none sticky bottom-3 flex justify-end">
+          <button
+            type="button"
+            className={`${BOTON_PRIMARIO_CLS} pointer-events-auto rounded-full shadow-lg`}
+            onClick={() => setEscribiendo(true)}
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+            Agregar observación
+          </button>
+        </div>
+      )}
     </div>
   );
 }
