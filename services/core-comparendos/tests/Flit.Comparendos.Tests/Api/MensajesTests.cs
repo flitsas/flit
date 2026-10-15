@@ -21,7 +21,7 @@ public sealed class MensajesTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
         var correo = scope.ServiceProvider.GetRequiredService<ServicioCorreo>();
         var lista = await correo.RegistrarAsync(new CorreoNuevo
         {
-            TenantId = empresa, Tipo = tipo, Plantilla = "comparendos.prueba", Para = [new Destinatario("destino@ejemplo.com", "Destino")], Cc = ["copia@ejemplo.com"],
+            TenantId = empresa, Tipo = tipo, Plantilla = "comparendos.prueba", Para = [new Destinatario("destino@example.test", "Destino")], Cc = ["copia@example.test"],
             Asunto = "Asunto de prueba", Html = "<html><body><p>Hola</p></body></html>",
         }, CancellationToken.None);
         await scope.ServiceProvider.GetRequiredService<ComparendosDb>().SaveChangesAsync();

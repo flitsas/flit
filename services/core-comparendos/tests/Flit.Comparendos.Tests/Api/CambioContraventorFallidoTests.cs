@@ -51,7 +51,7 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
             [Permisos.BandejaVer, Permisos.ContraventorAsignar, Permisos.ContraventorDocumentos, Permisos.CambioContraventorSolicitar, Permisos.RepresentantesGestionar]));
         (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
         {
-            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@ejemplo.com", declaracionTratamientoDatos = true,
+            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@example.test", declaracionTratamientoDatos = true,
         }, ct)).EnsureSuccessStatusCode();
         foreach (var tipo in new[] { "Cedula", "Licencia" })
         {
@@ -75,8 +75,8 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
 
     /// <summary>RN-114: un aviso que no llegó no cuenta; el fallido se reintenta y el rebotado espera un correo nuevo.</summary>
     [Theory]
-    [InlineData("falla@ejemplo.com", false)]
-    [InlineData("rebota@ejemplo.com", true)]
+    [InlineData("falla@example.test", false)]
+    [InlineData("rebota@example.test", true)]
     public async Task AvisoNoEntregado_NoCuentaComoEnviado(string correo, bool queda)
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

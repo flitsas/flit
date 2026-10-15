@@ -22,7 +22,7 @@ public sealed class PortalTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         var id = (await IngresarAsync(api, empresa, Item($"PT-{Random.Shared.Next(100000)}")))!.Values.Single();
         await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.ContraventorAsignar])).PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
         {
-            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@ejemplo.com", declaracionTratamientoDatos = true,
+            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@example.test", declaracionTratamientoDatos = true,
         });
         await using var scope = api.App.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();

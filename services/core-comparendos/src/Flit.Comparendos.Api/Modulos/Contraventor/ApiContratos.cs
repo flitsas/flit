@@ -45,7 +45,7 @@ internal sealed class ApiContratosSimulada : IApiContratos
 
         var documento = $"10{Math.Abs(placa.GetHashCode(StringComparison.Ordinal)) % 100000000:D8}";
         return Task.FromResult(new RespuestaContrato(ResultadoContrato.Encontrado,
-            new ConductorEncontrado(TipoDocumento.CC, documento, $"CONDUCTOR DE PRUEBA {placa}", $"conductor.{placa.ToLowerInvariant()}@ejemplo.com", "3001234567",
+            new ConductorEncontrado(TipoDocumento.CC, documento, $"CONDUCTOR DE PRUEBA {placa}", $"conductor.{placa.ToLowerInvariant()}@example.test", "3001234567",
                 "CALLE 10 # 20-30", "BOGOTA", "SUCURSAL NORTE", "RENTING OPERATIVO"),
             null, $"{{\"placa\":\"{placa}\",\"simulado\":true}}"));
     }

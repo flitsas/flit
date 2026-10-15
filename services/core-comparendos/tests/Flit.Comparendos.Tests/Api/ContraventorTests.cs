@@ -21,7 +21,7 @@ public sealed class ContraventorTests(ApiConFuente api) : IClassFixture<ApiConFu
 
     private static object Conductor(string doc, bool declaracion = true, string? motivo = null) => new
     {
-        tipoDocumento = "CC", numeroDocumento = doc, nombres = $"Conductor {doc}", correo = $"c{doc}@ejemplo.com", telefono = "3000000000",
+        tipoDocumento = "CC", numeroDocumento = doc, nombres = $"Conductor {doc}", correo = $"c{doc}@example.test", telefono = "3000000000",
         direccion = "Calle 1", ciudad = "Bogotá", sucursal = (string?)null, tipoContrato = "Renting", motivo, declaracionTratamientoDatos = declaracion,
     };
 

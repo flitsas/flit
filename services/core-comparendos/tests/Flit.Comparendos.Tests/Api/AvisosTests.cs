@@ -28,7 +28,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         {
             (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
             {
-                tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@ejemplo.com", declaracionTratamientoDatos = true,
+                tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@example.test", declaracionTratamientoDatos = true,
             })).EnsureSuccessStatusCode();
         }
 
@@ -118,12 +118,12 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
 
         (await api.Cliente(new UsuarioDePrueba(empresa, Operador)).PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
         {
-            tipoDocumento = "CC", numeroDocumento = "79888777", nombres = "Ana Ruiz", correo = "ana@ejemplo.com", motivo = "El contrato era de otra conductora", declaracionTratamientoDatos = true,
+            tipoDocumento = "CC", numeroDocumento = "79888777", nombres = "Ana Ruiz", correo = "ana@example.test", motivo = "El contrato era de otra conductora", declaracionTratamientoDatos = true,
         }, ct)).EnsureSuccessStatusCode();
         api.Reloj.Hoy(new DateOnly(2026, 10, 13));
         await SchedulerAsync(empresa);
         var destinos = await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id && a.TipoAviso == TipoAviso.Aviso1).Select(a => a.CorreoDestino).ToListAsync(ct));
-        destinos.Should().BeEquivalentTo("juan@ejemplo.com", "ana@ejemplo.com");
+        destinos.Should().BeEquivalentTo("juan@example.test", "ana@example.test");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         {
             (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
             {
-                tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@ejemplo.com", declaracionTratamientoDatos = true,
+                tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@example.test", declaracionTratamientoDatos = true,
             }, ct)).EnsureSuccessStatusCode();
         }
 

@@ -63,7 +63,7 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
 
         (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["R4"]}/contraventor", new
         {
-            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@ejemplo.com", declaracionTratamientoDatos = true,
+            tipoDocumento = "CC", numeroDocumento = "1020304050", nombres = "Juan Pérez", correo = "juan@example.test", declaracionTratamientoDatos = true,
         }, ct)).EnsureSuccessStatusCode();
         return (empresa, usuario, ids);
     }
