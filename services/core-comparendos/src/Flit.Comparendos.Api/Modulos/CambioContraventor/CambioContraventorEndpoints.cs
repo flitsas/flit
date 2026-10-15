@@ -27,9 +27,12 @@ public static class CambioContraventorEndpoints
         return Results.Ok(new { viable = condiciones.All(x => x.Cumple), condiciones, representante = rl?.Nombres, organismo = ot?.Nombre, correos = ot?.CorreosRadicacion });
     }
 
-    private static async Task<IResult> VistaPrevia(Guid id, AccesoComparendo acceso, ServicioCambioContraventor servicio, Configuracion.ResolutorRepresentante resolutor, CancellationToken ct)
+    /// <summary>Vista previa del formato al OT o, con <c>?documento=carta</c>, de la carta del aviso 4 al conductor (§7.4).</summary>
+    private static async Task<IResult> VistaPrevia(Guid id, string? documento, AccesoComparendo acceso, ServicioCambioContraventor servicio, Configuracion.ResolutorRepresentante resolutor, CancellationToken ct)
     {
         var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
+        if (string.Equals(documento, "carta", StringComparison.OrdinalIgnoreCase))
+            return Results.File(await servicio.CartaAsync(c, "VISTA PREVIA", ct).ConfigureAwait(false), "application/pdf");
         var rl = await resolutor.ResolverAsync(c.TenantId, c.IdentificacionMonitoreadaId, Configuracion.ParaFirmar.CambioContraventor, ct).ConfigureAwait(false);
         return Results.File(await servicio.FormatoAsync(c, rl, "VISTA PREVIA", ct).ConfigureAwait(false), "application/pdf");
     }

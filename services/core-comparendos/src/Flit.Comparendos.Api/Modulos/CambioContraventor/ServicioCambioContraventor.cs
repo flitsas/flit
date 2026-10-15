@@ -77,6 +77,14 @@ public sealed class ServicioCambioContraventor(
         return ServicioPlantillas.Pdf(armado, marcaDeAgua);
     }
 
+    /// <summary>La carta del aviso 4 al conductor tal como saldría, para revisarla antes de solicitar (§7.4).</summary>
+    public async Task<byte[]> CartaAsync(Comparendo c, string? marcaDeAgua, CancellationToken ct)
+    {
+        var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
+        var valores = await contexto.DeAsync(c, null, ct).ConfigureAwait(false);
+        return ServicioPlantillas.Pdf(await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.CartaCambioContraventor, null, valores, ct).ConfigureAwait(false), marcaDeAgua);
+    }
+
     public async Task<CambioContraventorSolicitud> SolicitarAsync(Comparendo c, Actor actor, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(c);

@@ -63,6 +63,12 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
 
         var viabilidad = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/viabilidad", ct);
         viabilidad.GetProperty("viable").GetBoolean().Should().BeTrue();
+        foreach (var url in new[] { "vista-previa", "vista-previa?documento=carta" })
+        {
+            var pdf = await cliente.GetAsync($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/{url}", ct);
+            pdf.StatusCode.Should().Be(HttpStatusCode.OK, url);
+            pdf.Content.Headers.ContentType!.MediaType.Should().Be("application/pdf", "§7.4: el formato y la carta al conductor se revisan antes de solicitar");
+        }
 
         var s1 = await (await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor", null, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         s1.GetProperty("correoOt").GetString().Should().Be("Enviado");

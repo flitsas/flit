@@ -118,6 +118,11 @@ function Solicitar({ ctx }: { ctx: ContextoDetalle }) {
       toast.show(e instanceof Error ? e.message : "No se pudo abrir el formato.", "error"),
     );
 
+  const verCarta = () =>
+    apiAbrirPdf(`/comparendos/${d.id}/cambio-contraventor/vista-previa?documento=carta`).catch((e: unknown) =>
+      toast.show(e instanceof Error ? e.message : "No se pudo abrir la carta.", "error"),
+    );
+
   const solicitar = async () => {
     setEnviando(true);
     try {
@@ -152,6 +157,12 @@ function Solicitar({ ctx }: { ctx: ContextoDetalle }) {
           <button type="button" className={controlCls(false)} onClick={verFormato}>
             <FileText className="h-3.5 w-3.5" aria-hidden />
             Ver formato
+          </button>
+        )}
+        {v.condiciones.find((c) => c.codigo === "CONDUCTOR")?.cumple && (
+          <button type="button" className={controlCls(false)} onClick={verCarta}>
+            <FileText className="h-3.5 w-3.5" aria-hidden />
+            Ver carta al conductor
           </button>
         )}
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!v.viable} onClick={() => setConfirmar(true)}>
