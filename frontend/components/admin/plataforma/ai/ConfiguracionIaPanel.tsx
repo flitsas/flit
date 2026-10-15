@@ -35,27 +35,29 @@ export function ConfiguracionIaPanel() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
 
-  const cargar = useCallback(async (signal?: AbortSignal) => {
-    setEstado("loading");
-    setErrorMsg(null);
-    try {
-      const data = await listAiTools(signal);
-      if (signal?.aborted) return;
-      const lista = ordenarTools(data.tools ?? []);
-      setTools(lista);
-      setEstado(lista.length === 0 ? "empty" : "ready");
-    } catch (err) {
-      if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
-      setErrorMsg(interpretarErrorAdminAi(err).mensaje);
-      setEstado("error");
-    }
-  }, []);
-
   useEffect(() => {
     const controller = new AbortController();
-    void cargar(controller.signal);
+    // Loading / errorMsg se fijan en estado inicial y en handlers (no setState síncrono aquí).
+    void listAiTools(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        const lista = ordenarTools(data.tools ?? []);
+        setTools(lista);
+        setEstado(lista.length === 0 ? "empty" : "ready");
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
+        setErrorMsg(interpretarErrorAdminAi(err).mensaje);
+        setEstado("error");
+      });
     return () => controller.abort();
-  }, [cargar, recarga]);
+  }, [recarga]);
+
+  const reintentar = useCallback(() => {
+    setErrorMsg(null);
+    setEstado("loading");
+    setRecarga((n) => n + 1);
+  }, []);
 
   const onToolUpdated = useCallback((next: AiToolSettingsView) => {
     setTools((prev) => ordenarTools(prev.map((t) => (t.toolCode === next.toolCode ? next : t))));
@@ -77,7 +79,7 @@ export function ConfiguracionIaPanel() {
         action={
           <button
             type="button"
-            onClick={() => setRecarga((n) => n + 1)}
+            onClick={reintentar}
             className="text-xs font-semibold underline"
           >
             Reintentar
@@ -98,7 +100,7 @@ export function ConfiguracionIaPanel() {
         </InlineAlert>
         <button
           type="button"
-          onClick={() => setRecarga((n) => n + 1)}
+          onClick={reintentar}
           className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -117,7 +119,7 @@ export function ConfiguracionIaPanel() {
         </p>
         <button
           type="button"
-          onClick={() => setRecarga((n) => n + 1)}
+          onClick={reintentar}
           className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />

@@ -76,14 +76,15 @@ export function AiToolCard({
   const [confirmProvider, setConfirmProvider] = useState<AiProviderCode | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
 
-  // Sincroniza borrador cuando el padre refresca la tool (p. ej. tras activate).
+  // Sincroniza borrador cuando el padre refresca la tool (p. ej. tras activate externo).
   const toolStamp = `${tool.toolCode}:${tool.activeProvider}:${tool.updatedAt}:${tool.rowVersion ?? 0}`;
   useEffect(() => {
     const next = toDraft(tool);
+    /* Sync intencional por stamp; remount por key borraría successMsg post-activate. */
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync borrador con tool del padre
     setDraft(next);
     setBaseline(next);
-    // Solo toolStamp: evita borrar el borrador sucio si el padre re-renderiza con la misma vista.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync intencional por stamp
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo toolStamp
   }, [toolStamp]);
 
   const dirty = !draftEquals(draft, baseline);
@@ -301,7 +302,11 @@ export function AiToolCard({
         </button>
       </div>
 
-      <AiTransitionsTable toolCode={tool.toolCode} toolLabel={label} refreshKey={historyKey} />
+      <AiTransitionsTable
+        key={`${tool.toolCode}-${historyKey}`}
+        toolCode={tool.toolCode}
+        toolLabel={label}
+      />
 
       {confirmProvider ? (
         <Modal

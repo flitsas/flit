@@ -11,15 +11,14 @@ const PAGE_SIZE = 20;
 /**
  * HU #13512 AC2 — historial paginado de transiciones (pageSize 20).
  * Ante 404 del endpoint (aún no en backend), muestra vacío sin romper la sección.
+ * Remontar con `key` desde el padre para resetear página / recargar tras cambios.
  */
 export function AiTransitionsTable({
   toolCode,
   toolLabel,
-  refreshKey = 0,
 }: {
   toolCode: AiToolCode;
   toolLabel: string;
-  refreshKey?: number;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
@@ -28,12 +27,8 @@ export function AiTransitionsTable({
   const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
-    setPage(1);
-  }, [toolCode, refreshKey]);
-
-  useEffect(() => {
     const controller = new AbortController();
-    setStatus("loading");
+    // Loading inicial / al cambiar página o reintentar desde handlers (no setState síncrono aquí).
     listAiTransitions(toolCode, page, PAGE_SIZE, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
@@ -54,7 +49,7 @@ export function AiTransitionsTable({
         setStatus("error");
       });
     return () => controller.abort();
-  }, [toolCode, page, refreshKey, retryTick]);
+  }, [toolCode, page, retryTick]);
 
   const columns: DataTableColumn<AiProviderTransitionView>[] = useMemo(
     () => [
@@ -101,7 +96,10 @@ export function AiTransitionsTable({
         rows={items}
         getRowKey={(row) => row.id}
         status={status === "loading" ? "loading" : status === "error" ? "error" : undefined}
-        onRetry={() => setRetryTick((n) => n + 1)}
+        onRetry={() => {
+          setStatus("loading");
+          setRetryTick((n) => n + 1);
+        }}
         errorMessage="No se pudo cargar el historial de transiciones."
         emptyMessage="Aún no hay cambios de proveedor registrados para esta herramienta."
         ariaLabel={`Historial de proveedores de ${toolLabel}`}
@@ -110,7 +108,10 @@ export function AiTransitionsTable({
           page,
           pageSize: PAGE_SIZE,
           totalCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setStatus("loading");
+            setPage(next);
+          },
         }}
       />
     </div>

@@ -27,7 +27,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    setEstado("loading");
+    // Estado loading inicial / en handlers de reintento — evita setState síncrono en el efecto.
     listAiAlerts(controller.signal)
       .then((items) => {
         if (controller.signal.aborted) return;
@@ -48,6 +48,11 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
       });
     return () => controller.abort();
   }, [recarga]);
+
+  const reintentar = useCallback(() => {
+    setEstado("loading");
+    setRecarga((n) => n + 1);
+  }, []);
 
   const reconocer = useCallback(
     async (alerta: AiFailoverAlertView) => {
@@ -74,7 +79,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
         </h2>
         <button
           type="button"
-          onClick={() => setRecarga((n) => n + 1)}
+          onClick={reintentar}
           className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -101,7 +106,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
           action={
             <button
               type="button"
-              onClick={() => setRecarga((n) => n + 1)}
+              onClick={reintentar}
               className="text-xs font-semibold underline"
             >
               Reintentar

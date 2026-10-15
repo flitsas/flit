@@ -14883,9 +14883,10 @@ components:
         id: { type: string, format: uuid }
         toolCode: { $ref: "#/components/schemas/AiToolCode" }
         fromProvider:
-          allOf:
-            - $ref: "#/components/schemas/AiProviderCode"
+          type: string
           nullable: true
+          enum: [anthropic, openai, kimi, deepseek]
+          description: Proveedor previo; null en la transición seed inicial.
         toProvider: { $ref: "#/components/schemas/AiProviderCode" }
         reason:
           type: string
