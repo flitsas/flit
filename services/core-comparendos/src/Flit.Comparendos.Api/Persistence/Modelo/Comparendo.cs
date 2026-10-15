@@ -55,6 +55,12 @@ public sealed class Comparendo : Auditada
     public EstadoCambioContraventor EstadoCambioContraventor { get; set; } = EstadoCambioContraventor.SinSolicitar;
     public EstadoConsultaContraventor EstadoConsultaContraventor { get; set; } = EstadoConsultaContraventor.NoAplica;
     public short IntentosConsultaContraventor { get; set; }
+
+    /// <summary>
+    /// Si la última consulta a la API de contratos falló: el mensaje y el comienzo de lo que respondió (4000 caracteres),
+    /// para diagnosticar. Mismo criterio que las fuentes: la respuesta de una consulta exitosa no se guarda.
+    /// </summary>
+    public string? ErrorConsultaContraventor { get; set; }
     public bool NotificadoFisicamente { get; set; }
     public bool Pagado { get; set; }
     public bool TieneDp { get; set; }

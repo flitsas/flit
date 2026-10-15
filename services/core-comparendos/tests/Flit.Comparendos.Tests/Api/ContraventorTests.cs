@@ -72,6 +72,24 @@ public sealed class ContraventorTests(ApiConFuente api) : IClassFixture<ApiConFu
     }
 
     [Fact]
+    public async Task ConsultaPorApi_ConError_GuardaSoloElError()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = await EmpresaAsync(api, consulta: true, integracion: "ApiRenting");
+        var ids = await IngresarAsync(api, empresa, Item("K-5", placa: "XYZ120"), Item("K-6", placa: "XYZ125"));
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        await cliente.PostAsync($"/api/v1/comparendos/comparendos/{ids["K5"]}/contraventor/consultar", null, ct);
+        await cliente.PostAsync($"/api/v1/comparendos/comparendos/{ids["K6"]}/contraventor/consultar", null, ct);
+
+        var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{ids["K5"]}", ct);
+        detalle.GetProperty("estadoConsultaContraventor").GetString().Should().Be("Error");
+        detalle.GetProperty("errorConsultaContraventor").GetString().Should().Contain("no disponible", "queda qué respondió la API para diagnosticar");
+        (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{ids["K6"]}", ct)).GetProperty("errorConsultaContraventor").ValueKind
+            .Should().Be(JsonValueKind.Null, "de una consulta que respondió bien no se guarda nada");
+    }
+
+    [Fact]
     public async Task SinCapacidadDeConsulta_Responde403()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

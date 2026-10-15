@@ -189,6 +189,12 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
           <StatusBadge label={consulta.texto} tone={consulta.tono} />
         </div>
       )}
+      {d.estadoConsultaContraventor === "Error" && d.errorConsultaContraventor && (
+        <details className="text-xs">
+          <summary className="cursor-pointer opacity-70">Qué respondió la API</summary>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[#F4F7FC] p-2 dark:bg-white/5">{d.errorConsultaContraventor}</pre>
+        </details>
+      )}
       {k ? (
         <Datos
           filas={[

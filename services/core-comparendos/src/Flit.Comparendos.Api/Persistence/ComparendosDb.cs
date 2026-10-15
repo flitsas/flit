@@ -312,6 +312,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     {
         m.Entity<Comparendo>(e =>
         {
+            e.Property(x => x.ErrorConsultaContraventor).HasMaxLength(4000);
             e.ToTable("comparendo", t =>
             {
                 t.HasCheckConstraint("ck_comparendo_inactivo_con_motivo", "activo OR motivo_inactivacion IS NOT NULL");

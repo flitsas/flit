@@ -125,13 +125,17 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
                 Asignar(c, new DatosConductor(k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato),
                     OrigenContraventor.Api, actor, c.Contraventor is null ? null : "Reemplazo confirmado con la consulta a la API de contratos.", declaracion: false);
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.Encontrado;
+                c.ErrorConsultaContraventor = null;
                 break;
             case ResultadoContrato.NoEncontrado:
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.NoEncontrado;
+                c.ErrorConsultaContraventor = null;
                 break;
             default:
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.Error;
                 c.IntentosConsultaContraventor++;
+                var error = string.Join("\n", new[] { r.Mensaje, r.CuerpoCrudo }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                c.ErrorConsultaContraventor = error.Length > 4000 ? error[..4000] : error;
                 break;
         }
 

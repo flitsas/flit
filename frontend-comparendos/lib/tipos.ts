@@ -174,6 +174,7 @@ export interface DetalleComparendo {
   estadoNotificacionConductor: string;
   estadoCambioContraventor: string;
   estadoConsultaContraventor: string;
+  errorConsultaContraventor: string | null;
   notificadoFisicamente: boolean;
   pagado: boolean;
   tieneDp: boolean;

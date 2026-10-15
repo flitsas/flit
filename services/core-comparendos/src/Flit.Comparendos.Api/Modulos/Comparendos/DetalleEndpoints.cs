@@ -100,6 +100,7 @@ public static class DetalleEndpoints
             estadoNotificacionConductor = c.EstadoNotificacionConductor.ToString(),
             estadoCambioContraventor = c.EstadoCambioContraventor.ToString(),
             estadoConsultaContraventor = c.EstadoConsultaContraventor.ToString(),
+                errorConsultaContraventor = c.ErrorConsultaContraventor,
             c.NotificadoFisicamente,
             c.Pagado,
             c.TieneDp,

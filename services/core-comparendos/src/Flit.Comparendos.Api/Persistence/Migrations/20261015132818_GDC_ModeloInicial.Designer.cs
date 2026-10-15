@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Comparendos.Api.Persistence.Migrations
 {
     [DbContext(typeof(ComparendosDb))]
-    [Migration("20261013223629_GDC_ModeloInicial")]
+    [Migration("20261015132818_GDC_ModeloInicial")]
     partial class GDC_ModeloInicial
     {
         /// <inheritdoc />
@@ -740,6 +740,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<bool>("EnCobroCoactivo")
                         .HasColumnType("boolean")
                         .HasColumnName("en_cobro_coactivo");
+
+                    b.Property<string>("ErrorConsultaContraventor")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("error_consulta_contraventor");
 
                     b.Property<bool?>("EsFotomulta")
                         .HasColumnType("boolean")
@@ -1736,10 +1741,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("origen");
-
-                    b.Property<Guid?>("RespuestaApiArchivoId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("respuesta_api_archivo_id");
 
                     b.Property<string>("Sucursal")
                         .HasMaxLength(120)

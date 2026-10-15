@@ -18,7 +18,6 @@ public sealed class Contraventor : Auditada
     public string? TipoContrato { get; set; }
     public OrigenContraventor Origen { get; set; }
     public bool DeclaracionTratamientoDatos { get; set; }
-    public Guid? RespuestaApiArchivoId { get; set; }
 }
 
 /// <summary>Cada asignación y reemplazo de conductor, con motivo obligatorio al reemplazar (§3.18).</summary>
