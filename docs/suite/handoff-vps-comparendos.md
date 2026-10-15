@@ -172,12 +172,26 @@ Trámites (§6.1 y §6.2 de handoff-vps-suite.md):
 
 | Pieza | Qué falta | Variables |
 |---|---|---|
-| SmartCloud por identificación y por placa (#13465, #13466) | Conector hecho. Falta una consulta real que confirme que la placa también lleva la clave delante y qué `error_Cod` devuelve el SIMIT para «sin comparendos» | `SMARTCLOUD_ACCESS_KEY` en core-consultas |
+| SmartCloud por identificación y por placa (#13465, #13466) | Probado contra el SIMIT real el 2026-10-13 (vacío = `error_Cod` 0 sin filas; la placa lleva la clave delante; `error_Cod` 1 = clave rechazada). Falta una consulta desde la VPS el día del despliegue | `SMARTCLOUD_ACCESS_KEY` y las dos URLs en core-consultas |
 | API municipal (#13467) | Conector probado contra la API de V1 el 2026-10-15 (NIT de Bancolombia): responde por municipio, y un municipio caído (timeout, SSL, HTML) queda como error de ese municipio sin tocar los demás. Con `?placa=` responde vacío: la consulta por placa sigue sin confirmar | `MUNICIPAL_INFRACCIONES_BASE_URL` y `MUNICIPAL_INFRACCIONES_PATH` en core-consultas (valores de V1 arriba) |
 | API de contratos de Renting | Contrato (placa + fecha → conductor) | `COMPARENDOS_RENTING_API_URL`, `COMPARENDOS_RENTING_API_KEY` |
 | OCR | Llave de Anthropic y comparación con una muestra real | `COMPARENDOS_OCR_API_KEY` |
 
 Hasta entonces los trabajos de ingesta corren y se omiten solos (sin alertas), y las pantallas lo dicen.
+
+### Revisar la API municipal de V1 antes de salir
+
+En la consulta del 2026-10-15 (NIT de Bancolombia) 5 de los 8 municipios fallaron **del lado de la API de V1**, no de
+Comparendos. Es probable que V1 en producción tenga el mismo problema:
+
+| Municipio | Lo que respondió la API de V1 en `estadoRespuesta` |
+|---|---|
+| Medellín, Itagüí, Rionegro | `One or more errors occurred. (A task was canceled.)`: se le acaba el tiempo consultando ese municipio |
+| Cali | `The SSL connection could not be established`: falla el certificado o el TLS hacia la fuente de Cali |
+| Sabaneta | `Unexpected character encountered while parsing value: <`: la fuente devuelve HTML (página de error o mantenimiento) en vez de JSON |
+
+Bello, Manizales y Envigado respondieron bien. Comparendos deja cada municipio caído como error de ese municipio (no
+inactiva nada) y alerta, pero los comparendos de esos municipios no llegan hasta que la API de V1 los traiga.
 
 ## 9. Si algo sale mal
 
