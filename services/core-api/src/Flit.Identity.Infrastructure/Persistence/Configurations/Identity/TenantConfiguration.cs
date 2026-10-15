@@ -23,7 +23,10 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .HasDefaultValueSql("identity.fn_next_tenant_code()")
             .HasSentinel(string.Empty);
         builder.HasIndex(x => x.Code).IsUnique().HasDatabaseName("uq_tenants_code");
-        builder.Property(x => x.LegacyCode).HasMaxLength(32);
+        // identity.tenants.legacy_code (código anterior a la recodificación) NO se mapea a propósito: es solo
+        // trazabilidad en la base y ninguna pantalla la lee. Mapearla haría que EF la incluyera en cada SELECT/INSERT,
+        // lo que rompe los esquemas anteriores a la migración 136 (pruebas de Down/Up) y obligaría a desplegar
+        // core-identity, que comparte esta entidad, después de la migración.
 
         builder.Property(x => x.LegalName).HasMaxLength(255).IsRequired();
         builder.Property(x => x.TaxId).HasMaxLength(20).IsRequired();
