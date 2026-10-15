@@ -22,6 +22,9 @@ public sealed class FuenteDePrueba : IFuenteComparendos
 
     public ConcurrentDictionary<string, string> ProveedorUsado { get; } = new();
 
+    /// <summary>Por qué empresa se pidió cada clave (la metadata x-flit-tenant-id hacia core-consultas).</summary>
+    public ConcurrentDictionary<string, Guid> EmpresaUsada { get; } = new();
+
     public Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<ProveedorFuente>>([
             new ProveedorFuente("prueba", "Fuente de prueba", [CanalIngesta.SimitNit, CanalIngesta.SimitPlaca, CanalIngesta.MunicipalNit, CanalIngesta.MunicipalPlaca], true, null),
@@ -29,10 +32,11 @@ public sealed class FuenteDePrueba : IFuenteComparendos
             new ProveedorFuente("sin_contrato", "Sin contrato", [CanalIngesta.SimitNit], false, "Falta el contrato."),
         ]);
 
-    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct)
+    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, Guid empresa, CancellationToken ct)
     {
         Llamadas.AddOrUpdate($"{clave.Canal}:{clave.Clave}", 1, (_, n) => n + 1);
         ProveedorUsado[$"{clave.Canal}:{clave.Clave}"] = proveedor;
+        EmpresaUsada[$"{clave.Canal}:{clave.Clave}"] = empresa;
         return Task.FromResult(Respuestas.TryGetValue($"{clave.Canal}:{clave.Clave}", out var r) ? r() : RespuestaFuente.Exitosa([]));
     }
 }
@@ -115,6 +119,8 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
 
         api.Fuente.Llamadas["SimitNit:800197268"].Should().Be(1);
         api.Fuente.Llamadas["SimitNit:8001972684"].Should().Be(1);
+        // El ciclo corre en segundo plano: la empresa va explícita, una fija para la clave compartida.
+        api.Fuente.EmpresaUsada["SimitNit:800197268"].Should().Be(a.CompareTo(b) < 0 ? a : b);
         (await Comparendo(a, "11001000000000001")).Should().NotBeNull();
         (await Comparendo(b, "11001000000000001")).Should().NotBeNull();
     }

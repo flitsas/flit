@@ -37,7 +37,7 @@ public sealed class FuenteSimulada(Reloj reloj) : IFuenteComparendos
         Task.FromResult<IReadOnlyList<ProveedorFuente>>([new ProveedorFuente(Clave, "Simulado (solo DEV, sin core-consultas)",
             [CanalIngesta.SimitNit, CanalIngesta.SimitPlaca, CanalIngesta.MunicipalNit, CanalIngesta.MunicipalPlaca], true, null)]);
 
-    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct)
+    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, Guid empresa, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(clave);
         if (clave.Clave.EndsWith("000", StringComparison.Ordinal))

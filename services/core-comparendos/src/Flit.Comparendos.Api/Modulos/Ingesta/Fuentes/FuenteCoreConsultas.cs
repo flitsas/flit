@@ -40,7 +40,7 @@ public sealed class FuenteCoreConsultas(FuentesComparendosService.FuentesCompare
             p.HasMotivo ? p.Motivo : null)).ToList();
     }
 
-    public async Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct)
+    public async Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, Guid empresa, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(clave);
         var porPlaca = clave.Canal is CanalIngesta.SimitPlaca or CanalIngesta.MunicipalPlaca;
@@ -51,7 +51,9 @@ public sealed class FuenteCoreConsultas(FuentesComparendosService.FuentesCompare
             (pedido.TipoDocumento, pedido.NumeroDocumento) = ((clave.TipoDocumento ?? TipoDocumento.NIT).ToString(), clave.Clave);
         try
         {
-            var r = await cliente.ConsultarComparendosAsync(pedido, cancellationToken: ct).ConfigureAwait(false);
+            // La empresa va explícita: el interceptor del SDK solo la toma de la petición web, y el ciclo corre sin ella.
+            var r = await cliente.ConsultarComparendosAsync(pedido, new Metadata { { "x-flit-tenant-id", empresa.ToString() } }, cancellationToken: ct)
+                .ConfigureAwait(false);
             var parciales = r.Parciales.Select(p => new ResultadoParcial(p.HasMunicipio ? p.Municipio : null, p.Resultado switch
             {
                 ResultadoFuente.ExitosaConDatos => ResultadoConsulta.ExitosaConDatos,

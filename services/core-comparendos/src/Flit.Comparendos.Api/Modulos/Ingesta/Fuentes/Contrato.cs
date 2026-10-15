@@ -76,7 +76,11 @@ public interface IFuenteComparendos
 {
     Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct);
 
-    Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct);
+    /// <param name="empresa">
+    /// Por quién se consulta (la metadata x-flit-tenant-id de core-consultas). El ciclo corre en segundo plano, sin
+    /// petición de la que tomarla: una clave que vigilan varias empresas se consulta una vez, a nombre de una de ellas.
+    /// </param>
+    Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, Guid empresa, CancellationToken ct);
 }
 
 /// <summary>QA y PDN sin core-consultas configurado: no hay proveedores y no se consulta nada.</summary>
@@ -84,6 +88,6 @@ public sealed class FuenteNoConectada : IFuenteComparendos
 {
     public Task<IReadOnlyList<ProveedorFuente>> ProveedoresAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ProveedorFuente>>([]);
 
-    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, CancellationToken ct) =>
+    public Task<RespuestaFuente> ConsultarAsync(ClaveConsulta clave, string proveedor, Guid empresa, CancellationToken ct) =>
         Task.FromResult(RespuestaFuente.Error(TipoErrorFuente.Excepcion, "Las fuentes de comparendos no están conectadas en este ambiente."));
 }

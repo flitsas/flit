@@ -157,13 +157,18 @@ public sealed partial class CicloDeIngesta(
 
         // Solo las empresas elegibles, cada una con el proveedor de su configuración (HU #13521).
         monitoreadas = monitoreadas.Where(m => proveedores.ContainsKey(m.TenantId)).Select(m => m with { Proveedor = proveedores[m.TenantId] }).ToList();
-        var unicas = monitoreadas.SelectMany(m => m.Variantes.Select(v => (Clave: v, m.Proveedor))).Distinct().ToList();
+        // Una clave que vigilan varias empresas se consulta una vez, a nombre de una fija (la de menor id): core-consultas
+        // registra la llamada real una sola vez (Excel S4).
+        var unicas = monitoreadas.SelectMany(m => m.Variantes.Select(v => (Clave: v, m.Proveedor, m.TenantId)))
+            .GroupBy(x => (x.Clave, x.Proveedor))
+            .Select(g => (g.Key.Clave, g.Key.Proveedor, Empresa: g.Min(x => x.TenantId)))
+            .ToList();
         ciclo.ClavesTotal = unicas.Count;
 
         // 1. Una sola llamada por clave única y proveedor, con paralelismo acotado.
         var cache = new ConcurrentDictionary<(ClaveConsulta Clave, string Proveedor), IReadOnlyList<ConsultaHecha>>();
         await Parallel.ForEachAsync(unicas, new ParallelOptions { MaxDegreeOfParallelism = Paralelismo, CancellationToken = ct }, async (u, token) =>
-            cache[u] = await ConsultarAsync(ciclo, u.Clave, u.Proveedor, ciclo.Canal is CanalIngesta.MunicipalNit or CanalIngesta.MunicipalPlaca ? municipiosActivos : [], token).ConfigureAwait(false))
+            cache[(u.Clave, u.Proveedor)] = await ConsultarAsync(ciclo, u.Clave, u.Proveedor, u.Empresa, ciclo.Canal is CanalIngesta.MunicipalNit or CanalIngesta.MunicipalPlaca ? municipiosActivos : [], token).ConfigureAwait(false))
             .ConfigureAwait(false);
 
         var errores = cache.Values.SelectMany(v => v).Where(h => h.Parcial.Resultado == ResultadoConsulta.Error).ToList();
@@ -219,13 +224,13 @@ public sealed partial class CicloDeIngesta(
         }
     }
 
-    private async Task<IReadOnlyList<ConsultaHecha>> ConsultarAsync(CicloIngesta ciclo, ClaveConsulta clave, string proveedor, List<string> municipiosActivos, CancellationToken ct)
+    private async Task<IReadOnlyList<ConsultaHecha>> ConsultarAsync(CicloIngesta ciclo, ClaveConsulta clave, string proveedor, Guid empresa, List<string> municipiosActivos, CancellationToken ct)
     {
         RespuestaFuente respuesta;
         var inicio = reloj.Ahora;
         try
         {
-            respuesta = await fuente.ConsultarAsync(clave, proveedor, ct).ConfigureAwait(false);
+            respuesta = await fuente.ConsultarAsync(clave, proveedor, empresa, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
