@@ -32,14 +32,17 @@ import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
 import { ResumenTab } from "./_reportes/tabs/ResumenTab";
 import { UsoTab } from "./_reportes/tabs/UsoTab";
 import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
+import { DetailedReportPanel } from "./_reportesDetallados/DetailedReportPanel";
 import { ADMIN_BRAND_OUTLINE_BTN_CLS } from "@/components/admin/admin-ui-styles";
 
-type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad" | "consultas";
+type TabId = "resumen" | "operacion" | "detallados" | "ot" | "uso" | "productividad" | "consultas";
 
 /** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. A20/A21 N/A: no se clonan al OT. */
 export const GESTOR_REPORTES_TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
   { id: "resumen", label: "Resumen general", slug: "reportes.resumen.read" },
   { id: "operacion", label: "Operación / Trámites", slug: "reportes.operacion.read" },
+  // HU #13581 (Épica #13271) — el antiguo módulo Reportes Detallados vive aquí como pestaña.
+  { id: "detallados", label: "Reportes Detallados", slug: "reportes.detallados.read" },
   { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
   { id: "uso", label: "Uso del aplicativo", slug: "reportes.uso.read" },
   { id: "productividad", label: "Productividad", slug: "reportes.productividad.read" },
@@ -61,7 +64,13 @@ const EXPORT_TABS: ReadonlyArray<TabId> = ["resumen", "operacion", "productivida
  * demás consumen endpoints que solo existen para el cliente propio; con la red activa NO se llaman
  * con datos de otro alcance: se muestra el aviso «disponible solo para tu compañía».
  */
-const NETWORK_TABS: ReadonlyArray<TabId> = ["resumen", "productividad"];
+const NETWORK_TABS: ReadonlyArray<TabId> = ["resumen", "productividad", "detallados"];
+
+/**
+ * HU #13581 — pestañas con filtros, selector de red y exportación propios. Mientras están activas se
+ * oculta la barra común (y su aviso de alcance) para no mostrar dos juegos de filtros.
+ */
+const OWN_FILTERS_TABS: ReadonlyArray<TabId> = ["detallados"];
 
 /** Segmento seleccionado en cualquier gráfica → detalle lateral (drill-down). */
 interface SelectedSegment {
@@ -148,6 +157,7 @@ export function Reportes() {
     }
   }, []);
   const rangeValid = isValidRange(filters.range);
+  const ownFilters = activeTab !== undefined && OWN_FILTERS_TABS.includes(activeTab);
 
   // Los 4 endpoints nuevos EXIGEN tenantId para SuperAdmin (§4): sin compañía
   // elegida, las pestañas nuevas muestran el aviso en lugar de llamar a la API.
@@ -202,7 +212,7 @@ export function Reportes() {
           <p className="text-sm font-medium">No tienes permisos para ver reportes.</p>
           <p className="text-xs opacity-70 max-w-md">
             Pide a tu administrador que te asigne acceso a alguna pestaña de reportes
-            (Resumen general, Operación, Organismo de Tránsito, Uso, Productividad o Consultas).
+            (Resumen general, Operación, Reportes Detallados, Organismo de Tránsito, Uso, Productividad o Consultas).
           </p>
         </div>
       </div>
@@ -226,14 +236,16 @@ export function Reportes() {
       {/* Filtros globales (persisten entre pestañas) + exportaciones. Van debajo de las pestañas:
           el usuario primero elige qué quiere ver y luego filtra esa vista. */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
-        <GlobalFilters
-          filters={filters}
-          onChange={setFilters}
-          isSuper={isSuper}
-          companies={companies}
-          onlyCompany={activeTab === "consultas"}
-        />
-        {net.isGroupParent && (
+        {!ownFilters && (
+          <GlobalFilters
+            filters={filters}
+            onChange={setFilters}
+            isSuper={isSuper}
+            companies={companies}
+            onlyCompany={activeTab === "consultas"}
+          />
+        )}
+        {net.isGroupParent && !ownFilters && (
           <NetworkScopeSelector
             scope={net.scope}
             onChange={net.setScope}
@@ -279,14 +291,14 @@ export function Reportes() {
         )}
       </div>
 
-      {networkScope && (
+      {networkScope && !ownFilters && (
         <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="reportes-alcance-red">
           <NetworkScopeBadge scope={networkScope} hijos={net.children} testId="reportes-red-badge" />
           <span className="opacity-70">Los indicadores corresponden a la red, no solo a tu compañía.</span>
         </div>
       )}
 
-      {!rangeValid && activeTab !== "consultas" ? (
+      {!rangeValid && activeTab !== "consultas" && !ownFilters ? (
         <div
           role="alert"
           className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
@@ -325,6 +337,7 @@ export function Reportes() {
           {activeTab === "operacion" && (
             <OperacionTab filters={filters} needsCompany={needsCompany} onDrillDown={openSegment} />
           )}
+          {activeTab === "detallados" && <DetailedReportPanel />}
           {activeTab === "ot" && <OrganismoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "productividad" && (
