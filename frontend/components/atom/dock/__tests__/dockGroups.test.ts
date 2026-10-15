@@ -104,10 +104,29 @@ describe("catálogo de Trámites", () => {
       "Mandatos",
       "FUR",
       "Notificaciones",
+      "Configuración de IA",
       "Mensajes muertos",
       "Descarga masiva",
       "Banners",
     ]);
+  });
+
+  // HU #13511 AC3 — Configuración de IA solo SuperAdmin (menú oculto para el resto).
+  it("HU13511 AC3 — «Configuración de IA» solo con SuperAdmin: apunta a su pantalla y no aparece sin el rol", () => {
+    const keys = (v: Partial<NavViewer>, ctx: Partial<TramitesNavContext> = {}) =>
+      dock(ctx, v).flatMap((g) => g.items.flatMap((i) => [i.key, ...(i.children?.map((c) => c.key) ?? [])]));
+    const plataforma = dock({}, { isSuperAdmin: true })
+      .find((g) => g.id === "administradores")
+      ?.items.find((i) => i.key === "admin-plataforma");
+    expect(plataforma?.children?.find((c) => c.key === "admin-configuracion-ia")?.href).toBe(
+      "/admin/plataforma/configuracion-ia",
+    );
+    expect(keys({ roles: ["AdminCompany"], permissions: ["banners.manage"] }, { isAdminCompany: true })).not.toContain(
+      "admin-configuracion-ia",
+    );
+    expect(keys({ roles: ["ot_admin"], modules: ["tramites"] }, { isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" })).not.toContain(
+      "admin-configuracion-ia",
+    );
   });
 
   // HU #13420 AC5 — la entrada de los parámetros del motor de descarga masiva es solo del SuperAdmin.
