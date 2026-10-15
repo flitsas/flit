@@ -978,7 +978,6 @@ Microsoft.AspNetCore.Http.IHttpContextAccessor => Microsoft.AspNetCore.Http.Http
 Microsoft.AspNetCore.Http.IHttpContextFactory => Microsoft.AspNetCore.Http.DefaultHttpContextFactory (Singleton)
 Microsoft.AspNetCore.Http.IMiddlewareFactory => Microsoft.AspNetCore.Http.MiddlewareFactory (Scoped)
 Microsoft.AspNetCore.MemoryPoolMetrics => Microsoft.AspNetCore.MemoryPoolMetrics (Singleton)
-Microsoft.AspNetCore.MemoryPoolMetrics => Microsoft.AspNetCore.MemoryPoolMetrics (Singleton)
 Microsoft.AspNetCore.Mvc.ApiExplorer.IApiDescriptionGroupCollectionProvider => factory (Singleton)
 Microsoft.AspNetCore.Mvc.ApiExplorer.IApiDescriptionProvider => Microsoft.AspNetCore.Mvc.ApiExplorer.EndpointMetadataApiDescriptionProvider (Transient)
 Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider => Microsoft.AspNetCore.Mvc.Infrastructure.DefaultActionDescriptorCollectionProvider (Singleton)
