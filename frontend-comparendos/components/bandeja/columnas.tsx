@@ -58,7 +58,16 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
   {
     key: "contraventor",
     header: "Contraventor",
-    render: (f) => (f.contraventorNombre ? <span>{f.contraventorNombre}</span> : <Chip e={consultaContraventor(f.estadoConsultaContraventor)} />),
+    render: (f) =>
+      f.contraventorNombre ? (
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[#16A34A]" />
+          <span>{f.contraventorNombre}</span>
+          <span className="sr-only">(asignado)</span>
+        </span>
+      ) : (
+        <Chip e={consultaContraventor(f.estadoConsultaContraventor)} />
+      ),
   },
   { key: "aviso", header: "Último hito de notificación", render: (f) => <Chip e={ultimoHito(f.ultimoHito)} /> },
   { key: "cambio", header: "Cambio de contraventor", render: (f) => <Chip e={cambioContraventor(f.cambioContraventor)} /> },

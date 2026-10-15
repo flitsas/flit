@@ -72,3 +72,12 @@ describe("describirFiltros (Mis exportaciones, §7.26)", () => {
     expect(describirFiltros({ activos: "activos" }, {}, {})).toBe("Sin filtros");
   });
 });
+
+describe("colores del contraventor (Epic GDC-4)", () => {
+  it("naranja si falta asignarlo a mano, verde si lo asignó la API", async () => {
+    const { consultaContraventor } = await import("@/lib/etiquetas");
+    expect(consultaContraventor("NoAplica").tono).toBe("warning");
+    expect(consultaContraventor("NoEncontrado").tono).toBe("warning");
+    expect(consultaContraventor("Encontrado").tono).toBe("success");
+  });
+});

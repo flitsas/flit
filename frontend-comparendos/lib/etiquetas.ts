@@ -71,12 +71,13 @@ export const FUENTE: Record<string, Etiqueta> = {
   MigracionV1: { texto: "V1", tono: "neutral" },
 };
 
+// Epic GDC-4: verde asignado, naranja pendiente de asignación manual, rojo rechazado por el OT (CAMBIO_CONTRAVENTOR).
 export const CONSULTA_CONTRAVENTOR: Record<string, Etiqueta> = {
-  NoAplica: { texto: "Sin conductor", tono: "neutral" },
-  Pendiente: { texto: "Pendiente", tono: "warning" },
-  Encontrado: { texto: "Encontrado", tono: "success" },
-  NoEncontrado: { texto: "No encontrado", tono: "danger" },
-  Error: { texto: "Error API", tono: "danger" },
+  NoAplica: { texto: "Pendiente de asignación manual", tono: "warning" },
+  Pendiente: { texto: "Consultando API", tono: "info" },
+  Encontrado: { texto: "Asignado por API", tono: "success" },
+  NoEncontrado: { texto: "No encontrado: asignar a mano", tono: "warning" },
+  Error: { texto: "Error de la API", tono: "danger" },
 };
 
 export const RESULTADO_DP: Record<string, Etiqueta> = {
