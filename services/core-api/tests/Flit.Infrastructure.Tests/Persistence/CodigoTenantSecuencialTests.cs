@@ -216,4 +216,16 @@ public sealed class CodigoTenantSecuencialTests
 
         entidad.GetIndexes().Single(i => i.GetDatabaseName() == "uq_tenants_code").IsUnique.Should().BeTrue();
     }
+
+    [Fact]
+    public void Hu13605_ElCentinelaDelCodigoEsLaCadenaVacia()
+    {
+        // La entidad nace con Code = string.Empty. Si el centinela fuera el default de string (null), EF mandaría
+        // esa cadena vacía en el INSERT y el DEFAULT de la secuencia nunca se dispararía.
+        using var db = NewContext();
+        var code = db.Model.FindEntityType(typeof(Tenant))!.FindProperty(nameof(Tenant.Code))!;
+
+        code.Sentinel.Should().Be(string.Empty);
+        new Tenant().Code.Should().Be(string.Empty, "el valor inicial de la entidad debe coincidir con el centinela");
+    }
 }

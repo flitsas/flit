@@ -27,7 +27,7 @@ public sealed class TenantProvisioner(FlitDbContext db, string v1ConnectionStrin
         var tenant = new Tenant
         {
             Id = Guid.CreateVersion7(),
-            Code = $"V1-{nit}",
+            // HU #13605 — sin Code: lo asigna Postgres (consecutivo COMP-XXXX), como a cualquier otro tenant.
             LegalName = legalName,
             TaxId = nit,
             TenantType = "RENTING",

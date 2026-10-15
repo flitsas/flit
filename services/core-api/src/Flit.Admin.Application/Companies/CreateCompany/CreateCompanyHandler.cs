@@ -9,14 +9,13 @@ namespace Flit.Admin.Application.Companies.CreateCompany;
 ///
 /// Flujo: (1) valida campos requeridos, longitudes y tipo permitido —cualquier fallo
 /// retorna 422 con la lista de errores <em>sin tocar BD</em>; (2) verifica unicidad
-/// del <c>code</c> (único en BD); (3) delega la inserción al repositorio. La razón
-/// social y el NIT no exigen unicidad (pueden repetirse entre tenants); el code sí.
+/// del NIT; (3) delega la inserción al repositorio. El <c>code</c> ya no lo envía el
+/// cliente: lo asigna Postgres al insertar (consecutivo COMP-XXXX, HU #13605).
 /// </summary>
 public sealed class CreateCompanyHandler
 {
     private const int LegalNameMaxLength = 255;
     private const int TaxIdMaxLength = 20;
-    private const int CodeMaxLength = 32;
 
     private readonly ICompanyWriteRepository _repository;
 
@@ -36,7 +35,6 @@ public sealed class CreateCompanyHandler
 
         var razonSocial = request.RazonSocial?.Trim() ?? string.Empty;
         var nit = request.Nit?.Trim() ?? string.Empty;
-        var code = request.Code?.Trim() ?? string.Empty;
         var tenantType = request.TenantType?.Trim().ToUpperInvariant() ?? string.Empty;
 
         if (razonSocial.Length == 0)
@@ -73,37 +71,10 @@ public sealed class CreateCompanyHandler
                 "nit", "El NIT debe contener al menos un dígito."));
         }
 
-        if (code.Length == 0)
-        {
-            errors.Add(new CompanyValidationError("code", "El código es obligatorio."));
-        }
-        else if (code.Length > CodeMaxLength)
-        {
-            errors.Add(new CompanyValidationError(
-                "code", $"El código no puede superar {CodeMaxLength} caracteres."));
-        }
-        else if (!TextFieldPatterns.TenantCode().IsMatch(code))
-        {
-            errors.Add(new CompanyValidationError(
-                "code", "El código solo permite letras, números, guion y guion bajo."));
-        }
-        else if (!TextFieldPatterns.HasLetterOrDigit().IsMatch(code))
-        {
-            errors.Add(new CompanyValidationError(
-                "code", "El código debe contener al menos una letra o número."));
-        }
-
         if (!CompanyTenantTypes.IsValid(tenantType))
         {
             errors.Add(new CompanyValidationError(
                 "tenantType", $"El tipo de compañía debe ser {CompanyTenantTypes.DisplayList}."));
-        }
-
-        // Unicidad del code: solo se consulta si el code pasó las validaciones de formato.
-        if (code.Length is > 0 and <= CodeMaxLength
-            && await _repository.CodeExistsAsync(code, cancellationToken).ConfigureAwait(false))
-        {
-            errors.Add(new CompanyValidationError("code", "Ya existe una compañía con ese código."));
         }
 
         // Unicidad del NIT: identifica a la empresa ante el Estado, así que dos tenants con el mismo NIT
@@ -125,7 +96,6 @@ public sealed class CreateCompanyHandler
                 new NewCompany(
                     LegalName: razonSocial,
                     TaxId: nit,
-                    Code: code,
                     TenantType: tenantType,
                     IsActive: request.EstadoActivo ?? true,
                     CreatedBy: command.CreatedBy),

@@ -10,7 +10,6 @@ public sealed class CreateChildCompanyHandler
 {
     private const int LegalNameMaxLength = 255;
     private const int TaxIdMaxLength = 20;
-    private const int CodeMaxLength = 32;
 
     private readonly ICompanyHierarchyRepository _hierarchy;
     private readonly ICompanyWriteRepository _companies;
@@ -34,7 +33,6 @@ public sealed class CreateChildCompanyHandler
 
         var razonSocial = request.RazonSocial?.Trim() ?? string.Empty;
         var nit = request.Nit?.Trim() ?? string.Empty;
-        var code = request.Code?.Trim() ?? string.Empty;
         var tenantTypeRaw = request.TenantType?.Trim();
         var tenantType = string.IsNullOrEmpty(tenantTypeRaw)
             ? ChildTenantTypes.DefaultForHeadType(command.HeadTenantType)
@@ -71,36 +69,12 @@ public sealed class CreateChildCompanyHandler
             errors.Add(new CompanyValidationError("nit", "El NIT debe contener al menos un dígito."));
         }
 
-        if (code.Length == 0)
-        {
-            errors.Add(new CompanyValidationError("code", "El código es obligatorio."));
-        }
-        else if (code.Length > CodeMaxLength)
-        {
-            errors.Add(new CompanyValidationError("code", $"El código no puede superar {CodeMaxLength} caracteres."));
-        }
-        else if (!TextFieldPatterns.TenantCode().IsMatch(code))
-        {
-            errors.Add(new CompanyValidationError(
-                "code", "El código solo permite letras, números, guion y guion bajo."));
-        }
-        else if (!TextFieldPatterns.HasLetterOrDigit().IsMatch(code))
-        {
-            errors.Add(new CompanyValidationError("code", "El código debe contener al menos una letra o número."));
-        }
-
         if (!ChildTenantTypes.IsValid(tenantType))
         {
             errors.Add(new CompanyValidationError(
                 "tenantType",
                 $"El tipo del cliente hijo debe ser {ChildTenantTypes.DisplayList}. "
                 + "Un tipo de cabeza de grupo o FLIT no está permitido."));
-        }
-
-        if (code.Length is > 0 and <= CodeMaxLength
-            && await _companies.CodeExistsAsync(code, cancellationToken).ConfigureAwait(false))
-        {
-            errors.Add(new CompanyValidationError("code", "Ya existe una compañía con ese código."));
         }
 
         if (nit.Length is > 0 and <= TaxIdMaxLength
@@ -121,7 +95,6 @@ public sealed class CreateChildCompanyHandler
                     new NewChildCompany(
                         LegalName: razonSocial,
                         TaxId: nit,
-                        Code: code,
                         TenantType: tenantType,
                         IsActive: request.EstadoActivo ?? true,
                         ParentTenantId: command.HeadTenantId,
