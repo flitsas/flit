@@ -27,11 +27,11 @@ public sealed class SimulacionTests(ApiSinSimulacion api) : IClassFixture<ApiSin
         var ct = TestContext.Current.CancellationToken;
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
         var empresa = Guid.NewGuid();
-        (await super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora" }, ct)).EnsureSuccessStatusCode();
+        (await api.RegistrarEmpresaAsync(super, empresa, "Gestora", ct: ct)).EnsureSuccessStatusCode();
         (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/capacidades", new
         {
             hasRightPetitionModule = false, allowsContravenerConsultation = false, allowsContravenerChange = false, hasOcrAccess = true, hasReportesModule = false,
-            tipoIntegracionConductor = "Manual", conjuntoPlantillas = "Flit", requiereRepresentanteLegal = true, empresaNombre = "Gestora",
+            tipoIntegracionConductor = "Manual", conjuntoPlantillas = "Flit", requiereRepresentanteLegal = true,
         }, ct)).EnsureSuccessStatusCode();
 
         var manual = await super.PostAsJsonAsync("/api/v1/comparendos/admin/ingesta/ejecutar", new { canal = "SimitNit" }, ct);

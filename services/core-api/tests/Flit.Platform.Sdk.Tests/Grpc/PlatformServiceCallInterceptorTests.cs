@@ -57,4 +57,14 @@ public sealed class PlatformServiceCallInterceptorTests
     [InlineData("00000000-0000-0000-0000-000000000000")]
     public void SinEmpresaValida_InvalidArgument(string? tenant) =>
         CodeOf(() => _interceptor.Validate(Token("svc-consultas"), tenant)).Should().Be(StatusCode.InvalidArgument);
+
+    [Fact]
+    public void ServicioGlobal_NoExigeEmpresa_PeroSiTokenDeServicioYScope()
+    {
+        var global = new PlatformServiceCallInterceptor("platform.identidad.empresas", "plataforma", requireTenant: false);
+
+        global.Validate(Token("svc-comparendos", scope: "platform.identidad.empresas"), null).TenantId.Should().Be(Guid.Empty);
+        CodeOf(() => global.Validate(Token("svc-comparendos"), null)).Should().Be(StatusCode.PermissionDenied);
+        CodeOf(() => global.Validate(Token(Guid.NewGuid().ToString(), scope: "platform.identidad.empresas"), null)).Should().Be(StatusCode.Unauthenticated);
+    }
 }

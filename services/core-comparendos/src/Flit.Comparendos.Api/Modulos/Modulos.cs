@@ -97,11 +97,16 @@ public static class Modulos
                 configuration, new Uri(identidad), "platform.identidad.read", o => o.Deadline = TimeSpan.FromSeconds(10));
             services.AddSingleton<Plataforma.IProductosHabilitados, Plataforma.ProductosHabilitadosIdentidad>();
             services.AddScoped<Plataforma.IUsuariosEmpresa, Plataforma.UsuariosEmpresaIdentidad>();
+            // Lista global de empresas para el parametrizador del SuperAdmin (B2-1, B2-4): su propio scope.
+            services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.EmpresasService.EmpresasServiceClient>(
+                configuration, new Uri(identidad), "platform.identidad.empresas", o => o.Deadline = TimeSpan.FromSeconds(10));
+            services.AddScoped<Plataforma.IEmpresasPlataforma, Plataforma.EmpresasPlataformaIdentidad>();
         }
         else
         {
             services.AddSingleton<Plataforma.IProductosHabilitados>(new Plataforma.ProductosHabilitadosFijo(simulacion));
             services.AddSingleton<Plataforma.IUsuariosEmpresa, Plataforma.UsuariosEmpresaVacio>();
+            services.AddSingleton<Plataforma.IEmpresasPlataforma, Plataforma.EmpresasPlataformaNoConectada>();
         }
 
         services.AddScoped<Ingesta.ElegibilidadConsultas>();

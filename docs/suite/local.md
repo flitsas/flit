@@ -189,6 +189,9 @@ cp services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.js
 # proveedor «simulado» y los reales), Comparendos:Notificaciones:Address=http://127.0.0.1:8085 (con Smtp:Host vacío en
 # core-notificaciones el correo queda en su log) y Comparendos:Tramites:Address=http://127.0.0.1:8082 (réplica de
 # organismos; core-api con Ict__GrpcPort=8082 y Suite__Hosts__Overrides__comparendos=http://127.0.0.1:4023).
+# Para registrar empresas en el parametrizador (lista de empresas con Comparendos encendido, nombre y NIT):
+# Comparendos:Identidad:Address=http://127.0.0.1:8083, con core-identity (§4) arrancado con Identidad__GrpcPort=8083 y el
+# override de comparendos. Sin Identidad la lista sale vacía y no se puede registrar.
 # El gateway necesita los destinos locales de core-comparendos y core-consultas (están en su appsettings de ejemplo).
 cd services/core-comparendos/src/Flit.Comparendos.Api && dotnet build && \
 ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Comparendos.Api.dll

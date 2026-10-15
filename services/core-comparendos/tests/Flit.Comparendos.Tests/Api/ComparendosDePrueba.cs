@@ -14,11 +14,11 @@ public static class ComparendosDePrueba
     {
         var empresa = Guid.NewGuid();
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
-        (await super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora de prueba" })).EnsureSuccessStatusCode();
+        (await api.RegistrarEmpresaAsync(super, empresa, "Gestora de prueba")).EnsureSuccessStatusCode();
         (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/capacidades", new
         {
             hasRightPetitionModule = dp, allowsContravenerConsultation = consulta, allowsContravenerChange = cambio, hasOcrAccess = ocr, hasReportesModule = reportes,
-            tipoIntegracionConductor = integracion, conjuntoPlantillas = conjunto, requiereRepresentanteLegal = requiereRl, empresaNombre = "Gestora de prueba",
+            tipoIntegracionConductor = integracion, conjuntoPlantillas = conjunto, requiereRepresentanteLegal = requiereRl,
         })).EnsureSuccessStatusCode();
         await ConsultasActivasAsync(api, empresa);
         return empresa;

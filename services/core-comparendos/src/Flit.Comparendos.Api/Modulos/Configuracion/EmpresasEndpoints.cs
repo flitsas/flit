@@ -16,7 +16,7 @@ namespace Flit.Comparendos.Api.Modulos.Configuracion;
 /// de la gestora edita solo su correo: canal, remitente, correo de respuesta, CC/BCC por tipo, destinatarios de reportes
 /// y correos de alerta operativa. Todo queda auditado (RN-010).
 /// </summary>
-public static class EmpresasEndpoints
+public static partial class EmpresasEndpoints
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -43,7 +43,8 @@ public static class EmpresasEndpoints
         IReadOnlyList<string> CorreosAlertaOperativa,
         string? EmpresaNit);
 
-    public sealed record NuevaEmpresa(Guid Id, string Nombre);
+    /// <summary>La empresa elegida de la lista de la plataforma (<c>GET /admin/empresas/plataforma</c>).</summary>
+    public sealed record NuevaEmpresa(Guid Id);
 
     public sealed record CambioCapacidades(
         bool HasRightPetitionModule,
@@ -53,9 +54,7 @@ public static class EmpresasEndpoints
         bool HasReportesModule,
         string TipoIntegracionConductor,
         string ConjuntoPlantillas,
-        bool RequiereRepresentanteLegal,
-        string? EmpresaNombre,
-        string? EmpresaNit = null);
+        bool RequiereRepresentanteLegal);
 
     public sealed record CambioCorreo(
         string CanalCorreo,
@@ -73,6 +72,7 @@ public static class EmpresasEndpoints
 
         var admin = api.MapGroup("/admin/empresas").RequireAuthorization(AutorizacionExtensions.PoliticaSuperAdmin);
         admin.MapGet("", Listar);
+        admin.MapGet("/plataforma", DePlataforma);
         admin.MapPost("", Registrar);
         admin.MapGet("/{id:guid}/configuracion", DeEmpresa);
         admin.MapPut("/{id:guid}/capacidades", GuardarCapacidades);
@@ -86,7 +86,7 @@ public static class EmpresasEndpoints
         return new(c.TenantId, c.EmpresaNombre, c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess,
             c.HasReportesModule, c.NotificationChannel.ToString(), c.CanalCorreo.ToString(), c.RemitenteNombre, c.CorreoRespuesta, Copias(c.Cc), Copias(c.Bcc),
             c.TipoIntegracionConductor.ToString(), c.ConjuntoPlantillas.ToString(), c.RequiereRepresentanteLegal, c.DestinatariosReportes, c.CorreosAlertaOperativa,
-            c.EmpresaNit is { } nit ? $"{nit}-{Nit.DigitoVerificacion(nit)}" : null);
+            ConDv(c.EmpresaNit));
     }
 
     public static IReadOnlyList<CopiaDto> Copias(string json) =>
@@ -154,30 +154,87 @@ public static class EmpresasEndpoints
     }
 
     /// <summary>
-    /// Alta de una empresa en Comparendos antes de que alguno de sus usuarios entre (la habilitación del producto vive
-    /// en la plataforma; aquí solo se crea su configuración). El id es el de la empresa en FLIT.
+    /// Empresas de la plataforma con Comparendos encendido, para elegir al registrar (hallazgos B2-1 y B2-4). Trae el nombre
+    /// y el NIT de la plataforma, con el dígito de verificación calculado, y si ya está registrada aquí.
     /// </summary>
-    private static async Task<IResult> Registrar(NuevaEmpresa pedido, Capacidades capacidades, Auditoria auditoria, ComparendosDb db, CancellationToken ct)
+    private static async Task<IResult> DePlataforma(IEmpresasPlataforma plataforma, ComparendosDb db, CancellationToken ct)
     {
-        if (pedido.Id == Guid.Empty || string.IsNullOrWhiteSpace(pedido.Nombre))
-            throw new ReglaException("EMPRESA_INVALIDA", "Escribe el id de la empresa en FLIT y su nombre.");
-        var existe = await db.ConfiguracionesEmpresa.AnyAsync(c => c.TenantId == pedido.Id, ct).ConfigureAwait(false);
-        var config = await capacidades.DeAsync(pedido.Id, ct, pedido.Nombre.Trim()).ConfigureAwait(false);
+        var empresas = await ListaPlataformaAsync(plataforma, ct).ConfigureAwait(false);
+        var registradas = (await db.ConfiguracionesEmpresa.AsNoTracking().Select(c => c.TenantId).ToListAsync(ct).ConfigureAwait(false)).ToHashSet();
+        return Results.Ok(empresas.Select(e => new { e.Id, e.Nombre, nit = ConDv(e.NitBase), registrada = registradas.Contains(e.Id) }));
+    }
+
+    /// <summary>
+    /// Alta de una empresa en Comparendos antes de que alguno de sus usuarios entre. Se elige de la lista de la plataforma:
+    /// solo una empresa con el producto encendido, y su nombre y NIT salen de allá, no se escriben.
+    /// </summary>
+    private static async Task<IResult> Registrar(NuevaEmpresa pedido, IEmpresasPlataforma plataforma, Capacidades capacidades, Auditoria auditoria, ComparendosDb db, CancellationToken ct)
+    {
+        var empresa = (await ListaPlataformaAsync(plataforma, ct).ConfigureAwait(false)).FirstOrDefault(e => e.Id == pedido.Id)
+            ?? throw new ReglaException("EMPRESA_SIN_PRODUCTO", "Esa empresa no tiene Comparendos encendido en la plataforma. Enciéndelo en Administración de compañías → Productos.");
+        var existe = await db.ConfiguracionesEmpresa.AnyAsync(c => c.TenantId == empresa.Id, ct).ConfigureAwait(false);
+        var config = await capacidades.DeAsync(empresa.Id, ct, empresa.Nombre).ConfigureAwait(false);
         if (!existe)
         {
-            auditoria.Registrar(pedido.Id, "configuracion_empresa", pedido.Id, "CREAR", new CambioCampo("empresa_nombre", null, pedido.Nombre.Trim()));
+            config.EmpresaNit = empresa.NitBase;
+            auditoria.Registrar(empresa.Id, "configuracion_empresa", empresa.Id, "CREAR",
+                new CambioCampo("empresa_nombre", null, empresa.Nombre), new CambioCampo("empresa_nit", null, empresa.NitBase));
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
 
         return Results.Ok(Dto(config));
     }
 
-    private static async Task<IResult> DeEmpresa(Guid id, ComparendosDb db, CancellationToken ct)
+    /// <summary>
+    /// Al abrir una empresa, su nombre y su NIT se ponen al día con la plataforma (la dueña de esos datos). Si la
+    /// plataforma no responde, se muestra lo último guardado.
+    /// </summary>
+    private static async Task<IResult> DeEmpresa(Guid id, IEmpresasPlataforma plataforma, Auditoria auditoria, ComparendosDb db, ILoggerFactory logs, CancellationToken ct)
     {
-        var config = await db.ConfiguracionesEmpresa.AsNoTracking().FirstOrDefaultAsync(c => c.TenantId == id, ct).ConfigureAwait(false)
+        var config = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(c => c.TenantId == id, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("La empresa");
+        IReadOnlyList<EmpresaPlataforma>? empresas = null;
+        try
+        {
+            empresas = await plataforma.ListarAsync(ct).ConfigureAwait(false);
+        }
+        catch (global::Grpc.Core.RpcException ex)
+        {
+            LogPlataformaNoResponde(logs.CreateLogger(typeof(EmpresasEndpoints)), id, ex.StatusCode);
+        }
+
+        if (empresas?.FirstOrDefault(e => e.Id == id) is { } empresa)
+        {
+            var cambios = Auditoria.Diferencias(("empresa_nombre", config.EmpresaNombre, empresa.Nombre), ("empresa_nit", config.EmpresaNit, empresa.NitBase));
+            if (cambios.Length > 0)
+            {
+                (config.EmpresaNombre, config.EmpresaNit) = (empresa.Nombre, empresa.NitBase);
+                auditoria.Registrar(id, "configuracion_empresa", id, "SINCRONIZAR", cambios);
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+        }
+
         return Results.Ok(Dto(config));
     }
+
+    private static async Task<IReadOnlyList<EmpresaPlataforma>> ListaPlataformaAsync(IEmpresasPlataforma plataforma, CancellationToken ct)
+    {
+        const string NoDisponible = "No se pudo leer la lista de empresas de la plataforma. Intenta de nuevo en unos minutos.";
+        try
+        {
+            return await plataforma.ListarAsync(ct).ConfigureAwait(false)
+                ?? throw new ReglaException("PLATAFORMA_NO_DISPONIBLE", NoDisponible, StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (global::Grpc.Core.RpcException)
+        {
+            throw new ReglaException("PLATAFORMA_NO_DISPONIBLE", NoDisponible, StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo leer la empresa {Empresa} en la plataforma ({Codigo}); se muestra lo último guardado.")]
+    private static partial void LogPlataformaNoResponde(ILogger logger, Guid empresa, global::Grpc.Core.StatusCode codigo);
+
+    private static string? ConDv(string? nitBase) => nitBase is { } nit ? $"{nit}-{Nit.DigitoVerificacion(nit)}" : null;
 
     private static async Task<IResult> GuardarCapacidades(Guid id, CambioCapacidades pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
     {
@@ -187,16 +244,6 @@ public static class EmpresasEndpoints
         if (!Enum.TryParse<ConjuntoPlantillas>(pedido.ConjuntoPlantillas, true, out var conjunto))
             throw new ReglaException("CONJUNTO_INVALIDO", "El conjunto de plantillas debe ser Flit o Renting.");
 
-        var nombre = string.IsNullOrWhiteSpace(pedido.EmpresaNombre) ? c.EmpresaNombre : pedido.EmpresaNombre.Trim();
-        var nit = c.EmpresaNit;
-        if (!string.IsNullOrWhiteSpace(pedido.EmpresaNit))
-        {
-            var separado = Nit.Separar(pedido.EmpresaNit) ?? throw new ReglaException("NIT_INVALIDO", "El NIT de la empresa no es válido.");
-            if (separado.Dv is { } dv && dv != Nit.DigitoVerificacion(separado.Base))
-                throw new ReglaException("NIT_INVALIDO", $"El dígito de verificación de {separado.Base} es {Nit.DigitoVerificacion(separado.Base)}, no {dv}.");
-            nit = separado.Base;
-        }
-
         var cambios = Auditoria.Diferencias(
             ("has_right_petition_module", c.HasRightPetitionModule, pedido.HasRightPetitionModule),
             ("allows_contravener_consultation", c.AllowsContravenerConsultation, pedido.AllowsContravenerConsultation),
@@ -205,9 +252,7 @@ public static class EmpresasEndpoints
             ("has_reportes_module", c.HasReportesModule, pedido.HasReportesModule),
             ("tipo_integracion_conductor", c.TipoIntegracionConductor, integracion),
             ("conjunto_plantillas", c.ConjuntoPlantillas, conjunto),
-            ("requiere_representante_legal", c.RequiereRepresentanteLegal, pedido.RequiereRepresentanteLegal),
-            ("empresa_nombre", c.EmpresaNombre, nombre),
-            ("empresa_nit", c.EmpresaNit, nit));
+            ("requiere_representante_legal", c.RequiereRepresentanteLegal, pedido.RequiereRepresentanteLegal));
         if (cambios.Length == 0)
             return Results.Ok(Dto(c));
 
@@ -216,7 +261,7 @@ public static class EmpresasEndpoints
             && pedido.AllowsContravenerConsultation && integracion == TipoIntegracionConductor.ApiRenting;
         (c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess, c.HasReportesModule) =
             (pedido.HasRightPetitionModule, pedido.AllowsContravenerConsultation, pedido.AllowsContravenerChange, pedido.HasOcrAccess, pedido.HasReportesModule);
-        (c.TipoIntegracionConductor, c.ConjuntoPlantillas, c.RequiereRepresentanteLegal, c.EmpresaNombre, c.EmpresaNit) = (integracion, conjunto, pedido.RequiereRepresentanteLegal, nombre, nit);
+        (c.TipoIntegracionConductor, c.ConjuntoPlantillas, c.RequiereRepresentanteLegal) = (integracion, conjunto, pedido.RequiereRepresentanteLegal);
         (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
         auditoria.Registrar(id, "configuracion_empresa", id, "ACTUALIZAR", cambios);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

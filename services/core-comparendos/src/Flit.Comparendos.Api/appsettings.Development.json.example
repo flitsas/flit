@@ -29,7 +29,8 @@
     },
     // Fuentes de comparendos por core-consultas (gRPC). Vacío: proveedor «simulado» local.
     "Consultas": { "Address": "" },
-    // Productos habilitados por Identidad (gRPC). Vacío en Development: todas las empresas cuentan como habilitadas.
+    // Productos habilitados, usuarios y la lista de empresas del parametrizador, por Identidad (gRPC). Vacío en Development:
+    // todas las empresas cuentan como habilitadas, pero no hay lista para registrar empresas. Con core-identity: "http://127.0.0.1:8083".
     "Identidad": { "Address": "" },
     // Vacío: los correos solo se escriben en el log. Con core-notificaciones corriendo: "http://127.0.0.1:8085".
     "Notificaciones": { "Address": "" },

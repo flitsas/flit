@@ -31,6 +31,19 @@ public static class PlatformGrpcServerExtensions
         return builder.AddServiceOptions<TService>(options => options.Interceptors.Add<PlatformServiceCallInterceptor>(scope, audience));
     }
 
+    /// <summary>
+    /// Como <see cref="RequireServiceToken{TService}"/>, pero para un servicio global que responde por todas las empresas:
+    /// no exige <c>x-flit-tenant-id</c>. Úsese solo con un scope propio, que nadie tenga por defecto.
+    /// </summary>
+    public static IGrpcServerBuilder RequireServiceTokenSinEmpresa<TService>(this IGrpcServerBuilder builder, string scope, string audience)
+        where TService : class
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(audience);
+        return builder.AddServiceOptions<TService>(options => options.Interceptors.Add<PlatformServiceCallInterceptor>(scope, audience, false));
+    }
+
     /// <summary><c>grpc.health.v1.Health</c> siempre; reflection solo en Development (contrato v1.3 §6.1).</summary>
     public static void MapFlitGrpcPlatform(this IEndpointRouteBuilder endpoints, IHostEnvironment environment, string? requireHost = null)
     {

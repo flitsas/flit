@@ -86,3 +86,32 @@ enum EstadoUsuario {
   ESTADO_USUARIO_ACTIVO = 2;
   ESTADO_USUARIO_INACTIVO = 3;
 }
+
+// Empresas de la plataforma, para las pantallas del SuperAdmin de cada producto (GDC, hallazgos B2-1 y B2-4: el
+// parametrizador de Comparendos elige la empresa de una lista y toma de aquí su nombre y su NIT, en vez de pedirlos a
+// mano). Es un servicio GLOBAL: responde por todas las empresas y no usa `x-flit-tenant-id`. Por eso tiene su propio
+// scope, `platform.identidad.empresas` (aud=plataforma), que solo se le da al servicio que lo necesita.
+service EmpresasService {
+  // Empresas activas que tienen `producto` encendido, con la misma regla fail-closed de la jerarquía que
+  // ObtenerProductosHabilitados (ADR-0057). Ordenadas por nombre. `producto` es obligatorio y no puede ser `plataforma`.
+  rpc ListarEmpresasConProducto(ListarEmpresasConProductoRequest) returns (ListarEmpresasConProductoResponse);
+}
+
+message ListarEmpresasConProductoRequest {
+  // Código de producto (contrato §1).
+  string producto = 1;
+}
+
+message ListarEmpresasConProductoResponse {
+  repeated Empresa empresas = 1;
+}
+
+message Empresa {
+  // Id de la empresa (UUID).
+  string id = 1;
+  // Razón social (identity.tenants.legal_name).
+  string nombre = 2;
+  // NIT tal como lo guarda la plataforma: solo el número, sin dígito de verificación. Vacío si no tiene. El dígito lo
+  // calcula quien lo muestre (DIAN, módulo 11).
+  string nit = 3;
+}

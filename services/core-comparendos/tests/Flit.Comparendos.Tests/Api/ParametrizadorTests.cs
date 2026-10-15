@@ -18,7 +18,7 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
     private static object Capacidades(bool dp = true, bool cambio = false) => new
     {
         hasRightPetitionModule = dp, allowsContravenerConsultation = false, allowsContravenerChange = cambio, hasOcrAccess = true, hasReportesModule = false,
-        tipoIntegracionConductor = "Manual", conjuntoPlantillas = "Flit", requiereRepresentanteLegal = true, empresaNombre = "Gestora Uno",
+        tipoIntegracionConductor = "Manual", conjuntoPlantillas = "Flit", requiereRepresentanteLegal = true,
     };
 
     [Fact]
@@ -27,7 +27,7 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         var empresa = Guid.NewGuid();
-        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora Uno" }, ct)).EnsureSuccessStatusCode();
+        (await api.RegistrarEmpresaAsync(Super, empresa, "Gestora Uno", ct: ct)).EnsureSuccessStatusCode();
         (await Super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/capacidades", Capacidades(), ct)).EnsureSuccessStatusCode();
 
         var sesion = await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer])).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/sesion", ct);
@@ -43,23 +43,48 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
     }
 
     [Fact]
-    public async Task NitDeLaEmpresa_SeValidaYSeMuestraConDv()
+    public async Task RegistrarEmpresa_SeEligeDeLaPlataforma_YTraeNombreYNitConDv()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         var empresa = Guid.NewGuid();
-        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora NIT" }, ct)).EnsureSuccessStatusCode();
-        var url = $"/api/v1/comparendos/admin/empresas/{empresa}/capacidades";
-        object Con(string nit) => new
-        {
-            hasRightPetitionModule = true, allowsContravenerConsultation = false, allowsContravenerChange = false, hasOcrAccess = false, hasReportesModule = false,
-            tipoIntegracionConductor = "Manual", conjuntoPlantillas = "Flit", requiereRepresentanteLegal = true, empresaNombre = "Gestora NIT", empresaNit = nit,
-        };
+        api.Empresas.Agregar(empresa, "Renting Colombia S.A.S", "890903938");
 
-        (await Super.PutAsJsonAsync(url, Con("900123456-1"), ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "el DV de 900123456 es 8");
-        var r = await Super.PutAsJsonAsync(url, Con("900.123.456"), ct);
+        var lista = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/empresas/plataforma", ct);
+        var fila = lista.EnumerateArray().Single(e => e.GetProperty("id").GetGuid() == empresa);
+        fila.GetProperty("nit").GetString().Should().Be("890903938-8", "el dígito se calcula (DIAN, módulo 11)");
+        fila.GetProperty("registrada").GetBoolean().Should().BeFalse();
+
+        var r = await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa }, ct);
         r.EnsureSuccessStatusCode();
-        (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("empresaNit").GetString().Should().Be("900123456-8");
+        var config = await r.Content.ReadFromJsonAsync<JsonElement>(ct);
+        config.GetProperty("empresaNombre").GetString().Should().Be("Renting Colombia S.A.S");
+        config.GetProperty("empresaNit").GetString().Should().Be("890903938-8");
+        (await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/empresas/plataforma", ct)).EnumerateArray()
+            .Single(e => e.GetProperty("id").GetGuid() == empresa).GetProperty("registrada").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RegistrarEmpresa_SinElProductoEnLaPlataforma_SeRechaza()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = Guid.NewGuid() }, ct)).StatusCode
+            .Should().Be(HttpStatusCode.UnprocessableEntity, "solo se registran empresas con Comparendos encendido");
+    }
+
+    [Fact]
+    public async Task AbrirEmpresa_PoneAlDiaNombreYNitDesdeLaPlataforma()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid();
+        (await api.RegistrarEmpresaAsync(Super, empresa, "Nombre viejo", "900123456", ct)).EnsureSuccessStatusCode();
+        api.Empresas.Agregar(empresa, "Nombre nuevo S.A.S", "800197268");
+
+        var config = await Super.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/admin/empresas/{empresa}/configuracion", ct);
+        config.GetProperty("empresaNombre").GetString().Should().Be("Nombre nuevo S.A.S");
+        config.GetProperty("empresaNit").GetString().Should().Be("800197268-4");
     }
 
     [Fact]
@@ -90,7 +115,7 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         var empresa = Guid.NewGuid();
-        await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora Dos" }, ct);
+        await api.RegistrarEmpresaAsync(Super, empresa, "Gestora Dos", ct: ct);
         await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar])).PostAsJsonAsync("/api/v1/comparendos/monitoreo/placas", new { placas = new[] { "PAR123" } }, ct);
         api.Fuente.Respuestas["SimitPlaca:PAR123"] = () => RespuestaFuente.Exitosa([new ItemFuente { Numero = "P-1", Placa = "PAR123", FechaNotificacion = new DateOnly(2026, 10, 1) }]);
         await api.CicloAsync(CanalIngesta.SimitPlaca, empresa);

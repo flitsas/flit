@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
+import { estadoLegal } from "@/lib/etiquetas";
 import {
   capacidadesDeConfiguracion,
   cambiosDeAuditoria,
@@ -20,11 +21,10 @@ import type {
   AuditoriaConfiguracion,
   ConfiguracionEmpresa,
   EmpresaAdmin,
+  EmpresaPlataforma,
   Tipologia,
 } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function NuevaEmpresa({
   onCerrar,
@@ -33,21 +33,22 @@ function NuevaEmpresa({
   onCerrar: () => void;
   onCreada: (id: string) => void;
 }) {
+  // Solo las empresas con Comparendos encendido en la plataforma; nombre y NIT salen de allá (hallazgos B2-1 y B2-4).
+  const empresas = useCarga("empresas-plataforma", (signal) =>
+    apiFetch<EmpresaPlataforma[]>("/admin/empresas/plataforma", { signal }),
+  );
   const [id, setId] = useState("");
-  const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const valido = UUID.test(id.trim()) && nombre.trim().length > 0;
+  const disponibles = (empresas.datos ?? []).filter((e) => !e.registrada);
+  const elegida = disponibles.find((e) => e.id === id);
 
   const crear = async () => {
     setOcupado(true);
     setError(null);
     try {
-      await apiFetch("/admin/empresas", {
-        method: "POST",
-        body: { id: id.trim(), nombre: nombre.trim() },
-      });
-      onCreada(id.trim());
+      await apiFetch("/admin/empresas", { method: "POST", body: { id } });
+      onCreada(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo registrar la empresa.");
     } finally {
@@ -61,7 +62,7 @@ function NuevaEmpresa({
       onClose={onCerrar}
       busy={ocupado}
       title="Registrar empresa en Comparendos"
-      description="La habilitación del producto vive en la plataforma; aquí se crea su configuración de Comparendos."
+      description="Aparecen las empresas que tienen Comparendos encendido en Administración de compañías → Productos."
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" className={controlCls(false)} onClick={onCerrar}>
@@ -70,7 +71,7 @@ function NuevaEmpresa({
           <button
             type="button"
             className={BOTON_PRIMARIO_CLS}
-            disabled={!valido || ocupado}
+            disabled={!elegida || ocupado}
             onClick={crear}
           >
             {ocupado ? "Registrando…" : "Registrar"}
@@ -79,19 +80,28 @@ function NuevaEmpresa({
       }
     >
       <div className="flex flex-col gap-3">
-        <label className={ETIQUETA_CLS}>
-          Identificador de la empresa en FLIT
-          <input
-            className={INPUT_CLS}
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="00000000-0000-0000-0000-000000000000"
-          />
-        </label>
-        <label className={ETIQUETA_CLS}>
-          Nombre
-          <input className={INPUT_CLS} value={nombre} onChange={(e) => setNombre(e.target.value)} />
-        </label>
+        {empresas.estado === "loading" && <p className="text-sm opacity-60">Cargando empresas…</p>}
+        {empresas.estado === "error" && <InlineAlert tone="error">{empresas.error}</InlineAlert>}
+        {empresas.estado !== "loading" && empresas.estado !== "error" && disponibles.length === 0 && (
+          <InlineAlert tone="info">
+            No hay empresas por registrar: todas las que tienen Comparendos encendido ya están en la lista.
+          </InlineAlert>
+        )}
+        {disponibles.length > 0 && (
+          <label className={ETIQUETA_CLS}>
+            Empresa
+            <select className={INPUT_CLS} value={id} onChange={(e) => setId(e.target.value)}>
+              <option value="">Elige una empresa</option>
+              {disponibles.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre}
+                  {e.nit ? ` · NIT ${e.nit}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {elegida && <DatosEmpresa nombre={elegida.nombre} nit={elegida.nit} />}
         {error && (
           <InlineAlert tone="error" compact>
             {error}
@@ -99,6 +109,24 @@ function NuevaEmpresa({
         )}
       </div>
     </Modal>
+  );
+}
+
+/** Nombre y NIT de la empresa: vienen de la plataforma y se corrigen allá, no aquí. */
+function DatosEmpresa({ nombre, nit }: { nombre: string | null; nit: string | null }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt className="opacity-70">Nombre</dt>
+        <dd className="font-semibold">{nombre ?? "—"}</dd>
+        <dt className="opacity-70">NIT</dt>
+        <dd className="font-semibold tabular-nums">{nit ?? "Sin NIT en la plataforma"}</dd>
+      </dl>
+      <p className="text-[11px] opacity-70">
+        Se toman de la plataforma; si algo está mal, se corrige en Administración de compañías. El dígito de verificación
+        lo calcula el sistema.
+      </p>
+    </div>
   );
 }
 
@@ -146,6 +174,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
   const [confirmar, setConfirmar] = useState(false);
   const [historial, setHistorial] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
   if (config.estado === "loading")
     return <p className="text-sm opacity-60">Cargando configuración…</p>;
@@ -161,6 +190,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
 
   const guardar = async () => {
     setOcupado(true);
+    setErrorGuardar(null);
     try {
       await apiFetch(`/admin/empresas/${empresaId}/capacidades`, { method: "PUT", body: valores });
       setConfirmar(false);
@@ -169,7 +199,8 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       onGuardado();
       toast.show("Configuración guardada.", "success");
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : "No se pudo guardar.", "error");
+      // B2-2: el error se ve dentro del diálogo, que sigue abierto.
+      setErrorGuardar(e instanceof Error ? e.message : "No se pudo guardar.");
     } finally {
       setOcupado(false);
     }
@@ -182,6 +213,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
         body: { habilitada },
       });
       tipologias.recargar();
+      toast.show(`${t.codigo} ${habilitada ? "habilitada" : "deshabilitada"}.`, "success");
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "No se pudo cambiar la tipología.", "error");
     }
@@ -189,27 +221,8 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className={`${ETIQUETA_CLS} w-80`}>
-            Nombre de la empresa
-            <input
-              className={INPUT_CLS}
-              value={valores.empresaNombre ?? ""}
-              onChange={(e) => cambiar({ empresaNombre: e.target.value })}
-            />
-          </label>
-          <label className={`${ETIQUETA_CLS} w-48`}>
-            NIT de la empresa
-            <input
-              className={INPUT_CLS}
-              inputMode="numeric"
-              placeholder="900123456-8"
-              value={valores.empresaNit ?? ""}
-              onChange={(e) => cambiar({ empresaNit: e.target.value })}
-            />
-          </label>
-        </div>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <DatosEmpresa nombre={config.datos.empresaNombre} nit={config.datos.empresaNit} />
         <button type="button" className={controlCls(false)} onClick={() => setHistorial(true)}>
           <History className="h-3.5 w-3.5" aria-hidden />
           Historial de cambios
@@ -334,7 +347,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
             {
               key: "estados",
               header: "Procede en",
-              render: (t) => t.estadosLegalesPermitidos.join(", "),
+              render: (t) => t.estadosLegalesPermitidos.map((e) => estadoLegal(e).texto).join(", "),
             },
             {
               key: "habilitada",
@@ -356,7 +369,10 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       {confirmar && (
         <Modal
           open
-          onClose={() => setConfirmar(false)}
+          onClose={() => {
+            setConfirmar(false);
+            setErrorGuardar(null);
+          }}
           busy={ocupado}
           title="¿Guardar los cambios?"
           description="Las capacidades se aplican de inmediato a todos los usuarios de la empresa y quedan en el historial."
@@ -365,7 +381,10 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
               <button
                 type="button"
                 className={controlCls(false)}
-                onClick={() => setConfirmar(false)}
+                onClick={() => {
+                  setConfirmar(false);
+                  setErrorGuardar(null);
+                }}
               >
                 Cancelar
               </button>
@@ -380,9 +399,16 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
             </div>
           }
         >
-          <p className="text-sm">
-            Al activar el cambio de contraventor, los comparendos activos pasan a «sin solicitar».
-          </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm">
+              Al activar el cambio de contraventor, los comparendos activos pasan a «sin solicitar».
+            </p>
+            {errorGuardar && (
+              <InlineAlert tone="error" compact>
+                {errorGuardar}
+              </InlineAlert>
+            )}
+          </div>
         </Modal>
       )}
       {historial && <Historial empresaId={empresaId} onCerrar={() => setHistorial(false)} />}
@@ -463,7 +489,7 @@ export default function Empresas() {
           errorMessage={lista.error ?? undefined}
           onRetry={lista.recargar}
           onRowClick={(e) => setElegida(e.id)}
-          emptyMessage="Todavía no hay empresas en Comparendos. Registra una o espera a que entre su primer usuario."
+          emptyMessage="Todavía no hay empresas en Comparendos. Registra una de las que tienen el producto encendido."
           columns={[
             {
               key: "nombre",

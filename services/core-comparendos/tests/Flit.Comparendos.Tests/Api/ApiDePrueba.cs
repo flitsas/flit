@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -53,6 +54,17 @@ public class ApiDePrueba : IAsyncLifetime
     /// <summary>Fotos de fotomulta por URL; una URL que no esté aquí falla (el aviso sale sin foto).</summary>
     public FotosDePrueba Fotos { get; } = new();
 
+    /// <summary>Empresas de la plataforma con Comparendos encendido (lo que respondería Identidad).</summary>
+    public EmpresasDePrueba Empresas { get; } = new();
+
+    /// <summary>La pone en la lista de la plataforma y la registra como la registraría el SuperAdmin.</summary>
+    public Task<HttpResponseMessage> RegistrarEmpresaAsync(HttpClient super, Guid id, string nombre, string? nit = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(super);
+        Empresas.Agregar(id, nombre, nit);
+        return super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id }, ct);
+    }
+
     /// <summary>Reemplazos de servicios que agregan las clases derivadas (fuentes simuladas, correo, etc.).</summary>
     protected virtual void Reemplazar(IServiceCollection services)
     {
@@ -102,6 +114,7 @@ public class ApiDePrueba : IAsyncLifetime
         {
             s.AddSingleton<TimeProvider>(Reloj);
             s.AddSingleton<Flit.Comparendos.Api.Modulos.Avisos.IDescargaFoto>(Fotos);
+            s.AddSingleton<Flit.Comparendos.Api.Plataforma.IEmpresasPlataforma>(Empresas);
             Reemplazar(s);
         });
         await Program.MigrateAsync(App);
@@ -187,4 +200,17 @@ public sealed class FotosDePrueba : Flit.Comparendos.Api.Modulos.Avisos.IDescarg
 
     public Task<Flit.Comparendos.Api.Modulos.Correo.AdjuntoCorreo?> DescargarAsync(string url, CancellationToken ct) =>
         Task.FromResult(PorUrl.TryGetValue(url, out var b) ? new Flit.Comparendos.Api.Modulos.Correo.AdjuntoCorreo("foto.jpg", "image/jpeg", b) : null);
+}
+
+/// <summary>La lista de empresas de la plataforma, en memoria. <see cref="Caida"/> simula que Identidad no responde.</summary>
+public sealed class EmpresasDePrueba : Flit.Comparendos.Api.Plataforma.IEmpresasPlataforma
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Flit.Comparendos.Api.Plataforma.EmpresaPlataforma> _empresas = new();
+
+    public bool Caida { get; set; }
+
+    public void Agregar(Guid id, string nombre, string? nit = null) => _empresas[id] = new(id, nombre, nit);
+
+    public Task<IReadOnlyList<Flit.Comparendos.Api.Plataforma.EmpresaPlataforma>?> ListarAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<Flit.Comparendos.Api.Plataforma.EmpresaPlataforma>?>(Caida ? null : [.. _empresas.Values]);
 }

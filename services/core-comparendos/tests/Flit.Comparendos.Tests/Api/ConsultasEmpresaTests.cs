@@ -53,7 +53,7 @@ public sealed class ConsultasEmpresaTests(ApiConProductos api) : IClassFixture<A
     private async Task<(Guid Empresa, string Nit)> EmpresaConNitAsync()
     {
         var empresa = Guid.NewGuid();
-        (await Super.PostAsJsonAsync("/api/v1/comparendos/admin/empresas", new { id = empresa, nombre = "Gestora" })).EnsureSuccessStatusCode();
+        (await api.RegistrarEmpresaAsync(Super, empresa, "Gestora")).EnsureSuccessStatusCode();
         var nit = $"8{Random.Shared.Next(10000000, 99999999)}";
         (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar])).PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = nit })).EnsureSuccessStatusCode();
         return (empresa, nit);

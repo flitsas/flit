@@ -348,6 +348,14 @@ export interface Exportacion {
 }
 
 // ── Parametrizador (HU #13473-#13475) ──────────────────────────────────────────────────────────────────────────────
+/** Empresa de la plataforma con Comparendos encendido (GET /admin/empresas/plataforma). `nit` ya trae el dígito. */
+export interface EmpresaPlataforma {
+  id: string;
+  nombre: string;
+  nit: string | null;
+  registrada: boolean;
+}
+
 export interface EmpresaAdmin {
   id: string;
   nombre: string;

@@ -65,7 +65,9 @@ En el `.env`: `RABBITMQ_URL_COMPARENDOS=amqp://comparendos:<clave>@rabbitmq:5672
 ## 3. Cliente de servicio `svc-comparendos`
 
 Ya está declarado en la configuración de la API con sus scopes (`platform.manifest`, `platform.consultas`,
-`platform.identidad.read`, `platform.notificaciones.send`, `platform.tramites.catalogos`). El último es para la réplica
+`platform.identidad.read`, `platform.identidad.empresas`, `platform.notificaciones.send`, `platform.tramites.catalogos`).
+`platform.identidad.empresas` es para la lista de empresas con Comparendos encendido que usa el parametrizador del
+SuperAdmin (gRPC `EmpresasService` de core-identity, en `Comparendos__Identidad__Address`). `platform.tramites.catalogos` es para la réplica
 diaria del catálogo de organismos de tránsito (trabajo `SincronizacionOrganismos`, 3 a. m.): Comparendos llama al gRPC
 de catálogos de core-api en `Comparendos__Tramites__Address` (por defecto `http://core-api:${CORE_API_GRPC_PORT}`, el
 mismo puerto que ya usa ICT). Sin esa dirección queda la semilla de 298 organismos. Falta el secreto, el mismo valor en los dos lados:
