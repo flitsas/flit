@@ -64,7 +64,6 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
 export const SPA_DOCK_ITEM_LABEL = {
   tramites: COPY.B21Tramites,
   reportes: COPY.B21Reportes,
-  "reportes-detallados": "Reportes Detallados",
   validaciones: COPY.A17,
   "historial-placa": "Historial por placa",
   usuarios: COPY.B21Usuarios,
@@ -100,7 +99,6 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   // HU #12194 — el historial por placa es una lectura del universo de trámites: cuelga de Trámites.
   "historial-placa": "tramites",
   reportes: "reportes",
-  "reportes-detallados": "reportes",
   usuarios: "usuarios",
   // SuperAdmin + AdminCompany ("Administración"): consola / listado de compañías
   "admin-companies": "administradores",

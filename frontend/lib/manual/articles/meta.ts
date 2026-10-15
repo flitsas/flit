@@ -33,7 +33,6 @@ export const MANUAL_MODULE_ARTICLES: Readonly<Record<string, string>> = {
   validaciones: "1-gestor/8-identidad",
   "historial-placa": "1-gestor/9-historial-placa",
   reportes: "1-gestor/11-reportes",
-  "reportes-detallados": "1-gestor/11-reportes",
   usuarios: "1-gestor/12-usuarios",
   ayuda: "0-introduccion/1-bienvenida",
   // SuperAdmin (módulos SPA)

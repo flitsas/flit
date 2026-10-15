@@ -44,7 +44,6 @@ import {
   LayoutGrid,
   FileStack,
   BarChart3,
-  FileSpreadsheet,
   ShieldCheck,
   Users,
   HelpCircle,
@@ -82,7 +81,6 @@ export type ModuleId =
   | "dashboard"
   | "tramites"
   | "reportes"
-  | "reportes-detallados"
   | "validaciones"
   | "historial-placa"
   | "usuarios"
@@ -98,7 +96,6 @@ const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
   { id: "tramites", label: SPA_DOCK_ITEM_LABEL.tramites, icon: FileStack },
   { id: "reportes", label: SPA_DOCK_ITEM_LABEL.reportes, icon: BarChart3 },
-  { id: "reportes-detallados", label: SPA_DOCK_ITEM_LABEL["reportes-detallados"], icon: FileSpreadsheet },
   { id: "validaciones", label: SPA_DOCK_ITEM_LABEL.validaciones, icon: ShieldCheck },
   // HU #12194 — historial operativo por placa. El id coincide con el `Code` del módulo RBAC
   // (`historial-placa`): el dock lo filtra con `visibleModuleCodes.includes(it.id)`, así que un
