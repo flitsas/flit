@@ -35,7 +35,10 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
         sesion.GetProperty("empresa").GetProperty("capacidades").GetProperty("reportes").GetBoolean().Should().BeFalse();
 
         var lista = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/empresas", ct);
-        lista.EnumerateArray().Should().Contain(e => e.GetProperty("id").GetGuid() == empresa);
+        var fila = lista.EnumerateArray().Single(e => e.GetProperty("id").GetGuid() == empresa);
+        fila.GetProperty("estadoConfiguracion").GetString().Should().Be("Pendiente", "naranja hasta que la empresa pueda operar (Epic GDC-3)");
+        fila.GetProperty("faltantes").EnumerateArray().Select(x => x.GetString()).Should()
+            .Contain(["Sin NIT ni placa monitoreados", "Consultas sin activar", "Sin representante legal", "Sin tipologías de DP habilitadas"]);
         (await Super.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/admin/empresas/{empresa}/auditoria", ct)).GetArrayLength().Should().BeGreaterThan(0);
     }
 

@@ -116,7 +116,7 @@ public static class EmpresasEndpoints
         var q = db.ConfiguracionesEmpresa.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(buscar))
             q = q.Where(c => c.EmpresaNombre != null && EF.Functions.ILike(c.EmpresaNombre, $"%{buscar.Trim()}%"));
-        var lista = await q.OrderBy(c => c.EmpresaNombre).Select(c => new
+        var filas = await q.OrderBy(c => c.EmpresaNombre).Select(c => new
         {
             id = c.TenantId,
             nombre = c.EmpresaNombre ?? c.TenantId.ToString(),
@@ -124,9 +124,33 @@ public static class EmpresasEndpoints
             c.HasOcrAccess,
             c.HasReportesModule,
             c.AllowsContravenerChange,
+            c.AllowsContravenerConsultation,
             comparendosActivos = db.Comparendos.Count(x => x.TenantId == c.TenantId && x.Activo),
+            monitoreo = db.IdentificacionesMonitoreadas.Any(i => i.TenantId == c.TenantId && i.Activo) || db.PlacasMonitoreadas.Any(p => p.TenantId == c.TenantId && p.Activo),
+            consultas = db.ConfiguracionesConsultas.Where(k => k.TenantId == c.TenantId).Select(k => (EstadoConfiguracionConsultas?)k.Estado).FirstOrDefault(),
+            representante = db.RepresentantesLegales.Any(r => r.TenantId == c.TenantId && r.Activo),
+            tipologias = db.TipologiasEmpresa.Any(t => t.TenantId == c.TenantId && t.Habilitada),
         }).ToListAsync(ct).ConfigureAwait(false);
-        return Results.Ok(lista);
+        // Estado de configuración (Epic GDC-3): azul activa, gris inactiva (consultas pausadas), naranja pendiente de
+        // configuración, con lo que le falta para operar.
+        return Results.Ok(filas.Select(f =>
+        {
+            var faltantes = new List<string>();
+            if (!f.monitoreo)
+                faltantes.Add("Sin NIT ni placa monitoreados");
+            if (f.consultas is null or EstadoConfiguracionConsultas.Borrador)
+                faltantes.Add("Consultas sin activar");
+            if ((f.HasRightPetitionModule || f.AllowsContravenerChange) && !f.representante)
+                faltantes.Add("Sin representante legal");
+            if (f.HasRightPetitionModule && !f.tipologias)
+                faltantes.Add("Sin tipologías de DP habilitadas");
+            var estado = f.consultas == EstadoConfiguracionConsultas.Pausada ? "Inactiva" : faltantes.Count > 0 ? "Pendiente" : "Activa";
+            return new
+            {
+                f.id, f.nombre, f.HasRightPetitionModule, f.HasOcrAccess, f.HasReportesModule, f.AllowsContravenerChange, f.AllowsContravenerConsultation,
+                f.comparendosActivos, estadoConfiguracion = estado, faltantes,
+            };
+        }));
     }
 
     /// <summary>

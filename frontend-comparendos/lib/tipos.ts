@@ -353,7 +353,11 @@ export interface EmpresaAdmin {
   hasOcrAccess: boolean;
   hasReportesModule: boolean;
   allowsContravenerChange: boolean;
+  allowsContravenerConsultation: boolean;
   comparendosActivos: number;
+  /** Epic GDC-3: Activa (azul), Inactiva (gris, consultas pausadas) o Pendiente (naranja) con lo que le falta. */
+  estadoConfiguracion: "Activa" | "Inactiva" | "Pendiente";
+  faltantes: string[];
 }
 
 export interface Copia {

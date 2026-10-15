@@ -473,15 +473,34 @@ export default function Empresas() {
             {
               key: "caps",
               header: "Capacidades",
+              // Azul habilitada, gris deshabilitada (Epic GDC-3).
               render: (e) => (
                 <div className="flex flex-wrap gap-1">
-                  {e.hasRightPetitionModule && <StatusBadge label="DP" tone="info" />}
-                  {e.hasOcrAccess && <StatusBadge label="OCR" tone="info" />}
-                  {e.allowsContravenerChange && (
-                    <StatusBadge label="Cambio de contraventor" tone="info" />
-                  )}
-                  {e.hasReportesModule && <StatusBadge label="Reportes" tone="info" />}
+                  {(
+                    [
+                      ["DP", e.hasRightPetitionModule],
+                      ["OCR", e.hasOcrAccess],
+                      ["Consulta de contraventor", e.allowsContravenerConsultation],
+                      ["Cambio de contraventor", e.allowsContravenerChange],
+                      ["Reportes", e.hasReportesModule],
+                    ] as const
+                  ).map(([texto, activa]) => (
+                    <StatusBadge key={texto} label={texto} tone={activa ? "info" : "neutral"} />
+                  ))}
                 </div>
+              ),
+            },
+            {
+              key: "estado",
+              header: "Configuración",
+              render: (e) => (
+                <span title={e.faltantes.join(" · ") || undefined} className="inline-flex flex-col gap-0.5">
+                  <StatusBadge
+                    label={e.estadoConfiguracion === "Activa" ? "Activa" : e.estadoConfiguracion === "Inactiva" ? "Inactiva" : "Pendiente de configuración"}
+                    tone={e.estadoConfiguracion === "Activa" ? "info" : e.estadoConfiguracion === "Inactiva" ? "neutral" : "warning"}
+                  />
+                  {e.estadoConfiguracion === "Pendiente" && <span className="text-[11px] opacity-70">{e.faltantes.join(" · ")}</span>}
+                </span>
               ),
             },
             {
