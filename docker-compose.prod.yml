@@ -230,14 +230,27 @@ services:
       TramiteValidations__MandatarioRequerido__Mode: ${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}
       # Biometría (HU #10233): el proveedor elegido (mock | kyverum). Kyverum Verify se llama por core-consultas (HU #13348).
       BIOMETRICS_PROVIDER: ${BIOMETRICS_PROVIDER:-mock}
-      # OCR de trámites (Anthropic). Mismo patrón: el código lee env vars CRUDAS
-      # (OCR_PROVIDER / ANTHROPIC_*), no `Anthropic__*`. Default mock ⇒ no rompe si el .env no lo define.
+      # OCR / IA multi-proveedor (Feature #13508, HU #13513). Env CRUDAS
+      # (OCR_PROVIDER / ANTHROPIC_* / OPENAI_* / KIMI_* / DEEPSEEK_*), no `Anthropic__*`.
+      # Default mock ⇒ no rompe si el .env no define keys. Ver .env.anthropic.example.
       OCR_PROVIDER: ${OCR_PROVIDER:-mock}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-60}
       ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-2000}
+      # Failover adapters (openai / kimi / deepseek). Vacío ⇒ hasApiKey=false en admin UI.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4o}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      KIMI_BASE_URL: ${KIMI_BASE_URL:-https://api.moonshot.cn/v1}
+      KIMI_MODEL: ${KIMI_MODEL:-moonshot-v1-8k}
+      KIMI_VISION_MODEL: ${KIMI_VISION_MODEL:-moonshot-v1-8k-vision-preview}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       # DR. FLIT (Épica #12718, ADR-0060): chat con LLM sobre el manual, mismo cliente y API key del
       # OCR. Env CRUDAS igual que arriba. DR_FLIT_DEPLOY_ENVIRONMENT (DEV|QA|PDN) va al campo
       # Custom.Environment del caso de soporte: NO se infiere de ASPNETCORE_ENVIRONMENT (los 3 VPS

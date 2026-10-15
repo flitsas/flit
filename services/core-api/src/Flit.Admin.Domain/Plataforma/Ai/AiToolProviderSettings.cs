@@ -14,3 +14,25 @@ public sealed record AiToolProviderSettings(
 
 /// <summary>Entrada del array <c>providers_json</c> (sin secretos).</summary>
 public sealed record AiProviderSlot(string ProviderCode, bool Enabled, int PriorityRank);
+
+/// <summary>Fila append-only de <c>admin.ai_provider_transitions</c> (HU #13512).</summary>
+public sealed record AiProviderTransition(
+    Guid Id,
+    string ToolCode,
+    string? FromProvider,
+    string ToProvider,
+    string Reason,
+    string? Detail,
+    Guid? ActorUserId,
+    DateTimeOffset OccurredAt);
+
+/// <summary>Fila de <c>admin.ai_failover_alerts</c> (HU #13512).</summary>
+public sealed record AiFailoverAlert(
+    Guid Id,
+    Guid TransitionId,
+    string ToolCode,
+    string FromProvider,
+    string ToProvider,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset? AckedAt,
+    Guid? AckedBy);

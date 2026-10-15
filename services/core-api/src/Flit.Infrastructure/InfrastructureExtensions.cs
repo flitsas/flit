@@ -16,6 +16,8 @@ using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Tramites;
+using Flit.Infrastructure.Ai.Providers;
+using Flit.Infrastructure.Ai.Routing;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Notificaciones;
@@ -574,7 +576,10 @@ public static class InfrastructureExtensions
     /// </summary>
     private static void AddDrFlit(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
+        // HU #13510 — chat vía router multi-proveedor (failover). AnthropicDrFlitChatModel queda disponible
+        // como referencia; el puerto IDrFlitChatModel apunta al routed.
+        services.AddScoped<AnthropicDrFlitChatModel>();
+        services.AddScoped<IDrFlitChatModel, RoutedDrFlitChatModel>();
         services.AddScoped<IDrFlitUsageCounter>(sp => new DrFlitUsageCounterRepository(sp.GetRequiredService<FlitDbContext>()));
         services.AddSingleton<IDrFlitChatSettings, DrFlitChatSettings>();
 
@@ -673,7 +678,31 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(
                 Math.Max(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds), o.DrFlitTimeoutSeconds));
         });
+
+        // HU #13510 — clientes OpenAI-compatible (openai / kimi / deepseek) + adapters + router.
+        BindOpenAiCompatibleOptions(services, configuration, Cfg);
+        services.AddHttpClient<OpenAiCompatibleClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(180));
+
+        services.AddScoped<AnthropicAiProviderAdapter>();
+        services.AddScoped<IAiVisionProvider>(sp => sp.GetRequiredService<AnthropicAiProviderAdapter>());
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<AnthropicAiProviderAdapter>());
+
+        services.AddScoped<OpenAiAiProviderAdapter>();
+        services.AddScoped<IAiVisionProvider>(sp => sp.GetRequiredService<OpenAiAiProviderAdapter>());
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<OpenAiAiProviderAdapter>());
+
+        services.AddScoped<KimiAiProviderAdapter>();
+        services.AddScoped<IAiVisionProvider>(sp => sp.GetRequiredService<KimiAiProviderAdapter>());
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<KimiAiProviderAdapter>());
+
+        services.AddScoped<DeepSeekAiProviderAdapter>();
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<DeepSeekAiProviderAdapter>());
+
+        services.AddScoped<IAiProviderRouter, AiProviderRouter>();
+
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
+        services.AddScoped<RoutedDocumentOcrAnalyzer>();
         services.AddScoped<AnthropicDocumentBatchClassifier>();
         services.AddScoped<AnthropicOrientationProbe>();
 
@@ -684,10 +713,11 @@ public static class InfrastructureExtensions
         // Feature flag de proveedor (mock por defecto ⇒ no rompe dev/CI sin API key). Mismo patrón que
         // BiometricsProviderOptions / ConsultationProviderModeOptions. El MockDocumentOcrAnalyzer vive en
         // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
+        // HU #13510: cualquier valor distinto de mock usa el router (RoutedDocumentOcrAnalyzer).
         var provider = Cfg("Ocr:Provider", "OCR_PROVIDER") ?? "mock";
-        if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(provider, "mock", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
+            services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<RoutedDocumentOcrAnalyzer>());
             services.AddScoped<IDocumentBatchClassifier>(sp => sp.GetRequiredService<AnthropicDocumentBatchClassifier>());
 
             // HU #12036 — el enderezado SOLO se registra con el proveedor real: con el mock no hay a
@@ -700,6 +730,49 @@ public static class InfrastructureExtensions
             services.AddScoped<IDocumentOcrAnalyzer, MockDocumentOcrAnalyzer>();
             services.AddScoped<IDocumentBatchClassifier, MockDocumentBatchClassifier>();
         }
+    }
+
+    /// <summary>HU #13510 — liga opciones openai / kimi / deepseek (env cruda primero).</summary>
+    private static void BindOpenAiCompatibleOptions(
+        IServiceCollection services,
+        IConfiguration configuration,
+        Func<string, string, string?> cfg)
+    {
+        services.Configure<OpenAiProviderOptions>(o =>
+        {
+            o.BaseUrl = cfg("OpenAI:BaseUrl", "OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
+            o.ApiKey = cfg("OpenAI:ApiKey", "OPENAI_API_KEY") ?? string.Empty;
+            o.Model = cfg("OpenAI:Model", "OPENAI_MODEL") ?? "gpt-4o-mini";
+            o.VisionModel = cfg("OpenAI:VisionModel", "OPENAI_VISION_MODEL") ?? "gpt-4o";
+            o.TimeoutSeconds = int.TryParse(cfg("OpenAI:TimeoutSeconds", "OPENAI_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(cfg("OpenAI:MaxTokens", "OPENAI_MAX_TOKENS"), out var m) ? m : 2000;
+            o.DrFlitMaxTokens = int.TryParse(cfg("OpenAI:DrFlitMaxTokens", "OPENAI_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(cfg("OpenAI:DrFlitTimeoutSeconds", "OPENAI_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+        });
+
+        services.Configure<KimiProviderOptions>(o =>
+        {
+            o.BaseUrl = cfg("Kimi:BaseUrl", "KIMI_BASE_URL") ?? "https://api.moonshot.cn/v1";
+            o.ApiKey = cfg("Kimi:ApiKey", "KIMI_API_KEY") ?? string.Empty;
+            o.Model = cfg("Kimi:Model", "KIMI_MODEL") ?? "moonshot-v1-8k";
+            o.VisionModel = cfg("Kimi:VisionModel", "KIMI_VISION_MODEL") ?? "moonshot-v1-8k-vision-preview";
+            o.TimeoutSeconds = int.TryParse(cfg("Kimi:TimeoutSeconds", "KIMI_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(cfg("Kimi:MaxTokens", "KIMI_MAX_TOKENS"), out var m) ? m : 2000;
+            o.DrFlitMaxTokens = int.TryParse(cfg("Kimi:DrFlitMaxTokens", "KIMI_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(cfg("Kimi:DrFlitTimeoutSeconds", "KIMI_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+        });
+
+        services.Configure<DeepSeekProviderOptions>(o =>
+        {
+            o.BaseUrl = cfg("DeepSeek:BaseUrl", "DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com";
+            o.ApiKey = cfg("DeepSeek:ApiKey", "DEEPSEEK_API_KEY") ?? string.Empty;
+            o.Model = cfg("DeepSeek:Model", "DEEPSEEK_MODEL") ?? "deepseek-chat";
+            o.VisionModel = cfg("DeepSeek:VisionModel", "DEEPSEEK_VISION_MODEL") ?? string.Empty;
+            o.TimeoutSeconds = int.TryParse(cfg("DeepSeek:TimeoutSeconds", "DEEPSEEK_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(cfg("DeepSeek:MaxTokens", "DEEPSEEK_MAX_TOKENS"), out var m) ? m : 2000;
+            o.DrFlitMaxTokens = int.TryParse(cfg("DeepSeek:DrFlitMaxTokens", "DEEPSEEK_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(cfg("DeepSeek:DrFlitTimeoutSeconds", "DEEPSEEK_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+        });
     }
 
     public static async Task InitializeInfrastructureAsync(

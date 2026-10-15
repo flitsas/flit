@@ -225,10 +225,11 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
       {
         id: "fur-notif",
-        title: "3. FUR y Notificaciones",
+        title: "3. FUR, Notificaciones y Configuración de IA",
         paragraphs: [
           "FUR: simula cómo se construye el Formulario Único de Registro con datos sintéticos, para validar plantillas sin un trámite real.",
           "Notificaciones: banco de plantillas de correo por canal y compañía (lectura), con vista previa que respeta el tema de la red (marca blanca en Marca Blanca). Antes de mandar una prueba, configura el buzón de pruebas (un correo propio para recibirlas); sin él, el botón de envío de prueba te pide configurarlo primero. Con el buzón listo, «Enviar prueba» manda el correo real a esa bandeja para revisar Seguridad, Trámites o Analítica antes de que lo reciba un cliente.",
+          "Configuración de IA: define por herramienta (OCR y DR. FLIT) el proveedor activo y el orden de prioridad entre Anthropic, OpenAI, Kimi y DeepSeek. Solo ves si la API key está configurada en el entorno y una máscara; nunca el secreto. Puedes activar un proveedor con confirmación, guardar prioridad y opciones, revisar el historial de cambios y marcar como leídas las alertas de failover automático. Esta sección solo la ve el Super Admin.",
         ],
       },
       {

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// SuperAdmin — Plataforma → Configuración de IA (Feature #13508, HU #13509).
+/// SuperAdmin — Plataforma → Configuración de IA (Feature #13508, HU #13509 / #13512).
 /// Prefijo <c>/api/v1/admin/plataforma/ai</c>; secretos solo en env, nunca en responses.
 /// </summary>
 public static class AdminPlataformaAiEndpoints
@@ -41,6 +41,20 @@ public static class AdminPlataformaAiEndpoints
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapGet("/tools/{toolCode}/transitions", ListTransitionsAsync)
+            .WithName("AdminPlataformaAiListTransitions")
+            .Produces<AiProviderTransitionsPageView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/alerts", ListAlertsAsync)
+            .WithName("AdminPlataformaAiListAlerts")
+            .Produces<AiFailoverAlertsListView>(StatusCodes.Status200OK);
+
+        group.MapPost("/alerts/{id:guid}/ack", AckAlertAsync)
+            .WithName("AdminPlataformaAiAckAlert")
+            .Produces<AiFailoverAlertView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }
@@ -131,6 +145,36 @@ public static class AdminPlataformaAiEndpoints
             ActivateAiProviderOutcome.ProviderNoApiKey => Results.UnprocessableEntity(new { error = "proveedor_sin_credencial" }),
             _ => Results.BadRequest(),
         };
+    }
+
+    private static async Task<IResult> ListTransitionsAsync(
+        string toolCode,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromServices] ListAiProviderTransitionsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var view = await handler.HandleAsync(toolCode, page, pageSize, cancellationToken).ConfigureAwait(false);
+        return view is null ? Results.NotFound(new { error = "herramienta_desconocida" }) : Results.Ok(view);
+    }
+
+    private static async Task<IResult> ListAlertsAsync(
+        [FromQuery] bool? acked,
+        [FromServices] ListAiFailoverAlertsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var view = await handler.HandleAsync(acked, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(view);
+    }
+
+    private static async Task<IResult> AckAlertAsync(
+        Guid id,
+        ClaimsPrincipal user,
+        [FromServices] AcknowledgeAiFailoverAlertHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var view = await handler.HandleAsync(id, ResolveUserId(user), cancellationToken).ConfigureAwait(false);
+        return view is null ? Results.NotFound(new { error = "alerta_desconocida" }) : Results.Ok(view);
     }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)

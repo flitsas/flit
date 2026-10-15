@@ -416,6 +416,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.AiProviderTransitionRow> AiProviderTransitions =>
         Set<Entities.Admin.AiProviderTransitionRow>();
 
+    internal DbSet<Entities.Admin.AiFailoverAlertRow> AiFailoverAlerts =>
+        Set<Entities.Admin.AiFailoverAlertRow>();
+
     // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
     // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
     internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>

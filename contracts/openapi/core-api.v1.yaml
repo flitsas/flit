@@ -69,6 +69,11 @@ tags:
     description: >
       Cadencia global de jobs ICT (ict.job_settings) y catálogo SuperAdmin de procesos
       periódicos (HU #12512 / #12513). Sin secretos. Solo rol SuperAdmin.
+  - name: Admin · Plataforma · IA
+    description: >
+      SuperAdmin → Plataforma → Configuración de IA (Feature #13508): tools multi-proveedor,
+      settings, activate, historial de transitions y alertas de failover (HU #13509 / #13512 / #13513).
+      Secretos solo en variables de entorno; responses exponen hasApiKey y apiKeyMask, nunca apiKey.
   - name: Admin · Baúl de Firmas
     description: "Gestión del baúl de firmas precargadas por compañía (HU #10643, ADR-0025). Solo SuperAdmin."
   - name: Admin · Representantes Legales
@@ -1222,6 +1227,215 @@ paths:
           description: Autenticado pero sin rol SuperAdmin.
         "404":
           description: jobKey no pertenece al catálogo.
+
+  /api/v1/admin/plataforma/ai/tools:
+    get:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiListTools
+      summary: Lista tools IA y estado de proveedores (HU #13509)
+      description: >
+        Settings por tool (ocr, dr_flit) con activeProvider, prioridades y presencia de API key
+        enmascarada. Nunca incluye el secreto. Requiere JWT SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de tools.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiToolsListView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
+  /api/v1/admin/plataforma/ai/tools/{toolCode}:
+    get:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiGetTool
+      summary: Detalle de settings de una tool IA (HU #13509)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AiToolCodePath"
+      responses:
+        "200":
+          description: Settings de la tool.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiToolSettingsView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "404":
+          description: toolCode desconocido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/plataforma/ai/tools/{toolCode}/settings:
+    put:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiPutToolSettings
+      summary: Actualiza prioridades y enabled de proveedores (HU #13509)
+      description: >
+        Persiste autoReturnToPrimary y el arreglo de providers (enabled + priorityRank).
+        No acepta ni persiste apiKey. Requiere JWT SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AiToolCodePath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiToolSettingsPutRequest"
+      responses:
+        "200":
+          description: Settings persistidos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiToolSettingsView"
+        "400":
+          description: Configuración inválida.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "404":
+          description: toolCode desconocido o sin fila de settings.
+
+  /api/v1/admin/plataforma/ai/tools/{toolCode}/activate:
+    post:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiActivateProvider
+      summary: Cambia manualmente el proveedor activo (HU #13509)
+      description: >
+        Actualiza active_provider e inserta transición reason=manual. Exige API key presente
+        en env del proveedor destino. Nunca recibe apiKey en el body.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AiToolCodePath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiActivateProviderRequest"
+      responses:
+        "200":
+          description: Proveedor activado (o sin cambio si ya era el activo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiToolSettingsView"
+        "400":
+          description: Proveedor inválido, deshabilitado o no aplicable a la tool.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "404":
+          description: toolCode desconocido.
+        "422":
+          description: Proveedor sin credencial en el entorno (proveedor_sin_credencial).
+
+  /api/v1/admin/plataforma/ai/tools/{toolCode}/transitions:
+    get:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiListTransitions
+      summary: Historial paginado de transiciones de proveedor (HU #13512)
+      description: >
+        Lee admin.ai_provider_transitions ordenado por occurred_at DESC.
+        page default 1, pageSize default 20, máximo 100.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AiToolCodePath"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de transitions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiProviderTransitionsPageView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "404":
+          description: toolCode desconocido.
+
+  /api/v1/admin/plataforma/ai/alerts:
+    get:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiListAlerts
+      summary: Lista alertas in-app de failover (HU #13512)
+      description: >
+        Lee admin.ai_failover_alerts. Query opcional acked=true|false filtra por presencia
+        de acked_at. Sin filtro devuelve todas (más recientes primero).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: acked
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: true = solo acked; false = solo pendientes; omitido = todas.
+      responses:
+        "200":
+          description: Lista de alertas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiFailoverAlertsListView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
+  /api/v1/admin/plataforma/ai/alerts/{id}/ack:
+    post:
+      tags: [Admin · Plataforma · IA]
+      operationId: adminPlataformaAiAckAlert
+      summary: Marca una alerta de failover como leída (HU #13512)
+      description: >
+        Setea acked_at / acked_by desde el claim sub del JWT. Idempotente si ya estaba acked.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Alerta actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiFailoverAlertView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "404":
+          description: Alerta inexistente.
 
   /api/v1/admin/companies:
     post:
@@ -12439,6 +12653,13 @@ components:
             error: SESSION_DOMAIN_MISMATCH
 
   parameters:
+    AiToolCodePath:
+      name: toolCode
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/AiToolCode"
+      description: Código de herramienta IA (ocr | dr_flit).
     NetworkStatsFrom:
       name: from
       in: query
@@ -14576,6 +14797,136 @@ components:
               items:
                 type: string
                 enum: [platformName, "colors.primary", "colors.secondary", "colors.onPrimary", logo]
+
+    AiToolCode:
+      type: string
+      enum: [ocr, dr_flit]
+      description: Código de herramienta IA de plataforma.
+
+    AiProviderCode:
+      type: string
+      enum: [anthropic, openai, kimi, deepseek]
+      description: Proveedor IA soportado en v1.
+
+    AiProviderKeyStatus:
+      type: object
+      required: [providerCode, hasApiKey, capable, enabled, priorityRank]
+      properties:
+        providerCode: { $ref: "#/components/schemas/AiProviderCode" }
+        hasApiKey:
+          type: boolean
+          description: True si la API key está presente en el entorno (nunca se revela el valor).
+        apiKeyMask:
+          type: string
+          nullable: true
+          description: Máscara del secreto (p.ej. sk-***mnop). Nunca el apiKey en claro.
+        capable:
+          type: boolean
+          description: El proveedor soporta la capacidad de la tool.
+        enabled: { type: boolean }
+        priorityRank: { type: integer, minimum: 1 }
+        health:
+          type: string
+          enum: [unknown, healthy, degraded, down]
+          default: unknown
+
+    AiToolSettingsView:
+      type: object
+      required: [toolCode, activeProvider, autoReturnToPrimary, providers, rowVersion, updatedAt]
+      properties:
+        toolCode: { $ref: "#/components/schemas/AiToolCode" }
+        activeProvider: { $ref: "#/components/schemas/AiProviderCode" }
+        autoReturnToPrimary: { type: boolean }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/AiProviderKeyStatus" }
+        rowVersion: { type: integer, format: int64 }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string, format: uuid, nullable: true }
+
+    AiToolsListView:
+      type: object
+      required: [tools]
+      properties:
+        tools:
+          type: array
+          items: { $ref: "#/components/schemas/AiToolSettingsView" }
+
+    AiToolSettingsPutRequest:
+      type: object
+      required: [autoReturnToPrimary, providers]
+      properties:
+        autoReturnToPrimary: { type: boolean }
+        providers:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [providerCode, enabled, priorityRank]
+            properties:
+              providerCode: { $ref: "#/components/schemas/AiProviderCode" }
+              enabled: { type: boolean }
+              priorityRank: { type: integer, minimum: 1 }
+          description: Sin campos apiKey / secret / token.
+
+    AiActivateProviderRequest:
+      type: object
+      required: [providerCode]
+      properties:
+        providerCode: { $ref: "#/components/schemas/AiProviderCode" }
+        reason: { type: string, maxLength: 500, nullable: true }
+
+    AiProviderTransitionView:
+      type: object
+      required: [id, toolCode, toProvider, reason, occurredAt]
+      properties:
+        id: { type: string, format: uuid }
+        toolCode: { $ref: "#/components/schemas/AiToolCode" }
+        fromProvider:
+          type: string
+          nullable: true
+          enum: [anthropic, openai, kimi, deepseek]
+          description: Proveedor previo; null en la transición seed inicial.
+        toProvider: { $ref: "#/components/schemas/AiProviderCode" }
+        reason:
+          type: string
+          enum: [manual, failover_auto, auto_return, seed]
+        detail: { type: string, nullable: true, maxLength: 1000 }
+        actorUserId: { type: string, format: uuid, nullable: true }
+        occurredAt: { type: string, format: date-time }
+
+    AiProviderTransitionsPageView:
+      type: object
+      required: [items, totalCount, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AiProviderTransitionView" }
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+
+    AiFailoverAlertView:
+      type: object
+      required: [id, transitionId, toolCode, fromProvider, toProvider, occurredAt, acked]
+      properties:
+        id: { type: string, format: uuid }
+        transitionId: { type: string, format: uuid }
+        toolCode: { $ref: "#/components/schemas/AiToolCode" }
+        fromProvider: { $ref: "#/components/schemas/AiProviderCode" }
+        toProvider: { $ref: "#/components/schemas/AiProviderCode" }
+        occurredAt: { type: string, format: date-time }
+        acked: { type: boolean }
+        ackedAt: { type: string, format: date-time, nullable: true }
+        ackedBy: { type: string, format: uuid, nullable: true }
+
+    AiFailoverAlertsListView:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AiFailoverAlertView" }
 
     IctJobSettingsView:
       type: object
