@@ -14,8 +14,12 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        builder.Property(x => x.Code).HasMaxLength(32).IsRequired();
+        // HU #13604 — el código es el consecutivo COMP-XXXX que asigna Postgres (DEFAULT sobre la secuencia
+        // identity.tenant_code_seq, 136-HU13604-codigo-tenant-secuencial.sql).
+        builder.Property(x => x.Code).HasMaxLength(32).IsRequired()
+            .HasDefaultValueSql("identity.fn_next_tenant_code()");
         builder.HasIndex(x => x.Code).IsUnique().HasDatabaseName("uq_tenants_code");
+        builder.Property(x => x.LegacyCode).HasMaxLength(32);
 
         builder.Property(x => x.LegalName).HasMaxLength(255).IsRequired();
         builder.Property(x => x.TaxId).HasMaxLength(20).IsRequired();

@@ -6,6 +6,12 @@ public sealed class Tenant
 
     public string Code { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Código que tenía el tenant antes de la recodificación <c>COMP-XXXX</c> (HU #13604). <c>null</c> en los
+    /// tenants creados después: su código ya nació consecutivo.
+    /// </summary>
+    public string? LegacyCode { get; set; }
+
     public string LegalName { get; set; } = string.Empty;
 
     public string TaxId { get; set; } = string.Empty;
