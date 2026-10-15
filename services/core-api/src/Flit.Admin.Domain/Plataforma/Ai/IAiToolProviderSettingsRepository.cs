@@ -34,6 +34,24 @@ public interface IAiToolProviderSettingsRepository
         string toProvider,
         string? detail,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Historial paginado de transiciones por tool (HU #13512), <c>occurred_at DESC</c>.</summary>
+    Task<(IReadOnlyList<AiProviderTransition> Items, long TotalCount)> ListTransitionsAsync(
+        string toolCode,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Alertas de failover; <paramref name="acked"/> filtra por presencia de <c>acked_at</c>.</summary>
+    Task<IReadOnlyList<AiFailoverAlert>> ListAlertsAsync(
+        bool? acked,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Marca alerta como leída. Devuelve <c>null</c> si no existe.</summary>
+    Task<AiFailoverAlert?> AcknowledgeAlertAsync(
+        Guid alertId,
+        Guid? ackedBy,
+        CancellationToken cancellationToken = default);
 }
 
 public enum ActivateProviderResult

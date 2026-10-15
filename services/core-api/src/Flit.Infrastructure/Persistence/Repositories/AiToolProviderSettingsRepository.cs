@@ -191,6 +191,76 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<(IReadOnlyList<AiProviderTransition> Items, long TotalCount)> ListTransitionsAsync(
+        string toolCode,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedTool = AiToolCodes.Normalize(toolCode);
+        var query = db.AiProviderTransitions
+            .AsNoTracking()
+            .Where(x => x.ToolCode == normalizedTool);
+
+        var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
+
+        var rows = await query
+            .OrderByDescending(x => x.OccurredAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return (rows.Select(MapTransition).ToList(), totalCount);
+    }
+
+    public async Task<IReadOnlyList<AiFailoverAlert>> ListAlertsAsync(
+        bool? acked,
+        CancellationToken cancellationToken = default)
+    {
+        var query = db.AiFailoverAlerts.AsNoTracking();
+
+        if (acked is true)
+        {
+            query = query.Where(x => x.AckedAt != null);
+        }
+        else if (acked is false)
+        {
+            query = query.Where(x => x.AckedAt == null);
+        }
+
+        var rows = await query
+            .OrderByDescending(x => x.OccurredAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows.Select(MapAlert).ToList();
+    }
+
+    public async Task<AiFailoverAlert?> AcknowledgeAlertAsync(
+        Guid alertId,
+        Guid? ackedBy,
+        CancellationToken cancellationToken = default)
+    {
+        var row = await db.AiFailoverAlerts
+            .FirstOrDefaultAsync(x => x.Id == alertId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (row.AckedAt is null)
+        {
+            row.AckedAt = DateTimeOffset.UtcNow;
+            row.AckedBy = ackedBy;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return MapAlert(row);
+    }
+
     private static AiToolProviderSettings Map(AiToolProviderSettingsRow row) =>
         new(
             row.Id,
@@ -202,6 +272,28 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
             row.CreatedAt,
             row.UpdatedAt,
             row.UpdatedBy);
+
+    private static AiProviderTransition MapTransition(AiProviderTransitionRow row) =>
+        new(
+            row.Id,
+            row.ToolCode,
+            row.FromProvider,
+            row.ToProvider,
+            row.Reason,
+            row.Detail,
+            row.ActorUserId,
+            row.OccurredAt);
+
+    private static AiFailoverAlert MapAlert(AiFailoverAlertRow row) =>
+        new(
+            row.Id,
+            row.TransitionId,
+            row.ToolCode,
+            row.FromProvider,
+            row.ToProvider,
+            row.OccurredAt,
+            row.AckedAt,
+            row.AckedBy);
 
     private static IReadOnlyList<AiProviderSlot> ParseProviders(string json)
     {
