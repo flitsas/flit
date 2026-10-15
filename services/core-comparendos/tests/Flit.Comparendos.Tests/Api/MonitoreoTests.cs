@@ -29,6 +29,8 @@ public sealed class MonitoreoTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
         nit.GetProperty("numeroBase").GetString().Should().Be("890903938");
         nit.GetProperty("digitoVerificacion").GetInt16().Should().Be(8);
         (await api.EnDbAsync(db => db.AuditoriasConfiguracion.CountAsync(a => a.TenantId == empresa && a.Entidad == "identificacion_monitoreada", ct))).Should().Be(1);
+        var historial = await api.Cliente(Admin(empresa)).GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/monitoreo/nits/{nit.GetProperty("id").GetGuid()}/historial", ct);
+        historial.GetProperty("items").EnumerateArray().Single().GetProperty("accion").GetString().Should().Be("CREAR", "§7.12: el historial del NIT dice quién lo registró");
     }
 
     [Fact]

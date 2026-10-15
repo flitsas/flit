@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
+import { HistorialAuditoria } from "@/components/HistorialAuditoria";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SearchInput } from "@/components/SearchInput";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -56,6 +57,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [cambiar, setCambiar] = useState<Nit | null>(null);
+  const [historial, setHistorial] = useState<Nit | null>(null);
   const pg = usePaginacion(25);
   const lista = useCarga(`nits:${empresa}:${buscar}`, (signal) => apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa, buscar } }));
   const filas = lista.datos ?? [];
@@ -118,6 +120,16 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
           { key: "titular", header: "Titular", render: (n) => n.nombreTitular ?? "—" },
           { key: "estado", header: "Estado", render: (n) => <StatusBadge label={n.activo ? "Activo" : "Inactivo"} tone={activeTone(n.activo)} /> },
           { key: "creado", header: "Registrado", render: (n) => formatoFecha(n.creadoEn) },
+          { key: "activos", header: "Comparendos activos", align: "right", render: (n) => n.comparendosActivos.toLocaleString("es-CO") },
+          {
+            key: "historial",
+            header: "",
+            render: (n) => (
+              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setHistorial(n)}>
+                Historial
+              </button>
+            ),
+          },
           {
             key: "accion",
             header: "",
@@ -183,6 +195,16 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
         onSi={alternar}
         onNo={() => setCambiar(null)}
       />
+      {historial && (
+        <HistorialAuditoria
+          entidad="identificacion_monitoreada"
+          titulo={`Historial de ${historial.numero}`}
+          nombre={() => historial.numero}
+          ruta={`/monitoreo/nits/${historial.id}/historial`}
+          query={{ empresa }}
+          onCerrar={() => setHistorial(null)}
+        />
+      )}
     </div>
   );
 }
@@ -195,6 +217,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
   const [resultado, setResultado] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [cambiar, setCambiar] = useState<PlacaMonitoreada | null>(null);
+  const [historial, setHistorial] = useState<PlacaMonitoreada | null>(null);
   const pg = usePaginacion(25);
   const lista = useCarga(`placas:${empresa}:${buscar}`, (signal) => apiFetch<PlacaMonitoreada[]>("/monitoreo/placas", { signal, query: { empresa, buscar } }));
   const filas = lista.datos ?? [];
@@ -256,6 +279,16 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
           { key: "estado", header: "Estado", render: (p) => <StatusBadge label={p.activo ? "Activa" : "Inactiva"} tone={activeTone(p.activo)} /> },
           { key: "origen", header: "Origen", render: (p) => (p.origenRegistro === "OCR" ? "Desde un documento OCR" : "Administrador") },
           { key: "creado", header: "Registrada", render: (p) => formatoFecha(p.creadoEn) },
+          { key: "activos", header: "Comparendos activos", align: "right", render: (p) => p.comparendosActivos.toLocaleString("es-CO") },
+          {
+            key: "historial",
+            header: "",
+            render: (p) => (
+              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setHistorial(p)}>
+                Historial
+              </button>
+            ),
+          },
           {
             key: "accion",
             header: "",
@@ -302,6 +335,16 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
         onSi={alternar}
         onNo={() => setCambiar(null)}
       />
+      {historial && (
+        <HistorialAuditoria
+          entidad="placa_monitoreada"
+          titulo={`Historial de ${historial.placa}`}
+          nombre={() => historial.placa}
+          ruta={`/monitoreo/placas/${historial.id}/historial`}
+          query={{ empresa }}
+          onCerrar={() => setHistorial(null)}
+        />
+      )}
     </div>
   );
 }

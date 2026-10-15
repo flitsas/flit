@@ -48,12 +48,16 @@ public sealed class BandejaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     public async Task HU13496_FiltroPorEstadoLegal_YOrdenPorUrgencia()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
-        var (_, cliente) = await PrepararAsync();
+        var (empresa, cliente) = await PrepararAsync();
 
         (await Numeros(cliente, "estadoLegal=EnTiempo")).Should().Equal("C-3", "A-1");
         (await Numeros(cliente, "estadoLegal=Vencido")).Should().Equal("B-2");
         (await Numeros(cliente, "estadoLegal=SinNotificar")).Should().Equal("D-4");
         (await Numeros(cliente, string.Empty)).Take(2).Should().Equal("C-3", "A-1");
+
+        var monitoreo = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoVer]));
+        (await monitoreo.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/monitoreo/nits", TestContext.Current.CancellationToken)).EnumerateArray().Single()
+            .GetProperty("comparendosActivos").GetInt32().Should().Be(4, "§7.12: la tabla de NITs dice cuántos comparendos activos tiene cada uno");
     }
 
     [Fact]

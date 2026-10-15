@@ -14,9 +14,9 @@ namespace Flit.Comparendos.Api.Modulos.Monitoreo;
 /// </summary>
 public static class MonitoreoEndpoints
 {
-    public sealed record NitDto(Guid Id, string TipoDocumento, string NumeroBase, short? DigitoVerificacion, string Numero, string? NombreTitular, bool Activo, DateTimeOffset CreadoEn);
+    public sealed record NitDto(Guid Id, string TipoDocumento, string NumeroBase, short? DigitoVerificacion, string Numero, string? NombreTitular, bool Activo, DateTimeOffset CreadoEn, int ComparendosActivos = 0);
 
-    public sealed record PlacaDto(Guid Id, string Placa, bool Activo, string OrigenRegistro, DateTimeOffset CreadoEn);
+    public sealed record PlacaDto(Guid Id, string Placa, bool Activo, string OrigenRegistro, DateTimeOffset CreadoEn, int ComparendosActivos = 0);
 
     public sealed record NuevoNit(string? TipoDocumento, string Numero, string? NombreTitular);
 
@@ -38,6 +38,24 @@ public static class MonitoreoEndpoints
         g.MapGet("/placas", ListarPlacas).RequirePermiso(Permisos.MonitoreoVer);
         g.MapPost("/placas", CrearPlacas).RequirePermiso(Permisos.MonitoreoGestionar);
         g.MapPatch("/placas/{id:guid}", CambiarPlaca).RequirePermiso(Permisos.MonitoreoGestionar);
+        g.MapGet("/{tipo}/{id:guid}/historial", Historial).RequirePermiso(Permisos.MonitoreoVer);
+    }
+
+    /// <summary>Historial de un NIT o una placa (§7.12): quién lo registró, activó o desactivó y cuándo.</summary>
+    private static async Task<IResult> Historial(string tipo, Guid id, Guid? empresa, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
+    {
+        var tenant = usuario.EmpresaLectura(empresa);
+        var entidad = tipo switch
+        {
+            "nits" => "identificacion_monitoreada",
+            "placas" => "placa_monitoreada",
+            _ => throw ReglaException.NoEncontrado("El historial"),
+        };
+        var clave = id.ToString();
+        var items = await db.AuditoriasConfiguracion.AsNoTracking().Where(a => a.TenantId == tenant && a.Entidad == entidad && a.EntidadId == clave)
+            .OrderByDescending(a => a.RegistradoEn).Select(a => new { a.Id, a.TenantId, a.Entidad, a.EntidadId, a.Accion, a.Cambios, a.UsuarioNombre, a.RegistradoEn })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { total = items.Count, pagina = 1, tamano = items.Count, items });
     }
 
     private static NitDto ANit(IdentificacionMonitoreada n) => new(
@@ -59,7 +77,9 @@ public static class MonitoreoEndpoints
         }
 
         var lista = await q.OrderByDescending(n => n.Activo).ThenBy(n => n.NumeroBase).ToListAsync(ct).ConfigureAwait(false);
-        return Results.Ok(lista.Select(ANit));
+        var activos = await db.Comparendos.AsNoTracking().Where(c => c.TenantId == tenant && c.Activo && c.IdentificacionMonitoreadaId != null)
+            .GroupBy(c => c.IdentificacionMonitoreadaId!.Value).Select(g => new { g.Key, Cantidad = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Cantidad, ct).ConfigureAwait(false);
+        return Results.Ok(lista.Select(n => ANit(n) with { ComparendosActivos = activos.GetValueOrDefault(n.Id) }));
     }
 
     private static async Task<IResult> CrearNit(NuevoNit pedido, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)
@@ -140,7 +160,9 @@ public static class MonitoreoEndpoints
         }
 
         var lista = await q.OrderByDescending(p => p.Activo).ThenBy(p => p.Placa).ToListAsync(ct).ConfigureAwait(false);
-        return Results.Ok(lista.Select(APlaca));
+        var activos = await db.Comparendos.AsNoTracking().Where(c => c.TenantId == tenant && c.Activo && c.PlacaMonitoreadaId != null)
+            .GroupBy(c => c.PlacaMonitoreadaId!.Value).Select(g => new { g.Key, Cantidad = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Cantidad, ct).ConfigureAwait(false);
+        return Results.Ok(lista.Select(p => APlaca(p) with { ComparendosActivos = activos.GetValueOrDefault(p.Id) }));
     }
 
     /// <summary>Una o varias placas a la vez (pegadas de una hoja de cálculo): agrega las nuevas e informa el resto.</summary>

@@ -18,15 +18,20 @@ export function HistorialAuditoria({
   titulo,
   nombre,
   onCerrar,
+  ruta,
+  query,
 }: {
   entidad: string;
   titulo: string;
+  /** Por defecto la auditoría global del SuperAdmin; p. ej. el historial de un NIT usa /monitoreo/nits/{id}/historial. */
+  ruta?: string;
+  query?: Record<string, string | null>;
   /** Cómo se llama el registro afectado a partir de su id en la auditoría. */
   nombre: (entidadId: string) => string;
   onCerrar: () => void;
 }) {
-  const lista = useCarga(`auditoria:${entidad}`, (signal) =>
-    apiFetch<{ items: AuditoriaConfiguracion[] }>("/admin/auditoria", { signal, query: { entidad, global: true, tamano: 100 } }),
+  const lista = useCarga(`auditoria:${entidad}:${ruta ?? ""}:${JSON.stringify(query ?? {})}`, (signal) =>
+    apiFetch<{ items: AuditoriaConfiguracion[] }>(ruta ?? "/admin/auditoria", { signal, query: ruta ? (query ?? {}) : { entidad, global: true, tamano: 100 } }),
   );
   const items = lista.datos?.items ?? [];
   return (

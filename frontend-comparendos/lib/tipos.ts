@@ -67,6 +67,7 @@ export interface Nit {
   nombreTitular: string | null;
   activo: boolean;
   creadoEn: string;
+  comparendosActivos: number;
 }
 
 export interface PlacaMonitoreada {
@@ -75,6 +76,7 @@ export interface PlacaMonitoreada {
   activo: boolean;
   origenRegistro: string;
   creadoEn: string;
+  comparendosActivos: number;
 }
 
 export interface Organismo {
