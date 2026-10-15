@@ -38,7 +38,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [InlineData("MARCA_BLANCA", GroupKind.MarcaBlanca)]
     public async Task AC1_Alta_con_tipo_de_cabeza_nace_marcada_cabeza_y_su_alcance_expone_la_clase(string tenantType, GroupKind esperada)
     {
-        var id = await CreateAsync("Cabeza " + tenantType.Replace('_', ' '), "900100200-1", "IT-HEAD-" + tenantType, tenantType);
+        var id = await CreateAsync("Cabeza " + tenantType.Replace('_', ' '), "900100200-1", tenantType);
 
         await using var check = NewContext();
         var row = await check.Tenants.AsNoTracking().SingleAsync(t => t.Id == id);
@@ -67,7 +67,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
         await using var ctx = NewContext();
         var result = await new CreateCompanyHandler(new CompanyWriteRepository(ctx)).HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("X", "900100200-2", "IT-BAD", "FRANQUICIA", true),
+            Request = new CreateCompanyRequest("X", "900100200-2", "FRANQUICIA", true),
             CreatedBy = null,
         });
 
@@ -81,7 +81,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC3_Sin_hijos_el_cambio_de_clase_se_acepta_y_queda_auditado_con_valor_anterior_y_nuevo()
     {
-        var id = await CreateAsync("Cabeza", "900100200-3", "IT-HEAD", "CONCESION");
+        var id = await CreateAsync("Cabeza", "900100200-3", "CONCESION");
         await SeedActorAsync(id);
 
         var result = await UpdateAsync(id, "Cabeza", "900100200-3", "MARCA_BLANCA");
@@ -112,7 +112,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC2_Cabeza_sin_hijos_puede_volver_a_un_tipo_que_no_es_de_cabeza_y_queda_desmarcada()
     {
-        var id = await CreateAsync("Cabeza", "900100200-4", "IT-HEAD", "CONCESION");
+        var id = await CreateAsync("Cabeza", "900100200-4", "CONCESION");
         await SeedActorAsync(id);
 
         var result = await UpdateAsync(id, "Cabeza", "900100200-4", "CONCESIONARIO");
@@ -129,7 +129,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC1_Cliente_existente_pasa_a_cabeza_por_edicion_y_nace_marcado()
     {
-        var id = await CreateAsync("Suelto", "900100200-5", "IT-LONE", "CONCESIONARIO");
+        var id = await CreateAsync("Suelto", "900100200-5", "CONCESIONARIO");
         await SeedActorAsync(id);
 
         var result = await UpdateAsync(id, "Suelto", "900100200-5", "MARCA_BLANCA");
@@ -146,7 +146,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC3_Con_hijos_vigentes_el_cambio_de_clase_devuelve_422_explicito_y_no_escribe_nada()
     {
-        var id = await CreateAsync("Cabeza", "900100200-6", "IT-HEAD", "CONCESION");
+        var id = await CreateAsync("Cabeza", "900100200-6", "CONCESION");
         await SeedActorAsync(id);
         await using (var ctx = NewContext())
         {
@@ -173,7 +173,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC3_Con_hijos_vigentes_tampoco_puede_dejar_de_ser_cabeza_por_edicion()
     {
-        var id = await CreateAsync("Cabeza", "900100200-7", "IT-HEAD", "MARCA_BLANCA");
+        var id = await CreateAsync("Cabeza", "900100200-7", "MARCA_BLANCA");
         await SeedActorAsync(id);
         await using (var ctx = NewContext())
         {
@@ -195,7 +195,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC7_Cliente_RENTING_sin_jerarquia_se_crea_y_edita_como_antes()
     {
-        var id = await CreateAsync("Renting S.A.", "900100200-8", "IT-RENT", "RENTING");
+        var id = await CreateAsync("Renting S.A.", "900100200-8", "RENTING");
         await SeedActorAsync(id);
 
         await using (var check = NewContext())
@@ -223,12 +223,12 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
 
     // ── helpers ─────────────────────────────────────────────────────────────────
 
-    private async Task<Guid> CreateAsync(string razonSocial, string nit, string code, string tenantType)
+    private async Task<Guid> CreateAsync(string razonSocial, string nit, string tenantType)
     {
         await using var ctx = NewContext();
         var result = await new CreateCompanyHandler(new CompanyWriteRepository(ctx)).HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest(razonSocial, nit, code, tenantType, true),
+            Request = new CreateCompanyRequest(razonSocial, nit, tenantType, true),
             CreatedBy = null,
         });
 

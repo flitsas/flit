@@ -14404,7 +14404,7 @@ components:
         id: { type: string, format: uuid }
         nit: { type: string }
         razonSocial: { type: string }
-        code: { type: string, description: Código único del tenant (inmutable). }
+        code: { type: string, description: "Código único del tenant (inmutable). Consecutivo COMP-XXXX asignado por el servidor (HU #13605)." }
         tenantType:
           type: string
           enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
@@ -14457,11 +14457,6 @@ components:
           maxLength: 20
           pattern: "^(?=.*[0-9])[0-9.\\-]+$"
           description: NIT (tax_id). Solo dígitos, puntos y guiones.
-        code:
-          type: string
-          maxLength: 32
-          pattern: "^(?=.*[A-Za-z0-9])[A-Za-z0-9_-]+$"
-          description: Código único del tenant. Alfanumérico con guion y guion bajo.
         tenantType:
           type: string
           enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
@@ -14469,7 +14464,10 @@ components:
             CONCESION y MARCA_BLANCA (HU #12406) crean una cabeza de grupo: la fila nace con
             is_group_parent = true en la misma operación.
         estadoActivo: { type: boolean, default: true, description: Estado activo inicial. }
-      required: [razonSocial, nit, code, tenantType]
+      required: [razonSocial, nit, tenantType]
+      description: >-
+        Alta de compañía (también de compañía hija). HU #13605: el cliente ya no envía el código; lo asigna el
+        servidor (consecutivo COMP-XXXX) y llega en la respuesta. Un "code" enviado se ignora.
 
     UpdateCompanyRequest:
       type: object
@@ -15406,7 +15404,7 @@ components:
         id: { type: string, format: uuid }
         legalName: { type: string }
         taxId: { type: string }
-        code: { type: string, description: Código único del tenant (inmutable). }
+        code: { type: string, description: "Código único del tenant (inmutable). Consecutivo COMP-XXXX asignado por el servidor (HU #13605)." }
         tenantType:
           type: string
           enum: [RENTING]
@@ -15572,7 +15570,9 @@ components:
 
     CreateTransitOfficeRequest:
       type: object
-      description: Alta de tenant OT (refactor adminOT).
+      description: >-
+        Alta de tenant OT (refactor adminOT). HU #13605: el cliente ya no envía el código; lo asigna el servidor
+        (consecutivo COMP-XXXX) y llega en la respuesta. Un "code" enviado se ignora.
       properties:
         transitOfficeId:
           type: string
@@ -15588,15 +15588,11 @@ components:
           type: string
           maxLength: 20
           description: NIT (tax_id). Solo dígitos, puntos y guiones.
-        code:
-          type: string
-          maxLength: 32
-          description: Código único del tenant. Alfanumérico con guion y guion bajo.
         operationMode:
           type: string
           enum: [dashboard, quipux]
           default: dashboard
-      required: [transitOfficeId, legalName, taxId, code]
+      required: [transitOfficeId, legalName, taxId]
 
     InviteOtUserRequest:
       type: object

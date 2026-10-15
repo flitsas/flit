@@ -100,9 +100,9 @@ public sealed class HeadTenantTypeAndParentSnapshotSchemaTests
         GroupKindCodes.TryParse("CONCESIONARIO", out _).Should().BeFalse();
         GroupKindCodes.TryParse(null, out _).Should().BeFalse();
 
-        new NewCompany("X", "1", "X", "CONCESION", true, null).IsGroupParent.Should().BeTrue();
-        new NewCompany("X", "1", "X", "MARCA_BLANCA", true, null).IsGroupParent.Should().BeTrue();
-        new NewCompany("X", "1", "X", "CONCESIONARIO", true, null).IsGroupParent.Should().BeFalse();
+        new NewCompany("X", "1", "CONCESION", true, null).IsGroupParent.Should().BeTrue();
+        new NewCompany("X", "1", "MARCA_BLANCA", true, null).IsGroupParent.Should().BeTrue();
+        new NewCompany("X", "1", "CONCESIONARIO", true, null).IsGroupParent.Should().BeFalse();
     }
 
     [Fact]

@@ -16,8 +16,12 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         // HU #13604 — el código es el consecutivo COMP-XXXX que asigna Postgres (DEFAULT sobre la secuencia
         // identity.tenant_code_seq, 136-HU13604-codigo-tenant-secuencial.sql).
+        // HU #13605 — el centinela es string.Empty (el valor con el que nace la entidad): mientras Code siga vacío, EF
+        // omite la columna en el INSERT, Postgres aplica el DEFAULT y EF lee de vuelta el código asignado. Sin él EF
+        // mandaría la cadena vacía y el DEFAULT nunca se dispararía.
         builder.Property(x => x.Code).HasMaxLength(32).IsRequired()
-            .HasDefaultValueSql("identity.fn_next_tenant_code()");
+            .HasDefaultValueSql("identity.fn_next_tenant_code()")
+            .HasSentinel(string.Empty);
         builder.HasIndex(x => x.Code).IsUnique().HasDatabaseName("uq_tenants_code");
         builder.Property(x => x.LegacyCode).HasMaxLength(32);
 
