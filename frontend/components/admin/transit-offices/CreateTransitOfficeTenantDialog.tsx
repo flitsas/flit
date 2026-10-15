@@ -14,10 +14,8 @@ import {
 } from "@/lib/api/admin-transit-office-tenants";
 import {
   hasDigit,
-  hasLetterOrDigit,
   sanitizeName,
   sanitizeTaxId,
-  sanitizeTenantCode,
   validateReadableName,
 } from "@/lib/validation/fieldRules";
 
@@ -33,7 +31,8 @@ export interface CreateTransitOfficeTenantDialogProps {
   initialOfficeId?: string;
 }
 
-type FieldErrors = Partial<Record<"transitOfficeId" | "legalName" | "taxId" | "code", string>>;
+/** `general`: error sin campo propio (HU #13607 — antes se mostraba bajo el campo Código, que ya no existe). */
+type FieldErrors = Partial<Record<"transitOfficeId" | "legalName" | "taxId" | "general", string>>;
 
 export function CreateTransitOfficeTenantDialog({
   open,
@@ -48,7 +47,6 @@ export function CreateTransitOfficeTenantDialog({
   const [transitOfficeId, setTransitOfficeId] = useState("");
   const [legalName, setLegalName] = useState("");
   const [taxId, setTaxId] = useState("");
-  const [code, setCode] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -96,7 +94,6 @@ export function CreateTransitOfficeTenantDialog({
     setTransitOfficeId("");
     setLegalName("");
     setTaxId("");
-    setCode("");
     setErrors({});
   };
 
@@ -112,7 +109,6 @@ export function CreateTransitOfficeTenantDialog({
     const next: FieldErrors = {};
     const ln = legalName.trim();
     const tx = taxId.trim();
-    const c = code.trim();
     if (!transitOfficeId) next.transitOfficeId = "Selecciona una oficina del catálogo.";
     if (!ln) next.legalName = "La razón social es obligatoria.";
     else {
@@ -121,8 +117,6 @@ export function CreateTransitOfficeTenantDialog({
     }
     if (!tx) next.taxId = "El NIT es obligatorio.";
     else if (!hasDigit(tx)) next.taxId = "El NIT debe contener al menos un dígito.";
-    if (!c) next.code = "El código es obligatorio.";
-    else if (!hasLetterOrDigit(c)) next.code = "El código debe contener al menos una letra o número.";
     return next;
   };
 
@@ -140,7 +134,6 @@ export function CreateTransitOfficeTenantDialog({
         transitOfficeId,
         legalName: legalName.trim(),
         taxId: taxId.trim(),
-        code: code.trim(),
       };
       const created = await createTransitOfficeTenant(request);
       reset();
@@ -152,8 +145,7 @@ export function CreateTransitOfficeTenantDialog({
           if (
             field === "transitOfficeId" ||
             field === "legalName" ||
-            field === "taxId" ||
-            field === "code"
+            field === "taxId"
           ) {
             mapped[field] = message;
           }
@@ -161,10 +153,10 @@ export function CreateTransitOfficeTenantDialog({
         setErrors(
           Object.keys(mapped).length > 0
             ? mapped
-            : { code: "No se pudo crear el organismo de tránsito." },
+            : { general: "No se pudo crear el organismo de tránsito." },
         );
       } else {
-        setErrors({ code: "No se pudo crear el organismo de tránsito. Intenta de nuevo." });
+        setErrors({ general: "No se pudo crear el organismo de tránsito. Intenta de nuevo." });
       }
     } finally {
       setSubmitting(false);
@@ -235,22 +227,11 @@ export function CreateTransitOfficeTenantDialog({
             />
           </Field>
 
-          <Field
-            label="Código"
-            htmlFor="cot-code"
-            error={errors.code}
-            hint="Identificador único del tenant (máx. 32)."
-          >
-            <input
-              id="cot-code"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(sanitizeTenantCode(e.target.value))}
-              maxLength={32}
-              className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-              style={{ borderColor: errors.code ? "#FF4E00" : undefined }}
-            />
-          </Field>
+          {errors.general && (
+            <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+              {errors.general}
+            </p>
+          )}
 
           <div className="flex justify-end gap-2 pt-1">
             <button

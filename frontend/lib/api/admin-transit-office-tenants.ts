@@ -115,11 +115,11 @@ export interface TransitOfficeTenantsIndexParams {
   pageSize?: number;
 }
 
+/** Alta de tenant OT. Sin `code`: lo asigna el servidor (consecutivo COMP-XXXX, HU #13605). */
 export interface CreateTransitOfficeRequest {
   transitOfficeId: string;
   legalName: string;
   taxId: string;
-  code: string;
   operationMode?: TransitOfficeTenantOperationMode;
 }
 

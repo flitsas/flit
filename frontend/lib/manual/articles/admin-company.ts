@@ -201,7 +201,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         title: "2. Píldora «Red de clientes»",
         paragraphs: ["Administración → Red de clientes (solo cabezas de red):"],
         bullets: [
-          "Agregar cliente a la red: razón social, NIT, código y tipo de compañía. Nace vinculado a tu red.",
+          "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
           "Activar / Desactivar cliente, con confirmación.",
           "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
           "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red.",
