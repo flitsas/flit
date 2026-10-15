@@ -15,7 +15,6 @@ import {
   Building2,
   ClipboardList,
   FileSignature,
-  FileSpreadsheet,
   FileStack,
   FileArchive,
   FileText,
@@ -103,7 +102,6 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   const spaEntries = [
     spa("tramites", FileStack, "/tramites"),
     spa("reportes", BarChart3),
-    spa("reportes-detallados", FileSpreadsheet),
     spa("validaciones", ShieldCheck),
     // HU #12194 — el id coincide con el `code` del módulo RBAC `historial-placa`.
     spa("historial-placa", History),

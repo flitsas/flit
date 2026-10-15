@@ -131,7 +131,6 @@ export function validateAttachmentFile(file: Pick<File, "name" | "size">, curren
 const MODULE_BY_SCOPE: Record<string, string> = {
   validaciones: "Validación de Identidad",
   reportes: "Reportes",
-  "reportes-detallados": "Reportes",
   usuarios: "Usuarios",
   "log-qx": "Qx",
   "admin-quipux": "Qx",
