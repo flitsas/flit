@@ -106,6 +106,22 @@ public sealed class FlitoSignalsOptionsTests
     }
 
     [Fact]
+    public async Task AC2_AlArrancarEncendidoSinBusDeTramitesDejaUnError()
+    {
+        var log = new LogCapturado();
+        var servicios = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceProviderIsService>();
+        var check = new FlitoSignalsStartupCheck(
+            Options.Create(new FlitoSignalsOptions { Enabled = true, TargetUrl = Destino, SigningKey = ClaveFicticia }),
+            log.Crear<FlitoSignalsStartupCheck>(),
+            servicios);
+
+        await check.StartAsync(CancellationToken.None);
+
+        log.Entradas.Should().ContainSingle(e => e.Nivel == LogLevel.Error && e.Mensaje.Contains("bus de Trámites"));
+        log.Entradas.Should().NotContain(e => e.Nivel == LogLevel.Information);
+    }
+
+    [Fact]
     public async Task AC3_AlArrancarApagadoLoDejaEnElLogComoInformacion()
     {
         var log = new LogCapturado();
