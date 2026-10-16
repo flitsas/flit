@@ -51,9 +51,12 @@ public sealed class CodigoTenantSecuencialTests
     /// </summary>
     private static FlitDbContext NewContext()
     {
-        var options = new DbContextOptionsBuilder<FlitDbContext>();
-        NpgsqlConventions.Apply(options, "Host=localhost;Database=flit_model_only;Username=none;Password=none");
-        return new FlitDbContext((DbContextOptions<FlitDbContext>)options.Options);
+        // En staging no existe NpgsqlConventions (HU #13231): se aplica la misma convención snake_case que registra
+        // InfrastructureExtensions.
+        var options = new DbContextOptionsBuilder<FlitDbContext>()
+            .UseNpgsql("Host=localhost;Database=flit_model_only;Username=none;Password=none")
+            .UseSnakeCaseNamingConvention();
+        return new FlitDbContext(options.Options);
     }
 
     // ── AC1 — recodificación por antigüedad ──────────────────────────────────
