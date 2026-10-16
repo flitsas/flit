@@ -102,10 +102,24 @@ v3.1. Es independiente del cliente de integración de los pasos 1 a 4: aquí no 
 5. Para **rotar**, coordinar la hora con FLITO: los avisos firmados con la clave vieja que sigan en reintento fallarán
    la firma en FLITO, y su lectura de respaldo cada hora los recupera.
 
-### Encender PDN
+### Encender PDN (o encender por primera vez un ambiente con historia)
 
 Solo después de avisar a FLITO, que mantiene la recepción apagada en PDN hasta entonces. Mismos pasos, con la clave
 propia de PDN.
+
+Mientras los avisos están apagados, cada trámite que cambia queda con su aviso pendiente. En el primer encendido
+saldría un aviso por cada trámite modificado desde el despliegue, que pueden ser miles. No se pierde nada, pero
+FLITO ya tiene esos cambios por su lectura periódica. Para evitar la ráfaga, **justo antes** del paso 4 (reiniciar
+`core-api`), cerrar los pendientes:
+
+```sql
+UPDATE integrations.flito_sync_signals
+   SET pendiente_desde = NULL
+ WHERE pendiente_desde IS NOT NULL;
+```
+
+Los cambios posteriores vuelven a quedar pendientes y salen normalmente. Si entre esta sentencia y el reinicio cambia
+algún trámite, ese cambio sale avisado (no se pierde).
 
 ### Apagar
 
