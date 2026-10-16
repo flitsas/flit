@@ -15,6 +15,8 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
     keywords: [
       "companias",
       "crear compania",
+      "codigo de compania",
+      "consecutivo comp",
       "administracion de companias",
       "organismos de transito",
       "activar organismo",
@@ -40,7 +42,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "companias",
         title: "1. Compañías",
         paragraphs: [
-          "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. «Crear compañía»: razón social, NIT, código único (máx. 32), tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+          "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
           "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:",
         ],
         bullets: [
@@ -80,7 +82,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "organismos",
         title: "3. Tránsito → Organismos",
         paragraphs: [
-          "Catálogo de organismos de tránsito con código DIVIPOL, código integrador y departamento; filtra por estado, departamento o integrador. «Activar organismo de tránsito» crea su inquilino y lo deja operable; desde la fila entras a su hub, con 10 pestañas: Trámites (bandeja de decisión), Reglas, Documentos (prelación y etiquetas), Requisitos, Usuarios, Reportes, Mandatos, Validar impronta, Revocatorias (decidir las solicitudes que llegan del gestor) y Configuración (modo Quipux, ventana de revocatoria, feature flags).",
+          "Catálogo de organismos de tránsito con código DIVIPOL, código integrador y departamento; filtra por estado, departamento o integrador. «Activar organismo de tránsito» crea su inquilino (con su código consecutivo COMP-XXXX, asignado por el sistema) y lo deja operable; desde la fila entras a su hub, con 10 pestañas: Trámites (bandeja de decisión), Reglas, Documentos (prelación y etiquetas), Requisitos, Usuarios, Reportes, Mandatos, Validar impronta, Revocatorias (decidir las solicitudes que llegan del gestor) y Configuración (modo Quipux, ventana de revocatoria, feature flags).",
         ],
         callouts: [
           {

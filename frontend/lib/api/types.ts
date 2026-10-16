@@ -6,7 +6,7 @@ export interface CompanyListItem {
   id: string;
   nit: string;
   razonSocial: string;
-  /** Código único del tenant (inmutable; identificador de sistema). */
+  /** Código único del tenant (inmutable): consecutivo COMP-XXXX asignado por el servidor (HU #13605). */
   code: string;
   /**
    * Tipo de compañía. `string` (no el enum B2B) porque el listado incluye tenants con
@@ -128,11 +128,13 @@ export function selectableTenantTypes(isSuperAdmin: boolean): TenantType[] {
   return isSuperAdmin ? [...B2B_TENANT_TYPES] : [...BASE_TENANT_TYPES];
 }
 
-/** Payload del POST /api/v1/admin/companies (alta de compañía). */
+/**
+ * Payload del POST /api/v1/admin/companies (alta de compañía). Sin `code`: lo asigna el servidor
+ * (consecutivo COMP-XXXX, HU #13605) y llega en la respuesta.
+ */
 export interface CreateCompanyRequest {
   razonSocial: string;
   nit: string;
-  code: string;
   tenantType: TenantType;
   estadoActivo: boolean;
 }

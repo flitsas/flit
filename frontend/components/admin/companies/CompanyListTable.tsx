@@ -15,9 +15,8 @@ import {
 } from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
-// Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
-
-// Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
+// Tabla paginada de compañías (HU #10194, AC1). Columnas: Código (HU #13608, consecutivo COMP-XXXX),
+// NIT, Razón Social, Tipo, Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
 // Paginación server-side: la tabla solo emite el cambio de página vía onPageChange.
 export interface CompanyListTableProps {
   items: CompanyListItem[];
@@ -51,12 +50,15 @@ export function CompanyListTable({
       {/* Bug #13055 — tabla homologada con el modelo de trámites */}
       <table
         aria-label="Compañías"
-        className="min-w-[640px] text-xs"
+        className="min-w-[760px] text-xs"
         style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
       >
         <thead>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
+              Código
+            </th>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               NIT
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
@@ -83,7 +85,10 @@ export function CompanyListTable({
             const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
             <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-              <td className="border-y border-l px-4 py-3 font-mono rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
+              <td className="whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
+                {c.code}
+              </td>
+              <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
                 {c.nit}
               </td>
               <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>

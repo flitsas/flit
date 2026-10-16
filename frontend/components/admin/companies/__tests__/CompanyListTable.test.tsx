@@ -12,7 +12,7 @@ const items: CompanyListItem[] = [
     id: "11111111-1111-1111-1111-111111111111",
     nit: "900.123.456-7",
     razonSocial: "FLIT SAS",
-    code: "FLITSAS",
+    code: "COMP-0001",
     tenantType: "FLIT",
     isTransitOffice: false,
     estadoActivo: true,
@@ -23,7 +23,7 @@ const items: CompanyListItem[] = [
     id: "22222222-2222-2222-2222-222222222222",
     nit: "890.456.789-1",
     razonSocial: "Movilidad Antioquia",
-    code: "MOVANT",
+    code: "COMP-0014",
     tenantType: "RENTING",
     isTransitOffice: true,
     estadoActivo: false,
@@ -190,5 +190,46 @@ describe("CompanyListTable (AC1)", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: /activar Movilidad Antioquia/i }));
     expect(onToggleStatus).toHaveBeenCalledWith(items[1]);
+  });
+
+  it("HU #13608: la primera columna es Código con el consecutivo de cada compañía", () => {
+    render(
+      <CompanyListTable
+        items={items}
+        totalCount={2}
+        page={1}
+        pageSize={20}
+        onPageChange={vi.fn()}
+        onConfigure={vi.fn()}
+        onEdit={vi.fn()}
+        onToggleStatus={vi.fn()}
+      />,
+    );
+
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.trim());
+    expect(headers[0]).toBe("Código");
+    expect(headers[1]).toBe("NIT");
+
+    const filas = screen.getAllByRole("row").slice(1);
+    expect(filas[0].querySelector("td")).toHaveTextContent("COMP-0001");
+    expect(filas[1].querySelector("td")).toHaveTextContent("COMP-0014");
+  });
+
+  it("HU #13608: sin compañías conserva el encabezado completo", () => {
+    render(
+      <CompanyListTable
+        items={[]}
+        totalCount={0}
+        page={1}
+        pageSize={20}
+        onPageChange={vi.fn()}
+        onConfigure={vi.fn()}
+        onEdit={vi.fn()}
+        onToggleStatus={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("columnheader")).toHaveLength(7);
+    expect(screen.getByRole("columnheader", { name: "Código" })).toBeInTheDocument();
   });
 });

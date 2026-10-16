@@ -16,8 +16,6 @@
 export const NAME_PATTERN = /^[\p{L}\p{N}\s.,&()/'°-]+$/u;
 /** NIT / identificador tributario: dígitos, puntos y guiones. */
 export const TAX_ID_PATTERN = /^[0-9.\-]+$/;
-/** Código de tenant: alfanumérico con guion y guion bajo. */
-export const TENANT_CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
 /** Código de tipo de documento: alfanumérico con guion. */
 export const DOC_CODE_PATTERN = /^[A-Za-z0-9-]+$/;
 
@@ -27,8 +25,6 @@ export const DOC_CODE_PATTERN = /^[A-Za-z0-9-]+$/;
 export const sanitizeName = (v: string): string => v.replace(/[^\p{L}\p{N}\s.,&()/'°-]/gu, "");
 /** Deja solo dígitos, puntos y guiones (NIT). */
 export const sanitizeTaxId = (v: string): string => v.replace(/[^0-9.\-]/g, "");
-/** Deja solo alfanumérico, guion y guion bajo (código de tenant). */
-export const sanitizeTenantCode = (v: string): string => v.replace(/[^A-Za-z0-9_-]/g, "");
 /** Deja solo alfanumérico y guion (código de tipo de documento). */
 export const sanitizeDocCode = (v: string): string => v.replace(/[^A-Za-z0-9-]/g, "");
 /** Texto libre seguro: quita `<` y `>` (anti-XSS). Usado en descripciones y búsquedas. */
