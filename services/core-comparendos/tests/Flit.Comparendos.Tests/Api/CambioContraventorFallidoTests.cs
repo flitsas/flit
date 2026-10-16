@@ -46,7 +46,7 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
         (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001", new { correosRadicacion = new[] { "radicacion@movilidad.test" } }, ct)).EnsureSuccessStatusCode();
         var empresa = await EmpresaAsync(api, cambio: true);
-        var id = (await IngresarAsync(api, empresa, Item("CCF-1"))).Values.Single();
+        var id = (await IngresarAsync(api, empresa, propietarioEsElNit: true, Item("CCF-1"))).Values.Single();
         var cliente = api.Cliente(new UsuarioDePrueba(empresa,
             [Permisos.BandejaVer, Permisos.ContraventorAsignar, Permisos.ContraventorDocumentos, Permisos.CambioContraventorSolicitar, Permisos.RepresentantesGestionar]));
         (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
@@ -59,11 +59,7 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
             (await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/documentos?tipo={tipo}", pdf, ct)).EnsureSuccessStatusCode();
         }
 
-        (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
-        {
-            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", cargo = "Representante legal",
-            permisoEnvioDp = true, permisoCambioContraventor = true,
-        }, ct)).EnsureSuccessStatusCode();
+        await RepresentanteDelNitAsync(api, cliente, empresa, ct);
 
         var r = await (await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor", null, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         r.GetProperty("correoOt").GetString().Should().Be("Fallido");

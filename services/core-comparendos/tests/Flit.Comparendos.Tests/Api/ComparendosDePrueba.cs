@@ -40,9 +40,18 @@ public static class ComparendosDePrueba
     }
 
     /// <summary>Ingresa los comparendos por SIMIT con un NIT nuevo de la empresa y devuelve sus ids por número normalizado.</summary>
-    public static async Task<Dictionary<string, Guid>> IngresarAsync(ApiConFuente api, Guid empresa, params ItemFuente[] items)
+    public static Task<Dictionary<string, Guid>> IngresarAsync(ApiConFuente api, Guid empresa, params ItemFuente[] items) =>
+        IngresarAsync(api, empresa, propietarioEsElNit: false, items);
+
+    /// <summary>
+    /// Como <see cref="IngresarAsync(ApiConFuente, Guid, ItemFuente[])"/>; con <paramref name="propietarioEsElNit"/> la fuente
+    /// devuelve como infractor el NIT consultado, como el SIMIT real (el propietario es la empresa del NIT).
+    /// </summary>
+    public static async Task<Dictionary<string, Guid>> IngresarAsync(ApiConFuente api, Guid empresa, bool propietarioEsElNit, params ItemFuente[] items)
     {
         var nit = $"8{Random.Shared.Next(10000000, 99999999)}";
+        if (propietarioEsElNit)
+            items = [.. items.Select(i => i with { NumeroDocumentoInfractor = nit })];
         (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar])).PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = nit, nombreTitular = "TITULAR DE PRUEBA S.A.S." })).EnsureSuccessStatusCode();
         api.Fuente.Respuestas[$"SimitNit:{nit}"] = () => RespuestaFuente.Exitosa(items);
         await api.CicloAsync(CanalIngesta.SimitNit, empresa);
@@ -55,4 +64,15 @@ public static class ComparendosDePrueba
         Secretaria = "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA", ValorTotal = valor, CodigoInfraccion = "C29", DescripcionInfraccion = "Exceso de velocidad",
         TipoDocumentoInfractor = TipoDocumento.NIT, NumeroDocumentoInfractor = "900123456", NombreInfractor = "TITULAR DE PRUEBA S.A.S.",
     };
+
+    /// <summary>Representante legal del NIT vigilado de la empresa (el que firma por ese propietario).</summary>
+    public static async Task RepresentanteDelNitAsync(ApiConFuente api, HttpClient cliente, Guid empresa, CancellationToken ct)
+    {
+        var nitId = await api.EnDbAsync(db => db.IdentificacionesMonitoreadas.Where(n => n.TenantId == empresa).Select(n => n.Id).SingleAsync(ct));
+        (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
+        {
+            alcance = "Identificacion", identificacionMonitoreadaId = nitId, tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez",
+            cargo = "Representante legal", permisoEnvioDp = true, permisoCambioContraventor = true,
+        }, ct)).EnsureSuccessStatusCode();
+    }
 }

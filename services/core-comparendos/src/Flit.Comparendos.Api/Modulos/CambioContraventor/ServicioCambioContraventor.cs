@@ -43,7 +43,10 @@ public sealed class ServicioCambioContraventor(
         ArgumentNullException.ThrowIfNull(c);
         var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
         var ot = c.OrganismoTransitoId is { } otId ? await db.OrganismosTransito.AsNoTracking().FirstOrDefaultAsync(o => o.Id == otId, ct).ConfigureAwait(false) : null;
-        var rl = await resolutor.ResolverAsync(c.TenantId, c.IdentificacionMonitoreadaId, ParaFirmar.CambioContraventor, ct).ConfigureAwait(false);
+        var propietario = await PropietarioAsync(c, config.EmpresaNit, ct).ConfigureAwait(false);
+        var rl = propietario.EsDeLaEmpresa
+            ? await resolutor.ResolverDelPropietarioAsync(c.TenantId, propietario.IdentificacionId, propietario.EsLaEmpresa, ParaFirmar.CambioContraventor, ct).ConfigureAwait(false)
+            : null;
         var permiso = ot is null ? (true, true) : await permisos.DeAsync(c.TenantId, ot.Id, rl?.Id, ct).ConfigureAwait(false);
         var estado = (await calendario.MotorAsync(ct).ConfigureAwait(false)).Evaluar(Plazos.Fechas(c), reloj.Hoy).Estado;
         var documentos = await db.DocumentosSoporte.AsNoTracking().Where(d => d.ComparendoId == c.Id && d.Vigente).Select(d => d.Tipo).ToListAsync(ct).ConfigureAwait(false);
@@ -59,14 +62,44 @@ public sealed class ServicioCambioContraventor(
             new("NO_PAGADO", "El comparendo no está pagado", !c.Pagado),
             new("EN_PLAZO", "El comparendo no está caducado ni prescrito", estado is not (EstadoLegal.Caducado or EstadoLegal.Prescrito)),
             new("SIN_COBRO", "El comparendo no está en cobro coactivo", !c.EnCobroCoactivo),
+            new("PROPIETARIO", "El propietario del vehículo es la empresa o uno de sus NITs", propietario.EsDeLaEmpresa),
             new("CONDUCTOR", "El comparendo tiene conductor asignado", c.Contraventor is not null),
             new("CEDULA", "Está cargada la cédula del conductor", documentos.Contains(TipoDocumentoSoporte.Cedula)),
             new("LICENCIA", "Está cargada la licencia de conducción", documentos.Contains(TipoDocumentoSoporte.Licencia)),
             new("ESTADO", "No hay una solicitud en curso ni aceptada", c.EstadoCambioContraventor is EstadoCambioContraventor.SinSolicitar or EstadoCambioContraventor.RechazadoOt),
-            new("REPRESENTANTE", "Hay un representante legal con permiso para firmar", rl is not null || !config.RequiereRepresentanteLegal),
+            new("REPRESENTANTE", "Hay un representante legal del propietario con permiso para firmar", rl is not null || !config.RequiereRepresentanteLegal),
         ];
         return (condiciones, rl, ot);
     }
+
+    /// <summary>
+    /// El propietario del vehículo es quien pide el cambio (hallazgo B9-1). Es el infractor que trae la fuente; si no lo
+    /// trae, el NIT por el que se consultó. Es de la empresa si coincide con su NIT o con uno de sus NITs vigilados (la
+    /// fuente puede traer el NIT con el dígito pegado: «8110117798»).
+    /// </summary>
+    private async Task<(bool EsDeLaEmpresa, bool EsLaEmpresa, Guid? IdentificacionId)> PropietarioAsync(Comparendo c, string? empresaNit, CancellationToken ct)
+    {
+        var nits = await db.IdentificacionesMonitoreadas.AsNoTracking()
+            .Where(n => n.TenantId == c.TenantId && n.Activo && n.TipoDocumento == TipoDocumento.NIT)
+            .Select(n => new { n.Id, n.NumeroBase }).ToListAsync(ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(c.NumeroDocumentoInfractor))
+        {
+            var porNit = nits.FirstOrDefault(n => n.Id == c.IdentificacionMonitoreadaId);
+            return porNit is null ? (false, false, null) : (true, Coincide(empresaNit, porNit.NumeroBase), porNit.Id);
+        }
+
+        if (c.TipoDocumentoInfractor is { } tipo && tipo != TipoDocumento.NIT)
+            return (false, false, null);
+
+        var documento = new string(c.NumeroDocumentoInfractor.Where(char.IsAsciiDigit).ToArray()).TrimStart('0');
+        var esLaEmpresa = Coincide(empresaNit, documento);
+        var nit = nits.FirstOrDefault(n => Coincide(n.NumeroBase, documento));
+        return (esLaEmpresa || nit is not null, esLaEmpresa, nit?.Id);
+    }
+
+    private static bool Coincide(string? nitBase, string documento) =>
+        !string.IsNullOrEmpty(nitBase) && documento.Length > 0
+        && (documento == nitBase || documento == string.Concat(nitBase, Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nitBase).ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
     public async Task<byte[]> FormatoAsync(Comparendo c, RepresentanteLegal? rl, string? marcaDeAgua, CancellationToken ct)
     {

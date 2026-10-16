@@ -35,6 +35,21 @@ public sealed class ResolutorRepresentante(ComparendosDb db)
 
         return await q.FirstOrDefaultAsync(r => r.Alcance == AlcanceRepresentante.Empresa, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Quién firma a nombre del propietario del vehículo (cambio de contraventor, hallazgo B9-1): el RL de ese NIT, o el de
+    /// la empresa solo cuando el propietario es la empresa misma. Nunca el de la empresa por otro NIT: el formato dice «en
+    /// calidad de representante legal de {propietario}» y sería falso.
+    /// </summary>
+    public async Task<RepresentanteLegal?> ResolverDelPropietarioAsync(Guid tenantId, Guid? identificacionId, bool esLaEmpresa, ParaFirmar para, CancellationToken ct)
+    {
+        var q = db.RepresentantesLegales.AsNoTracking().Where(r => r.TenantId == tenantId && r.Activo);
+        q = para == ParaFirmar.DerechoPeticion ? q.Where(r => r.PermisoEnvioDp) : q.Where(r => r.PermisoCambioContraventor);
+        if (identificacionId is { } nit
+            && await q.FirstOrDefaultAsync(r => r.Alcance == AlcanceRepresentante.Identificacion && r.IdentificacionMonitoreadaId == nit, ct).ConfigureAwait(false) is { } delNit)
+            return delNit;
+        return esLaEmpresa ? await q.FirstOrDefaultAsync(r => r.Alcance == AlcanceRepresentante.Empresa, ct).ConfigureAwait(false) : null;
+    }
 }
 
 /// <summary>

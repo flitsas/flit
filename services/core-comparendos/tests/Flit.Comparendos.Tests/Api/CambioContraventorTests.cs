@@ -30,7 +30,7 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
         (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001", new { correosRadicacion = new[] { "radicacion@movilidad.test" } }, ct)).EnsureSuccessStatusCode();
         var empresa = await EmpresaAsync(api, cambio: true);
-        var id = (await IngresarAsync(api, empresa, Item($"CC-{Random.Shared.Next(100000)}"))).Values.Single();
+        var id = (await IngresarAsync(api, empresa, propietarioEsElNit: true, Item($"CC-{Random.Shared.Next(100000)}"))).Values.Single();
         var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
         (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", new
         {
@@ -42,11 +42,7 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
             (await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/documentos?tipo=Licencia", Pdf("licencia.pdf"), ct)).EnsureSuccessStatusCode();
         }
 
-        (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
-        {
-            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", cargo = "Representante legal",
-            permisoEnvioDp = true, permisoCambioContraventor = true,
-        }, ct)).EnsureSuccessStatusCode();
+        await RepresentanteDelNitAsync(api, cliente, empresa, ct);
         return (empresa, id, cliente);
     }
 
@@ -99,5 +95,54 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
         viabilidad.GetProperty("condiciones").EnumerateArray().Where(c => !c.GetProperty("cumple").GetBoolean()).Select(c => c.GetProperty("codigo").GetString()).Should().Equal("CEDULA", "LICENCIA");
         var r = await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor", null, ct);
         (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("CAMBIO_CEDULA");
+    }
+
+    /// <summary>Hallazgo B9-1: el propietario según la fuente no es la empresa ni uno de sus NITs → no se pide a su nombre.</summary>
+    [Fact]
+    public async Task PropietarioAjenoALaEmpresa_NoEsViable()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, id, cliente) = await PrepararAsync();
+        await api.EnDbAsync(async db =>
+        {
+            var c = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
+            c.NumeroDocumentoInfractor = "900123456";
+            await db.SaveChangesAsync(ct);
+        });
+
+        var viabilidad = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/viabilidad", ct);
+        viabilidad.GetProperty("condiciones").EnumerateArray().Where(c => !c.GetProperty("cumple").GetBoolean()).Select(c => c.GetProperty("codigo").GetString())
+            .Should().Equal("PROPIETARIO", "REPRESENTANTE");
+        _ = empresa;
+    }
+
+    /// <summary>
+    /// Hallazgo B9-1: el RL de la empresa no firma por otro NIT (el formato diría que representa a ese propietario). El NIT
+    /// con el dígito pegado (como lo trae la fuente) cuenta como el mismo propietario.
+    /// </summary>
+    [Fact]
+    public async Task NitVigiladoSinRepresentantePropio_ElDeLaEmpresaNoFirma()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, id, cliente) = await PrepararAsync();
+        await api.EnDbAsync(async db =>
+        {
+            var nit = await db.IdentificacionesMonitoreadas.SingleAsync(n => n.TenantId == empresa, ct);
+            var c = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
+            c.NumeroDocumentoInfractor = nit.NumeroBase + Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nit.NumeroBase);
+            await db.RepresentantesLegales.Where(r => r.TenantId == empresa).ExecuteUpdateAsync(s => s.SetProperty(r => r.Activo, false), ct);
+            await db.SaveChangesAsync(ct);
+        });
+        (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
+        {
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52999999", nombres = "RL de la empresa", cargo = "Representante legal",
+            permisoEnvioDp = true, permisoCambioContraventor = true,
+        }, ct)).EnsureSuccessStatusCode();
+
+        var viabilidad = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/viabilidad", ct);
+        viabilidad.GetProperty("condiciones").EnumerateArray().Where(c => !c.GetProperty("cumple").GetBoolean()).Select(c => c.GetProperty("codigo").GetString())
+            .Should().Equal(["REPRESENTANTE"], "el propietario (con DV pegado) es el NIT vigilado, pero solo el RL de ese NIT puede firmar por él");
     }
 }
