@@ -108,7 +108,7 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
         await api.EnDbAsync(async db =>
         {
             var c = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
-            c.NumeroDocumentoInfractor = "900123456";
+            c.NumeroDocumentoInfractor = "860000001"; // ni la gestora (NitGestora) ni su NIT vigilado
             await db.SaveChangesAsync(ct);
         });
 

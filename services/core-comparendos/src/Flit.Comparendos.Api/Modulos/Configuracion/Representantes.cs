@@ -3,6 +3,7 @@ using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Identificadores;
 using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,11 +38,46 @@ public sealed class ResolutorRepresentante(ComparendosDb db)
     }
 
     /// <summary>
-    /// Quién firma a nombre del propietario del vehículo (cambio de contraventor, hallazgo B9-1): el RL de ese NIT, o el de
-    /// la empresa solo cuando el propietario es la empresa misma. Nunca el de la empresa por otro NIT: el formato dice «en
-    /// calidad de representante legal de {propietario}» y sería falso.
+    /// El propietario del vehículo (quien pide el cambio de contraventor o firma el DP como peticionario) y quién firma a
+    /// su nombre (hallazgo B9-1). El propietario es el infractor que trae la fuente o, si no lo trae, el NIT consultado; es
+    /// de la empresa si coincide con su NIT o con uno de sus NITs vigilados (la fuente puede traer el NIT con el dígito
+    /// pegado: «8110117798»). Firma el RL de ese NIT, o el de la empresa solo cuando el propietario es la empresa misma:
+    /// los documentos dicen «en calidad de representante legal de {propietario}».
     /// </summary>
-    public async Task<RepresentanteLegal?> ResolverDelPropietarioAsync(Guid tenantId, Guid? identificacionId, bool esLaEmpresa, ParaFirmar para, CancellationToken ct)
+    public async Task<(bool EsDeLaEmpresa, RepresentanteLegal? Representante)> DelPropietarioAsync(Comparendo c, string? empresaNit, ParaFirmar para, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        var nits = await db.IdentificacionesMonitoreadas.AsNoTracking()
+            .Where(n => n.TenantId == c.TenantId && n.Activo && n.TipoDocumento == TipoDocumento.NIT)
+            .Select(n => new { n.Id, n.NumeroBase }).ToListAsync(ct).ConfigureAwait(false);
+        bool esLaEmpresa;
+        Guid? nitId;
+        if (string.IsNullOrWhiteSpace(c.NumeroDocumentoInfractor))
+        {
+            var porNit = nits.FirstOrDefault(n => n.Id == c.IdentificacionMonitoreadaId);
+            if (porNit is null)
+                return (false, null);
+            (esLaEmpresa, nitId) = (Coincide(empresaNit, porNit.NumeroBase), porNit.Id);
+        }
+        else
+        {
+            if (c.TipoDocumentoInfractor is { } tipo && tipo != TipoDocumento.NIT)
+                return (false, null);
+            var documento = new string(c.NumeroDocumentoInfractor.Where(char.IsAsciiDigit).ToArray()).TrimStart('0');
+            esLaEmpresa = Coincide(empresaNit, documento);
+            nitId = nits.FirstOrDefault(n => Coincide(n.NumeroBase, documento))?.Id;
+            if (!esLaEmpresa && nitId is null)
+                return (false, null);
+        }
+
+        return (true, await ResolverDelPropietarioAsync(c.TenantId, nitId, esLaEmpresa, para, ct).ConfigureAwait(false));
+    }
+
+    private static bool Coincide(string? nitBase, string documento) =>
+        !string.IsNullOrEmpty(nitBase) && documento.Length > 0
+        && (documento == nitBase || documento == string.Concat(nitBase, Nit.DigitoVerificacion(nitBase).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+    private async Task<RepresentanteLegal?> ResolverDelPropietarioAsync(Guid tenantId, Guid? identificacionId, bool esLaEmpresa, ParaFirmar para, CancellationToken ct)
     {
         var q = db.RepresentantesLegales.AsNoTracking().Where(r => r.TenantId == tenantId && r.Activo);
         q = para == ParaFirmar.DerechoPeticion ? q.Where(r => r.PermisoEnvioDp) : q.Where(r => r.PermisoCambioContraventor);

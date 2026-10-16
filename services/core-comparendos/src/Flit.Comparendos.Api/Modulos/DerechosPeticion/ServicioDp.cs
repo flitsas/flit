@@ -69,7 +69,7 @@ public sealed class ServicioDp(
         var habilitada = await db.TipologiasEmpresa.AnyAsync(h => h.TenantId == c.TenantId && h.TipologiaId == tipologiaId && h.Habilitada, ct).ConfigureAwait(false);
         var estado = (await calendario.MotorAsync(ct).ConfigureAwait(false)).Evaluar(Plazos.Fechas(c), reloj.Hoy).Estado;
         var ot = c.OrganismoTransitoId is { } otId ? await db.OrganismosTransito.AsNoTracking().FirstOrDefaultAsync(o => o.Id == otId, ct).ConfigureAwait(false) : null;
-        var rl = await resolutor.ResolverAsync(c.TenantId, c.IdentificacionMonitoreadaId, ParaFirmar.DerechoPeticion, ct).ConfigureAwait(false);
+        var (propietarioEsDeLaEmpresa, rl) = await resolutor.DelPropietarioAsync(c, config.EmpresaNit, ParaFirmar.DerechoPeticion, ct).ConfigureAwait(false);
         var plantilla = await plantillas.PublicadaAsync(config.ConjuntoPlantillas, TipoPlantilla.DpDocumento, t.Id, ct).ConfigureAwait(false);
 
         var bloqueos = new List<Bloqueo>();
@@ -89,7 +89,9 @@ public sealed class ServicioDp(
         Si(masivo && !t.PermiteMasivo, "TIPOLOGIA_SIN_MASIVO", "La tipología no admite envío masivo.");
         Si(ot is null, "OT_SIN_MAPEAR", "El comparendo no tiene organismo de tránsito identificado.");
         Si(ot is { CorreosRadicacion.Count: 0 }, "OT_SIN_CORREO", "El organismo de tránsito no tiene correo de radicación.");
-        Si(rl is null && config.RequiereRepresentanteLegal, "SIN_REPRESENTANTE_LEGAL", "La empresa exige representante legal y no hay uno activo con permiso para firmar derechos de petición.");
+        // Hallazgo B9-1: el DP va a nombre del propietario y lo firma su representante; un propietario ajeno no se representa.
+        Si(!propietarioEsDeLaEmpresa, "PROPIETARIO_AJENO", "El propietario del vehículo según la fuente no es la empresa ni uno de sus NITs vigilados.");
+        Si(propietarioEsDeLaEmpresa && rl is null && config.RequiereRepresentanteLegal, "SIN_REPRESENTANTE_LEGAL", "La empresa exige representante legal y no hay uno activo del propietario (el del NIT, o el de la empresa si el propietario es la empresa) con permiso para firmar derechos de petición.");
         Si(plantilla is null, "SIN_PLANTILLA", "No hay una plantilla publicada para esta tipología.");
 
         // Anexos del representante según la tipología; lo que falta solo advierte [Excel J7].

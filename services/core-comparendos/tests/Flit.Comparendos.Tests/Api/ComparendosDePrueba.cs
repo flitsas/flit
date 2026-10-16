@@ -9,12 +9,18 @@ namespace Flit.Comparendos.Tests.Api;
 /// <summary>Atajos para las pruebas que necesitan una empresa con capacidades y comparendos ya ingresados.</summary>
 public static class ComparendosDePrueba
 {
+    /// <summary>
+    /// NIT de la gestora de prueba: es el propietario que trae <see cref="Item"/>, así la gestora es dueña de sus vehículos y
+    /// su representante puede firmar a nombre del propietario (hallazgo B9-1).
+    /// </summary>
+    public const string NitGestora = "900123456";
+
     public static async Task<Guid> EmpresaAsync(ApiConFuente api, bool dp = false, bool consulta = false, bool cambio = false, bool ocr = false, bool reportes = false,
         string integracion = "Manual", bool requiereRl = true, string conjunto = "Flit")
     {
         var empresa = Guid.NewGuid();
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
-        (await api.RegistrarEmpresaAsync(super, empresa, "Gestora de prueba")).EnsureSuccessStatusCode();
+        (await api.RegistrarEmpresaAsync(super, empresa, "Gestora de prueba", NitGestora)).EnsureSuccessStatusCode();
         (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/capacidades", new
         {
             hasRightPetitionModule = dp, allowsContravenerConsultation = consulta, allowsContravenerChange = cambio, hasOcrAccess = ocr, hasReportesModule = reportes,

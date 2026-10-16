@@ -107,6 +107,21 @@ public sealed class DerechosPeticionTests(ApiConFuente api) : IClassFixture<ApiC
         previa.GetProperty("bloqueos").EnumerateArray().Select(b => b.GetProperty("codigo").GetString()).Should().Contain("COMPARENDO_PAGADO");
     }
 
+    /// <summary>Hallazgo B9-1: el DP va a nombre del propietario; si la fuente dice que es otra empresa, no se envía.</summary>
+    [Fact]
+    public async Task PropietarioAjeno_BloqueaElDp()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente) = await EmpresaConDpAsync(true, "DA");
+        var id = (await IngresarAsync(api, empresa, Item("DP-AJ") with { NumeroDocumentoInfractor = "860000001", NombreInfractor = "OTRA EMPRESA S.A.S." })).Values.Single();
+
+        var previa = await (await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp/vista-previa", new { tipologiaId = await TipologiaAsync("DA") }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        previa.GetProperty("bloqueos").EnumerateArray().Select(b => b.GetProperty("codigo").GetString()).Should().Equal("PROPIETARIO_AJENO");
+        var envio = await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/dp", new { tipologiaId = await TipologiaAsync("DA") }, ct);
+        (await envio.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("PROPIETARIO_AJENO");
+    }
+
     [Fact]
     public async Task HU13490_RespuestaDelOt_QuedaBloqueada()
     {
