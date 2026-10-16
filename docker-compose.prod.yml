@@ -928,7 +928,7 @@ services:
       FLIT_TRAMITES_HOST_ENABLED: ${FLIT_TRAMITES_HOST_ENABLED:-false}
       TRAMITES_URL: ${FLIT_TRAMITES_URL:-https://dev.tramites.flitsas.online}
       # Hosts FLIT (sin marca de red). Mismo valor que NEXT_PUBLIC_FLIT_HOSTS de Trámites en cd.yml.
-      FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online}
+      FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!marcablancatramitesdev.flitsas.online,!marcablancatramitesqa.flitsas.online,!marcablancatramitespdn.flitsas.online}
     ports:
       - "127.0.0.1:${HUB_PORT:-4022}:${HUB_PORT:-4022}"
     healthcheck:
