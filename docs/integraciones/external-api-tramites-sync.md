@@ -1,8 +1,15 @@
-# API externa — Sincronización incremental de trámites (v3.2)
+# API externa — Sincronización incremental de trámites (v3.3)
 
 > Contrato para clientes de integración externos (primer consumidor: **Flito**).
 > Estado: **Acordado** (2026-09-29) · Épica ADO: [#12737](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/12737) · Sin implementar.
 > Todos los ejemplos usan datos ficticios. Este documento puede copiarse al repositorio del consumidor.
+>
+> **Cambios de v3.2 → v3.3** (2026-10-16, Épica [#13614](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13614),
+> contraparte de la Épica FLITO [#13576](https://dev.azure.com/FlitDevOps/FLIT%20-%20FLITO/_workitems/edit/13576)):
+> vuelve el **canal de señal** del v2, ahora sobre la plataforma de mensajería (ADR-0071). FLIT 2 avisa en segundos,
+> con un webhook firmado y delgado, que un trámite cambió (§8). El feed por cursor **sigue siendo la fuente de
+> verdad**: el aviso solo indica cuándo leer. La consulta periódica pasa a ser un respaldo (FLITO: cada hora).
+> Feed, ítem, autenticación y adjuntos: sin cambios.
 >
 > **Cambios de v3.1 → v3.2** (2026-10-02, Épica [#12741](https://dev.azure.com/FlitDevOps/FLIT%20-%20FLITO/_workitems/edit/12741),
 > Feature [#13261](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13261)): primera operación de
@@ -45,7 +52,7 @@
 | Base | `https://<host-ambiente>/api/v1/external` (un cliente y un host por ambiente: DEV, QA, PDN) |
 | Autenticación | `client_credentials` → JWT Bearer RS256, vigencia 30 min |
 | Scopes | `external.tramites.read` (obligatorio) · `external.tramites.pii.read` (datos personales sin enmascarar) · `external.tramites.attachments.write` (envío de adjuntos, §7) |
-| Patrón | Pull incremental por cursor opaco (keyset), consultado periódicamente (previsto: cada 5 min) y a demanda. Semántica **al menos una vez**. Escritura puntual: envío de adjuntos (§7) |
+| Patrón | Pull incremental por cursor opaco (keyset), consultado al recibir un aviso (§8), periódicamente como respaldo y a demanda. Semántica **al menos una vez**. Escritura puntual: envío de adjuntos (§7) |
 | Formato | JSON camelCase · fechas ISO-8601 con offset `-05:00` · **todas las claves siempre presentes**, vacío = `null` |
 | Errores | RFC 7807 `application/problem+json` |
 | Límites | `pageSize` default 200, máx 1000 · 120 solicitudes/min por cliente · token: límite por IP · ventana de estabilidad 5 s |
@@ -300,7 +307,7 @@ Notas imprescindibles para el consumidor:
 5. Por cada ítem: upsert por `id`; si `syncVersion` ≤ el guardado, ignorar; si `eliminado=true`, aplicar la política local de borrado. Un estado desconocido no debe descartar el ítem.
 6. Ante 429: esperar `Retry-After` y reintentar la misma página con el mismo cursor.
 7. Para descargar la factura: `GET /tramites/{id}/adjuntos/{factura.adjuntoId}/url` y descargar la URL antes de `expiraEn`.
-8. Frecuencia: corrida programada cada 5 min más corridas a demanda, **nunca dos a la vez** para el mismo cliente (ambas comparten cursor). Sin cambios, la respuesta es `items: []` con el mismo `nextCursor`: es la situación normal, no un error.
+8. Frecuencia: una corrida al recibir un aviso (§8), una corrida programada de respaldo (por si se pierde un aviso) y corridas a demanda, **nunca dos a la vez** para el mismo cliente (todas comparten cursor). Varios avisos seguidos pueden atenderse con una sola corrida. Sin cambios, la respuesta es `items: []` con el mismo `nextCursor`: es la situación normal, no un error.
 
 ### Arrancar sin cargar el histórico
 
@@ -423,3 +430,65 @@ aceptar el comprobante.
 **Cuota:** los envíos comparten con el feed y la URL de factura las **120 solicitudes por minuto** del
 cliente. Enviar por cola con concurrencia baja (2–4, o ~60 por minuto) para no frenar la sincronización,
 y reutilizar el pase cacheado (el endpoint de token tiene su propio límite por IP).
+
+## 8. Avisos en tiempo real (v3.3)
+
+FLIT 2 avisa al consumidor, en segundos, que un trámite cambió. El aviso **no trae datos del trámite**: el consumidor
+lo atiende con una corrida del feed (§5). Si se pierde un aviso, la corrida de respaldo recoge el cambio.
+
+### `POST <URL del consumidor>`
+
+FLIT 2 llama a una URL HTTPS pública que da el consumidor, una por ambiente. La de Flito es
+`/api/flito/sync/flit2/avisos` en su host de DEV, QA y PDN.
+
+**Cabeceras**
+
+| Cabecera | Valor |
+|---|---|
+| `Content-Type` | `application/json; charset=utf-8` |
+| `X-Webhook-Signature` | `sha256=<HMAC-SHA256 del cuerpo, 64 hex en minúsculas>` |
+| `X-Correlation-Id` | igual a `eventId` |
+
+**Cuerpo** (siempre estos 7 campos)
+
+```json
+{
+  "eventId": "0192f0a1-7b2c-7d10-9f21-3a4b5c6d7e8f",
+  "tipo": "tramite.cambio",
+  "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f",
+  "syncVersion": 48213,
+  "fechaUltimoCambio": "2026-10-16T15:20:04.512345+00:00",
+  "eliminado": false,
+  "tenantId": "0ad1c0de-0000-4000-8000-000000000001"
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `eventId` | UUIDv7 nuevo por aviso. Un reintento de entrega repite el mismo cuerpo y el mismo `eventId` |
+| `tipo` | `tramite.cambio`. Un tipo desconocido debe responderse `200` e ignorarse |
+| `id` | El `id` del trámite en el feed |
+| `syncVersion` | Versión del trámite al avisar. Dos avisos del mismo trámite pueden traer la misma |
+| `fechaUltimoCambio` | Último cambio del trámite (RFC 3339, con microsegundos y desfase) |
+| `eliminado` | `true` si el trámite tiene borrado lógico (tombstone del feed) |
+| `tenantId` | Compañía dueña del trámite. Informativo: la autenticidad la da la firma |
+
+**Firma.** La clave es una por ambiente, compartida para todos los tenants, y se entrega fuera de banda. Entra al
+HMAC como los **bytes UTF-8 del texto tal cual**, sin decodificar ni recortar. El HMAC se calcula sobre el **cuerpo
+crudo** recibido, antes de parsearlo, y se compara en tiempo constante.
+
+**Respuesta esperada.** `200` en cuanto la firma es válida, también para duplicados y tipos desconocidos. Cualquier
+otra respuesta, o ninguna, se reintenta a los 10 s, 1 min y 10 min; después el aviso se descarta (el cambio sigue en
+el feed).
+
+**Qué se avisa.** Lo mismo que entrega el feed: trámites radicados al menos una vez, nunca migrados desde FLIT 1, y
+los borrados como `eliminado = true`. Varios cambios del mismo trámite en pocos segundos se agrupan en un solo aviso
+con la versión más reciente.
+
+**Cuándo.** De 6 a 8 s después del cambio. FLIT 2 avisa solo cuando el cambio ya cumple las condiciones de
+estabilidad del feed, así que la corrida que dispara el aviso lo encuentra.
+
+**Recomendaciones al consumidor.** Deduplicar por (`id`, `syncVersion`). Si la corrida aún no trae esa versión,
+reintentar unos segundos o dejarla al respaldo. Limitar la tasa por IP, más estricta para firmas fallidas.
+
+Contrato del mensaje: `contracts/asyncapi/domain-events.v1.yaml`, canal `flito-webhook/tramite.cambio`.

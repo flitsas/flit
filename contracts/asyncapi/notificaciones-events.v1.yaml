@@ -1,7 +1,7 @@
 asyncapi: '2.6.0'
 info:
   title: FLIT — trabajos de Notificaciones
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Trabajos en cola que recibe Notificaciones (core-notificaciones). A diferencia de un evento, un trabajo va
     dirigido a un servicio concreto: el servicio que lo pide lo deja, vía su outbox (trabajo del SDK), en el
@@ -100,5 +100,5 @@ components:
                     type: object
                     additionalProperties: { type: string }
                     description: "X-Webhook-Signature (sha256=<hex del HMAC-SHA256 del cuerpo>), X-Correlation-Id y las que espere el destino."
-                  origen: { type: string, enum: [ot, ict] }
+                  origen: { type: string, enum: [ot, ict, flito], description: "ot (organismo de tránsito), ict o flito (avisos de sincronización a FLITO, HU #13623)." }
                   evento: { type: string, description: Tipo de evento del webhook (para el registro). }
