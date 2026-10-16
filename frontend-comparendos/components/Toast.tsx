@@ -1,11 +1,13 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { CheckCircle2, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X, XCircle } from "lucide-react";
 
-// Toast mínimo sin dependencias externas (HU #10194). Éxito #00DBD5, error #FF4E00.
+// Toast mínimo sin dependencias externas (HU #10194). Éxito #00DBD5, advertencia #D9A400, error #FF4E00.
 // Región aria-live para accesibilidad (WCAG 2.1 AA).
-export type ToastType = "success" | "error";
+export type ToastType = "success" | "warning" | "error";
+
+const COLOR_TOAST: Record<ToastType, string> = { success: "#00DBD5", warning: "#D9A400", error: "#FF4E00" };
 
 interface ToastItem {
   id: number;
@@ -53,12 +55,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={toast.id}
             className="flex items-start gap-2 rounded-xl border bg-white px-4 py-3 text-xs shadow-lg dark:bg-[#0B0F14]"
-            style={{ borderColor: toast.type === "success" ? "#00DBD5" : "#FF4E00", minWidth: 260 }}
+            style={{ borderColor: COLOR_TOAST[toast.type], minWidth: 260 }}
           >
             {toast.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "#00DBD5" }} />
+              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.success }} />
+            ) : toast.type === "warning" ? (
+              <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.warning }} />
             ) : (
-              <XCircle className="h-4 w-4 shrink-0" style={{ color: "#FF4E00" }} />
+              <XCircle className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.error }} />
             )}
             <p className="flex-1 font-medium">{toast.message}</p>
             <button type="button" aria-label="Cerrar notificación" onClick={() => dismiss(toast.id)}>

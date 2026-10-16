@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarPago, diferencia, errorArchivoCarga, erroresPago, leerDatosFila, leerValor, type FormPago } from "@/lib/pagos";
+import { armarPago, diferencia, errorArchivoCarga, erroresPago, leerDatosFila, leerValor, porcentajeDescuento, tonoResultadoCarga, valorEsperado, type FormPago } from "@/lib/pagos";
 
 const F: FormPago = { tipo: "BC", valor: "$ 302.050", fecha: "2026-10-08", comprobante: null };
 
@@ -59,5 +59,34 @@ describe("carga masiva de pagos", () => {
       fechaPago: "2026-10-08",
     });
     expect(leerDatosFila("no es json").tipoPago).toBeNull();
+  });
+});
+
+describe("valor esperado con el descuento vigente (B11-1)", () => {
+  it("toma el porcentaje de la ventana", () => {
+    expect(porcentajeDescuento("Descuento50")).toBe(50);
+    expect(porcentajeDescuento("Descuento25")).toBe(25);
+    expect(porcentajeDescuento("SinDescuento")).toBe(0);
+    expect(porcentajeDescuento(null)).toBe(0);
+  });
+
+  it("descuenta y redondea al peso; sin valor no hay esperado", () => {
+    expect(valorEsperado(604100, "Descuento50")).toBe(302050);
+    expect(valorEsperado(604100, "Descuento25")).toBe(453075);
+    expect(valorEsperado(1208201, "Descuento50")).toBe(604101);
+    expect(valorEsperado(604100, "SinDescuento")).toBe(604100);
+    expect(valorEsperado(null, "Descuento50")).toBeNull();
+  });
+
+  it("pagar el valor con descuento no deja diferencia", () => {
+    expect(diferencia(302050, valorEsperado(604100, "Descuento50"))).toBe(0);
+  });
+});
+
+describe("tono del aviso de la carga masiva", () => {
+  it("éxito si entró todo, advertencia si fue parcial, error si nada", () => {
+    expect(tonoResultadoCarga(7, 0)).toBe("success");
+    expect(tonoResultadoCarga(2, 5)).toBe("warning");
+    expect(tonoResultadoCarga(0, 7)).toBe("error");
   });
 });

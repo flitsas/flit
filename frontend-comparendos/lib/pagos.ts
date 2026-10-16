@@ -50,6 +50,26 @@ export function armarPago(f: FormPago): FormData {
   return form;
 }
 
+/** Porcentaje de descuento de la ventana vigente del comparendo (`situacion.ventanaDescuento`): 50, 25 o 0. */
+export function porcentajeDescuento(ventana: string | null | undefined): number {
+  return ventana === "Descuento50" ? 50 : ventana === "Descuento25" ? 25 : 0;
+}
+
+/**
+ * Lo que se espera pagar hoy (B11-1): el valor total con el descuento de la ventana vigente, redondeado al peso. null
+ * si el comparendo no trae valor.
+ */
+export function valorEsperado(valorTotal: number | null, ventana: string | null | undefined): number | null {
+  if (valorTotal === null) return null;
+  return Math.round(valorTotal * (1 - porcentajeDescuento(ventana) / 100));
+}
+
+/** Tono del aviso al terminar una carga masiva: éxito si todo entró, advertencia si fue parcial, error si nada. */
+export function tonoResultadoCarga(registradas: number, conError: number): "success" | "warning" | "error" {
+  if (registradas === 0) return "error";
+  return conError > 0 ? "warning" : "success";
+}
+
 /** Lo pagado menos el valor del comparendo (RN-163: puede diferir). null si falta alguno de los dos. */
 export function diferencia(valorPagado: number | null, valorComparendo: number | null): number | null {
   if (valorPagado === null || valorComparendo === null) return null;

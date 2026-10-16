@@ -6,21 +6,25 @@ import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
 import { apiFetch } from "@/lib/api";
-import { diaColombia, formatoPesos } from "@/lib/format/date";
+import { diaColombia, formatoFecha, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { armarPago, diferencia, erroresPago, leerValor, TIPOS_PAGO, type FormPago } from "@/lib/pagos";
+import { armarPago, diferencia, erroresPago, leerValor, porcentajeDescuento, TIPOS_PAGO, valorEsperado, type FormPago } from "@/lib/pagos";
 import { tienePermiso } from "@/lib/sesion";
 
 function ModalPago({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => void }) {
   const toast = useToast();
   const d = ctx.detalle;
   const hoy = diaColombia();
-  const [f, setF] = useState<FormPago>({ tipo: "", valor: d.valores.valorTotal ? String(d.valores.valorTotal) : "", fecha: hoy, comprobante: null });
+  // B11-1: dentro de una ventana de descuento lo esperado es el valor con descuento, no el total.
+  const porcentaje = porcentajeDescuento(d.situacion.ventanaDescuento);
+  const esperado = valorEsperado(d.valores.valorTotal, d.situacion.ventanaDescuento);
+  const [f, setF] = useState<FormPago>({ tipo: "", valor: esperado ? String(esperado) : "", fecha: hoy, comprobante: null });
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errores = erroresPago(f, hoy);
-  const dif = diferencia(leerValor(f.valor), d.valores.valorTotal);
+  const dif = diferencia(leerValor(f.valor), esperado);
 
   const guardar = async () => {
     setOcupado(true);
@@ -73,20 +77,25 @@ function ModalPago({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => vo
           Valor pagado
           <input className={INPUT_CLS} inputMode="numeric" value={f.valor} onChange={(e) => setF({ ...f, valor: e.target.value })} />
           <span className="font-normal opacity-70">{formatoPesos(leerValor(f.valor))}</span>
+          {porcentaje > 0 && (
+            <span className="font-normal opacity-70">
+              Valor con {porcentaje} % de descuento
+              {d.situacion.finDescuentoVigente ? ` vigente hasta el ${formatoFecha(d.situacion.finDescuentoVigente)}` : ""} (total {formatoPesos(d.valores.valorTotal)}).
+            </span>
+          )}
         </label>
         <label className={ETIQUETA_CLS}>
           Fecha de pago
           <input className={INPUT_CLS} type="date" max={hoy} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
-        <label className={`${ETIQUETA_CLS} md:col-span-3`}>
+        <div className={`${ETIQUETA_CLS} md:col-span-3`}>
           Comprobante (opcional: PDF, JPG o PNG)
-          <input type="file" accept="application/pdf,image/jpeg,image/png" className="text-xs" onChange={(e) => setF({ ...f, comprobante: e.target.files?.[0] ?? null })} />
-        </label>
+          <SelectorArchivo archivo={f.comprobante} accept="application/pdf,image/jpeg,image/png" onCambio={(comprobante) => setF({ ...f, comprobante })} />
+        </div>
       </div>
       {dif !== null && dif !== 0 && (
         <InlineAlert tone="info" compact className="mt-3">
-          El valor pagado {dif > 0 ? "supera" : "es menor que"} el valor del comparendo ({formatoPesos(d.valores.valorTotal)}) por {formatoPesos(Math.abs(dif))}. Se
-          registra igual.
+          {`El valor pagado ${dif > 0 ? "supera" : "es menor que"} ${porcentaje > 0 ? `el valor con ${porcentaje} % de descuento` : "el valor del comparendo"} (${formatoPesos(esperado)}) por ${formatoPesos(Math.abs(dif))}. Se registra igual.`}
         </InlineAlert>
       )}
       {errores.length > 0 && (

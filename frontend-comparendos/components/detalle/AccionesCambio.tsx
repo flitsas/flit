@@ -6,6 +6,7 @@ import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
+import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
 import { apiAbrirPdf, apiFetch } from "@/lib/api";
 import { armarRespuestaCambio, erroresRespuestaCambio, solicitudPendiente, type FormRespuestaCambio, type Viabilidad } from "@/lib/cambio";
 import { diaColombia, formatoFecha } from "@/lib/format/date";
@@ -83,10 +84,10 @@ function ResponderCambio({ ctx, solicitud, onCerrar }: { ctx: ContextoDetalle; s
             <textarea className={TEXTAREA_CLS} rows={3} value={f.causal} onChange={(e) => setF({ ...f, causal: e.target.value })} />
           </label>
         )}
-        <label className={`${ETIQUETA_CLS} md:col-span-2`}>
+        <div className={`${ETIQUETA_CLS} md:col-span-2`}>
           Soporte de la respuesta (opcional)
-          <input type="file" accept="application/pdf,image/jpeg,image/png" className="text-xs" onChange={(e) => setF({ ...f, soporte: e.target.files?.[0] ?? null })} />
-        </label>
+          <SelectorArchivo archivo={f.soporte} accept="application/pdf,image/jpeg,image/png" onCambio={(soporte) => setF({ ...f, soporte })} />
+        </div>
       </div>
       {errores.length > 0 && (
         <InlineAlert tone="warning" compact className="mt-3">

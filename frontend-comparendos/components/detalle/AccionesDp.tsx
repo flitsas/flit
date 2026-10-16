@@ -7,6 +7,7 @@ import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
 import { Datos } from "@/components/ui/Acordeon";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
 import { apiAbrirPdf, apiFetch } from "@/lib/api";
 import { armarRespuestaDp, erroresRespuestaDp, ordenarTipologias, type FormRespuestaDp, type TipologiaComparendo, type VistaPreviaDp } from "@/lib/dp";
 import { estadoLegal } from "@/lib/etiquetas";
@@ -217,10 +218,10 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
             ))}
           </div>
         </fieldset>
-        <label className={`${ETIQUETA_CLS} md:col-span-2`}>
+        <div className={`${ETIQUETA_CLS} md:col-span-2`}>
           PDF de la respuesta
-          <input type="file" accept="application/pdf" className="text-xs" onChange={(e) => setF({ ...f, archivo: e.target.files?.[0] ?? null })} />
-        </label>
+          <SelectorArchivo archivo={f.archivo} accept="application/pdf" texto="Elegir PDF" onCambio={(archivo) => setF({ ...f, archivo })} />
+        </div>
       </div>
       {errores.length > 0 && (
         <InlineAlert tone="warning" compact className="mt-3">

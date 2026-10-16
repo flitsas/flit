@@ -32,6 +32,7 @@ export function MultiSeleccion({
   const [abierto, setAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const boton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!abierto) return;
@@ -47,8 +48,19 @@ export function MultiSeleccion({
   const visibles = [...elegidasFuera.map((v) => ({ valor: v, texto: textosElegidos?.[v] ?? v })), ...opciones];
 
   return (
-    <div ref={ref} className="relative">
-      <button type="button" className={`${controlCls(valores.length > 0)} w-full justify-between`} onClick={() => setAbierto((a) => !a)} aria-expanded={abierto}>
+    <div
+      ref={ref}
+      className="relative"
+      // B5-1: Escape cierra la lista (sin cerrar el modal que la contenga) y devuelve el foco al botón.
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && abierto) {
+          e.stopPropagation();
+          setAbierto(false);
+          boton.current?.focus();
+        }
+      }}
+    >
+      <button ref={boton} type="button" className={`${controlCls(valores.length > 0)} w-full justify-between`} onClick={() => setAbierto((a) => !a)} aria-expanded={abierto}>
         <span className="truncate">{valores.length > 0 ? `${etiqueta} (${valores.length})` : etiqueta}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
       </button>

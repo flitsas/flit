@@ -182,7 +182,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       setConfirmar(null);
       toast.show(
         r.resultado === "Encontrado" ? "La API de contratos encontró el conductor." : r.resultado === "NoEncontrado" ? "La API no encontró conductor: asígnalo a mano." : r.mensaje ?? "La consulta falló.",
-        r.resultado === "Error" ? "error" : "success",
+        r.resultado === "Error" ? "error" : r.resultado === "NoEncontrado" ? "warning" : "success",
       );
       ctx.recargar();
     } catch (e) {

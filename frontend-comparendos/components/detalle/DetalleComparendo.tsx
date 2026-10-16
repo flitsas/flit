@@ -422,8 +422,11 @@ export function DetalleComparendo({
   const carga = useCarga(id ? `detalle:${id}` : null, (signal) => apiFetch<Detalle>(`/comparendos/${id}`, { signal }));
   const d = carga.datos;
   const soloLectura = !!sesion?.usuario.esSuperAdmin;
+  // B7-1: cada acción del detalle (conductor, documentos, cambio, DP, pago, avisos) deja eventos nuevos en el timeline.
+  const [versionTimeline, setVersionTimeline] = useState(0);
   const recargar = () => {
     carga.recargar();
+    setVersionTimeline((v) => v + 1);
     onCambio?.();
   };
   const ctx: ContextoDetalle | null = d ? { detalle: d, recargar, sesion, soloLectura } : null;
@@ -432,7 +435,12 @@ export function DetalleComparendo({
   const secciones = abiertas.id === id ? abiertas.secciones : seccionInicial ? [seccionInicial] : [];
   const cargado = !!d;
   useEffect(() => {
-    if (cargado && seccionInicial) document.getElementById(`detalle-${seccionInicial}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!cargado || !seccionInicial) return;
+    // B11-2: el timeline y los acordeones cargan después y empujan la sección hacia abajo; se vuelve a ubicar mientras
+    // el contenido se acomoda (hasta ~1 s), sin animación para que no «persiga» el destino.
+    const ubicar = () => document.getElementById(`detalle-${seccionInicial}`)?.scrollIntoView({ behavior: "auto", block: "start" });
+    const tiempos = [0, 150, 400, 800, 1200].map((ms) => window.setTimeout(ubicar, ms));
+    return () => tiempos.forEach((t) => window.clearTimeout(t));
   }, [cargado, id, seccionInicial]);
   const alternar = (s: SeccionDetalle) => (abrir: boolean) =>
     setAbiertas({ id, secciones: abrir ? [...secciones.filter((x) => x !== s), s] : secciones.filter((x) => x !== s) });
@@ -449,8 +457,15 @@ export function DetalleComparendo({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 rounded-2xl bg-[#F4F7FC] p-4 dark:bg-white/5">
             <div className="flex flex-wrap items-center gap-2">
-              <Chip e={estadoProceso(d.estadoProceso)} />
-              <Chip e={ultimoHito(d.ultimoHito)} />
+              {/* B6-1: los dos chips pueden decir «Sin procesar»; cada uno con su rótulo. */}
+              <span className="inline-flex items-center gap-1 text-[11px]">
+                <span className="opacity-60">Proceso</span>
+                <Chip e={estadoProceso(d.estadoProceso)} />
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px]">
+                <span className="opacity-60">Último aviso</span>
+                <Chip e={ultimoHito(d.ultimoHito)} />
+              </span>
               <StatusBadge label={textoSemaforo(d.situacion.estadoLegal, d.situacion.diasHabilesRestantes)} tone={tonoSemaforo(d.situacion.estadoLegal, d.situacion.proximoAVencer)} />
               <Chip e={ventanaDescuento(d.situacion.ventanaDescuento)} />
               {d.situacion.finDescuentoVigente && <span className="text-xs opacity-70">hasta {formatoFecha(d.situacion.finDescuentoVigente)}</span>}
@@ -500,7 +515,7 @@ export function DetalleComparendo({
             </div>
           </Acordeon>
           <Acordeon titulo="Timeline" abiertoInicial>
-            <Timeline comparendoId={d.id} puedeObservar={!soloLectura && tienePermiso(sesion, "comparendos.comparendo.observar")} onCambio={onCambio} onIr={ir} />
+            <Timeline comparendoId={d.id} version={versionTimeline} puedeObservar={!soloLectura && tienePermiso(sesion, "comparendos.comparendo.observar")} onCambio={onCambio} onIr={ir} />
           </Acordeon>
           <Acordeon titulo="Resolución OT / derecho de petición" id="detalle-dp" abierto={secciones.includes("dp")} onAlternar={alternar("dp")}>
             <ResolucionDp d={d} extra={!soloLectura ? extensiones.dp?.(ctx) : null} />

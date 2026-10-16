@@ -12,7 +12,7 @@ import { apiDownload, apiFetch } from "@/lib/api";
 import type { Etiqueta } from "@/lib/etiquetas";
 import { formatoFecha, formatoFechaHora, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { errorArchivoCarga, ESTADO_CARGA, leerDatosFila } from "@/lib/pagos";
+import { errorArchivoCarga, ESTADO_CARGA, leerDatosFila, tonoResultadoCarga } from "@/lib/pagos";
 import { useCarga } from "@/lib/useCarga";
 
 interface Carga {
@@ -126,7 +126,7 @@ function CargaPagos() {
       form.append("archivo", archivo);
       const r = await apiFetch<ResumenCarga>("/pagos/cargas", { method: "POST", body: form });
       setElegida(r.id);
-      toast.show(r.filasInvalidas === 0 ? `${r.filasValidas} pagos registrados.` : `${r.filasValidas} pagos registrados y ${r.filasInvalidas} filas con error.`, r.filasInvalidas === 0 ? "success" : "error");
+      toast.show(r.filasInvalidas === 0 ? `${r.filasValidas} pagos registrados.` : `${r.filasValidas} pagos registrados y ${r.filasInvalidas} filas con error.`, tonoResultadoCarga(r.filasValidas, r.filasInvalidas));
     } catch (e) {
       // CARGA_RECHAZADA: el archivo completo no sirve (columnas, más de 1.000 filas, no es Excel); igual queda en el historial.
       setRechazo(e instanceof Error ? e.message : "No se pudo cargar el archivo.");

@@ -257,7 +257,7 @@ function Centro() {
               </span>
             ),
           },
-          { key: "reintentos", header: "Reintentos", align: "right", render: (m) => m.reintentos },
+          { key: "reintentos", header: "Intentos", align: "right", render: (m) => m.reintentos }, // B8-3: la API cuenta intentos de envío (1 = el primero).
           { key: "apertura", header: "Posiblemente abierto", render: (m) => (m.abiertoEn ? formatoFechaHora(m.abiertoEn) : "—") },
           { key: "comparendo", header: "Comparendo", render: (m) => m.comparendo ?? "—" },
         ]}

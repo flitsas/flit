@@ -38,11 +38,14 @@ const ENLACE_SECCION: Record<string, { seccion: SeccionDetalle; texto: string }>
 
 export function Timeline({
   comparendoId,
+  version = 0,
   puedeObservar,
   onCambio,
   onIr,
 }: {
   comparendoId: string;
+  /** Sube cuando el detalle cambia por una acción: el timeline vuelve a cargar. */
+  version?: number;
   puedeObservar: boolean;
   onCambio?: () => void;
   /** Abre la sección del detalle que originó el evento. */
@@ -55,7 +58,7 @@ export function Timeline({
   const [nota, setNota] = useState("");
   const [escribiendo, setEscribiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const eventos = useCarga(`timeline:${comparendoId}:${tipo}`, (signal) =>
+  const eventos = useCarga(`timeline:${comparendoId}:${tipo}:${version}`, (signal) =>
     apiFetch<EventoTimeline[]>(`/comparendos/${comparendoId}/timeline`, { signal, query: { tipo: tipo || undefined } }),
   );
 

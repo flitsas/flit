@@ -164,7 +164,14 @@ function ContenidoBandeja() {
           ariaLabel={`Acciones del comparendo ${f.numero}`}
           items={[
             { key: "ver", label: "Ver detalle", onSelect: () => abrir(f.id) },
-            ...(puedeDp ? [{ key: "dp", label: "Derecho de petición", onSelect: () => abrir(f.id, "dp") }] : []),
+            // B11-3: con DP se abre para verlo (y registrar la respuesta del OT); pagado y sin DP ya no admite uno.
+            ...(puedeDp
+              ? [
+                  f.dpRadicado
+                    ? { key: "dp", label: "Ver derecho de petición", onSelect: () => abrir(f.id, "dp") }
+                    : { key: "dp", label: "Derecho de petición", onSelect: () => abrir(f.id, "dp"), disabled: f.pagado, disabledReason: "Ya tiene un pago registrado." },
+                ]
+              : []),
             ...(puedePago
               ? [{ key: "pago", label: "Registrar pago", onSelect: () => abrir(f.id, "pago"), disabled: f.pagado, disabledReason: "Ya tiene un pago registrado." }]
               : []),
