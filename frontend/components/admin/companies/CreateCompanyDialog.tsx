@@ -17,10 +17,8 @@ import {
 import type { CompanyListItem, CreateCompanyRequest } from "@/lib/api/types";
 import {
   hasDigit,
-  hasLetterOrDigit,
   sanitizeName,
   sanitizeTaxId,
-  sanitizeTenantCode,
   validateReadableName,
 } from "@/lib/validation/fieldRules";
 
@@ -34,8 +32,9 @@ export interface CreateCompanyDialogProps {
   isSuperAdmin?: boolean;
 }
 
+/** `general`: error sin campo propio (HU #13607 — antes se mostraba bajo el campo Código, que ya no existe). */
 type FieldErrors = Partial<
-  Record<"razonSocial" | "nit" | "code" | "tenantType" | "transitGrants" | "domainHost", string>
+  Record<"razonSocial" | "nit" | "tenantType" | "transitGrants" | "domainHost" | "general", string>
 >;
 
 type WizardStep = "form" | "ot" | "review";
@@ -49,7 +48,6 @@ export function CreateCompanyDialog({
 }: CreateCompanyDialogProps) {
   const [razonSocial, setRazonSocial] = useState("");
   const [nit, setNit] = useState("");
-  const [code, setCode] = useState("");
   const [tenantType, setTenantType] = useState<TenantType>("RENTING");
   const [estadoActivo, setEstadoActivo] = useState(true);
   const [transitGrantIds, setTransitGrantIds] = useState<string[]>([]);
@@ -74,7 +72,6 @@ export function CreateCompanyDialog({
   const reset = () => {
     setRazonSocial("");
     setNit("");
-    setCode("");
     setTenantType("RENTING");
     setEstadoActivo(true);
     setTransitGrantIds([]);
@@ -111,7 +108,6 @@ export function CreateCompanyDialog({
     const next: FieldErrors = {};
     const rs = razonSocial.trim();
     const n = nit.trim();
-    const c = code.trim();
     if (!rs) next.razonSocial = "La razón social es obligatoria.";
     else {
       const e = validateReadableName(rs, "La razón social");
@@ -119,8 +115,6 @@ export function CreateCompanyDialog({
     }
     if (!n) next.nit = "El NIT es obligatorio.";
     else if (!hasDigit(n)) next.nit = "El NIT debe contener al menos un dígito.";
-    if (!c) next.code = "El código es obligatorio.";
-    else if (!hasLetterOrDigit(c)) next.code = "El código debe contener al menos una letra o número.";
     if (isMarcaBlanca) {
       const host = domainHost.trim();
       if (host && !isValidHostFormat(host)) {
@@ -168,7 +162,6 @@ export function CreateCompanyDialog({
       const created = await onCreate({
         razonSocial: razonSocial.trim(),
         nit: nit.trim(),
-        code: code.trim(),
         tenantType,
         estadoActivo,
       });
@@ -204,16 +197,15 @@ export function CreateCompanyDialog({
           if (
             field === "razonSocial" ||
             field === "nit" ||
-            field === "code" ||
             field === "tenantType"
           ) {
             mapped[field] = message;
           }
         }
-        setErrors(Object.keys(mapped).length > 0 ? mapped : { code: "No se pudo crear la compañía." });
+        setErrors(Object.keys(mapped).length > 0 ? mapped : { general: "No se pudo crear la compañía." });
         setStep("form");
       } else {
-        setErrors({ code: "No se pudo crear la compañía. Intenta de nuevo." });
+        setErrors({ general: "No se pudo crear la compañía. Intenta de nuevo." });
         setStep("form");
       }
     } finally {
@@ -290,18 +282,6 @@ export function CreateCompanyDialog({
               />
             </Field>
 
-            <Field label="Código" htmlFor="cc-code" error={errors.code} hint="Identificador único de la compañía (máx. 32).">
-              <input
-                id="cc-code"
-                type="text"
-                value={code}
-                onChange={(e) => setCode(sanitizeTenantCode(e.target.value))}
-                maxLength={32}
-                className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-                style={{ borderColor: errors.code ? "#FF4E00" : "#DFE5ED" }}
-              />
-            </Field>
-
             <Field label="Tipo de compañía" htmlFor="cc-type" error={errors.tenantType}>
               <select
                 id="cc-type"
@@ -373,6 +353,12 @@ export function CreateCompanyDialog({
             error={errors.transitGrants}
             disabled={submitting}
           />
+        )}
+
+        {!pendingCreated && errors.general && (
+          <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+            {errors.general}
+          </p>
         )}
 
         {!pendingCreated && (

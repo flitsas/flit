@@ -69,7 +69,7 @@ function AdminTransitOfficesPageInner() {
           transitOfficeId: office.id,
           legalName: office.name,
           taxId: office.code,
-          code: office.code,
+          // HU #13607 — el código del tenant lo asigna el servidor (COMP-XXXX); antes se copiaba el DIVIPOL.
         });
         show(`Organismo de tránsito «${tenant.legalName}» activado.`, "success");
         setListVersion((v) => v + 1);

@@ -8,11 +8,13 @@ namespace Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 /// <param name="TransitOfficeId">Oficina del catálogo <c>catalogs.transit_offices</c> a vincular. Requerido.</param>
 /// <param name="LegalName">Razón social (legal_name). Requerido, ≤255.</param>
 /// <param name="TaxId">NIT (tax_id). Requerido, ≤20.</param>
-/// <param name="Code">Código único del tenant. Requerido, ≤32.</param>
 /// <param name="OperationMode">Modo de operación del perfil OT. Opcional (default <c>dashboard</c>).</param>
+/// <remarks>
+/// HU #13605: ya no lleva <c>code</c>. Lo asigna Postgres (consecutivo COMP-XXXX); si un cliente viejo lo envía,
+/// el binder lo descarta como cualquier propiedad desconocida.
+/// </remarks>
 public sealed record CreateTransitOfficeRequest(
     Guid? TransitOfficeId,
     string? LegalName,
     string? TaxId,
-    string? Code,
     string? OperationMode);

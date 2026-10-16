@@ -18,7 +18,6 @@ public sealed class CreateChildCompanyHandlerTests
     {
         var hierarchy = Substitute.For<ICompanyHierarchyRepository>();
         var companies = Substitute.For<ICompanyWriteRepository>();
-        companies.CodeExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         companies.TaxIdExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
 
         var handler = new CreateChildCompanyHandler(hierarchy, companies);
@@ -26,7 +25,7 @@ public sealed class CreateChildCompanyHandlerTests
         {
             HeadTenantId = Head,
             HeadTenantType = HeadTenantTypes.Concesion,
-            Request = new CreateCompanyRequest("Hijo", "900100200-1", "HIJO-1", "CONCESION", true),
+            Request = new CreateCompanyRequest("Hijo", "900100200-1", "CONCESION", true),
         });
 
         result.IsValid.Should().BeFalse();
@@ -39,7 +38,6 @@ public sealed class CreateChildCompanyHandlerTests
     {
         var hierarchy = Substitute.For<ICompanyHierarchyRepository>();
         var companies = Substitute.For<ICompanyWriteRepository>();
-        companies.CodeExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         companies.TaxIdExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
 
         var expected = new CompanyListItem { Id = Guid.NewGuid(), Code = "HIJO-2", TenantType = ChildTenantTypes.Concesionario };
@@ -50,7 +48,7 @@ public sealed class CreateChildCompanyHandlerTests
         {
             HeadTenantId = Head,
             HeadTenantType = HeadTenantTypes.Concesion,
-            Request = new CreateCompanyRequest("Hijo", "900100200-2", "HIJO-2", null, true),
+            Request = new CreateCompanyRequest("Hijo", "900100200-2", null, true),
         });
 
         result.IsValid.Should().BeTrue();
@@ -64,7 +62,6 @@ public sealed class CreateChildCompanyHandlerTests
     {
         var hierarchy = Substitute.For<ICompanyHierarchyRepository>();
         var companies = Substitute.For<ICompanyWriteRepository>();
-        companies.CodeExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         companies.TaxIdExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         hierarchy.CreateChildAsync(Arg.Any<NewChildCompany>(), Arg.Any<CancellationToken>())
             .Returns(new CompanyListItem { Id = Guid.NewGuid(), TenantType = ChildTenantTypes.Renting });
@@ -74,7 +71,7 @@ public sealed class CreateChildCompanyHandlerTests
         {
             HeadTenantId = Head,
             HeadTenantType = HeadTenantTypes.MarcaBlanca,
-            Request = new CreateCompanyRequest("Hijo", "900100200-3", "HIJO-3", null, true),
+            Request = new CreateCompanyRequest("Hijo", "900100200-3", null, true),
         });
 
         await hierarchy.Received(1).CreateChildAsync(

@@ -30,11 +30,16 @@ public static class DevelopmentAuthSeeder
     /// <summary>Usuario fijo del tab Operación (HU #10200); el SQL seed crea la fila sin credencial.</summary>
     public const string DevOperacionEmail = "dev@flitsas.io";
     public const string DevOperacionPassword = "DevPass1!";
-    public const string DemoTenantCode = "DEMO";
+    /// <summary>
+    /// NIT del tenant del SuperAdmin demo. HU #13606: los tenants semilla se identifican por NIT (único,
+    /// <c>uq_tenants_tax_id</c>) y no por código, porque el código es el consecutivo COMP-XXXX que asigna Postgres.
+    /// </summary>
+    public const string DemoTenantTaxId = "9000000001";
 
     public const string DemoAdminCompanyEmail = "admin@empresa.local";
     public const string DemoAdminCompanyPassword = "AdminPass1!";
-    public const string DemoEmpresaTenantCode = "EMPRESA_DEMO";
+    /// <summary>NIT de la compañía demo del AdminCompany (antes buscada por el código EMPRESA_DEMO, HU #13606).</summary>
+    public const string DemoEmpresaTenantTaxId = "9000000002";
 
     /// <summary>Radicador de pruebas en EMPRESA_DEMO (compañía sin configurar): rol propio con acceso
     /// al módulo Trámites (leer + crear). Sirve para probar el flujo de radicación / matrícula inicial.</summary>
@@ -128,7 +133,7 @@ public static class DevelopmentAuthSeeder
         CancellationToken cancellationToken)
     {
         var empresaTenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, cancellationToken);
+            .FirstOrDefaultAsync(t => t.TaxId == DemoEmpresaTenantTaxId, cancellationToken);
         if (empresaTenant is null)
             return;
 
@@ -272,9 +277,8 @@ public static class DevelopmentAuthSeeder
         db.Tenants.Add(new Tenant
         {
             Id = tenantId,
-            Code = DemoTenantCode,
             LegalName = "Empresa Demo FLIT",
-            TaxId = "9000000001",
+            TaxId = DemoTenantTaxId,
             TenantType = "FLIT",
             IsActive = true,
             CreatedAt = now,
@@ -472,13 +476,12 @@ public static class DevelopmentAuthSeeder
 
         // 1. Tenant OT-SABANETA
         var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == OtSabanetaTenantId || t.Code == "OT-SABANETA", cancellationToken);
+            .FirstOrDefaultAsync(t => t.Id == OtSabanetaTenantId || t.TaxId == "900273813-7", cancellationToken);
         if (tenant is null)
         {
             tenant = new Tenant
             {
                 Id = OtSabanetaTenantId,
-                Code = "OT-SABANETA",
                 LegalName = "Secretaría de Tránsito y Transporte de Sabaneta (DEV)",
                 TaxId = "900273813-7",
                 TenantType = "RENTING",
@@ -570,13 +573,12 @@ public static class DevelopmentAuthSeeder
 
         // 1. Tenant OT-ENVIGADO
         var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == OtEnvigadoTenantId || t.Code == "OT-ENVIGADO", cancellationToken);
+            .FirstOrDefaultAsync(t => t.Id == OtEnvigadoTenantId || t.TaxId == "900000266-5", cancellationToken);
         if (tenant is null)
         {
             tenant = new Tenant
             {
                 Id = OtEnvigadoTenantId,
-                Code = "OT-ENVIGADO",
                 LegalName = "STRIA TTEyTTO ENVIGADO (DEV)",
                 TaxId = "900000266-5",
                 TenantType = "RENTING",
@@ -779,16 +781,15 @@ public static class DevelopmentAuthSeeder
         // del SuperAdmin (DEMO). Esto garantiza aislamiento real en dev: AdminCompany
         // solo ve usuarios de su propia compañía, no los del SuperAdmin.
         var empresaTenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, cancellationToken);
+            .FirstOrDefaultAsync(t => t.TaxId == DemoEmpresaTenantTaxId, cancellationToken);
 
         if (empresaTenant is null)
         {
             empresaTenant = new Tenant
             {
                 Id = Guid.CreateVersion7(),
-                Code = DemoEmpresaTenantCode,
                 LegalName = "Empresa Demo S.A.S",
-                TaxId = "9000000002",
+                TaxId = DemoEmpresaTenantTaxId,
                 TenantType = "RENTING",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -867,7 +868,7 @@ public static class DevelopmentAuthSeeder
         CancellationToken ct)
     {
         var empresaTenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
+            .FirstOrDefaultAsync(t => t.TaxId == DemoEmpresaTenantTaxId, ct);
         if (empresaTenant is null) return;
 
         // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id).
