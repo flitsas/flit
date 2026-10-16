@@ -59,6 +59,14 @@ public sealed class FlitoSignalsOptions
             return false;
         }
 
+        // La clave se firma tal cual (bytes UTF-8, sin recortar): un espacio o salto de línea sobrante en el .env haría
+        // fallar todas las firmas en FLITO, así que se rechaza aquí en vez de recortarla en silencio.
+        if (SigningKey.Length != SigningKey.Trim().Length)
+        {
+            motivo = $"{SectionName}:SigningKey tiene espacios o saltos de línea al inicio o al final.";
+            return false;
+        }
+
         if (PollInterval <= TimeSpan.Zero || StabilityLag < TimeSpan.Zero || BatchSize < 1)
         {
             motivo = $"{SectionName}: PollInterval y BatchSize deben ser positivos y StabilityLag no puede ser negativo.";

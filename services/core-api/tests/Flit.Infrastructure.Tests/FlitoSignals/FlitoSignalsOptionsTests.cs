@@ -45,6 +45,8 @@ public sealed class FlitoSignalsOptionsTests
     [InlineData(Destino, null, "SigningKey")]
     [InlineData(Destino, "   ", "SigningKey")]
     [InlineData(Destino, "corta", "SigningKey")]
+    [InlineData(Destino, ClaveFicticia + "\n", "SigningKey")]
+    [InlineData(Destino, " " + ClaveFicticia, "SigningKey")]
     public void AC2_EncendidoConConfiguracionIncompletaNoEsOperableYElMotivoNoIncluyeLaClave(string? url, string? clave, string campo)
     {
         var o = new FlitoSignalsOptions { Enabled = true, TargetUrl = url, SigningKey = clave };
