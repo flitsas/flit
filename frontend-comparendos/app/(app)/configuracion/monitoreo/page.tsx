@@ -232,7 +232,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
       const form = new FormData();
       form.append("archivo", f);
       const r = await apiFetch<{ agregadas: PlacaMonitoreada[]; yaExistian: string[]; invalidas: string[]; repetidas: string[] }>("/monitoreo/placas/archivo", { method: "POST", body: form });
-      setResultado(`${f.name}: ${resumenPlacas(r)}`);
+      setResultado(`${f.name}: ${resumenPlacas(r, "archivo")}`);
       if (r.agregadas.length > 0) lista.recargar();
     } catch (e) {
       setResultado(e instanceof Error ? e.message : "No se pudo cargar el archivo.");

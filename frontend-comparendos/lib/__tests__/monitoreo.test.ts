@@ -11,4 +11,8 @@ describe("resumenPlacas", () => {
   it("plural y sin secciones vacías", () => {
     expect(resumenPlacas({ agregadas: [{}, {}, {}], yaExistian: [], invalidas: [], repetidas: [] })).toBe("3 agregadas");
   });
+
+  it("en un archivo dice «en el archivo»", () => {
+    expect(resumenPlacas({ agregadas: [], yaExistian: [], invalidas: [], repetidas: ["EXL101"] }, "archivo")).toBe("0 agregadas · 1 repetida en el archivo (EXL101)");
+  });
 });
