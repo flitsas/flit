@@ -537,6 +537,7 @@ public static class DevelopmentAuthSeeder
             };
             db.Roles.Add(role);
             await db.SaveChangesAsync(cancellationToken);
+            await GrantOtModulePermissionsAsync(db, role.Id, cancellationToken);
         }
 
         db.UserRoleAssignments.Add(new UserRoleAssignment
@@ -841,6 +842,7 @@ public static class DevelopmentAuthSeeder
             };
             db.Roles.Add(role);
             await db.SaveChangesAsync(cancellationToken);
+            await GrantOtModulePermissionsAsync(db, role.Id, cancellationToken);
         }
 
         var assignedAt = DateTimeOffset.UtcNow;
@@ -1984,6 +1986,40 @@ public static class DevelopmentAuthSeeder
 
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// HU #13638 (Épica #12753): al crear el rol global <c>ot_admin</c> en una base nueva le concede los
+    /// permisos de los módulos OT (<c>ot-*</c>) que la migración <c>20261016150000_HU13638_SlugsOt</c> ya dejó
+    /// en el catálogo. La migración corre antes que este seeder y no encuentra el rol, así que sin esto el
+    /// Admin OT de una base nueva quedaría sin sus slugs. Solo se llama cuando el rol se crea (HU #13640).
+    /// </summary>
+    private static async Task GrantOtModulePermissionsAsync(FlitDbContext db, Guid roleId, CancellationToken ct)
+    {
+        var otModuleIds = await db.SecurityModules
+            .Where(m => m.Code.StartsWith("ot-"))
+            .Select(m => m.Id)
+            .ToListAsync(ct);
+        var actionIds = await db.RbacActions
+            .Where(a => otModuleIds.Contains(a.ModuleId))
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+        var existing = await db.RoleGrants
+            .Where(g => g.RoleId == roleId)
+            .Select(g => g.PermissionId)
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        db.RoleGrants.AddRange(actionIds
+            .Where(id => !existing.Contains(id))
+            .Select(id => new RoleGrant
+            {
+                Id = Guid.CreateVersion7(),
+                RoleId = roleId,
+                PermissionId = id,
+                CreatedAt = now,
+            }));
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>

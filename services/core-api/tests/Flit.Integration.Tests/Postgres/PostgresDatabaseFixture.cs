@@ -108,6 +108,10 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // HU #13367 (DDL 133): fila única de parámetros del motor de lotes de consolidados. Configuración, no
         // catálogo (como runt_confirmation_settings): se trunca; la prueba que la necesite reaplica el DDL 133.
         "tramites.consolidado_export_settings",
+        // HU #13638 (DDL 137): modulos y permisos RBAC ot.* sembrados por migracion. Se truncan como el resto de las
+        // tablas RBAC (security.roles, role_permissions): la prueba que los necesite reaplica el DDL 137.
+        "security.modules",
+        "security.permissions",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";
