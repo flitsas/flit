@@ -106,6 +106,45 @@ public sealed class OidcNetworkTests(PostgresDatabaseFixture fixture) : MarcaBla
         response.Headers.Contains("Set-Cookie").Should().BeFalse();
     }
 
+    [PostgresFact]
+    public async Task PublicNetwork_DesdeCualquierDominioDeLaRed_DaSuHub_YNullEnFlit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        foreach (var host in new[] { MarcaBlancaScenario.HostA, TramitesHostA })
+        {
+            var body = await NewClient(host).GetFromJsonAsync<JsonElement>("/api/v1/public/network", ct);
+            body.GetProperty("hubUrl").GetString().Should().Be($"https://{MarcaBlancaScenario.HostA}", host);
+        }
+
+        var flit = await NewClient(null).GetFromJsonAsync<JsonElement>("/api/v1/public/network", ct);
+        flit.GetProperty("hubUrl").ValueKind.Should().Be(JsonValueKind.Null);
+        var unknown = await NewClient("desconocido.example").GetFromJsonAsync<JsonElement>("/api/v1/public/network", ct);
+        unknown.GetProperty("hubUrl").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [PostgresFact]
+    public async Task MisApps_PorElDominioDeLaRed_EnlazaLosDominiosDeLaRed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await GiveTramitesRoleAsync(MarcaBlancaScenario.UserChildA, MarcaBlancaScenario.ChildA);
+        var client = NewClient(MarcaBlancaScenario.HostA);
+        await LoginAsync(client, MarcaBlancaScenario.UserChildA, ct);
+        var accessToken = await CodeFlowAsync(client, "plataforma", HubCallbackA, ct);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/platform/me/apps");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Add("X-Flit-Domain", MarcaBlancaScenario.HostA);
+        var response = await Client.SendAsync(request, ct);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+
+        var apps = (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).EnumerateArray().ToDictionary(a => a.GetProperty("code").GetString()!);
+        apps["plataforma"].GetProperty("url").GetString().Should().Be($"https://{MarcaBlancaScenario.HostA}");
+        apps["plataforma"].GetProperty("current").GetBoolean().Should().BeTrue();
+        apps["tramites"].GetProperty("url").GetString().Should().Be($"https://{TramitesHostA}");
+        apps["tramites"].GetProperty("current").GetBoolean().Should().BeFalse();
+    }
+
     private HttpClient NewClient(string? host)
     {
         var client = Factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true, BaseAddress = new Uri("https://localhost") });

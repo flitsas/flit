@@ -404,10 +404,36 @@ curl -sI https://dev.flitsas.online/tramites | grep -i -E "^HTTP|location"   # 3
 
 ### 6.4 Dominios de red (Marca Blanca)
 
-La plantilla `flit-network-domains.conf.example` (dominios propios de clientes, catch-all) **todavía no está
-adaptada a la suite**: manda `/` a Trámites y `/api/v1` directo al gateway. Mientras ningún dominio de cliente esté en
-uso con la suite, no se toca. Antes de encender la suite para un dominio de cliente hay que actualizarla (queda en
-§11 como pendiente).
+Con la suite, una red de Marca Blanca usa **dos dominios**, los dos `active` en `admin.tenant_domains`:
+
+| Dominio | `purpose` | Lo sirve | Para qué |
+|---|---|---|---|
+| Hub de la red (p. ej. `marca.cliente.com`) | `HUB` | `frontend-hub` (`HUB_PORT`) | Login, `/connect`, `/.well-known`; es el emisor OIDC de la red |
+| Trámites de la red (p. ej. `tramites.cliente.com`) | `tramites` | `frontend` (`FRONTEND_PORT`) | El producto; vuelve del login a `/auth/callback` |
+
+Red de prueba de FLIT: `marcablanca<amb>.flitsas.online` (HUB) y `tramites.marcablanca<amb>.flitsas.online` (Trámites),
+con `<amb>` = `dev`, `qa` o `pdn`. Como viven bajo `*.flitsas.online` (zona reservada), cada host va con su nombre
+EXACTO en `Domains:Allowed` (backend) y en las negaciones de `FLIT_HOSTS` (fronts): sin eso se tratan como dominio de
+FLIT. Cualquier otro subdominio sigue reservado.
+
+**Por qué hacen falta dos.** Por el hub de FLIT, un usuario de la red recibe `NETWORK_DOMAIN_REQUIRED`, y el servidor
+OIDC solo acepta volver a un dominio de red si la petición entró por el hub de **esa** red. Si no, responde *«El
+redirect_uri no es válido para este cliente»* (`OidcNetworkRedirects`). En un solo dominio no caben las dos apps.
+
+**Qué hay que encender:**
+
+1. `FLIT_NETWORK_DOMAINS_ENABLED=true` en el `.env`. Con eso, `@flit/auth` (hub y Trámites) pregunta a
+   `GET /api/v1/public/network` cuál es el hub de la red del host de la petición. La respuesta se guarda 60 s. En los
+   hosts de FLIT responde `null` y todo sigue igual.
+2. Los dos dominios en `admin.tenant_domains`. La pantalla de administración solo registra el `HUB`. El de producto
+   se inserta por SQL mientras tanto: misma red, `purpose = 'tramites'`, `status = 'active'` y fechas de verificación y
+   certificado.
+3. nginx: un `server{}` por dominio, con todo hacia la app, **sin** `location /api/v1/` directo al gateway (el Bearer
+   lo pone el proxy de la app). Plantilla: sección «Con la FLIT Suite» de `flit-network-domains.conf.example`. El
+   catch-all de arriba es solo para la sesión legacy.
+
+El menú de productos del hub (`/platform/me/apps`) enlaza, desde un dominio de la red, los dominios de esa red. Un
+producto sin dominio en la red conserva el enlace de FLIT.
 
 ---
 
@@ -574,6 +600,7 @@ Cuando uno se despliegue (por PR, no a mano):
 | `docker compose` dice `required variable FLIT_SUITE_ENV is missing a value` | Falta la línea en el `.env` | Agregarla (§4.2). En PDN: `FLIT_SUITE_ENV=` |
 | Después de la fase 1, todos reciben 401 / vuelven al login | Esperado una vez (§4.4). Si persiste tras iniciar sesión, la llave no se está guardando | Revisar logs de core-api; salida rápida: `JWT_VALIDATE_ISSUED_TOKENS=false` |
 | «El redirect_uri / post_logout_redirect_uri no es válido» | Los clientes de login tienen hosts de otro ambiente, o falta `X-Forwarded-Proto` | SQL de §7.2; corregir `FLIT_SUITE_ENV` y reiniciar core-api (y core-identity); revisar nginx |
+| «El redirect_uri no es válido para este cliente» en un dominio de Marca Blanca | El authorize fue al hub de FLIT: falta `FLIT_NETWORK_DOMAINS_ENABLED=true`, o la red no tiene dominio `HUB` activo | §6.4; `curl -sI https://<dominio>/auth/login` debe llevar a `https://<hub de la red>/connect/authorize` |
 | El hub o Trámites responden 500; el log dice `FLIT_SESSION_SECRET debe tener al menos 32 caracteres` | Vacía o de menos de 32 caracteres | Generarla (§4.1) |
 | Las pantallas del hub o de Trámites dan 401 en `/api/v1` con la sesión abierta | nginx manda `/api/v1` directo al gateway | Quitar esa `location` (§6.2) |
 | Marca Blanca o producto equivocados con la suite | `FLIT_INTERNAL_API_KEY` vacía, `Host` reescrito o subred distinta a la de la red Docker | §4.3 y §6.2; `docker network inspect flitdev_default` para ver la subred real |
@@ -588,7 +615,7 @@ Cuando uno se despliegue (por PR, no a mano):
 
 | Tema | Estado |
 |---|---|
-| Dominios de red (Marca Blanca) con la suite | La plantilla `flit-network-domains.conf.example` no está adaptada (§6.4). Antes de usar la suite en un dominio de cliente |
+| Dominios de red (Marca Blanca) con la suite | Soportado (§6.4). Falta: alta de dominios de producto desde la administración (hoy, SQL); `core-consultas` y `core-notificaciones` aceptan solo el emisor de FLIT (`Platform:Auth:Issuers`), así que rechazan los tokens de una red; el cierre de sesión del hub de la red no abre el front-channel logout de los productos de la red (sin verificar: la sesión del producto podría seguir abierta hasta que venza su token); las rutas viejas de Trámites en el hub de la red (A-11) redirigen a la Trámites de FLIT |
 | Trámites en su host con `FLIT_SESSION_MODE=legacy` | No soportado: el CORS del gateway no incluye `<ambiente>.tramites.flitsas.online`. Por eso, en el rollback de la fase 3 la raíz vuelve a Trámites |
 | Límite de peticiones del gateway por IP | Detrás de nginx y del servidor de Trámites, todas las peticiones comparten IP: el tope (600/min) es casi global. Vigilar 429 en DEV |
 | Duración de sesión | La sesión del producto dura 14 días y la del hub 12 h (caso H1 de `matriz-pruebas.md`); decisión pendiente |

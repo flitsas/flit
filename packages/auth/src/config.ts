@@ -16,6 +16,11 @@ export interface AuthConfig {
   internalApiKey: string | undefined;
   /** URL pública de esta app; si falta, sale del Host de la petición. */
   appUrl: string | undefined;
+  /**
+   * FLIT_NETWORK_DOMAINS_ENABLED: la app también se sirve en dominios de redes de Marca Blanca. En un host que no es el
+   * del hub se pregunta a la API cuál es el hub de su red (network.ts); apagado, el hub es siempre `hubUrl`.
+   */
+  networkDomains?: boolean;
 }
 
 const DEV_SESSION_SECRET = "flit-dev-session-secret-solo-para-next-dev";
@@ -35,6 +40,7 @@ export function authConfig(productCode: string, env: NodeJS.ProcessEnv = process
     sessionSecret,
     internalApiKey: env.FLIT_INTERNAL_API_KEY || undefined,
     appUrl: env.FLIT_APP_URL ? trimSlash(env.FLIT_APP_URL) : undefined,
+    networkDomains: env.FLIT_NETWORK_DOMAINS_ENABLED === "true",
   };
 }
 

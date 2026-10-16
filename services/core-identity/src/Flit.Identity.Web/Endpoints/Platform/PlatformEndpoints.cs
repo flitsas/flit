@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Admin.Domain.Companies.Domains;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Platform.Application.Apps;
@@ -25,11 +26,12 @@ public static class PlatformEndpoints
     {
         var group = app.MapGroup("/api/v1/platform").WithTags("Platform");
 
-        // GET /me/apps — productos que el usuario puede abrir, con su URL en este ambiente.
+        // GET /me/apps — productos que el usuario puede abrir, con su URL en este ambiente (o en los dominios de su red).
         group.MapGet("/me/apps", async (
             ClaimsPrincipal user,
             IDomainContextAccessor domain,
             ListMyAppsHandler handler,
+            ITenantDomainRepository domains,
             CancellationToken ct) =>
         {
             if (!Guid.TryParse(user.FindFirstValue("sub"), out var userId)
@@ -39,6 +41,8 @@ public static class PlatformEndpoints
             }
 
             var apps = await handler.HandleAsync(userId, tenantId, RequestTenantResolver.IsSuperAdmin(user), domain.Host, ct);
+            if (domain is { Kind: DomainKind.Network, HeadTenantId: { } head })
+                apps = NetworkHosts.Rebase(apps, await domains.ListActiveHostsByPurposeAsync(head, ct), domain.Host);
             return Results.Ok(apps);
         }).RequireAuthorization().WithName("ListMyApps");
 

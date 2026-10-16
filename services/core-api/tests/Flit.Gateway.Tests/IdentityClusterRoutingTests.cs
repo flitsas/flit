@@ -23,7 +23,7 @@ public sealed class IdentityClusterRoutingTests : IAsyncLifetime
     private static readonly string[] IdentityPaths =
     [
         "/connect/authorize", "/.well-known/openid-configuration", "/api/v1/auth/login", "/api/v1/platform/me/apps",
-        "/api/v1/platform/issuers", "/api/v1/public/branding", "/api/v1/public/branding/logos/abc",
+        "/api/v1/platform/issuers", "/api/v1/public/branding", "/api/v1/public/branding/logos/abc", "/api/v1/public/network",
     ];
 
     private static readonly string[] ApiPaths =
@@ -122,7 +122,7 @@ public sealed class IdentityClusterRoutingTests : IAsyncLifetime
         }
 
         before.Where(r => r.Value.Identity).Select(r => r.Key).Should().BeEquivalentTo(
-            "oidc-connect-route", "oidc-well-known-route", "auth-public-route", "platform-route", "public-branding-route");
+            "oidc-connect-route", "oidc-well-known-route", "auth-public-route", "platform-route", "public-branding-route", "public-network-route");
     }
 
     private WebApplicationFactory<Program> Gateway(bool identityClusterEnabled) =>
