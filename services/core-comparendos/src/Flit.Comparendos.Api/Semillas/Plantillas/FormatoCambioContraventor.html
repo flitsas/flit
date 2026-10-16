@@ -6,9 +6,10 @@
 <table>
 <tr><th>Nombre</th><td>{{conductor.nombres}}</td></tr>
 <tr><th>Documento</th><td>{{conductor.tipo_documento}} {{conductor.numero_documento}}</td></tr>
-<tr><th>Dirección</th><td>{{conductor.direccion}}, {{conductor.ciudad}}</td></tr>
-<tr><th>Teléfono</th><td>{{conductor.telefono}}</td></tr>
-<tr><th>Correo</th><td>{{conductor.correo}}</td></tr>
+<tr><th>Dirección</th><td>{{#si conductor.direccion}}{{conductor.direccion}}{{#sino}}—{{/si}}</td></tr>
+<tr><th>Ciudad</th><td>{{#si conductor.ciudad}}{{conductor.ciudad}}{{#sino}}—{{/si}}</td></tr>
+<tr><th>Teléfono</th><td>{{#si conductor.telefono}}{{conductor.telefono}}{{#sino}}—{{/si}}</td></tr>
+<tr><th>Correo</th><td>{{#si conductor.correo}}{{conductor.correo}}{{#sino}}—{{/si}}</td></tr>
 </table>
 <p style="text-align:justify">Datos del comparendo: número {{comparendo.numero}}, fecha {{comparendo.fecha_imposicion}}, infracción {{comparendo.codigo_infraccion}}, dirección {{comparendo.direccion_infraccion}}.</p>
 <p>Adjunto la cédula y la licencia de conducción del conductor y el certificado de existencia y representación de la empresa.</p>

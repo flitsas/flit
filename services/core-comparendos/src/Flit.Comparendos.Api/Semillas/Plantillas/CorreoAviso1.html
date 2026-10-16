@@ -4,4 +4,4 @@
 <p>{{peticionario.nombre}} te informa que el vehículo de placa <b>{{comparendo.placa}}</b>, que tenías a tu cargo, recibió el comparendo <b>{{comparendo.numero}}</b> el {{comparendo.fecha_imposicion}} por la infracción {{comparendo.codigo_infraccion}}: {{comparendo.descripcion_infraccion}}</p>
 <p>Valor: <b>{{comparendo.valor_total}}</b>. Hoy tienes <b>{{descuento.ventana}}</b>: puedes pagar con 50% de descuento hasta el {{descuento.fecha_fin_50}} y con 25% hasta el {{descuento.fecha_fin_25}}, haciendo el curso de seguridad vial en un CIA autorizado.</p>
 <p><a href="{{portal.enlace}}">Ver el comparendo y su evidencia</a> (enlace disponible hasta el {{portal.vence}}).</p>
-<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>
+{{#si empresa.correo_respuesta}}<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>{{/si}}

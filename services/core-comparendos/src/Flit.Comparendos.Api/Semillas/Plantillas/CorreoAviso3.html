@@ -3,4 +3,4 @@
 <p>Hola, {{conductor.nombres}}:</p>
 <p>Terminó el plazo de descuento del comparendo <b>{{comparendo.numero}}</b> (placa {{comparendo.placa}}). Desde hoy el valor a pagar es el 100%: <b>{{comparendo.valor_total}}</b>, más los intereses que liquide el organismo de tránsito.</p>
 <p><a href="{{portal.enlace}}">Ver el comparendo</a></p>
-<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>
+{{#si empresa.correo_respuesta}}<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>{{/si}}

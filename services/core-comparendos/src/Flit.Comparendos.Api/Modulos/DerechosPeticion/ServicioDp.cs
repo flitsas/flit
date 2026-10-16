@@ -93,6 +93,8 @@ public sealed class ServicioDp(
         Si(!propietarioEsDeLaEmpresa, "PROPIETARIO_AJENO", "El propietario del vehículo según la fuente no es la empresa ni uno de sus NITs vigilados.");
         Si(propietarioEsDeLaEmpresa && rl is null && config.RequiereRepresentanteLegal, "SIN_REPRESENTANTE_LEGAL", "La empresa exige representante legal y no hay uno activo del propietario (el del NIT, o el de la empresa si el propietario es la empresa) con permiso para firmar derechos de petición.");
         Si(plantilla is null, "SIN_PLANTILLA", "No hay una plantilla publicada para esta tipología.");
+        // Hallazgo B9-2: el DP dice a qué correo responder; sin el de la empresa ni el del RL la respuesta no llega.
+        Si(propietarioEsDeLaEmpresa && (rl is not null || !config.RequiereRepresentanteLegal) && string.IsNullOrWhiteSpace(config.CorreoRespuesta ?? rl?.Correo), "SIN_CORREO_RESPUESTA", "No hay un correo para recibir la respuesta del organismo: configura el correo de respuesta de la empresa o el del representante legal.");
 
         // Anexos del representante según la tipología; lo que falta solo advierte [Excel J7].
         var advertencias = new List<string>();

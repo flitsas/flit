@@ -40,7 +40,7 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         var cliente = api.Cliente(usuario);
         var rl = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
         {
-            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", cargo = "Representante legal",
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", correo = "rl@gestora.test", cargo = "Representante legal",
             direccionNotificacion = "Calle 100 # 9A-45", permisoEnvioDp = true, permisoCambioContraventor = true,
         }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";

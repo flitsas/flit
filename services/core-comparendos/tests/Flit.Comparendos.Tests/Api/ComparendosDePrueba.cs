@@ -77,7 +77,7 @@ public static class ComparendosDePrueba
         var nitId = await api.EnDbAsync(db => db.IdentificacionesMonitoreadas.Where(n => n.TenantId == empresa).Select(n => n.Id).SingleAsync(ct));
         (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
         {
-            alcance = "Identificacion", identificacionMonitoreadaId = nitId, tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez",
+            alcance = "Identificacion", identificacionMonitoreadaId = nitId, tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", correo = "rl@gestora.test",
             cargo = "Representante legal", permisoEnvioDp = true, permisoCambioContraventor = true,
         }, ct)).EnsureSuccessStatusCode();
     }

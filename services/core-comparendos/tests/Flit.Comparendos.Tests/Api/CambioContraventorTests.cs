@@ -138,7 +138,7 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
         });
         (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
         {
-            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52999999", nombres = "RL de la empresa", cargo = "Representante legal",
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52999999", nombres = "RL de la empresa", correo = "rl@gestora.test", cargo = "Representante legal",
             permisoEnvioDp = true, permisoCambioContraventor = true,
         }, ct)).EnsureSuccessStatusCode();
 
@@ -168,5 +168,19 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
         var comparendo = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
         var valores = await scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Modulos.Plantillas.ContextoPlantilla>().DeAsync(comparendo, null, ct);
         valores["peticionario.numero_documento"].Should().Be($"{nitBase}-{Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nitBase)}");
+    }
+
+    /// <summary>Hallazgo B9-2: sin correo de respuesta (ni de la empresa ni del RL) el OT no tendría a dónde responder.</summary>
+    [Fact]
+    public async Task SinCorreoDeRespuesta_NoEsViable()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, id, cliente) = await PrepararAsync();
+        await api.EnDbAsync(db => db.RepresentantesLegales.Where(r => r.TenantId == empresa).ExecuteUpdateAsync(s => s.SetProperty(r => r.Correo, (string?)null), ct));
+
+        var viabilidad = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/viabilidad", ct);
+        viabilidad.GetProperty("condiciones").EnumerateArray().Where(c => !c.GetProperty("cumple").GetBoolean()).Select(c => c.GetProperty("codigo").GetString())
+            .Should().Equal("CORREO_RESPUESTA");
     }
 }

@@ -3,7 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Api.Infraestructura.Pdf;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Flit.Comparendos.Tests.Api;
@@ -106,5 +108,48 @@ public sealed class PlantillasTests(ApiDePrueba api) : IClassFixture<ApiDePrueba
         var html = $"<h2>Título</h2><p style=\"text-align:justify\">Hola <b>mundo</b> &amp; más</p><ol><li>uno</li><li>dos</li></ol><table><tr><th>A</th><td>1</td></tr></table><img src=\"data:image/png;base64,{png}\" width=\"120\">";
         HtmlAPdf.TextoPlano(html).Should().Contain("Hola mundo & más").And.Contain("- uno").And.Contain("A | 1").And.Contain("[imagen]");
         HtmlAPdf.Generar(html).Take(4).Should().Equal("%PDF"u8.ToArray());
+    }
+
+    /// <summary>
+    /// Las correcciones de texto de FLIT llegan a las bases ya sembradas (hallazgo B9-3), pero nunca pisan una plantilla que
+    /// un usuario editó.
+    /// </summary>
+    [Fact]
+    public async Task Semillas_ActualizanLaBaseSinTocarLasEditadas()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        async Task<(Guid Id, string Cuerpo, int Versiones)> Publicada(TipoPlantilla tipo) => await api.EnDbAsync(async db =>
+        {
+            var p = await db.Plantillas.SingleAsync(x => x.Conjunto == ConjuntoPlantillas.Flit && x.Tipo == tipo && x.TipologiaId == null, ct);
+            var v = await db.PlantillaVersiones.SingleAsync(x => x.Id == p.VersionPublicadaId, ct);
+            return (v.Id, v.CuerpoHtml, await db.PlantillaVersiones.CountAsync(x => x.PlantillaId == p.Id, ct));
+        });
+        async Task Envejecer(TipoPlantilla tipo, string? nota) => await api.EnDbAsync(async db =>
+        {
+            var p = await db.Plantillas.SingleAsync(x => x.Conjunto == ConjuntoPlantillas.Flit && x.Tipo == tipo && x.TipologiaId == null, ct);
+            var v = await db.PlantillaVersiones.SingleAsync(x => x.Id == p.VersionPublicadaId, ct);
+            v.CuerpoHtml = "<p>texto viejo</p>";
+            if (nota is not null)
+                v.NotaCambio = nota;
+            await db.SaveChangesAsync(ct);
+        });
+        async Task Sembrar() => await api.EnDbAsync(async db =>
+        {
+            await Flit.Comparendos.Api.Semillas.PlantillasSemilla.SembrarAsync(db, api.Reloj.GetUtcNow(), ct);
+            await db.SaveChangesAsync(ct);
+        });
+
+        var antes = await Publicada(TipoPlantilla.CorreoAlertaSinRl);
+        await Envejecer(TipoPlantilla.CorreoAlertaSinRl, null);
+        await Sembrar();
+        var despues = await Publicada(TipoPlantilla.CorreoAlertaSinRl);
+        despues.Id.Should().NotBe(antes.Id, "la base vieja se reemplaza por una versión base nueva");
+        despues.Cuerpo.Should().NotContain("texto viejo");
+        despues.Versiones.Should().Be(antes.Versiones + 1);
+
+        await Envejecer(TipoPlantilla.CorreoCambioContraventorOt, "Ajuste del SuperAdmin.");
+        await Sembrar();
+        (await Publicada(TipoPlantilla.CorreoCambioContraventorOt)).Cuerpo.Should().Be("<p>texto viejo</p>", "una plantilla con una versión de un usuario no se toca");
     }
 }

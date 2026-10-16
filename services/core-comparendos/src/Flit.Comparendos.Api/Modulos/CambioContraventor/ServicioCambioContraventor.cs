@@ -65,6 +65,8 @@ public sealed class ServicioCambioContraventor(
             new("LICENCIA", "Está cargada la licencia de conducción", documentos.Contains(TipoDocumentoSoporte.Licencia)),
             new("ESTADO", "No hay una solicitud en curso ni aceptada", c.EstadoCambioContraventor is EstadoCambioContraventor.SinSolicitar or EstadoCambioContraventor.RechazadoOt),
             new("REPRESENTANTE", "Hay un representante legal del propietario con permiso para firmar", rl is not null || !config.RequiereRepresentanteLegal),
+            // Hallazgo B9-2: el OT responde por correo; sin dirección de respuesta (la de la empresa o la del RL) no llega.
+            new("CORREO_RESPUESTA", "Hay un correo para recibir la respuesta del organismo", !string.IsNullOrWhiteSpace(config.CorreoRespuesta ?? rl?.Correo) || (rl is null && config.RequiereRepresentanteLegal)),
         ];
         return (condiciones, rl, ot);
     }

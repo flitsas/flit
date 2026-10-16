@@ -12,12 +12,17 @@ namespace Flit.Comparendos.Api.Semillas;
 /// se siembra una vez por tipología: con el texto jurídico de V1 de esa tesis si existe (Semillas/Plantillas/Tesis/
 /// &lt;código&gt;.html, ver context/gdc/v1/tesis-textos-v1.md; pendiente de revisión del abogado) o, si no, con el texto
 /// genérico cuyo fundamento sale del catálogo ({{dp.fundamento}}). Renting usa las de FLIT hasta que publique las suyas
-/// (S-23). Nunca se pisa una plantilla existente.
+/// (S-23). Nunca se pisa una plantilla que alguien editó: si una plantilla solo tiene versiones base (nadie publicó una
+/// propia) y el texto sembrado cambió, se publica una versión base nueva y la anterior queda retirada (así llegan las
+/// correcciones de texto a las bases ya sembradas).
 /// </summary>
 internal static partial class PlantillasSemilla
 {
     [GeneratedRegex(@"<!--\s*(nombre|asunto):\s*(.*?)\s*-->\s*", RegexOptions.CultureInvariant)]
     private static partial Regex Encabezado();
+
+    /// <summary>Nota de las versiones que siembra FLIT; una versión con otra nota es de un usuario.</summary>
+    public const string NotaBase = "Versión base de FLIT.";
 
     public static async Task SembrarAsync(ComparendosDb db, DateTimeOffset ahora, CancellationToken ct)
     {
@@ -44,16 +49,57 @@ internal static partial class PlantillasSemilla
             {
                 if (!existentes.Any(e => e.Tipo == tipo && e.TipologiaId == null))
                     Crear(db, tipo, null, nombre ?? tipo.ToString(), asunto, cuerpo, ahora);
+                else
+                    await ActualizarBaseAsync(db, tipo, null, asunto, cuerpo, ahora, ct).ConfigureAwait(false);
                 continue;
             }
 
-            foreach (var t in tipologias.Where(t => !existentes.Any(e => e.Tipo == tipo && e.TipologiaId == t.Id)))
+            foreach (var t in tipologias)
             {
                 var propio = tesis.TryGetValue(t.Codigo, out var x) ? x : ((string? Nombre, string Cuerpo)?)null;
-                Crear(db, tipo, t.Id, propio?.Nombre ?? nombre ?? tipo.ToString(), null, propio?.Cuerpo ?? cuerpo, ahora);
+                if (!existentes.Any(e => e.Tipo == tipo && e.TipologiaId == t.Id))
+                    Crear(db, tipo, t.Id, propio?.Nombre ?? nombre ?? tipo.ToString(), null, propio?.Cuerpo ?? cuerpo, ahora);
+                else
+                    await ActualizarBaseAsync(db, tipo, t.Id, null, propio?.Cuerpo ?? cuerpo, ahora, ct).ConfigureAwait(false);
             }
         }
     }
+
+    /// <summary>
+    /// Publica la versión base nueva si la plantilla solo tiene versiones base y su texto quedó viejo. Si un usuario
+    /// publicó o guardó una versión propia, no se toca.
+    /// </summary>
+    private static async Task ActualizarBaseAsync(ComparendosDb db, TipoPlantilla tipo, Guid? tipologia, string? asunto, string cuerpo, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var plantilla = await db.Plantillas.FirstOrDefaultAsync(p => p.Conjunto == ConjuntoPlantillas.Flit && p.Tipo == tipo && p.TipologiaId == tipologia, ct).ConfigureAwait(false);
+        if (plantilla is null)
+            return;
+        var versiones = await db.PlantillaVersiones.Where(v => v.PlantillaId == plantilla.Id).ToListAsync(ct).ConfigureAwait(false);
+        if (versiones.Count == 0 || versiones.Any(v => v.NotaCambio != NotaBase))
+            return;
+        var publicada = versiones.FirstOrDefault(v => v.Id == plantilla.VersionPublicadaId);
+        if (publicada is null || (publicada.CuerpoHtml == cuerpo && publicada.Asunto == asunto))
+            return;
+
+        publicada.Estado = EstadoPlantillaVersion.Retirada;
+        var nueva = Version(plantilla.Id, versiones.Max(v => v.NumeroVersion) + 1, asunto, cuerpo, ahora);
+        plantilla.VersionPublicadaId = nueva.Id;
+        db.PlantillaVersiones.Add(nueva);
+    }
+
+    private static PlantillaVersion Version(Guid plantillaId, int numero, string? asunto, string cuerpo, DateTimeOffset ahora) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        PlantillaId = plantillaId,
+        NumeroVersion = numero,
+        Estado = EstadoPlantillaVersion.Publicada,
+        Asunto = asunto,
+        CuerpoHtml = cuerpo,
+        VariablesUsadas = [.. MotorPlantillas.Validar(asunto, cuerpo).Usadas],
+        NotaCambio = NotaBase,
+        PublicadaEn = ahora,
+        CreadoEn = ahora,
+    };
 
     /// <summary>Una tipología nueva del catálogo nace con su plantilla de DP base (si no, no se podría enviar: SIN_PLANTILLA).</summary>
     public static async Task CrearParaTipologiaAsync(ComparendosDb db, Guid tipologiaId, DateTimeOffset ahora, CancellationToken ct)
@@ -85,19 +131,7 @@ internal static partial class PlantillasSemilla
     private static void Crear(ComparendosDb db, TipoPlantilla tipo, Guid? tipologia, string nombre, string? asunto, string cuerpo, DateTimeOffset ahora)
     {
         var plantilla = new Plantilla { Id = Guid.CreateVersion7(), Conjunto = ConjuntoPlantillas.Flit, Tipo = tipo, TipologiaId = tipologia, Nombre = nombre, CreadoEn = ahora };
-        var version = new PlantillaVersion
-        {
-            Id = Guid.CreateVersion7(),
-            PlantillaId = plantilla.Id,
-            NumeroVersion = 1,
-            Estado = EstadoPlantillaVersion.Publicada,
-            Asunto = asunto,
-            CuerpoHtml = cuerpo,
-            VariablesUsadas = [.. MotorPlantillas.Validar(asunto, cuerpo).Usadas],
-            NotaCambio = "Versión base de FLIT.",
-            PublicadaEn = ahora,
-            CreadoEn = ahora,
-        };
+        var version = Version(plantilla.Id, 1, asunto, cuerpo, ahora);
         plantilla.VersionPublicadaId = version.Id;
         db.Plantillas.Add(plantilla);
         db.PlantillaVersiones.Add(version);

@@ -81,7 +81,7 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
             ["comparendo.fecha_imposicion"] = Formato.Fecha(c.FechaImposicion),
             ["comparendo.fecha_notificacion"] = Formato.Fecha(c.FechaNotificacion) ?? "(sin fecha de notificación)",
             ["comparendo.codigo_infraccion"] = c.CodigoInfraccion,
-            ["comparendo.descripcion_infraccion"] = c.DescripcionInfraccion,
+            ["comparendo.descripcion_infraccion"] = c.DescripcionInfraccion?.TrimEnd().TrimEnd('.'), // va entre paréntesis o a mitad de frase: sin punto final (B9-3)
             ["comparendo.direccion_infraccion"] = c.DireccionInfraccion,
             ["comparendo.valor_total"] = Formato.Pesos(c.ValorTotal),
             ["comparendo.secretaria"] = ot?.Nombre ?? c.SecretariaTexto,

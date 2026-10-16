@@ -114,6 +114,8 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
         (await super.PatchAsJsonAsync("/api/v1/comparendos/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001",
             new { correosRadicacion = new[] { "radicacion@movilidad.test", "judicial@movilidad.test" } }, ct)).EnsureSuccessStatusCode();
         var empresa = await EmpresaAsync(api, dp: true, requiereRl: false);
+        // Sin RL, la respuesta del OT llega al correo de respuesta de la empresa (hallazgo B9-2).
+        (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/correo", new { canalCorreo = "FlitSmtp", correoRespuesta = "respuestas@gestora.test" }, ct)).EnsureSuccessStatusCode();
         var dc = (await super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/tipologias", ct)).EnumerateArray().Single(t => t.GetProperty("codigo").GetString() == "DC").GetProperty("id").GetGuid();
         (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/tipologias/{dc}", new { habilitada = true }, ct)).EnsureSuccessStatusCode();
         var id = (await IngresarAsync(api, empresa, Item("VC-1", notificacion: new DateOnly(2025, 9, 1)))).Values.Single();
@@ -144,7 +146,7 @@ public sealed class CambioContraventorFallidoTests(ApiConOtCaido api) : IClassFi
         var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer, Permisos.DpGenerar, Permisos.DpEnviar, Permisos.DpEnviarMasivo, Permisos.RepresentantesGestionar]));
         var rl = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
         {
-            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", cargo = "Representante legal",
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", correo = "rl@gestora.test", cargo = "Representante legal",
             direccionNotificacion = "Calle 100 # 9A-45", permisoEnvioDp = true, permisoCambioContraventor = true,
         }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
