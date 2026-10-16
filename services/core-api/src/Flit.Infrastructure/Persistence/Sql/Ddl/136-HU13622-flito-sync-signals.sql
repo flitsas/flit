@@ -12,6 +12,10 @@
 --   trámite en cada aviso y reabriría el cruce de bloqueos que corrigió el DDL 128 (deadlock 40P01).
 -- * Sin RLS ni columnas de auditoría/soft delete: es una cola técnica de la plataforma, no una entidad de negocio,
 --   y la lee el despachador para TODAS las compañías (lectura entre compañías acotada, ADR-0069).
+-- * El índice de la cola (ix_flito_sync_signals_pendientes) no empieza por tenant_id: la cola es de todas las
+--   compañías y se recorre en el orden en que maduran los cambios.
+-- * Sin purga: queda una fila por trámite (la de un trámite borrado físicamente, ya cerrada, también). Es una fila
+--   pequeña por trámite; si algún día pesa, se borran las que no están pendientes.
 -- * Los migrados desde FLIT 1 (is_migrated) no generan aviso, igual que no entran al feed. La regla «radicado al
 --   menos una vez» NO se evalúa aquí (al sellar, la fila del historial puede no existir todavía en la
 --   transacción): la aplica el despachador.
