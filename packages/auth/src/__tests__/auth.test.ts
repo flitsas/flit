@@ -5,6 +5,7 @@ import { createApiProxy } from "../proxy";
 import { createAuthRoutes, safeReturnTo } from "../routes";
 import { sessionUser } from "../claims";
 import type { AuthConfig } from "../config";
+import { forgetNetworkHubs } from "../network";
 import { forgetRenewals, pack, unsealSession } from "../store";
 import type { StoredSession } from "../types";
 
@@ -335,5 +336,109 @@ describe("SessionUser", () => {
 
     expect(user).toMatchObject({ id: "u1", product: "tramites", domain: "flit", permissions: ["tramites.read"], isSuperAdmin: true, expiresAt: 123 });
     expect(user.tenant).toEqual({ id: "t1", name: "Empresa", nit: "900", type: "RENTING", entityType: "COMPANY", parentId: null, isGroupParent: false });
+  });
+});
+
+// Marca Blanca con la suite: en el dominio de una red el emisor es el hub de ESA red. Por el de FLIT el servidor rechaza
+// el retorno («El redirect_uri no es válido para este cliente») y al usuario de la red le responde NETWORK_DOMAIN_REQUIRED.
+describe("dominios de red", () => {
+  const RED = "https://tramites.cliente.com";
+  const HUB_RED = "https://marca.cliente.com";
+  const networkConfig: AuthConfig = { ...config, networkDomains: true };
+  const networkRoutes = createAuthRoutes({ productCode: "tramites", config: () => networkConfig });
+
+  afterEach(() => forgetNetworkHubs());
+
+  function lookup(hubUrl: unknown, status = 200) {
+    return vi.fn((url: string) =>
+      Promise.resolve(url.endsWith("/api/v1/public/network") ? Response.json({ hubUrl }, { status }) : Response.json({ ok: true })));
+  }
+
+  it("el login va al authorize del hub de la red y vuelve al dominio de la red", async () => {
+    const fetchMock = lookup(HUB_RED);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await networkRoutes.login(new Request(`${RED}/auth/login`));
+
+    const location = new URL(response.headers.get("location")!);
+    expect(location.origin + location.pathname).toBe(`${HUB_RED}/connect/authorize`);
+    expect(location.searchParams.get("redirect_uri")).toBe(`${RED}/auth/callback`);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://gateway:4002/api/v1/public/network");
+    expect(init.headers).toMatchObject({ "x-flit-domain": "tramites.cliente.com", "x-internal-key": "clave" });
+  });
+
+  it("el canje del código se sella con el host del hub de la red (mismo emisor del authorize)", async () => {
+    vi.stubGlobal("fetch", lookup(HUB_RED));
+    const login = await networkRoutes.login(new Request(`${RED}/auth/login`));
+    const state = new URL(login.headers.get("location")!).searchParams.get("state")!;
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ access_token: jwt({ sub: "u1", exp: now() + 900 }), refresh_token: "r1", expires_in: 900 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await networkRoutes.callback(new Request(`${RED}/auth/callback?code=c1&state=${state}`, {
+      headers: { cookie: cookieHeader(login.headers.getSetCookie()) },
+    }));
+
+    expect(response.headers.get("location")).toBe("/");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://gateway:4002/connect/token");
+    expect((init.headers as Record<string, string>)["x-flit-domain"]).toBe("marca.cliente.com");
+  });
+
+  it("la renovación también va al hub de la red", async () => {
+    const fetchMock = vi.fn((url: string) => Promise.resolve(url.endsWith("/api/v1/public/network")
+      ? Response.json({ hubUrl: HUB_RED })
+      : url.endsWith("/connect/token")
+        ? Response.json({ access_token: jwt({ exp: now() + 900 }), refresh_token: "r2", expires_in: 900 })
+        : Response.json({ ok: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    const proxy = createApiProxy({ productCode: "tramites", config: () => networkConfig });
+
+    await proxy(new Request(`${RED}/api/v1/x`, {
+      headers: { host: "tramites.cliente.com", cookie: await sessionCookieHeader({ accessToken: jwt({ exp: now() + 10 }), refreshToken: "r1", expiresAt: now() + 10 }) },
+    }), ["x"]);
+
+    const token = fetchMock.mock.calls.find(([url]) => url.endsWith("/connect/token")) as unknown as [string, RequestInit];
+    expect((token[1].headers as Record<string, string>)["x-flit-domain"]).toBe("marca.cliente.com");
+  });
+
+  it("recuerda el hub de cada dominio: el segundo login no vuelve a preguntar", async () => {
+    const fetchMock = lookup(HUB_RED);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await networkRoutes.login(new Request(`${RED}/auth/login`));
+    await networkRoutes.login(new Request(`${RED}/auth/login`));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fuera de una red, si la API falla o responde algo que no es https, sigue el hub de FLIT", async () => {
+    for (const [hubUrl, status] of [[null, 200], [HUB_RED, 503], ["http://marca.cliente.com", 200], ["javascript:alert(1)", 200]] as const) {
+      forgetNetworkHubs();
+      vi.stubGlobal("fetch", lookup(hubUrl, status));
+      const response = await networkRoutes.login(new Request(`${RED}/auth/login`));
+      expect(new URL(response.headers.get("location")!).origin).toBe("https://dev.flitsas.online");
+    }
+  });
+
+  it("un fallo de la API no se recuerda", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    await networkRoutes.login(new Request(`${RED}/auth/login`));
+    vi.stubGlobal("fetch", lookup(HUB_RED));
+
+    const response = await networkRoutes.login(new Request(`${RED}/auth/login`));
+
+    expect(new URL(response.headers.get("location")!).origin).toBe(HUB_RED);
+  });
+
+  it("en el host del hub de FLIT o con la bandera apagada no pregunta", async () => {
+    const fetchMock = lookup(HUB_RED);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createAuthRoutes({ productCode: "plataforma", config: () => networkConfig }).login(new Request("https://dev.flitsas.online/auth/login"));
+    await routes.login(new Request(`${RED}/auth/login`));
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

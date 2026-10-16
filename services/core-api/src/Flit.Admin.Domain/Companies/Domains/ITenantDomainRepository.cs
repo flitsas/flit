@@ -43,6 +43,12 @@ public interface ITenantDomainRepository
     /// </summary>
     Task<string?> FindActivePurposeAsync(string host, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Dominios activos de UNA red, por propósito (<c>HUB</c> o código de producto → host), leídos de la misma vista.
+    /// Vacío si la red no tiene ninguno. Lo usan el hub y los productos de la red para enlazarse entre sí con la suite.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> ListActiveHostsByPurposeAsync(Guid headTenantId, CancellationToken cancellationToken = default);
+
     /// <summary>Hosts activos de toda la plataforma (CORS del Gateway, consumido por #12417).</summary>
     Task<IReadOnlyList<string>> ListActiveHostsAsync(CancellationToken cancellationToken = default);
 

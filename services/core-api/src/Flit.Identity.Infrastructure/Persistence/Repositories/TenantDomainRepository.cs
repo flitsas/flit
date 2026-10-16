@@ -180,6 +180,19 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> ListActiveHostsByPurposeAsync(Guid headTenantId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.ActiveNetworkDomains
+            .AsNoTracking()
+            .Where(d => d.HeadTenantId == headTenantId)
+            .Select(d => new { d.Purpose, d.Host })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // La unicidad es (red, propósito): no hay dos hosts para el mismo propósito.
+        return rows.ToDictionary(r => r.Purpose, r => r.Host, StringComparer.Ordinal);
+    }
+
     public async Task<IReadOnlyList<string>> ListActiveHostsAsync(CancellationToken cancellationToken = default) =>
         await _context.ActiveNetworkDomains
             .AsNoTracking()

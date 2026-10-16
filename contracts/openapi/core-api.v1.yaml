@@ -1974,6 +1974,33 @@ paths:
         "429":
           description: Límite de tasa por IP excedido (policy public-branding). Sin cuerpo informativo.
 
+  /api/v1/public/network:
+    get:
+      tags: [Público · Identidad de marca]
+      operationId: publicNetworkGet
+      summary: Hub de la red del dominio de entrada (Marca Blanca con la FLIT Suite)
+      description: >-
+        Lo consulta @flit/auth desde el servidor de cada app antes del authorize: en un dominio de red el
+        emisor OIDC es el hub de esa red (su dominio con purpose HUB). Igual que /public/branding, el
+        dominio sale solo del sello X-Flit-Domain y la forma es siempre la misma; hubUrl es null en el
+        dominio de FLIT, en un host desconocido o en una red sin dominio HUB activo.
+      security: []
+      responses:
+        "200":
+          description: URL del hub de la red, o null.
+          headers:
+            Cache-Control: { schema: { type: string, example: "public, max-age=60" } }
+            Vary: { schema: { type: string, example: "X-Flit-Domain" } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hubUrl]
+                properties:
+                  hubUrl: { type: string, format: uri, nullable: true, example: "https://marcablanca.cliente.com" }
+        "429":
+          description: Límite de tasa por IP excedido (policy public-branding). Sin cuerpo informativo.
+
   /api/v1/public/branding/logos/{logoId}:
     parameters:
       - name: logoId
