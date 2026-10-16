@@ -405,9 +405,12 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
                     break;
                 }
                 catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException
+                                               or OpenIddictExceptions.ValidationException
                                                or Microsoft.EntityFrameworkCore.DbUpdateException
                                                or System.Data.Common.DbException)
                 {
+                    // ValidationException: otra fábrica creó el mismo cliente entre el Find y el Create (misma carrera
+                    // que OidcClientSync). El siguiente intento lo encuentra y lo actualiza.
                     if (attempt >= 3) break;
                 }
             }
