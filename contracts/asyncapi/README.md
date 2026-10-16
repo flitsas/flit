@@ -9,8 +9,8 @@ sale de FLIT por REST (`contracts/openapi`).
 | [`plataforma-events.v1.yaml`](plataforma-events.v1.yaml) | `flit.plataforma` | Productos encendidos, suspensiones y cambios de roles |
 | [`tramites-events.v1.yaml`](tramites-events.v1.yaml) | `flit.tramites` | Cambio de estado del trámite y validaciones de identidad |
 | [`consultas-events.v1.yaml`](consultas-events.v1.yaml) | `flit.consultas` | Medición de cada consulta a proveedores |
-| [`notificaciones-events.v1.yaml`](notificaciones-events.v1.yaml) | `flit.notificaciones` | Trabajos en cola que recibe Notificaciones (correo) |
-| [`domain-events.v1.yaml`](domain-events.v1.yaml) | — | Webhook HTTP saliente al Organismo de Tránsito (no es del bus) |
+| [`notificaciones-events.v1.yaml`](notificaciones-events.v1.yaml) | `flit.notificaciones` | Trabajos en cola que recibe Notificaciones (correo y webhooks salientes) |
+| [`domain-events.v1.yaml`](domain-events.v1.yaml) | — | Webhooks HTTP salientes al Organismo de Tránsito y a FLITO (no son del bus) |
 
 Todos los mensajes del bus usan el sobre común [`comun/sobre.v1.yaml`](comun/sobre.v1.yaml): `eventId` (UUIDv7,
 llave de idempotencia), `type`, `version`, `occurredAt`, `tenantId`, `producer`, `correlationId` y `data`.

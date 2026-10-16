@@ -8,7 +8,7 @@ namespace Flit.Modules.Notificaciones.Webhooks;
 /// <param name="Url">Destino de la suscripción.</param>
 /// <param name="Cuerpo">JSON exacto que se firmó (la firma es del cuerpo: no se re-serializa).</param>
 /// <param name="Cabeceras">Firma, correlación y lo que el destino espera (p. ej. <c>X-Webhook-Signature</c>).</param>
-/// <param name="Origen">Quién lo emite: <c>ot</c> (organismo de tránsito) o <c>ict</c>.</param>
+/// <param name="Origen">Quién lo emite: <c>ot</c> (organismo de tránsito), <c>ict</c> o <c>flito</c> (avisos de sincronización a FLITO, HU #13623).</param>
 /// <param name="Evento">Tipo de evento del webhook (p. ej. <c>procedure.state_changed</c>), para el registro.</param>
 public sealed record TrabajoWebhook(string Url, string Cuerpo, IReadOnlyDictionary<string, string> Cabeceras, string Origen, string Evento)
 {
