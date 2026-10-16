@@ -18,7 +18,7 @@ Para levantarla en local, ver [local.md](local.md). Para lo que cambia cuando la
 | **@flit/brand** | `packages/brand/` | dentro de cada front | Decide la marca por host (FLIT o Marca Blanca) con `FLIT_HOSTS`. |
 | **Gateway** | `services/core-api/src/Flit.Gateway` (YARP) | interno, puerto `4002` | Reparte `/api`, `/connect`, `/.well-known`, `/hubs`, `/ml`. Sella el dominio (`X-Flit-Domain`) solo si la petición viene de la red interna. No valida tokens. |
 | **core-api** | `services/core-api/src/Flit.Api` | interno, puerto `4003` | La API de negocio. Hoy también atiende la identidad (login, OIDC, usuarios, roles, productos) y valida los tokens. |
-| **core-identity** | `services/core-identity` (`Flit.Identity.Api`) | interno, puerto `4025` (perfil `identity`) | El servicio de identidad: `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform`, `/api/v1/public/branding`. Recibe tráfico solo con `FLIT_IDENTITY_CLUSTER_ENABLED`. |
+| **core-identity** | `services/core-identity` (`Flit.Identity.Api`) | interno, puerto `4025` (perfil `identity`) | El servicio de identidad: `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform`, `/api/v1/public/branding`, `/api/v1/public/network`. Recibe tráfico solo con `FLIT_IDENTITY_CLUSTER_ENABLED`. |
 | **Postgres** | — | host del VPS | Una base. Las tablas de la suite: `platform.*`, `identity.oidc_*`, `security.jwt_signing_keys`, el anillo de Data Protection. |
 
 ## 2. Qué viaja entre ellas
@@ -114,7 +114,7 @@ servidor, las variables van en el `.env` del VPS y `docker-compose.prod.yml` las
 | Variable (`.env`) | Configuración | Contenedor | Apagada / vacía (hoy) | Encendida |
 |---|---|---|---|---|
 | `COMPOSE_PROFILES=identity` | — | (compose) | `core-identity` no se levanta. | Se levanta `core-identity` (su propia imagen). |
-| `FLIT_IDENTITY_CLUSTER_ENABLED` | `Gateway:IdentityCluster:Enabled` | gateway | `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform` y `/api/v1/public/branding` van a `core-api`. | Esas rutas van a `core-identity`; el resto sigue en `core-api`. Volver atrás = `false`. |
+| `FLIT_IDENTITY_CLUSTER_ENABLED` | `Gateway:IdentityCluster:Enabled` | gateway | `/connect`, `/.well-known`, `/api/v1/auth`, `/api/v1/platform`, `/api/v1/public/branding` y `/api/v1/public/network` van a `core-api`. | Esas rutas van a `core-identity`; el resto sigue en `core-api`. Volver atrás = `false`. |
 | `CORE_IDENTITY_PORT` | — | core-identity, gateway | `4025` | Puerto interno de `core-identity` (por ambiente, como los demás). |
 | `CORE_IDENTITY_TAG` | — | core-identity | — | Etiqueta de su imagen. La exporta el CD (si su código no cambió, la imagen es la misma reetiquetada). |
 
