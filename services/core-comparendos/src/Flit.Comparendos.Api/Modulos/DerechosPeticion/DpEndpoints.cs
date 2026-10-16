@@ -50,7 +50,7 @@ public static class DpEndpoints
             cc = Configuracion.EmpresasEndpoints.CopiasPara(p.Config.Cc, TipoComunicacion.DpOt),
             bcc = Configuracion.EmpresasEndpoints.CopiasPara(p.Config.Bcc, TipoComunicacion.DpOt),
             representante = p.Representante is { } r ? new { r.Nombres, r.Cargo, r.NumeroDocumento } : null,
-            anexos = p.Anexos.Select(a => a.Nombre).Prepend("Derecho de petición (PDF)"),
+            anexos = p.Anexos.Select(a => ServicioDp.EtiquetaAnexo(a.Nombre)).Prepend("Derecho de petición (PDF)"),
             estadoLegal = p.EstadoLegal.ToString(),
         });
     }

@@ -224,6 +224,8 @@ export interface DetalleComparendo {
 export interface Trabajo {
   tipo: string;
   expresionCron: string;
+  /** La programación en palabras («Todos los días a las 7:00»); null si no es una forma conocida. */
+  programacion: string | null;
   siguiente: string | null;
   activo: boolean;
   soloDiasHabiles: boolean;

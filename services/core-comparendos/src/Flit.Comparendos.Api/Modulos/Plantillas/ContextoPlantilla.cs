@@ -63,15 +63,8 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
 
         var peticionarioDocumento = c.NumeroDocumentoInfractor ?? nit?.NumeroBase;
         var peticionarioTipo = c.TipoDocumentoInfractor ?? nit?.TipoDocumento ?? TipoDocumento.NIT;
-        if (peticionarioTipo == TipoDocumento.NIT && peticionarioDocumento is { } doc && Nit.Separar(doc) is { } separado)
-        {
-            // La fuente puede traer el NIT con el dígito pegado («8110117798»): si coincide con el NIT vigilado o con el de
-            // la empresa más su dígito, es ese NIT (hallazgos B6-2 y B9-1; si no, se le calcularía un dígito a un número equivocado).
-            var baseNit = new[] { nit?.NumeroBase, config?.EmpresaNit }
-                .FirstOrDefault(b => !string.IsNullOrEmpty(b) && separado.Dv is null && separado.Base == b + Nit.DigitoVerificacion(b!).ToString(CultureInfo.InvariantCulture))
-                ?? separado.Base;
-            peticionarioDocumento = $"{baseNit}-{(baseNit == separado.Base ? separado.Dv : null) ?? Nit.DigitoVerificacion(baseNit)}";
-        }
+        if (peticionarioTipo == TipoDocumento.NIT)
+            peticionarioDocumento = Nit.ConDigito(peticionarioDocumento, nit?.NumeroBase, config?.EmpresaNit);
 
         var porcentaje = s.DescuentoVigente switch { Descuento.Cincuenta => 50, Descuento.Veinticinco => 25, _ => 0 };
         return new Dictionary<string, string?>(StringComparer.Ordinal)

@@ -32,4 +32,17 @@ public sealed class ExpresionCronTests
     [InlineData("0 25 * * *")]
     [InlineData("a b c d e")]
     public void Expresiones_invalidas(string cron) => ExpresionCron.EsValida(cron, out _).Should().BeFalse();
+
+    /// <summary>Hallazgo B4-2: la tabla de trabajos dice la programación en palabras.</summary>
+    [Theory]
+    [InlineData("*/15 * * * *", "Cada 15 minutos")]
+    [InlineData("0 7,13 * * *", "Todos los días a las 7:00 y 13:00")]
+    [InlineData("0 1 * * *", "Todos los días a la 1:00")]
+    [InlineData("0 17 * * 5", "Los viernes a las 17:00")]
+    [InlineData("30 6 * * 1,3", "Los lunes y miércoles a las 6:30")]
+    [InlineData("0 6 * * 1-5", "De lunes a viernes a las 6:00")]
+    [InlineData("0 18 L * *", "El último día de cada mes a las 18:00")]
+    [InlineData("0 8 15 * *", "El día 15 de cada mes a las 8:00")]
+    [InlineData("0 8 * 1 *", null)]
+    public void Describir_EnPalabras(string cron, string? esperado) => ExpresionCron.Describir(cron).Should().Be(esperado);
 }

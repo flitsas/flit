@@ -112,7 +112,7 @@ public sealed class ServicioDp(
                 if (archivo is { } id)
                     anexos.Add((nombre, id));
                 else
-                    advertencias.Add($"Falta {nombre.Replace('-', ' ')} del representante: se envía sin ese anexo.");
+                    advertencias.Add($"Falta {NombreAnexo(nombre)}: se envía sin ese anexo.");
             }
 
             if (rl.FechaExpedicionCertificado is { } f && f.AddDays(30) < reloj.Hoy)
@@ -131,7 +131,7 @@ public sealed class ServicioDp(
         var firma = p.Representante?.FirmaArchivoId is { } f ? (await archivos.LeerAsync(f, ct).ConfigureAwait(false))?.Contenido : null;
         var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: p.Representante, FirmaPng: firma, Radicado: radicado, Tipologia: p.Tipologia), ct).ConfigureAwait(false);
         var armado = await plantillas.ArmarAsync(p.Config.ConjuntoPlantillas, TipoPlantilla.DpDocumento, p.Tipologia.Id, valores, ct).ConfigureAwait(false);
-        return (ServicioPlantillas.Pdf(armado, vistaPrevia ? "VISTA PREVIA" : null), armado.VersionId);
+        return (ServicioPlantillas.Pdf(armado, vistaPrevia ? "VISTA PREVIA" : null, $"Derecho de petición {(vistaPrevia ? "(vista previa)" : radicado)} — {c.Numero}"), armado.VersionId);
     }
 
     public static string RadicadoEnmascarado(TipologiaDp t, DateOnly hoy)
@@ -336,6 +336,23 @@ public sealed class ServicioDp(
             $"Respuesta del organismo al DP {dp.Radicado}: {(sentido == SentidoRespuestaOt.Favorable ? "FAVORABLE" : "DESFAVORABLE")} (radicado {radicadoOt.Trim()}, {fecha:yyyy-MM-dd}).",
             actor, null, "derecho_peticion", dp.Id);
     }
+
+    /// <summary>El anexo del representante como lo lee el usuario (hallazgo B10-3).</summary>
+    public static string EtiquetaAnexo(string clave) => clave switch
+    {
+        "cedula-representante" => "Cédula del representante legal",
+        "certificado-representacion" => "Certificado de existencia y representación",
+        "escritura-poder" => "Escritura o poder",
+        _ => clave.Replace('-', ' '),
+    };
+
+    public static string NombreAnexo(string clave) => clave switch
+    {
+        "cedula-representante" => "la cédula del representante legal",
+        "certificado-representacion" => "el certificado de existencia y representación",
+        "escritura-poder" => "la escritura o el poder",
+        _ => clave.Replace('-', ' '),
+    };
 }
 
 /// <summary>El DP pasa a ENVIADO cuando la plataforma acepta su correo, o a ENVÍO FALLIDO si falla del todo (§4.4).</summary>

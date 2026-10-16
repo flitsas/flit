@@ -13,7 +13,7 @@ namespace Flit.Comparendos.Api.Modulos.Ingesta;
 /// <summary>Trabajos programados, ejecución manual y ciclos de ingesta (HU #13460). Solo SuperAdmin.</summary>
 public static class IngestaEndpoints
 {
-    public sealed record TrabajoDto(string Tipo, string ExpresionCron, string? Siguiente, bool Activo, bool SoloDiasHabiles, DateTimeOffset? UltimaEjecucionEn, string? UltimoResultado);
+    public sealed record TrabajoDto(string Tipo, string ExpresionCron, string? Siguiente, bool Activo, bool SoloDiasHabiles, DateTimeOffset? UltimaEjecucionEn, string? UltimoResultado, string? Programacion);
 
     public sealed record CambioTrabajo(string? ExpresionCron, bool? Activo, bool? SoloDiasHabiles);
 
@@ -36,7 +36,7 @@ public static class IngestaEndpoints
     private static TrabajoDto Dto(Persistence.Modelo.TrabajoProgramado t, DateTime ahoraLocal) => new(
         t.Tipo.ToString(), t.ExpresionCron,
         ExpresionCron.EsValida(t.ExpresionCron, out _) ? ExpresionCron.Parse(t.ExpresionCron).Siguiente(ahoraLocal)?.ToString("yyyy-MM-ddTHH:mm", System.Globalization.CultureInfo.InvariantCulture) : null,
-        t.Activo, t.SoloDiasHabiles, t.UltimaEjecucionEn, t.UltimoResultado?.ToString());
+        t.Activo, t.SoloDiasHabiles, t.UltimaEjecucionEn, t.UltimoResultado?.ToString(), ExpresionCron.Describir(t.ExpresionCron));
 
     private static async Task<IResult> ListarTrabajos(ComparendosDb db, Reloj reloj, CancellationToken ct)
     {

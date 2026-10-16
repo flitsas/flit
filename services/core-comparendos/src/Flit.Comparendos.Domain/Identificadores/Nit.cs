@@ -53,4 +53,20 @@ public static class Nit
     /// <summary>Las dos formas en que se consulta a las fuentes: sin y con dígito de verificación.</summary>
     public static IReadOnlyList<string> Variantes(string baseNit) =>
         [baseNit, string.Concat(baseNit, DigitoVerificacion(baseNit).ToString(System.Globalization.CultureInfo.InvariantCulture))];
+
+    /// <summary>
+    /// Un NIT como lo trae una fuente, para mostrarlo «base-DV». Si viene con guion, se respeta. Si viene pegado al dígito
+    /// («8110117798») y coincide con uno de los NITs conocidos (el vigilado o el de la empresa) más su dígito, es ese NIT.
+    /// Si no, se toma como base y se le calcula el dígito (hallazgos B6-2 y B9-5).
+    /// </summary>
+    public static string? ConDigito(string? documento, params string?[] basesConocidas)
+    {
+        if (Separar(documento) is not { } s)
+            return documento;
+        if (s.Dv is { } dv)
+            return $"{s.Base}-{dv}";
+        var conocida = basesConocidas.FirstOrDefault(b => !string.IsNullOrEmpty(b) && s.Base == string.Concat(b, DigitoVerificacion(b!).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        var baseNit = conocida ?? s.Base;
+        return $"{baseNit}-{DigitoVerificacion(baseNit)}";
+    }
 }

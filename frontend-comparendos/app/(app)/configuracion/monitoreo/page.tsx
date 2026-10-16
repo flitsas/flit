@@ -9,6 +9,7 @@ import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SearchInput } from "@/components/SearchInput";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
+import { resumenPlacas } from "@/lib/monitoreo";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFecha } from "@/lib/format/date";
@@ -226,11 +227,8 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
     setOcupado(true);
     try {
       const placas = texto.split(/[\s,;]+/).filter(Boolean);
-      const r = await apiFetch<{ agregadas: PlacaMonitoreada[]; yaExistian: string[]; invalidas: string[] }>("/monitoreo/placas", { method: "POST", body: { placas } });
-      const partes = [`${r.agregadas.length} agregadas`];
-      if (r.yaExistian.length) partes.push(`${r.yaExistian.length} ya estaban (${r.yaExistian.slice(0, 5).join(", ")}${r.yaExistian.length > 5 ? "…" : ""})`);
-      if (r.invalidas.length) partes.push(`${r.invalidas.length} no son placas válidas (${r.invalidas.slice(0, 5).join(", ")}${r.invalidas.length > 5 ? "…" : ""})`);
-      setResultado(partes.join(" · "));
+      const r = await apiFetch<{ agregadas: PlacaMonitoreada[]; yaExistian: string[]; invalidas: string[]; repetidas: string[] }>("/monitoreo/placas", { method: "POST", body: { placas } });
+      setResultado(resumenPlacas(r));
       if (r.agregadas.length > 0) lista.recargar();
       setTexto("");
     } catch (e) {

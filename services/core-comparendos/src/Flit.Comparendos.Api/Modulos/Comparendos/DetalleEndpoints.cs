@@ -81,7 +81,10 @@ public static class DetalleEndpoints
                 c.NitConsultado,
                 titular = c.NombreInfractor ?? nit?.NombreTitular,
                 tipoDocumentoInfractor = c.TipoDocumentoInfractor?.ToString(),
-                c.NumeroDocumentoInfractor,
+                // Como en los documentos: «811011779-8» aunque la fuente lo traiga con el dígito pegado (B6-2).
+                numeroDocumentoInfractor = c.TipoDocumentoInfractor is null or TipoDocumento.NIT
+                    ? Flit.Comparendos.Domain.Identificadores.Nit.ConDigito(c.NumeroDocumentoInfractor, nit?.NumeroBase)
+                    : c.NumeroDocumentoInfractor,
                 nitMonitoreado = nit is null ? null : new { nit.Id, nit.NumeroBase, nit.DigitoVerificacion, nit.NombreTitular },
                 placaMonitoreada = placa,
             },

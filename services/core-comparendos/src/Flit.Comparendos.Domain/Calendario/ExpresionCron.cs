@@ -49,6 +49,46 @@ public sealed class ExpresionCron
         return new ExpresionCron(texto.Trim());
     }
 
+    private static readonly string[] Dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+
+    /// <summary>
+    /// La expresión en palabras para la tabla de trabajos (hallazgo B4-2): «Cada 15 minutos», «Todos los días a las 7:00 y
+    /// 13:00», «Los viernes a las 17:00», «De lunes a viernes a las 6:00», «El último día de cada mes a las 18:00». Null si
+    /// no es una forma conocida (la pantalla muestra la expresión).
+    /// </summary>
+    public static string? Describir(string? texto)
+    {
+        var c = (texto ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (c.Length != 5 || c[3] != "*")
+            return null;
+        var (min, hora, dia, semana) = (c[0], c[1], c[2], c[4]);
+        if (hora == "*" && dia == "*" && semana == "*" && min.StartsWith("*/", StringComparison.Ordinal) && int.TryParse(min[2..], out var cada))
+            return cada == 1 ? "Cada minuto" : $"Cada {cada} minutos";
+        if (!int.TryParse(min, out var m) || m is < 0 or > 59)
+            return null;
+        var horas = hora.Split(',').Select(h => int.TryParse(h, out var x) && x is >= 0 and <= 23 ? x : -1).ToList();
+        if (horas.Contains(-1))
+            return null;
+        var lista = horas.Select(h => $"{h}:{m:00}").ToList();
+        var cuando = (horas.Count == 1 && horas[0] == 1 ? "a la " : "a las ")
+            + (lista.Count == 1 ? lista[0] : $"{string.Join(", ", lista[..^1])} y {lista[^1]}");
+        if (dia == "*" && semana == "*")
+            return $"Todos los días {cuando}";
+        if (dia == "L" && semana == "*")
+            return $"El último día de cada mes {cuando}";
+        if (int.TryParse(dia, out var d) && semana == "*")
+            return $"El día {d} de cada mes {cuando}";
+        if (dia != "*")
+            return null;
+        if (semana.Split('-') is [var a, var b] && int.TryParse(a, out var ia) && int.TryParse(b, out var ib) && ia is >= 0 and <= 7 && ib is >= 0 and <= 7)
+            return $"De {Dias[ia]} a {Dias[ib]} {cuando}";
+        var dias = semana.Split(',').Select(s => int.TryParse(s, out var x) && x is >= 0 and <= 7 ? Dias[x] : null).ToList();
+        if (dias.Contains(null))
+            return null;
+        var nombres = dias.Select(n => n![^1] == 's' ? n : n + "s").ToList(); // «los viernes», «los martes», «los domingos»
+        return $"Los {(nombres.Count == 1 ? nombres[0] : $"{string.Join(", ", nombres[..^1])} y {nombres[^1]}")} {cuando}";
+    }
+
     public static bool EsValida(string? texto, out string? error)
     {
         try

@@ -41,10 +41,10 @@ public sealed class ExportacionBandeja(ConsultaBandeja consulta)
             Columnas.Select(c => new TabularWorkbookWriter.Column(c.Titulo, c.Ancho)).ToList(),
             filas.Select(f => (IReadOnlyList<Cell>)
             [
-                Cell.Of(f.Numero), Cell.Of(f.Placa), Cell.Of(f.NitConsultado), Cell.Of(f.Titular), Cell.Of(f.Organismo ?? f.SecretariaTexto),
-                Fecha(f.FechaImposicion), Fecha(f.FechaNotificacion), f.ValorTotal is { } v ? Cell.Of((double)v) : Cell.Empty, Cell.Of(f.Fuente),
-                Cell.Of(f.EstadoLegal), f.DiasHabilesRestantes is { } d ? Cell.Of(d) : Cell.Empty, Cell.Of(f.VentanaDescuento), Fecha(f.FinDescuentoVigente),
-                Cell.Of(f.EstadoProceso), Cell.Of(f.ContraventorNombre), Cell.Of(ConsultaBandeja.TextoHito(f.UltimoHito)), Cell.Of(f.CambioContraventor), Cell.Of(f.DpRadicado),
+                Cell.Of(f.Numero), Cell.Of(f.Placa), Cell.Of(ConDv(f.NitConsultado)), Cell.Of(f.Titular), Cell.Of(f.Organismo ?? f.SecretariaTexto),
+                Fecha(f.FechaImposicion), Fecha(f.FechaNotificacion), f.ValorTotal is { } v ? Cell.Of((double)v) : Cell.Empty, Cell.Of(Texto(f.Fuente)),
+                Cell.Of(Texto(f.EstadoLegal)), f.DiasHabilesRestantes is { } d ? Cell.Of(d) : Cell.Empty, Cell.Of(Texto(f.VentanaDescuento)), Fecha(f.FinDescuentoVigente),
+                Cell.Of(Texto(f.EstadoProceso)), Cell.Of(f.ContraventorNombre), Cell.Of(ConsultaBandeja.TextoHito(f.UltimoHito)), Cell.Of(Texto(f.CambioContraventor)), Cell.Of(f.DpRadicado),
                 Cell.Of(f.DpResultado), Cell.Of(f.Pagado ? "Sí" : "No"), Cell.Of(f.Activo ? "Sí" : "No"), Cell.Of(f.EnCobroCoactivo ? "Sí" : "No"),
             ]).ToList());
         return TabularWorkbookWriter.Write([hoja]);
@@ -63,6 +63,26 @@ public sealed class ExportacionBandeja(ConsultaBandeja consulta)
     }
 
     private static Cell Fecha(DateOnly? d) => d is { } x ? Cell.Of(x) : Cell.Empty;
+
+    /// <summary>
+    /// Los valores internos como los ve el usuario en la bandeja (hallazgo B5-3; mismos textos que lib/etiquetas.ts del
+    /// frontend). Lo que no está en la tabla sale tal cual.
+    /// </summary>
+    private static readonly Dictionary<string, string> Etiquetas = new(StringComparer.Ordinal)
+    {
+        ["Simit"] = "SIMIT", ["Municipal"] = "Municipal", ["Ocr"] = "OCR", ["MigracionV1"] = "V1",
+        ["SinNotificar"] = "Sin notificación", ["EnTiempo"] = "En tiempo", ["Vencido"] = "Vencido", ["Caducado"] = "Caducado", ["Prescrito"] = "Prescrito",
+        ["Descuento50"] = "Descuento 50%", ["Descuento25"] = "Descuento 25%", ["SinDescuento"] = "Sin descuento", ["SinFechaBase"] = "Sin fecha base",
+        ["SinProcesar"] = "Sin procesar", ["DerechoPeticion"] = "Derecho de petición", ["RespuestaFavorable"] = "Respuesta OT: favorable",
+        ["RespuestaDesfavorable"] = "Respuesta OT: desfavorable", ["NoEncontrado"] = "No encontrado en fuente", ["Inactivado"] = "Inactivado",
+        ["NoAplica"] = "No aplica", ["SinSolicitar"] = "Sin solicitar", ["Solicitado"] = "En proceso", ["RechazadoOt"] = "Rechazado OT", ["AceptadoOt"] = "Exitoso",
+    };
+
+    internal static string? Texto(string? valor) => valor is null ? null : Etiquetas.GetValueOrDefault(valor, valor);
+
+    /// <summary>El NIT consultado como en la pantalla: «811011779-8».</summary>
+    internal static string? ConDv(string? nit) =>
+        nit is { Length: > 0 } && nit.All(char.IsAsciiDigit) ? $"{nit}-{Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nit)}" : nit;
 }
 
 /// <summary>Genera en segundo plano las exportaciones grandes y avisa por correo cuando quedan listas.</summary>

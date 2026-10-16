@@ -27,7 +27,8 @@ public static class MonitoreoEndpoints
 
     public sealed record CambioPlaca(bool Activo);
 
-    public sealed record ResultadoPlacas(IReadOnlyList<PlacaDto> Agregadas, IReadOnlyList<string> YaExistian, IReadOnlyList<string> Invalidas);
+    /// <summary>Repetidas: las que venían más de una vez en el mismo envío (se agregan una sola vez, hallazgo B3-1).</summary>
+    public sealed record ResultadoPlacas(IReadOnlyList<PlacaDto> Agregadas, IReadOnlyList<string> YaExistian, IReadOnlyList<string> Invalidas, IReadOnlyList<string> Repetidas);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -122,7 +123,8 @@ public static class MonitoreoEndpoints
             CreadoPor = usuario.Id,
         };
         db.IdentificacionesMonitoreadas.Add(nit);
-        auditoria.Registrar(tenant, "identificacion_monitoreada", nit.Id, "CREAR", new CambioCampo("numero", null, $"{tipo} {numero}"));
+        auditoria.Registrar(tenant, "identificacion_monitoreada", nit.Id, "CREAR", new CambioCampo("numero", null, $"{tipo} {numero}"),
+            new CambioCampo("titular", null, nit.NombreTitular)); // el historial muestra con qué titular se creó (B3-3)
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}/monitoreo/nits/{nit.Id}", ANit(nit));
     }
@@ -176,6 +178,7 @@ public static class MonitoreoEndpoints
             throw new ReglaException("ORIGEN_INVALIDO", "El origen de la placa es ADMIN u OCR.");
 
         var invalidas = new List<string>();
+        var repetidas = new List<string>();
         var normalizadas = new List<string>();
         foreach (var texto in pedido.Placas)
         {
@@ -183,6 +186,8 @@ public static class MonitoreoEndpoints
             {
                 if (!normalizadas.Contains(p))
                     normalizadas.Add(p);
+                else if (!repetidas.Contains(p))
+                    repetidas.Add(p);
             }
             else if (!string.IsNullOrWhiteSpace(texto))
             {
@@ -204,7 +209,7 @@ public static class MonitoreoEndpoints
         foreach (var p in nuevas)
             auditoria.Registrar(tenant, "placa_monitoreada", p.Id, "CREAR", new CambioCampo("placa", null, p.Placa));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new ResultadoPlacas(nuevas.Select(APlaca).ToList(), existentes, invalidas));
+        return Results.Ok(new ResultadoPlacas(nuevas.Select(APlaca).ToList(), existentes, invalidas, repetidas));
     }
 
     private static async Task<IResult> CambiarPlaca(Guid id, CambioPlaca pedido, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)

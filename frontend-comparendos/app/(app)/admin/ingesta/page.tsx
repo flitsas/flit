@@ -244,7 +244,17 @@ export default function Ingesta() {
           onRowClick={(t) => setEditar(t)}
           columns={[
             { key: "tipo", header: "Trabajo", render: (t) => <span className="font-semibold">{TRABAJO[t.tipo] ?? t.tipo}</span> },
-            { key: "cron", header: "Programación", render: (t) => <span className="font-mono">{t.expresionCron}</span> },
+            {
+              key: "cron",
+              header: "Programación",
+              // B4-2: en palabras, con la expresión debajo para quien la edita.
+              render: (t) => (
+                <span className="flex flex-col">
+                  <span>{t.programacion ?? t.expresionCron}</span>
+                  {t.programacion && <span className="font-mono text-[11px] opacity-60">{t.expresionCron}</span>}
+                </span>
+              ),
+            },
             { key: "sig", header: "Siguiente ejecución", render: (t) => (t.activo ? siguiente(t.siguiente) : "—") },
             { key: "habiles", header: "Solo días hábiles", render: (t) => (t.soloDiasHabiles ? "Sí" : "No") },
             { key: "activo", header: "Estado", render: (t) => <StatusBadge label={t.activo ? "Activo" : "Apagado"} tone={enabledTone(t.activo)} /> },

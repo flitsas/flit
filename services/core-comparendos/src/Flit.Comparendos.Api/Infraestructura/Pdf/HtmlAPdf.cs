@@ -19,7 +19,8 @@ public static partial class HtmlAPdf
 {
     private static int _fuentes;
 
-    public static byte[] Generar(string html, string? marcaDeAgua = null)
+    /// <param name="titulo">Título del PDF: el navegador lo muestra en la pestaña en vez de un identificador (hallazgo B9-4).</param>
+    public static byte[] Generar(string html, string? marcaDeAgua = null, string? titulo = null)
     {
         Inicializar();
         var bloques = Parsear(html ?? string.Empty);
@@ -47,7 +48,7 @@ public static partial class HtmlAPdf
                 t.Span(" / ");
                 t.TotalPages();
             });
-        })).GeneratePdf();
+        })).WithMetadata(new DocumentMetadata { Title = titulo ?? string.Empty, Author = "FLIT · Gestión de Comparendos" }).GeneratePdf();
     }
 
     private static void Inicializar()

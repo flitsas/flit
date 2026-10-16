@@ -472,7 +472,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         ArgumentNullException.ThrowIfNull(c);
         if (c.FechaLimiteGestion is null)
             return "Sin fecha de notificación: todavía no corre ningún plazo.";
-        string F(DateOnly? d) => d?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—";
+        string F(DateOnly? d) => Plantillas.Formato.Fecha(d) ?? "—"; // «19 de octubre de 2026» (hallazgo B6-3)
         return $"Límite de gestión {F(c.FechaLimiteGestion)}; 50% hasta {F(c.FechaFinDescuento50)}; 25% hasta {F(c.FechaFinDescuento25)}; caducidad {F(c.FechaCaducidad)}; prescripción {F(c.FechaPrescripcion)}.";
     }
 

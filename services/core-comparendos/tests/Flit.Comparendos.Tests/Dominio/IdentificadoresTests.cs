@@ -56,4 +56,13 @@ public sealed class TextoNormalizadoTests
     [InlineData(null, "")]
     public void De_quita_tildes_y_espacios(string? texto, string esperado) =>
         Flit.Comparendos.Domain.Textos.TextoNormalizado.De(texto).Should().Be(esperado);
+
+    /// <summary>Hallazgos B6-2 y B9-5: el NIT del infractor se muestra «base-DV» aunque la fuente lo traiga pegado.</summary>
+    [Theory]
+    [InlineData("8110117798", "811011779", "811011779-8")]
+    [InlineData("811011779", null, "811011779-8")]
+    [InlineData("890903938-8", null, "890903938-8")]
+    [InlineData("900.123.456", null, "900123456-8")]
+    public void ConDigito_ComoEnLosDocumentos(string documento, string? conocida, string esperado) =>
+        Nit.ConDigito(documento, conocida).Should().Be(esperado);
 }

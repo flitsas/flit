@@ -56,9 +56,9 @@ public sealed class ServicioPlantillas(ComparendosDb db)
 
     public static bool EsCorreo(TipoPlantilla tipo) => tipo.ToString().StartsWith("Correo", StringComparison.Ordinal);
 
-    public static byte[] Pdf(Armado armado, string? marcaDeAgua = null)
+    public static byte[] Pdf(Armado armado, string? marcaDeAgua = null, string? titulo = null)
     {
         ArgumentNullException.ThrowIfNull(armado);
-        return HtmlAPdf.Generar(armado.Html, marcaDeAgua);
+        return HtmlAPdf.Generar(armado.Html, marcaDeAgua, titulo);
     }
 }
