@@ -596,7 +596,7 @@ jobs:
             # solo sirve su propio host: las negaciones de los otros dos son inertes.
             # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
             # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
-            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!marcablancatramitesdev.flitsas.online,!marcablancatramitesqa.flitsas.online,!marcablancatramitespdn.flitsas.online
+            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

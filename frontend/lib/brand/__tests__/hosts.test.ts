@@ -138,6 +138,10 @@ describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
     expect(isFlitHost("marcablancadev.flitsas.online")).toBe(false);
     expect(isFlitHost("marcablancaqa.flitsas.online")).toBe(false);
     expect(isFlitHost("marcablancapdn.flitsas.online")).toBe(false);
+    // Suite (handoff §6.4): el dominio de Trámites de la red de prueba va negado con su nombre exacto; otro
+    // subdominio sigue siendo FLIT.
+    expect(isFlitHost("tramites.marcablancadev.flitsas.online")).toBe(false);
+    expect(isFlitHost("otro.marcablancadev.flitsas.online")).toBe(true);
     // El resto del respaldo no cambia respecto de #12419 (no regresión).
     expect(isFlitHost("localhost:3000")).toBe(true);
     expect(isFlitHost("127.0.0.1:3000")).toBe(true);

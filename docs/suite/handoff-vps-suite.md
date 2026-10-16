@@ -411,9 +411,10 @@ Con la suite, una red de Marca Blanca usa **dos dominios**, los dos `active` en 
 | Hub de la red (p. ej. `marca.cliente.com`) | `HUB` | `frontend-hub` (`HUB_PORT`) | Login, `/connect`, `/.well-known`; es el emisor OIDC de la red |
 | Trámites de la red (p. ej. `tramites.cliente.com`) | `tramites` | `frontend` (`FRONTEND_PORT`) | El producto; vuelve del login a `/auth/callback` |
 
-Red de prueba de FLIT: `marcablanca<amb>.flitsas.online` (HUB) y `marcablancatramites<amb>.flitsas.online` (Trámites),
-con `<amb>` = `dev`, `qa` o `pdn`. Son nombres planos a propósito: los hosts de prueba bajo `flitsas.online` se
-permiten con coincidencia exacta (`Domains:Allowed` y las negaciones de `FLIT_HOSTS`), nunca sus subdominios.
+Red de prueba de FLIT: `marcablanca<amb>.flitsas.online` (HUB) y `tramites.marcablanca<amb>.flitsas.online` (Trámites),
+con `<amb>` = `dev`, `qa` o `pdn`. Como viven bajo `*.flitsas.online` (zona reservada), cada host va con su nombre
+EXACTO en `Domains:Allowed` (backend) y en las negaciones de `FLIT_HOSTS` (fronts): sin eso se tratan como dominio de
+FLIT. Cualquier otro subdominio sigue reservado.
 
 **Por qué hacen falta dos.** Por el hub de FLIT, un usuario de la red recibe `NETWORK_DOMAIN_REQUIRED`, y el servidor
 OIDC solo acepta volver a un dominio de red si la petición entró por el hub de **esa** red. Si no, responde *«El
