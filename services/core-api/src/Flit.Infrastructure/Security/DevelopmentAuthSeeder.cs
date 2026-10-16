@@ -1480,6 +1480,7 @@ public static class DevelopmentAuthSeeder
         foreach (var (slug, name, routePattern) in permisos)
         {
             var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+            var actionCreated = action is null;
             if (action is null)
             {
                 action = new RbacAction
@@ -1497,7 +1498,9 @@ public static class DevelopmentAuthSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            foreach (var role in roles)
+            // HU #13640: admin_tramites recibe el default solo cuando el permiso se crea en esta ejecución;
+            // SuperAdmin se re-concilia siempre. Un grant retirado por el Super Admin no vuelve al reiniciar.
+            foreach (var role in roles.Where(r => actionCreated || r.Code == "SuperAdmin"))
             {
                 var alreadyGranted = await db.RoleGrants
                     .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
@@ -1562,6 +1565,7 @@ public static class DevelopmentAuthSeeder
 
         var action = await db.RbacActions
             .FirstOrDefaultAsync(a => a.Slug == "historial-placa.read", ct);
+        var actionCreated = action is null;
         if (action is null)
         {
             action = new RbacAction
@@ -1582,11 +1586,13 @@ public static class DevelopmentAuthSeeder
         // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. HU #12964: el de AdminCompany
         // pasa a admin_tramites, porque historial-placa es un módulo de Trámites. Se excluyen los roles
         // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
+        // HU #13640: solo SuperAdmin se re-concilia en cada arranque; los demás roles reciben el default
+        // únicamente cuando el permiso se crea en esta ejecución, para no revertir lo que el Super Admin quitó.
         string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites, "Radicador"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
-        foreach (var role in roles)
+        foreach (var role in roles.Where(r => actionCreated || r.Code == "SuperAdmin"))
         {
             var alreadyGranted = await db.RoleGrants
                 .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
@@ -1650,6 +1656,7 @@ public static class DevelopmentAuthSeeder
 
         var action = await db.RbacActions
             .FirstOrDefaultAsync(a => a.Slug == "consolidado-masivo.download", ct);
+        var actionCreated = action is null;
         if (action is null)
         {
             action = new RbacAction
@@ -1672,7 +1679,9 @@ public static class DevelopmentAuthSeeder
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
-        foreach (var role in roles)
+        // HU #13640: solo SuperAdmin se re-concilia en cada arranque; el resto recibe el default únicamente
+        // cuando el permiso se crea en esta ejecución (un grant retirado por el Super Admin no vuelve).
+        foreach (var role in roles.Where(r => actionCreated || r.Code == "SuperAdmin"))
         {
             var alreadyGranted = await db.RoleGrants
                 .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
@@ -1934,6 +1943,7 @@ public static class DevelopmentAuthSeeder
         foreach (var permission in permissions)
         {
             var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == permission.Slug, ct);
+            var actionCreated = action is null;
             if (action is null)
             {
                 action = new RbacAction
@@ -1951,7 +1961,8 @@ public static class DevelopmentAuthSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
+            // HU #13640: admin_tramites recibe el default solo cuando el permiso se crea en esta ejecución.
+            foreach (var roleCode in actionCreated ? new[] { "SuperAdmin", ProductRoleCodes.AdminTramites } : new[] { "SuperAdmin" })
             {
                 var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
                 foreach (var role in roles)
@@ -2073,6 +2084,7 @@ public static class DevelopmentAuthSeeder
             return;
 
         var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        var actionCreated = action is null;
         if (action is null)
         {
             action = new RbacAction
@@ -2090,7 +2102,9 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        // HU #13640: AdminCompany recibe el default solo cuando el permiso se crea en esta ejecución; si el
+        // Super Admin se lo quitó, el reinicio no lo devuelve. SuperAdmin se re-concilia siempre.
+        foreach (var roleCode in actionCreated ? new[] { "SuperAdmin", "AdminCompany" } : new[] { "SuperAdmin" })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
             foreach (var role in roles)
