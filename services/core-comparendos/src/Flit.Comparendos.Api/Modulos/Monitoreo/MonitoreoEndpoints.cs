@@ -1,10 +1,13 @@
+using Flit.Comparendos.Api.Infraestructura.Excel;
 using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
 using Flit.Comparendos.Domain.Identificadores;
 using Flit.Comparendos.Domain.Modelo;
+using Flit.Comparendos.Domain.Textos;
 using Microsoft.EntityFrameworkCore;
+using Cell = Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Cell;
 
 namespace Flit.Comparendos.Api.Modulos.Monitoreo;
 
@@ -38,6 +41,8 @@ public static class MonitoreoEndpoints
         g.MapPatch("/nits/{id:guid}", CambiarNit).RequirePermiso(Permisos.MonitoreoGestionar);
         g.MapGet("/placas", ListarPlacas).RequirePermiso(Permisos.MonitoreoVer);
         g.MapPost("/placas", CrearPlacas).RequirePermiso(Permisos.MonitoreoGestionar);
+        g.MapGet("/placas/plantilla", PlantillaPlacas).RequirePermiso(Permisos.MonitoreoGestionar);
+        g.MapPost("/placas/archivo", CargarPlacas).RequirePermiso(Permisos.MonitoreoGestionar).DisableAntiforgery();
         g.MapPatch("/placas/{id:guid}", CambiarPlaca).RequirePermiso(Permisos.MonitoreoGestionar);
         g.MapGet("/{tipo}/{id:guid}/historial", Historial).RequirePermiso(Permisos.MonitoreoVer);
     }
@@ -167,20 +172,68 @@ public static class MonitoreoEndpoints
         return Results.Ok(lista.Select(p => APlaca(p) with { ComparendosActivos = activos.GetValueOrDefault(p.Id) }));
     }
 
+    /// <summary>Filas de la carga de placas por Excel (S-64, hallazgo B3-2).</summary>
+    public const int MaximoFilasExcel = 1000;
+
+    private static IResult PlantillaPlacas()
+    {
+        var hoja = new TabularWorkbookWriter.Sheet("Placas", [new TabularWorkbookWriter.Column("placa", 14)], [[Cell.Of("ABC123")], [Cell.Of("XYZ98F")]]);
+        return Results.File(TabularWorkbookWriter.Write([hoja]), TabularWorkbookWriter.ContentType, "plantilla-placas.xlsx");
+    }
+
+    /// <summary>
+    /// Carga de placas por Excel (S-64, hallazgo B3-2): primera hoja, una columna «placa», hasta 1.000 filas. Responde lo
+    /// mismo que el pegado: agregadas, las que ya estaban, repetidas e inválidas.
+    /// </summary>
+    private static async Task<IResult> CargarPlacas(IFormFile archivo, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(archivo);
+        if (!archivo.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+            throw new ReglaException("ARCHIVO_TIPO_INVALIDO", "Carga un archivo de Excel (.xlsx) con una columna «placa».");
+        List<Dictionary<int, CeldaLeida>> filas;
+        try
+        {
+            await using var stream = archivo.OpenReadStream();
+            using var memoria = new MemoryStream();
+            await stream.CopyToAsync(memoria, ct).ConfigureAwait(false);
+            memoria.Position = 0;
+            filas = LectorExcel.LeerPrimeraHoja(memoria);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException or IOException)
+        {
+            throw new ReglaException("ARCHIVO_ILEGIBLE", "El archivo no se pudo leer como Excel.");
+        }
+
+        var columna = (filas.FirstOrDefault() ?? []).FirstOrDefault(kv => string.Equals(TextoNormalizado.De(kv.Value.Texto), "placa", StringComparison.OrdinalIgnoreCase)).Key;
+        if (columna == 0)
+            throw new ReglaException("FALTA_COLUMNA_PLACA", "El archivo no tiene la columna «placa» en la primera fila.");
+        var placas = filas.Skip(1).Select(f => f.GetValueOrDefault(columna)?.Texto).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).ToList();
+        if (placas.Count == 0)
+            throw new ReglaException("PLACAS_REQUERIDAS", "El archivo no trae placas.");
+        if (placas.Count > MaximoFilasExcel)
+            throw new ReglaException("DEMASIADAS_PLACAS", $"El archivo tiene {placas.Count} placas: el máximo es {MaximoFilasExcel:N0}.");
+        return Results.Ok(await AgregarAsync(placas, "ADMIN", usuario, db, auditoria, reloj, ct).ConfigureAwait(false));
+    }
+
     /// <summary>Una o varias placas a la vez (pegadas de una hoja de cálculo): agrega las nuevas e informa el resto.</summary>
     private static async Task<IResult> CrearPlacas(NuevasPlacas pedido, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)
     {
-        var tenant = usuario.EmpresaOperacion();
         if (pedido.Placas is not { Count: > 0 and <= 5000 })
             throw new ReglaException("PLACAS_REQUERIDAS", "Envía entre 1 y 5.000 placas.");
         var origen = (pedido.Origen ?? "ADMIN").Trim().ToUpperInvariant();
         if (origen is not ("ADMIN" or "OCR"))
             throw new ReglaException("ORIGEN_INVALIDO", "El origen de la placa es ADMIN u OCR.");
+        return Results.Ok(await AgregarAsync(pedido.Placas, origen, usuario, db, auditoria, reloj, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<ResultadoPlacas> AgregarAsync(IReadOnlyList<string> textos, string origen, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)
+    {
+        var tenant = usuario.EmpresaOperacion();
 
         var invalidas = new List<string>();
         var repetidas = new List<string>();
         var normalizadas = new List<string>();
-        foreach (var texto in pedido.Placas)
+        foreach (var texto in textos)
         {
             if (Placa.Normalizar(texto) is { } p)
             {
@@ -209,7 +262,7 @@ public static class MonitoreoEndpoints
         foreach (var p in nuevas)
             auditoria.Registrar(tenant, "placa_monitoreada", p.Id, "CREAR", new CambioCampo("placa", null, p.Placa));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new ResultadoPlacas(nuevas.Select(APlaca).ToList(), existentes, invalidas, repetidas));
+        return new ResultadoPlacas(nuevas.Select(APlaca).ToList(), existentes, invalidas, repetidas);
     }
 
     private static async Task<IResult> CambiarPlaca(Guid id, CambioPlaca pedido, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)

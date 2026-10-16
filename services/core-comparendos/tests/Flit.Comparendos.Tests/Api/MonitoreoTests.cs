@@ -112,4 +112,33 @@ public sealed class MonitoreoTests(ApiDePrueba api) : IClassFixture<ApiDePrueba>
             .PostAsJsonAsync("/api/v1/comparendos/monitoreo/placas", new { placas = new[] { "ABC123" } }, TestContext.Current.CancellationToken);
         r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    private static MultipartFormDataContent Excel(params string[][] filas)
+    {
+        var hoja = new Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Sheet("Placas",
+            [.. filas[0].Select(e => new Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Column(e, 12))],
+            [.. filas.Skip(1).Select(f => (IReadOnlyList<Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Cell>)[.. f.Select(Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Cell.Of)])]);
+        var bytes = Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Write([hoja]);
+        return new MultipartFormDataContent { { new ByteArrayContent(bytes), "archivo", "placas.xlsx" } };
+    }
+
+    /// <summary>Hallazgo B3-2 (S-64): placas por archivo Excel, con el mismo resultado que el pegado.</summary>
+    [Fact]
+    public async Task PlacasPorExcel_AgregaEInformaElResto()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var cliente = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [Permisos.MonitoreoGestionar, Permisos.MonitoreoVer]));
+
+        var r = await cliente.PostAsync("/api/v1/comparendos/monitoreo/placas/archivo", Excel(["placa"], ["xls-101"], ["XLS101"], ["XLS102"], ["AB1"]), ct);
+        r.EnsureSuccessStatusCode();
+        var cuerpo = await r.Content.ReadFromJsonAsync<JsonElement>(ct);
+        cuerpo.GetProperty("agregadas").EnumerateArray().Select(p => p.GetProperty("placa").GetString()).Should().BeEquivalentTo(["XLS101", "XLS102"]);
+        cuerpo.GetProperty("repetidas").EnumerateArray().Select(p => p.GetString()).Should().Equal("XLS101");
+        cuerpo.GetProperty("invalidas").EnumerateArray().Select(p => p.GetString()).Should().Equal("AB1");
+
+        var sinColumna = await cliente.PostAsync("/api/v1/comparendos/monitoreo/placas/archivo", Excel(["vehiculo"], ["XLS103"]), ct);
+        (await sinColumna.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("FALTA_COLUMNA_PLACA");
+        (await cliente.GetAsync("/api/v1/comparendos/monitoreo/placas/plantilla", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
 }

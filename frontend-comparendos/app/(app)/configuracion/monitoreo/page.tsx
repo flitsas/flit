@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useRef, useState } from "react";
+import { FileSpreadsheet, Plus } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { HistorialAuditoria } from "@/components/HistorialAuditoria";
@@ -11,7 +11,7 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { resumenPlacas } from "@/lib/monitoreo";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
-import { apiFetch } from "@/lib/api";
+import { apiDownload, apiFetch } from "@/lib/api";
 import { formatoFecha } from "@/lib/format/date";
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit, PlacaMonitoreada } from "@/lib/tipos";
@@ -223,6 +223,28 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
   const lista = useCarga(`placas:${empresa}:${buscar}`, (signal) => apiFetch<PlacaMonitoreada[]>("/monitoreo/placas", { signal, query: { empresa, buscar } }));
   const filas = lista.datos ?? [];
 
+  const archivo = useRef<HTMLInputElement>(null);
+
+  // B3-2 (S-64): placas desde un Excel con una columna «placa» (hasta 1.000); mismo resultado que el pegado.
+  const cargarExcel = async (f: File) => {
+    setOcupado(true);
+    try {
+      const form = new FormData();
+      form.append("archivo", f);
+      const r = await apiFetch<{ agregadas: PlacaMonitoreada[]; yaExistian: string[]; invalidas: string[]; repetidas: string[] }>("/monitoreo/placas/archivo", { method: "POST", body: form });
+      setResultado(`${f.name}: ${resumenPlacas(r)}`);
+      if (r.agregadas.length > 0) lista.recargar();
+    } catch (e) {
+      setResultado(e instanceof Error ? e.message : "No se pudo cargar el archivo.");
+    } finally {
+      setOcupado(false);
+      if (archivo.current) archivo.current.value = "";
+    }
+  };
+
+  const plantilla = () =>
+    apiDownload("/monitoreo/placas/plantilla", "plantilla-placas.xlsx").catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"));
+
   const crear = async () => {
     setOcupado(true);
     try {
@@ -321,6 +343,27 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
       >
         <div className="flex flex-col gap-3">
           <textarea className={TEXTAREA_CLS} rows={8} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={"ABC123\nXYZ987"} aria-label="Placas" />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="opacity-70">O carga un Excel con una columna «placa» (hasta 1.000):</span>
+            <input
+              ref={archivo}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              aria-label="Archivo de Excel con placas"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void cargarExcel(f);
+              }}
+            />
+            <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => archivo.current?.click()}>
+              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden />
+              Cargar Excel
+            </button>
+            <button type="button" className="font-semibold text-[#3B4FD6] underline-offset-2 hover:underline dark:text-[#8FA9FF]" onClick={plantilla}>
+              Descargar plantilla
+            </button>
+          </div>
           {resultado && <InlineAlert tone="info" compact>{resultado}</InlineAlert>}
         </div>
       </Modal>
