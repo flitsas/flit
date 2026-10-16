@@ -122,6 +122,20 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
                 // Cancelación limpia (host parando): propagar sin reintentar.
                 throw;
             }
+            catch (OpenIddictExceptions.ValidationException)
+            {
+                // Otra instancia creó el cliente entre el Find y el Create: OpenIddict lo rechaza con «An application with
+                // the same client identifier already exists» (CI de los PR #596/#597). El siguiente intento lo encuentra
+                // y lo actualiza. Si el cliente NO existe, la validación falló por otra razón y se propaga.
+                if (!await ClientExistsAsync(descriptor.ClientId!, ct).ConfigureAwait(false))
+                    throw;
+
+                if (attempt >= 3)
+                {
+                    LogConcurrentSync(logger, descriptor.ClientId!);
+                    return;
+                }
+            }
             catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException
                                            or Microsoft.EntityFrameworkCore.DbUpdateException
                                            or System.Data.Common.DbException)
@@ -133,6 +147,14 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
                 }
             }
         }
+    }
+
+    /// <summary>Consulta con un scope propio: el DbContext del intento fallido puede tener la entidad rechazada rastreada.</summary>
+    private async Task<bool> ClientExistsAsync(string clientId, CancellationToken ct)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        return await manager.FindByClientIdAsync(clientId, ct).ConfigureAwait(false) is not null;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cliente OIDC {ClientId} sincronizado por otra instancia al mismo tiempo; se deja su versión.")]

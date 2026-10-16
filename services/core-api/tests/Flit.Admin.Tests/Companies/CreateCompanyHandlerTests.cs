@@ -11,7 +11,8 @@ namespace Flit.Admin.Tests.Companies;
 /// <summary>
 /// Tests del alta de compañías (botón "Crear compañía", #10118). Ejercitan el
 /// handler real sobre el repositorio EF real con proveedor InMemory: validación
-/// 422 sin persistir, unicidad del code, default de estado y persistencia real.
+/// 422 sin persistir, unicidad del NIT, default de estado y persistencia real. El código lo
+/// asigna Postgres (HU #13605); InMemory no ejecuta ese DEFAULT, así que aquí no se mide su valor.
 /// </summary>
 public sealed class CreateCompanyHandlerTests
 {
@@ -31,7 +32,6 @@ public sealed class CreateCompanyHandlerTests
                 Request = new CreateCompanyRequest(
                     RazonSocial: "Renting Andino S.A.S.",
                     Nit: "900123456-1",
-                    Code: "RENTANDINO",
                     TenantType: "RENTING",
                     EstadoActivo: true),
             }, TestContext.Current.CancellationToken);
@@ -46,7 +46,7 @@ public sealed class CreateCompanyHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var tenant = await verify.Tenants.SingleAsync(t => t.Code == "RENTANDINO", cancellationToken: TestContext.Current.CancellationToken);
+        var tenant = await verify.Tenants.SingleAsync(t => t.TaxId == "900123456-1", cancellationToken: TestContext.Current.CancellationToken);
         tenant.LegalName.Should().Be("Renting Andino S.A.S.");
         tenant.TaxId.Should().Be("900123456-1");
         tenant.TenantType.Should().Be("RENTING");
@@ -62,7 +62,7 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("Compañía Sin Estado", "900000000-0", "SINESTADO", "FLIT", EstadoActivo: null),
+            Request = new CreateCompanyRequest("Compañía Sin Estado", "900000000-0", "FLIT", EstadoActivo: null),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeTrue();
@@ -77,11 +77,11 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("Concesionario X", "901000000-1", "CONCEX", "concesionario", true),
+            Request = new CreateCompanyRequest("Concesionario X", "901000000-1", "concesionario", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeTrue();
-        (await ctx.Tenants.SingleAsync(t => t.Code == "CONCEX", cancellationToken: TestContext.Current.CancellationToken)).TenantType.Should().Be("CONCESIONARIO");
+        (await ctx.Tenants.SingleAsync(t => t.TaxId == "901000000-1", cancellationToken: TestContext.Current.CancellationToken)).TenantType.Should().Be("CONCESIONARIO");
     }
 
     [Fact]
@@ -93,13 +93,15 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest(RazonSocial: "  ", Nit: "", Code: null, TenantType: null, EstadoActivo: null),
+            Request = new CreateCompanyRequest(RazonSocial: "  ", Nit: "", TenantType: null, EstadoActivo: null),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Company.Should().BeNull();
         result.Errors.Select(e => e.Field).Should()
-            .Contain(["razonSocial", "nit", "code", "tenantType"]);
+            .Contain(["razonSocial", "nit", "tenantType"]);
+        // HU #13605 — el código ya no lo envía el cliente: nunca es un error de validación.
+        result.Errors.Select(e => e.Field).Should().NotContain("code");
         (await ctx.Tenants.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
@@ -111,62 +113,11 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("Compañía Y", "902000000-2", "COMPY", "BANCO", true),
+            Request = new CreateCompanyRequest("Compañía Y", "902000000-2", "BANCO", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle(e => e.Field == "tenantType");
-    }
-
-    [Fact]
-    public async Task DuplicateCode_Returns422_WithoutDuplicating()
-    {
-        var db = NewDbName();
-
-        await using (var seed = NewContext(db))
-        {
-            seed.Tenants.Add(new Tenant
-            {
-                Id = Guid.NewGuid(),
-                Code = "DUPLICADO",
-                LegalName = "Existente S.A.S.",
-                TaxId = "900111111-1",
-                TenantType = "RENTING",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using (var act = NewContext(db))
-        {
-            var handler = new CreateCompanyHandler(new CompanyWriteRepository(act));
-            var result = await handler.HandleAsync(new CreateCompanyCommand
-            {
-                Request = new CreateCompanyRequest("Nueva Compañía", "900222222-2", "DUPLICADO", "RENTING", true),
-            }, TestContext.Current.CancellationToken);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().ContainSingle(e => e.Field == "code");
-        }
-
-        await using var verify = NewContext(db);
-        (await verify.Tenants.CountAsync(t => t.Code == "DUPLICADO", cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
-    }
-
-    [Fact]
-    public async Task CodeTooLong_Returns422()
-    {
-        await using var ctx = NewContext(NewDbName());
-        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
-
-        var result = await handler.HandleAsync(new CreateCompanyCommand
-        {
-            Request = new CreateCompanyRequest("Compañía Z", "903000000-3", new string('X', 33), "RENTING", true),
-        }, TestContext.Current.CancellationToken);
-
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().ContainSingle(e => e.Field == "code");
     }
 
     [Theory]
@@ -180,7 +131,7 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("Compañía Válida", nit, "NITCHARS", "RENTING", true),
+            Request = new CreateCompanyRequest("Compañía Válida", nit, "RENTING", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
@@ -199,29 +150,11 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "RAZONCHARS", "RENTING", true),
+            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "RENTING", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle(e => e.Field == "razonSocial");
-    }
-
-    [Theory]
-    [InlineData("BAD CODE")]    // espacio
-    [InlineData("CODE!")]        // signo
-    [InlineData("CÓDIGO")]       // tilde (el code solo admite ASCII alfanumérico + - _)
-    public async Task InvalidCodeCharacters_Returns422(string code)
-    {
-        await using var ctx = NewContext(NewDbName());
-        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
-
-        var result = await handler.HandleAsync(new CreateCompanyCommand
-        {
-            Request = new CreateCompanyRequest("Compañía Válida", "900123456-1", code, "RENTING", true),
-        }, TestContext.Current.CancellationToken);
-
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().ContainSingle(e => e.Field == "code");
     }
 
     [Theory]
@@ -239,7 +172,7 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "OKCODE", "RENTING", true),
+            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "RENTING", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
@@ -256,7 +189,7 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("Compañía Válida", nit, "OKCODE", "RENTING", true),
+            Request = new CreateCompanyRequest("Compañía Válida", nit, "RENTING", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
@@ -276,10 +209,32 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "OKCODE", "RENTING", true),
+            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "RENTING", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CodigoEnviadoPorElCliente_SeIgnora()
+    {
+        // HU #13605 AC4 — un cliente viejo que todavía mande "code" no fija el código: el binder lo descarta
+        // (System.Text.Json con los defaults Web) y el repositorio no lo escribe; lo asigna Postgres.
+        var json = """{"razonSocial":"Cliente Viejo S.A.S.","nit":"904000000-4","code":"MANUAL-01","tenantType":"RENTING"}""";
+        var request = System.Text.Json.JsonSerializer.Deserialize<CreateCompanyRequest>(
+            json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+
+        var db = NewDbName();
+        await using (var ctx = NewContext(db))
+        {
+            var result = await new CreateCompanyHandler(new CompanyWriteRepository(ctx))
+                .HandleAsync(new CreateCompanyCommand { Request = request }, TestContext.Current.CancellationToken);
+            result.IsValid.Should().BeTrue();
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.Tenants.AnyAsync(t => t.Code == "MANUAL-01", TestContext.Current.CancellationToken))
+            .Should().BeFalse("el código enviado por el cliente se ignora");
     }
 
     // ---------- Helpers ----------
@@ -298,15 +253,15 @@ public sealed class CreateCompanyHandlerTests
         var primera = await handler.HandleAsync(new CreateCompanyCommand
         {
             CreatedBy = Operator,
-            Request = new CreateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "RENT1", "RENTING", true),
+            Request = new CreateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "RENTING", true),
         }, ct);
         primera.IsValid.Should().BeTrue();
 
-        // Mismo NIT, código distinto: antes se creaba sin queja.
+        // Mismo NIT: antes se creaba sin queja.
         var segunda = await handler.HandleAsync(new CreateCompanyCommand
         {
             CreatedBy = Operator,
-            Request = new CreateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "RENT2", "RENTING", true),
+            Request = new CreateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "RENTING", true),
         }, ct);
 
         segunda.IsValid.Should().BeFalse();

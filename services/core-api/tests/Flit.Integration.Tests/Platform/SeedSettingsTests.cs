@@ -40,7 +40,7 @@ public sealed class SeedSettingsTests(PostgresDatabaseFixture fixture) : Postgre
 
         (await db.Users.AnyAsync(u => u.Email.EndsWith("@flit.local") || u.Email.EndsWith("@empresa.local"), TestContext.Current.CancellationToken))
             .Should().BeFalse("sin Seed:DemoUsers no se crean cuentas con contraseña fija");
-        (await db.Tenants.AnyAsync(t => t.Code == DevelopmentAuthSeeder.DemoTenantCode || t.Code == DevelopmentAuthSeeder.DemoEmpresaTenantCode, TestContext.Current.CancellationToken))
+        (await db.Tenants.AnyAsync(t => t.TaxId == DevelopmentAuthSeeder.DemoTenantTaxId || t.TaxId == DevelopmentAuthSeeder.DemoEmpresaTenantTaxId, TestContext.Current.CancellationToken))
             .Should().BeFalse();
     }
 

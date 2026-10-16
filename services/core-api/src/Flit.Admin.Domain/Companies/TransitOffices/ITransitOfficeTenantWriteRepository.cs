@@ -13,9 +13,6 @@ namespace Flit.Admin.Domain.Companies.TransitOffices;
 /// </summary>
 public interface ITransitOfficeTenantWriteRepository
 {
-    /// <summary>Indica si ya existe un tenant con ese <c>code</c> (único en BD, tabla compartida con compañías).</summary>
-    Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Indica si la oficina del catálogo ya tiene un <c>TransitOfficeProfile</c> asociado
     /// (regla de negocio nueva: una oficina física = un solo tenant OT).

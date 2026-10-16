@@ -15,8 +15,8 @@ namespace Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 /// para razón social/NIT/código—, más las reglas propias de OT: la oficina del
 /// catálogo debe existir (y estar activa) y no tener ya un <c>TransitOfficeProfile</c>
 /// asociado (una oficina física = un solo tenant OT); cualquier fallo retorna 422 con
-/// la lista de errores <em>sin tocar BD</em>; (2) verifica unicidad del <c>code</c>;
-/// (3) delega el alta compuesta (tenant + rol <c>ot_admin</c> sin permisos + perfil OT)
+/// la lista de errores <em>sin tocar BD</em>; (2) el <c>code</c> ya no lo envía el cliente:
+/// lo asigna Postgres (consecutivo COMP-XXXX, HU #13605); (3) delega el alta compuesta (tenant + rol <c>ot_admin</c> sin permisos + perfil OT)
 /// al repositorio.
 ///
 /// Decisión de producto (no reabrir, ver plan de refactor "adminOT"): el
@@ -31,7 +31,6 @@ public sealed class CreateTransitOfficeHandler
 {
     private const int LegalNameMaxLength = 255;
     private const int TaxIdMaxLength = 20;
-    private const int CodeMaxLength = 32;
 
     private readonly ITransitOfficeTenantWriteRepository _repository;
     private readonly ITransitOfficeCatalog _catalog;
@@ -55,7 +54,6 @@ public sealed class CreateTransitOfficeHandler
 
         var legalName = request.LegalName?.Trim() ?? string.Empty;
         var taxId = request.TaxId?.Trim() ?? string.Empty;
-        var code = request.Code?.Trim() ?? string.Empty;
         var operationMode = string.IsNullOrWhiteSpace(request.OperationMode)
             ? OtOperationModes.Dashboard
             : request.OperationMode.Trim();
@@ -94,26 +92,6 @@ public sealed class CreateTransitOfficeHandler
                 "taxId", "El NIT debe contener al menos un dígito."));
         }
 
-        if (code.Length == 0)
-        {
-            errors.Add(new CompanyValidationError("code", "El código es obligatorio."));
-        }
-        else if (code.Length > CodeMaxLength)
-        {
-            errors.Add(new CompanyValidationError(
-                "code", $"El código no puede superar {CodeMaxLength} caracteres."));
-        }
-        else if (!TextFieldPatterns.TenantCode().IsMatch(code))
-        {
-            errors.Add(new CompanyValidationError(
-                "code", "El código solo permite letras, números, guion y guion bajo."));
-        }
-        else if (!TextFieldPatterns.HasLetterOrDigit().IsMatch(code))
-        {
-            errors.Add(new CompanyValidationError(
-                "code", "El código debe contener al menos una letra o número."));
-        }
-
         if (!OtOperationModes.IsValid(operationMode))
         {
             errors.Add(new CompanyValidationError(
@@ -139,13 +117,6 @@ public sealed class CreateTransitOfficeHandler
                 "transitOfficeId", "La oficina seleccionada ya tiene un tenant OT asociado."));
         }
 
-        // Unicidad del code: solo se consulta si el code pasó las validaciones de formato.
-        if (code.Length is > 0 and <= CodeMaxLength
-            && await _repository.CodeExistsAsync(code, cancellationToken).ConfigureAwait(false))
-        {
-            errors.Add(new CompanyValidationError("code", "Ya existe un tenant con ese código."));
-        }
-
         if (errors.Count > 0)
         {
             return CreateTransitOfficeResult.Invalid(errors);
@@ -157,7 +128,6 @@ public sealed class CreateTransitOfficeHandler
                     TransitOfficeId: request.TransitOfficeId!.Value,
                     LegalName: legalName,
                     TaxId: taxId,
-                    Code: code,
                     OperationMode: operationMode,
                     CreatedBy: command.CreatedBy),
                 cancellationToken)

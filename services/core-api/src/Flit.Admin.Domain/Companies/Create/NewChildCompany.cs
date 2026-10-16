@@ -5,7 +5,6 @@ namespace Flit.Admin.Domain.Companies.Create;
 /// </summary>
 /// <param name="LegalName">Razón social.</param>
 /// <param name="TaxId">NIT.</param>
-/// <param name="Code">Código único del tenant.</param>
 /// <param name="TenantType">Solo <see cref="ChildTenantTypes"/>.</param>
 /// <param name="IsActive">Estado activo inicial.</param>
 /// <param name="ParentTenantId">Cabeza de grupo que crea al hijo.</param>
@@ -13,7 +12,6 @@ namespace Flit.Admin.Domain.Companies.Create;
 public sealed record NewChildCompany(
     string LegalName,
     string TaxId,
-    string Code,
     string TenantType,
     bool IsActive,
     Guid ParentTenantId,

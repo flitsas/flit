@@ -61,12 +61,14 @@ public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture
         (await TriggerColumnsAsync("tr_tenants_hierarchy")).Should().BeEquivalentTo(["parent_tenant_id", "is_group_parent", "tenant_type"]);
 
         await using var check = NewContext();
-        var tenants = await check.Tenants.AsNoTracking().OrderBy(t => t.Code).ToListAsync();
-        tenants.Select(t => (t.Code, t.TenantType, t.IsGroupParent)).Should().BeEquivalentTo(
+        // Se compara por Id y no por código: al bajar por debajo de la migración 136 (HU #13604) su Down devuelve los
+        // códigos IT-LONE…, y al volver a subir su Up los recodifica a COMP-XXXX. Ese cambio es el de la HU #13604, no del 109.
+        var tenants = await check.Tenants.AsNoTracking().ToListAsync();
+        tenants.Select(t => (t.Id, t.TenantType, t.IsGroupParent)).Should().BeEquivalentTo(
         [
-            ("IT-LONE", "CONCESIONARIO", false),
-            ("IT-LONE-2", "RENTING", false),
-            ("IT-LONE-3", "FLIT", false),
+            (TenantSeed.LoneId, "CONCESIONARIO", false),
+            (TenantSeed.ChildId, "RENTING", false),
+            (TenantSeed.GrandchildId, "FLIT", false),
         ], "sin poblado: ningún tipo ni marca cambia");
         (await check.ProcedureInstances.AsNoTracking().CountAsync()).Should().BeGreaterThan(0);
         (await check.ProcedureInstances.AsNoTracking().AllAsync(p => p.ParentTenantIdAtCreation == null)).Should().BeTrue("sin poblado");

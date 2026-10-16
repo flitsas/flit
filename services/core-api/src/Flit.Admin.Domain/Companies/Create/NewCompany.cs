@@ -6,7 +6,6 @@ namespace Flit.Admin.Domain.Companies.Create;
 /// </summary>
 /// <param name="LegalName">Razón social — <c>legal_name</c>.</param>
 /// <param name="TaxId">NIT — <c>tax_id</c>.</param>
-/// <param name="Code">Código único del tenant — <c>code</c>.</param>
 /// <param name="TenantType">Tipo de compañía — <c>tenant_type</c>. Si es de cabeza de grupo
 /// (<see cref="HeadTenantTypes"/>), la fila nace con <c>is_group_parent = true</c> (HU #12406).</param>
 /// <param name="IsActive">Estado activo inicial — <c>is_active</c>.</param>
@@ -14,7 +13,6 @@ namespace Flit.Admin.Domain.Companies.Create;
 public sealed record NewCompany(
     string LegalName,
     string TaxId,
-    string Code,
     string TenantType,
     bool IsActive,
     Guid? CreatedBy)
