@@ -29,9 +29,15 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [attempt, setAttempt] = useState(0);
   const key = `${facing}:${attempt}`;
-  const [result, setResult] = useState<{ key: string; status: CameraStatus }>({ key: "", status: "opening" });
+  const [result, setResult] = useState<{ key: string; status: CameraStatus; actualFacing?: CameraFacing }>({
+    key: "",
+    status: "opening",
+  });
   // «opening» se deriva (la clave cambió y aún no hay resultado): evita setState síncrono en el efecto.
   const status: CameraStatus = result.key === key ? result.status : "opening";
+  // Cámara que el navegador dice haber abierto. En computador suele ignorar `facingMode` y no lo reporta
+  // (`undefined`): la webcam es frontal aunque se haya pedido la trasera.
+  const actualFacing: CameraFacing | undefined = result.key === key ? result.actualFacing : undefined;
 
   useEffect(() => {
     if (!enabled) return;
@@ -58,15 +64,17 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
           return;
         }
         stream = s;
+        const reported = s.getVideoTracks?.()[0]?.getSettings?.().facingMode;
+        const actual: CameraFacing | undefined = reported === "user" || reported === "environment" ? reported : undefined;
         if (!video) {
-          setResult({ key, status: "ready" });
+          setResult({ key, status: "ready", actualFacing: actual });
           return;
         }
         // «ready» solo cuando el <video> ya tiene dimensiones reales: antes, «Capturar» no podría tomar nada.
         const markReady = () => {
           if (cancelled || !video.videoWidth) return;
           detach();
-          setResult({ key, status: "ready" });
+          setResult({ key, status: "ready", actualFacing: actual });
         };
         detach = () => {
           video.removeEventListener("loadedmetadata", markReady);
@@ -112,5 +120,5 @@ export function useLiveCamera({ facing, enabled = true }: { facing: CameraFacing
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", JPEG_QUALITY));
   }, []);
 
-  return { videoRef, status, restart, capture };
+  return { videoRef, status, restart, capture, actualFacing };
 }

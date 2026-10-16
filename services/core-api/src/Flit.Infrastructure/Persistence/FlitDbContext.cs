@@ -306,6 +306,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow> BulkTramitesBatchRows =>
         Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow>();
 
+    // Trámites — motor de lotes de descarga masiva de consolidados (HU #13367, Feature #13306, ADR-0070)
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings> ConsolidadoExportSettings =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings>();
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatch> ConsolidadoExportBatches =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatch>();
+
+    // HU #13368: partes, ítems y auditoría append-only del lote (Ley 1581). La auditoría solo se inserta.
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchPart> ConsolidadoExportBatchParts =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchPart>();
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchItem> ConsolidadoExportBatchItems =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchItem>();
+    public DbSet<ConsolidadoExportAuditEntry> ConsolidadoExportAuditEntries => Set<ConsolidadoExportAuditEntry>();
+
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
         Set<ProcedureStateChangeEmailDispatch>();
@@ -395,6 +408,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // el SuperAdmin, no un cliente.
     internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
         Set<Entities.Admin.NotificationTestSettingsRow>();
+
+    // Feature #13508 (Épica #13272) — configuración multi-proveedor IA por herramienta (global SuperAdmin).
+    internal DbSet<Entities.Admin.AiToolProviderSettingsRow> AiToolProviderSettings =>
+        Set<Entities.Admin.AiToolProviderSettingsRow>();
+
+    internal DbSet<Entities.Admin.AiProviderTransitionRow> AiProviderTransitions =>
+        Set<Entities.Admin.AiProviderTransitionRow>();
+
+    internal DbSet<Entities.Admin.AiFailoverAlertRow> AiFailoverAlerts =>
+        Set<Entities.Admin.AiFailoverAlertRow>();
 
     // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
     // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.

@@ -131,7 +131,7 @@ describe("HU #12929 — lógica del borrador", () => {
 
   it("módulo afectado: mejor esfuerzo por el módulo activo; sin coincidencia lo decide el backend", () => {
     expect(resolveAffectedModule("/|validaciones")).toBe("Validación de Identidad");
-    expect(resolveAffectedModule("/|reportes-detallados")).toBe("Reportes");
+    expect(resolveAffectedModule("/|reportes")).toBe("Reportes");
     expect(resolveAffectedModule("/admin/companies|admin-companies")).toBe("Administradores");
     expect(resolveAffectedModule("/|tramites")).toBeNull();
     expect(resolveAffectedModule(undefined)).toBeNull();

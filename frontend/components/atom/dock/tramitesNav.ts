@@ -10,12 +10,13 @@ import {
   BadgeCheck,
   BarChart3,
   Bell,
+  BrainCircuit,
   MailWarning,
   Building2,
   ClipboardList,
   FileSignature,
-  FileSpreadsheet,
   FileStack,
+  FileArchive,
   FileText,
   FolderCog,
   Fingerprint,
@@ -101,7 +102,6 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   const spaEntries = [
     spa("tramites", FileStack, "/tramites"),
     spa("reportes", BarChart3),
-    spa("reportes-detallados", FileSpreadsheet),
     spa("validaciones", ShieldCheck),
     // HU #12194 — el id coincide con el `code` del módulo RBAC `historial-placa`.
     spa("historial-placa", History),
@@ -149,8 +149,12 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", FileSignature),
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", FileText),
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", Bell),
+        // Feature #13508 / HU #13511 — multi-proveedor OCR y DR. FLIT (solo SuperAdmin).
+        superAdmin("admin-configuracion-ia", "Configuración de IA", "/admin/plataforma/configuracion-ia", BrainCircuit),
         // Epic #13316 (HU #13358): correos y webhooks que agotaron sus reintentos.
         superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", MailWarning),
+        // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
+        superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", FileArchive),
         superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
       ],
     },

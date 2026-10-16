@@ -85,6 +85,19 @@ public sealed class SendToCoreApiJob(
         await Task.WhenAll(readyIds.Select(id => ProcessMasterAsync(gate, id, mappings, ct)));
     }
 
+    /// <summary>
+    /// Carga el master con todo lo que consume el borrador en core-api: actores, adjuntos y
+    /// transformaciones (Bug #13445: sin <c>Include(Transformations)</c> el mapper no emitía
+    /// <c>cambio_color</c>/<c>cambio_carroceria</c>; core-ict no tiene AutoInclude ni lazy loading).
+    /// </summary>
+    internal static Task<ExternalIntegrationMaster?> LoadMasterForDraftAsync(
+        IctDbContext db, Guid masterId, CancellationToken ct) =>
+        db.Masters
+            .Include(m => m.Actors)
+            .Include(m => m.Attachments)
+            .Include(m => m.Transformations)
+            .FirstOrDefaultAsync(m => m.Id == masterId, ct);
+
     /// <summary>Materializa UN master en su propio scope/DbContext (thread-safe), gateado por el semáforo.</summary>
     private async Task ProcessMasterAsync(
         SemaphoreSlim gate,
@@ -100,10 +113,7 @@ public sealed class SendToCoreApiJob(
             var draftClient = scope.ServiceProvider.GetRequiredService<IProcedureDraftClient>();
             var snapshots = scope.ServiceProvider.GetRequiredService<IIctVehicleSnapshotReader>();
 
-            var master = await db.Masters
-                .Include(m => m.Actors)
-                .Include(m => m.Attachments)
-                .FirstOrDefaultAsync(m => m.Id == masterId, ct);
+            var master = await LoadMasterForDraftAsync(db, masterId, ct);
             if (master is null)
             {
                 return;

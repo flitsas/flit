@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 // Sin `historial-placa`: con él, Trámites es un grupo de dos entradas (se prueba aparte) y no un enlace directo.
-const ALL_SPA = ["tramites", "reportes", "reportes-detallados", "validaciones", "usuarios"];
+const ALL_SPA = ["tramites", "reportes", "validaciones", "usuarios"];
 const OT_OFFICE_KEY = "flit-ot-transit-office-id";
 
 function makeToken(payload: Record<string, unknown>): string {

@@ -4,6 +4,8 @@ import { sessionAwareBase } from "@/lib/api/base-url";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
 import type { QueryField } from "./queries";
+import { aErrorDeLote } from "./consolidado-lotes-client";
+import type { CrearLoteConsolidadosRequest, LoteConsolidados } from "./types-consolidado-lotes";
 import type {
   ConsolidadoEntregaParams,
   ConsolidadoEntregaResult,
@@ -161,6 +163,39 @@ export function searchOtClientProcedures(
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
+}
+
+/**
+ * HU #13394 (Feature #13308, contrato de #13391) — cuerpo de `POST /consolidados/lotes` de la
+ * bandeja: siempre el consolidado MAESTRO y la selección de `useSeleccionLote` sobre el filtro de la
+ * bandeja sin orden ni página (o los ids marcados).
+ */
+export type CrearLoteConsolidadosOtRequest = Omit<
+  CrearLoteConsolidadosRequest<OtClientProceduresParams>,
+  "tipoDocumento"
+> & { tipoDocumento: "consolidado_maestro" };
+
+/**
+ * HU #13394 — crea el lote de descarga masiva de consolidados maestros desde la bandeja (202). El
+ * SuperAdmin manda `?transitOfficeId` (CF-10); el ot_admin lo trae del token y el servidor lo
+ * ignora. Lanza `ConsolidadoLotesApiError` (409 `lote_activo` con su id, 422, 403, 503, red) para
+ * que la confirmación compartida (#13381) lo interprete igual que en el Gestor.
+ */
+export async function crearLoteConsolidadosOt(
+  body: CrearLoteConsolidadosOtRequest,
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<LoteConsolidados> {
+  try {
+    return await apiFetch<LoteConsolidados>(`${base}/consolidados/lotes`, {
+      method: "POST",
+      body,
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+      signal,
+    });
+  } catch (err) {
+    throw aErrorDeLote(err);
+  }
 }
 
 /**

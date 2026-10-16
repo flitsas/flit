@@ -2351,6 +2351,74 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToListAsync(ct);
     }
 
+    // Épica #13216 (HU #13370) — selección del lote de consolidados. Reutiliza ApplyListFilters y
+    // ApplyListSort tal cual (ADR-0070 D3: cero lógica de visibilidad copiada); sin Skip ni grafo.
+    // Code review #13216 (Obs2): `limite` es un LIMIT en SQL después del mismo orden; null = sin límite.
+    public Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite,
+        CancellationToken ct) =>
+        ListIdsAsync(IdsFilteredQuery(tenantId, filter), sortBy, direction, limite, ct);
+
+    // Code review #13216 (Obs2) — el mismo predicado que ListIdsFilteredAsync, contado en SQL.
+    public Task<int> CountIdsFilteredAsync(Guid? tenantId, ProcedureInstanceListFilter filter, CancellationToken ct) =>
+        IdsFilteredQuery(tenantId, filter).CountAsync(ct);
+
+    // HU #13417 — selección del lote de red: único cambio frente a la sobrecarga Guid? es el alcance, por
+    // WhereTenantInScope (el mismo del listado de red de HU #12358). Filtros, orden y LIMIT idénticos.
+    public Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredInScopeAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite,
+        CancellationToken ct) =>
+        ListIdsAsync(IdsFilteredQuery(scope, filter), sortBy, direction, limite, ct);
+
+    // HU #13417 — el mismo predicado que ListIdsFilteredInScopeAsync, contado en SQL (total del 422 de la red).
+    public Task<int> CountIdsFilteredInScopeAsync(TenantScope scope, ProcedureInstanceListFilter filter, CancellationToken ct) =>
+        IdsFilteredQuery(scope, filter).CountAsync(ct);
+
+    /// <summary>Proyección, orden y <c>LIMIT</c> compartidos por las dos selecciones del lote (propia y de red).</summary>
+    private async Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsAsync(
+        IQueryable<ProcedureInstance> query,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite,
+        CancellationToken ct)
+    {
+        var refs = ApplyListSort(query, sortBy, direction)
+            .Select(x => new ProcedureInstanceRef(x.Id, x.TenantId, x.ReferenceNumber, x.Plate));
+        if (limite is { } max)
+            refs = refs.Take(Math.Max(0, max));
+
+        return await refs.ToListAsync(ct);
+    }
+
+    /// <summary>Base y filtros compartidos por <see cref="ListIdsFilteredAsync"/> y <see cref="CountIdsFilteredAsync"/>.</summary>
+    private IQueryable<ProcedureInstance> IdsFilteredQuery(Guid? tenantId, ProcedureInstanceListFilter filter)
+    {
+        var query = db.ProcedureInstances.AsNoTracking().Where(x => x.DeletedAt == null);
+        if (tenantId is { } tid)
+            query = query.Where(x => x.TenantId == tid);
+
+        return ApplyListFilters(query, filter);
+    }
+
+    /// <summary>Base y filtros de la selección de red: alcance por <c>WhereTenantInScope</c> (vacío ⇒ cero filas).</summary>
+    private IQueryable<ProcedureInstance> IdsFilteredQuery(TenantScope scope, ProcedureInstanceListFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return ApplyListFilters(query, filter);
+    }
+
     /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>
     private async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(
         IQueryable<ProcedureInstance> query,

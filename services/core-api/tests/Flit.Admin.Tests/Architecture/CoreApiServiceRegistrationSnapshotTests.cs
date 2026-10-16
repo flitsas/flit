@@ -42,6 +42,9 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
             if (oidc)
             {
                 b.UseSetting("Suite:Oidc:Enabled", "true");
+                // Misma raíz que OidcServerTests: OidcClientSync escribe redirect_uris en el store
+                // compartido de CI; sin Environment=dev pisaría https://tramites.flitsas.online/...
+                b.UseSetting("Suite:Hosts:Environment", "dev");
                 b.UseSetting("Jwt:PersistSigningKey", "true");
                 b.UseSetting("Jwt:ValidateIssuedTokens", "true");
             }
@@ -52,7 +55,9 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
 
         // El transporte de correo (Smtp o consola) lo decide Smtp:Host, que en local suele venir del
         // appsettings.Development.json (fuera de git) y en CI no: es del ambiente, no del código, y queda fuera de la foto.
-        var actual = Describe(captured.Where(d => !EnvironmentDependent.Contains(d.ServiceType.FullName)));
+        // También se excluyen registros solo-Windows (NamedPipe/Quic/EventLog/Registry) para que el snapshot
+        // coincida entre CI Linux y desarrollo en Windows.
+        var actual = Describe(captured.Where(d => !IsEnvironmentDependent(d)));
         var path = Path.Combine(SourceDirectory(), snapshotFile);
         if (Environment.GetEnvironmentVariable("FLIT_UPDATE_DI_SNAPSHOT") == "1")
         {
@@ -72,6 +77,46 @@ public sealed class CoreApiServiceRegistrationSnapshotTests
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .SelectMany(g => g.OrderBy(x => x.index).Select(x => $"{g.Key} => {Implementation(x.d)} ({x.d.Lifetime})"))
             .ToArray();
+
+    private static bool IsEnvironmentDependent(ServiceDescriptor d)
+    {
+        if (EnvironmentDependent.Contains(d.ServiceType.FullName))
+        {
+            return true;
+        }
+
+        var impl = d.IsKeyedService
+            ? d.KeyedImplementationType?.FullName
+            : d.ImplementationType?.FullName;
+        if (impl is null)
+        {
+            var service = d.ServiceType.FullName ?? string.Empty;
+            // NamedPipe: solo Windows.
+            if (service.Contains("NamedPipeTransportOptions", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            // Local Windows añade ConfigureNamedOptions<LoggerFilterOptions> genérico;
+            // en CI/Linux ya existe EventLogFiltersConfigureOptions (impl tipada) y se conserva.
+            if (service.Contains("LoggerFilterOptions", StringComparison.Ordinal)
+                && d.ImplementationInstance is not null
+                && d.ImplementationInstance.GetType().Name.StartsWith("ConfigureNamedOptions", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        return impl.Contains("NamedPipes", StringComparison.Ordinal)
+               || impl.Contains("QuicTransportFactory", StringComparison.Ordinal)
+               || impl.Contains("RegistryPolicyResolver", StringComparison.Ordinal)
+               || impl.Contains("EventLogLoggerProvider", StringComparison.Ordinal)
+               // Local Windows a veces registra ObjectPoolProvider como Singleton además/en vez de Transient.
+               || (impl.Contains("DefaultObjectPoolProvider", StringComparison.Ordinal)
+                   && d.Lifetime == ServiceLifetime.Singleton);
+    }
 
     private static string Implementation(ServiceDescriptor d)
     {

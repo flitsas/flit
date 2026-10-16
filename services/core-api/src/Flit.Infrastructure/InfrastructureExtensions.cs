@@ -16,6 +16,8 @@ using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Tramites;
+using Flit.Infrastructure.Ai.Providers;
+using Flit.Infrastructure.Ai.Routing;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Notificaciones;
@@ -48,6 +50,8 @@ using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
+using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.DataProtection;
@@ -297,6 +301,38 @@ public static class InfrastructureExtensions
 
         services.AddSecurityApplication();
 
+        // Épica #13216 — HU13389: acceso del OT + scope del tenant cliente + precedencia de la matriz del
+        // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
+        services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
+            OtClientProcedures.OtClientProcedureConsolidadoContext>();
+
+        // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
+        // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            ConsolidadoLotes.Ot.OtBandejaSeleccionResolver>();
+
+        // Épica #13216 — HU13373: persistencia de la creación del lote (lote + ítems + auditoría en una transacción)
+        // y de su purga (borrado criptográfico), reutilizada por #13379.
+        services.AddScoped<IConsolidadoLoteRepository, ConsolidadoLoteRepository>();
+        // Épica #13216 — HU13420: lectura y edición de los parámetros del motor por el Super Admin (row_version).
+        services.AddScoped<IConsolidadoExportSettingsRepository, ConsolidadoExportSettingsRepository>();
+        // Épica #13216 — HU13375: revalidación de acceso por ítem (caché 60 s por lote) y cierre del ítem.
+        services.AddScoped<IConsolidadoLoteAccessChecker, Security.ConsolidadoLoteAccessChecker>();
+        services.AddScoped<IConsolidadoLoteItemProceso, Persistence.Repositories.ConsolidadoLoteItemProceso>();
+        // Épica #13216 — HU13392: procesamiento por ítem del lote de maestros de la bandeja OT (origen ot_bandeja): acceso de
+        // la bandeja + transacción del tenant cliente + matriz del OT + guard de Quipux, sobre el entregador común.
+        services.AddScoped<Flit.Tramites.Application.UseCases.ConsolidadoLotes.ILoteItemOrigen,
+            ConsolidadoLotes.Ot.OtConsolidadoLoteEntregador>();
+        // Épica #13216 — HU13378: carril de empaquetado (reclamo de partes, cierre condicionado, terminal + lote_finalizado).
+        // Temporales en {TMPDIR}/flit-consolidado-lotes salvo ConsolidadoLotes:DirectorioTemporal (volumen dedicado ≥ 2 × M).
+        services.AddScoped<IConsolidadoLoteEmpaquetado, Persistence.Repositories.ConsolidadoLoteEmpaquetado>();
+        // Épica #13216 — HU13379: lectura del lote para su dueño (sub), vencidos para la purga y auditoría parte_descargada.
+        services.AddScoped<IConsolidadoLoteLectura, Persistence.Repositories.ConsolidadoLoteLectura>();
+        services.AddSingleton(_ =>
+            configuration["ConsolidadoLotes:DirectorioTemporal"] is { Length: > 0 } dir
+                ? new ConsolidadoLoteTemporales(dir)
+                : ConsolidadoLoteTemporales.Predeterminado());
+
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
         // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).
@@ -318,6 +354,13 @@ public static class InfrastructureExtensions
         services.AddHttpClient<IAttachmentStorage, FileManagerAttachmentStorage>((sp, c) =>
             FileManagerDownloader.ConfigureClient(
                 c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "el almacenamiento de adjuntos"));
+        // Épica #13216 — HU13372: partes cifradas del lote; sin timeout global (lo aplica el adaptador por llamada).
+        services.AddHttpClient<IConsolidadoLoteParteStorage, ConsolidadoLoteParteStorage>((sp, c) =>
+        {
+            FileManagerDownloader.ConfigureClient(
+                c, sp.GetRequiredService<IOptions<FileManagerOptions>>().Value, "las partes del lote de consolidados");
+            c.Timeout = Timeout.InfiniteTimeSpan;
+        });
     }
 
     private static void AddConsultationProviders(IServiceCollection services)
@@ -361,6 +404,7 @@ public static class InfrastructureExtensions
         // Epic #13217 (HU #13232): mismo nombre de aplicación y misma tabla que core-identity.
         services.AddFlitDataProtection<FlitDbContext>();
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+        services.AddSingleton<IConsolidadoLoteCipher, ConsolidadoLoteCipher>(); // Épica #13216 — HU13372
         // Bitácora ÚNICA del ciclo de identidad (envío/webhook/descifrado/errores). Escribe en su propio
         // scope, así queda registrada aunque el webhook termine en 500/401.
         services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
@@ -437,6 +481,15 @@ public static class InfrastructureExtensions
         services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue>(
             sp => sp.GetRequiredService<ChannelConsolidadoRegeneracionQueue>());
         services.AddHostedService<ConsolidadoRegeneracionProcessor>();
+        // Épica #13216 — HU13376: carril de ítems del lote de descarga masiva de consolidados (reclamo con lease, equidad
+        // entre lotes, reanudación). Sus parámetros y su interruptor viven en tramites.consolidado_export_settings: sin
+        // fila (base de pruebas recién reseteada) o con is_active = false no reclama nada.
+        // HU13378 AC5: limpieza de temporales huérfanos del carril de empaquetado ANTES de arrancar el procesador.
+        services.AddHostedService<ConsolidadoLoteTemporalesLimpieza>();
+        services.AddHostedService<ConsolidadoLoteProcessor>();
+        // HU13379: carril de purga a las 24 h (cada 10 min). Corre aunque el motor esté apagado (is_active = false): la
+        // retención de 24 h es una garantía de privacidad (CF-12, Ley 1581), no un trabajo del motor.
+        services.AddHostedService<ConsolidadoLotePurgaProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
@@ -523,7 +576,10 @@ public static class InfrastructureExtensions
     /// </summary>
     private static void AddDrFlit(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
+        // HU #13510 — chat vía router multi-proveedor (failover). AnthropicDrFlitChatModel queda disponible
+        // como referencia; el puerto IDrFlitChatModel apunta al routed.
+        services.AddScoped<AnthropicDrFlitChatModel>();
+        services.AddScoped<IDrFlitChatModel, RoutedDrFlitChatModel>();
         services.AddScoped<IDrFlitUsageCounter>(sp => new DrFlitUsageCounterRepository(sp.GetRequiredService<FlitDbContext>()));
         services.AddSingleton<IDrFlitChatSettings, DrFlitChatSettings>();
 
@@ -622,7 +678,31 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(
                 Math.Max(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds), o.DrFlitTimeoutSeconds));
         });
+
+        // HU #13510 — clientes OpenAI-compatible (openai / kimi / deepseek) + adapters + router.
+        BindOpenAiCompatibleOptions(services, configuration, Cfg);
+        services.AddHttpClient<OpenAiCompatibleClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(180));
+
+        services.AddScoped<AnthropicAiProviderAdapter>();
+        services.AddScoped<IAiVisionProvider>(sp => sp.GetRequiredService<AnthropicAiProviderAdapter>());
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<AnthropicAiProviderAdapter>());
+
+        services.AddScoped<OpenAiAiProviderAdapter>();
+        services.AddScoped<IAiVisionProvider>(sp => sp.GetRequiredService<OpenAiAiProviderAdapter>());
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<OpenAiAiProviderAdapter>());
+
+        services.AddScoped<KimiAiProviderAdapter>();
+        services.AddScoped<IAiVisionProvider>(sp => sp.GetRequiredService<KimiAiProviderAdapter>());
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<KimiAiProviderAdapter>());
+
+        services.AddScoped<DeepSeekAiProviderAdapter>();
+        services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<DeepSeekAiProviderAdapter>());
+
+        services.AddScoped<IAiProviderRouter, AiProviderRouter>();
+
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
+        services.AddScoped<RoutedDocumentOcrAnalyzer>();
         services.AddScoped<AnthropicDocumentBatchClassifier>();
         services.AddScoped<AnthropicOrientationProbe>();
 
@@ -633,10 +713,11 @@ public static class InfrastructureExtensions
         // Feature flag de proveedor (mock por defecto ⇒ no rompe dev/CI sin API key). Mismo patrón que
         // BiometricsProviderOptions / ConsultationProviderModeOptions. El MockDocumentOcrAnalyzer vive en
         // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
+        // HU #13510: cualquier valor distinto de mock usa el router (RoutedDocumentOcrAnalyzer).
         var provider = Cfg("Ocr:Provider", "OCR_PROVIDER") ?? "mock";
-        if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(provider, "mock", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
+            services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<RoutedDocumentOcrAnalyzer>());
             services.AddScoped<IDocumentBatchClassifier>(sp => sp.GetRequiredService<AnthropicDocumentBatchClassifier>());
 
             // HU #12036 — el enderezado SOLO se registra con el proveedor real: con el mock no hay a
@@ -649,6 +730,49 @@ public static class InfrastructureExtensions
             services.AddScoped<IDocumentOcrAnalyzer, MockDocumentOcrAnalyzer>();
             services.AddScoped<IDocumentBatchClassifier, MockDocumentBatchClassifier>();
         }
+    }
+
+    /// <summary>HU #13510 — liga opciones openai / kimi / deepseek (env cruda primero).</summary>
+    private static void BindOpenAiCompatibleOptions(
+        IServiceCollection services,
+        IConfiguration configuration,
+        Func<string, string, string?> cfg)
+    {
+        services.Configure<OpenAiProviderOptions>(o =>
+        {
+            o.BaseUrl = cfg("OpenAI:BaseUrl", "OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
+            o.ApiKey = cfg("OpenAI:ApiKey", "OPENAI_API_KEY") ?? string.Empty;
+            o.Model = cfg("OpenAI:Model", "OPENAI_MODEL") ?? "gpt-4o-mini";
+            o.VisionModel = cfg("OpenAI:VisionModel", "OPENAI_VISION_MODEL") ?? "gpt-4o";
+            o.TimeoutSeconds = int.TryParse(cfg("OpenAI:TimeoutSeconds", "OPENAI_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(cfg("OpenAI:MaxTokens", "OPENAI_MAX_TOKENS"), out var m) ? m : 2000;
+            o.DrFlitMaxTokens = int.TryParse(cfg("OpenAI:DrFlitMaxTokens", "OPENAI_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(cfg("OpenAI:DrFlitTimeoutSeconds", "OPENAI_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+        });
+
+        services.Configure<KimiProviderOptions>(o =>
+        {
+            o.BaseUrl = cfg("Kimi:BaseUrl", "KIMI_BASE_URL") ?? "https://api.moonshot.cn/v1";
+            o.ApiKey = cfg("Kimi:ApiKey", "KIMI_API_KEY") ?? string.Empty;
+            o.Model = cfg("Kimi:Model", "KIMI_MODEL") ?? "moonshot-v1-8k";
+            o.VisionModel = cfg("Kimi:VisionModel", "KIMI_VISION_MODEL") ?? "moonshot-v1-8k-vision-preview";
+            o.TimeoutSeconds = int.TryParse(cfg("Kimi:TimeoutSeconds", "KIMI_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(cfg("Kimi:MaxTokens", "KIMI_MAX_TOKENS"), out var m) ? m : 2000;
+            o.DrFlitMaxTokens = int.TryParse(cfg("Kimi:DrFlitMaxTokens", "KIMI_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(cfg("Kimi:DrFlitTimeoutSeconds", "KIMI_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+        });
+
+        services.Configure<DeepSeekProviderOptions>(o =>
+        {
+            o.BaseUrl = cfg("DeepSeek:BaseUrl", "DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com";
+            o.ApiKey = cfg("DeepSeek:ApiKey", "DEEPSEEK_API_KEY") ?? string.Empty;
+            o.Model = cfg("DeepSeek:Model", "DEEPSEEK_MODEL") ?? "deepseek-chat";
+            o.VisionModel = cfg("DeepSeek:VisionModel", "DEEPSEEK_VISION_MODEL") ?? string.Empty;
+            o.TimeoutSeconds = int.TryParse(cfg("DeepSeek:TimeoutSeconds", "DEEPSEEK_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(cfg("DeepSeek:MaxTokens", "DEEPSEEK_MAX_TOKENS"), out var m) ? m : 2000;
+            o.DrFlitMaxTokens = int.TryParse(cfg("DeepSeek:DrFlitMaxTokens", "DEEPSEEK_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(cfg("DeepSeek:DrFlitTimeoutSeconds", "DEEPSEEK_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+        });
     }
 
     public static async Task InitializeInfrastructureAsync(

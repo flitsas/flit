@@ -133,7 +133,9 @@ services:
       - "host.docker.internal:host-gateway"
     # HU #13226: ancla — core-identity reusa TODO este bloque (misma llave de firma, clientes OIDC, correo, base), así
     # los dos procesos no pueden quedar con valores distintos. Lo que cambie aquí cambia en los dos.
-    environment: &core-api-env
+    # HU #13378: el ancla vive en esta extensión x- del servicio (Compose la ignora) y `environment` de core-api la
+    # fusiona más abajo junto a las variables SOLO de core-api, que core-identity no hereda.
+    x-core-api-env: &core-api-env
       # HU #13332 (Epic #13316): trazas y logs hacia el colector OTLP. Vacía = apagado (como hasta ahora).
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # HU #12895 (FLIT Suite A-02) — nombre del ambiente .NET, igual en core-api, core-ict y gateway. Sin la variable
@@ -230,14 +232,27 @@ services:
       TramiteValidations__MandatarioRequerido__Mode: ${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}
       # Biometría (HU #10233): el proveedor elegido (mock | kyverum). Kyverum Verify se llama por core-consultas (HU #13348).
       BIOMETRICS_PROVIDER: ${BIOMETRICS_PROVIDER:-mock}
-      # OCR de trámites (Anthropic). Mismo patrón: el código lee env vars CRUDAS
-      # (OCR_PROVIDER / ANTHROPIC_*), no `Anthropic__*`. Default mock ⇒ no rompe si el .env no lo define.
+      # OCR / IA multi-proveedor (Feature #13508, HU #13513). Env CRUDAS
+      # (OCR_PROVIDER / ANTHROPIC_* / OPENAI_* / KIMI_* / DEEPSEEK_*), no `Anthropic__*`.
+      # Default mock ⇒ no rompe si el .env no define keys. Ver .env.anthropic.example.
       OCR_PROVIDER: ${OCR_PROVIDER:-mock}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-60}
       ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-2000}
+      # Failover adapters (openai / kimi / deepseek). Vacío ⇒ hasApiKey=false en admin UI.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4o}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      KIMI_BASE_URL: ${KIMI_BASE_URL:-https://api.moonshot.cn/v1}
+      KIMI_MODEL: ${KIMI_MODEL:-moonshot-v1-8k}
+      KIMI_VISION_MODEL: ${KIMI_VISION_MODEL:-moonshot-v1-8k-vision-preview}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       # DR. FLIT (Épica #12718, ADR-0060): chat con LLM sobre el manual, mismo cliente y API key del
       # OCR. Env CRUDAS igual que arriba. DR_FLIT_DEPLOY_ENVIRONMENT (DEV|QA|PDN) va al campo
       # Custom.Environment del caso de soporte: NO se infiere de ASPNETCORE_ENVIRONMENT (los 3 VPS
@@ -278,6 +293,19 @@ services:
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
+    environment:
+      <<: *core-api-env
+      # HU #13378 (épica #13216, ADR-0070 D4) — directorio temporal dedicado del empaquetado de lotes de consolidados.
+      # Cada parte escribe a la vez su ZIP en claro (.zip.tmp) y su versión cifrada (.flz.tmp): hasta 2 × M, con
+      # M = max_mb_per_part. Montado en el volumen core-api-lotes-tmp (abajo) para no llenar la capa del contenedor.
+      # Espacio libre necesario en el disco del host que respalda el volumen: >= 600 MB con M por defecto (250 MB) y
+      # >= 4,5 GB si M = 2048 MB. Al arrancar, core-api borra los temporales huérfanos de ahí.
+      # Fuera del ancla a propósito: core-identity no empaqueta lotes.
+      ConsolidadoLotes__DirectorioTemporal: /var/tmp/flit-lotes
+    volumes:
+      # HU #13378 — temporales del empaquetado de lotes (ver ConsolidadoLotes__DirectorioTemporal arriba).
+      # El .pfx de Renting ya no se monta aquí: desde el corte (HU #13359) solo lo usa core-notificaciones.
+      - core-api-lotes-tmp:/var/tmp/flit-lotes
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
@@ -1034,6 +1062,18 @@ services:
     cpus: ${OBSERVABILIDAD_CPUS:-0}
     logging: *default-logging
 
+# Volúmenes con nombre. Un solo bloque `volumes:` en el archivo: YAML no admite la clave repetida y compose falla
+# con «mapping key "volumes" already defined».
+volumes:
+  # HU #13378 — temporales del empaquetado de lotes de consolidados (solo core-api).
+  # Contenido desechable (core-api lo limpia al arrancar), pero NO se borra con `down`: el CD no usa -v.
+  # Requiere >= 600 MB libres con max_mb_per_part por defecto (250 MB) y >= 4,5 GB si max_mb_per_part = 2048.
+  core-api-lotes-tmp:
+  # HU #13332: datos de trazas y logs del perfil `observabilidad`.
+  observabilidad-datos:
+  # HU #13349: datos del broker (vhost, colas y mensajes durables).
+  rabbitmq-datos:
+
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
 # Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
 # de forma implicita, al no declarar `networks:` propio — este bloque no
@@ -1060,8 +1100,3 @@ networks:
     ipam:
       config:
         - subnet: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
-
-# HU #13332: datos de trazas y logs del perfil `observabilidad`.
-volumes:
-  observabilidad-datos:
-  rabbitmq-datos:

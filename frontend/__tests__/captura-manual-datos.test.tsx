@@ -37,7 +37,7 @@ describe("PasoDatos", () => {
     expect(screen.getByText("Para que salga bien")).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByText(/y tu firma/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "samuel.cardenas@flitsas.com" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "soporte@flitsas.com" })).toBeInTheDocument();
   });
 
   it("el texto de consentimiento no menciona a Kyverum", () => {

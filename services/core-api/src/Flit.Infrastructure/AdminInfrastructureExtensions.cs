@@ -13,6 +13,9 @@ using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.Improntas;
 using Flit.Admin.Domain.Ict;
+using Flit.Admin.Domain.Plataforma.Ai;
+using Flit.Admin.Application.Plataforma.Ai;
+using Flit.Infrastructure.Ai;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtRequirements;
 using Flit.Admin.Domain.OtWebhooks;
@@ -66,6 +69,10 @@ public static class AdminInfrastructureExtensions
 
         // HU #12512 — ict.job_settings (schema ict, DDL de core-ict; SQL parametrizado).
         services.AddScoped<IIctJobSettingsRepository, IctJobSettingsRepository>();
+
+        // Feature #13508 (HU #13509) — admin.ai_tool_provider_settings + transiciones manuales.
+        services.AddScoped<IAiToolProviderSettingsRepository, AiToolProviderSettingsRepository>();
+        services.AddSingleton<IAiApiKeyEnvironmentProbe, AiApiKeyEnvironmentProbe>();
         // HU #12513 — ict.job_runs (último ciclo / take acotado; sin error_message).
         services.AddScoped<IIctJobRunRepository, IctJobRunRepository>();
 
