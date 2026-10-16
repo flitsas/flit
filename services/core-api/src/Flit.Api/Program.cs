@@ -90,6 +90,7 @@ builder.Services.AddScoped<ITransitOfficeTenantProbe, TransitOfficeTenantProbe>(
 
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.OtPermissionEnforcementOptions.Section)); // HU #13639
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
@@ -253,6 +254,10 @@ app.UseAuthentication();
 app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
 
 app.UseAuthorization();
+
+// HU #13639 (Feature #13100 FA-4, Anexo A) — slug OT por ruta en AND con la policy de rol; apagado por defecto
+// (Security:OtPermissionEnforcement:Enabled). Ver OtPermissionMap.
+app.UseMiddleware<Flit.Api.Authorization.OtPermissionEnforcementMiddleware>();
 
 // HU #13085 (Épica #12737) — cuota por cliente externo (120/min por client_id). Va DESPUÉS de la autorización:
 // el client_id solo es fiable con el pase ya validado, y los 401/403 no consumen cuota.

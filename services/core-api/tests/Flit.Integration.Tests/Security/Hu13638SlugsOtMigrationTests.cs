@@ -125,12 +125,12 @@ public sealed class Hu13638SlugsOtMigrationTests(PostgresDatabaseFixture fixture
 
         (await CountAsync(cn, "SELECT count(*) FROM security.modules WHERE code LIKE 'ot-%'")).Should().Be(7);
 
-        // Alcance: no se asigna a roles OT no-admin ni a AdminCompany (eso es #13639 / prohibido por producto).
+        // Alcance: no se asigna a AdminCompany (prohibido por producto). Los roles OT no-admin los cubre el DDL 138 (HU #13639).
         (await CountAsync(cn, """
             SELECT count(*) FROM security.role_permissions rp
               JOIN security.roles r ON r.id = rp.role_id
               JOIN security.permissions p ON p.id = rp.permission_id
-             WHERE p.slug LIKE 'ot.%' AND r.code NOT IN ('ot_admin', 'SuperAdmin')
+             WHERE p.slug LIKE 'ot.%' AND r.code = 'AdminCompany'
             """)).Should().Be(0);
     }
 
