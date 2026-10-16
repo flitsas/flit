@@ -125,7 +125,11 @@ public static class DevelopmentAuthSeeder
         }
 
         if (settings.RbacCatalog)
+        {
             await SeedRbacCatalogAsync(db, cancellationToken);
+            // HU #13641: los permisos recién sembrados nacen con enforced='false'; el DDL 139 los clasifica (idempotente).
+            await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("139-HU13641-permisos-enforced.sql"), cancellationToken);
+        }
 
         if (settings.DemoData)
             await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
