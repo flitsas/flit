@@ -66,7 +66,7 @@ components:
             tipo: tramite.cambio
             id: 0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f
             syncVersion: 48213
-            fechaUltimoCambio: '2026-10-16T15:20:04.512Z'
+            fechaUltimoCambio: '2026-10-16T15:20:04.512345+00:00'
             eliminado: false
             tenantId: 0ad1c0de-0000-4000-8000-000000000001
     VehicleStateChanged:
@@ -100,7 +100,7 @@ components:
         fechaUltimoCambio:
           type: string
           format: date-time
-          description: sync_changed_at del trámite.
+          description: sync_changed_at del trámite (RFC 3339 con microsegundos y desfase, p. ej. 2026-10-16T15:20:04.512345+00:00).
         eliminado:
           type: boolean
           description: true cuando el trámite tiene borrado lógico (tombstone del feed).
