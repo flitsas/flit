@@ -262,4 +262,46 @@ public sealed class PromptOcrVersion : Auditada
     public string Proveedor { get; set; } = "ANTHROPIC";
     public string Modelo { get; set; } = string.Empty;
     public bool Publicada { get; set; }
+
+    /// <summary>Cuándo dejó de ser la publicada por última vez. Una versión que ya estuvo publicada se puede volver a publicar sin evaluarla.</summary>
+    public DateTimeOffset? RetiradaEn { get; set; }
+}
+
+public enum EstadoEvaluacionPrompt
+{
+    EnCurso,
+    Terminada,
+    Fallida,
+}
+
+/// <summary>
+/// Comparación de una versión del prompt con la publicada sobre los mismos documentos ya revisados por una persona. Sin
+/// una evaluación aprobada, la versión no se publica.
+/// </summary>
+public sealed class EvaluacionPromptOcr
+{
+    public Guid Id { get; set; }
+    public Guid PromptVersionId { get; set; }
+
+    /// <summary>La versión publicada contra la que se comparó. Si se publica otra antes, la evaluación ya no sirve.</summary>
+    public Guid? PromptVigenteId { get; set; }
+
+    /// <summary>Fecha de la última edición de la versión al evaluarla: si se edita después, hay que evaluarla de nuevo.</summary>
+    public DateTimeOffset VersionDel { get; set; }
+
+    public EstadoEvaluacionPrompt Estado { get; set; } = EstadoEvaluacionPrompt.EnCurso;
+    public int Documentos { get; set; }
+    public int Campos { get; set; }
+    public int AciertosCandidata { get; set; }
+    public int AciertosVigente { get; set; }
+    public bool Aprobada { get; set; }
+    public string? Mensaje { get; set; }
+
+    /// <summary>Campo por campo de cada documento: lo esperado y lo que leyó cada versión.</summary>
+    public string? Detalle { get; set; }
+
+    public DateTimeOffset CreadoEn { get; set; }
+    public Guid? CreadoPor { get; set; }
+    public DateTimeOffset? TerminadaEn { get; set; }
+    public DateTimeOffset? ReclamadaHasta { get; set; }
 }

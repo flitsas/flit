@@ -874,6 +874,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     proveedor = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     modelo = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
                     publicada = table.Column<bool>(type: "boolean", nullable: false),
+                    retirada_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     creado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     creado_por = table.Column<Guid>(type: "uuid", nullable: true),
                     actualizado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -1359,6 +1360,40 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "evaluacion_prompt_ocr",
+                schema: "comparendos",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    prompt_version_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    prompt_vigente_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    version_del = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    estado = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    documentos = table.Column<int>(type: "integer", nullable: false),
+                    campos = table.Column<int>(type: "integer", nullable: false),
+                    aciertos_candidata = table.Column<int>(type: "integer", nullable: false),
+                    aciertos_vigente = table.Column<int>(type: "integer", nullable: false),
+                    aprobada = table.Column<bool>(type: "boolean", nullable: false),
+                    mensaje = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    detalle = table.Column<string>(type: "jsonb", nullable: true),
+                    creado_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    creado_por = table.Column<Guid>(type: "uuid", nullable: true),
+                    terminada_en = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    reclamada_hasta = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_evaluacion_prompt_ocr", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_evaluacion_prompt_ocr_prompt_ocr_version_prompt_version_id",
+                        column: x => x.prompt_version_id,
+                        principalSchema: "comparendos",
+                        principalTable: "prompt_ocr_version",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "tipologia_empresa",
                 schema: "comparendos",
                 columns: table => new
@@ -1730,6 +1765,19 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 columns: new[] { "comparendo_id", "tipo" });
 
             migrationBuilder.CreateIndex(
+                name: "ix_evaluacion_prompt_ocr_estado",
+                schema: "comparendos",
+                table: "evaluacion_prompt_ocr",
+                column: "estado",
+                filter: "estado = 'EnCurso'");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_evaluacion_prompt_ocr_prompt_version_id_creado_en",
+                schema: "comparendos",
+                table: "evaluacion_prompt_ocr",
+                columns: new[] { "prompt_version_id", "creado_en" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_exportacion_tenant_id_creado_en",
                 schema: "comparendos",
                 table: "exportacion",
@@ -2069,6 +2117,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 schema: "comparendos");
 
             migrationBuilder.DropTable(
+                name: "evaluacion_prompt_ocr",
+                schema: "comparendos");
+
+            migrationBuilder.DropTable(
                 name: "exportacion",
                 schema: "comparendos");
 
@@ -2129,10 +2181,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                 schema: "comparendos");
 
             migrationBuilder.DropTable(
-                name: "prompt_ocr_version",
-                schema: "comparendos");
-
-            migrationBuilder.DropTable(
                 name: "radicado_reservado",
                 schema: "comparendos");
 
@@ -2162,6 +2210,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "documento_ocr",
+                schema: "comparendos");
+
+            migrationBuilder.DropTable(
+                name: "prompt_ocr_version",
                 schema: "comparendos");
 
             migrationBuilder.DropTable(

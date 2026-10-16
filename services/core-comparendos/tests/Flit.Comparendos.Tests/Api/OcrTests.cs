@@ -31,6 +31,8 @@ public sealed class OcrDePrueba : IProveedorOcr
         Interlocked.Increment(ref _llamadas);
         Recibidos.Add((contentType, contenido));
         var clave = Encoding.UTF8.GetString(contenido);
+        if (Guion.TryGetValue($"{prompt}::{clave}", out var porPrompt) && porPrompt.Count > 0)
+            clave = $"{prompt}::{clave}";
         if (!Guion.TryGetValue(clave, out var cola) || cola.Count == 0)
             return Task.FromResult(ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "sin guion"));
         var siguiente = cola.Count > 1 ? cola.Dequeue() : cola.Peek();
@@ -63,6 +65,16 @@ public sealed class ApiConOcr : ApiConFuente
     {
         base.Reemplazar(services);
         services.AddSingleton<IProveedorOcr>(Ocr);
+    }
+
+    /// <summary>Corre las evaluaciones de prompt pendientes.</summary>
+    public async Task<int> EvaluarAsync()
+    {
+        var evaluador = App.Services.GetRequiredService<EvaluadorPromptOcr>();
+        var n = 0;
+        while (await evaluador.EvaluarSiguienteAsync(CancellationToken.None))
+            n++;
+        return n;
     }
 
     /// <summary>Corre la cola de OCR hasta que no quede nada listo para procesar a la hora del reloj de prueba.</summary>
@@ -288,13 +300,98 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         var r = await Json(await super.PostAsync($"/api/v1/comparendos/admin/ocr/prompts/{nueva}/probar", prueba, ct), ct);
         r.GetProperty("campos").GetProperty(CamposOcr.Numero).GetProperty("valor").GetString().Should().Be("MUESTRA-1");
 
-        (await super.PostAsync($"/api/v1/comparendos/admin/ocr/prompts/{nueva}/publicar", null, ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
-        var publicadas = await api.EnDbAsync(db => db.PromptsOcr.Where(p => p.Publicada).Select(p => p.Id).ToListAsync(ct));
-        publicadas.Should().Equal(nueva);
+        // Sin evaluarla contra la publicada no se publica (AC6 cubre la evaluación).
+        var sinEvaluar = await super.PostAsync($"/api/v1/comparendos/admin/ocr/prompts/{nueva}/publicar", null, ct);
+        sinEvaluar.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await sinEvaluar.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("EVALUACION_REQUERIDA");
+        (await api.EnDbAsync(db => db.PromptsOcr.Where(p => p.Publicada).Select(p => p.Id).ToListAsync(ct))).Should().Equal(v1.GetProperty("id").GetGuid());
         (await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), Operador)).GetAsync("/api/v1/comparendos/admin/ocr/prompts", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 
-        // Se devuelve la v1 publicada para no afectar a las demás pruebas de la clase.
-        (await super.PostAsync($"/api/v1/comparendos/admin/ocr/prompts/{v1.GetProperty("id").GetGuid()}/publicar", null, ct)).EnsureSuccessStatusCode();
+    [Fact]
+    public async Task AC6_PublicarExigeEvaluacionAprobada_YSePuedeVolverALaAnterior()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await EmpresaOcrAsync();
+        var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
+        const string Base = "/api/v1/comparendos/admin/ocr/prompts";
+        var v1 = (await Json(await super.GetAsync(Base, ct), ct)).EnumerateArray().Single(p => p.GetProperty("publicada").GetBoolean()).GetProperty("id").GetGuid();
+
+        async Task<Guid> CrearAsync(string texto) =>
+            (await Json(await super.PostAsJsonAsync(Base, new { texto, proveedor = "ANTHROPIC", modelo = "m" }, ct), ct)).GetProperty("id").GetGuid();
+        async Task<JsonElement> VersionAsync(Guid id) =>
+            (await Json(await super.GetAsync(Base, ct), ct)).EnumerateArray().Single(p => p.GetProperty("id").GetGuid() == id);
+        async Task<string?> PublicarAsync(Guid id)
+        {
+            var r = await super.PostAsync($"{Base}/{id}/publicar", null, ct);
+            return r.StatusCode == HttpStatusCode.NoContent ? null : (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString();
+        }
+
+        // Con menos de 5 documentos revisados no hay con qué comparar (las otras pruebas de la clase pueden haber registrado algunos).
+        if (await api.EnDbAsync(db => db.DocumentosOcr.CountAsync(d => d.Estado == EstadoDocumentoOcr.Registrado && d.RevisadoEn != null, ct)) < 5)
+        {
+            var pronto = await CrearAsync("pronto");
+            (await super.PostAsync($"{Base}/{pronto}/evaluar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+            await api.EvaluarAsync();
+            var sinConjunto = (await VersionAsync(pronto)).GetProperty("evaluacion");
+            (sinConjunto.GetProperty("estado").GetString(), sinConjunto.GetProperty("aprobada").GetBoolean()).Should().Be(("Fallida", false));
+            sinConjunto.GetProperty("mensaje").GetString().Should().Contain("al menos 5");
+        }
+
+        // Cinco documentos que una persona revisó y registró: la verdad de la evaluación.
+        var archivos = Enumerable.Range(1, 5).Select(i => ($"ev{i}.pdf", $"ev{i}")).ToArray();
+        foreach (var (_, clave) in archivos)
+        {
+            api.Ocr.Responder(clave, () => OcrDePrueba.Campos($"EV-{clave}", placa: $"EVA{clave[^1]}0{clave[^1]}"));
+            api.Ocr.Responder($"malo::{clave}", () => OcrDePrueba.Campos("OTRO-NUMERO", placa: "ZZZ999", valor: "1", nombre: "NADIE"));
+        }
+
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Para evaluar", archivos), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+        (await Json(await cliente.PostAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}/registrar-completos", null, ct), ct))
+            .GetProperty("registrados").GetArrayLength().Should().Be(5);
+
+        // Una versión que lee peor que la publicada no aprueba y no se publica.
+        var malo = await CrearAsync("malo");
+        (await super.PostAsync($"{Base}/{malo}/evaluar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await super.PostAsync($"{Base}/{malo}/evaluar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict, "ya hay una en curso");
+        (await PublicarAsync(malo)).Should().Be("EVALUACION_REQUERIDA", "la evaluación sigue en curso");
+        (await api.EvaluarAsync()).Should().Be(1);
+        var evMalo = (await VersionAsync(malo)).GetProperty("evaluacion");
+        (evMalo.GetProperty("estado").GetString(), evMalo.GetProperty("aprobada").GetBoolean()).Should().Be(("Terminada", false), evMalo.GetProperty("mensaje").GetString());
+        evMalo.GetProperty("porcentajeCandidata").GetDecimal().Should().BeLessThan(evMalo.GetProperty("porcentajeVigente").GetDecimal());
+        (await PublicarAsync(malo)).Should().Be("EVALUACION_REQUERIDA");
+
+        var detalle = await Json(await super.GetAsync($"{Base}/evaluaciones/{evMalo.GetProperty("id").GetGuid()}", ct), ct);
+        var ev1 = detalle.GetProperty("detalle").EnumerateArray().Single(d => d.GetProperty("archivo").GetString() == "ev1.pdf");
+        var numero = ev1.GetProperty("campos").EnumerateArray().Single(c => c.GetProperty("campo").GetString() == CamposOcr.Numero);
+        (numero.GetProperty("esperado").GetString(), numero.GetProperty("candidata").GetString(), numero.GetProperty("vigente").GetString())
+            .Should().Be(("EV-ev1", "OTRO-NUMERO", "EV-ev1"));
+
+        // Una que lee igual aprueba y se publica; la anterior queda retirada.
+        var bueno = await CrearAsync("bueno");
+        (await super.PostAsync($"{Base}/{bueno}/evaluar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await api.EvaluarAsync();
+        (await VersionAsync(bueno)).GetProperty("puedePublicar").GetBoolean().Should().BeTrue();
+        (await PublicarAsync(bueno)).Should().BeNull();
+        (await VersionAsync(v1)).GetProperty("retiradaEn").ValueKind.Should().NotBe(JsonValueKind.Null);
+
+        // Si se edita después de evaluarla, hay que evaluarla de nuevo.
+        var tercera = await CrearAsync("tercera");
+        (await super.PostAsync($"{Base}/{tercera}/evaluar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await api.EvaluarAsync();
+        (await VersionAsync(tercera)).GetProperty("puedePublicar").GetBoolean().Should().BeTrue();
+        api.Reloj.Ahora += TimeSpan.FromMinutes(1);
+        (await super.PutAsJsonAsync($"{Base}/{tercera}", new { texto = "tercera editada", proveedor = "ANTHROPIC", modelo = "m" }, ct)).EnsureSuccessStatusCode();
+        (await VersionAsync(tercera)).GetProperty("puedePublicar").GetBoolean().Should().BeFalse();
+        (await PublicarAsync(tercera)).Should().Be("EVALUACION_REQUERIDA");
+
+        // Volver a la anterior no exige evaluación, y la que ya estuvo publicada no se edita.
+        (await PublicarAsync(v1)).Should().BeNull();
+        (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.EntidadId == v1.ToString() && a.Accion == "VOLVER_A_PUBLICAR", ct))).Should().BeTrue();
+        (await super.PutAsJsonAsync($"{Base}/{bueno}", new { texto = "x", proveedor = "ANTHROPIC", modelo = "m" }, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await api.EnDbAsync(db => db.PromptsOcr.Where(p => p.Publicada).Select(p => p.Id).ToListAsync(ct))).Should().Equal(v1);
     }
 
     /// <summary>TIFF de prueba en memoria (RGB, una franja por fila).</summary>
@@ -351,5 +448,33 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         var r = await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", malo, ct);
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await r.Content.ReadAsStringAsync(ct)).Should().Contain("roto.tif");
+    }
+}
+
+/// <summary>La evaluación del prompt no castiga diferencias de formato que el registro ignora.</summary>
+public sealed class CalificacionOcrTests
+{
+    [Theory]
+    [InlineData(CamposOcr.Numero, "D05001000000054280231", "D 0500-1000.000054280231", true)]
+    [InlineData(CamposOcr.Placa, "ABC123", "abc-123", true)]
+    [InlineData(CamposOcr.NumeroDocumento, "900123456", "900.123.456", true)]
+    [InlineData(CamposOcr.Valor, "604100", "$604.100", true)]
+    [InlineData(CamposOcr.FechaInfraccion, "2026-09-28", "28/09/2026", true)]
+    [InlineData(CamposOcr.TipoDocumento, "NIT", "nit", true)]
+    [InlineData(CamposOcr.Nombre, "JOSÉ PÉREZ GÓMEZ", "Jose Perez Gomes", true)]
+    [InlineData(CamposOcr.Secretaria, "SECRETARIA DE MOVILIDAD DE MEDELLIN", "SECRETARIA DE TRANSITO DE CALI", false)]
+    [InlineData(CamposOcr.Valor, "604100", "302050", false)]
+    [InlineData(CamposOcr.Placa, null, "ABC123", false)]
+    [InlineData(CamposOcr.Placa, "ABC123", null, false)]
+    [InlineData(CamposOcr.Placa, null, "null", true)]
+    public void Acierta(string campo, string? esperado, string? obtenido, bool acierta) =>
+        CalificacionOcr.Acierta(campo, esperado, obtenido).Should().Be(acierta);
+
+    [Fact]
+    public void Aprueba_ConMargenDeDosPuntos()
+    {
+        CalificacionOcr.Aprueba(89, 90, 100).Should().BeTrue();
+        CalificacionOcr.Aprueba(88, 90, 100).Should().BeTrue();
+        CalificacionOcr.Aprueba(87, 90, 100).Should().BeFalse();
     }
 }

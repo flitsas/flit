@@ -2341,6 +2341,89 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("documento_soporte", "comparendos");
                 });
 
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.EvaluacionPromptOcr", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AciertosCandidata")
+                        .HasColumnType("integer")
+                        .HasColumnName("aciertos_candidata");
+
+                    b.Property<int>("AciertosVigente")
+                        .HasColumnType("integer")
+                        .HasColumnName("aciertos_vigente");
+
+                    b.Property<bool>("Aprobada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("aprobada");
+
+                    b.Property<int>("Campos")
+                        .HasColumnType("integer")
+                        .HasColumnName("campos");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.Property<string>("Detalle")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("detalle");
+
+                    b.Property<int>("Documentos")
+                        .HasColumnType("integer")
+                        .HasColumnName("documentos");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<string>("Mensaje")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("mensaje");
+
+                    b.Property<Guid>("PromptVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prompt_version_id");
+
+                    b.Property<Guid?>("PromptVigenteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prompt_vigente_id");
+
+                    b.Property<DateTimeOffset?>("ReclamadaHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reclamada_hasta");
+
+                    b.Property<DateTimeOffset?>("TerminadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("terminada_en");
+
+                    b.Property<DateTimeOffset>("VersionDel")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("version_del");
+
+                    b.HasKey("Id")
+                        .HasName("pk_evaluacion_prompt_ocr");
+
+                    b.HasIndex("Estado")
+                        .HasDatabaseName("ix_evaluacion_prompt_ocr_estado")
+                        .HasFilter("estado = 'EnCurso'");
+
+                    b.HasIndex("PromptVersionId", "CreadoEn")
+                        .HasDatabaseName("ix_evaluacion_prompt_ocr_prompt_version_id_creado_en");
+
+                    b.ToTable("evaluacion_prompt_ocr", "comparendos");
+                });
+
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Exportacion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3406,6 +3489,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("publicada");
 
+                    b.Property<DateTimeOffset?>("RetiradaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retirada_en");
+
                     b.Property<string>("Texto")
                         .IsRequired()
                         .HasColumnType("text")
@@ -4008,6 +4095,16 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_documento_ocr_campo_documento_ocr_documento_ocr_id");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.EvaluacionPromptOcr", b =>
+                {
+                    b.HasOne("Flit.Comparendos.Api.Persistence.Modelo.PromptOcrVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PromptVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_evaluacion_prompt_ocr_prompt_ocr_version_prompt_version_id");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.LogMigracion", b =>

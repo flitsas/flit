@@ -65,6 +65,8 @@ public static class Modulos
         // OCR (HUs #13469–#13471): Anthropic si hay llave; si no, el modo simulado (local, DEV sin llave).
         services.AddScoped<Ocr.ServicioOcr>();
         services.AddSingleton<Ocr.ProcesadorOcr>();
+        services.AddScoped<Ocr.ServicioEvaluacionPrompt>();
+        services.AddSingleton<Ocr.EvaluadorPromptOcr>();
         services.Configure<Ocr.OpcionesAnthropic>(configuration.GetSection(Ocr.OpcionesAnthropic.Seccion));
         if (configuration[$"{Ocr.OpcionesAnthropic.Seccion}:ApiKey"] is { Length: > 0 })
             services.AddHttpClient<Ocr.IProveedorOcr, Ocr.ProveedorOcrAnthropic>(h => h.Timeout = TimeSpan.FromMinutes(3));
@@ -154,6 +156,7 @@ public static class Modulos
             services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
             services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorOcr>());
+            services.AddHostedService(sp => sp.GetRequiredService<Ocr.EvaluadorPromptOcr>());
         }
         return services;
     }

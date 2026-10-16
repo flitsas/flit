@@ -37,6 +37,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<AlertaConfiguracion> AlertaConfiguraciones => Set<AlertaConfiguracion>();
     public DbSet<AlertaDestinatario> AlertaDestinatarios => Set<AlertaDestinatario>();
     public DbSet<PromptOcrVersion> PromptsOcr => Set<PromptOcrVersion>();
+    public DbSet<EvaluacionPromptOcr> EvaluacionesPromptOcr => Set<EvaluacionPromptOcr>();
     public DbSet<ConfiguracionConsultas> ConfiguracionesConsultas => Set<ConfiguracionConsultas>();
     public DbSet<ConfiguracionConsultaCanal> ConfiguracionConsultaCanales => Set<ConfiguracionConsultaCanal>();
     public DbSet<Comparendo> Comparendos => Set<Comparendo>();
@@ -305,6 +306,17 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.Property(x => x.Modelo).HasMaxLength(80);
             e.HasIndex(x => x.NumeroVersion).IsUnique();
             e.HasIndex(x => x.Publicada).IsUnique().HasFilter("publicada");
+        });
+        m.Entity<EvaluacionPromptOcr>(e =>
+        {
+            e.ToTable("evaluacion_prompt_ocr");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Estado).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Mensaje).HasMaxLength(500);
+            e.Property(x => x.Detalle).HasColumnType("jsonb");
+            e.HasOne<PromptOcrVersion>().WithMany().HasForeignKey(x => x.PromptVersionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.PromptVersionId, x.CreadoEn });
+            e.HasIndex(x => x.Estado).HasFilter("estado = 'EnCurso'");
         });
     }
 
