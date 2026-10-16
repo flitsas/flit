@@ -193,8 +193,8 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await RadicarAsync(Radicado);
         await using var sp = Servicios(outboxQueFalla: true);
 
-        await FluentActions.Awaiting(() => Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken))
-            .Should().ThrowAsync<InvalidOperationException>();
+        (await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken))
+            .Should().Be(1, "solo cuenta el borrador, que se cierra sin enviar; el aviso que falla se aparta sin frenar el ciclo");
 
         (await TrabajosAsync()).Should().BeEmpty();
         (await EstadoAvisoAsync(Radicado)).Pendiente.Should().BeTrue("la transacción se revirtió completa");
@@ -220,6 +220,123 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         versiones.Should().HaveCount(2);
         versiones[1].Should().BeGreaterThan(versiones[0]);
         versiones[1].Should().Be(await VersionAsync(Radicado));
+    }
+
+    [PostgresFact]
+    public async Task UnaTransaccionMasAntiguaAbiertaRetieneElAvisoComoElFeed()
+    {
+        await SembrarAsync();
+        var ct = TestContext.Current.CancellationToken;
+
+        // L: cualquier transacción con id asignado que sigue abierta. El feed no entrega cambios confirmados después de
+        // que L empezó (pg_snapshot_xmin); el aviso tampoco puede salir antes.
+        await using var connL = await Fixture.OpenConnectionAsync();
+        await using var txL = await connL.BeginTransactionAsync(ct);
+        await using (var cmd = new NpgsqlCommand("SELECT pg_current_xact_id()", connL, txL))
+        {
+            await cmd.ExecuteScalarAsync(ct);
+        }
+
+        await RadicarAsync(Radicado);
+        await using var sp = Servicios();
+        var d = Despachador(sp);
+
+        await d.ProcesarPendientesAsync(ct);
+        (await TrabajosAsync()).Should().BeEmpty("con L abierta el cambio todavía no está en el feed");
+        (await EstadoAvisoAsync(Radicado)).Pendiente.Should().BeTrue();
+
+        await txL.CommitAsync(ct);
+        await d.ProcesarPendientesAsync(ct);
+        (await TrabajosAsync()).Should().ContainSingle();
+    }
+
+    [PostgresFact]
+    public async Task ConEscritoresConcurrentesLaUltimaVersionDeCadaTramiteRadicadoSeAvisa()
+    {
+        await SembrarAsync();
+        var ids = new List<Guid>();
+        for (var n = 40; n < 52; n++)
+        {
+            var id = Guid.Parse($"5a5a5a5a-00{n:D2}-4000-8000-000000013624");
+            await SembrarTramiteAsync(id, n);
+            ids.Add(id);
+        }
+
+        await using var sp = Servicios(lote: 5);
+        var d = Despachador(sp);
+        using var fin = new CancellationTokenSource();
+        var despachador = Task.Run(async () =>
+        {
+            while (!fin.IsCancellationRequested)
+            {
+                await d.ProcesarPendientesAsync(CancellationToken.None);
+                await Task.Delay(10);
+            }
+        });
+
+        // Escritores: transacciones que radican o cambian un trámite y confirman tras una pausa, mientras el
+        // despachador reclama. Varios toman la versión y confirman fuera de orden.
+        var escritores = Enumerable.Range(0, 4).Select(w => Task.Run(async () =>
+        {
+            var azar = new Random(13624 + w);
+            for (var m = 0; m < 15; m++)
+            {
+                var id = ids[azar.Next(ids.Count)];
+                await using var conn = await Fixture.OpenConnectionAsync();
+                await using var tx = await conn.BeginTransactionAsync();
+                var sql = azar.Next(2) == 0
+                    ? $"INSERT INTO tramites.procedure_instance_status_history (tenant_id, procedure_instance_id, to_status) VALUES ('{Cliente}', '{id}', 'entregado')"
+                    : $"UPDATE tramites.procedure_instances SET status = status WHERE id = '{id}'";
+                await using (var cmd = new NpgsqlCommand(sql, conn, tx))
+                {
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                await using (var pausa = new NpgsqlCommand("SELECT pg_sleep(@s)", conn, tx))
+                {
+                    pausa.Parameters.AddWithValue("s", azar.Next(0, 80) / 1000.0);
+                    await pausa.ExecuteNonQueryAsync();
+                }
+
+                await tx.CommitAsync();
+            }
+        })).ToList();
+
+        await Task.WhenAll(escritores);
+        await fin.CancelAsync();
+        await despachador;
+        while (await d.ProcesarPendientesAsync(TestContext.Current.CancellationToken) > 0)
+        {
+        }
+
+        var ultimoAvisado = (await TrabajosAsync())
+            .Select(t => JsonDocument.Parse(t.Trabajo.Cuerpo).RootElement)
+            .GroupBy(e => e.GetProperty("id").GetGuid())
+            .ToDictionary(g => g.Key, g => g.Max(e => e.GetProperty("syncVersion").GetInt64()));
+        foreach (var id in ids)
+        {
+            var radicado = await EscalarAsync<long>(
+                $"SELECT count(*) FROM tramites.procedure_instance_status_history WHERE procedure_instance_id = '{id}' AND to_status = 'entregado'") > 0;
+            if (radicado)
+            {
+                ultimoAvisado.Should().ContainKey(id, "un trámite radicado tiene que haberse avisado");
+                ultimoAvisado[id].Should().Be(await VersionAsync(id), $"la última versión de {id} tiene que haberse avisado");
+            }
+            else
+            {
+                ultimoAvisado.Should().NotContainKey(id, "un borrador nunca radicado no se avisa");
+            }
+        }
+
+        (await EscalarAsync<long>("SELECT count(*) FROM integrations.flito_sync_signals WHERE pendiente_desde IS NOT NULL"))
+            .Should().Be(0, "no queda nada pendiente");
+    }
+
+    private async Task<T> EscalarAsync<T>(string sql)
+    {
+        await using var conn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        return (T)(await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
 
     private static FlitoSignalDispatcher Despachador(ServiceProvider sp) =>

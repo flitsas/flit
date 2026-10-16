@@ -20,8 +20,12 @@ namespace Flit.Infrastructure.FlitoSignals;
 /// <c>notificaciones.webhook.send</c> en la outbox del SDK (origen <c>flito</c>) y sella el aviso; core-notificaciones
 /// lo entrega con sus reintentos y su <c>.dlq</c>. La clave de firma no sale de core-api.
 /// <list type="bullet">
-///   <item>Solo toma cambios con más de <see cref="FlitoSignalsOptions.StabilityLag"/> (la ventana del feed v3.1): antes,
-///   FLITO leería el feed y todavía no encontraría el cambio.</item>
+///   <item>Solo toma cambios ESTABLES con las dos condiciones del feed v3.1: más de
+///   <see cref="FlitoSignalsOptions.StabilityLag"/> de antigüedad y ninguna transacción más antigua todavía abierta
+///   (<c>sync_xact &lt; pg_snapshot_xmin</c>). Si no, FLITO leería el feed y todavía no encontraría el cambio.</item>
+///   <item>Reclama en dos sentencias: primero bloquea el aviso y después lee el trámite con una foto NUEVA. Así nunca
+///   decide con el estado de antes de un cambio confirmado durante el reclamo, y un cambio posterior espera el bloqueo
+///   del aviso y lo vuelve a dejar pendiente.</item>
 ///   <item>Aplica la regla del feed: solo trámites radicados al menos una vez. Un aviso de un borrador se cierra sin
 ///   enviar (lo vuelve a abrir el siguiente cambio).</item>
 ///   <item>Reclamo <c>FOR NO KEY UPDATE SKIP LOCKED</c> y una transacción por aviso: seguro con varias réplicas.</item>
@@ -46,11 +50,12 @@ internal sealed partial class FlitoSignalDispatcher(
         while (!stoppingToken.IsCancellationRequested)
         {
             var o = options.CurrentValue;
+            var loteCompleto = false;
             try
             {
                 if (o.EsOperable(out _))
                 {
-                    await ProcesarPendientesAsync(stoppingToken).ConfigureAwait(false);
+                    loteCompleto = await ProcesarPendientesAsync(stoppingToken).ConfigureAwait(false) >= o.BatchSize;
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -60,6 +65,11 @@ internal sealed partial class FlitoSignalDispatcher(
             catch (Exception ex)
             {
                 LogErrorCiclo(logger, ex);
+            }
+
+            if (loteCompleto)
+            {
+                continue; // hay atraso (p. ej. al volver a encender): sale sin esperar entre lotes
             }
 
             try
@@ -74,7 +84,11 @@ internal sealed partial class FlitoSignalDispatcher(
         }
     }
 
-    /// <summary>Despacha hasta <see cref="FlitoSignalsOptions.BatchSize"/> avisos maduros. Devuelve cuántos reclamó.</summary>
+    /// <summary>
+    /// Despacha hasta <see cref="FlitoSignalsOptions.BatchSize"/> avisos maduros. Devuelve cuántos despachó (enviados o
+    /// cerrados sin enviar). Un aviso que
+    /// falla o cuyo trámite todavía no es estable se aparta por el resto del ciclo: no frena a los demás.
+    /// </summary>
     internal async Task<int> ProcesarPendientesAsync(CancellationToken ct)
     {
         var o = options.CurrentValue;
@@ -83,21 +97,46 @@ internal sealed partial class FlitoSignalDispatcher(
             return 0;
         }
 
+        var apartados = new List<Guid>();
         var reclamados = 0;
         for (var i = 0; i < o.BatchSize && !ct.IsCancellationRequested; i++)
         {
-            if (!await ProcesarSiguienteAsync(o, ct).ConfigureAwait(false))
+            Guid? enCurso = null;
+            try
             {
-                break;
-            }
+                var resultado = await ProcesarSiguienteAsync(o, apartados, id => enCurso = id, ct).ConfigureAwait(false);
+                if (resultado == Resultado.SinPendientes)
+                {
+                    break;
+                }
 
-            reclamados++;
+                if (resultado == Resultado.Aplazado)
+                {
+                    apartados.Add(enCurso!.Value);
+                    continue;
+                }
+
+                reclamados++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && enCurso is not null)
+            {
+                LogErrorAviso(logger, enCurso.Value, ex);
+                apartados.Add(enCurso.Value);
+            }
         }
 
         return reclamados;
     }
 
-    private async Task<bool> ProcesarSiguienteAsync(FlitoSignalsOptions o, CancellationToken ct)
+    private enum Resultado
+    {
+        SinPendientes,
+        Despachado,
+        Aplazado,
+    }
+
+    private async Task<Resultado> ProcesarSiguienteAsync(
+        FlitoSignalsOptions o, IReadOnlyList<Guid> apartados, Action<Guid> alReclamar, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var outbox = scope.ServiceProvider.GetService<IPlatformOutbox>();
@@ -109,7 +148,7 @@ internal sealed partial class FlitoSignalDispatcher(
                 LogSinBus(logger);
             }
 
-            return false;
+            return Resultado.SinPendientes;
         }
 
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
@@ -119,12 +158,24 @@ internal sealed partial class FlitoSignalDispatcher(
             db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             await db.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", ct).ConfigureAwait(false);
+            var conn = db.Database.GetDbConnection();
+            var dbTx = tx.GetDbTransaction();
 
-            var aviso = await ReclamarAsync(db.Database.GetDbConnection(), tx.GetDbTransaction(), o.StabilityLag, ct).ConfigureAwait(false);
-            if (aviso is null)
+            var id = await ReclamarAsync(conn, dbTx, o.StabilityLag, apartados, ct).ConfigureAwait(false);
+            if (id is null)
             {
                 await tx.CommitAsync(ct).ConfigureAwait(false);
-                return false;
+                return Resultado.SinPendientes;
+            }
+
+            alReclamar(id.Value);
+            var aviso = await LeerTramiteAsync(conn, dbTx, id.Value, ct).ConfigureAwait(false);
+            if (aviso.Existe && !aviso.Estable)
+            {
+                // Lo cambió una transacción confirmada después de la foto del reclamo: aún no está en el feed. Queda
+                // pendiente y sale en un ciclo próximo.
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+                return Resultado.Aplazado;
             }
 
             var enviar = aviso.Existe && !aviso.Migrado && aviso.Radicado;
@@ -152,7 +203,7 @@ internal sealed partial class FlitoSignalDispatcher(
                 LogCerradoSinEnviar(logger, aviso.Id);
             }
 
-            return true;
+            return Resultado.Despachado;
         }).ConfigureAwait(false);
     }
 
@@ -184,17 +235,46 @@ internal sealed partial class FlitoSignalDispatcher(
         Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(clave), Encoding.UTF8.GetBytes(cuerpo))).ToLowerInvariant();
 
     /// <summary>
-    /// Reclama el aviso maduro más antiguo con el estado ACTUAL del trámite (versión, fecha, borrado) y la regla de
-    /// radicado del feed. SQL crudo: EF no expone el locking clause. LEFT JOIN: un trámite que ya no existe cierra el aviso.
+    /// Bloquea el aviso maduro más antiguo. «Maduro» = las dos condiciones de estabilidad del feed. El LEFT JOIN solo
+    /// filtra (no bloquea el trámite): los datos para decidir se leen después, en <see cref="LeerTramiteAsync"/>.
+    /// SQL crudo: EF no expone el locking clause.
     /// </summary>
-    private static async Task<AvisoReclamado?> ReclamarAsync(DbConnection conn, DbTransaction tx, TimeSpan lag, CancellationToken ct)
+    private static async Task<Guid?> ReclamarAsync(
+        DbConnection conn, DbTransaction tx, TimeSpan lag, IReadOnlyList<Guid> apartados, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
-            SELECT s.procedure_instance_id,
-                   pi.id IS NOT NULL,
+            SELECT s.procedure_instance_id
+              FROM integrations.flito_sync_signals s
+              LEFT JOIN tramites.procedure_instances pi ON pi.id = s.procedure_instance_id
+             WHERE s.pendiente_desde IS NOT NULL
+               AND s.sync_changed_at <= clock_timestamp() - @lag
+               AND (pi.id IS NULL OR COALESCE(pi.sync_xact, '0'::xid8) < pg_snapshot_xmin(pg_current_snapshot()))
+               AND s.procedure_instance_id <> ALL(@apartados)
+             ORDER BY s.sync_changed_at
+             LIMIT 1
+             FOR NO KEY UPDATE OF s SKIP LOCKED
+            """;
+        Parametro(cmd, "lag", lag);
+        Parametro(cmd, "apartados", apartados.ToArray());
+
+        var valor = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return valor is Guid id ? id : null;
+    }
+
+    /// <summary>
+    /// Estado ACTUAL del trámite, en una sentencia aparte (foto nueva) con el aviso ya bloqueado, y la regla de radicado
+    /// del feed. Si el trámite ya no existe se usan los datos del aviso (y no se envía).
+    /// </summary>
+    private static async Task<AvisoReclamado> LeerTramiteAsync(DbConnection conn, DbTransaction tx, Guid id, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            SELECT pi.id IS NOT NULL,
                    COALESCE(pi.is_migrated, false),
+                   COALESCE(pi.sync_xact, '0'::xid8) < pg_snapshot_xmin(pg_current_snapshot()),
                    COALESCE(pi.tenant_id, s.tenant_id),
                    COALESCE(pi.sync_version, s.sync_version),
                    COALESCE(pi.sync_changed_at, s.sync_changed_at),
@@ -205,25 +285,15 @@ internal sealed partial class FlitoSignalDispatcher(
                               AND h.to_status IN ('preasignacion', 'entregado'))
               FROM integrations.flito_sync_signals s
               LEFT JOIN tramites.procedure_instances pi ON pi.id = s.procedure_instance_id
-             WHERE s.pendiente_desde IS NOT NULL
-               AND s.sync_changed_at <= clock_timestamp() - @lag
-             ORDER BY s.sync_changed_at
-             LIMIT 1
-             FOR NO KEY UPDATE OF s SKIP LOCKED
+             WHERE s.procedure_instance_id = @id
             """;
-        var p = cmd.CreateParameter();
-        p.ParameterName = "lag";
-        p.Value = lag;
-        cmd.Parameters.Add(p);
+        Parametro(cmd, "id", id);
 
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        if (!await r.ReadAsync(ct).ConfigureAwait(false))
-        {
-            return null;
-        }
-
+        await r.ReadAsync(ct).ConfigureAwait(false);
         return new AvisoReclamado(
-            r.GetGuid(0),
+            id,
+            r.GetBoolean(0),
             r.GetBoolean(1),
             r.GetBoolean(2),
             r.GetGuid(3),
@@ -233,8 +303,17 @@ internal sealed partial class FlitoSignalDispatcher(
             r.GetBoolean(7));
     }
 
+    private static void Parametro(DbCommand cmd, string nombre, object valor)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = nombre;
+        p.Value = valor;
+        cmd.Parameters.Add(p);
+    }
+
     private sealed record AvisoReclamado(
-        Guid Id, bool Existe, bool Migrado, Guid TenantId, long SyncVersion, DateTimeOffset FechaUltimoCambio, bool Eliminado, bool Radicado);
+        Guid Id, bool Existe, bool Migrado, bool Estable, Guid TenantId, long SyncVersion, DateTimeOffset FechaUltimoCambio,
+        bool Eliminado, bool Radicado);
 
     /// <summary>Cuerpo del aviso: el contrato acordado con FLITO (domain-events.v1.yaml, flito-webhook/tramite.cambio).</summary>
     internal sealed record AvisoFlito(
@@ -251,4 +330,7 @@ internal sealed partial class FlitoSignalDispatcher(
 
     [LoggerMessage(EventId = 13633, Level = LogLevel.Error, Message = "Avisos a FLITO: error en el ciclo de despacho; se reintentará.")]
     private static partial void LogErrorCiclo(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 13634, Level = LogLevel.Error, Message = "Avisos a FLITO: error al despachar el aviso del trámite {ProcedureInstanceId}; queda pendiente y se reintentará en el próximo ciclo.")]
+    private static partial void LogErrorAviso(ILogger logger, Guid procedureInstanceId, Exception ex);
 }
