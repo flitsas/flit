@@ -27,8 +27,9 @@ public sealed class FlitoSignalsOptions
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Antigüedad mínima de un cambio para avisarlo: la ventana de estabilidad del feed v3.1. Antes, FLITO leería el
-    /// feed y todavía no encontraría el cambio.
+    /// Antigüedad mínima de un cambio para avisarlo: la ventana de estabilidad del feed v3.1. Es una de las dos
+    /// condiciones del feed; la otra (que no quede abierta ninguna transacción más antigua) la comprueba el despachador
+    /// al reclamar. Con las dos, FLITO encuentra el cambio al leer el feed.
     /// </summary>
     public TimeSpan StabilityLag { get; set; } = TimeSpan.FromSeconds(5);
 
