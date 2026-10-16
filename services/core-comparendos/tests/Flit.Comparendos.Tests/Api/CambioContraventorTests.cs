@@ -6,6 +6,7 @@ using Flit.Comparendos.Api.Plataforma;
 using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 
@@ -144,5 +145,28 @@ public sealed class CambioContraventorTests(ApiConFuente api) : IClassFixture<Ap
         var viabilidad = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/viabilidad", ct);
         viabilidad.GetProperty("condiciones").EnumerateArray().Where(c => !c.GetProperty("cumple").GetBoolean()).Select(c => c.GetProperty("codigo").GetString())
             .Should().Equal(["REPRESENTANTE"], "el propietario (con DV pegado) es el NIT vigilado, pero solo el RL de ese NIT puede firmar por él");
+    }
+
+    /// <summary>Hallazgos B6-2 y B9-1: el NIT que la fuente trae con el dígito pegado sale en el documento como «base-DV».</summary>
+    [Fact]
+    public async Task NitConDigitoPegado_SaleEnElDocumentoComoBaseGuionDv()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, id, _) = await PrepararAsync();
+        var nitBase = await api.EnDbAsync(async db =>
+        {
+            var nit = await db.IdentificacionesMonitoreadas.SingleAsync(n => n.TenantId == empresa, ct);
+            var c = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
+            c.NumeroDocumentoInfractor = nit.NumeroBase + Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nit.NumeroBase);
+            await db.SaveChangesAsync(ct);
+            return nit.NumeroBase;
+        });
+
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Persistence.ComparendosDb>();
+        var comparendo = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
+        var valores = await scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Modulos.Plantillas.ContextoPlantilla>().DeAsync(comparendo, null, ct);
+        valores["peticionario.numero_documento"].Should().Be($"{nitBase}-{Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nitBase)}");
     }
 }
