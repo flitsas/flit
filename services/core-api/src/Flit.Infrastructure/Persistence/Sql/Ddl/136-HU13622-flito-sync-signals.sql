@@ -29,8 +29,10 @@ CREATE TABLE IF NOT EXISTS integrations.flito_sync_signals (
     pendiente_desde       timestamptz,
     encolado_en           timestamptz,
     CONSTRAINT pk_flito_sync_signals PRIMARY KEY (procedure_instance_id),
+    -- CASCADE: un aviso es una cola técnica; no debe impedir el borrado físico de una compañía (sin FK al trámite,
+    -- el aviso de un trámite borrado seguiría ahí).
     CONSTRAINT fk_flito_sync_signals_tenants FOREIGN KEY (tenant_id)
-        REFERENCES identity.tenants(id) ON DELETE RESTRICT ON UPDATE CASCADE
+        REFERENCES identity.tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS ix_flito_sync_signals_tenant

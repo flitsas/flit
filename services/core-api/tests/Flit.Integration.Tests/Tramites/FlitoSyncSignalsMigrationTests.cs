@@ -217,6 +217,20 @@ public sealed class FlitoSyncSignalsMigrationTests(PostgresDatabaseFixture fixtu
             await EscalarAsync<long>("SELECT sync_version FROM tramites.procedure_instances WHERE id = @id"));
     }
 
+    [PostgresFact]
+    public async Task BorrarLaCompaniaConSusTramitesNoQuedaBloqueadoPorLosAvisos()
+    {
+        await SembrarAsync();
+        (await AvisoAsync(Tramite)).Should().NotBeNull();
+
+        await EjecutarAsync("DELETE FROM tramites.procedure_instances WHERE tenant_id = @tenant");
+        await EjecutarAsync("DELETE FROM identity.users WHERE home_tenant_id = @tenant");
+        await FluentActions.Awaiting(() => EjecutarAsync("DELETE FROM identity.tenants WHERE id = @tenant"))
+            .Should().NotThrowAsync("el aviso no tiene FK al trámite y se va en cascada con la compañía");
+
+        (await AvisoAsync(Tramite)).Should().BeNull();
+    }
+
     private sealed record Aviso(Guid TenantId, long SyncVersion, bool Eliminado, DateTimeOffset? PendienteDesde, DateTimeOffset? EncoladoEn)
     {
         public bool Pendiente => PendienteDesde is not null;
