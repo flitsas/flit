@@ -121,6 +121,9 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # PDN se despliega por DIGEST en flit-gitops (job deploy-pdn-gitops), no por tag.
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -161,6 +164,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-api
+        id: build
         uses: docker/build-push-action@v6
         with:
           # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
@@ -178,6 +182,8 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -218,6 +224,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push frontend
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -250,6 +257,8 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -290,6 +299,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push python-ml
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./services/python-ml
@@ -305,6 +315,8 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -342,6 +354,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-ict
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./services/core-ict
@@ -352,8 +365,13 @@ jobs:
           cache-from: type=gha,scope=core-ict
           cache-to: type=gha,mode=max,scope=core-ict
 
+  # QA ya no corre en docker compose: desde el 2026-10-18 vive en el k3s de la 177 y se
+  # despliega con deploy-qa-gitops (abajo). Si este job corriera en staging, volveria a
+  # levantar el stack viejo de /opt/flitqa en paralelo al de k3s (misma base flitqa).
+  # PDN tampoco (k3s de la 169, deploy-pdn-gitops en release).
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
+    if: github.ref_name != 'release' && github.ref_name != 'staging'
     needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
     runs-on: ubuntu-latest
     # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
@@ -516,3 +534,113 @@ jobs:
           echo "Deploy a ${{ needs.setup.outputs.env_name }} FALLIDO. Revisa los logs arriba."
           echo "Rollback manual: ssh al VPS y ejecuta:"
           echo "  cd <deploy-path> && docker compose down && docker compose up -d"
+
+  # ── QA por GitOps (k3s de la 177) ───────────────────────────────────────────
+  # Escribe los digests recien construidos en flit-gitops/services/flit2-qa/kustomization.yaml;
+  # Argo CD (root-vps-177, app flit2-qa) los aplica. Rollback = revertir ese commit.
+  #
+  # OJO: la CONFIGURACION de QA ya no sale de docker-compose.prod.yml ni del .env de la
+  # 177. Vive en flit-gitops/services/flit2-qa/ (configmaps.yaml + sealed-secrets.yaml).
+  # Una variable nueva en el compose NO llega a QA sola: hay que agregarla alla.
+  deploy-qa-gitops:
+    name: Deploy QA (GitOps → k3s 177)
+    if: github.ref_name == 'staging'
+    needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: https://qa.flitsas.online
+    env:
+      CORE_API_DIGEST: ${{ needs.build-core-api.outputs.digest }}
+      CORE_ICT_DIGEST: ${{ needs.build-core-ict.outputs.digest }}
+      FRONTEND_DIGEST: ${{ needs.build-frontend.outputs.digest }}
+      PYTHON_ML_DIGEST: ${{ needs.build-python-ml.outputs.digest }}
+    steps:
+      - name: Checkout (para comparar el compose)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Aviso, no bloqueo: si este push cambio docker-compose.prod.yml, lo mas probable es que
+      # traiga una variable de entorno nueva que en QA hay que replicar a mano en flit-gitops.
+      - name: Avisar si cambio docker-compose.prod.yml
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "Sin commit previo para comparar (workflow_dispatch o rama nueva)."
+            exit 0
+          fi
+          if ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml; then
+            echo "::warning title=Revisar config de QA::docker-compose.prod.yml cambio en este despliegue. QA ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-qa/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
+            git diff "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml | grep -E '^[+-][^+-]' | head -60 || true
+          fi
+
+      - name: Validar digests
+        run: |
+          for v in CORE_API_DIGEST CORE_ICT_DIGEST FRONTEND_DIGEST PYTHON_ML_DIGEST; do
+            d="${!v}"
+            if [[ ! "$d" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::$v no es un digest valido: '$d'"
+              exit 1
+            fi
+            echo "$v=$d"
+          done
+
+      - name: Actualizar digests en flit-gitops
+        env:
+          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${GITOPS_TOKEN}@github.com/${{ github.repository_owner }}/flit-gitops.git" gitops
+          cd gitops
+          K=services/flit2-qa/kustomization.yaml
+          set_digest() {
+            # Falla si la imagen no esta en la kustomization (evita un despliegue a medias).
+            yq -e "(.images[] | select(.name == \"$1\"))" "$K" > /dev/null
+            yq -i "(.images[] | select(.name == \"$1\")).digest = \"$2\"" "$K"
+            yq -i "del((.images[] | select(.name == \"$1\")).newTag)" "$K"
+          }
+          # gateway y migracion-api usan la imagen de core-api con otro entrypoint.
+          set_digest "${{ env.CORE_API_IMAGE }}"  "$CORE_API_DIGEST"
+          set_digest "${{ env.CORE_ICT_IMAGE }}"  "$CORE_ICT_DIGEST"
+          set_digest "${{ env.FRONTEND_IMAGE }}"  "$FRONTEND_DIGEST"
+          set_digest "${{ env.PYTHON_ML_IMAGE }}" "$PYTHON_ML_DIGEST"
+          git diff --stat
+          git config user.name "flit-ci"
+          git config user.email "ci@flitsas.com"
+          git add "$K"
+          if git diff --cached --quiet; then
+            echo "Los digests ya eran estos: nada que desplegar."
+            exit 0
+          fi
+          git commit -m "flit2-qa: despliegue ${GITHUB_SHA::7} (flitsas/flit staging)" \
+                     -m "core-api ${CORE_API_DIGEST}" -m "core-ict ${CORE_ICT_DIGEST}" \
+                     -m "frontend ${FRONTEND_DIGEST}" -m "python-ml ${PYTHON_ML_DIGEST}"
+          for i in 1 2 3; do
+            git push && exit 0
+            echo "Push rechazado (intento $i); rebase y reintento..."
+            git pull --rebase
+          done
+          echo "::error::No se pudo empujar a flit-gitops tras 3 intentos"
+          exit 1
+
+      # Argo CD sondea el repo cada ~3 min y core-api/core-ict van con Recreate (corte de
+      # segundos). Esto comprueba que QA SIGUE SANO tras el despliegue; la version que corre
+      # se ve en Argo CD de la 177 (revision de flit2-qa).
+      - name: Comprobar que QA responde
+        run: |
+          sleep 240
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 https://api.qa.flitsas.online/health > /dev/null \
+               && curl -fsS --max-time 10 -o /dev/null https://qa.flitsas.online/; then
+              echo "QA responde (intento $i)."
+              exit 0
+            fi
+            echo "Intento $i: aun no responde; reintento en 15 s"
+            sleep 15
+          done
+          echo "::error::QA no responde 11 min despues del despliegue. Revisar Argo CD (flit2-qa) en la 177; rollback = revertir el commit de flit-gitops."
+          exit 1
