@@ -32,6 +32,7 @@ import { useMostrarLoteDescarga } from '@/components/shared/LoteDescargaTracker'
 import type { LoteConsolidados, TipoDocumentoLote } from '@/lib/api/types-consolidado-lotes';
 import { consolidadoLotesClient } from '@/lib/api/consolidado-lotes-client';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useFamilyAccess } from '@/hooks/useFamilyAccess';
 import {
   ETIQUETA_CLIENTE_HIJO,
   ETIQUETA_CLIENTE_PROPIO,
@@ -364,6 +365,9 @@ interface TramitesTableProps {
 
 export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: TramitesTableProps) {
   const router = useRouter();
+  // HU #13665 — Ver / Crear por familia: pestañas visibles y botón «Nuevo trámite».
+  const familyAccess = useFamilyAccess();
+  const puedeCrearAlguna = familyAccess.creatable.length > 0;
   const [items, setItems] = useState<InstanceSummary[]>([]);
   /** Conteo por estado del UNIVERSO filtrado — lo sirve el backend, no se deriva de `items`. */
   const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
@@ -1401,6 +1405,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         {/* flit-tramites-chrome: tabs + filtros ANTES de KPIs */}
         <TramitesListToolbar
           modalidad={modalidad}
+          familias={familyAccess.readable}
           onModalidadChange={handleModalidadChange}
           onRefresh={handleRefresh}
           loading={loading}
@@ -1486,7 +1491,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 </button>
               }
               bulkUploadAction={
-                onBulkUpload ? (
+                onBulkUpload && puedeCrearAlguna ? (
                   <button
                     type="button"
                     onClick={() => onBulkUpload()}
@@ -1544,6 +1549,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               />
             </div>
           ) : null}
+          {puedeCrearAlguna ? (
           <button
             type="button"
             onClick={() => onNewTramite?.()}
@@ -1562,6 +1568,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               trámite
             </span>
           </button>
+          ) : null}
         </div>
 
         {hayCambios && !loading ? <AvisoHayCambios onActualizar={() => void load()} /> : null}

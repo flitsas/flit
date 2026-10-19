@@ -544,7 +544,8 @@
           "title": "1. Antes de empezar",
           "paragraphs": [
             "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
-            "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes."
+            "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes.",
+            "Los permisos de ver y crear se otorgan por familia de trámite (Matrículas, Traspaso y Otros trámites). Solo verás las pestañas de las familias que puedes ver, y el asistente de «Nuevo trámite» solo ofrece las familias que puedes crear. Si tienes permiso para ver una familia pero no para crearla, puedes consultar sus trámites pero esa opción no aparece al crear. Si no puedes ver ninguna familia, al abrir Trámites volverás al inicio con el aviso «No tienes acceso a este módulo.»."
           ],
           "bullets": [
             "Ten a mano documentos de identidad de las partes (vendedor, comprador, mandante, etc.).",

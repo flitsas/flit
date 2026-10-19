@@ -16,12 +16,17 @@ interface Props {
   /** Familia seleccionada; cadena vacía = todas. */
   value: '' | ProcedureFamily;
   onChange: (v: '' | ProcedureFamily) => void;
+  /** HU #13665 — familias visibles (permiso Ver); sin la prop, todas. «Todos» se oculta si no hay ninguna. */
+  familias?: readonly ProcedureFamily[];
 }
 
-export function FamiliaTabs({ value, onChange }: Props) {
+export function FamiliaTabs({ value, onChange, familias }: Props) {
+  const tabs = familias
+    ? TABS.filter((t) => (t.value === '' ? familias.length > 0 : familias.includes(t.value)))
+    : TABS;
   return (
     <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Tipo de trámite">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = value === t.value;
         return (
           <button

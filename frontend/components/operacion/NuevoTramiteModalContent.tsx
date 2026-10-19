@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Info, Loader2 } from 'lucide-react';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
+import { useFamilyAccess } from '@/hooks/useFamilyAccess';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   TIPOS_UI_MOCKUP,
@@ -207,6 +208,8 @@ export function NuevoTramiteModalContent({
   tituloEnContenedor = false,
 }: Props) {
   const { familias, status, error, reload } = useTiposHabilitados();
+  // HU #13665 — la tarjeta de una familia sin permiso Crear no se ofrece (no basta deshabilitarla).
+  const { canCreate } = useFamilyAccess();
   const [tipo, setTipo] = useState<NuevoTramiteTipoUi | null>(null);
   const [leasing, setLeasing] = useState(false);
   const [modalidad, setModalidad] = useState<ModalidadTraspasoUi>('bilateral');
@@ -366,7 +369,7 @@ export function NuevoTramiteModalContent({
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {TIPOS_UI_MOCKUP.map((t) => {
+        {TIPOS_UI_MOCKUP.filter((t) => canCreate(t.id)).map((t) => {
           const on = tipo === t.id;
           const blocked = estaBloqueada(t.id);
           const noFamilia = !tieneTipos(t.id);
