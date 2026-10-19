@@ -117,8 +117,22 @@ public sealed class FamilyPermissionEnforcementTests : IClassFixture<TramitesCre
         Build(true, null).CanCreate(ProcedureFamily.Matriculas).Should().BeTrue();
 
         var grpc = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("role_code", "ict")], "test")) };
-        grpc.Request.ContentType = "application/grpc";
+        var method = new global::Grpc.Core.Method<string, string>(global::Grpc.Core.MethodType.Unary, "ict", "Crear",
+            global::Grpc.Core.Marshallers.StringMarshaller, global::Grpc.Core.Marshallers.StringMarshaller);
+        grpc.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(
+            new global::Grpc.AspNetCore.Server.GrpcMethodMetadata(typeof(object), method)), "grpc"));
         Build(true, grpc).CanCreate(ProcedureFamily.Matriculas).Should().BeTrue();
+    }
+
+    // Un cliente REST no se exime enviando Content-Type: application/grpc (el header lo controla el cliente).
+    [Fact]
+    public void ContentTypeGrpc_EnRutaRest_SigueExigiendo()
+    {
+        var rest = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("role_code", "Radicador")], "test")) };
+        rest.Request.ContentType = "application/grpc";
+
+        Build(true, rest).CanRead(ProcedureFamily.Matriculas).Should().BeFalse();
+        Build(true, rest).ReadableFamilyCodes().Should().BeEmpty();
     }
 
     // HTTP: la plantilla fija la familia del lote (matricula/traspaso/otros) → 403 sin el «Crear» de esa familia.

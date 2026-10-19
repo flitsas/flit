@@ -8,7 +8,8 @@ namespace Flit.Api.Authorization;
 /// <summary>
 /// HU #13664 — exigencia de los permisos Ver/Crear por familia de trámite, detrás de
 /// <see cref="ModulePermissionEnforcementOptions"/>. Misma regla que <see cref="PermissionAuthorizationHandler.Grants"/>
-/// (bypass SuperAdmin, slug en el claim <c>permissions</c>). Las llamadas gRPC (ICT) no llevan permisos de usuario: se eximen.
+/// (bypass SuperAdmin, slug en el claim <c>permissions</c>). Los endpoints gRPC (ICT) no llevan permisos de usuario: se eximen
+/// por su metadata de endpoint, nunca por el Content-Type.
 /// </summary>
 public sealed class HttpProcedureFamilyPermissionGate(
     IHttpContextAccessor accessor, IOptionsMonitor<ModulePermissionEnforcementOptions> options) : IProcedureFamilyPermissionGate
@@ -38,7 +39,8 @@ public sealed class HttpProcedureFamilyPermissionGate(
         return options.CurrentValue.Enabled
             && http is not null
             && user?.Identity?.IsAuthenticated == true
-            && http.Request.ContentType?.StartsWith("application/grpc", StringComparison.OrdinalIgnoreCase) != true;
+            // Solo se eximen los endpoints gRPC registrados (ICT): el Content-Type lo controla el cliente y no sirve de prueba.
+            && http.GetEndpoint()?.Metadata.GetMetadata<global::Grpc.AspNetCore.Server.GrpcMethodMetadata>() is null;
     }
 }
 
