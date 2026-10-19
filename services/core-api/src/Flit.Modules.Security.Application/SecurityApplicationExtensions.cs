@@ -4,6 +4,7 @@ using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.PermissionOverrides;
 using Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Application.Roles;
@@ -91,6 +92,8 @@ public static class SecurityApplicationExtensions
 
         // HU #13642 (ADR-0071) - permisos individuales por usuario: foto de módulo completo.
         services.AddScoped<GrantModuleOverridesHandler>();
+        services.AddScoped<PermissionCapCalculator>(); // HU #13644 - tope del administrador
+        services.AddScoped<ManageUserPermissionOverridesHandler>(); // HU #13644
 
         return services;
     }

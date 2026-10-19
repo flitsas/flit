@@ -122,6 +122,13 @@ public static class ApiSecurityExtensions
                     AdminAuthorization.SuperAdminRole,
                     AdminAuthorization.AdminCompanyRole,
                     AdminAuthorization.OtAdminRole))
+            .AddPolicy(AdminAuthorization.PermissionOverridesAdminPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireRole(
+                    AdminAuthorization.SuperAdminRole,
+                    AdminAuthorization.AdminCompanyRole,
+                    AdminAuthorization.OtAdminRole,
+                    AdminAuthorization.AdminTramitesRole))
             .AddPolicy(AdminAuthorization.OtModulePolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .AddRequirements(new OtModuleRequirement()))

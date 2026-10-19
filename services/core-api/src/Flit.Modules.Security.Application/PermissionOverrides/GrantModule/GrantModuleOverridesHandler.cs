@@ -3,10 +3,12 @@ using Flit.Modules.Security.Domain.PermissionOverrides;
 namespace Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 
 /// <summary>Otorga (o niega) un módulo completo a un usuario en un tenant. Validaciones de tope/ámbito: HUs posteriores.</summary>
-public sealed record GrantModuleOverridesCommand(Guid TenantId, Guid UserId, Guid ActorUserId, string ModuleCode, string Effect);
+/// <param name="AllowedPermissionIds">HU #13644: si viene, solo se otorgan las acciones de este conjunto (tope del administrador); el resto cuenta en <c>OutOfCap</c>.</param>
+public sealed record GrantModuleOverridesCommand(
+    Guid TenantId, Guid UserId, Guid ActorUserId, string ModuleCode, string Effect, IReadOnlySet<Guid>? AllowedPermissionIds = null);
 
 /// <summary><c>Skipped</c> = acciones del módulo que el usuario ya tenía con un override activo (se conservan intactas).</summary>
-public sealed record GrantModuleOverridesResult(string ProductCode, Guid BatchId, int Created, int Skipped);
+public sealed record GrantModuleOverridesResult(string ProductCode, Guid BatchId, int Created, int Skipped, int OutOfCap = 0);
 
 /// <summary>
 /// "Módulo completo" es una FOTO (ADR-0071): crea un override por cada acción activa del módulo en este momento.
@@ -28,7 +30,10 @@ public sealed class GrantModuleOverridesHandler(IUserPermissionOverrideRepositor
             .Select(o => o.PermissionId).ToHashSet();
 
         var batchId = Guid.NewGuid();
-        var pending = module.Actions.Where(a => !existing.Contains(a.PermissionId)).ToList();
+        var notYetOverridden = module.Actions.Where(a => !existing.Contains(a.PermissionId)).ToList();
+        var pending = notYetOverridden
+            .Where(a => command.AllowedPermissionIds is null || command.AllowedPermissionIds.Contains(a.PermissionId))
+            .ToList();
         var overrides = pending
             .Select(a => new UserPermissionOverride(
                 Guid.NewGuid(), command.TenantId, command.UserId, module.ProductCode, a.PermissionId,
@@ -45,6 +50,7 @@ public sealed class GrantModuleOverridesHandler(IUserPermissionOverrideRepositor
             await repository.AddAsync(command.TenantId, overrides, audit, ct).ConfigureAwait(false);
         }
 
-        return new GrantModuleOverridesResult(module.ProductCode, batchId, overrides.Count, module.Actions.Count - overrides.Count);
+        return new GrantModuleOverridesResult(
+            module.ProductCode, batchId, overrides.Count, module.Actions.Count - notYetOverridden.Count, notYetOverridden.Count - pending.Count);
     }
 }

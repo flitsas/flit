@@ -74,4 +74,62 @@ public interface IUserPermissionOverrideRepository
         IReadOnlyList<UserPermissionOverride> items,
         IReadOnlyList<UserPermissionAuditEntry> audit,
         CancellationToken ct);
+
+    // HU #13644: tope del administrador y operaciones puntuales.
+
+    /// <summary>Permiso del catálogo con su producto, módulo y marca <c>enforced</c>; <c>null</c> si no existe o está inactivo.</summary>
+    Task<PermissionCatalogEntry?> GetPermissionAsync(Guid permissionId, CancellationToken ct);
+
+    /// <summary>Permisos activos del catálogo con <c>enforced = 'true'</c> (los únicos otorgables).</summary>
+    Task<IReadOnlyList<PermissionCatalogEntry>> ListEnforcedPermissionsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Ids de los permisos de los roles ACTIVOS del usuario en el tenant (unión), leídos de la BD en este momento.
+    /// No incluye overrides individuales.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> GetRolePermissionIdsAsync(Guid tenantId, Guid userId, CancellationToken ct);
+
+    /// <summary>Overrides ACTIVOS del usuario en el tenant, de todos los productos.</summary>
+    Task<IReadOnlyList<UserPermissionOverride>> ListActiveAsync(Guid tenantId, Guid userId, CancellationToken ct);
+
+    /// <summary>
+    /// En una sola transacción: da de baja (soft delete) los overrides indicados, inserta los nuevos y escribe la
+    /// bitácora. Con listas vacías solo registra la auditoría (rechazos).
+    /// </summary>
+    Task ApplyAsync(
+        Guid tenantId,
+        Guid actorUserId,
+        IReadOnlyList<Guid> removeOverrideIds,
+        IReadOnlyList<UserPermissionOverride> add,
+        IReadOnlyList<UserPermissionAuditEntry> audit,
+        CancellationToken ct);
+}
+
+/// <summary>Permiso del catálogo. <c>Enforced</c>: 'true' | 'false' | 'excluded'.</summary>
+public sealed record PermissionCatalogEntry(Guid Id, string Slug, string Name, string ModuleCode, string ProductCode, string Enforced)
+{
+    public bool IsEnforced => Enforced == "true";
+}
+
+/// <summary>Motivos de rechazo que quedan en <c>reason_code</c> de la bitácora (los demás los define #13645).</summary>
+public static class PermissionOverrideReasons
+{
+    public const string OutOfCap = "OUT_OF_CAP";
+
+    public const string NotEnforced = "NOT_ENFORCED";
+}
+
+public sealed class PermissionNotFoundForOverrideException(Guid permissionId)
+    : Exception($"El permiso '{permissionId}' no existe o no está activo.")
+{
+    public Guid PermissionId { get; } = permissionId;
+}
+
+/// <summary>La operación no cabe en el tope del administrador o el catálogo no la permite. Ya quedó auditada como REJECTED.</summary>
+public sealed class PermissionOverrideRejectedException(string reasonCode, string slug)
+    : Exception($"Operación rechazada ({reasonCode}) sobre '{slug}'.")
+{
+    public string ReasonCode { get; } = reasonCode;
+
+    public string Slug { get; } = slug;
 }
