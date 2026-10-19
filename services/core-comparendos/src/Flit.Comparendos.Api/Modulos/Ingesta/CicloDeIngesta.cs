@@ -213,8 +213,11 @@ public sealed partial class CicloDeIngesta(
                 await cola.EncolarAsync(new SolicitudTrabajo(TipoTrabajo.ReintentoContraventor, Disparo.Programado), ct).ConfigureAwait(false);
         }
 
+        // Fallido solo si no respondió nada: en la API municipal Cali puede fallar siempre (SSL) y cada clave queda «con
+        // error» aunque los demás municipios trajeron sus comparendos (prueba con la API real, 2026-10-19).
+        var algoRespondio = cache.Values.SelectMany(v => v).Any(h => h.Parcial.Resultado != ResultadoConsulta.Error);
         ciclo.Resultado = ciclo.ClavesTotal == 0 || ciclo.ClavesError == 0 ? ResultadoCiclo.Exitoso
-            : ciclo.ClavesError == ciclo.ClavesTotal ? ResultadoCiclo.Fallido
+            : ciclo.ClavesError == ciclo.ClavesTotal && !algoRespondio ? ResultadoCiclo.Fallido
             : ResultadoCiclo.Parcial;
 
         if (errores.Count > 0)

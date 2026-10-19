@@ -270,6 +270,36 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     }
 
     [Fact]
+    public async Task HU13467_UnMunicipioQueFallaEnTodasLasClaves_ElCicloEsParcialYEntraLoDemas()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaConNit("900444666");
+        await api.EnDbAsync(async db =>
+        {
+            db.MunicipiosFuente.AddRange(
+                new MunicipioFuente { Id = Guid.NewGuid(), CodigoFuente = "PRB-OK", Nombre = "Municipio que responde", Activo = true },
+                new MunicipioFuente { Id = Guid.NewGuid(), CodigoFuente = "PRB-SSL", Nombre = "Municipio con el certificado vencido", Activo = true });
+            await db.SaveChangesAsync();
+        });
+
+        // Como Cali en la API municipal real: falla en cada clave, y el otro municipio sí trae sus comparendos.
+        foreach (var variante in Flit.Comparendos.Domain.Identificadores.Nit.Variantes("900444666"))
+        {
+            api.Fuente.Respuestas[$"MunicipalNit:{variante}"] = () => new RespuestaFuente(
+            [
+                new ResultadoParcial("PRB-OK", ResultadoConsulta.ExitosaConDatos, [Item("M-0101")]),
+                new ResultadoParcial("PRB-SSL", ResultadoConsulta.Error, [], TipoErrorFuente.Red, "The SSL connection could not be established"),
+            ], 200, 10, null);
+        }
+
+        var ciclo = await api.CicloAsync(CanalIngesta.MunicipalNit, empresa);
+
+        (await Comparendo(empresa, "M0101")).Should().NotBeNull("lo que respondió el otro municipio entra");
+        (await api.EnDbAsync(db => db.CiclosIngesta.SingleAsync(c => c.Id == ciclo))).Resultado
+            .Should().Be(ResultadoCiclo.Parcial, "todas las claves tienen un municipio con error, pero entró información: no es «Fallido»");
+    }
+
+    [Fact]
     public async Task HU13461_Reaparece_SeReactivaSalvoInactivadoPorOperador()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
