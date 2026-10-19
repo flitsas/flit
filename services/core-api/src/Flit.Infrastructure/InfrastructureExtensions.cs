@@ -486,6 +486,9 @@ public static class InfrastructureExtensions
         services.Configure<FlitoSignals.FlitoSignalsOptions>(
             configuration.GetSection(FlitoSignals.FlitoSignalsOptions.SectionName));
         services.AddHostedService<FlitoSignals.FlitoSignalsStartupCheck>();
+        // HU #13624 — despachador: deja cada aviso maduro como trabajo notificaciones.webhook.send (origen flito) por la
+        // outbox del SDK; core-notificaciones hace el POST con reintentos y .dlq.
+        services.AddHostedService<FlitoSignals.FlitoSignalDispatcher>();
         // Épica #13216 — HU13376: carril de ítems del lote de descarga masiva de consolidados (reclamo con lease, equidad
         // entre lotes, reanudación). Sus parámetros y su interruptor viven en tramites.consolidado_export_settings: sin
         // fila (base de pruebas recién reseteada) o con is_active = false no reclama nada.
