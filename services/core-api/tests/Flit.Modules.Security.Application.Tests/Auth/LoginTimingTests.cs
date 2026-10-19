@@ -19,9 +19,11 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 /// ANTES de tocar <see cref="ITenantNetworkMembership"/> — el chequeo de red solo se alcanza con
 /// contraseña correcta (documentado abajo, <see cref="Login_ContrasenaCorrectaFueraDeRed_HaceUnaLlamadaAdicional"/>:
 /// no es un vector de enumeración porque exige conocer YA la contraseña).
-/// <c>Uso de ejemplo</c>: <see cref="MeasureMedianMs"/> hashea <paramref name="samples"/> veces con
-/// un <see cref="IPasswordHasher"/> de coste FIJO (Argon2 real de bajo coste, no simulado) y devuelve
-/// la mediana en milisegundos.
+/// <c>Uso de ejemplo</c>: <see cref="MeasureMediansMsAsync"/> calienta los dos caminos y luego los mide
+/// INTERCALADOS <see cref="Samples"/> veces con un <see cref="IPasswordHasher"/> de coste FIJO (Argon2
+/// real de bajo coste, no simulado) y devuelve la mediana de cada uno en milisegundos. Intercalar hace
+/// que una racha de carga del runner caiga sobre los dos caminos por igual en vez de inflar solo el
+/// que se medía en ese momento (#601: 77 ms contra 27 ms con mediciones secuenciales).
 /// <para>
 /// <see cref="TraitAttribute"/> "Timing": sensible al entorno de CI (carga de la máquina). Tolerancia
 /// amplia (ratio ≤ 2.0) a propósito: el objetivo es detectar una regresión estructural (un camino que
@@ -73,9 +75,8 @@ public sealed class LoginTimingTests
             repository, _hasher, jwtIssuer, auditWriter, NullAuditContextAccessor.Instance,
             membership, domainContext);
 
-        var inexistente = await MeasureMedianMsAsync(
-            () => handlerFor.HandleAsync(new LoginCommand("ghost@flit.local", "WrongPass1!"), CancellationToken.None));
-        var fueraDeRed = await MeasureMedianMsAsync(
+        var (inexistente, fueraDeRed) = await MeasureMediansMsAsync(
+            () => handlerFor.HandleAsync(new LoginCommand("ghost@flit.local", "WrongPass1!"), CancellationToken.None),
             () => handlerFor.HandleAsync(new LoginCommand("offnetwork@empresa.com", "WrongPass1!"), CancellationToken.None));
 
         var ratio = Math.Max(inexistente, fueraDeRed) / Math.Min(inexistente, fueraDeRed);
@@ -130,24 +131,46 @@ public sealed class LoginTimingTests
         await membership.Received(1).ResolveAsync(OffNetworkTenant, Arg.Any<CancellationToken>());
     }
 
-    private static async Task<double> MeasureMedianMsAsync(Func<Task> attempt)
+    private const int WarmupRounds = 3;
+
+    private static async Task<(double First, double Second)> MeasureMediansMsAsync(
+        Func<Task> first, Func<Task> second)
     {
-        var samples = new List<double>(Samples);
-        for (var i = 0; i < Samples; i++)
+        // Calentamiento: JIT del handler y el señuelo perezoso (DummyHash) fuera de la medición.
+        for (var i = 0; i < WarmupRounds; i++)
         {
-            var sw = Stopwatch.StartNew();
-            try
-            {
-                await attempt();
-            }
-            catch (InvalidCredentialsException)
-            {
-                // Resultado esperado — lo que se mide es cuánto tarda en llegar aquí.
-            }
-            sw.Stop();
-            samples.Add(sw.Elapsed.TotalMilliseconds);
+            await TimeAttemptMsAsync(first);
+            await TimeAttemptMsAsync(second);
         }
 
+        var firstSamples = new List<double>(Samples);
+        var secondSamples = new List<double>(Samples);
+        for (var i = 0; i < Samples; i++)
+        {
+            firstSamples.Add(await TimeAttemptMsAsync(first));
+            secondSamples.Add(await TimeAttemptMsAsync(second));
+        }
+
+        return (Median(firstSamples), Median(secondSamples));
+    }
+
+    private static async Task<double> TimeAttemptMsAsync(Func<Task> attempt)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await attempt();
+        }
+        catch (InvalidCredentialsException)
+        {
+            // Resultado esperado — lo que se mide es cuánto tarda en llegar aquí.
+        }
+        sw.Stop();
+        return sw.Elapsed.TotalMilliseconds;
+    }
+
+    private static double Median(List<double> samples)
+    {
         samples.Sort();
         return samples[samples.Count / 2];
     }
