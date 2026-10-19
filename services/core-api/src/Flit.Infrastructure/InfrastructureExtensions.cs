@@ -34,6 +34,7 @@ using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
+using Flit.Modules.Security.Domain.PermissionOverrides;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UiPreferences;
@@ -298,6 +299,7 @@ public static class InfrastructureExtensions
         services.AddScoped<IUserManagementRepository, UserManagementRepository>();
         // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
         services.AddScoped<IUserUiPreferenceRepository, UserUiPreferenceRepository>();
+        services.AddScoped<IUserPermissionOverrideRepository, UserPermissionOverrideRepository>(); // HU #13642
 
         services.AddSecurityApplication();
 
