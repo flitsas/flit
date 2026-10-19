@@ -243,12 +243,13 @@ jobs:
             # FLIT (sin marca de red). No hay salida de dominio de frontend en `needs.setup`,
             # así que se usa el respaldo de dominios propios de la plataforma.
             # Las entradas con "!" (HU #12761) excluyen los hosts de prueba de marca blanca, que
-            # viven bajo *.flitsas.online pero deben tratarse como dominios de red. Se hornean los
-            # tres a la vez porque este workflow construye una imagen por ambiente y cada ambiente
-            # solo sirve su propio host: las negaciones de los otros dos son inertes.
+            # viven bajo *.flitsas.online pero deben tratarse como dominios de red. Se hornean todos
+            # a la vez porque este workflow construye una imagen por ambiente y cada ambiente
+            # solo sirve sus propios hosts: las negaciones de los demás son inertes. marcablancadag1
+            # es un host de prueba adicional de QA.
             # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
             # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
-            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online
+            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
