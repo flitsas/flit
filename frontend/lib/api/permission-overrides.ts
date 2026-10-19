@@ -163,6 +163,11 @@ const REJECTION_MESSAGES: Record<string, string> = {
   OVERRIDE_CONFLICT: "Otra persona modificó este permiso al mismo tiempo. Actualiza la lista e inténtalo de nuevo.",
 };
 
+/** Texto en español de un código de rechazo (también el `reasonCode` de la auditoría). `null` si no se conoce. */
+export function rejectionReasonMessage(code: string | null | undefined): string | null {
+  return (code && REJECTION_MESSAGES[code]) || null;
+}
+
 /** Mensaje claro en español para un rechazo de la API de permisos individuales. */
 export function overrideErrorMessage(
   error: unknown,

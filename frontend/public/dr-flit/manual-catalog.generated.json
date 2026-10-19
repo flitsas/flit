@@ -2534,7 +2534,8 @@
           "id": "auditoria",
           "title": "3. Auditoría",
           "paragraphs": [
-            "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only)."
+            "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only).",
+            "Auditoría de permisos individuales: en Usuarios, la pestaña «Auditoría de permisos» lista cada cambio de permisos por usuario con su fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, el usuario afectado, la compañía, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después; los intentos rechazados quedan registrados con su motivo. Filtra por usuario, compañía y administrador; si ningún registro coincide, la tabla te lo avisa. La lista se pagina con «Filas por página»."
           ],
           "bullets": [],
           "callouts": []

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck } from "lucide-react";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList } from "lucide-react";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -14,6 +14,7 @@ import { InviteUserModal } from "./users/InviteUserModal";
 import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
 import { UserPermissionsModal } from "./users/UserPermissionsModal";
+import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
 import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -50,6 +51,8 @@ const ALL_TABS = [
   { id: "clientes-ict", label: "Clientes ICT", icon: KeyRound },
   // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
   { id: "clientes-integracion", label: "Clientes de integración", icon: PlugZap },
+  // HU #13654 (Feature #13103): auditoría de permisos individuales, solo Super Admin en el Panel SA.
+  { id: "auditoria-permisos", label: "Auditoría de permisos", icon: ClipboardList },
   { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
@@ -111,7 +114,8 @@ export function Usuarios() {
       // ot_admin y el resto de roles no ven la pestaña: asignan roles desde la edición del usuario.
       (t.id !== "roles" || isSuperAdmin || isAdminCompany) &&
       (t.id !== "clientes-ict" || canManageIctClients) &&
-      (t.id !== "clientes-integracion" || isSuperAdmin),
+      (t.id !== "clientes-integracion" || isSuperAdmin) &&
+      (t.id !== "auditoria-permisos" || isSuperAdmin),
   );
 
   async function loadUsers() {
@@ -541,6 +545,8 @@ export function Usuarios() {
           )}
         </div>
       )}
+
+      {tab === "auditoria-permisos" && isSuperAdmin && <PermissionAuditView mode="superadmin" users={users} />}
 
       {tab === "roles" && isSuperAdmin && (
         // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);

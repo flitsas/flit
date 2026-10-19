@@ -40,7 +40,12 @@ vi.mock("@/lib/api/superadmin-client", () => ({
 }));
 vi.mock("@/lib/api/permission-overrides", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/permission-overrides")>("@/lib/api/permission-overrides");
-  return { ...actual, listGrantablePermissions: vi.fn().mockResolvedValue([]), listUserOverrides: vi.fn().mockResolvedValue([]) };
+  return {
+    ...actual,
+    listGrantablePermissions: vi.fn().mockResolvedValue([]),
+    listUserOverrides: vi.fn().mockResolvedValue([]),
+    listPermissionAudit: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 }),
+  };
 });
 vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/api/admin-transit-office-tenants", () => ({ fetchAllTransitOfficeTenants: vi.fn().mockResolvedValue([]) }));
@@ -88,5 +93,23 @@ describe("Usuarios — Permisos por módulo (#13652)", () => {
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
     expect(screen.queryByRole("button", { name: /Permisos por módulo de/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Usuarios — pestaña Auditoría de permisos (#13654)", () => {
+  it("el Super Admin ve la pestaña y la vista de auditoría", async () => {
+    vi.mocked(getUsers).mockResolvedValue([base]);
+    render(<Usuarios />);
+    await screen.findByText("Ana Torres");
+    await userEvent.click(screen.getByRole("button", { name: "Auditoría de permisos" }));
+    expect(await screen.findByRole("region", { name: "Auditoría de permisos individuales" })).toBeInTheDocument();
+  });
+
+  it("quien no es Super Admin no ve la pestaña", async () => {
+    perms.isSuperAdmin = false;
+    vi.mocked(getUsers).mockResolvedValue([base]);
+    render(<Usuarios />);
+    await screen.findByText("Ana Torres");
+    expect(screen.queryByRole("button", { name: "Auditoría de permisos" })).not.toBeInTheDocument();
   });
 });
