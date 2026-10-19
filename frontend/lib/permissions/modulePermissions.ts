@@ -23,6 +23,8 @@ export interface ActionView {
    * usuario lo tiene por un permiso individual (o lo tuvo en esta sesión). Se puede quitar, no volver a otorgar.
    */
   outOfCap?: boolean;
+  /** HU #13653: permiso exclusivo del Super Admin frente al usuario destino (ningún administrador de su compañía/OT lo tiene). */
+  superAdminOnly: boolean;
 }
 
 export interface ModuleView {
@@ -56,6 +58,7 @@ export function buildModuleViews(
   lockedIds: ReadonlySet<string> = new Set(),
 ): ModuleView[] {
   const grantableIds = new Set(grantable.map((g) => g.id));
+  const superAdminOnlyIds = new Set(grantable.filter((g) => g.superAdminOnly).map((g) => g.id));
   const overrideById = new Map(overrides.map((o) => [o.permissionId, o]));
 
   const views: ModuleView[] = [];
@@ -65,7 +68,13 @@ export function buildModuleViews(
       const override = overrideById.get(a.id);
       const outOfCap = !grantableIds.has(a.id);
       if (outOfCap && !override && !lockedIds.has(a.id)) continue;
-      const base = { id: a.id, slug: a.slug, name: a.name, ...(outOfCap ? { outOfCap: true } : {}) };
+      const base = {
+        id: a.id,
+        slug: a.slug,
+        name: a.name,
+        superAdminOnly: superAdminOnlyIds.has(a.id),
+        ...(outOfCap ? { outOfCap: true } : {}),
+      };
       if (override) {
         actions.push({
           ...base,

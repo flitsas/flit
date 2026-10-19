@@ -23,8 +23,15 @@ internal static class PermissionOverridesEndpoints
         group.MapGet("/permission-overrides/grantable", (
             ClaimsPrincipal caller, [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
             Run(caller, tenantId, async (tenant, actor) =>
-                Results.Ok((await handler.ListGrantableAsync(tenant, actor, ct)).Select(p =>
-                    new { p.Id, p.Slug, p.Name, p.ModuleCode, p.ProductCode }))))
+            {
+                var items = await handler.ListGrantableAsync(tenant, actor, ct);
+                // HU #13653: «Solo SA» únicamente cuando el Super Admin declara el tenant destino (?tenantId=); si no, false.
+                var onlySa = actor.IsSuperAdmin && tenantId is not null
+                    ? await handler.ListSuperAdminOnlyAsync(tenant, items, ct)
+                    : new HashSet<Guid>();
+                return Results.Ok(items.Select(p =>
+                    new { p.Id, p.Slug, p.Name, p.ModuleCode, p.ProductCode, SuperAdminOnly = onlySa.Contains(p.Id) }));
+            }))
             .RequireAuthorization(policy).WithName("ListGrantablePermissionOverrides");
 
         group.MapGet("/users/{userId:guid}/permission-overrides", (
@@ -54,7 +61,8 @@ internal static class PermissionOverridesEndpoints
             Guid userId, Guid permissionId, [FromBody] SetOverrideRequest request, ClaimsPrincipal caller,
             [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
             Run(caller, tenantId, async (tenant, actor) =>
-                Results.Ok(await handler.SetAsync(tenant, actor, userId, permissionId, request.Effect ?? string.Empty, ct))))
+                Results.Ok(await handler.SetAsync(
+                    tenant, actor, userId, permissionId, request.Effect ?? string.Empty, ct, request.PiiConfirmed == true))))
             .RequireAuthorization(policy).WithName("SetUserPermissionOverride");
 
         // AC4: quitar el permiso individual ("volver a lo que dicta el rol").
@@ -110,6 +118,10 @@ internal static class PermissionOverridesEndpoints
         {
             return Error(StatusCodes.Status404NotFound, "MODULE_NOT_FOUND", ex.Message);
         }
+        catch (PiiConfirmationRequiredException ex)
+        {
+            return Error(StatusCodes.Status400BadRequest, "PII_CONFIRMATION_REQUIRED", ex.Message);
+        }
         catch (ArgumentException)
         {
             return Error(StatusCodes.Status400BadRequest, "INVALID_EFFECT", "El efecto debe ser 'allow' o 'deny'.");
@@ -143,7 +155,7 @@ internal static class PermissionOverridesEndpoints
     private static IResult Error(int status, string code, string message, string? permission = null) =>
         Results.Json(new ErrorBody(code, message, permission), statusCode: status);
 
-    private sealed record SetOverrideRequest(string? Effect);
+    private sealed record SetOverrideRequest(string? Effect, bool? PiiConfirmed = null);
 
     private sealed record ErrorBody(string Code, string Message, string? Permission);
 }

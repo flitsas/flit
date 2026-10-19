@@ -3572,6 +3572,12 @@ paths:
                     name: { type: string }
                     moduleCode: { type: string }
                     productCode: { type: string }
+                    superAdminOnly:
+                      type: boolean
+                      description: >
+                        HU #13653 (aditivo). `true` si NINGUN administrador del tenant destino (AdminCompany, ot_admin,
+                        admin_tramites) tiene el permiso en su tope (roles menos sus deny): un administrador no puede otorgarlo.
+                        Solo se calcula cuando el Super Admin envia `?tenantId=`; en cualquier otro caso es `false`.
         "401": { description: No autenticado. }
         "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
         "404": { description: "`USER_NOT_FOUND`." }
@@ -3707,6 +3713,13 @@ paths:
               required: [effect]
               properties:
                 effect: { type: string, enum: [allow, deny] }
+                piiConfirmed:
+                  type: boolean
+                  description: >
+                    HU #13653 (aditivo, FB-17). Confirmacion Ley 1581 de 2012. Obligatorio en `true` para `allow` sobre
+                    `ict.pii.reveal` (sin el: 400 `PII_CONFIRMATION_REQUIRED`, nada cambia). Al aplicarse escribe, en la misma
+                    operacion que el GRANT, una fila `PII_REVEAL_CONFIRMED` en `security.user_permission_audit`.
+                    El modulo completo NO otorga `ict.pii.reveal` (cuenta en `excluded`).
       responses:
         "200":
           description: Aplicado (`changed = false` si el usuario ya tenia ese efecto).
@@ -3719,7 +3732,7 @@ paths:
                   effect: { type: string, enum: [allow, deny] }
                   changed: { type: boolean }
         "400":
-          description: "`INVALID_EFFECT`, o `FAMILY_CREATE_REQUIRES_READ` (HU #13666): `allow` de `<familia>.create` (`matriculas`, `traspasos`, `otros-tramites`) cuando el permiso efectivo del usuario (rol + individuales) no incluye `<familia>.read`. Queda auditado como REJECTED. `deny` de `<familia>.read` apaga tambien `<familia>.create`: retira su allow individual y, si el rol lo da, lo deniega."
+          description: "`INVALID_EFFECT`, `PII_CONFIRMATION_REQUIRED` (HU #13653: `allow` de `ict.pii.reveal` sin `piiConfirmed: true`; nada cambia) o `FAMILY_CREATE_REQUIRES_READ` (HU #13666): `allow` de `<familia>.create` (`matriculas`, `traspasos`, `otros-tramites`) cuando el permiso efectivo del usuario (rol + individuales) no incluye `<familia>.read`. Queda auditado como REJECTED. `deny` de `<familia>.read` apaga tambien `<familia>.create`: retira su allow individual y, si el rol lo da, lo deniega."
           content:
             application/json:
               schema:

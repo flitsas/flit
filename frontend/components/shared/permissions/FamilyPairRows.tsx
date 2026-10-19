@@ -4,6 +4,7 @@ import { RotateCcw, ShieldCheck, UserCog } from "lucide-react";
 import type { ActionView } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
 import { CREATE_NEEDS_READ_HINT } from "./FamilyPairCheckboxes";
+import { OUT_OF_CAP_LOCKED_TOOLTIP, OUT_OF_CAP_TOOLTIP, OutOfCapChip, SoloSaChip } from "./PermissionChips";
 
 // HU #13666 (Feature #13636 F-F) — par Ver / Crear de un tipo de servicio en «Permisos por módulo» de un usuario.
 // Cada fila lleva su estado («Heredado del rol» / «Individual»). «Crear» queda deshabilitado mientras el «Ver» EFECTIVO
@@ -21,6 +22,7 @@ function PairRow({
   hint,
   readOnly,
   controlsOff,
+  showOutOfCap,
   onToggle,
   onBackToRole,
 }: {
@@ -31,6 +33,7 @@ function PairRow({
   hint?: string;
   readOnly: boolean;
   controlsOff: boolean;
+  showOutOfCap: boolean;
   onToggle: (a: ActionView) => void;
   onBackToRole: (a: ActionView) => void;
 }) {
@@ -62,6 +65,11 @@ function PairRow({
       </button>
       <span className="min-w-0 flex-1 text-xs">
         <span className="font-medium">{label}</span>
+        {action.superAdminOnly && (
+          <span className="ml-2 align-middle">
+            <SoloSaChip />
+          </span>
+        )}
         {action.origin === "individual" && action.grantedByName && (
           <span className="block text-[10px] opacity-60">
             Otorgado por {action.grantedByName}
@@ -83,6 +91,12 @@ function PairRow({
         <Icon className="h-3 w-3" aria-hidden="true" />
         {ORIGIN_TEXT[action.origin]}
       </span>
+      {showOutOfCap && action.outOfCap && (
+        <OutOfCapChip
+          id={`cap-${moduleName}-${action.id}`}
+          tooltip={action.origin === "individual" ? OUT_OF_CAP_TOOLTIP : OUT_OF_CAP_LOCKED_TOOLTIP}
+        />
+      )}
       {action.origin === "individual" && !readOnly && (
         <button
           type="button"
@@ -105,6 +119,7 @@ export function FamilyPairRows({
   create,
   readOnly,
   controlsOff,
+  showOutOfCap = false,
   onToggle,
   onBackToRole,
 }: {
@@ -113,6 +128,8 @@ export function FamilyPairRows({
   create: ActionView;
   readOnly: boolean;
   controlsOff: boolean;
+  /** Modo `admin`: muestra el chip «Fuera de tu tope» en las filas que lo estén. */
+  showOutOfCap?: boolean;
   onToggle: (a: ActionView) => void;
   onBackToRole: (a: ActionView) => void;
 }) {
@@ -126,6 +143,7 @@ export function FamilyPairRows({
         disabled={false}
         readOnly={readOnly}
         controlsOff={controlsOff}
+        showOutOfCap={showOutOfCap}
         onToggle={onToggle}
         onBackToRole={onBackToRole}
       />
@@ -137,6 +155,7 @@ export function FamilyPairRows({
         hint={createBlocked ? CREATE_NEEDS_READ_HINT : undefined}
         readOnly={readOnly}
         controlsOff={controlsOff}
+        showOutOfCap={showOutOfCap}
         onToggle={onToggle}
         onBackToRole={onBackToRole}
       />

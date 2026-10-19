@@ -3,8 +3,11 @@ namespace Flit.Modules.Security.Domain.PermissionOverrides;
 /// <summary>Acciones de la bitácora que no escribe el flujo de overrides (HU #13647, AC4).</summary>
 public static class PermissionAuditActions
 {
-    /// <summary>Confirmación de <c>ict.pii.reveal</c>; la escribe el endpoint de la UI de F-D1 (aún no existe, solo se consulta).</summary>
+    /// <summary>Confirmación Ley 1581 de <c>ict.pii.reveal</c> (HU #13653): se escribe junto al GRANT, en la misma transacción.</summary>
     public const string PiiRevealConfirmed = "PII_REVEAL_CONFIRMED";
+
+    /// <summary>Slug del permiso que exige la confirmación (HU #13653).</summary>
+    public const string PiiRevealSlug = "ict.pii.reveal";
 }
 
 /// <summary>Filtros ya resueltos por ámbito (<c>TenantId</c> es obligatorio salvo para el Super Admin).</summary>

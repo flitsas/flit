@@ -139,6 +139,20 @@ internal sealed class UserPermissionOverrideRepository(FlitDbContext db) : IUser
         return row is null ? null : ToEntry(row);
     }
 
+    private static readonly string[] AdministratorRoleCodes = ["AdminCompany", "ot_admin", "admin_tramites"];
+
+    public Task<IReadOnlyList<Guid>> ListTenantAdministratorIdsAsync(Guid tenantId, CancellationToken ct) =>
+        TenantRlsScope.ExecuteAsync(
+            db.Database,
+            tenantId,
+            async () => (IReadOnlyList<Guid>)await (
+                from a in db.UserRoleAssignments.AsNoTracking()
+                join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                where a.TenantId == tenantId && a.DeletedAt == null && r.IsActive && r.DeletedAt == null
+                      && AdministratorRoleCodes.Contains(r.Code)
+                select a.UserId).Distinct().ToListAsync(ct).ConfigureAwait(false),
+            ct);
+
     public async Task<IReadOnlyList<PermissionCatalogEntry>> ListEnforcedPermissionsAsync(CancellationToken ct) =>
         (await Catalog().Where(r => r.Enforced == "true").OrderBy(r => r.Slug).ToListAsync(ct).ConfigureAwait(false))
         .Select(ToEntry).ToList();

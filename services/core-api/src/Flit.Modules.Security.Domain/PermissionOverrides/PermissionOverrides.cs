@@ -57,6 +57,10 @@ public sealed class ModuleNotFoundForOverrideException(string moduleCode)
     public string ModuleCode { get; } = moduleCode;
 }
 
+/// <summary>HU #13653 (FB-17): habilitar <c>ict.pii.reveal</c> exige la confirmación Ley 1581 (<c>piiConfirmed = true</c>): 400.</summary>
+public sealed class PiiConfirmationRequiredException()
+    : Exception("Habilitar este permiso exige confirmar el acceso a datos personales (Ley 1581 de 2012).");
+
 public sealed class DuplicateUserPermissionOverrideException()
     : Exception("El usuario ya tiene un permiso individual para ese permiso en el tenant.");
 
@@ -79,6 +83,12 @@ public interface IUserPermissionOverrideRepository
 
     /// <summary>Permiso del catálogo con su producto, módulo y marca <c>enforced</c>; <c>null</c> si no existe o está inactivo.</summary>
     Task<PermissionCatalogEntry?> GetPermissionAsync(Guid permissionId, CancellationToken ct);
+
+    /// <summary>
+    /// HU #13653: ids de los administradores del tenant (usuarios con rol AdminCompany, ot_admin o admin_tramites
+    /// asignado y activo; el Super Admin no cuenta). Base de «Solo SA».
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListTenantAdministratorIdsAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>Permisos activos del catálogo con <c>enforced = 'true'</c> (los únicos otorgables).</summary>
     Task<IReadOnlyList<PermissionCatalogEntry>> ListEnforcedPermissionsAsync(CancellationToken ct);

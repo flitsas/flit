@@ -22,7 +22,7 @@ public sealed class ManageUserPermissionOverridesHandler(
     IEnumerable<IPermissionOverrideRule> rules)
 {
     public async Task<SetOverrideResult> SetAsync(
-        Guid tenantId, OverrideActor actor, Guid targetUserId, Guid permissionId, string effect, CancellationToken ct)
+        Guid tenantId, OverrideActor actor, Guid targetUserId, Guid permissionId, string effect, CancellationToken ct, bool piiConfirmed = false)
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (!PermissionEffects.IsValid(effect))
@@ -49,6 +49,13 @@ public sealed class ManageUserPermissionOverridesHandler(
                 await RejectAsync(tenantId, actor, targetUserId, permission, action, PermissionOverrideReasons.OutOfCap, existing?.Effect, effect, ct)
                     .ConfigureAwait(false);
             }
+        }
+
+        // HU #13653 (FB-17): habilitar ict.pii.reveal exige la confirmación Ley 1581; sin ella, 400 y nada cambia.
+        var needsPii = effect == PermissionEffects.Allow && permission.Slug == PermissionAuditActions.PiiRevealSlug;
+        if (needsPii && !piiConfirmed)
+        {
+            throw new PiiConfirmationRequiredException();
         }
 
         // HU #13666: «crear exige ver» sobre el permiso EFECTIVO (rol + individuales).
@@ -83,6 +90,12 @@ public sealed class ManageUserPermissionOverridesHandler(
             Guid.NewGuid(), tenantId, targetUserId, permission.ProductCode, permissionId, effect,
             PermissionOverrideSources.Individual, null, actor.UserId));
         audits.Add(Audit(tenantId, actor, targetUserId, permission, action, "OK", null, existing?.Effect, effect));
+
+        if (needsPii)
+        {
+            // Misma transacción que el GRANT: o quedan ambas filas o ninguna.
+            audits.Add(Audit(tenantId, actor, targetUserId, permission, PermissionAuditActions.PiiRevealConfirmed, "OK", null, existing?.Effect, effect));
+        }
 
         // Denegar «Ver» apaga el «Crear» de la familia: se retira el allow individual y, si el rol lo da, se deniega.
         if (family is not null && effect == PermissionEffects.Deny && IsFamilyRead(permission.Slug))
@@ -154,10 +167,16 @@ public sealed class ManageUserPermissionOverridesHandler(
                 .Where(p => cap.Contains(p.Id)).Select(p => p.Id).ToHashSet();
         }
 
+        var excluded = (await repository.ListExcludedPermissionIdsAsync(ct).ConfigureAwait(false)).ToHashSet();
+        if (effect == PermissionEffects.Allow
+            && await repository.GetModuleActionsAsync(moduleCode, ct).ConfigureAwait(false) is { } snapshot)
+        {
+            // HU #13653: ict.pii.reveal exige confirmación Ley 1581 permiso a permiso; no entra al «módulo completo».
+            excluded.UnionWith(snapshot.Actions.Where(a => a.Slug == PermissionAuditActions.PiiRevealSlug).Select(a => a.PermissionId));
+        }
+
         var result = await moduleHandler.HandleAsync(
-            new GrantModuleOverridesCommand(
-                tenantId, targetUserId, actor.UserId, moduleCode, effect, allowed,
-                await repository.ListExcludedPermissionIdsAsync(ct).ConfigureAwait(false)), ct).ConfigureAwait(false);
+            new GrantModuleOverridesCommand(tenantId, targetUserId, actor.UserId, moduleCode, effect, allowed, excluded), ct).ConfigureAwait(false);
         if (result.Excluded > 0 && result.Created == 0 && result.Skipped == 0 && result.OutOfCap == 0)
         {
             await RejectAsync(tenantId, actor, targetUserId, null, "MODULE_SNAPSHOT", PermissionOverrideReasons.Excluded, null, effect, ct, moduleCode)
@@ -290,6 +309,24 @@ public sealed class ManageUserPermissionOverridesHandler(
 
             return set;
         }
+    }
+
+    /// <summary>
+    /// HU #13653, regla «Solo SA»: de los permisos otorgables, los que NINGÚN administrador del tenant destino (AdminCompany,
+    /// ot_admin, admin_tramites) tiene en su tope (<see cref="PermissionCapCalculator"/>: roles menos sus deny). Un tenant sin
+    /// administradores deja todo como «Solo SA».
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> ListSuperAdminOnlyAsync(
+        Guid tenantId, IReadOnlyList<PermissionCatalogEntry> grantable, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(grantable);
+        var caps = new List<PermissionCap>();
+        foreach (var adminId in await repository.ListTenantAdministratorIdsAsync(tenantId, ct).ConfigureAwait(false))
+        {
+            caps.Add(await capCalculator.GetCapAsync(tenantId, new OverrideActor(adminId, false), ct).ConfigureAwait(false));
+        }
+
+        return grantable.Where(p => !caps.Exists(c => c.Contains(p.Id))).Select(p => p.Id).ToHashSet();
     }
 
     private async Task<PermissionCatalogEntry> GetPermissionAsync(Guid permissionId, CancellationToken ct) =>

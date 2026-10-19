@@ -107,7 +107,7 @@ public sealed class ManageUserPermissionOverridesHandlerTests
         var sut = Sut();
         var sa = new OverrideActor(AdminId, true);
 
-        (await sut.SetAsync(Tenant, sa, TargetId, Pii.Id, "allow", TestContext.Current.CancellationToken)).Changed.Should().BeTrue();
+        (await sut.SetAsync(Tenant, sa, TargetId, Pii.Id, "allow", TestContext.Current.CancellationToken, piiConfirmed: true)).Changed.Should().BeTrue();
         var ex = await Rejected(sut.SetAsync(Tenant, sa, TargetId, Sin.Id, "allow", TestContext.Current.CancellationToken));
         ex.ReasonCode.Should().Be("NOT_ENFORCED");
     }
@@ -193,7 +193,71 @@ public sealed class ManageUserPermissionOverridesHandlerTests
 
         var r = await sut.GrantModuleAsync(Tenant, Admin, TargetId, "m", "allow", TestContext.Current.CancellationToken);
 
+        // HU #13653: ict.pii.reveal no entra al módulo completo (exige confirmación Ley 1581 uno a uno).
         r.Created.Should().Be(1);
-        r.OutOfCap.Should().Be(1);
+        r.OutOfCap.Should().Be(0);
+        r.Excluded.Should().Be(1);
+    }
+
+    // HU #13653 (FB-17)
+    [Fact]
+    public async Task Habilitar_ict_pii_reveal_sin_confirmacion_lanza_y_no_escribe_nada()
+    {
+        var sut = Sut();
+        AdminHas(Pii.Id);
+
+        await FluentActions.Awaiting(() => sut.SetAsync(Tenant, Admin, TargetId, Pii.Id, "allow", TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<PiiConfirmationRequiredException>();
+
+        await _repo.DidNotReceive().ApplyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(),
+            Arg.Any<IReadOnlyList<UserPermissionOverride>>(), Arg.Any<IReadOnlyList<UserPermissionAuditEntry>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Habilitar_ict_pii_reveal_confirmado_escribe_GRANT_y_PII_REVEAL_CONFIRMED_en_la_misma_operacion()
+    {
+        var sut = Sut();
+        AdminHas(Pii.Id);
+
+        await sut.SetAsync(Tenant, Admin, TargetId, Pii.Id, "allow", TestContext.Current.CancellationToken, piiConfirmed: true);
+
+        await _repo.Received(1).ApplyAsync(Tenant, AdminId, Arg.Any<IReadOnlyList<Guid>>(),
+            Arg.Is<IReadOnlyList<UserPermissionOverride>>(l => l.Count == 1),
+            Arg.Is<IReadOnlyList<UserPermissionAuditEntry>>(l => l.Count == 2 && l[0].Action == "GRANT"
+                && l[1].Action == "PII_REVEAL_CONFIRMED" && l[1].Outcome == "OK" && l[1].PermissionSlug == "ict.pii.reveal"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Denegar_ict_pii_reveal_no_exige_confirmacion()
+    {
+        var sut = Sut();
+
+        (await sut.SetAsync(Tenant, Admin, TargetId, Pii.Id, "deny", TestContext.Current.CancellationToken)).Changed.Should().BeTrue();
+    }
+
+    // HU #13653: «Solo SA» = ningún administrador del tenant destino lo tiene en su tope.
+    [Fact]
+    public async Task Solo_SA_son_los_permisos_que_ningun_administrador_del_tenant_tiene_en_su_tope()
+    {
+        var sut = Sut();
+        var other = Guid.NewGuid();
+        _repo.ListTenantAdministratorIdsAsync(Tenant, Arg.Any<CancellationToken>()).Returns([AdminId, other]);
+        AdminHas(Reportes.Id);
+
+        var onlySa = await sut.ListSuperAdminOnlyAsync(Tenant, [Reportes, Pii], TestContext.Current.CancellationToken);
+
+        onlySa.Should().BeEquivalentTo([Pii.Id]);
+    }
+
+    [Fact]
+    public async Task Sin_administradores_en_el_tenant_todo_es_solo_SA()
+    {
+        var sut = Sut();
+        _repo.ListTenantAdministratorIdsAsync(Tenant, Arg.Any<CancellationToken>()).Returns([]);
+
+        var onlySa = await sut.ListSuperAdminOnlyAsync(Tenant, [Reportes, Pii], TestContext.Current.CancellationToken);
+
+        onlySa.Should().BeEquivalentTo([Reportes.Id, Pii.Id]);
     }
 }
