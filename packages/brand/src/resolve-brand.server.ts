@@ -11,7 +11,7 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { isFlitHost } from "./hosts";
-import { FLIT_BRAND, type Brand } from "./types";
+import { BRAND_CACHE_TAG, FLIT_BRAND, type Brand } from "./types";
 
 /** Ventana máxima de espera al Gateway (delta-hechos-post-adr.md #7): no debe retrasar la TTFB. */
 const FETCH_TIMEOUT_MS = 1500;
@@ -81,7 +81,7 @@ async function fetchBrandFor(host: string): Promise<Brand> {
         ...(key ? { "X-Internal-Key": key } : {}),
       },
       // Anti-destello con caché corta: el ADR fija 60s (mismo TTL que la caché del backend).
-      next: { revalidate: 60 },
+      next: { revalidate: 60, tags: [BRAND_CACHE_TAG] },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (error) {

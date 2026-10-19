@@ -94,7 +94,7 @@ export function BrandingLogoUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/png,image/jpeg"
         aria-label="Cargar logotipo de marca"
         className="sr-only"
         onChange={(e) => void handleFileChange(e)}

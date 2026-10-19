@@ -1,5 +1,5 @@
 // Validación en cliente del logotipo de marca — HU #12414 AC2.
-// Mismas reglas que `UploadBrandLogoHandler` (#12413): formato PNG/JPEG/WebP, peso ≤ 512 KB,
+// Mismas reglas que `UploadBrandLogoHandler` (#12413): formato PNG/JPEG, peso ≤ 512 KB,
 // dimensiones 120x40..2000x2000. Los códigos coinciden con `BrandingErrors.cs` para que
 // `brandingErrorMessage` muestre el MISMO texto que un rechazo del servidor (AC2).
 //
@@ -7,7 +7,7 @@
 //   const result = await validateLogoFile(file);
 //   if (!result.ok) { showError(brandingErrorMessage(result.code)); }
 
-export const ALLOWED_LOGO_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const ALLOWED_LOGO_MIME_TYPES = ["image/png", "image/jpeg"] as const;
 export const MAX_LOGO_BYTES = 524_288; // 512 KB — Branding:Logo:MaxBytes (default backend)
 export const MIN_LOGO_WIDTH = 120;
 export const MIN_LOGO_HEIGHT = 40;
@@ -81,5 +81,5 @@ export async function validateLogoFile(file: File): Promise<LogoValidationResult
 
 /** Texto legible de la restricción de dimensiones, para el hint del input de archivo. */
 export function logoDimensionsHint(): string {
-  return `PNG, JPEG o WebP · máx. 512 KB · ${MIN_LOGO_WIDTH}x${MIN_LOGO_HEIGHT} a ${MAX_LOGO_WIDTH}x${MAX_LOGO_HEIGHT} px`;
+  return `PNG o JPEG · máx. 512 KB · ${MIN_LOGO_WIDTH}x${MIN_LOGO_HEIGHT} a ${MAX_LOGO_WIDTH}x${MAX_LOGO_HEIGHT} px`;
 }

@@ -9,6 +9,10 @@ import { BrandingConfigurator } from "../BrandingConfigurator";
 import { ApiError } from "@/lib/api/types";
 import type { TenantBrandingResponse } from "@/lib/api/branding";
 
+const routerRefresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
+vi.mock("@/app/actions/brand", () => ({ refreshBrand: vi.fn().mockResolvedValue(undefined) }));
+
 vi.mock("@/lib/api/branding", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/branding")>("@/lib/api/branding");
   return {
@@ -150,6 +154,8 @@ describe("BrandingConfigurator — AC5 publicar pide confirmación", () => {
 
     await waitFor(() => expect(publishBranding).toHaveBeenCalled());
     expect(await screen.findByText(/publicada el/i)).toBeInTheDocument();
+    // La marca aplicada se refresca al instante, sin esperar los 60 s de caché.
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalled());
   });
 });
 
