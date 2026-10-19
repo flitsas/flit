@@ -69,6 +69,12 @@ public static class AdminAuthorization
     /// </summary>
     public const string UserAdminPolicy = "UserAdmin";
 
+    /// <summary>HU #13644 (FB-9): quién entra a los permisos individuales por usuario: SuperAdmin, AdminCompany, ot_admin y admin_tramites.</summary>
+    public const string PermissionOverridesAdminPolicy = "PermissionOverridesAdmin";
+
+    /// <summary>Valor del claim de rol del administrador del producto trámites.</summary>
+    public const string AdminTramitesRole = "admin_tramites";
+
     /// <summary>Claim JWT del tenant autenticado.</summary>
     public const string TenantIdClaimType = "tenant_id";
 

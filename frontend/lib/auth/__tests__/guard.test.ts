@@ -13,6 +13,9 @@ import {
   HOME_PATH,
 } from "../guard";
 
+// HU #13650: sesión válida sin el permiso → inicio con el aviso (no /403, que queda para fallos de sesión).
+const ACCESO_DENEGADO = /^\/\?acceso=denegado/;
+
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -40,10 +43,10 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.allowed).toBe(true);
   });
 
-  it("redirige a /403 cuando el rol no es SuperAdmin", () => {
+  it("redirige al inicio con aviso cuando el rol no es SuperAdmin", () => {
     const decision = evaluateAdminAccess(makeToken({ role: "Operador" }));
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("redirige a /403 cuando no hay token", () => {
@@ -96,7 +99,7 @@ describe("evaluateAdminAccess (AC6)", () => {
       "/admin/companies",
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("permite AdminCompany en /admin/companies (HU #11228)", () => {
@@ -113,7 +116,7 @@ describe("evaluateAdminAccess (AC6)", () => {
       "/admin/transit-offices",
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("redirige a /403 cuando el token de SuperAdmin ya expiró", () => {
@@ -140,7 +143,7 @@ describe("evaluateAdminAccess (AC6)", () => {
   ])("HU12856 AC2 — deniega a ot_admin en %s (%s)", (pathname: string) => {
     const decision = evaluateAdminAccess(makeToken({ sub: "u1", role: "ot_admin" }), pathname);
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("HU12856 AC2 — deniega a cualquier rol de un tenant OT (no solo ot_admin) en /rules", () => {
@@ -149,7 +152,7 @@ describe("evaluateAdminAccess (AC6)", () => {
       "/admin/transit-offices/abc/requirements",
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   // Security review (Low) HU12856 — isSuperAdminOnlyOtRoute debe ser insensible a mayúsculas y
@@ -162,7 +165,7 @@ describe("evaluateAdminAccess (AC6)", () => {
   ])("deniega a ot_admin en %s (%s)", (pathname: string) => {
     const decision = evaluateAdminAccess(makeToken({ sub: "u1", role: "ot_admin" }), pathname);
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it.each([
@@ -221,7 +224,7 @@ describe("evaluateAdminAccess (AC6)", () => {
         "/admin/transit-offices/abc/documents",
       );
       expect(decision.allowed).toBe(false);
-      expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+      expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
     },
   );
 
@@ -245,7 +248,7 @@ describe("evaluateAdminAccess (AC6)", () => {
       pathname,
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("permite el acceso de SuperAdmin a /admin/improntas (HU #10469 AC1)", () => {
@@ -262,7 +265,7 @@ describe("evaluateAdminAccess (AC6)", () => {
       "/admin/improntas",
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 });
 

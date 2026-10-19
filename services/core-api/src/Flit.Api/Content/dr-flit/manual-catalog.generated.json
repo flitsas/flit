@@ -108,7 +108,7 @@
           "title": "1. Perfil Gestor (empresa cliente)",
           "paragraphs": [
             "Corresponde a usuarios de una compañía que radica trámites vehiculares (concesionario, renting, gestoría). En el dock típico de un operador (rol Radicador) verás Inicio, Trámites y Ayuda.",
-            "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen si tu rol custom tiene los permisos RBAC correspondientes."
+            "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen en el menú si tienes el permiso correspondiente, ya sea por tu rol o porque el administrador te lo asignó a ti directamente. Mientras FLIT carga tus permisos, el menú solo muestra Inicio y Ayuda."
           ],
           "bullets": [
             "Ruta principal de trámites: /tramites",
@@ -250,7 +250,8 @@
           "title": "6. Sesión expirada y acceso denegado",
           "paragraphs": [
             "Si dejas la sesión inactiva por mucho tiempo, verás una ventana que dice «Tu sesión expiró. Por seguridad, tu sesión se cerró. Vuelve a iniciar sesión para continuar». Pulsa «Ir a iniciar sesión», escribe tus datos otra vez y FLIT te devuelve a donde estabas.",
-            "Si entras a una sección para la que no tienes permiso, verás la pantalla «Acceso restringido»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT."
+            "Si escribes o abres la dirección de un módulo para el que no tienes permiso, FLIT te devuelve al inicio y te avisa con el mensaje «No tienes acceso a este módulo.»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Puedes cerrar el aviso con la X. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT.",
+            "En otros casos (por ejemplo, si tu sesión ya no es válida) verás la pantalla «Acceso restringido»."
           ],
           "bullets": [],
           "callouts": [

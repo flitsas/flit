@@ -1,15 +1,13 @@
 // Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
-import {
-  canAccessRuntConfirmation,
-  canReadGeneracionDocumental,
-  decodeJwtPayload,
-  isAdminCompany,
-  isOtAdmin,
-  isOtUser,
-  isSuperAdmin,
-} from "./jwt";
+//
+// HU #13650 (Feature #13102, ADR-0072): QUIÉN entra a cada ruta ya no vive aquí sino en la tabla única
+// `lib/nav/module-access.ts` (`ROUTE_ACCESS`), la misma que decide el menú. Este archivo solo valida la sesión y
+// traduce la decisión a una redirección.
+import { decodeJwtPayload, isAdminCompany, isOtUser, isSuperAdmin } from "./jwt";
+import { matchRouteRule, resolveRouteAccess } from "@/lib/nav/module-access";
 
+/** Destino de los fallos de SESIÓN (sin token, malformado o vencido). */
 export const FORBIDDEN_PATH = "/403";
 
 /** Raíz de Administración → Plataforma → Confirmación RUNT (Feature #12276). */
@@ -17,149 +15,66 @@ export const RUNT_CONFIRMATION_BASE_PATH = "/admin/plataforma/confirmacion-runt"
 
 export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
 
-/**
- * HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración del organismo quedan
- * exclusivos de Super Admin también en la capa de UI: un `ot_admin` (o cualquier otro rol de un
- * tenant OT) que entra por URL directa a una de estas 3 sub-rutas debe caer a /403, aunque el
- * resto de `/admin/transit-offices/*` le siga permitido (HU #10218). Bloqueo en dos capas: la API
- * ya exige la policy `SuperAdmin` (HU-B2, backend); esto cierra el hueco de UI.
- */
-const SUPERADMIN_ONLY_OT_SUBROUTES = ["rules", "requirements", "configuracion"] as const;
+/** Parámetros con los que se vuelve al inicio cuando la persona tiene sesión pero no el permiso (ADR-0072 §4). */
+export const ACCESS_DENIED_PARAM = "acceso";
+export const ACCESS_DENIED_VALUE = "denegado";
+export const ACCESS_DENIED_MODULE_PARAM = "modulo";
 
-/**
- * HU #12860 (Feature #12848) — Documentos queda exclusivo de `ot_admin` y Super Admin en la
- * capa de UI (bloqueo en dos capas: la API ya exige la policy `OtAdminOrSuperAdmin`, HU-C2
- * backend): un Operador OT (`gestor_tramites_ot`) u otro rol OT personalizado que entra por URL
- * directa cae a /403, aunque el resto de `/admin/transit-offices/*` le siga permitido.
- */
-const OT_ADMIN_ONLY_OT_SUBROUTES = ["documents"] as const;
-
-/**
- * Decodifica los segmentos percent-encoded de un pathname (p. ej. `%72ules` → `rules`) sin
- * lanzar ante secuencias inválidas: si `decodeURIComponent` falla, se usa el pathname original
- * tal cual, de forma que un valor malformado nunca abre una vía de bypass del gate.
- */
-function safeDecodePathname(pathname: string): string {
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    return pathname;
-  }
-}
-
-function isSuperAdminOnlyOtRoute(pathname: string): boolean {
-  const normalized = safeDecodePathname(pathname).toLowerCase();
-  return SUPERADMIN_ONLY_OT_SUBROUTES.some((segment) =>
-    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(normalized),
-  );
-}
-
-function isOtAdminOnlyOtRoute(pathname: string): boolean {
-  const normalized = safeDecodePathname(pathname).toLowerCase();
-  return OT_ADMIN_ONLY_OT_SUBROUTES.some((segment) =>
-    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(normalized),
-  );
+/** `/?acceso=denegado&modulo=<id>`: el inicio muestra «No tienes acceso a este módulo.» y limpia la marca. */
+export function accessDeniedPath(moduleId?: string): string {
+  const query = new URLSearchParams({ [ACCESS_DENIED_PARAM]: ACCESS_DENIED_VALUE });
+  if (moduleId) query.set(ACCESS_DENIED_MODULE_PARAM, moduleId);
+  return `/?${query.toString()}`;
 }
 
 export interface AdminAccessDecision {
   /** `true` si el token corresponde a un usuario con acceso permitido. */
   allowed: boolean;
-  /** Ruta de redirección cuando `allowed` es `false`. */
+  /**
+   * Ruta de redirección cuando `allowed` es `false`: `/403` si la sesión no es válida; el inicio con la marca de
+   * acceso denegado si hay sesión válida pero falta el permiso (HU #13650).
+   */
   redirectTo?: string;
 }
 
-/**
- * Evalúa si un token habilita el acceso a la consola admin.
- *
- * Reglas:
- * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
- * - SuperAdmin → permitido en todo /admin/*.
- * - Usuario de un tenant OT (ot_admin o entity_type TRANSIT_OFFICE) → permitido en
- *   /admin/transit-offices/* (HU #10218), salvo /rules, /requirements y /configuracion, que
- *   quedan exclusivos de Super Admin (HU #12856, Feature #12847), y salvo /documents, que
- *   además exige ser `ot_admin` (Operador OT y roles OT personalizados caen a /403 — HU #12860,
- *   Feature #12848).
- * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
- * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
- * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
- *   permitido en /admin/plataforma/confirmacion-runt/* (Feature #12276).
- * - /admin/banners/* es exclusivo de SuperAdmin (HU #13439, Épica #12750): cualquier otro rol cae a /403,
- *   aunque tenga el permiso `banners.manage` en el token.
- * - Otros roles → redirigir a /403.
- */
-export function evaluateAdminAccess(
+/** Decisión común: sesión válida + regla de la tabla para el pathname (`fallbackPath` si ninguna regla lo cubre). */
+function evaluateRouteAccess(
   token: string | null | undefined,
-  pathname?: string,
+  pathname: string,
+  fallbackPath: string,
 ): AdminAccessDecision {
   if (!hasActiveSession(token)) {
     return { allowed: false, redirectTo: FORBIDDEN_PATH };
   }
 
-  const payload = decodeJwtPayload(token);
-
-  if (payload && isSuperAdmin(payload)) {
-    return { allowed: true };
-  }
-
-  if (
-    pathname?.startsWith("/admin/transit-offices") &&
-    payload &&
-    isOtUser(payload) &&
-    !isSuperAdminOnlyOtRoute(pathname) &&
-    (!isOtAdminOnlyOtRoute(pathname) || isOtAdmin(payload))
-  ) {
-    return { allowed: true };
-  }
-
-  if (
-    pathname?.startsWith("/admin/companies") &&
-    payload &&
-    isAdminCompany(payload)
-  ) {
-    return { allowed: true };
-  }
-
-  // Generación documental (Feature #12201): el módulo NO es exclusivo de SuperAdmin. El
-  // acceso se gobierna por el permiso `generacion-documental.read` del JWT, no por rol —
-  // si se dejara solo el gate SuperAdmin de arriba, un AdminCompany con el módulo
-  // habilitado sería redirigido a /403 antes de renderizar nada.
-  if (
-    pathname?.startsWith("/admin/generacion-documental") &&
-    canReadGeneracionDocumental(payload)
-  ) {
-    return { allowed: true };
-  }
-
-  // Confirmación RUNT (Feature #12276): único submódulo de Plataforma que NO es exclusivo de
-  // SuperAdmin. Se abre con cualquiera de sus dos permisos; qué pestaña ve cada uno lo decide la
-  // propia página. El resto de /admin/plataforma/* sigue siendo SuperAdmin.
-  if (
-    pathname?.startsWith(RUNT_CONFIRMATION_BASE_PATH) &&
-    canAccessRuntConfirmation(payload)
-  ) {
-    return { allowed: true };
-  }
-
-  return { allowed: false, redirectTo: FORBIDDEN_PATH };
+  const claims = decodeJwtPayload(token);
+  // Una ruta que ninguna regla cubre se trata como la raíz de su sección: deny-by-default.
+  const effectivePath = matchRouteRule(pathname) ? pathname : fallbackPath;
+  const decision = resolveRouteAccess(claims, effectivePath);
+  return decision.allowed ? { allowed: true } : { allowed: false, redirectTo: accessDeniedPath(decision.moduleId) };
 }
 
 /**
- * Evalúa si un token habilita el acceso a la sección de empresa (/empresa/*).
- * Permitido para AdminCompany y SuperAdmin. Sin sesión activa (sin token,
- * malformado o expirado) → /403.
+ * Evalúa si un token habilita el acceso a la consola admin (`/admin/*`). Las reglas por ruta están en
+ * `ROUTE_ACCESS` (SuperAdmin en todo /admin; organismo de tránsito en /admin/transit-offices con sus excepciones;
+ * AdminCompany en /admin/companies; permisos para generación documental y Confirmación RUNT; Banners solo SuperAdmin).
+ *
+ * - Sin token, token malformado o expirado → /403.
+ * - Sesión válida sin el permiso → inicio con el aviso de acceso denegado.
+ */
+export function evaluateAdminAccess(
+  token: string | null | undefined,
+  pathname?: string,
+): AdminAccessDecision {
+  return evaluateRouteAccess(token, pathname ?? "/admin", "/admin");
+}
+
+/**
+ * Evalúa si un token habilita el acceso a la sección de empresa (/empresa/*): AdminCompany y SuperAdmin. Sin sesión
+ * activa → /403; con sesión sin el rol → inicio con el aviso.
  */
 export function evaluateEmpresaAccess(token: string | null | undefined): AdminAccessDecision {
-  if (!hasActiveSession(token)) {
-    return { allowed: false, redirectTo: FORBIDDEN_PATH };
-  }
-
-  const payload = decodeJwtPayload(token);
-
-  if (payload && (isSuperAdmin(payload) || isAdminCompany(payload))) {
-    return { allowed: true };
-  }
-
-  return { allowed: false, redirectTo: FORBIDDEN_PATH };
+  return evaluateRouteAccess(token, "/empresa", "/empresa");
 }
 
 /**

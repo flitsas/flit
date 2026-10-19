@@ -4,6 +4,8 @@ using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.PermissionOverrides;
+using Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Application.Roles;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
@@ -87,6 +89,22 @@ public static class SecurityApplicationExtensions
         // tablas de trámites (GET/PUT /api/v1/me/ui-preferences/{scope}).
         services.AddScoped<GetUserUiPreferenceHandler>();
         services.AddScoped<UpsertUserUiPreferenceHandler>();
+
+        // HU #13642 (ADR-0071) - permisos individuales por usuario: foto de módulo completo.
+        services.AddScoped<GrantModuleOverridesHandler>();
+        services.AddScoped<PermissionCapCalculator>(); // HU #13644 - tope del administrador
+        services.AddScoped<ManageUserPermissionOverridesHandler>(); // HU #13644
+        services.AddScoped<QueryPermissionAuditHandler>(); // HU #13647
+
+        // HU #13645 - reglas de permisos individuales (en este orden; la primera que rechaza gana).
+        services.AddScoped<OverrideTargetLookup>();
+        services.AddScoped<IPermissionOverrideRule, UserExistsRule>();
+        services.AddScoped<IPermissionOverrideRule, SelfEditRule>();
+        services.AddScoped<IPermissionOverrideRule, TargetSuperAdminRule>();
+        services.AddScoped<IPermissionOverrideRule, TenantScopeRule>();
+        services.AddScoped<IPermissionOverrideRule, TargetIsAdminRule>();
+        services.AddScoped<IPermissionOverrideRule, ExcludedPermissionRule>();
+        services.AddScoped<IPermissionOverrideRule, InvitationPendingRule>();
 
         return services;
     }

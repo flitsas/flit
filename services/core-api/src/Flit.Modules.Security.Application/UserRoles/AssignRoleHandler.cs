@@ -1,3 +1,4 @@
+using Flit.Modules.Security.Domain.PermissionOverrides;
 using Flit.Modules.Security.Domain.UserRoles;
 
 namespace Flit.Modules.Security.Application.UserRoles;
@@ -12,7 +13,9 @@ namespace Flit.Modules.Security.Application.UserRoles;
 /// permiso, no un segundo rol. El índice único de BD que garantiza la invariante volvió a ser
 /// (user_id, tenant_id) — ver la migración RolUnicoPorUsuario.
 /// </summary>
-public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
+public sealed class AssignRoleHandler(
+    IUserRoleAssignmentRepository repo,
+    IRoleChangeOverridesPurger? purger = null)
 {
     public async Task HandleAsync(AssignRoleCommand cmd, CancellationToken ct)
     {
@@ -52,6 +55,24 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
         if (current.Any(a => a.RoleId == cmd.RoleId))
             throw new RoleAlreadyAssignedException();
 
+        // HU #13646 (FB-15): el cambio de rol y la purga de permisos individuales del producto del rol nuevo van en la
+        // misma transacción; si el cambio falla no se purga. Los permisos de otros productos no se tocan.
+        if (purger is null || string.IsNullOrWhiteSpace(role.ProductCode))
+        {
+            await ReplaceAsync(cmd, tenantId, current, ct);
+            return;
+        }
+
+        await purger.RunAtomicallyAsync(async () =>
+        {
+            await ReplaceAsync(cmd, tenantId, current, ct);
+            await purger.PurgeAsync(tenantId, cmd.UserId, role.ProductCode, cmd.AssignedBy, ct);
+        }, ct);
+    }
+
+    private async Task ReplaceAsync(
+        AssignRoleCommand cmd, Guid tenantId, IReadOnlyList<UserRoleAssignmentSnapshot> current, CancellationToken ct)
+    {
         // Reemplazo: se cierran TODAS las asignaciones activas anteriores del usuario en este
         // tenant. Normalmente es una sola; el bucle cubre los datos previos al rol único.
         foreach (var assignment in current)

@@ -154,6 +154,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/session-policy:
+    get:
+      operationId: authGetSessionPolicy
+      tags: [Auth]
+      summary: Vigencia de la sesión (cuándo entra en vigor un cambio de permisos)
+      description: >
+        HU #13651 (Feature #13102, Épica #12753). El token lleva los permisos efectivos y solo se recalcula al emitir
+        uno nuevo; este endpoint dice cuánto puede tardar un cambio de permisos de un usuario en aplicarse.
+        Modo `legacy` (sin OIDC): un solo JWT que dura `Jwt:TokenLifetimeHours`; `maxMinutes` = horas × 60.
+        Modo `oidc` (`Suite:Oidc:Enabled`): el access token dura `Suite:Oidc:AccessTokenMinutes` y se renueva solo.
+        El valor sale de la configuración vigente, nunca de un literal. Vive en /auth (no en /security) para que
+        el Gateway lo enrute a core-identity o a core-api igual que el resto del login: llega en ambos modos.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Política de sesión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionPolicyResponse'
+        '401':
+          description: No autenticado o sesión expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/auth/forgot-password:
     post:
       operationId: authForgotPassword
@@ -3512,6 +3539,269 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/security/permission-overrides/grantable:
+    get:
+      tags: [Security]
+      operationId: securityListGrantablePermissionOverrides
+      summary: Catalogo de permisos que el caller puede otorgar a un usuario (HU #13644)
+      description: >
+        Super Admin recibe todos los permisos con `enforced = 'true'`; los demas administradores
+        (AdminCompany, ot_admin, admin_tramites) solo su tope: la union de los permisos de sus roles en el
+        tenant, menos los que tengan denegados. Sus `allow` individuales no amplian el tope.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Permisos otorgables.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    slug: { type: string }
+                    name: { type: string }
+                    moduleCode: { type: string }
+                    productCode: { type: string }
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
+  /api/v1/security/users/{userId}/permission-overrides:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: tenantId
+        in: query
+        required: false
+        description: Solo Super Admin; para los demas se usa el tenant del JWT.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Security]
+      operationId: securityListUserPermissionOverrides
+      summary: Permisos individuales activos de un usuario (HU #13644)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Overrides activos (allow o deny).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserPermissionOverrideItem"
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
+  /api/v1/security/users/{userId}/permission-overrides/count:
+    get:
+      tags: [Security]
+      operationId: securityCountUserPermissionOverrides
+      summary: Cuantos permisos individuales tiene el usuario (HU #13646)
+      description: >-
+        Consulta previa al cambio de rol: al cambiar el rol del usuario se eliminan sus permisos individuales del producto
+        del rol nuevo (auditoria ROLE_CHANGE_PURGE). Mismas reglas de lectura que el listado (existencia y ambito).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: productCode
+          in: query
+          required: false
+          description: Producto a contar (p. ej. `tramites`); sin valor cuenta todos los productos.
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Cantidad de permisos individuales activos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count: { type: integer, minimum: 0 }
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
+  /api/v1/security/permission-audit:
+    get:
+      tags: [Security]
+      operationId: securityListPermissionAudit
+      summary: Auditoria de permisos individuales segun el ambito (HU #13647)
+      description: >-
+        Super Admin ve todo (tenantId opcional). Los demas administradores solo su tenant del JWT;
+        pedir otro tenant responde 403 `OUT_OF_SCOPE`. Orden created_at DESC.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: tenantId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: actorId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: Pagina de registros.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionAuditPage"
+        "401": { description: No autenticado. }
+        "403": { description: "No es administrador o tenant fuera del ambito: `OUT_OF_SCOPE`." }
+
+  /api/v1/security/users/{userId}/permission-overrides/{permissionId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: permissionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: tenantId
+        in: query
+        required: false
+        description: Solo Super Admin; para los demas se usa el tenant del JWT.
+        schema: { type: string, format: uuid }
+    put:
+      tags: [Security]
+      operationId: securitySetUserPermissionOverride
+      summary: Otorga (allow) o deniega (deny) un permiso puntual dentro del tope del admin (HU #13644)
+      description: >
+        `allow` exige que el permiso tenga `enforced = 'true'` y este dentro del tope del administrador
+        (403 `NOT_ENFORCED` / `OUT_OF_CAP`). `deny` siempre se puede. Cada intento, aceptado o rechazado,
+        queda en la bitacora `security.user_permission_audit`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effect]
+              properties:
+                effect: { type: string, enum: [allow, deny] }
+      responses:
+        "200":
+          description: Aplicado (`changed = false` si el usuario ya tenia ese efecto).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissionId: { type: string, format: uuid }
+                  effect: { type: string, enum: [allow, deny] }
+                  changed: { type: boolean }
+        "400": { description: "`INVALID_EFFECT`." }
+        "401": { description: No autenticado. }
+        "403":
+          description: "Fuera del tope o no otorgable (`OUT_OF_CAP`, `NOT_ENFORCED`) o regla de HU #13645: `SELF`, `TARGET_SUPERADMIN`, `TARGET_IS_ADMIN`, `OUT_OF_SCOPE`, `EXCLUDED`. Todo rechazo queda auditado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "404": { description: "`PERMISSION_NOT_FOUND` o `USER_NOT_FOUND`." }
+        "409": { description: "`INVITATION_PENDING`: el usuario aun no acepto su invitacion (HU #13645)." }
+    delete:
+      tags: [Security]
+      operationId: securityRemoveUserPermissionOverride
+      summary: Quita el permiso individual (vuelve a lo que dicta el rol) (HU #13644)
+      description: >
+        Un admin siempre puede quitar un `allow`. Quitar un `deny` devuelve lo que dicta el rol: 403
+        `OUT_OF_CAP` si el rol del usuario lo da y queda fuera del tope del admin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204": { description: Quitado (baja logica; queda en la bitacora como REVOKE). }
+        "401": { description: No autenticado. }
+        "403":
+          description: Volver al rol dejaria un permiso fuera del tope (`OUT_OF_CAP`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "404": { description: "`OVERRIDE_NOT_FOUND` o `PERMISSION_NOT_FOUND`." }
+
+  /api/v1/security/users/{userId}/permission-overrides/modules/{moduleCode}:
+    post:
+      tags: [Security]
+      operationId: securityGrantModulePermissionOverrides
+      summary: Otorga (o deniega) un modulo completo como foto, limitado al tope (HU #13644)
+      description: >
+        Crea un override por cada accion activa del modulo hoy. Con `allow` solo se otorgan las acciones
+        con `enforced = 'true'` dentro del tope (`outOfCap` cuenta el resto); si no se otorga ninguna, 403.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: moduleCode
+          in: path
+          required: true
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effect]
+              properties:
+                effect: { type: string, enum: [allow, deny] }
+      responses:
+        "200":
+          description: Foto aplicada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productCode: { type: string }
+                  batchId: { type: string, format: uuid }
+                  created: { type: integer }
+                  skipped: { type: integer }
+                  outOfCap: { type: integer }
+        "400": { description: "`INVALID_EFFECT`." }
+        "403":
+          description: Ninguna accion cabe en el tope (`OUT_OF_CAP`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "404": { description: "`MODULE_NOT_FOUND`." }
 
   /api/v1/security/users:
     get:
@@ -14563,6 +14853,22 @@ components:
         loginUrl:
           type: string
           example: https://app.movilidadandina.com/login
+    SessionPolicyResponse:
+      type: object
+      description: Vigencia de la sesión del usuario autenticado (HU #13651).
+      required: [mode, maxMinutes]
+      properties:
+        mode:
+          type: string
+          enum: [legacy, oidc]
+          description: >
+            legacy = JWT único de `Jwt:TokenLifetimeHours` (sin renovación); oidc = access token de
+            `Suite:Oidc:AccessTokenMinutes` con renovación.
+        maxMinutes:
+          type: integer
+          minimum: 1
+          description: Máximo de minutos hasta que el usuario recibe un token con los permisos recalculados.
+          example: 720
     CurrentUserResponse:
       type: object
       required: [userId, email, tenantId, roles, permissions, companyName, companyNit, entityType]
@@ -14767,6 +15073,61 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    PermissionOverrideError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: "OUT_OF_CAP | NOT_ENFORCED | ..." }
+        message: { type: string }
+        permission: { type: string, nullable: true }
+
+    UserPermissionOverrideItem:
+      type: object
+      properties:
+        permissionId: { type: string, format: uuid }
+        slug: { type: string }
+        productCode: { type: string }
+        effect: { type: string, enum: [allow, deny] }
+        source: { type: string, enum: [INDIVIDUAL, MODULE_SNAPSHOT] }
+        grantedBy: { type: string, format: uuid }
+        grantedByName: { type: string, nullable: true, description: "Nombre de quien otorgo el permiso (HU #13647)." }
+        grantedAt: { type: string, format: date-time, nullable: true, description: "Fecha UTC en que se otorgo (HU #13647)." }
+
+    PermissionAuditRecord:
+      type: object
+      description: Registro de la bitacora de permisos individuales (HU #13647). Fechas en UTC.
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        tenantName: { type: string, nullable: true }
+        actorUserId: { type: string, format: uuid }
+        actorName: { type: string, nullable: true }
+        actorEmail: { type: string, nullable: true }
+        targetUserId: { type: string, format: uuid }
+        targetName: { type: string, nullable: true }
+        targetEmail: { type: string, nullable: true }
+        productCode: { type: string, nullable: true }
+        moduleCode: { type: string, nullable: true }
+        permissionSlug: { type: string, nullable: true }
+        action: { type: string, description: "Ej. GRANT, DENY, REMOVE, PII_REVEAL_CONFIRMED." }
+        outcome: { type: string, enum: [OK, REJECTED] }
+        reasonCode: { type: string, nullable: true }
+        valueBefore: { type: string, nullable: true }
+        valueAfter: { type: string, nullable: true }
+        batchId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    PermissionAuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PermissionAuditRecord"
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     BrandAssetValidationError:
       type: object

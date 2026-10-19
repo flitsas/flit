@@ -43,4 +43,5 @@ public sealed record AssignRoleData(Guid TenantId, Guid UserId, Guid RoleId, Gui
 public sealed record UserRoleAssignmentSnapshot(Guid Id, Guid UserId, Guid RoleId);
 
 /// <param name="TenantId">HU #13441: <c>null</c> = rol global; con valor = rol propio de esa compañía.</param>
-public sealed record RoleForAssignmentSnapshot(Guid Id, string TargetEntityType, Guid? TenantId = null);
+/// <param name="ProductCode">HU #13646: producto del rol; define qué permisos individuales se purgan al asignarlo.</param>
+public sealed record RoleForAssignmentSnapshot(Guid Id, string TargetEntityType, Guid? TenantId = null, string? ProductCode = null);

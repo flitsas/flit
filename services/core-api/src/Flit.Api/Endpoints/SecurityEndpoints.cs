@@ -1223,6 +1223,10 @@ public static class SecurityEndpoints
         // HU #13441: gestión de roles propios de la compañía (AdminCompanyPolicy por endpoint).
         SecurityTenantRolesEndpoints.Map(group);
 
+        // HU #13644: permisos individuales por usuario dentro del tope del administrador.
+        PermissionOverridesEndpoints.Map(group);
+        PermissionAuditEndpoints.Map(group); // HU #13647
+
         return app;
     }
 
