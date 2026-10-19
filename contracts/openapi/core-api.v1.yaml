@@ -2194,6 +2194,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /api/v1/internal/jwks.json:
+    get:
+      tags: [Internal]
+      operationId: internalJwks
+      summary: >-
+        USO INTERNO — JWKS con la llave PÚBLICA (kid Jwt:SigningKeyId, p. ej. flit-api-v1) con que core-api firma el
+        token de usuario. Lo lee core-ict (Jwt:JwksUri) por la red interna; YARP no publica /api/v1/internal/*.
+      security: []
+      responses:
+        "200":
+          description: Conjunto de llaves públicas (solo n y e; sin parámetros privados).
+          content:
+            application/json:
+              schema: { type: object }
+
   /api/v1/internal/domains/active:
     get:
       tags: [Internal]
