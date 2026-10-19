@@ -23,6 +23,7 @@ public static class DetailedReportEndpoints
             .WithTags("Analytics · Reportes detallados (Feature #10813)");
 
         group.MapGet("/procedures", GetProceduresAsync)
+            .RequireModulePermission("reportes.detallados.read")
             .WithName("DetailedReportProcedures")
             .WithSummary("Consulta paginada del reporte detallado con filtros por atributos del trámite")
             .Produces(StatusCodes.Status200OK)
@@ -30,6 +31,7 @@ public static class DetailedReportEndpoints
 
         group.MapGet("/procedures/export", ExportExcelAsync)
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .RequireModulePermission("reportes.detallados.export")
             .WithName("DetailedReportExportExcel")
             .WithSummary("Exporta a Excel el reporte detallado filtrado")
             .Produces(StatusCodes.Status200OK, contentType: ExcelContentType)
