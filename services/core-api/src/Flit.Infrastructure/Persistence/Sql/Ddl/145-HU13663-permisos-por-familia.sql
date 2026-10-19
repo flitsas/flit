@@ -51,6 +51,8 @@ SELECT DISTINCT rp.role_id, np.id
   JOIN security.permissions np
     ON (op.slug = 'tramites.read'   AND np.slug IN ('matriculas.read', 'traspasos.read', 'otros-tramites.read'))
     OR (op.slug = 'tramites.create' AND np.slug IN ('matriculas.create', 'traspasos.create', 'otros-tramites.create'))
+  JOIN security.modules nm ON nm.id = np.module_id
  WHERE r.deleted_at IS NULL
+   AND nm.product_code = r.product_code  -- tr_role_permissions_same_product: solo roles del producto del módulo
    AND r.is_active
 ON CONFLICT (role_id, permission_id) DO NOTHING;
