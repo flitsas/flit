@@ -27,6 +27,7 @@ public static class AnalyticsMetricsEndpoints
             .WithTags("Analytics · Métricas (Reportes 2.0)");
 
         group.MapGet("/ot-metrics", GetOtMetricsAsync)
+            .RequireAnyModulePermission(ReportesPermissions.Ot, ReportesPermissions.Operacion) // OperacionTab también lee las métricas OT
             .WithName("AnalyticsOtMetrics")
             .WithSummary("Métricas del Organismo de Tránsito: rechazos, tiempos de decisión, reincidencia, ranking y atascados")
             .Produces(StatusCodes.Status200OK)
@@ -35,6 +36,7 @@ public static class AnalyticsMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/funnel", GetFunnelAsync)
+            .RequireModulePermission(ReportesPermissions.Operacion)
             .WithName("AnalyticsFunnel")
             .WithSummary("Funnel de estados del trámite (instancias que alcanzaron cada etapa) y pasos del wizard")
             .Produces(StatusCodes.Status200OK)
@@ -43,6 +45,7 @@ public static class AnalyticsMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/usage", GetUsageAsync)
+            .RequireModulePermission(ReportesPermissions.Uso)
             .WithName("AnalyticsUsage")
             .WithSummary("Uso del aplicativo: módulos, wizard, horas pico, reemplazos de documentos e integraciones externas")
             .Produces(StatusCodes.Status200OK)
@@ -51,6 +54,7 @@ public static class AnalyticsMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/live-overview", GetLiveOverviewAsync)
+            .RequireAnyModulePermission(ReportesPermissions.CualquierPestana)
             .WithName("AnalyticsLiveOverview")
             .WithSummary("Panorama en vivo del tenant: actividad de hoy, atascados, validaciones pendientes e integraciones")
             .Produces(StatusCodes.Status200OK)

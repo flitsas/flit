@@ -22,6 +22,7 @@ public static class ReportSchedulesEndpoints
         var group = app
             .MapGroup("/api/v1/analytics")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .RequireModulePermission(ReportesPermissions.Programacion)
             .WithTags("Analytics · Informes programados (Reportes 2.0)");
 
         group.MapGet("/report-schedules", ListAsync)

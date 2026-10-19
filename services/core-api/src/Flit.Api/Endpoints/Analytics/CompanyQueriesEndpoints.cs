@@ -33,6 +33,7 @@ public static class CompanyQueriesEndpoints
         var group = app
             .MapGroup("/api/v1/analytics/queries")
             .RequireAuthorization()
+            .RequireModulePermission(ReportesPermissions.Consultas)
             .WithTags("Analytics · Consultas de la empresa");
 
         group.MapGet("/fields", GetFieldsAsync)

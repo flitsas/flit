@@ -33,6 +33,7 @@ public static class AnalyticsEndpoints
             .WithTags("Analytics · Dashboard");
 
         group.MapGet("/overview", GetOverviewAsync)
+            .RequireAnyModulePermission(ReportesPermissions.Resumen, ReportesPermissions.Read, "dashboard.read") // compartida con el Dashboard
             .WithName("AnalyticsOverview")
             .WithSummary("Métricas por categoría/estado del tenant en un rango de fechas")
             .Produces(StatusCodes.Status200OK)
@@ -41,6 +42,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/productivity/top", GetTopProducersAsync)
+            .RequireModulePermission(ReportesPermissions.Productividad)
             .WithName("AnalyticsTopProducers")
             .WithSummary("Top de radicadores por trámites enviados en un rango de fechas")
             .Produces(StatusCodes.Status200OK)
@@ -49,6 +51,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/procedures", GetProcedureDetailsAsync)
+            .RequireAnyModulePermission(ReportesPermissions.CualquierPestana)
             .WithName("AnalyticsProcedureDetails")
             .WithSummary("Detalle paginado de trámites filtrable por categoría y estado")
             .Produces(StatusCodes.Status200OK)
@@ -57,6 +60,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/export/excel", ExportExcel)
+            .RequireAnyModulePermission(ReportesPermissions.CualquierPestana)
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .WithName("AnalyticsExportExcel")
             .WithSummary("Exporta a Excel (.xlsx) el detalle de trámites filtrado, por streaming")
@@ -66,6 +70,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPost("/export/executive-pdf", ExportExecutivePdfAsync)
+            .RequireAnyModulePermission(ReportesPermissions.CualquierPestana)
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .WithName("AnalyticsExecutivePdf")
             .WithSummary("Genera el PDF de Resumen Ejecutivo del periodo")
@@ -75,6 +80,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/monthly-trend", GetMonthlyTrendAsync)
+            .RequireAnyModulePermission(ReportesPermissions.Resumen, ReportesPermissions.Read, "dashboard.read")
             .WithName("AnalyticsMonthlyTrend")
             .WithSummary("Tendencia mensual de trámites por categoría (últimos N meses)")
             .Produces(StatusCodes.Status200OK)
