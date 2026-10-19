@@ -133,6 +133,7 @@ public sealed class ServicioHostTests : IAsyncLifetime
         ["Platform:Auth:JwksUri"] = "http://core-identity/.well-known/jwks.json",
         ["Platform:Auth:Issuers:0"] = "https://hub.prueba/",
         ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
+        ["Comparendos:Archivos:GuardarEnBase"] = "true",
         [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 }

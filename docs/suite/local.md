@@ -193,6 +193,10 @@ cp services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.js
 # Comparendos:Identidad:Address=http://127.0.0.1:8083, con core-identity (§4) arrancado con Identidad__GrpcPort=8083 y el
 # override de comparendos. Sin Identidad la lista sale vacía y no se puede registrar.
 # El gateway necesita los destinos locales de core-comparendos y core-consultas (están en su appsettings de ejemplo).
+# Archivos: el ejemplo trae FileManager apuntando al file-manager de DEV (MinIO), categoría «comparendos», el mismo que
+# usa core-api en local: los archivos quedan en flit-files/comparendos/<año>/<mes>/<día>. Sin FileManager:BaseUrl el
+# servicio NO arranca (guardar en la base solo lo permiten las pruebas, con Comparendos:Archivos:GuardarEnBase=true).
+# Lo guardado en la base antes de conectar el file-manager (referencias «db:…») se sigue leyendo de la base.
 cd services/core-comparendos/src/Flit.Comparendos.Api && dotnet build && \
 ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Comparendos.Api.dll
 

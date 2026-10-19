@@ -89,8 +89,10 @@ handoff-vps-suite.md).
 COMPOSE_PROFILES=<los que ya tenga>,comparendos
 COMPARENDOS_SESSION_SECRET=<openssl rand -base64 48, distinto del FLIT_SESSION_SECRET del hub>
 COMPARENDOS_URL=https://dev.comparendos.flitsas.online      # sin prefijo en PDN
+FILE_MANAGER_BASE_URL=<la misma URL que core-api>           # OBLIGATORIA: sin ella core-comparendos no arranca
+FILE_MANAGER_AUTH_TOKEN=<el mismo de core-api y core-ict>     # obligatorio en PDN (Contabo responde 401 sin él)
 # Opcionales (vacíos = valor por defecto o apagado):
-# COMPARENDOS_FILE_MANAGER_CATEGORY=comparendos             # sin FILE_MANAGER_BASE_URL los archivos van a la base (solo DEV)
+# COMPARENDOS_FILE_MANAGER_CATEGORY=comparendos             # carpeta del bucket: flit-files/comparendos/<año>/<mes>/<día>
 # COMPARENDOS_OCR_API_KEY=                                  # llave de Anthropic; sin ella el OCR no acepta paquetes fuera de DEV
 # COMPARENDOS_SIMULACION=                                   # vacío = solo en Dev; true para una demo en QA; nunca en PDN
 COMPARENDOS_IDENTIDAD_ADDRESS=http://core-identity:8083     # obligatoria: sin ella ninguna empresa cuenta como habilitada

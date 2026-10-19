@@ -100,6 +100,7 @@ public class ApiDePrueba : IAsyncLifetime
             ["Comparendos:Plataforma:RegistrarManifiesto"] = "false",
             ["Comparendos:Trabajos:Habilitados"] = "false",
             ["Comparendos:Simulacion:Habilitada"] = "true",
+            ["Comparendos:Archivos:GuardarEnBase"] = "true",
             [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         foreach (var (k, v) in Configuracion())

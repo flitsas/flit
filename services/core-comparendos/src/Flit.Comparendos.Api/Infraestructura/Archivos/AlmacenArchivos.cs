@@ -17,8 +17,11 @@ public sealed record ArchivoGuardado(string Referencia, string Sha256, long Tama
 
 /// <summary>
 /// Archivos del producto: originales del OCR, PDF de los DP, respuestas del OT, comprobantes de pago, documentos del
-/// conductor y firmas. En los servidores van al file-manager corporativo (MinIO en DEV/QA, Contabo en PDN) en la
-/// categoría <c>comparendos</c>; en local, sin file-manager, quedan en la tabla <c>archivos</c> del propio esquema.
+/// conductor y firmas. Van al file-manager corporativo (MinIO en DEV/QA, Contabo en PDN) en la categoría
+/// <c>comparendos</c>, la carpeta hermana de <c>tramites</c> e <c>ict</c>; en local se usa el de DEV, igual que core-api.
+/// Guardar en la base (<c>comparendos.archivo_local</c>) solo se permite con <see cref="OpcionesAlmacen.GuardarEnBase"/>
+/// (pruebas automáticas): sin URL y sin esa bandera el servicio no arranca, para que un <c>.env</c> incompleto no deje los
+/// documentos en la base sin que nadie lo note.
 /// </summary>
 public interface IAlmacenArchivos
 {
@@ -171,7 +174,28 @@ internal sealed class FileManagerAlmacen(HttpClient http, IOptions<FileManagerOp
         [property: JsonPropertyName("fields")] Dictionary<string, string>? Fields);
 }
 
-/// <summary>Sin file-manager (local y pruebas): los bytes quedan en <c>comparendos.archivos</c>.</summary>
+public static class OpcionesAlmacen
+{
+    /// <summary>Bandera explícita para guardar los archivos en la base. Solo la ponen las pruebas automáticas.</summary>
+    public const string GuardarEnBase = "Comparendos:Archivos:GuardarEnBase";
+}
+
+/// <summary>
+/// File-manager para lo nuevo; lo que ya tenga referencia <c>db:</c> (guardado en la base antes de conectar el
+/// file-manager, solo en bases locales) se sigue leyendo de la base.
+/// </summary>
+internal sealed class AlmacenFileManagerConRespaldo(FileManagerAlmacen fileManager, ComparendosDb db) : IAlmacenArchivos
+{
+    public Task<ArchivoGuardado> GuardarAsync(Guid empresaId, string tipo, string nombre, string contentType, byte[] contenido, CancellationToken ct) =>
+        fileManager.GuardarAsync(empresaId, tipo, nombre, contentType, contenido, ct);
+
+    public Task<byte[]?> LeerAsync(string referencia, CancellationToken ct) =>
+        referencia.StartsWith(AlmacenEnBase.Prefijo, StringComparison.Ordinal)
+            ? AlmacenEnBase.LeerDeBaseAsync(db, referencia, ct)
+            : fileManager.LeerAsync(referencia, ct);
+}
+
+/// <summary>Sin file-manager (solo pruebas automáticas): los bytes quedan en <c>comparendos.archivo_local</c>.</summary>
 internal sealed class AlmacenEnBase(ComparendosDb db) : IAlmacenArchivos
 {
     public async Task<ArchivoGuardado> GuardarAsync(Guid empresaId, string tipo, string nombre, string contentType, byte[] contenido, CancellationToken ct)
@@ -188,11 +212,15 @@ internal sealed class AlmacenEnBase(ComparendosDb db) : IAlmacenArchivos
         };
         db.ArchivosLocales.Add(archivo);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return new ArchivoGuardado($"db:{archivo.Id:D}", Convert.ToHexStringLower(SHA256.HashData(contenido)), contenido.LongLength);
+        return new ArchivoGuardado($"{Prefijo}{archivo.Id:D}", Convert.ToHexStringLower(SHA256.HashData(contenido)), contenido.LongLength);
     }
 
-    public async Task<byte[]?> LeerAsync(string referencia, CancellationToken ct) =>
-        referencia.StartsWith("db:", StringComparison.Ordinal) && Guid.TryParse(referencia[3..], out var id)
+    public Task<byte[]?> LeerAsync(string referencia, CancellationToken ct) => LeerDeBaseAsync(db, referencia, ct);
+
+    public const string Prefijo = "db:";
+
+    public static async Task<byte[]?> LeerDeBaseAsync(ComparendosDb db, string referencia, CancellationToken ct) =>
+        referencia.StartsWith(Prefijo, StringComparison.Ordinal) && Guid.TryParse(referencia[Prefijo.Length..], out var id)
             ? await db.ArchivosLocales.Where(a => a.Id == id).Select(a => a.Contenido).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             : null;
 }
@@ -206,15 +234,21 @@ public static class AlmacenArchivosExtensions
         services.Configure<FileManagerOptions>(o => FileManagerOptions.Configurar(o, configuration));
         if (string.IsNullOrWhiteSpace(opciones.BaseUrl))
         {
+            if (!configuration.GetValue(OpcionesAlmacen.GuardarEnBase, false))
+                throw new InvalidOperationException(
+                    "Comparendos no tiene file-manager: define FILE_MANAGER_BASE_URL (la misma URL que core-api; MinIO en DEV/QA, "
+                    + "Contabo en PDN, que además exige FILE_MANAGER_AUTH_TOKEN). Guardar los archivos en la base solo se permite "
+                    + $"con {OpcionesAlmacen.GuardarEnBase}=true, que es para las pruebas automáticas.");
             services.AddScoped<IAlmacenArchivos, AlmacenEnBase>();
             return services;
         }
 
-        services.AddHttpClient<IAlmacenArchivos, FileManagerAlmacen>(c =>
+        services.AddHttpClient<FileManagerAlmacen>(c =>
         {
             c.BaseAddress = new Uri(opciones.BaseUrl.EndsWith('/') ? opciones.BaseUrl : opciones.BaseUrl + "/");
             c.Timeout = TimeSpan.FromSeconds(opciones.TimeoutSeconds);
         });
+        services.AddScoped<IAlmacenArchivos, AlmacenFileManagerConRespaldo>();
         return services;
     }
 }

@@ -3,6 +3,9 @@
   // por git) y reemplaza cada CAMBIAR. En Development las fuentes, la API de contratos y el OCR sin llave se simulan.
   "Urls": "http://127.0.0.1:4028",
   "Servicio": { "GrpcPort": 8086 },
+  // Archivos al file-manager de DEV (MinIO), carpeta flit-files/comparendos, como core-api con «tramites». Sin BaseUrl el
+  // servicio no arranca: guardar en la base solo lo permiten las pruebas automáticas.
+  "FileManager": { "BaseUrl": "https://devfilemanager.flitsas.online/", "FilesPath": "api/v1/files", "Category": "comparendos", "TimeoutSeconds": 120 },
   "ConnectionStrings": {
     // La misma base de core-api; el servicio usa su esquema propio «comparendos» y lo migra al arrancar.
     "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
