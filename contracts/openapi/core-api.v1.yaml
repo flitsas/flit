@@ -154,6 +154,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/session-policy:
+    get:
+      operationId: authGetSessionPolicy
+      tags: [Auth]
+      summary: Vigencia de la sesión (cuándo entra en vigor un cambio de permisos)
+      description: >
+        HU #13651 (Feature #13102, Épica #12753). El token lleva los permisos efectivos y solo se recalcula al emitir
+        uno nuevo; este endpoint dice cuánto puede tardar un cambio de permisos de un usuario en aplicarse.
+        Modo `legacy` (sin OIDC): un solo JWT que dura `Jwt:TokenLifetimeHours`; `maxMinutes` = horas × 60.
+        Modo `oidc` (`Suite:Oidc:Enabled`): el access token dura `Suite:Oidc:AccessTokenMinutes` y se renueva solo.
+        El valor sale de la configuración vigente, nunca de un literal. Vive en /auth (no en /security) para que
+        el Gateway lo enrute a core-identity o a core-api igual que el resto del login: llega en ambos modos.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Política de sesión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionPolicyResponse'
+        '401':
+          description: No autenticado o sesión expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/auth/forgot-password:
     post:
       operationId: authForgotPassword
@@ -14826,6 +14853,22 @@ components:
         loginUrl:
           type: string
           example: https://app.movilidadandina.com/login
+    SessionPolicyResponse:
+      type: object
+      description: Vigencia de la sesión del usuario autenticado (HU #13651).
+      required: [mode, maxMinutes]
+      properties:
+        mode:
+          type: string
+          enum: [legacy, oidc]
+          description: >
+            legacy = JWT único de `Jwt:TokenLifetimeHours` (sin renovación); oidc = access token de
+            `Suite:Oidc:AccessTokenMinutes` con renovación.
+        maxMinutes:
+          type: integer
+          minimum: 1
+          description: Máximo de minutos hasta que el usuario recibe un token con los permisos recalculados.
+          example: 720
     CurrentUserResponse:
       type: object
       required: [userId, email, tenantId, roles, permissions, companyName, companyNit, entityType]
