@@ -132,7 +132,11 @@ public sealed class OpcionesAnthropic
     public string BaseUrl { get; set; } = "https://api.anthropic.com";
     public string ApiKey { get; set; } = string.Empty;
     public int TimeoutSegundos { get; set; } = 90;
-    public int MaxTokens { get; set; } = 2000;
+    /// <summary>
+    /// Haiku 5.5 piensa antes de responder y ese pensamiento cuenta contra este tope: con 2.000 se cortaba el JSON a la
+    /// mitad (prueba en navegador 2026-10-19). Es un techo, no lo que se cobra.
+    /// </summary>
+    public int MaxTokens { get; set; } = 16000;
 }
 
 /// <summary>
@@ -183,6 +187,14 @@ public sealed class ProveedorOcrAnthropic(HttpClient http, IOptions<OpcionesAnth
                 return ResultadoOcr.Fallo(modelo, TipoFalloOcr.ArchivoInvalido, $"El proveedor rechazó el archivo ({(int)respuesta.StatusCode}).", crudo: Recortar(texto));
 
             using var doc = JsonDocument.Parse(texto);
+            switch (doc.RootElement.TryGetProperty("stop_reason", out var parada) ? parada.GetString() : null)
+            {
+                case "max_tokens":
+                    return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens).");
+                case "refusal":
+                    return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "El modelo no quiso leer el documento.");
+            }
+
             var salida = string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
                 .Where(b => b.GetProperty("type").GetString() == "text").Select(b => b.GetProperty("text").GetString()));
             var campos = RespuestaOcr.Interpretar(salida);
