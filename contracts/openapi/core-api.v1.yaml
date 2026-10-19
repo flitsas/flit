@@ -14414,6 +14414,14 @@ components:
             agregó el CHECK ck_tenants_tenant_type. HU #12406 amplía el catálogo con los
             dos tipos de CABEZA de grupo (CONCESION | MARCA_BLANCA): la clase de la cabeza
             es su tipo de compañía y la BD acopla is_group_parent a él.
+        parentTenantId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Cabeza de red (Concesión o Marca Blanca) de la que cuelga; null si no es cliente
+            hijo. El tipo de una hija de red no se puede cambiar mientras esté vinculada (422
+            en tenantType).
         isTransitOffice:
           type: boolean
           description: >-
