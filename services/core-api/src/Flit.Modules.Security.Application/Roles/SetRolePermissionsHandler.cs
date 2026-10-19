@@ -2,7 +2,7 @@ using Flit.Modules.Security.Domain.Roles;
 
 namespace Flit.Modules.Security.Application.Roles;
 
-public sealed class SetRolePermissionsHandler(IRoleRepository repository)
+public sealed class SetRolePermissionsHandler(IRoleRepository repository, IFamilyPermissionRulePolicy? familyRules = null)
 {
     public async Task<RoleDetail> HandleAsync(SetRolePermissionsCommand command, CancellationToken ct)
     {
@@ -10,17 +10,21 @@ public sealed class SetRolePermissionsHandler(IRoleRepository repository)
         if (role is null)
             throw new RoleNotFoundException();
 
+        // HU #13664 AC1: «crear exige ver» por familia de trámite (detrás del flag de enforcement).
+        var permissionIds = await FamilyPermissionGuard.ApplyAsync(
+            repository, familyRules, role.Permissions.Select(p => p.Slug), command.PermissionIds, ct);
+
         // HU #12964 (contrato v1 §4): un rol solo tiene permisos de módulos de su producto. SuperAdmin
         // queda exento por su bypass (§2.1). La base lo exige también (tr_role_permissions_same_product);
         // validarlo aquí devuelve un error claro en vez de la excepción del disparador.
-        if (!string.Equals(role.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && command.PermissionIds.Count > 0)
+        if (!string.Equals(role.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && permissionIds.Count > 0)
         {
-            var products = await repository.GetPermissionProductCodesAsync(command.PermissionIds, ct);
+            var products = await repository.GetPermissionProductCodesAsync(permissionIds, ct);
             if (products.Any(p => !string.Equals(p, role.ProductCode, StringComparison.Ordinal)))
                 throw new RolePermissionProductMismatchException();
         }
 
-        await repository.SetPermissionsAsync(command.RoleId, command.PermissionIds, ct);
+        await repository.SetPermissionsAsync(command.RoleId, permissionIds, ct);
 
         var updated = await repository.GetByIdAsync(command.RoleId, ct);
         return updated!;

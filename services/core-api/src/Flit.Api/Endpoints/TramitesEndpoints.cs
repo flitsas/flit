@@ -2,6 +2,9 @@ using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
+using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Repositories;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -41,8 +44,20 @@ public static class TramitesEndpoints
         CreateProcedureInstanceRequest request,
         HttpContext httpContext,
         [FromServices] CreateProcedureInstanceHandler handler,
+        [FromServices] IProcedureFamilyPermissionGate familyGate,
+        [FromServices] IProcedureTypeRepository procedureTypes,
         CancellationToken cancellationToken)
     {
+        // HU #13664 — Crear por familia (AND con tramites.create de la ruta): la familia sale del tipo de trámite.
+        if (familyGate.IsActive
+            && await procedureTypes.GetByIdAsync(request.ProcedureTypeId, cancellationToken).ConfigureAwait(false) is { } tipo
+            && !familyGate.CanCreate(ProcedureFamilyCodes.FromCodeOrOtros(tipo.Family)))
+        {
+            return Results.Json(
+                new ErrorResponse("No tienes permiso para crear trámites de esta familia."),
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         var command = new CreateProcedureInstanceCommand
         {
             Request = request,
