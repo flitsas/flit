@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, Rocket, Save, Undo2 } from "lucide-react";
 import { refreshBrand } from "@/app/actions/brand";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { contrastRatio, isValidHexColor, meetsMinimumContrast } from "@/lib/brand/contrast";
+import { brandContrastPairs, isValidHexColor } from "@/lib/brand/contrast";
 import {
   brandLogoUrl,
   brandingErrorCode,
@@ -114,27 +114,25 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
     return () => controller.abort();
   }, [load]);
 
-  const contrastResult = useMemo(() => {
-    if (!isValidHexColor(draftColors.primary) || !isValidHexColor(draftColors.onPrimary)) {
-      return { ratio: null, ok: false };
-    }
-    const ratio = contrastRatio(draftColors.primary, draftColors.onPrimary);
-    return { ratio, ok: meetsMinimumContrast(ratio) };
-  }, [draftColors.primary, draftColors.onPrimary]);
+  // Los mismos dos pares que valida el backend al guardar: texto/principal y texto/secundario.
+  const contrastResult = useMemo(
+    () => ({ ok: brandContrastPairs(draftColors).every((p) => p.ok) }),
+    [draftColors],
+  );
+  const colorsValid =
+    isValidHexColor(draftColors.primary) &&
+    isValidHexColor(draftColors.secondary) &&
+    isValidHexColor(draftColors.onPrimary);
 
   const missing = useMemo(() => {
     const list: string[] = [];
     if (!draftName.trim()) list.push("nombre de la plataforma");
     if (!draftLogoId) list.push("logotipo");
-    if (
-      !isValidHexColor(draftColors.primary) ||
-      !isValidHexColor(draftColors.secondary) ||
-      !isValidHexColor(draftColors.onPrimary)
-    ) {
+    if (!colorsValid) {
       list.push("colores");
     }
     return list;
-  }, [draftName, draftLogoId, draftColors]);
+  }, [draftName, draftLogoId, colorsValid]);
 
   const canPublish = missing.length === 0 && contrastResult.ok;
 
@@ -159,9 +157,24 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
     return updated;
   }
 
+  /**
+   * Mismas reglas que el backend al guardar: si un color no es #RRGGBB o el contraste no llega a
+   * 4.5:1, se avisa con el motivo y no se envía nada.
+   */
+  function draftBlockedReason(): string | null {
+    if (!colorsValid) return brandingErrorMessage("BRANDING_COLOR_FORMAT");
+    if (!contrastResult.ok) return brandingErrorMessage("BRANDING_CONTRAST_TOO_LOW");
+    return null;
+  }
+
   async function handleSaveDraft() {
-    setSaving(true);
     setSuccessMessage(null);
+    const blocked = draftBlockedReason();
+    if (blocked) {
+      setFormError(blocked);
+      return;
+    }
+    setSaving(true);
     try {
       await persistDraft();
       setSuccessMessage("Borrador guardado.");
