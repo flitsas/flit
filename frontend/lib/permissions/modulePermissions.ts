@@ -18,6 +18,8 @@ export interface ActionView {
   effect?: "allow" | "deny";
   grantedByName?: string | null;
   grantedAt?: string | null;
+  /** HU #13653: permiso exclusivo del Super Admin frente al usuario destino (ningún administrador de su compañía/OT lo tiene). */
+  superAdminOnly: boolean;
 }
 
 export interface ModuleView {
@@ -46,6 +48,7 @@ export function buildModuleViews(
   overrides: UserPermissionOverride[],
 ): ModuleView[] {
   const grantableIds = new Set(grantable.map((g) => g.id));
+  const superAdminOnlyIds = new Set(grantable.filter((g) => g.superAdminOnly).map((g) => g.id));
   const overrideById = new Map(overrides.map((o) => [o.permissionId, o]));
 
   const views: ModuleView[] = [];
@@ -54,7 +57,7 @@ export function buildModuleViews(
     for (const a of m.actions) {
       const override = overrideById.get(a.id);
       if (!grantableIds.has(a.id) && !override) continue;
-      const base = { id: a.id, slug: a.slug, name: a.name };
+      const base = { id: a.id, slug: a.slug, name: a.name, superAdminOnly: superAdminOnlyIds.has(a.id) };
       if (override) {
         actions.push({
           ...base,

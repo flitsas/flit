@@ -23,7 +23,10 @@ vi.mock("@/lib/api/permission-overrides", async () => {
   };
 });
 
+vi.mock("@/lib/api/session-policy", () => ({ fetchSessionPolicy: vi.fn() }));
+
 import { getAccessibleModules } from "@/lib/api/security";
+import { fetchSessionPolicy } from "@/lib/api/session-policy";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import {
   listGrantablePermissions,
@@ -62,6 +65,7 @@ beforeEach(() => {
   vi.mocked(getAccessibleModules).mockResolvedValue(modules);
   vi.mocked(listGrantablePermissions).mockResolvedValue(grantable);
   vi.mocked(listUserOverrides).mockResolvedValue([]);
+  vi.mocked(fetchSessionPolicy).mockResolvedValue({ mode: "legacy", maxMinutes: 720 });
   vi.mocked(superadminClient.getRole).mockResolvedValue({
     id: "r1", targetEntityType: "COMPANY", code: "x", name: "Rol", description: null, isSystem: false, isActive: true,
     permissions: [{ id: "p1", slug: "tramites.view", name: "Ver trámites" }],
@@ -180,5 +184,117 @@ describe("ModulePermissionsSection", () => {
     vi.mocked(listGrantablePermissions).mockResolvedValue([]);
     renderSection();
     expect(await screen.findByTestId("ui-empty")).toBeInTheDocument();
+  });
+
+  // HU #13653 -----------------------------------------------------------------------------------
+  describe("HU #13653", () => {
+    const piiModules = [
+      ...modules,
+      { id: "m3", code: "ict", name: "ICT", sortOrder: 3, actions: [{ id: "p9", slug: "ict.pii.reveal", name: "Revelar datos personales" }] },
+    ];
+    const piiGrantable = [
+      ...grantable.map((g) => (g.id === "p2" ? { ...g, superAdminOnly: true } : g)),
+      { id: "p9", slug: "ict.pii.reveal", name: "Revelar datos personales", moduleCode: "ict", productCode: "tramites", superAdminOnly: true },
+    ];
+    const TIP = "Permiso exclusivo del Super Admin: un administrador de compañía u OT no puede otorgarlo.";
+    const PII_TEXT =
+      "Este permiso da acceso a datos personales protegidos por la Ley 1581 de 2012. Confirma que el usuario lo requiere para su función.";
+
+    beforeEach(() => {
+      vi.mocked(getAccessibleModules).mockResolvedValue(piiModules);
+      vi.mocked(listGrantablePermissions).mockResolvedValue(piiGrantable);
+    });
+
+    it("AC1: el permiso exclusivo del SA lleva chip «Solo SA», candado y tooltip; el resto no", async () => {
+      renderSection();
+      const tramites = await screen.findByTestId("module-tramites");
+      const crear = within(tramites).getByRole("switch", { name: /Crear trámites/ }).closest("li") as HTMLElement;
+      const chip = within(crear).getByTestId("solo-sa");
+      expect(chip).toHaveTextContent("Solo SA");
+      expect(chip).toHaveAttribute("title", TIP);
+      expect(chip.querySelector("svg")).not.toBeNull();
+      expect(within(crear).getAllByText(TIP).length).toBeGreaterThan(0);
+      const ver = within(tramites).getByRole("switch", { name: /Ver trámites/ }).closest("li") as HTMLElement;
+      expect(within(ver).queryByTestId("solo-sa")).not.toBeInTheDocument();
+    });
+
+    it("AC2: habilitar ict.pii.reveal abre el diálogo con la advertencia y NO guarda aún", async () => {
+      renderSection();
+      await userEvent.click(await screen.findByRole("switch", { name: /Revelar datos personales/ }));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(PII_TEXT)).toBeInTheDocument();
+      expect(setUserOverride).not.toHaveBeenCalled();
+    });
+
+    it("AC2: sin marcar «Confirmo» no se puede pulsar «Otorgar»", async () => {
+      renderSection();
+      await userEvent.click(await screen.findByRole("switch", { name: /Revelar datos personales/ }));
+      const dialog = await screen.findByRole("dialog");
+      const otorgar = within(dialog).getByRole("button", { name: "Otorgar" });
+      expect(otorgar).toBeDisabled();
+      await userEvent.click(otorgar);
+      expect(setUserOverride).not.toHaveBeenCalled();
+      await userEvent.click(within(dialog).getByLabelText("Confirmo"));
+      expect(otorgar).toBeEnabled();
+    });
+
+    it("AC2: confirmar guarda con piiConfirmed=true y cierra el diálogo", async () => {
+      vi.mocked(setUserOverride).mockResolvedValue({ permissionId: "p9", effect: "allow", changed: true });
+      renderSection();
+      await userEvent.click(await screen.findByRole("switch", { name: /Revelar datos personales/ }));
+      const dialog = await screen.findByRole("dialog");
+      await userEvent.click(within(dialog).getByLabelText("Confirmo"));
+      await userEvent.click(within(dialog).getByRole("button", { name: "Otorgar" }));
+      await waitFor(() => expect(setUserOverride).toHaveBeenCalledWith("u1", "p9", "allow", "t1", true));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    });
+
+    it("AC2: cancelar no cambia nada", async () => {
+      renderSection();
+      await userEvent.click(await screen.findByRole("switch", { name: /Revelar datos personales/ }));
+      const dialog = await screen.findByRole("dialog");
+      await userEvent.click(within(dialog).getByLabelText("Confirmo"));
+      await userEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(setUserOverride).not.toHaveBeenCalled();
+      expect(screen.getByRole("switch", { name: /Revelar datos personales/ })).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("AC2: deshabilitar ict.pii.reveal (ya habilitado) no pide confirmación", async () => {
+      vi.mocked(listUserOverrides).mockResolvedValue([
+        { permissionId: "p9", slug: "ict.pii.reveal", productCode: "tramites", effect: "allow", source: "INDIVIDUAL", grantedBy: "g", grantedByName: "Ana", grantedAt: null },
+      ]);
+      vi.mocked(setUserOverride).mockResolvedValue({ permissionId: "p9", effect: "deny", changed: true });
+      renderSection();
+      await userEvent.click(await screen.findByRole("switch", { name: /Revelar datos personales/ }));
+      await waitFor(() => expect(setUserOverride).toHaveBeenCalledWith("u1", "p9", "deny", "t1"));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("AC3: al guardar muestra un aviso de éxito con el mensaje de vigencia del usuario", async () => {
+      vi.mocked(setUserOverride).mockResolvedValue({ permissionId: "p2", effect: "allow", changed: true });
+      renderSection({ userName: "Ana Pérez" });
+      await userEvent.click(await screen.findByRole("switch", { name: /Crear trámites/ }));
+      expect(
+        await screen.findByText("El cambio se aplicará la próxima vez que Ana Pérez inicie sesión (máximo 12 horas)."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Cambio guardado");
+    });
+
+    it("AC3: si la API responde error muestra un aviso de error y ninguno de éxito", async () => {
+      vi.mocked(setUserOverride).mockRejectedValue(rejected(403, "OUT_OF_CAP"));
+      renderSection({ userName: "Ana Pérez" });
+      await userEvent.click(await screen.findByRole("switch", { name: /Crear trámites/ }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Ese permiso queda fuera de lo que puedes otorgar.");
+      expect(screen.queryByText(/El cambio se aplicará/)).not.toBeInTheDocument();
+    });
+
+    it("AC3: si la política de sesión no responde, el guardado igual se informa", async () => {
+      vi.mocked(setUserOverride).mockResolvedValue({ permissionId: "p2", effect: "allow", changed: true });
+      vi.mocked(fetchSessionPolicy).mockRejectedValue(new Error("boom"));
+      renderSection({ userName: "Ana Pérez" });
+      await userEvent.click(await screen.findByRole("switch", { name: /Crear trámites/ }));
+      expect(await screen.findByText(/El cambio se aplicará la próxima vez que la persona inicie sesión/)).toBeInTheDocument();
+    });
   });
 });

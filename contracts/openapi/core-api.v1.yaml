@@ -3572,6 +3572,12 @@ paths:
                     name: { type: string }
                     moduleCode: { type: string }
                     productCode: { type: string }
+                    superAdminOnly:
+                      type: boolean
+                      description: >
+                        HU #13653 (aditivo). `true` si NINGUN administrador del tenant destino (AdminCompany, ot_admin,
+                        admin_tramites) tiene el permiso en su tope (roles menos sus deny): un administrador no puede otorgarlo.
+                        Solo se calcula cuando el Super Admin envia `?tenantId=`; en cualquier otro caso es `false`.
         "401": { description: No autenticado. }
         "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
         "404": { description: "`USER_NOT_FOUND`." }
@@ -3707,6 +3713,13 @@ paths:
               required: [effect]
               properties:
                 effect: { type: string, enum: [allow, deny] }
+                piiConfirmed:
+                  type: boolean
+                  description: >
+                    HU #13653 (aditivo, FB-17). Confirmacion Ley 1581 de 2012. Obligatorio en `true` para `allow` sobre
+                    `ict.pii.reveal` (sin el: 400 `PII_CONFIRMATION_REQUIRED`, nada cambia). Al aplicarse escribe, en la misma
+                    operacion que el GRANT, una fila `PII_REVEAL_CONFIRMED` en `security.user_permission_audit`.
+                    El modulo completo NO otorga `ict.pii.reveal` (cuenta en `excluded`).
       responses:
         "200":
           description: Aplicado (`changed = false` si el usuario ya tenia ese efecto).
@@ -3718,7 +3731,7 @@ paths:
                   permissionId: { type: string, format: uuid }
                   effect: { type: string, enum: [allow, deny] }
                   changed: { type: boolean }
-        "400": { description: "`INVALID_EFFECT`." }
+        "400": { description: "`INVALID_EFFECT` o `PII_CONFIRMATION_REQUIRED` (HU #13653)." }
         "401": { description: No autenticado. }
         "403":
           description: "Fuera del tope o no otorgable (`OUT_OF_CAP`, `NOT_ENFORCED`) o regla de HU #13645: `SELF`, `TARGET_SUPERADMIN`, `TARGET_IS_ADMIN`, `OUT_OF_SCOPE`, `EXCLUDED`. Todo rechazo queda auditado."

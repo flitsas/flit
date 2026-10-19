@@ -63,4 +63,10 @@ describe("buildModuleViews", () => {
     expect(views.map((m) => m.name)).toEqual(["Trámites", "Reportes"]);
     expect(views[0].actions.map((a) => a.name)).toEqual(["Ver", "Crear"]);
   });
+
+  it("HU #13653: marca superAdminOnly según lo otorgable (también en acciones con override)", () => {
+    const g = grantable.map((x) => (x.id === "p2" ? { ...x, superAdminOnly: true } : x));
+    const views = buildModuleViews(modules, g, new Set(), [ov("p2", "allow")]);
+    expect(views[0].actions.map((a) => [a.id, a.superAdminOnly])).toEqual([["p1", false], ["p2", true]]);
+  });
 });

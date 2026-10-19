@@ -13,7 +13,15 @@ export interface GrantablePermissionItem {
   name: string;
   moduleCode: string;
   productCode: string;
+  /**
+   * HU #13653 (aditivo): ningún administrador del tenant destino tiene este permiso en su tope. Solo lo calcula la API
+   * cuando el Super Admin envía `tenantId`; en cualquier otro caso llega `false` (o ausente en servidores anteriores).
+   */
+  superAdminOnly?: boolean;
 }
+
+/** Permiso que exige la confirmación Ley 1581 antes de otorgarse (HU #13653, FB-17). */
+export const PII_REVEAL_SLUG = "ict.pii.reveal";
 
 export interface UserPermissionOverride {
   permissionId: string;
@@ -95,8 +103,14 @@ export function setUserOverride(
   permissionId: string,
   effect: OverrideEffect,
   tenantId?: string,
+  /** HU #13653: confirmación Ley 1581; la API la exige para `allow` sobre `ict.pii.reveal` (400 PII_CONFIRMATION_REQUIRED). */
+  piiConfirmed?: boolean,
 ): Promise<{ permissionId: string; effect: OverrideEffect; changed: boolean }> {
-  return apiFetch(`${base(userId)}/${permissionId}`, { method: "PUT", body: { effect }, query: { tenantId } });
+  return apiFetch(`${base(userId)}/${permissionId}`, {
+    method: "PUT",
+    body: piiConfirmed ? { effect, piiConfirmed: true } : { effect },
+    query: { tenantId },
+  });
 }
 
 /** «Volver a lo que dicta el rol»: 204 (404 OVERRIDE_NOT_FOUND si ya no había override). */
@@ -160,6 +174,7 @@ const REJECTION_MESSAGES: Record<string, string> = {
   MODULE_NOT_FOUND: "Ese módulo ya no existe en el catálogo.",
   INVITATION_PENDING: INVITATION_PENDING_MESSAGE,
   INVALID_EFFECT: "La acción solicitada no es válida.",
+  PII_CONFIRMATION_REQUIRED: "Para otorgar este permiso debes confirmar el acceso a datos personales.",
   OVERRIDE_CONFLICT: "Otra persona modificó este permiso al mismo tiempo. Actualiza la lista e inténtalo de nuevo.",
 };
 

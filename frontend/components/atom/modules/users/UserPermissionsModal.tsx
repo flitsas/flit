@@ -39,6 +39,7 @@ export function UserPermissionsModal({
     >
       <ModulePermissionsSection
         userId={user.id}
+        userName={user.fullName}
         tenantId={user.tenantId ?? undefined}
         mode={mode}
         roleIds={roleIds}
