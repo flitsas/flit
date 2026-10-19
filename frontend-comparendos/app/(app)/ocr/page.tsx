@@ -88,7 +88,12 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
   const validos = elegidos.filter((a) => !a.error).length;
   const invalidos = elegidos.length - validos;
 
-  const agregar = (lista: FileList | null) => lista && setElegidos((actuales) => agregarArchivos(actuales, Array.from(lista)));
+  // La FileList es viva: se copia antes de que el input se vacíe (`value = ""`), no dentro del actualizador del estado.
+  const agregar = (lista: FileList | null) => {
+    if (!lista) return;
+    const nuevos = Array.from(lista);
+    setElegidos((actuales) => agregarArchivos(actuales, nuevos));
+  };
 
   const crear = async (iniciar: boolean) => {
     setEnviando(true);
