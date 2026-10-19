@@ -36,7 +36,7 @@ internal static class PermissionOverridesEndpoints
 
         group.MapGet("/users/{userId:guid}/permission-overrides", (
             Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler,
-            IPermissionAuditReader grants, CancellationToken ct) =>
+            [FromServices] IPermissionAuditReader grants, CancellationToken ct) =>
             Run(caller, tenantId, async (tenant, actor) =>
             {
                 var items = await handler.ListAsync(tenant, actor, userId, ct);
