@@ -133,6 +133,8 @@ internal static class PermissionOverridesEndpoints
             StatusCodes.Status403Forbidden, ex.ReasonCode, "Solo el Super Admin modifica a otro administrador.", ex.Slug),
         PermissionOverrideReasons.OutOfScope => Error(
             StatusCodes.Status403Forbidden, ex.ReasonCode, "El usuario no pertenece a la compañía sobre la que operas.", ex.Slug),
+        PermissionOverrideReasons.FamilyCreateRequiresRead => Error(
+            StatusCodes.Status400BadRequest, ex.ReasonCode, "Para habilitar «Crear» primero debe estar habilitado «Ver» en esa familia.", ex.Slug),
         PermissionOverrideReasons.Excluded => Error(
             StatusCodes.Status403Forbidden, ex.ReasonCode, "Ese permiso no se configura individualmente.", ex.Slug),
         _ => Error(StatusCodes.Status403Forbidden, ex.ReasonCode, "El permiso queda fuera de lo que puedes otorgar.", ex.Slug),

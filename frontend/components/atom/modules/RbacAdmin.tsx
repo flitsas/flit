@@ -18,6 +18,14 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
+import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
+import {
+  FAMILY_CREATE_REQUIRES_READ_MESSAGE,
+  findFamilyPair,
+  isFamilyCreateRequiresReadError,
+  normalizeFamilyPairs,
+  toggleRolePermission,
+} from "@/lib/permissions/familyPairs";
 import { digitsOnly } from "@/lib/format/currency";
 
 const RBAC_TABS = [
@@ -547,6 +555,7 @@ function ModulePermissionsChecklist({
       {modules.map((m) => {
         const allSelected = m.actions.length > 0 && m.actions.every((a) => selected.has(a.id));
         const someSelected = m.actions.some((a) => selected.has(a.id));
+        const pair = findFamilyPair(m.actions);
         return (
           <div key={m.id}>
             <button
@@ -568,7 +577,8 @@ function ModulePermissionsChecklist({
               <span className="text-sm font-semibold">{m.name}</span>
             </button>
             <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-              {m.actions.map((a) => (
+              {pair && <FamilyPairCheckboxes moduleName={m.name} read={pair.read} create={pair.create} selected={selected} onToggle={onToggle} />}
+              {m.actions.filter((a) => !pair || (a.id !== pair.read.id && a.id !== pair.create.id)).map((a) => (
                 <label key={a.id} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -621,13 +631,9 @@ function CreateRoleModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // HU #13666: «crear exige ver» — apagar «Ver» apaga también «Crear» de ese tipo de servicio.
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((prev) => toggleRolePermission(prev, id, modules));
   }
 
   function toggleModule(m: AccessibleModule) {
@@ -636,7 +642,7 @@ function CreateRoleModal({
       const next = new Set(prev);
       if (allSelected) m.actions.forEach((a) => next.delete(a.id));
       else m.actions.forEach((a) => next.add(a.id));
-      return next;
+      return normalizeFamilyPairs(next, modules);
     });
   }
 
@@ -660,7 +666,11 @@ function CreateRoleModal({
       onCreated(targetEntityType);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      setError(msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe para este tipo de entidad." : "Error al crear el rol.");
+      setError(
+        isFamilyCreateRequiresReadError(err)
+          ? FAMILY_CREATE_REQUIRES_READ_MESSAGE
+          : msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe para este tipo de entidad." : "Error al crear el rol.",
+      );
       setBusy(false);
     }
   }
@@ -747,13 +757,9 @@ function EditRolePermissionsModal({
     };
   }, [role.id]);
 
+  // HU #13666: «crear exige ver» — apagar «Ver» apaga también «Crear» de ese tipo de servicio.
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((prev) => toggleRolePermission(prev, id, modules));
   }
 
   function toggleModule(m: AccessibleModule) {
@@ -762,7 +768,7 @@ function EditRolePermissionsModal({
       const next = new Set(prev);
       if (allSelected) m.actions.forEach((a) => next.delete(a.id));
       else m.actions.forEach((a) => next.add(a.id));
-      return next;
+      return normalizeFamilyPairs(next, modules);
     });
   }
 
@@ -784,8 +790,8 @@ function EditRolePermissionsModal({
     try {
       const detail = await superadminClient.setRolePermissions(role.id, ids);
       onSaved(detail.permissions);
-    } catch {
-      setError("No se pudieron actualizar los permisos.");
+    } catch (err: unknown) {
+      setError(isFamilyCreateRequiresReadError(err) ? FAMILY_CREATE_REQUIRES_READ_MESSAGE : "No se pudieron actualizar los permisos.");
       setBusy(false);
     }
   }

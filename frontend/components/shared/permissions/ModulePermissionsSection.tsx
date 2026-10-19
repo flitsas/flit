@@ -20,6 +20,8 @@ import {
 } from "@/lib/api/permission-overrides";
 import { buildModuleViews, outOfCapOverrideIds, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
+import { findFamilyPair } from "@/lib/permissions/familyPairs";
+import { FamilyPairRows } from "./FamilyPairRows";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary } from "@flit/ui/UiStateBoundary";
 
@@ -83,6 +85,11 @@ async function fetchRolePermissionIds(mode: "superadmin" | "admin", roleIds: str
   );
   for (const d of details) for (const p of d.permissions) ids.add(p.id);
   return ids;
+}
+
+function isFamilyPairAction(actions: ActionView[], a: ActionView): boolean {
+  const pair = findFamilyPair(actions);
+  return pair !== null && (a.id === pair.read.id || a.id === pair.create.id);
 }
 
 function OriginBadge({ origin }: { origin: PermissionOrigin }) {
@@ -327,7 +334,22 @@ export function ModulePermissionsSection({
               </div>
 
               <ul className="mt-2 flex flex-col divide-y divide-[#DFE5ED] dark:divide-white/10">
-                {m.actions.map((a) => (
+                {(() => {
+                  // HU #13666: par Ver / Crear por tipo de servicio (módulos tramites-matriculas/-traspasos/-otros).
+                  const pair = findFamilyPair(m.actions);
+                  return pair ? (
+                    <FamilyPairRows
+                      moduleName={m.name}
+                      read={pair.read}
+                      create={pair.create}
+                      readOnly={readOnly}
+                      controlsOff={controlsOff || (mode === "admin" && (pair.read.outOfCap === true || pair.create.outOfCap === true))}
+                      onToggle={(a) => void toggleAction(a)}
+                      onBackToRole={(a) => void backToRole(a)}
+                    />
+                  ) : null;
+                })()}
+                {m.actions.filter((a) => !isFamilyPairAction(m.actions, a)).map((a) => (
                   <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                     <button
                       type="button"

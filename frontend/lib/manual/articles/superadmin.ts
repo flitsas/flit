@@ -368,6 +368,10 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
             variant: "warning",
             text: "Quitar un permiso a un rol afecta de inmediato a todos sus usuarios. El Super Admin no pasa por RBAC: tiene bypass total.",
           },
+          {
+            variant: "info",
+            text: "Al editar los permisos de un rol, «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» muestran cada uno el par «Ver» / «Crear». «Crear» aparece deshabilitado mientras «Ver» esté sin marcar y, si desmarcas «Ver», «Crear» se desmarca también. Si el sistema devuelve «Para habilitar «Crear» primero debe estar habilitado «Ver» en ese tipo de servicio.», marca «Ver» y guarda de nuevo.",
+          },
         ],
         media: [
           {
@@ -384,7 +388,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
           "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
-          "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+          "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. Ver y Crear por tipo de servicio: en los módulos «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» cada tipo de servicio tiene un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
           "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada.",
         ],
       },

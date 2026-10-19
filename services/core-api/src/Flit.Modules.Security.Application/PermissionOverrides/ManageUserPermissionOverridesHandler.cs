@@ -1,5 +1,6 @@
 using Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 using Flit.Modules.Security.Domain.PermissionOverrides;
+using Flit.Modules.Security.Domain.Roles;
 
 namespace Flit.Modules.Security.Application.PermissionOverrides;
 
@@ -50,17 +51,49 @@ public sealed class ManageUserPermissionOverridesHandler(
             }
         }
 
+        // HU #13666: «crear exige ver» sobre el permiso EFECTIVO (rol + individuales).
+        var family = IsFamilyPermission(permission.Slug)
+            ? await LoadFamilyAsync(tenantId, targetUserId, ct).ConfigureAwait(false)
+            : null;
+        if (family is not null && effect == PermissionEffects.Allow && IsFamilyCreate(permission.Slug))
+        {
+            var after = family.Effective(null);
+            after.Add(permission.Slug);
+            if (FamilyPermissionRules.Resolve(family.Effective(null), after).Violations.Contains(permission.Slug))
+            {
+                await RejectAsync(tenantId, actor, targetUserId, permission, action, PermissionOverrideReasons.FamilyCreateRequiresRead, existing?.Effect, effect, ct)
+                    .ConfigureAwait(false);
+            }
+        }
+
         if (existing?.Effect == effect)
         {
             return new SetOverrideResult(permissionId, effect, false);
         }
 
-        var added = new UserPermissionOverride(
+        var removeIds = new List<Guid>();
+        var adds = new List<UserPermissionOverride>();
+        var audits = new List<UserPermissionAuditEntry>();
+        if (existing is not null)
+        {
+            removeIds.Add(existing.Id);
+        }
+
+        adds.Add(new UserPermissionOverride(
             Guid.NewGuid(), tenantId, targetUserId, permission.ProductCode, permissionId, effect,
-            PermissionOverrideSources.Individual, null, actor.UserId);
-        await repository.ApplyAsync(
-            tenantId, actor.UserId, existing is null ? [] : [existing.Id], [added],
-            [Audit(tenantId, actor, targetUserId, permission, action, "OK", null, existing?.Effect, effect)], ct).ConfigureAwait(false);
+            PermissionOverrideSources.Individual, null, actor.UserId));
+        audits.Add(Audit(tenantId, actor, targetUserId, permission, action, "OK", null, existing?.Effect, effect));
+
+        // Denegar «Ver» apaga el «Crear» de la familia: se retira el allow individual y, si el rol lo da, se deniega.
+        if (family is not null && effect == PermissionEffects.Deny && IsFamilyRead(permission.Slug))
+        {
+            var before = family.Effective(null);
+            var afterSet = family.Effective(null);
+            afterSet.Remove(permission.Slug);
+            AddCascade(tenantId, actor, targetUserId, family, FamilyPermissionRules.Resolve(before, afterSet).CascadeDropped, removeIds, adds, audits);
+        }
+
+        await repository.ApplyAsync(tenantId, actor.UserId, removeIds, adds, audits, ct).ConfigureAwait(false);
         return new SetOverrideResult(permissionId, effect, true);
     }
 
@@ -89,9 +122,20 @@ public sealed class ManageUserPermissionOverridesHandler(
             }
         }
 
-        await repository.ApplyAsync(
-            tenantId, actor.UserId, [existing.Id], [],
-            [Audit(tenantId, actor, targetUserId, permission, "REVOKE", "OK", null, existing.Effect, null)], ct).ConfigureAwait(false);
+        var removeIds = new List<Guid> { existing.Id };
+        var adds = new List<UserPermissionOverride>();
+        var audits = new List<UserPermissionAuditEntry> { Audit(tenantId, actor, targetUserId, permission, "REVOKE", "OK", null, existing.Effect, null) };
+
+        // HU #13666: quitar un allow individual de «Ver» devuelve «Ver» al rol; si el rol no lo da, el «Crear» se arrastra.
+        if (existing.Effect == PermissionEffects.Allow && IsFamilyRead(permission.Slug))
+        {
+            var family = await LoadFamilyAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
+            var before = family.Effective(null);
+            var afterSet = family.Effective(permission.Slug);
+            AddCascade(tenantId, actor, targetUserId, family, FamilyPermissionRules.Resolve(before, afterSet).CascadeDropped, removeIds, adds, audits);
+        }
+
+        await repository.ApplyAsync(tenantId, actor.UserId, removeIds, adds, audits, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -170,6 +214,82 @@ public sealed class ManageUserPermissionOverridesHandler(
         var all = await repository.ListEnforcedPermissionsAsync(ct).ConfigureAwait(false);
         var cap = await capCalculator.GetCapAsync(tenantId, actor, ct).ConfigureAwait(false);
         return [.. all.Where(p => cap.Contains(p.Id))];
+    }
+
+    // ── HU #13666: regla «crear exige ver» por familia sobre permisos individuales ─────────────────────────────
+
+    private static bool IsFamilyPermission(string slug) => IsFamilyRead(slug) || IsFamilyCreate(slug);
+
+    private static bool IsFamilyRead(string slug) => FamilyPermissionRules.Pairs.Any(p => p.Read == slug);
+
+    private static bool IsFamilyCreate(string slug) => FamilyPermissionRules.Pairs.Any(p => p.Create == slug);
+
+    private async Task<FamilyState> LoadFamilyAsync(Guid tenantId, Guid userId, CancellationToken ct)
+    {
+        var slugs = FamilyPermissionRules.Pairs.SelectMany(p => new[] { p.Read, p.Create }).ToHashSet(StringComparer.Ordinal);
+        var catalog = (await repository.ListEnforcedPermissionsAsync(ct).ConfigureAwait(false))
+            .Where(p => slugs.Contains(p.Slug)).ToDictionary(p => p.Slug, StringComparer.Ordinal);
+        var roleIds = await repository.GetRolePermissionIdsAsync(tenantId, userId, ct).ConfigureAwait(false);
+        var overrides = await repository.ListActiveAsync(tenantId, userId, ct).ConfigureAwait(false);
+        return new FamilyState(catalog, roleIds, overrides);
+    }
+
+    /// <summary>Retira el «Crear» arrastrado: borra su allow individual y, si el rol lo da, lo deniega (queda apagado).</summary>
+    private static void AddCascade(
+        Guid tenantId, OverrideActor actor, Guid targetUserId, FamilyState family, IReadOnlyList<string> createSlugs,
+        List<Guid> removeIds, List<UserPermissionOverride> adds, List<UserPermissionAuditEntry> audits)
+    {
+        foreach (var slug in createSlugs)
+        {
+            if (!family.Catalog.TryGetValue(slug, out var create))
+            {
+                continue;
+            }
+
+            var ov = family.Overrides.FirstOrDefault(o => o.PermissionId == create.Id);
+            if (ov is not null && !removeIds.Contains(ov.Id))
+            {
+                removeIds.Add(ov.Id);
+            }
+
+            if (family.RoleIds.Contains(create.Id))
+            {
+                adds.Add(new UserPermissionOverride(
+                    Guid.NewGuid(), tenantId, targetUserId, create.ProductCode, create.Id, PermissionEffects.Deny,
+                    PermissionOverrideSources.Individual, null, actor.UserId));
+                audits.Add(Audit(tenantId, actor, targetUserId, create, "DENY", "OK", null, ov?.Effect, PermissionEffects.Deny));
+            }
+            else if (ov is not null)
+            {
+                audits.Add(Audit(tenantId, actor, targetUserId, create, "REVOKE", "OK", null, ov.Effect, null));
+            }
+        }
+    }
+
+    private sealed record FamilyState(
+        IReadOnlyDictionary<string, PermissionCatalogEntry> Catalog,
+        IReadOnlySet<Guid> RoleIds,
+        IReadOnlyList<UserPermissionOverride> Overrides)
+    {
+        /// <summary>
+        /// Slugs de familia que el usuario tiene hoy (rol + individuales; deny gana). Con <paramref name="ignoreOverrideOf"/>,
+        /// el override de ESE slug se ignora (simula quitarlo y volver al rol).
+        /// </summary>
+        public HashSet<string> Effective(string? ignoreOverrideOf)
+        {
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (slug, entry) in Catalog)
+            {
+                var ov = slug == ignoreOverrideOf ? null : Overrides.FirstOrDefault(o => o.PermissionId == entry.Id);
+                var on = ov is null ? RoleIds.Contains(entry.Id) : ov.Effect == PermissionEffects.Allow;
+                if (on)
+                {
+                    set.Add(slug);
+                }
+            }
+
+            return set;
+        }
     }
 
     private async Task<PermissionCatalogEntry> GetPermissionAsync(Guid permissionId, CancellationToken ct) =>

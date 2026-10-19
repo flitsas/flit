@@ -160,6 +160,7 @@ const REJECTION_MESSAGES: Record<string, string> = {
   MODULE_NOT_FOUND: "Ese módulo ya no existe en el catálogo.",
   INVITATION_PENDING: INVITATION_PENDING_MESSAGE,
   INVALID_EFFECT: "La acción solicitada no es válida.",
+  FAMILY_CREATE_REQUIRES_READ: "Para habilitar «Crear» primero debe estar habilitado «Ver» en ese tipo de servicio.",
   OVERRIDE_CONFLICT: "Otra persona modificó este permiso al mismo tiempo. Actualiza la lista e inténtalo de nuevo.",
 };
 

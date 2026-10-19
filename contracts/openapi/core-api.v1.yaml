@@ -3718,7 +3718,12 @@ paths:
                   permissionId: { type: string, format: uuid }
                   effect: { type: string, enum: [allow, deny] }
                   changed: { type: boolean }
-        "400": { description: "`INVALID_EFFECT`." }
+        "400":
+          description: "`INVALID_EFFECT`, o `FAMILY_CREATE_REQUIRES_READ` (HU #13666): `allow` de `<familia>.create` (`matriculas`, `traspasos`, `otros-tramites`) cuando el permiso efectivo del usuario (rol + individuales) no incluye `<familia>.read`. Queda auditado como REJECTED. `deny` de `<familia>.read` apaga tambien `<familia>.create`: retira su allow individual y, si el rol lo da, lo deniega."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
         "401": { description: No autenticado. }
         "403":
           description: "Fuera del tope o no otorgable (`OUT_OF_CAP`, `NOT_ENFORCED`) o regla de HU #13645: `SELF`, `TARGET_SUPERADMIN`, `TARGET_IS_ADMIN`, `OUT_OF_SCOPE`, `EXCLUDED`. Todo rechazo queda auditado."
@@ -3734,7 +3739,7 @@ paths:
       summary: Quita el permiso individual (vuelve a lo que dicta el rol) (HU #13644)
       description: >
         Un admin siempre puede quitar un `allow`. Quitar un `deny` devuelve lo que dicta el rol: 403
-        `OUT_OF_CAP` si el rol del usuario lo da y queda fuera del tope del admin.
+        `OUT_OF_CAP` si el rol del usuario lo da y queda fuera del tope del admin. Quitar el `allow` de `<familia>.read` arrastra el `allow` individual de `<familia>.create` si el rol no da `.read` (HU #13666).
       security:
         - bearerAuth: []
       responses:

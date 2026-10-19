@@ -141,6 +141,9 @@ public static class PermissionOverrideReasons
 
     /// <summary>HU #13645: el usuario destino no existe.</summary>
     public const string UserNotFound = "USER_NOT_FOUND";
+
+    /// <summary>HU #13666: se pidió «Crear» de una familia de trámite sin «Ver» efectivo (rol + individuales).</summary>
+    public const string FamilyCreateRequiresRead = "FAMILY_CREATE_REQUIRES_READ";
 }
 
 /// <summary>
