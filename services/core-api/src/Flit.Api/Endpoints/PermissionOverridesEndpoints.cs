@@ -57,6 +57,14 @@ internal static class PermissionOverridesEndpoints
             Run(caller, tenantId, async (tenant, actor) =>
                 Results.Ok(await handler.GrantModuleAsync(tenant, actor, userId, moduleCode, request.Effect ?? string.Empty, ct))))
             .RequireAuthorization(policy).WithName("GrantModulePermissionOverrides");
+
+        // HU #13646 (FD2-5): consulta previa al cambio de rol — cuántos permisos individuales perdería el usuario.
+        group.MapGet("/users/{userId:guid}/permission-overrides/count", (
+            Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, [FromQuery] string? productCode,
+            ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
+            Run(caller, tenantId, async (tenant, actor) =>
+                Results.Ok(new { count = await handler.CountAsync(tenant, actor, userId, productCode, ct) })))
+            .RequireAuthorization(policy).WithName("CountUserPermissionOverrides");
     }
 
     private static async Task<IResult> Run(ClaimsPrincipal caller, Guid? tenantParam, Func<Guid, OverrideActor, Task<IResult>> action)

@@ -151,6 +151,18 @@ public sealed class ManageUserPermissionOverridesHandler(
         return [.. items.OrderBy(i => i.Slug, StringComparer.Ordinal)];
     }
 
+    /// <summary>
+    /// HU #13646 (FD2-5): cuántos permisos individuales activos tiene el usuario en el tenant (y producto, si se indica), para avisar
+    /// antes de cambiarle el rol. Mismas reglas de lectura que <see cref="ListAsync"/>: existencia y ámbito.
+    /// </summary>
+    public async Task<int> CountAsync(Guid tenantId, OverrideActor actor, Guid targetUserId, string? productCode, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        await RunRulesAsync(tenantId, actor, targetUserId, PermissionOverrideActions.Read, null, null, null, ct).ConfigureAwait(false);
+        var active = await repository.ListActiveAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(productCode) ? active.Count : active.Count(o => o.ProductCode == productCode);
+    }
+
     /// <summary>Catálogo otorgable (AC5): Super Admin = todo lo <c>enforced = 'true'</c>; el resto, solo su tope.</summary>
     public async Task<IReadOnlyList<PermissionCatalogEntry>> ListGrantableAsync(Guid tenantId, OverrideActor actor, CancellationToken ct)
     {

@@ -3579,6 +3579,45 @@ paths:
         "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
         "404": { description: "`USER_NOT_FOUND`." }
 
+  /api/v1/security/users/{userId}/permission-overrides/count:
+    get:
+      tags: [Security]
+      operationId: securityCountUserPermissionOverrides
+      summary: Cuantos permisos individuales tiene el usuario (HU #13646)
+      description: >-
+        Consulta previa al cambio de rol: al cambiar el rol del usuario se eliminan sus permisos individuales del producto
+        del rol nuevo (auditoria ROLE_CHANGE_PURGE). Mismas reglas de lectura que el listado (existencia y ambito).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: productCode
+          in: query
+          required: false
+          description: Producto a contar (p. ej. `tramites`); sin valor cuenta todos los productos.
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Cantidad de permisos individuales activos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count: { type: integer, minimum: 0 }
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
   /api/v1/security/users/{userId}/permission-overrides/{permissionId}:
     parameters:
       - name: userId

@@ -301,6 +301,7 @@ public static class InfrastructureExtensions
         services.AddScoped<IUserUiPreferenceRepository, UserUiPreferenceRepository>();
         services.AddScoped<IUserPermissionOverrideRepository, UserPermissionOverrideRepository>(); // HU #13642
         services.AddScoped<IOverrideTargetDirectory, OverrideTargetDirectory>(); // HU #13645
+        services.AddScoped<IRoleChangeOverridesPurger, RoleChangeOverridesPurger>(); // HU #13646
 
         services.AddSecurityApplication();
 
