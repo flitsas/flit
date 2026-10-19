@@ -17,7 +17,9 @@ import { LogQx } from "@/components/atom/modules/LogQx";
 import { IctLogs } from "@/components/atom/modules/IctLogs";
 import { IctReports } from "@/components/atom/modules/IctReports";
 import { IctTrazabilidad } from "@/components/atom/modules/IctTrazabilidad";
-import { ToastProvider, useToast } from "@/components/admin/Toast";
+import { ToastProvider } from "@/components/admin/Toast";
+import { AccesoDenegadoAlert } from "@/components/shared/AccesoDenegadoAlert";
+import { ACCESS_DENIED_PARAM, ACCESS_DENIED_VALUE } from "@/lib/auth/guard";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import {
@@ -34,6 +36,7 @@ import {
   canReadIctTrazabilidad,
   canReadLogQx,
   decodeJwtPayload,
+  type JwtPayload,
   isOtUser,
   isSuperAdmin,
 } from "@/lib/auth/jwt";
@@ -41,7 +44,6 @@ import {
 function HomeContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const { show: showToast } = useToast();
   const { authed, hydrated, logout } = useAuthGate();
   const {
     modules: accessibleModules,
@@ -50,32 +52,25 @@ function HomeContent() {
     error: modulesError,
   } = useAccessibleModules(authed);
   // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
-  const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
-  const [isOtAdminUser] = useState<boolean>(() => isOtUser(decodeJwtPayload(getToken())));
-  const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
+  const [claims] = useState<JwtPayload | null>(() => decodeJwtPayload(getToken()));
+  const isSuperAdminUser = isSuperAdmin(claims);
+  const isOtAdminUser = isOtUser(claims);
+  const canLogQx = canReadLogQx(claims);
   // ICT (Bug #13445): Log solo SuperAdmin; Trazabilidad y Reportes por su permiso propio.
-  const [canIctLogs] = useState<boolean>(() => canReadIctLogs(decodeJwtPayload(getToken())));
-  const [canIctTrazabilidad] = useState<boolean>(() => canReadIctTrazabilidad(decodeJwtPayload(getToken())));
-  const [canIctReportes] = useState<boolean>(() => canReadIctReportes(decodeJwtPayload(getToken())));
+  const canIctLogs = canReadIctLogs(claims);
+  const canIctTrazabilidad = canReadIctTrazabilidad(claims);
+  const canIctReportes = canReadIctReportes(claims);
 
   const accessibleCodes = useMemo(
     () => accessibleModules.map((m) => m.code) as ModuleId[],
     [accessibleModules],
   );
 
-  // Fuente única dock ≡ URL (HU #11507 / #11508).
+  // Fuente única dock ≡ URL (HU #11507 / #11508): la decide la tabla de acceso (ADR-0072, HU #13649).
+  // Hasta que el catálogo de módulos resuelve no se abre nada protegido (deny-by-default).
   const navigableIds = useMemo(
-    () =>
-      resolveNavigableModuleIds({
-        accessibleCodes,
-        isSuperAdmin: isSuperAdminUser,
-        isOtAdmin: isOtAdminUser,
-        canReadLogQx: canLogQx,
-        canReadIctLogs: canIctLogs,
-        canReadIctTrazabilidad: canIctTrazabilidad,
-        canReadIctReportes: canIctReportes,
-      }),
-    [accessibleCodes, isSuperAdminUser, isOtAdminUser, canLogQx, canIctLogs, canIctTrazabilidad, canIctReportes],
+    () => resolveNavigableModuleIds({ accessibleCodes: modulesReady ? accessibleCodes : null, claims }),
+    [accessibleCodes, claims, modulesReady],
   );
 
   // Clave estable: evita re-ejecutar el effect por nueva referencia de array.
@@ -85,8 +80,20 @@ function HomeContent() {
 
   // Hold: null hasta !modulesLoading — evita flash del módulo denegado.
   const [module, setModule] = useState<ModuleId | null>(null);
+  // HU #13650 — aviso «No tienes acceso a este módulo.»: lo dispara un `?m=` sin permiso o la marca
+  // `?acceso=denegado` con la que el middleware devuelve al inicio al que abrió /admin/* o /empresa/* sin permiso.
+  const [accesoDenegado, setAccesoDenegado] = useState(false);
+  const accessMark = params.get(ACCESS_DENIED_PARAM);
   const lastDeniedRef = useRef<string | null>(null);
   const replaceIssuedRef = useRef<string | null>(null);
+
+  // La marca del middleware se convierte en el aviso y se limpia de la URL (un solo replace; sin loop).
+  useEffect(() => {
+    if (!hydrated || !authed || accessMark !== ACCESS_DENIED_VALUE) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAccesoDenegado(true);
+    router.replace("/", { scroll: false });
+  }, [accessMark, hydrated, authed, router]);
 
   // Sync / revalidar ?m= cuando cambian rawModule O navigableIds (post-RBAC).
   // Importante: un solo replace por módulo denegado — sin loop de router.replace.
@@ -110,7 +117,7 @@ function HomeContent() {
       const deniedKey = rawModule ?? "";
       if (lastDeniedRef.current !== deniedKey) {
         lastDeniedRef.current = deniedKey;
-        showToast("No tienes acceso a ese módulo.", "error");
+        setAccesoDenegado(true);
       }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setModule((prev) => (prev === "dashboard" ? prev : "dashboard"));
@@ -127,8 +134,10 @@ function HomeContent() {
 
     lastDeniedRef.current = null;
     replaceIssuedRef.current = null;
+    // Navegar a otro módulo permitido retira el aviso (quedarse en Inicio lo conserva hasta cerrarlo).
+    if (rawModule && rawModule !== "dashboard") setAccesoDenegado(false);
     setModule((prev) => (prev === plan.module ? prev : plan.module));
-  }, [rawModule, navigableKey, navigableIds, modulesReady, hydrated, authed, router, showToast]);
+  }, [rawModule, navigableKey, navigableIds, modulesReady, hydrated, authed, router]);
 
   // Reportes2 HU-A — telemetría solo tras módulo autorizado (no durante hold).
   useEffect(() => {
@@ -170,6 +179,8 @@ function HomeContent() {
           reintentar.
         </div>
       ) : null}
+
+      {accesoDenegado ? <AccesoDenegadoAlert onClose={() => setAccesoDenegado(false)} /> : null}
 
       {/* Hold / loading RBAC: no montar módulo pedido (sin flash). */}
       {/* El inicio se bifurca por rol (HU #11940): el tablero del gestor mide producción de una
