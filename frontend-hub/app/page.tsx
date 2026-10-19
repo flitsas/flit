@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@flit/brand/BrandLogo";
-import { resolveBrand } from "@flit/brand/resolve-brand.server";
+import { resolveFreshBrand } from "@flit/brand/resolve-brand.server";
 import { isFlitBrand } from "@flit/brand/types";
 import { getSession } from "@flit/auth/server";
 import { HubHome } from "@/components/HubHome";
@@ -22,7 +22,7 @@ import { fetchMyAppsOnServer } from "@/lib/me-apps.server";
 export const dynamic = "force-dynamic";
 
 export default async function HubRoot({ searchParams }: { searchParams: Promise<{ inicio?: string; sso?: string }> }) {
-  const [brand, user, { inicio, sso }] = await Promise.all([resolveBrand(), getSession(HUB_PRODUCT), searchParams]);
+  const [brand, user, { inicio, sso }] = await Promise.all([resolveFreshBrand(), getSession(HUB_PRODUCT), searchParams]);
   const config = hubConfig();
 
   const silentLogin = `/auth/login?prompt=none&returnTo=${encodeURIComponent(inicio === "1" ? "/?inicio=1" : "/")}`;

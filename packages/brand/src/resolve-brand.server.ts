@@ -69,7 +69,14 @@ function isBrandShape(value: unknown): value is Brand {
   );
 }
 
-async function fetchBrandFor(host: string): Promise<Brand> {
+/**
+ * Caché de Next de la respuesta: `revalidate` (Trámites, 60 s que expira al publicar desde su
+ * configurador) o `fresh` (hub: no guarda nada y cada render lee la marca del backend, cuya caché
+ * se invalida al publicar; así el hub, que es otro proceso, también ve la marca al instante).
+ */
+type BrandFetchMode = "revalidate" | "fresh";
+
+async function fetchBrandFor(host: string, mode: BrandFetchMode): Promise<Brand> {
   const url = `${internalApiBase()}/api/v1/public/branding`;
   const key = internalApiKey();
 
@@ -81,7 +88,9 @@ async function fetchBrandFor(host: string): Promise<Brand> {
         ...(key ? { "X-Internal-Key": key } : {}),
       },
       // Anti-destello con caché corta: el ADR fija 60s (mismo TTL que la caché del backend).
-      next: { revalidate: 60, tags: [BRAND_CACHE_TAG] },
+      ...(mode === "fresh"
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: 60, tags: [BRAND_CACHE_TAG] } }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (error) {
@@ -115,7 +124,7 @@ async function fetchBrandFor(host: string): Promise<Brand> {
  * llamadas nuevas). Host de red ⇒ `GET /public/branding` con el sello `X-Flit-Domain` explícito;
  * cualquier fallo (red, timeout, forma inválida, no-200) ⇒ `FLIT_BRAND` (AC5, respaldo seguro).
  */
-export const resolveBrand = cache(async (): Promise<Brand> => {
+async function resolveFor(mode: BrandFetchMode): Promise<Brand> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("host");
 
@@ -123,5 +132,14 @@ export const resolveBrand = cache(async (): Promise<Brand> => {
     return FLIT_BRAND;
   }
 
-  return fetchBrandFor(host as string);
-});
+  return fetchBrandFor(host as string, mode);
+}
+
+export const resolveBrand = cache(async (): Promise<Brand> => resolveFor("revalidate"));
+
+/**
+ * Igual que {@link resolveBrand}, pero sin caché de Next: la usa el hub, que no tiene configurador
+ * de marca que la expire. El costo es una llamada interna por render en dominios de red (en hosts
+ * FLIT sigue sin haber fetch).
+ */
+export const resolveFreshBrand = cache(async (): Promise<Brand> => resolveFor("fresh"));
