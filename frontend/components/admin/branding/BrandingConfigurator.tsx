@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Eye, Rocket, Save, Undo2 } from "lucide-react";
+import { refreshBrand } from "@/app/actions/brand";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { contrastRatio, isValidHexColor, meetsMinimumContrast } from "@/lib/brand/contrast";
 import {
@@ -38,6 +40,19 @@ const DEFAULT_COLORS: BrandColors = { primary: "#557EFF", secondary: "#00DBD5", 
  * retirar solo existe del lado `admin`, AC1/AC7).
  */
 export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorProps) {
+  const router = useRouter();
+
+  // La marca aplicada (logo, colores, nombre) sale del layout en servidor: tras publicar o retirar
+  // se expira su caché y se vuelve a renderizar para que el cambio se vea sin esperar 60 s.
+  async function applyBrandNow() {
+    try {
+      await refreshBrand();
+    } catch {
+      // Sin la acción, la marca se actualiza sola cuando venza la caché (60 s).
+    }
+    router.refresh();
+  }
+
   const [status, setStatus] = useState<UiStatus>("loading");
   const [branding, setBranding] = useState<TenantBrandingResponse | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -170,6 +185,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
       setDraftLogoUrl(brandLogoUrl(published.logoUrl));
       setPublishOpen(false);
       setSuccessMessage("Identidad de marca publicada.");
+      await applyBrandNow();
     } catch (err) {
       setFormError(brandingErrorMessage(brandingErrorCode(err)) || "No se pudo publicar la marca.");
     } finally {
@@ -186,6 +202,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
       setBranding(updated);
       setConfirmingRetire(false);
       setSuccessMessage("Marca retirada. La red vuelve a la identidad FLIT.");
+      await applyBrandNow();
     } catch (err) {
       setFormError(brandingErrorMessage(brandingErrorCode(err)) || "No se pudo retirar la marca.");
     } finally {

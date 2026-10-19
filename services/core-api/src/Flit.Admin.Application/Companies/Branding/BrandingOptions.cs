@@ -41,7 +41,7 @@ public sealed class BrandingLogoOptions
     /// <summary>Alto máximo en píxeles (AC2). Por defecto 2000.</summary>
     public int MaxHeight { get; set; } = 2000;
 
-    /// <summary>Content-types aceptados por firma binaria (AC1). Por defecto PNG/JPEG/WebP.</summary>
+    /// <summary>Content-types aceptados por firma binaria (AC1). Por defecto PNG y JPEG (WebP no se admite).</summary>
     public IReadOnlyList<string> AllowedContentTypes { get; set; } =
-        ["image/png", "image/jpeg", "image/webp"];
+        ["image/png", "image/jpeg"];
 }
