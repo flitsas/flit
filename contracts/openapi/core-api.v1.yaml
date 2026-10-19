@@ -3546,7 +3546,8 @@ paths:
                     moduleCode: { type: string }
                     productCode: { type: string }
         "401": { description: No autenticado. }
-        "403": { description: El caller no es administrador. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
 
   /api/v1/security/users/{userId}/permission-overrides:
     parameters:
@@ -3575,7 +3576,8 @@ paths:
                 items:
                   $ref: "#/components/schemas/UserPermissionOverrideItem"
         "401": { description: No autenticado. }
-        "403": { description: El caller no es administrador. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
 
   /api/v1/security/users/{userId}/permission-overrides/{permissionId}:
     parameters:
@@ -3625,12 +3627,13 @@ paths:
         "400": { description: "`INVALID_EFFECT`." }
         "401": { description: No autenticado. }
         "403":
-          description: "Fuera del tope o no otorgable: `OUT_OF_CAP`, `NOT_ENFORCED`."
+          description: "Fuera del tope o no otorgable (`OUT_OF_CAP`, `NOT_ENFORCED`) o regla de HU #13645: `SELF`, `TARGET_SUPERADMIN`, `TARGET_IS_ADMIN`, `OUT_OF_SCOPE`, `EXCLUDED`. Todo rechazo queda auditado."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PermissionOverrideError"
-        "404": { description: "`PERMISSION_NOT_FOUND`." }
+        "404": { description: "`PERMISSION_NOT_FOUND` o `USER_NOT_FOUND`." }
+        "409": { description: "`INVITATION_PENDING`: el usuario aun no acepto su invitacion (HU #13645)." }
     delete:
       tags: [Security]
       operationId: securityRemoveUserPermissionOverride

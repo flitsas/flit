@@ -95,6 +95,16 @@ public static class SecurityApplicationExtensions
         services.AddScoped<PermissionCapCalculator>(); // HU #13644 - tope del administrador
         services.AddScoped<ManageUserPermissionOverridesHandler>(); // HU #13644
 
+        // HU #13645 - reglas de permisos individuales (en este orden; la primera que rechaza gana).
+        services.AddScoped<OverrideTargetLookup>();
+        services.AddScoped<IPermissionOverrideRule, UserExistsRule>();
+        services.AddScoped<IPermissionOverrideRule, SelfEditRule>();
+        services.AddScoped<IPermissionOverrideRule, TargetSuperAdminRule>();
+        services.AddScoped<IPermissionOverrideRule, TenantScopeRule>();
+        services.AddScoped<IPermissionOverrideRule, TargetIsAdminRule>();
+        services.AddScoped<IPermissionOverrideRule, ExcludedPermissionRule>();
+        services.AddScoped<IPermissionOverrideRule, InvitationPendingRule>();
+
         return services;
     }
 }

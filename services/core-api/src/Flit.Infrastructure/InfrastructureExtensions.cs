@@ -300,6 +300,7 @@ public static class InfrastructureExtensions
         // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
         services.AddScoped<IUserUiPreferenceRepository, UserUiPreferenceRepository>();
         services.AddScoped<IUserPermissionOverrideRepository, UserPermissionOverrideRepository>(); // HU #13642
+        services.AddScoped<IOverrideTargetDirectory, OverrideTargetDirectory>(); // HU #13645
 
         services.AddSecurityApplication();
 

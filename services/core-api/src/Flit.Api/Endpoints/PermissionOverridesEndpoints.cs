@@ -29,7 +29,7 @@ internal static class PermissionOverridesEndpoints
 
         group.MapGet("/users/{userId:guid}/permission-overrides", (
             Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
-            Run(caller, tenantId, async (tenant, _) => Results.Ok(await handler.ListAsync(tenant, userId, ct))))
+            Run(caller, tenantId, async (tenant, actor) => Results.Ok(await handler.ListAsync(tenant, actor, userId, ct))))
             .RequireAuthorization(policy).WithName("ListUserPermissionOverrides");
 
         // AC1/AC2/AC3: otorgar (allow) o denegar (deny) un permiso puntual.
@@ -75,7 +75,7 @@ internal static class PermissionOverridesEndpoints
         }
         catch (PermissionOverrideRejectedException ex)
         {
-            return Error(StatusCodes.Status403Forbidden, ex.ReasonCode, "El permiso queda fuera de lo que puedes otorgar.", ex.Slug);
+            return RejectedResult(ex);
         }
         catch (PermissionNotFoundForOverrideException ex)
         {
@@ -94,6 +94,24 @@ internal static class PermissionOverridesEndpoints
             return Error(StatusCodes.Status409Conflict, "OVERRIDE_CONFLICT", ex.Message);
         }
     }
+
+    /// <summary>HU #13645: USER_NOT_FOUND = 404, INVITATION_PENDING = 409, el resto de rechazos = 403 con su <c>code</c>.</summary>
+    private static IResult RejectedResult(PermissionOverrideRejectedException ex) => ex.ReasonCode switch
+    {
+        PermissionOverrideReasons.UserNotFound => Error(StatusCodes.Status404NotFound, ex.ReasonCode, "El usuario no existe."),
+        PermissionOverrideReasons.InvitationPending => Error(
+            StatusCodes.Status409Conflict, ex.ReasonCode, "El usuario aún no aceptó su invitación.", ex.Slug),
+        PermissionOverrideReasons.Self => Error(StatusCodes.Status403Forbidden, ex.ReasonCode, "No puedes modificar tus propios permisos.", ex.Slug),
+        PermissionOverrideReasons.TargetSuperadmin => Error(
+            StatusCodes.Status403Forbidden, ex.ReasonCode, "Al Super Admin no se le configuran permisos individuales.", ex.Slug),
+        PermissionOverrideReasons.TargetIsAdmin => Error(
+            StatusCodes.Status403Forbidden, ex.ReasonCode, "Solo el Super Admin modifica a otro administrador.", ex.Slug),
+        PermissionOverrideReasons.OutOfScope => Error(
+            StatusCodes.Status403Forbidden, ex.ReasonCode, "El usuario no pertenece a la compañía sobre la que operas.", ex.Slug),
+        PermissionOverrideReasons.Excluded => Error(
+            StatusCodes.Status403Forbidden, ex.ReasonCode, "Ese permiso no se configura individualmente.", ex.Slug),
+        _ => Error(StatusCodes.Status403Forbidden, ex.ReasonCode, "El permiso queda fuera de lo que puedes otorgar.", ex.Slug),
+    };
 
     private static IResult Error(int status, string code, string message, string? permission = null) =>
         Results.Json(new ErrorBody(code, message, permission), statusCode: status);

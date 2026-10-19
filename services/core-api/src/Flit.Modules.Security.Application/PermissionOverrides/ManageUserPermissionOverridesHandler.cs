@@ -71,12 +71,11 @@ public sealed class ManageUserPermissionOverridesHandler(
         ArgumentNullException.ThrowIfNull(actor);
         var permission = await GetPermissionAsync(permissionId, ct).ConfigureAwait(false);
         var existing = await FindActiveAsync(tenantId, targetUserId, permissionId, ct).ConfigureAwait(false);
+        await RunRulesAsync(tenantId, actor, targetUserId, "REVOKE", permission, existing?.Effect, null, ct).ConfigureAwait(false);
         if (existing is null)
         {
             return false;
         }
-
-        await RunRulesAsync(tenantId, actor, targetUserId, "REVOKE", permission, existing.Effect, null, ct).ConfigureAwait(false);
 
         // Quitar un allow solo reduce. Quitar un deny devuelve lo que dicta el rol: si el rol lo da y queda fuera del tope, no.
         if (existing.Effect == PermissionEffects.Deny)
@@ -112,7 +111,15 @@ public sealed class ManageUserPermissionOverridesHandler(
         }
 
         var result = await moduleHandler.HandleAsync(
-            new GrantModuleOverridesCommand(tenantId, targetUserId, actor.UserId, moduleCode, effect, allowed), ct).ConfigureAwait(false);
+            new GrantModuleOverridesCommand(
+                tenantId, targetUserId, actor.UserId, moduleCode, effect, allowed,
+                await repository.ListExcludedPermissionIdsAsync(ct).ConfigureAwait(false)), ct).ConfigureAwait(false);
+        if (result.Excluded > 0 && result.Created == 0 && result.Skipped == 0 && result.OutOfCap == 0)
+        {
+            await RejectAsync(tenantId, actor, targetUserId, null, "MODULE_SNAPSHOT", PermissionOverrideReasons.Excluded, null, effect, ct, moduleCode)
+                .ConfigureAwait(false);
+        }
+
         if (result.OutOfCap > 0)
         {
             await repository.ApplyAsync(
@@ -129,9 +136,11 @@ public sealed class ManageUserPermissionOverridesHandler(
         return result;
     }
 
-    /// <summary>Overrides activos del usuario en el tenant, con el slug del permiso.</summary>
-    public async Task<IReadOnlyList<UserOverrideItem>> ListAsync(Guid tenantId, Guid targetUserId, CancellationToken ct)
+    /// <summary>Overrides activos del usuario en el tenant, con el slug del permiso. Aplica las reglas de existencia y ámbito (AC7: leer también se valida).</summary>
+    public async Task<IReadOnlyList<UserOverrideItem>> ListAsync(Guid tenantId, OverrideActor actor, Guid targetUserId, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(actor);
+        await RunRulesAsync(tenantId, actor, targetUserId, PermissionOverrideActions.Read, null, null, null, ct).ConfigureAwait(false);
         var items = new List<UserOverrideItem>();
         foreach (var o in await repository.ListActiveAsync(tenantId, targetUserId, ct).ConfigureAwait(false))
         {
@@ -162,7 +171,7 @@ public sealed class ManageUserPermissionOverridesHandler(
         Guid tenantId, OverrideActor actor, Guid targetUserId, string action, PermissionCatalogEntry? permission,
         string? before, string? after, CancellationToken ct, string? moduleCode = null)
     {
-        var request = new PermissionOverrideRequest(tenantId, actor, targetUserId, action, permission?.Slug ?? moduleCode);
+        var request = new PermissionOverrideRequest(tenantId, actor, targetUserId, action, permission?.Slug ?? moduleCode, permission?.Enforced);
         foreach (var rule in rules)
         {
             if (await rule.CheckAsync(request, ct).ConfigureAwait(false) is { } reason)

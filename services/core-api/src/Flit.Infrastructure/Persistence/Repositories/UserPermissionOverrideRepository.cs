@@ -143,6 +143,9 @@ internal sealed class UserPermissionOverrideRepository(FlitDbContext db) : IUser
         (await Catalog().Where(r => r.Enforced == "true").OrderBy(r => r.Slug).ToListAsync(ct).ConfigureAwait(false))
         .Select(ToEntry).ToList();
 
+    public async Task<IReadOnlySet<Guid>> ListExcludedPermissionIdsAsync(CancellationToken ct) =>
+        (await Catalog().Where(r => r.Enforced == "excluded").Select(r => r.Id).ToListAsync(ct).ConfigureAwait(false)).ToHashSet();
+
     public Task<IReadOnlySet<Guid>> GetRolePermissionIdsAsync(Guid tenantId, Guid userId, CancellationToken ct) =>
         TenantRlsScope.ExecuteAsync(
             db.Database,

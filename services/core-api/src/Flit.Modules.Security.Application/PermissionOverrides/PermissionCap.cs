@@ -54,12 +54,14 @@ public sealed class PermissionCapCalculator(IUserPermissionOverrideRepository re
 }
 
 /// <summary>Operación en curso, para las reglas de extensión.</summary>
-public sealed record PermissionOverrideRequest(Guid TenantId, OverrideActor Actor, Guid TargetUserId, string Action, string? PermissionSlug);
+/// <param name="PermissionEnforced">Marca <c>enforced</c> del permiso (HU #13645, regla de excluidos); <c>null</c> en lectura o módulo completo.</param>
+public sealed record PermissionOverrideRequest(
+    Guid TenantId, OverrideActor Actor, Guid TargetUserId, string Action, string? PermissionSlug, string? PermissionEnforced = null);
 
 /// <summary>
 /// Punto de extensión (#13645): reglas de ámbito, otro administrador, sí mismo, invitación pendiente, excluidos, etc.
 /// Se ejecutan ANTES de cualquier operación; devuelven el <c>reason_code</c> del rechazo o <c>null</c> si la dejan pasar.
-/// Hoy no hay ninguna registrada.
+/// Desde #13645 se registran: existencia, sí mismo, Super Admin destino, ámbito, otro administrador, excluidos e invitación pendiente.
 /// </summary>
 public interface IPermissionOverrideRule
 {
