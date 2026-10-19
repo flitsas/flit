@@ -350,6 +350,10 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "usuarios eliminados",
       "restaurar usuario",
       "eliminar usuario",
+      "permisos por modulo",
+      "permisos individuales",
+      "heredado del rol",
+      "auditoria de permisos",
     ],
     summary: "Cómo se definen módulos, permisos y roles, quién los recibe y dónde queda el rastro.",
     blocks: [
@@ -380,6 +384,8 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
           "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
+          "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+          "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada.",
         ],
       },
       {
@@ -387,6 +393,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "3. Auditoría",
         paragraphs: [
           "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only).",
+          "Auditoría de permisos individuales: en Usuarios, la pestaña «Auditoría de permisos» lista cada cambio de permisos por usuario con su fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, el usuario afectado, la compañía, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después; los intentos rechazados quedan registrados con su motivo. Filtra por usuario, compañía y administrador; si ningún registro coincide, la tabla te lo avisa. La lista se pagina con «Filas por página».",
         ],
       },
     ],
