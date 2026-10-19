@@ -197,6 +197,9 @@ public static class TenantRoleErrors
             "Un rol solo puede incluir permisos de módulos de su propio producto."),
         // AC3
         PrivilegeCeilingException p => Json(StatusCodes.Status403Forbidden, p.Code, CeilingMessage(p), p.Slugs),
+        // HU #13664 AC1: «Crear» por familia sin su «Ver».
+        FamilyCreateRequiresReadException f => Json(StatusCodes.Status400BadRequest, "FAMILY_CREATE_REQUIRES_READ",
+            "Para otorgar «Crear» de una familia de trámites hay que otorgar también su «Ver».", f.Slugs),
         // AC5: otro tenant o inexistente = 404 sin revelar; global = 403 (es visible, pero de solo lectura).
         RoleNotFoundException => Results.NotFound(),
         RoleNotOwnedException => Json(StatusCodes.Status403Forbidden, "ROLE_READ_ONLY",

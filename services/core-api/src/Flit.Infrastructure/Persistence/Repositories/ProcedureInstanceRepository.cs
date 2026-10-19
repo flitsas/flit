@@ -2664,6 +2664,13 @@ internal sealed partial class ProcedureInstanceRepository(
             }
         }
 
+        if (filter.AllowedFamilies is { } familiasPermitidas)
+        {
+            // HU #13664 — la familia vive en el tipo (ADR-0050); vacío = ninguna familia visible.
+            var familias = familiasPermitidas.Select(f => f.Trim().ToUpperInvariant()).ToList();
+            query = query.Where(x => x.ProcedureType != null && familias.Contains(x.ProcedureType.Family.ToUpper()));
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.Modalidad))
         {
             // La familia vive en el TIPO (ADR-0050), no en la instancia: se compara contra la

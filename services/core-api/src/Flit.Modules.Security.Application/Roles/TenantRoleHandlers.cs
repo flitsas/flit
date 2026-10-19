@@ -37,7 +37,7 @@ public sealed class ListGrantablePermissionsHandler(IRoleRepository repository)
 }
 
 /// <summary>Crea un rol COMPANY propio del tenant con sus permisos, respetando el tope de privilegios.</summary>
-public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
+public sealed partial class CreateTenantRoleHandler(IRoleRepository repository, IFamilyPermissionRulePolicy? familyRules = null)
 {
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_.-]{1,49}$")]
     private static partial Regex CodePattern();
@@ -70,6 +70,8 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
 
         var permissionIds = command.PermissionIds.Distinct().ToList();
         await EnforceAsync(repository, command.ProductCode, permissionIds, command.CallerPermissions, enabled, ct);
+        // HU #13664 AC1: un rol nuevo no puede nacer con «Crear» de una familia sin su «Ver».
+        permissionIds = [.. await FamilyPermissionGuard.ApplyAsync(repository, familyRules, [], permissionIds, ct)];
 
         if (await repository.CodeTakenForTenantAsync(command.TenantId, code, ct))
             throw new RoleCodeDuplicateException();
@@ -103,7 +105,7 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
 }
 
 /// <summary>Reemplaza los permisos de un rol propio del tenant (los globales y los de otro tenant no se tocan).</summary>
-public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository)
+public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository, IFamilyPermissionRulePolicy? familyRules = null)
 {
     public async Task<RoleDetail> HandleAsync(SetTenantRolePermissionsCommand command, CancellationToken ct)
     {
@@ -117,7 +119,10 @@ public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository)
         var added = permissionIds.Where(id => !current.Contains(id)).ToList();
         await CreateTenantRoleHandler.EnforceAsync(repository, role.ProductCode, added, command.CallerPermissions, enabled, ct);
 
-        await repository.SetPermissionsAsync(command.RoleId, permissionIds, ct);
+        // HU #13664 AC1: «crear exige ver»; quitar «Ver» retira también su «Crear».
+        var finalIds = await FamilyPermissionGuard.ApplyAsync(
+            repository, familyRules, role.Permissions.Select(x => x.Slug), permissionIds, ct);
+        await repository.SetPermissionsAsync(command.RoleId, finalIds, ct);
         return (await repository.GetByIdAsync(command.RoleId, ct))!;
     }
 

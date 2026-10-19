@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Api.Endpoints.Tramites;
 
@@ -95,6 +96,7 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                "family_permission_denied" => FamilyForbidden(), // HU #13664
                 "procedure_family_blocked" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "La compañía tiene bloqueada la creación de trámites de esta familia. Contacta al administrador."),
                 // ADR-0050 — el tipo existe y está publicado, pero su recorrido todavía no está
                 // habilitado para operarse. Se distingue de `not_published` a propósito: uno es un
@@ -120,6 +122,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances", async (
             HttpContext http,
             ListProcedureInstancesHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             ListProcedureInstancesFilteredHandler filteredHandler,
             [FromQuery] string? vin,
             [FromQuery] string? placa,
@@ -144,6 +147,7 @@ internal static class ProcedureInstanceEndpoints
             CancellationToken ct) =>
         {
             var (tenantId, _) = ResolveTenantContext(http);
+            var familiasPermitidas = familyGate.ReadableFamilyCodes(); // HU #13664
 
             // Filtrado/ordenamiento server-side (WHERE/ORDER BY en SQL): solo se activa el camino nuevo
             // cuando el caller pide EXPLÍCITAMENTE algún filtro, orden o paginación. Sin ningún parámetro
@@ -159,7 +163,8 @@ internal static class ProcedureInstanceEndpoints
                 || createdFrom is not null || createdTo is not null
                 || updatedFrom is not null || updatedTo is not null
                 || !string.IsNullOrWhiteSpace(sortBy) || !string.IsNullOrWhiteSpace(sortDir)
-                || skip is not null || take is not null;
+                || skip is not null || take is not null
+                || familiasPermitidas is not null; // HU #13664: restringir por familia exige el camino filtrado
 
             if (!pideFiltradoOrdenado)
             {
@@ -182,6 +187,7 @@ internal static class ProcedureInstanceEndpoints
                 Modalidad = modalidad,
                 OrganismoTransito = organismoTransito,
                 TipoCodigo = tipoCodigo,
+                AllowedFamilies = familiasPermitidas, // HU #13664
                 Busqueda = busqueda,
                 Prioritario = prioritario,
                 CreatedFrom = createdFrom,
@@ -292,6 +298,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances/search", async (
             HttpContext http,
             ListProcedureInstancesFilteredHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromBody] TramitesSearchRequest body,
             CancellationToken ct) =>
         {
@@ -307,7 +314,7 @@ internal static class ProcedureInstanceEndpoints
 
             try
             {
-                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct);
+                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User), AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct);
                 return Results.Ok(new { items, total });
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
@@ -327,6 +334,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances/estado-counts", async (
             HttpContext http,
             CountProcedureInstancesByStatusHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromBody] TramitesSearchRequest body,
             CancellationToken ct) =>
         {
@@ -339,7 +347,7 @@ internal static class ProcedureInstanceEndpoints
 
             try
             {
-                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct));
+                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User), AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct));
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
@@ -361,6 +369,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances/estado-counts", async (
             HttpContext http,
             CountProcedureInstancesByStatusHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromQuery] string? vin,
             [FromQuery] string? placa,
             [FromQuery] string? vendedor,
@@ -394,6 +403,7 @@ internal static class ProcedureInstanceEndpoints
                 Modalidad = modalidad,
                 OrganismoTransito = organismoTransito,
                 TipoCodigo = tipoCodigo,
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664
                 Busqueda = busqueda,
                 Prioritario = prioritario,
                 CreatedFrom = createdFrom,
@@ -461,6 +471,8 @@ internal static class ProcedureInstanceEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            if (error is "family_forbidden") // HU #13664
+                return Results.Problem(statusCode: 403, title: "Forbidden", detail: "No tienes permiso para ver trámites de esta familia.");
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
@@ -1090,6 +1102,7 @@ internal static class ProcedureInstanceEndpoints
 
             return err switch
             {
+                "family_permission_denied" => FamilyForbidden(), // HU #13664
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el identificador del vehículo (VIN o placa, según el tipo de trámite) para crear el trámite."),
                 // ADR-0050 — el tipo elegido no existe o no está publicado. Se distingue de
                 // `modalidad_not_available`: aquí el catálogo SÍ se consultó y el code no está.
@@ -1251,6 +1264,10 @@ internal static class ProcedureInstanceEndpoints
 
         return validos.Count > 0 ? validos : null;
     }
+
+    /// <summary>HU #13664 — falta el «Crear» de la familia del trámite (en AND con tramites.create de la ruta).</summary>
+    private static IResult FamilyForbidden() => Results.Problem(
+        statusCode: 403, title: "Forbidden", detail: "No tienes permiso para crear trámites de esta familia.");
 
     private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http) =>
         RequestTenantResolver.FromItems(http);

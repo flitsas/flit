@@ -88,6 +88,10 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.NotFound();
             }
+            catch (FamilyCreateRequiresReadException ex) // HU #13664 AC1
+            {
+                return Results.BadRequest(new { code = "FAMILY_CREATE_REQUIRES_READ", permissions = ex.Slugs });
+            }
             catch (RolePermissionProductMismatchException)
             {
                 return Results.BadRequest(new { code = "ROLE_PERMISSION_PRODUCT_MISMATCH" });
