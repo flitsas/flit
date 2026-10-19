@@ -102,6 +102,8 @@ public static class InfrastructureExtensions
         services.AddScoped<ISavepointScope, Persistence.EfSavepointScope>();
         // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
         services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
+        // HU #13664 — familia del trámite por id, para el guard de «Ver por familia» (FamilyReadEnforcementMiddleware).
+        services.AddScoped<IProcedureInstanceFamilyLookup, ProcedureInstanceFamilyLookup>();
         // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
         // best-effort con scope propio y lectura para el hijo / SuperAdmin.
         services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditWriter, Auditing.NetworkAccessAuditWriter>();

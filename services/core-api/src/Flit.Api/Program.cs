@@ -276,6 +276,12 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 // cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
 
+// HU #13664 (Feature #13636 F-F, Épica #12753) — «Ver por familia» en un solo punto: toda ruta por id de trámite
+// (/instances/{id}/**, /network/instances/{id}/**, /{tramiteId}/document-requirements) exige el «.read» de la familia del
+// trámite cuando Security:ModulePermissionEnforcement:Enabled está encendido; apagado, pasa sin consultar. Va tras el enforcement
+// de tenant (usa su alcance) y del enrutamiento.
+app.UseMiddleware<Flit.Api.Middleware.FamilyReadEnforcementMiddleware>();
+
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)
 

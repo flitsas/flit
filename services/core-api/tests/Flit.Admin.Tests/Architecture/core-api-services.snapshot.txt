@@ -898,6 +898,7 @@ Flit.Tramites.Domain.Repositories.IOtConfiguredDocumentOrderProvider => Flit.Inf
 Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository => Flit.Infrastructure.Persistence.Repositories.PersonDataConsentRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IPersonRepository => Flit.Infrastructure.Persistence.Repositories.PersonRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy => Flit.Infrastructure.Services.PrendaDocumentRequirementPolicy (Scoped)
+Flit.Tramites.Domain.Repositories.IProcedureInstanceFamilyLookup => Flit.Infrastructure.Persistence.Repositories.ProcedureInstanceFamilyLookup (Scoped)
 Flit.Tramites.Domain.Repositories.IProcedureInstanceOwnerLookup => Flit.Infrastructure.Persistence.Repositories.ProcedureInstanceOwnerLookup (Scoped)
 Flit.Tramites.Domain.Repositories.IProcedureInstancePrendaRepository => Flit.Infrastructure.Persistence.Repositories.ProcedureInstancePrendaRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IProcedureInstanceRepository => Flit.Infrastructure.Persistence.Repositories.ProcedureInstanceRepository (Scoped)
