@@ -34,6 +34,7 @@ import {
   canReadIctTrazabilidad,
   canReadLogQx,
   decodeJwtPayload,
+  type JwtPayload,
   isOtUser,
   isSuperAdmin,
 } from "@/lib/auth/jwt";
@@ -50,32 +51,25 @@ function HomeContent() {
     error: modulesError,
   } = useAccessibleModules(authed);
   // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
-  const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
-  const [isOtAdminUser] = useState<boolean>(() => isOtUser(decodeJwtPayload(getToken())));
-  const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
+  const [claims] = useState<JwtPayload | null>(() => decodeJwtPayload(getToken()));
+  const isSuperAdminUser = isSuperAdmin(claims);
+  const isOtAdminUser = isOtUser(claims);
+  const canLogQx = canReadLogQx(claims);
   // ICT (Bug #13445): Log solo SuperAdmin; Trazabilidad y Reportes por su permiso propio.
-  const [canIctLogs] = useState<boolean>(() => canReadIctLogs(decodeJwtPayload(getToken())));
-  const [canIctTrazabilidad] = useState<boolean>(() => canReadIctTrazabilidad(decodeJwtPayload(getToken())));
-  const [canIctReportes] = useState<boolean>(() => canReadIctReportes(decodeJwtPayload(getToken())));
+  const canIctLogs = canReadIctLogs(claims);
+  const canIctTrazabilidad = canReadIctTrazabilidad(claims);
+  const canIctReportes = canReadIctReportes(claims);
 
   const accessibleCodes = useMemo(
     () => accessibleModules.map((m) => m.code) as ModuleId[],
     [accessibleModules],
   );
 
-  // Fuente única dock ≡ URL (HU #11507 / #11508).
+  // Fuente única dock ≡ URL (HU #11507 / #11508): la decide la tabla de acceso (ADR-0072, HU #13649).
+  // Hasta que el catálogo de módulos resuelve no se abre nada protegido (deny-by-default).
   const navigableIds = useMemo(
-    () =>
-      resolveNavigableModuleIds({
-        accessibleCodes,
-        isSuperAdmin: isSuperAdminUser,
-        isOtAdmin: isOtAdminUser,
-        canReadLogQx: canLogQx,
-        canReadIctLogs: canIctLogs,
-        canReadIctTrazabilidad: canIctTrazabilidad,
-        canReadIctReportes: canIctReportes,
-      }),
-    [accessibleCodes, isSuperAdminUser, isOtAdminUser, canLogQx, canIctLogs, canIctTrazabilidad, canIctReportes],
+    () => resolveNavigableModuleIds({ accessibleCodes: modulesReady ? accessibleCodes : null, claims }),
+    [accessibleCodes, claims, modulesReady],
   );
 
   // Clave estable: evita re-ejecutar el effect por nueva referencia de array.

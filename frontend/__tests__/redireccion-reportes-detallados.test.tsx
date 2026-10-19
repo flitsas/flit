@@ -35,9 +35,12 @@ vi.mock("@/hooks/useAccessibleModules", () => ({
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: () => null }));
 vi.mock("@/lib/auth/jwt", () => ({
-  decodeJwtPayload: () => null,
+  // HU #13649: el menú se decide con claims; sin claims legibles solo hay Inicio y Ayuda.
+  decodeJwtPayload: () => ({ sub: "u1", roles: [], permissions: [] }),
   isSuperAdmin: () => false,
   isOtUser: () => false,
+  hasPermission: () => false,
+  hasRoleCode: () => false,
   canReadLogQx: () => false,
   canReadIctLogs: () => false,
   canReadIctReportes: () => false,
@@ -128,12 +131,7 @@ describe("HU #13582 AC4 — enlace antiguo sin permiso (negativo)", () => {
   it("contrato: el gate deniega `reportes` a quien no tiene el módulo", () => {
     const ids = resolveNavigableModuleIds({
       accessibleCodes: ["tramites"],
-      isSuperAdmin: false,
-      isOtAdmin: false,
-      canReadLogQx: false,
-      canReadIctLogs: false,
-      canReadIctTrazabilidad: false,
-      canReadIctReportes: false,
+      claims: { sub: "u1", roles: [], permissions: [] },
     });
     expect(planSpaModuleAccess("reportes", ids)).toEqual(expect.objectContaining({ denied: true, replaceTo: "/?m=dashboard" }));
   });
