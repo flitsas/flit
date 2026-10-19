@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Api.Authorization;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +26,9 @@ public static class TramitesEndpoints
             .RequireAuthorization();
 
         // POST — crea el trámite y congela el snapshot (AC1/AC3 → 201 / 422 / 404 / 500).
-        group.MapPost("/", CreateAsync).WithName("TramitesCreate");
+        group.MapPost("/", CreateAsync)
+            .RequireModulePermission("tramites.create") // HU #13662 (Feature #13105 F-E)
+            .WithName("TramitesCreate");
 
         // GET /{tramiteId}/document-requirements — documentos del snapshot (AC2/AC4 → 200 / 404).
         group.MapGet("/{tramiteId:guid}/document-requirements", GetDocumentRequirementsAsync)

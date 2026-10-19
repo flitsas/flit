@@ -110,7 +110,8 @@ internal static class ProcedureInstanceEndpoints
                         ? Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "No se pudo crear el trámite.")
                         : Results.Created($"/api/v1/tramites/instances/{result.Id}", result))
             };
-        }).WithName("CreateProcedureInstance");
+        }).RequireModulePermission("tramites.create") // HU #13662 (Feature #13105 F-E)
+            .WithName("CreateProcedureInstance");
 
         // Listado para la tabla de operación (Slice M6). Ruta literal /instances → NO colisiona con
         // /instances/{id:guid} (la constraint :guid solo casa GUIDs; el listado no lleva segmento).
@@ -1145,7 +1146,8 @@ internal static class ProcedureInstanceEndpoints
                 null => Results.Created($"/api/v1/tramites/instances/{result!.Instance.Id}", result),
                 _ => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo crear el trámite."),
             };
-        }).WithName("CreateProcedureInstanceFromConsulta");
+        }).RequireModulePermission("tramites.create") // HU #13662 (Feature #13105 F-E)
+            .WithName("CreateProcedureInstanceFromConsulta");
 
         return app;
     }

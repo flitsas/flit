@@ -26,7 +26,9 @@ public static class BulkTramitesEndpoints
         group.MapGet("/plantilla", DescargarPlantillaAsync).WithName("BulkTramitesDescargarPlantilla");
 
         // POST /lotes?tipo=... — HU #12522 AC1/AC2/AC3 → 201 / 400 (template_invalid, too_many_rows, invalid_file).
+        // HU #13662: el lote crea trámites, así que exige tramites.create (el PO: quien radica, ve la carga masiva).
         group.MapPost("/lotes", SubirLoteAsync)
+            .RequireModulePermission("tramites.create")
             .WithName("BulkTramitesSubirLote")
             .DisableAntiforgery();
 
