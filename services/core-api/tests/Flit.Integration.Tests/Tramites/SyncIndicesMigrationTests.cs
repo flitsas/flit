@@ -68,6 +68,7 @@ public sealed class SyncIndicesMigrationTests(PostgresDatabaseFixture fixture) :
     public async Task AC2_LasConsultasDeApoyoUsanSuIndice(string consulta, string indice)
     {
         await SembrarAsync();
+        await SembrarHistorialQueNoCoincideAsync();
 
         (await PlanAsync(consulta)).Should().Contain(indice);
     }
@@ -161,6 +162,21 @@ public sealed class SyncIndicesMigrationTests(PostgresDatabaseFixture fixture) :
         await SembrarTramiteAsync(Tramite, "IT13075-1");
 
         await EjecutarAsync("ANALYZE tramites.procedure_instances, tramites.procedure_instance_status_history, tramites.procedure_instance_attachments");
+    }
+
+    /// <summary>
+    /// Historial del trámite con un estado que ningún índice parcial cubre. Sin estas filas, con la
+    /// tabla casi vacía, el índice parcial y <c>ix_procedure_instance_status_history_tenant_id_instance</c>
+    /// cuestan lo mismo y el planificador elegía uno u otro según las estadísticas que dejaran las demás
+    /// pruebas (#606). Con ellas el índice general tiene que filtrar todo el historial y el parcial no
+    /// tiene ninguna fila del trámite: la misma razón por la que el índice existe en producción.
+    /// </summary>
+    private async Task SembrarHistorialQueNoCoincideAsync()
+    {
+        await EjecutarAsync(
+            $"INSERT INTO tramites.procedure_instance_status_history (tenant_id, procedure_instance_id, to_status, changed_at) "
+            + $"SELECT '{Cliente}', @id, 'borrador', now() - make_interval(secs => g) FROM generate_series(1, 300) g");
+        await EjecutarAsync("ANALYZE tramites.procedure_instance_status_history");
     }
 
     private async Task SembrarTramiteAsync(Guid id, string referencia)

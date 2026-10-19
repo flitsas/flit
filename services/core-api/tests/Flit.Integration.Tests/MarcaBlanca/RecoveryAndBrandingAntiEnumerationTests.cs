@@ -59,9 +59,11 @@ public sealed class RecoveryAndBrandingAntiEnumerationTests(PostgresDatabaseFixt
     {
         var (verifiedHost, inactiveHost) = await SeedNegativeDomainsAsync();
 
-        var medianInexistente = await ResponseTimingSampler.MedianMsAsync(() => PublicBrandingRawAsync("no-registrado-jamas.example"));
-        var medianVerificado = await ResponseTimingSampler.MedianMsAsync(() => PublicBrandingRawAsync(verifiedHost));
-        var medianInactivo = await ResponseTimingSampler.MedianMsAsync(() => PublicBrandingRawAsync(inactiveHost));
+        var medianas = await ResponseTimingSampler.MediansMsAsync(
+            () => PublicBrandingRawAsync("no-registrado-jamas.example"),
+            () => PublicBrandingRawAsync(verifiedHost),
+            () => PublicBrandingRawAsync(inactiveHost));
+        var (medianInexistente, medianVerificado, medianInactivo) = (medianas[0], medianas[1], medianas[2]);
 
         Math.Abs(medianVerificado - medianInexistente).Should().BeLessOrEqualTo(ResponseTimingSampler.ToleranceMs);
         Math.Abs(medianInactivo - medianInexistente).Should().BeLessOrEqualTo(ResponseTimingSampler.ToleranceMs);

@@ -17,25 +17,42 @@ internal static class ResponseTimingSampler
     public const int WarmupSamples = 3;
     public const double ToleranceMs = 200;
 
-    /// <summary>Mediana en milisegundos de <see cref="Samples"/> ejecuciones de <paramref name="action"/>, tras <see cref="WarmupSamples"/> de calentamiento descartadas.</summary>
-    public static async Task<double> MedianMsAsync(Func<Task> action)
+    /// <summary>
+    /// Mediana en milisegundos de <see cref="Samples"/> ejecuciones de cada una de <paramref name="actions"/>,
+    /// tras <see cref="WarmupSamples"/> rondas de calentamiento descartadas. Las muestras se toman
+    /// INTERCALADAS (A, B, C, A, B, C…): una racha de carga del runner cae sobre todos los caminos por
+    /// igual en vez de inflar solo el que se medía en ese momento (#606: 527 ms contra 735 ms con
+    /// mediciones secuenciales). Devuelve las medianas en el mismo orden de <paramref name="actions"/>.
+    /// </summary>
+    public static async Task<double[]> MediansMsAsync(params Func<Task>[] actions)
     {
         for (var i = 0; i < WarmupSamples; i++)
         {
-            await action().ConfigureAwait(false);
+            foreach (var action in actions)
+            {
+                await action().ConfigureAwait(false);
+            }
         }
 
-        var elapsed = new List<double>(Samples);
+        var elapsed = actions.Select(_ => new List<double>(Samples)).ToArray();
         for (var i = 0; i < Samples; i++)
         {
-            var sw = Stopwatch.StartNew();
-            await action().ConfigureAwait(false);
-            sw.Stop();
-            elapsed.Add(sw.Elapsed.TotalMilliseconds);
+            for (var a = 0; a < actions.Length; a++)
+            {
+                var sw = Stopwatch.StartNew();
+                await actions[a]().ConfigureAwait(false);
+                sw.Stop();
+                elapsed[a].Add(sw.Elapsed.TotalMilliseconds);
+            }
         }
 
-        elapsed.Sort();
-        var mid = elapsed.Count / 2;
-        return elapsed.Count % 2 == 0 ? (elapsed[mid - 1] + elapsed[mid]) / 2 : elapsed[mid];
+        return elapsed.Select(Median).ToArray();
+    }
+
+    private static double Median(List<double> samples)
+    {
+        samples.Sort();
+        var mid = samples.Count / 2;
+        return samples.Count % 2 == 0 ? (samples[mid - 1] + samples[mid]) / 2 : samples[mid];
     }
 }

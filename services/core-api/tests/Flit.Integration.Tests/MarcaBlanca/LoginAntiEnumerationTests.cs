@@ -35,12 +35,11 @@ public sealed class LoginAntiEnumerationTests(PostgresDatabaseFixture fixture) :
     [PostgresFact]
     public async Task AC2_DiferenciaDeTiempoEntreLosTresCasos_QuedaDentroDeLaTolerancia()
     {
-        var medianWrongPassword = await ResponseTimingSampler.MedianMsAsync(
-            () => LoginRawAsync(MarcaBlancaScenario.EmailOf(MarcaBlancaScenario.UserHeadA), "no-es-la-clave"));
-        var medianOtherNetwork = await ResponseTimingSampler.MedianMsAsync(
-            () => LoginRawAsync(MarcaBlancaScenario.EmailOf(MarcaBlancaScenario.UserHeadB), MarcaBlancaScenario.Password));
-        var medianNonexistent = await ResponseTimingSampler.MedianMsAsync(
+        var medianas = await ResponseTimingSampler.MediansMsAsync(
+            () => LoginRawAsync(MarcaBlancaScenario.EmailOf(MarcaBlancaScenario.UserHeadA), "no-es-la-clave"),
+            () => LoginRawAsync(MarcaBlancaScenario.EmailOf(MarcaBlancaScenario.UserHeadB), MarcaBlancaScenario.Password),
             () => LoginRawAsync("no-existe-jamas@flit.test", MarcaBlancaScenario.Password));
+        var (medianWrongPassword, medianOtherNetwork, medianNonexistent) = (medianas[0], medianas[1], medianas[2]);
 
         Math.Abs(medianOtherNetwork - medianWrongPassword).Should().BeLessOrEqualTo(ResponseTimingSampler.ToleranceMs,
             $"medianas: sin-red={medianWrongPassword:F1}ms otra-red={medianOtherNetwork:F1}ms");
