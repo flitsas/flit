@@ -1351,7 +1351,7 @@ jobs:
   # variable nueva en el compose NO llega a DEV sola: hay que agregarla alla.
   deploy-dev-gitops:
     name: Deploy DEV (GitOps → k3s 177)
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name == 'develop' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1367,12 +1367,16 @@ jobs:
       D_CORE_CONSULTAS: ${{ needs.build-core-consultas.outputs.digest }}
       R_CORE_NOTIFICACIONES: ${{ needs.build-core-notificaciones.result }}
       D_CORE_NOTIFICACIONES: ${{ needs.build-core-notificaciones.outputs.digest }}
+      R_CORE_COMPARENDOS: ${{ needs.build-core-comparendos.result }}
+      D_CORE_COMPARENDOS: ${{ needs.build-core-comparendos.outputs.digest }}
       R_CORE_ICT: ${{ needs.build-core-ict.result }}
       D_CORE_ICT: ${{ needs.build-core-ict.outputs.digest }}
       R_FRONTEND: ${{ needs.build-frontend.result }}
       D_FRONTEND: ${{ needs.build-frontend.outputs.digest }}
       R_FRONTEND_HUB: ${{ needs.build-frontend-hub.result }}
       D_FRONTEND_HUB: ${{ needs.build-frontend-hub.outputs.digest }}
+      R_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.result }}
+      D_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.outputs.digest }}
       R_PYTHON_ML: ${{ needs.build-python-ml.result }}
       D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
@@ -1413,9 +1417,11 @@ jobs:
               "core-identity:${{ env.CORE_IDENTITY_IMAGE }}:CORE_IDENTITY" \
               "core-consultas:${{ env.CORE_CONSULTAS_IMAGE }}:CORE_CONSULTAS" \
               "core-notificaciones:${{ env.CORE_NOTIFICACIONES_IMAGE }}:CORE_NOTIFICACIONES" \
+              "core-comparendos:${{ env.CORE_COMPARENDOS_IMAGE }}:CORE_COMPARENDOS" \
               "core-ict:${{ env.CORE_ICT_IMAGE }}:CORE_ICT" \
               "frontend:${{ env.FRONTEND_IMAGE }}:FRONTEND" \
               "frontend-hub:${{ env.FRONTEND_HUB_IMAGE }}:FRONTEND_HUB" \
+              "frontend-comparendos:${{ env.FRONTEND_COMPARENDOS_IMAGE }}:FRONTEND_COMPARENDOS" \
               "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
             svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
             r="R_$var"; d="D_$var"
