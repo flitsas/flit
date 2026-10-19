@@ -22,6 +22,7 @@ internal static class ApiEndpoints
         // HU #13348: la consulta de fuentes de ICT va directo a core-consultas (ya no hay IctConsultation aquí).
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
+        app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
         app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token
         app.MapExternalAttachmentEndpoints(); // HU #13263 (Épica #12741) — POST /api/v1/external/tramites/{id}/adjuntos
         app.MapExternalSyncEndpoints(); // HU #13081 (Épica #12737) — GET /api/v1/external/tramites/sync

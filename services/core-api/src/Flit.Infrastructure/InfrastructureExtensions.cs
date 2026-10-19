@@ -486,6 +486,11 @@ public static class InfrastructureExtensions
         services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue>(
             sp => sp.GetRequiredService<ChannelConsolidadoRegeneracionQueue>());
         services.AddHostedService<ConsolidadoRegeneracionProcessor>();
+        // HU #13625 (Épica #13614) — avisos de sincronización a FLITO: configuración por ambiente (apagada por defecto)
+        // y su estado en el log al arrancar. El despachador (HU #13624) solo encola si EsOperable.
+        services.Configure<FlitoSignals.FlitoSignalsOptions>(
+            configuration.GetSection(FlitoSignals.FlitoSignalsOptions.SectionName));
+        services.AddHostedService<FlitoSignals.FlitoSignalsStartupCheck>();
         // Épica #13216 — HU13376: carril de ítems del lote de descarga masiva de consolidados (reclamo con lease, equidad
         // entre lotes, reanudación). Sus parámetros y su interruptor viven en tramites.consolidado_export_settings: sin
         // fila (base de pruebas recién reseteada) o con is_active = false no reclama nada.
