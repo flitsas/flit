@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ShieldX } from "lucide-react";
+import { getHubUrl } from "@flit/auth/server";
 
 // Destino de acceso denegado (HU #10194, AC6). El middleware redirige aquí a los usuarios sin rol SuperAdmin antes de
 // renderizar cualquier dato admin.
@@ -22,11 +23,23 @@ const DENIED: Record<string, { title: string; body: string }> = {
   },
 };
 
+/** En el dominio de una red de Marca Blanca, el hub de esa red; si no, FLIT_HUB_URL. */
+async function hubUrlForRequest(): Promise<string> {
+  const configured = (process.env.FLIT_HUB_URL || "").replace(/\/+$/, "");
+  if (!configured) return "";
+  try {
+    return await getHubUrl("tramites");
+  } catch {
+    // Sin la configuración de la sesión de la suite (modo legacy) se queda el hub configurado.
+    return configured;
+  }
+}
+
 export default async function ForbiddenPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
   const { code } = await searchParams;
   const denied = code ? DENIED[code] : undefined;
   // Leída en cada petición (la página depende de la consulta): una sola imagen para los tres ambientes.
-  const hubUrl = (process.env.FLIT_HUB_URL || "").replace(/\/+$/, "");
+  const hubUrl = denied ? await hubUrlForRequest() : "";
   const href = denied && hubUrl ? `${hubUrl}/?inicio=1` : "/";
 
   return (

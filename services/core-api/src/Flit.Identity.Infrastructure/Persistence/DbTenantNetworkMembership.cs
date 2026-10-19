@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.Domains;
 using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Queries.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,8 @@ internal sealed partial class DbTenantNetworkMembership(
             var activeHost = await _db.ActiveNetworkDomains
                 .AsNoTracking()
                 .Where(d => d.HeadTenantId == head)
+                // Con dominios por producto (HU #12968) la red tiene varios: los enlaces y el login van al HUB.
+                .OrderBy(d => d.Purpose == TenantDomainPurposes.Hub ? 0 : 1)
                 .Select(d => (string?)d.Host)
                 .FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);

@@ -71,6 +71,7 @@ Solo lo que el login necesita para sobrevivir a una caída de `core-api` (lo que
 | `/api/v1/auth/*` | Login de siempre, recuperar y cambiar contraseña, activar invitación, `me` |
 | `/api/v1/platform/*` | `me/apps` (inicio del hub), emisores, manifiesto, productos por empresa |
 | `/api/v1/public/branding*` | Marca de la pantalla de login (Marca Blanca) |
+| `/api/v1/public/network` | Hub de la red del dominio, para que `@flit/auth` inicie sesión en él (Marca Blanca con la suite) |
 
 Todo lo demás sigue en `core-api`, incluidos `/api/v1/security/*` y `/api/v1/superadmin/*` (administración de
 usuarios y roles). Pasan a identidad junto con B-12 o en el Epic siguiente; moverlos ahora obliga a partir

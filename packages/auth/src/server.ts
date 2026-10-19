@@ -9,10 +9,11 @@
 //
 //   // Server Component
 //   const user = await getSession();
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { sessionUser } from "./claims";
 import { authConfig } from "./config";
 import { readChunked, sessionCookie } from "./cookies";
+import { withNetworkHub } from "./network";
 import { unsealSession } from "./store";
 import type { SessionUser } from "./types";
 
@@ -33,6 +34,19 @@ export async function getSession(productCode: string): Promise<SessionUser | nul
   if (!session) return null;
   if (session.expiresAt <= Math.floor(Date.now() / 1000) && !session.refreshToken) return null;
   return sessionUser(session.accessToken);
+}
+
+/**
+ * URL del hub para enlazarlo desde un Server Component («Ir a mis productos»): en el dominio de una red, el hub de esa
+ * red (network.ts); si no, FLIT_HUB_URL.
+ */
+export async function getHubUrl(productCode: string): Promise<string> {
+  const config = authConfig(productCode);
+  const incoming = await headers();
+  const host = incoming.get("x-forwarded-host") ?? incoming.get("host");
+  if (!host) return config.hubUrl;
+  const proto = incoming.get("x-forwarded-proto") ?? "https";
+  return (await withNetworkHub(new Request(`${proto}://${host}/`), config)).hubUrl;
 }
 
 /**

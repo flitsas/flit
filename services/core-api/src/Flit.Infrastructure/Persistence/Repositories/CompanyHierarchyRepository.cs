@@ -100,7 +100,7 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
         var entity = new Tenant
         {
             Id = tenantId,
-            Code = company.Code,
+            // HU #13605 — sin Code: lo asigna Postgres (consecutivo COMP-XXXX).
             LegalName = company.LegalName,
             TaxId = company.TaxId,
             TenantType = company.TenantType,

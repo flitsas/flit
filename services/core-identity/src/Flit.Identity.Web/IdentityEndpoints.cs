@@ -16,6 +16,7 @@ public static class IdentityEndpoints
         app.MapAuthEndpoints(); // /api/v1/auth/*
         app.MapPlatformEndpoints(); // /api/v1/platform/* · HU #12966
         app.MapPublicBrandingEndpoints(); // /api/v1/public/branding* · HU #12418
+        app.MapPublicNetworkEndpoints(); // /api/v1/public/network · hub de la red (Marca Blanca con la suite)
         app.MapFlitOidcEndpoints(); // /connect/*, /api/v1/platform/issuers · HU #12990 (/connect/* con Suite:Oidc:Enabled)
         return app;
     }

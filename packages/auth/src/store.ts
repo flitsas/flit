@@ -3,6 +3,7 @@ import type { AuthConfig } from "./config";
 import { appOrigin } from "./config";
 import { sessionCookie, chunkedCookies, clearChunkedCookies, parseCookies, readChunked } from "./cookies";
 import { base64UrlDecode, base64UrlEncode, seal, unseal } from "./crypto";
+import { withNetworkHub } from "./network";
 import { refreshSession } from "./tokens";
 import type { StoredSession } from "./types";
 
@@ -110,7 +111,8 @@ export async function freshSession(request: Request, config: AuthConfig, now = M
   if (session.expiresAt - now > REFRESH_MARGIN_SECONDS) return { session, setCookies: [] };
 
   try {
-    const renewed = await renewOnce(config, session);
+    // El refresh se canjea con el mismo emisor que lo dio: en un dominio de red, el hub de la red.
+    const renewed = await renewOnce(await withNetworkHub(request, config), session);
     return { session: renewed, setCookies: await sessionCookies(renewed, request, config) };
   } catch {
     return { session: null, setCookies: clearSessionCookies(request, config) };

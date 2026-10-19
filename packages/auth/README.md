@@ -57,3 +57,4 @@ const { user, status } = useSession(); // de "@flit/auth/client"
 | `FLIT_SESSION_SECRET` | Cifra la cookie; obligatoria en producción (≥ 32 caracteres) | en `next dev`, una fija de desarrollo |
 | `FLIT_INTERNAL_API_KEY` | Para que el gateway acepte el sello `X-Flit-Domain` | vacía |
 | `FLIT_APP_URL` | URL pública de la app, si el Host no la refleja | el Host de la petición |
+| `FLIT_NETWORK_DOMAINS_ENABLED` | `true`: en un dominio de red de Marca Blanca el hub es el de esa red (`GET /api/v1/public/network`, guardado 60 s) | apagada |
