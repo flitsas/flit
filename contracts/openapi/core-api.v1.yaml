@@ -3522,6 +3522,9 @@ paths:
         Super Admin recibe todos los permisos con `enforced = 'true'`; los demas administradores
         (AdminCompany, ot_admin, admin_tramites) solo su tope: la union de los permisos de sus roles en el
         tenant, menos los que tengan denegados. Sus `allow` individuales no amplian el tope.
+        Se excluyen los permisos cuyo flag de enforcement esta apagado (`Security:OtPermissionEnforcement`,
+        `Security:ModulePermissionEnforcement`, fuentes de familia): la API aun no los exige, asi que
+        otorgarlos o denegarlos no tendria efecto.
       security:
         - bearerAuth: []
       parameters:
@@ -3667,7 +3670,8 @@ paths:
       summary: Otorga (allow) o deniega (deny) un permiso puntual dentro del tope del admin (HU #13644)
       description: >
         `allow` exige que el permiso tenga `enforced = 'true'` y este dentro del tope del administrador
-        (403 `NOT_ENFORCED` / `OUT_OF_CAP`). `deny` siempre se puede. Cada intento, aceptado o rechazado,
+        (403 `NOT_ENFORCED` / `OUT_OF_CAP`). Tanto `allow` como `deny` sobre un permiso cuyo flag de enforcement
+        esta apagado responden 403 `NOT_ENFORCED` (falsa revocacion); quitar el override siempre se puede. Cada intento, aceptado o rechazado,
         queda en la bitacora `security.user_permission_audit`.
       security:
         - bearerAuth: []
@@ -3729,6 +3733,8 @@ paths:
       description: >
         Crea un override por cada accion activa del modulo hoy. Con `allow` solo se otorgan las acciones
         con `enforced = 'true'` dentro del tope (`outOfCap` cuenta el resto); si no se otorga ninguna, 403.
+        Las acciones cuyo flag de enforcement esta apagado no se otorgan ni se deniegan (`notEnforced`); si todo
+        lo que tocaria esta apagado, 403 `NOT_ENFORCED` auditado.
       security:
         - bearerAuth: []
       parameters:
@@ -3767,6 +3773,7 @@ paths:
                   created: { type: integer }
                   skipped: { type: integer }
                   outOfCap: { type: integer }
+                  notEnforced: { type: integer }
         "400": { description: "`INVALID_EFFECT`." }
         "403":
           description: Ninguna accion cabe en el tope (`OUT_OF_CAP`).

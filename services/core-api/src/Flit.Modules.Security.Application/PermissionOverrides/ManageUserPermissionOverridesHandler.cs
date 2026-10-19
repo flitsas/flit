@@ -18,8 +18,12 @@ public sealed class ManageUserPermissionOverridesHandler(
     IUserPermissionOverrideRepository repository,
     PermissionCapCalculator capCalculator,
     GrantModuleOverridesHandler moduleHandler,
-    IEnumerable<IPermissionOverrideRule> rules)
+    IEnumerable<IPermissionOverrideRule> rules,
+    IPermissionEnforcementState? enforcement = null)
 {
+    // Hallazgo review Épica #12753: sin estado de enforcement (null) todo permiso enforced='true' se considera exigido.
+    private bool IsLive(string slug) => enforcement?.IsEffectivelyEnforced(slug) ?? true;
+
     public async Task<SetOverrideResult> SetAsync(
         Guid tenantId, OverrideActor actor, Guid targetUserId, Guid permissionId, string effect, CancellationToken ct)
     {
@@ -34,6 +38,15 @@ public sealed class ManageUserPermissionOverridesHandler(
         var existing = await FindActiveAsync(tenantId, targetUserId, permissionId, ct).ConfigureAwait(false);
 
         await RunRulesAsync(tenantId, actor, targetUserId, action, permission, existing?.Effect, effect, ct).ConfigureAwait(false);
+
+        // Allow o deny sobre un permiso cuyo flag está apagado no tiene efecto real (la API lo deja pasar): falsa revocación.
+        // Quitar el override (RemoveAsync) sí se permite siempre, para poder limpiar.
+        if (permission.IsEnforced && !IsLive(permission.Slug))
+        {
+            await RejectAsync(tenantId, actor, targetUserId, permission, action, PermissionOverrideReasons.NotEnforced, existing?.Effect, effect, ct)
+                .ConfigureAwait(false);
+        }
+
         if (effect == PermissionEffects.Allow)
         {
             if (!permission.IsEnforced)
@@ -110,13 +123,28 @@ public sealed class ManageUserPermissionOverridesHandler(
                 .Where(p => cap.Contains(p.Id)).Select(p => p.Id).ToHashSet();
         }
 
+        // Acciones enforced='true' cuyo flag está apagado: no se otorgan ni se deniegan (falsa revocación).
+        IReadOnlySet<Guid>? notEnforced = null;
+        if (enforcement is not null)
+        {
+            notEnforced = (await repository.ListEnforcedPermissionsAsync(ct).ConfigureAwait(false))
+                .Where(p => !IsLive(p.Slug)).Select(p => p.Id).ToHashSet();
+        }
+
         var result = await moduleHandler.HandleAsync(
             new GrantModuleOverridesCommand(
                 tenantId, targetUserId, actor.UserId, moduleCode, effect, allowed,
-                await repository.ListExcludedPermissionIdsAsync(ct).ConfigureAwait(false)), ct).ConfigureAwait(false);
+                await repository.ListExcludedPermissionIdsAsync(ct).ConfigureAwait(false), notEnforced), ct).ConfigureAwait(false);
         if (result.Excluded > 0 && result.Created == 0 && result.Skipped == 0 && result.OutOfCap == 0)
         {
             await RejectAsync(tenantId, actor, targetUserId, null, "MODULE_SNAPSHOT", PermissionOverrideReasons.Excluded, null, effect, ct, moduleCode)
+                .ConfigureAwait(false);
+        }
+
+        // Todo lo que habría tocado está apagado: 403 NOT_ENFORCED auditado. Si queda algo exigido, se aplica solo eso.
+        if (result.NotEnforced > 0 && result.Created == 0 && result.Skipped == 0 && result.OutOfCap == 0 && result.Excluded == 0)
+        {
+            await RejectAsync(tenantId, actor, targetUserId, null, "MODULE_SNAPSHOT", PermissionOverrideReasons.NotEnforced, null, effect, ct, moduleCode)
                 .ConfigureAwait(false);
         }
 
@@ -169,7 +197,8 @@ public sealed class ManageUserPermissionOverridesHandler(
         ArgumentNullException.ThrowIfNull(actor);
         var all = await repository.ListEnforcedPermissionsAsync(ct).ConfigureAwait(false);
         var cap = await capCalculator.GetCapAsync(tenantId, actor, ct).ConfigureAwait(false);
-        return [.. all.Where(p => cap.Contains(p.Id))];
+        // Los permisos cuyo flag de enforcement está apagado no se ofrecen: otorgarlos o denegarlos no tendría efecto en la API.
+        return [.. all.Where(p => cap.Contains(p.Id) && IsLive(p.Slug))];
     }
 
     private async Task<PermissionCatalogEntry> GetPermissionAsync(Guid permissionId, CancellationToken ct) =>
