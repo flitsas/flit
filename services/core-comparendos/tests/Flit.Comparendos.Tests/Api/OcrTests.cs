@@ -394,6 +394,46 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         (await api.EnDbAsync(db => db.PromptsOcr.Where(p => p.Publicada).Select(p => p.Id).ToListAsync(ct))).Should().Equal(v1);
     }
 
+    [Fact]
+    public async Task AC7_AlRegistrar_QuedaAsociadoAlNitYALaPlacaMonitoreados()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente) = await EmpresaOcrAsync();
+        var nit = Guid.NewGuid();
+        var placa = Guid.NewGuid();
+        await api.EnDbAsync(async db =>
+        {
+            db.IdentificacionesMonitoreadas.Add(new IdentificacionMonitoreada { Id = nit, TenantId = empresa, NumeroBase = "900123456", NombreTitular = "Titular" });
+            db.PlacasMonitoreadas.Add(new PlacaMonitoreada { Id = placa, TenantId = empresa, Placa = "NIT777" });
+            await db.SaveChangesAsync(ct);
+        });
+
+        // Uno con el NIT tal cual, otro con el dígito de verificación pegado, otro con un NIT que la empresa no monitorea.
+        var dv = Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion("900123456");
+        ResultadoOcr Con(string numero, string documento, string placaLeida)
+        {
+            var r = OcrDePrueba.Campos(numero, placa: placaLeida);
+            var campos = r.Campos.ToDictionary(kv => kv.Key, kv => kv.Value);
+            campos[CamposOcr.NumeroDocumento] = new(documento, 0.9m);
+            return r with { Campos = campos };
+        }
+
+        api.Ocr.Responder("nit-tal-cual", () => Con("OCR-NIT-1", "900123456", "NIT777"));
+        api.Ocr.Responder("nit-con-dv", () => Con("OCR-NIT-2", $"900123456{dv}", "ABC124"));
+        api.Ocr.Responder("nit-ajeno", () => Con("OCR-NIT-3", "800999111", "ABC125"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes",
+            Paquete("NIT", ("a.pdf", "nit-tal-cual"), ("b.pdf", "nit-con-dv"), ("c.pdf", "nit-ajeno")), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+        (await Json(await cliente.PostAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}/registrar-completos", null, ct), ct)).GetProperty("registrados").GetArrayLength().Should().Be(3);
+
+        var c = await api.EnDbAsync(db => db.Comparendos.AsNoTracking().Where(x => x.TenantId == empresa && x.NumeroNormalizado.StartsWith("OCRNIT"))
+            .ToDictionaryAsync(x => x.NumeroNormalizado, x => new { x.IdentificacionMonitoreadaId, x.NitConsultado, x.PlacaMonitoreadaId }, ct));
+        c["OCRNIT1"].Should().Be(new { IdentificacionMonitoreadaId = (Guid?)nit, NitConsultado = (string?)"900123456", PlacaMonitoreadaId = (Guid?)placa });
+        (c["OCRNIT2"].IdentificacionMonitoreadaId, c["OCRNIT2"].PlacaMonitoreadaId).Should().Be(((Guid?)nit, (Guid?)null));
+        (c["OCRNIT3"].IdentificacionMonitoreadaId, c["OCRNIT3"].NitConsultado).Should().Be(((Guid?)null, (string?)null), "un NIT que la empresa no monitorea no se asocia");
+    }
+
     /// <summary>TIFF de prueba en memoria (RGB, una franja por fila).</summary>
     private static byte[] Tiff(int paginas)
     {

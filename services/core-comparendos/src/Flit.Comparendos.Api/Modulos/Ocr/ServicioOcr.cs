@@ -420,6 +420,7 @@ public sealed class ServicioOcr(
             UltimoEventoEn = ahora,
         };
         Reconciliador.AplicarCampos(c, item);
+        await AsociarMonitoreoAsync(c, ct).ConfigureAwait(false);
         c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct, c.NumeroNormalizado).ConfigureAwait(false);
         Plazos.Recalcular(c, await calendario.MotorAsync(ct).ConfigureAwait(false), ahora);
         db.Comparendos.Add(c);
@@ -442,6 +443,36 @@ public sealed class ServicioOcr(
         var yaMonitoreada = c.Placa is { } placa
             && await db.PlacasMonitoreadas.AnyAsync(p => p.TenantId == c.TenantId && p.Placa == placa && p.Activo, ct).ConfigureAwait(false);
         return new Registro(doc.Id, c.Id, c.Numero, c.Placa, yaMonitoreada, c.TipoIngreso);
+    }
+
+    /// <summary>
+    /// Como los que llegan por las fuentes: si el documento del infractor es un NIT (u otra identificación) que la empresa
+    /// monitorea, el comparendo queda asociado a él (filtros y reportes por NIT, representante del propietario); si la placa
+    /// está monitoreada, a la placa. Si no coincide con nada, queda como hoy: sin asociar.
+    /// </summary>
+    private async Task AsociarMonitoreoAsync(Comparendo c, CancellationToken ct)
+    {
+        if (Nit.Separar(c.NumeroDocumentoInfractor)?.Base is { } numero)
+        {
+            // El dígito de verificación a veces viene pegado («8110117798»): si el último es el DV correcto, también vale sin él.
+            var candidatos = new List<string> { numero };
+            if (numero.Length > 1 && Nit.DigitoVerificacion(numero[..^1]) == numero[^1] - '0')
+                candidatos.Add(numero[..^1]);
+            var nit = await db.IdentificacionesMonitoreadas.AsNoTracking()
+                .Where(n => n.TenantId == c.TenantId && n.Activo && candidatos.Contains(n.NumeroBase))
+                .OrderBy(n => n.TipoDocumento == c.TipoDocumentoInfractor ? 0 : 1)
+                .Select(n => new { n.Id, n.NumeroBase })
+                .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            if (nit is not null)
+                (c.IdentificacionMonitoreadaId, c.NitConsultado) = (nit.Id, nit.NumeroBase);
+        }
+
+        if (c.Placa is { } placa)
+        {
+            c.PlacaMonitoreadaId = await db.PlacasMonitoreadas.AsNoTracking()
+                .Where(p => p.TenantId == c.TenantId && p.Activo && p.Placa == placa)
+                .Select(p => (Guid?)p.Id).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        }
     }
 
     public async Task DescartarAsync(DocumentoOcr doc, string? motivo, Guid usuario, CancellationToken ct)
