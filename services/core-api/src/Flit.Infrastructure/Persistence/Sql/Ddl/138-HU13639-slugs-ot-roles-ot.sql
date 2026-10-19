@@ -13,7 +13,9 @@ INSERT INTO security.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
   FROM security.roles r
   JOIN security.permissions p ON p.slug IN ('ot.tramites.manage', 'ot.improntas.manage', 'ot.reportes.manage', 'ot.mandatos.manage')
+  JOIN security.modules m ON m.id = p.module_id
  WHERE r.deleted_at IS NULL
+   AND m.product_code = r.product_code  -- tr_role_permissions_same_product: un rol OT de otro producto no aborta la migración
    AND r.target_entity_type = 'TRANSIT_OFFICE'
    AND r.code <> 'ot_admin'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
