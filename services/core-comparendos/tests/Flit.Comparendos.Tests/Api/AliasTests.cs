@@ -31,6 +31,12 @@ public sealed class AliasTests(ApiConFuente api) : IClassFixture<ApiConFuente>
             new { texto = "insp. transito villa inventada", organismoTransitoId = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001") }, ct)).EnsureSuccessStatusCode();
         (await api.EnDbAsync(db => db.Comparendos.SingleAsync(c => c.Id == id, ct))).OrganismoTransitoId.Should().Be(Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001"));
         (await api.EnDbAsync(db => db.Timeline.AnyAsync(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.DatosActualizados && t.Descripcion.Contains("alias"), ct))).Should().BeTrue();
+
+        // La pestaña «Alias de secretarías» los lista (fallaba siempre con un 500: OrderBy sobre el DTO).
+        var alias = await super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/organismos/alias", ct);
+        alias.EnumerateArray().Should().Contain(a => a.GetProperty("organismoTransitoId").GetGuid() == Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001"));
+        (await super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/organismos/alias?organismo=aaaaaaaa-0001-4000-8000-000000000001", ct))
+            .GetArrayLength().Should().BeGreaterThan(0);
     }
 
     [Fact]

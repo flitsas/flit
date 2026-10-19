@@ -111,12 +111,15 @@ public static class CatalogosEndpoints
 
     private static async Task<IResult> ListarAlias(Guid? organismo, ComparendosDb db, CancellationToken ct)
     {
-        var q = from a in db.OrganismosTransitoAlias.AsNoTracking()
-                join o in db.OrganismosTransito.AsNoTracking() on a.OrganismoTransitoId equals o.Id
-                select new AliasDto(a.Id, a.TextoNormalizado, o.Id, o.Nombre, a.Origen);
+        // Filtrar y ordenar antes de proyectar al DTO: EF no traduce un OrderBy sobre el record ya construido (fallaba siempre).
+        var alias = db.OrganismosTransitoAlias.AsNoTracking();
         if (organismo is { } id)
-            q = q.Where(a => a.OrganismoTransitoId == id);
-        return Results.Ok(await q.OrderBy(a => a.Texto).ToListAsync(ct).ConfigureAwait(false));
+            alias = alias.Where(a => a.OrganismoTransitoId == id);
+        var q = from a in alias
+                join o in db.OrganismosTransito.AsNoTracking() on a.OrganismoTransitoId equals o.Id
+                orderby a.TextoNormalizado
+                select new AliasDto(a.Id, a.TextoNormalizado, o.Id, o.Nombre, a.Origen);
+        return Results.Ok(await q.ToListAsync(ct).ConfigureAwait(false));
     }
 
     /// <summary>§7.21: textos de secretaría que llegaron sin organismo, con cuántos comparendos activos afectan (para crear su alias).</summary>
