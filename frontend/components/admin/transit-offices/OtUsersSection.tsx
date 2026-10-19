@@ -510,6 +510,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           // El listado puede traer una fila por rol: los roles del usuario son todas las filas con su id.
           roleIds={users.filter((x) => x.id === permissionsTarget.id && x.roleId).map((x) => x.roleId as string)}
           invitationPending={isInvitationRow(permissionsTarget)}
+          // HU #13656: otro administrador o la propia ficha se ven en solo lectura.
+          targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}
+          isSelf={permissionsTarget.id === currentUserId}
           onClose={() => setPermissionsTarget(null)}
         />
       )}

@@ -102,3 +102,27 @@ export function outOfCapOverrideIds(
   const grantableIds = new Set(grantable.map((g) => g.id));
   return overrides.filter((o) => !grantableIds.has(o.permissionId)).map((o) => o.permissionId);
 }
+
+// ── HU #13656 (FD2-4): administradores en solo lectura ───────────────────────────────────────────────────
+
+export const ADMIN_READ_ONLY_MESSAGE = "Solo el Super Admin puede modificar los permisos de un administrador.";
+
+/** «Administrador» según el backend (`AdministratorRoles`): SuperAdmin, AdminCompany, ot_admin y admin_tramites. */
+const ADMINISTRATOR_ROLE_CODES = new Set(["superadmin", "admincompany", "ot_admin", "admin_tramites"]);
+
+export function isAdministratorRoleCode(roleCode: string | null | undefined): boolean {
+  return ADMINISTRATOR_ROLE_CODES.has((roleCode ?? "").trim().toLowerCase());
+}
+
+/**
+ * Modo `admin`: la ficha de otro administrador, o la propia, se ve en solo lectura (el backend rechaza con
+ * TARGET_IS_ADMIN / SELF). El Super Admin (`superadmin`) no se ve afectado por esta regla.
+ */
+export function adminReadOnlyFor(
+  mode: "superadmin" | "admin",
+  targetRoleCodes: ReadonlyArray<string | null | undefined> | undefined,
+  isSelf: boolean | undefined,
+): boolean {
+  if (mode !== "admin") return false;
+  return Boolean(isSelf) || (targetRoleCodes ?? []).some(isAdministratorRoleCode);
+}

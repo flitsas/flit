@@ -660,6 +660,9 @@ export function Usuarios() {
             .filter((x) => x.id === permissionsTarget.id && x.roleId)
             .map((x) => x.roleId as string)}
           targetIsSuperAdmin={users.some((x) => x.id === permissionsTarget.id && isSuperAdminRole(x.roleCode))}
+          // HU #13656: en modo admin, otro administrador o la propia ficha se ven en solo lectura.
+          targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}
+          isSelf={permissionsTarget.id === currentUserId}
           invitationPending={isInvitationRow(permissionsTarget)}
           onClose={() => setPermissionsTarget(null)}
         />

@@ -903,6 +903,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
         callouts: [
           {
+            variant: "info",
+            text: "Los permisos de otro administrador, y los tuyos, solo se pueden ver: la pantalla aparece en solo lectura con el aviso «Solo el Super Admin puede modificar los permisos de un administrador.». Si la persona no tiene rol de administrador, los controles están habilitados.",
+          },
+          {
             variant: "warning",
             text: "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones que sí están dentro de tu tope. Si una persona ya tiene un permiso que otro administrador le dio y que está fuera de tu tope, verás la etiqueta «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo.",
           },

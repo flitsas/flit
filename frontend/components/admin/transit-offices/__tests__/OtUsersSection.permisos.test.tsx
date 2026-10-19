@@ -1,5 +1,5 @@
-// HU #13655 (Feature #13104 F-D2) — el Admin OT configura los permisos de los
-// usuarios de su organismo (modo admin).
+// HU #13655/#13656 (Feature #13104 F-D2) — el Admin OT configura los permisos de los
+// usuarios de su organismo (modo admin) y ve a otros administradores (o su propia ficha) en solo lectura.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -8,6 +8,7 @@ import { OtUsersSection } from "../OtUsersSection";
 import { fetchOtUsers } from "@/lib/api/admin-ot-security";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
 import { listGrantablePermissions } from "@/lib/api/permission-overrides";
+import { ADMIN_READ_ONLY_MESSAGE } from "@/lib/permissions/modulePermissions";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -48,6 +49,8 @@ const mk = (over: Partial<OtUserItem>): OtUserItem => ({
   status: "active", createdAt: "2026-07-01T00:00:00Z", isSuspended: false, rowVersion: 1, ...over,
 });
 const ana = mk({});
+const beto = mk({ id: "u-2", fullName: "Beto Admin", email: "beto@transito.gov.co", role: "Admin OT", roleCode: "ot_admin", roleId: "r-adm" });
+const yo = mk({ id: "u-self", fullName: "Yo Mismo", email: "yo@transito.gov.co", role: "Admin OT", roleCode: "ot_admin", roleId: "r-adm" });
 
 const renderSection = () =>
   render(
@@ -58,15 +61,30 @@ const renderSection = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(fetchOtUsers).mockResolvedValue({ data: [ana] });
+  vi.mocked(fetchOtUsers).mockResolvedValue({ data: [ana, beto, yo] });
 });
 
-describe("OtUsersSection — Admin OT (#13655)", () => {
+describe("OtUsersSection — Admin OT (#13655, #13656)", () => {
   it("#13655 AC1: abre «Permisos por módulo» de un usuario del organismo en modo admin", async () => {
     renderSection();
     await screen.findByText("Ana Torres");
     await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
     expect(await screen.findByText("Permisos por módulo — Ana Torres")).toBeInTheDocument();
     expect(listGrantablePermissions).toHaveBeenCalledWith(undefined);
+    expect(screen.queryByText(ADMIN_READ_ONLY_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it("#13656 AC1: la ficha de otro administrador queda en solo lectura", async () => {
+    renderSection();
+    await screen.findByText("Beto Admin");
+    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Beto Admin" }));
+    expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
+  });
+
+  it("#13656 AC2: la propia ficha queda en solo lectura", async () => {
+    renderSection();
+    await screen.findByText("Yo Mismo");
+    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Yo Mismo" }));
+    expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
   });
 });

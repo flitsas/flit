@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildModuleViews, outOfCapOverrideIds } from "../modulePermissions";
+import { adminReadOnlyFor, buildModuleViews, outOfCapOverrideIds } from "../modulePermissions";
 import type { AccessibleModule } from "@/lib/api/security";
 import type { GrantablePermissionItem, UserPermissionOverride } from "@/lib/api/permission-overrides";
 
@@ -85,5 +85,23 @@ describe("buildModuleViews — tope del administrador (#13655)", () => {
 
   it("outOfCapOverrideIds devuelve solo los overrides fuera del tope", () => {
     expect(outOfCapOverrideIds(cap, [ov("p1", "allow"), ov("p2", "deny")])).toEqual(["p2"]);
+  });
+});
+
+describe("adminReadOnlyFor (#13656)", () => {
+  it("en modo admin: otro administrador → solo lectura; los 4 códigos de administrador", () => {
+    for (const code of ["SuperAdmin", "AdminCompany", "ot_admin", "admin_tramites"]) {
+      expect(adminReadOnlyFor("admin", [code], false)).toBe(true);
+    }
+  });
+  it("en modo admin: la propia ficha → solo lectura", () => {
+    expect(adminReadOnlyFor("admin", ["radicador"], true)).toBe(true);
+  });
+  it("en modo admin: usuario sin rol de administrador → editable", () => {
+    expect(adminReadOnlyFor("admin", ["radicador", null, undefined], false)).toBe(false);
+    expect(adminReadOnlyFor("admin", undefined, false)).toBe(false);
+  });
+  it("el Super Admin (modo superadmin) no queda en solo lectura por esta regla", () => {
+    expect(adminReadOnlyFor("superadmin", ["AdminCompany"], false)).toBe(false);
   });
 });
