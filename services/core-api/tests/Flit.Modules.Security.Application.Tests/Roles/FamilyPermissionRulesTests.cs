@@ -9,7 +9,7 @@ namespace Flit.Modules.Security.Application.Tests.Roles;
 /// <summary>
 /// HU #13664 (Feature #13636 F-F, Épica #12753) AC1 — «crear exige ver» por familia de trámite en la configuración de roles:
 /// otorgar <c>traspasos.create</c> sin <c>traspasos.read</c> lanza <see cref="FamilyCreateRequiresReadException"/> (400) y quitar
-/// <c>traspasos.read</c> retira también <c>traspasos.create</c>. Sin la política activa (flag apagado) nada cambia.
+/// <c>traspasos.read</c> retira también <c>traspasos.create</c>. La regla aplica siempre (es validación de datos, no depende del flag de exigencia en runtime).
 /// <para>Uso de ejemplo: <c>FamilyPermissionRules.Resolve(actuales, pedidos).Violations</c> es reutilizable por la configuración por usuario (F-B).</para>
 /// </summary>
 public sealed class FamilyPermissionRulesTests
@@ -23,13 +23,6 @@ public sealed class FamilyPermissionRulesTests
     private readonly IRoleRepository _repo = Substitute.For<IRoleRepository>();
 
     private static HashSet<string> S(params string[] slugs) => new(slugs, StringComparer.OrdinalIgnoreCase);
-
-    private static IFamilyPermissionRulePolicy Policy(bool enabled)
-    {
-        var policy = Substitute.For<IFamilyPermissionRulePolicy>();
-        policy.Enabled.Returns(enabled);
-        return policy;
-    }
 
     private static RoleDetail Role(params PermissionInfo[] tiene) =>
         new(RoleId, "COMPANY", "gestor", "Gestor", null, false, true,
@@ -76,7 +69,7 @@ public sealed class FamilyPermissionRulesTests
     {
         Arrange(Role());
 
-        var act = () => new SetRolePermissionsHandler(_repo, Policy(true))
+        var act = () => new SetRolePermissionsHandler(_repo)
             .HandleAsync(new SetRolePermissionsCommand(RoleId, [Create.Id]), CancellationToken.None);
 
         (await act.Should().ThrowAsync<FamilyCreateRequiresReadException>()).Which.Slugs.Should().Equal("traspasos.create");
@@ -88,23 +81,11 @@ public sealed class FamilyPermissionRulesTests
     {
         Arrange(Role(Read, Create));
 
-        await new SetRolePermissionsHandler(_repo, Policy(true))
+        await new SetRolePermissionsHandler(_repo)
             .HandleAsync(new SetRolePermissionsCommand(RoleId, [Create.Id]), CancellationToken.None);
 
         await _repo.Received(1).SetPermissionsAsync(
             RoleId, Arg.Is<IReadOnlyList<Guid>>(ids => ids.Count == 0), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task AC1_RolGlobal_FlagApagado_NoCambiaNada()
-    {
-        Arrange(Role());
-
-        await new SetRolePermissionsHandler(_repo, Policy(false))
-            .HandleAsync(new SetRolePermissionsCommand(RoleId, [Create.Id]), CancellationToken.None);
-
-        await _repo.Received(1).SetPermissionsAsync(
-            RoleId, Arg.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { Create.Id })), Arg.Any<CancellationToken>());
     }
 
     // AC1 (rol propio de la compañía)
@@ -113,7 +94,7 @@ public sealed class FamilyPermissionRulesTests
     {
         Arrange(Role());
 
-        var act = () => new SetTenantRolePermissionsHandler(_repo, Policy(true))
+        var act = () => new SetTenantRolePermissionsHandler(_repo)
             .HandleAsync(new SetTenantRolePermissionsCommand(TenantId, RoleId, [Create.Id], Held), CancellationToken.None);
 
         await act.Should().ThrowAsync<FamilyCreateRequiresReadException>();
@@ -125,7 +106,7 @@ public sealed class FamilyPermissionRulesTests
     {
         Arrange(Role(Read, Create));
 
-        await new SetTenantRolePermissionsHandler(_repo, Policy(true))
+        await new SetTenantRolePermissionsHandler(_repo)
             .HandleAsync(new SetTenantRolePermissionsCommand(TenantId, RoleId, [Create.Id], Held), CancellationToken.None);
 
         await _repo.Received(1).SetPermissionsAsync(
@@ -137,7 +118,7 @@ public sealed class FamilyPermissionRulesTests
     {
         Arrange(Role());
 
-        await new SetTenantRolePermissionsHandler(_repo, Policy(true))
+        await new SetTenantRolePermissionsHandler(_repo)
             .HandleAsync(new SetTenantRolePermissionsCommand(TenantId, RoleId, [Read.Id, Create.Id], Held), CancellationToken.None);
 
         await _repo.Received(1).SetPermissionsAsync(

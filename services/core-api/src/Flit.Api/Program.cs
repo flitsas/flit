@@ -94,7 +94,6 @@ builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions
 builder.Services.Configure<Flit.Api.Authorization.ModulePermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.ModulePermissionEnforcementOptions.Section)); // Feature #13105
 builder.Services.AddSingleton<IAuthorizationHandler, Flit.Api.Authorization.ModulePermissionAuthorizationHandler>();
 builder.Services.AddScoped<Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate, Flit.Api.Authorization.HttpProcedureFamilyPermissionGate>(); // HU #13664
-builder.Services.AddSingleton<Flit.Modules.Security.Domain.Roles.IFamilyPermissionRulePolicy, Flit.Api.Authorization.FamilyPermissionRulePolicy>(); // HU #13664
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();

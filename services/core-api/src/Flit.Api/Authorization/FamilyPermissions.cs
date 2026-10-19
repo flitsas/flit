@@ -44,8 +44,3 @@ public sealed class HttpProcedureFamilyPermissionGate(
     }
 }
 
-/// <summary>Interruptor de «crear exige ver» en la configuración de roles: sigue al mismo flag.</summary>
-public sealed class FamilyPermissionRulePolicy(IOptionsMonitor<ModulePermissionEnforcementOptions> options) : IFamilyPermissionRulePolicy
-{
-    public bool Enabled => options.CurrentValue.Enabled;
-}

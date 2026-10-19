@@ -48,12 +48,6 @@ public static class FamilyPermissionRules
 /// <summary>Resultado de <see cref="FamilyPermissionRules.Resolve"/>.</summary>
 public sealed record FamilyPermissionResolution(IReadOnlyList<string> Violations, IReadOnlyList<string> CascadeDropped);
 
-/// <summary>Interruptor de la regla «crear exige ver» (detrás de <c>Security:ModulePermissionEnforcement:Enabled</c>).</summary>
-public interface IFamilyPermissionRulePolicy
-{
-    bool Enabled { get; }
-}
-
 /// <summary>HU #13664 AC1: se pidió un «Crear» por familia sin su «Ver» → 400 <c>FAMILY_CREATE_REQUIRES_READ</c>.</summary>
 public sealed class FamilyCreateRequiresReadException(IReadOnlyList<string> slugs)
     : Exception($"Create permissions require their read permission: {string.Join(", ", slugs)}")
