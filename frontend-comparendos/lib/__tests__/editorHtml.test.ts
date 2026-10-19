@@ -25,4 +25,9 @@ describe("variablesUsadas", () => {
   it("lista cada variable una vez, sin espacios", () => {
     expect(variablesUsadas("Hola {{ conductor.nombre }}, placa {{comparendo.placa}} {{conductor.nombre}}")).toEqual(["conductor.nombre", "comparendo.placa"]);
   });
+
+  it("de los bloques condicionales cuenta solo la variable que se evalúa", () => {
+    expect(variablesUsadas('{{#si empresa.correo_respuesta}}Responde a {{empresa.correo_respuesta}}{{#sino}}No respondas.{{/si}}')).toEqual(["empresa.correo_respuesta"]);
+    expect(variablesUsadas('{{#si comparendo.tipo == "FOTOMULTA"}}foto{{/si}} {{#si dp.estado != "x"}}{{/si}}')).toEqual(["comparendo.tipo", "dp.estado"]);
+  });
 });

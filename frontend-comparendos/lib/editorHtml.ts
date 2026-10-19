@@ -46,8 +46,12 @@ export function limpiarHtml(html: string): string {
 export function variablesUsadas(texto: string): string[] {
   const vistas: string[] = [];
   for (const m of texto.matchAll(/\{\{([^}]*)\}\}/g)) {
-    const v = m[1].trim();
-    if (!vistas.includes(v)) vistas.push(v);
+    let v = m[1].trim();
+    // Bloques condicionales del motor: {{#si variable}}, {{#si variable == "x"}}, {{#sino}} y {{/si}} no son variables;
+    // de {{#si …}} cuenta la variable que se evalúa.
+    if (v === "#sino" || v === "/si") continue;
+    if (v.startsWith("#si")) v = v.slice(3).trim().split(/\s|==|!=/)[0];
+    if (v && !vistas.includes(v)) vistas.push(v);
   }
   return vistas;
 }
