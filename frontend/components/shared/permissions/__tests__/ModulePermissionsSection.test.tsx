@@ -23,7 +23,7 @@ vi.mock("@/lib/api/permission-overrides", async () => {
   };
 });
 
-import { getAccessibleModules } from "@/lib/api/security";
+import { getAccessibleModules, getTenantRole } from "@/lib/api/security";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import {
   listGrantablePermissions,
@@ -180,5 +180,71 @@ describe("ModulePermissionsSection", () => {
     vi.mocked(listGrantablePermissions).mockResolvedValue([]);
     renderSection();
     expect(await screen.findByTestId("ui-empty")).toBeInTheDocument();
+  });
+});
+
+// HU #13655 (Feature #13104 F-D2) — modo admin: el tope es la lista /grantable.
+describe("ModulePermissionsSection — modo admin y tope (#13655)", () => {
+  // p1 está dentro del tope (grantable); p2 queda fuera. El usuario tiene p2 por un permiso individual.
+  const capOnlyP1 = [grantable[0]];
+  const adminProps = { mode: "admin" as const, tenantId: undefined };
+
+  beforeEach(() => {
+    vi.mocked(listGrantablePermissions).mockResolvedValue(capOnlyP1);
+    vi.mocked(getTenantRole).mockResolvedValue({
+      id: "r1", code: "x", name: "Rol", description: null, isSystem: false, isActive: true,
+      productCode: "tramites", tenantId: null, permissions: [{ id: "p1", slug: "tramites.view", name: "Ver trámites" }],
+    });
+  });
+
+  it("AC1: la sección se monta en modo admin con el tope del administrador (sin tenantId en la consulta)", async () => {
+    renderSection(adminProps);
+    const tramites = await screen.findByTestId("module-tramites");
+    expect(within(tramites).getByRole("switch", { name: /Ver trámites/ })).toBeEnabled();
+    expect(listGrantablePermissions).toHaveBeenCalledWith(undefined);
+    expect(listUserOverrides).toHaveBeenCalledWith("u1", undefined);
+  });
+
+  it("AC3: un permiso del usuario fuera del tope lleva el chip «Fuera de tu tope», con tooltip, y su control está deshabilitado", async () => {
+    vi.mocked(listUserOverrides).mockResolvedValue([individual]);
+    renderSection(adminProps);
+    const tramites = await screen.findByTestId("module-tramites");
+    const chip = within(tramites).getByTestId("out-of-cap-chip");
+    expect(chip).toHaveTextContent("Fuera de tu tope");
+    expect(chip).toHaveAttribute("title", "Lo otorgó otro administrador. Puedes quitarlo, pero no volver a otorgarlo.");
+    expect(within(tramites).getByRole("tooltip")).toHaveTextContent("Puedes quitarlo, pero no volver a otorgarlo.");
+    expect(within(tramites).getByRole("switch", { name: /Crear trámites/ })).toBeDisabled();
+    // Pero sí se puede quitar.
+    expect(within(tramites).getByRole("button", { name: /Volver Crear trámites a lo que dicta el rol/ })).toBeEnabled();
+  });
+
+  it("AC3: tras quitarlo, el permiso sigue visible con el control deshabilitado (no se puede volver a otorgar)", async () => {
+    vi.mocked(listUserOverrides).mockResolvedValueOnce([individual]).mockResolvedValue([]);
+    vi.mocked(removeUserOverride).mockResolvedValue(undefined);
+    renderSection(adminProps);
+    await userEvent.click(await screen.findByRole("button", { name: /Volver Crear trámites a lo que dicta el rol/ }));
+    await waitFor(() => expect(removeUserOverride).toHaveBeenCalledWith("u1", "p2", undefined));
+    const sw = await screen.findByRole("switch", { name: /Crear trámites/ });
+    await waitFor(() => expect(sw).toBeDisabled());
+    expect(sw).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("button", { name: /Volver Crear trámites/ })).not.toBeInTheDocument();
+  });
+
+  it("AC2: «módulo completo» avisa que solo abarcó lo que está dentro del tope", async () => {
+    vi.mocked(setModuleOverrides).mockResolvedValue({
+      productCode: "tramites", batchId: "b", created: 1, skipped: 0, outOfCap: 1, excluded: 0,
+    });
+    renderSection(adminProps);
+    await userEvent.click(await screen.findByRole("button", { name: /Habilitar el módulo Trámites completo/ }));
+    await waitFor(() => expect(setModuleOverrides).toHaveBeenCalledWith("u1", "tramites", "allow", undefined));
+    expect(await screen.findByText(/1 acción aplicada; 1 quedaron fuera de lo que puedes otorgar/)).toBeInTheDocument();
+  });
+
+  it("en modo superadmin no hay chip de tope", async () => {
+    vi.mocked(listUserOverrides).mockResolvedValue([individual]);
+    renderSection();
+    const tramites = await screen.findByTestId("module-tramites");
+    expect(within(tramites).queryByTestId("out-of-cap-chip")).not.toBeInTheDocument();
+    expect(within(tramites).getByRole("switch", { name: /Crear trámites/ })).toBeEnabled();
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CircleDot, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
+import { CircleDot, Lock, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
 import { getAccessibleModules, getTenantRole, type AccessibleModule } from "@/lib/api/security";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import {
@@ -18,7 +18,7 @@ import {
   type OverrideEffect,
   type UserPermissionOverride,
 } from "@/lib/api/permission-overrides";
-import { buildModuleViews, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
+import { buildModuleViews, outOfCapOverrideIds, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary } from "@flit/ui/UiStateBoundary";
@@ -70,6 +70,8 @@ type LoadState =
       grantable: GrantablePermissionItem[];
       roleIds: Set<string>;
       overrides: UserPermissionOverride[];
+      /** HU #13655: permisos que salieron del tope y se muestran bloqueados aunque ya no tengan override. */
+      locked: Set<string>;
     };
 
 async function fetchRolePermissionIds(mode: "superadmin" | "admin", roleIds: string[]): Promise<Set<string>> {
@@ -92,6 +94,30 @@ function OriginBadge({ origin }: { origin: PermissionOrigin }) {
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
       {ORIGIN_LABEL[origin]}
+    </span>
+  );
+}
+
+/** HU #13655 (FD2-3): textos del chip de permisos fuera del tope del administrador. */
+export const OUT_OF_CAP_LABEL = "Fuera de tu tope";
+export const OUT_OF_CAP_TOOLTIP = "Lo otorgó otro administrador. Puedes quitarlo, pero no volver a otorgarlo.";
+const OUT_OF_CAP_LOCKED_TOOLTIP = "Está fuera de lo que puedes otorgar.";
+
+function OutOfCapChip({ tooltip, id }: { tooltip: string; id: string }) {
+  return (
+    <span
+      tabIndex={0}
+      title={tooltip}
+      aria-describedby={id}
+      data-testid="out-of-cap-chip"
+      className="inline-flex items-center gap-1 rounded-full border border-current px-2 py-0.5 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
+      style={{ color: "var(--badge-danger-fg)" }}
+    >
+      <Lock className="h-3 w-3" aria-hidden="true" />
+      {OUT_OF_CAP_LABEL}
+      <span id={id} role="tooltip" className="sr-only">
+        {tooltip}
+      </span>
     </span>
   );
 }
@@ -136,7 +162,7 @@ export function ModulePermissionsSection({
         listUserOverrides(userId, tenantParam),
         fetchRolePermissionIds(mode, roleKey ? roleKey.split(",") : []),
       ]);
-      return { status: "ready", modules, grantable, roleIds: roleSet, overrides };
+      return { status: "ready", modules, grantable, roleIds: roleSet, overrides, locked: new Set(outOfCapOverrideIds(grantable, overrides)) };
     } catch (e) {
       const code = overrideErrorCode(e);
       if (code === "TARGET_SUPERADMIN") return { status: "superadmin" };
@@ -162,13 +188,17 @@ export function ModulePermissionsSection({
   };
 
   const views = useMemo<ModuleView[]>(
-    () => (state.status === "ready" ? buildModuleViews(state.modules, state.grantable, state.roleIds, state.overrides) : []),
+    () => (state.status === "ready" ? buildModuleViews(state.modules, state.grantable, state.roleIds, state.overrides, state.locked) : []),
     [state],
   );
 
   async function refreshOverrides() {
     const overrides = await listUserOverrides(userId, tenantParam);
-    setState((prev) => (prev.status === "ready" ? { ...prev, overrides } : prev));
+    setState((prev) =>
+      prev.status === "ready"
+        ? { ...prev, overrides, locked: new Set([...prev.locked, ...outOfCapOverrideIds(prev.grantable, overrides)]) }
+        : prev,
+    );
     onChanged?.(overrides);
   }
 
@@ -304,7 +334,7 @@ export function ModulePermissionsSection({
                       role="switch"
                       aria-checked={a.enabled}
                       aria-label={`${a.name}, módulo ${m.name}`}
-                      disabled={controlsOff}
+                      disabled={controlsOff || (mode === "admin" && a.outOfCap === true)}
                       onClick={() => void toggleAction(a)}
                       className="relative h-5 w-9 shrink-0 rounded-full border transition disabled:opacity-50"
                       style={{
@@ -332,6 +362,12 @@ export function ModulePermissionsSection({
                     </span>
                     <StateText enabled={a.enabled} />
                     <OriginBadge origin={a.origin} />
+                    {mode === "admin" && a.outOfCap && (
+                      <OutOfCapChip
+                        id={`cap-${m.code}-${a.id}`}
+                        tooltip={a.origin === "individual" ? OUT_OF_CAP_TOOLTIP : OUT_OF_CAP_LOCKED_TOOLTIP}
+                      />
+                    )}
                     {a.origin === "individual" && !readOnly && (
                       <button
                         type="button"

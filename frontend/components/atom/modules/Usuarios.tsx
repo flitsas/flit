@@ -80,6 +80,10 @@ export function Usuarios() {
   // Eliminar: SuperAdmin-only (AdminCompany ya no tiene este permiso).
   // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
   const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
+  // HU #13652/#13655: permisos por módulo y su auditoría — Super Admin (cualquier tenant) y Admin de Compañía
+  // (modo `admin`: tope y ámbito de su sesión; la API acota al tenant).
+  const canConfigurePermissions = isSuperAdmin || isAdminCompany;
+  const permissionsMode: "superadmin" | "admin" = isSuperAdmin ? "superadmin" : "admin";
   const [open, setOpen] = useState(false);
   const pgEliminados = usePaginacion();
   const [tab, setTab] = useState<TabId>("usuarios");
@@ -250,7 +254,7 @@ export function Usuarios() {
 
     // HU #13652: permisos individuales por módulo. Solo Super Admin aquí; las invitaciones pendientes la
     // abren para ver el aviso deshabilitado (AC5), las canceladas no tienen cuenta ni invitación vigente.
-    if (isSuperAdmin && u.status !== "cancelled") {
+    if (canConfigurePermissions && u.status !== "cancelled") {
       actions.push({
         icon: ShieldCheck,
         label: `Permisos por módulo de ${u.fullName}`,
@@ -642,7 +646,7 @@ export function Usuarios() {
           onClose={() => setAuditTarget(null)}
         />
       )}
-      {permissionsTarget && isSuperAdmin && (
+      {permissionsTarget && canConfigurePermissions && (
         <UserPermissionsModal
           user={{
             id: permissionsTarget.id,
@@ -650,7 +654,7 @@ export function Usuarios() {
             email: permissionsTarget.email,
             tenantId: permissionsTarget.tenantId,
           }}
-          mode="superadmin"
+          mode={permissionsMode}
           // El listado trae una fila por rol: los roles del usuario son todas las filas con su id.
           roleIds={users
             .filter((x) => x.id === permissionsTarget.id && x.roleId)

@@ -18,6 +18,11 @@ export interface ActionView {
   effect?: "allow" | "deny";
   grantedByName?: string | null;
   grantedAt?: string | null;
+  /**
+   * HU #13655 (FD2-1..3): el permiso está fuera del tope de quien consulta (no está en `/grantable`) pero el
+   * usuario lo tiene por un permiso individual (o lo tuvo en esta sesión). Se puede quitar, no volver a otorgar.
+   */
+  outOfCap?: boolean;
 }
 
 export interface ModuleView {
@@ -44,6 +49,11 @@ export function buildModuleViews(
   grantable: GrantablePermissionItem[],
   roleGrantedIds: ReadonlySet<string>,
   overrides: UserPermissionOverride[],
+  /**
+   * HU #13655: ids que ya salieron del tope y se siguen mostrando (deshabilitados) aunque ya no tengan permiso
+   * individual — p. ej. tras quitarlo. Sin esto la acción desaparecería de la lista en vez de quedar bloqueada.
+   */
+  lockedIds: ReadonlySet<string> = new Set(),
 ): ModuleView[] {
   const grantableIds = new Set(grantable.map((g) => g.id));
   const overrideById = new Map(overrides.map((o) => [o.permissionId, o]));
@@ -53,8 +63,9 @@ export function buildModuleViews(
     const actions: ActionView[] = [];
     for (const a of m.actions) {
       const override = overrideById.get(a.id);
-      if (!grantableIds.has(a.id) && !override) continue;
-      const base = { id: a.id, slug: a.slug, name: a.name };
+      const outOfCap = !grantableIds.has(a.id);
+      if (outOfCap && !override && !lockedIds.has(a.id)) continue;
+      const base = { id: a.id, slug: a.slug, name: a.name, ...(outOfCap ? { outOfCap: true } : {}) };
       if (override) {
         actions.push({
           ...base,
@@ -81,4 +92,13 @@ export function buildModuleViews(
     });
   }
   return views;
+}
+
+/** Ids de los permisos individuales que quedan fuera del tope (`grantable`) de quien consulta. */
+export function outOfCapOverrideIds(
+  grantable: GrantablePermissionItem[],
+  overrides: UserPermissionOverride[],
+): string[] {
+  const grantableIds = new Set(grantable.map((g) => g.id));
+  return overrides.filter((o) => !grantableIds.has(o.permissionId)).map((o) => o.permissionId);
 }

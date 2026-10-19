@@ -5,13 +5,14 @@ import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
 import { getUsers } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
+import { listGrantablePermissions } from "@/lib/api/permission-overrides";
 
-const perms = vi.hoisted(() => ({ isSuperAdmin: true }));
+const perms = vi.hoisted(() => ({ isSuperAdmin: true, isAdminCompany: false }));
 
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
     isSuperAdmin: perms.isSuperAdmin,
-    isAdminCompany: !perms.isSuperAdmin,
+    isAdminCompany: perms.isAdminCompany,
     isOtAdmin: false,
     permissions: [],
     tenantId: "tenant-1",
@@ -60,6 +61,7 @@ const pending: TenantUser = { ...base, id: "inv-1", fullName: "Invitado", email:
 beforeEach(() => {
   vi.clearAllMocks();
   perms.isSuperAdmin = true;
+  perms.isAdminCompany = false;
 });
 
 describe("Usuarios — Permisos por módulo (#13652)", () => {
@@ -87,7 +89,7 @@ describe("Usuarios — Permisos por módulo (#13652)", () => {
     expect(await screen.findByText(/cuando el usuario acepte la invitación/)).toBeInTheDocument();
   });
 
-  it("quien no es Super Admin no ve la acción", async () => {
+  it("quien no es administrador no ve la acción", async () => {
     perms.isSuperAdmin = false;
     vi.mocked(getUsers).mockResolvedValue([base]);
     render(<Usuarios />);
@@ -105,11 +107,30 @@ describe("Usuarios — pestaña Auditoría de permisos (#13654)", () => {
     expect(await screen.findByRole("region", { name: "Auditoría de permisos individuales" })).toBeInTheDocument();
   });
 
-  it("quien no es Super Admin no ve la pestaña", async () => {
+  it("quien no es administrador no ve la pestaña", async () => {
     perms.isSuperAdmin = false;
     vi.mocked(getUsers).mockResolvedValue([base]);
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
     expect(screen.queryByRole("button", { name: "Auditoría de permisos" })).not.toBeInTheDocument();
+  });
+});
+
+// HU #13655 (Feature #13104 F-D2) — Admin de Compañía en el módulo Usuarios (modo admin).
+describe("Usuarios — Admin de Compañía (#13655)", () => {
+
+  beforeEach(() => {
+    perms.isSuperAdmin = false;
+    perms.isAdminCompany = true;
+  });
+
+  it("#13655 AC1: el Admin de Compañía abre «Permisos por módulo» de un usuario de su compañía, en modo admin", async () => {
+    vi.mocked(getUsers).mockResolvedValue([base]);
+    render(<Usuarios />);
+    await screen.findByText("Ana Torres");
+    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
+    expect(await screen.findByText("Permisos por módulo — Ana Torres")).toBeInTheDocument();
+    // Modo admin: el tope sale de /grantable sin tenantId, y los usuarios sin rol admin quedan editables.
+    expect(listGrantablePermissions).toHaveBeenCalledWith(undefined);
   });
 });

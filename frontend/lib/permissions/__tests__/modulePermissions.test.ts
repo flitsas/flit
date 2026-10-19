@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildModuleViews } from "../modulePermissions";
+import { buildModuleViews, outOfCapOverrideIds } from "../modulePermissions";
 import type { AccessibleModule } from "@/lib/api/security";
 import type { GrantablePermissionItem, UserPermissionOverride } from "@/lib/api/permission-overrides";
 
@@ -62,5 +62,28 @@ describe("buildModuleViews", () => {
     const views = buildModuleViews(modules, grantable, new Set(), []);
     expect(views.map((m) => m.name)).toEqual(["Trámites", "Reportes"]);
     expect(views[0].actions.map((a) => a.name)).toEqual(["Ver", "Crear"]);
+  });
+});
+
+describe("buildModuleViews — tope del administrador (#13655)", () => {
+  const cap: GrantablePermissionItem[] = [{ id: "p1", slug: "p1", name: "p1", moduleCode: "x", productCode: "tramites" }];
+
+  it("un permiso individual fuera del tope se marca outOfCap; los dentro del tope no", () => {
+    const views = buildModuleViews(modules, cap, new Set(), [ov("p2", "allow"), ov("p1", "allow")]);
+    const byId = Object.fromEntries(views[0].actions.map((a) => [a.id, a]));
+    expect(byId.p2.outOfCap).toBe(true);
+    expect(byId.p1.outOfCap).toBeUndefined();
+  });
+
+  it("un id bloqueado sigue visible, sin override, como outOfCap; sin bloquear desaparece", () => {
+    const sinBloqueo = buildModuleViews(modules, cap, new Set(), []);
+    expect(sinBloqueo[0].actions.map((a) => a.id)).toEqual(["p1"]);
+    const conBloqueo = buildModuleViews(modules, cap, new Set(), [], new Set(["p2"]));
+    const p2 = conBloqueo[0].actions.find((a) => a.id === "p2");
+    expect(p2).toMatchObject({ origin: "inherited", enabled: false, outOfCap: true });
+  });
+
+  it("outOfCapOverrideIds devuelve solo los overrides fuera del tope", () => {
+    expect(outOfCapOverrideIds(cap, [ov("p1", "allow"), ov("p2", "deny")])).toEqual(["p2"]);
   });
 });

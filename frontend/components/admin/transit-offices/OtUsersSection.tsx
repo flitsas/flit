@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
+import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -35,6 +35,7 @@ import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelIn
 import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTable";
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
+import { UserPermissionsModal } from "@/components/atom/modules/users/UserPermissionsModal";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -60,7 +61,10 @@ export interface OtUsersSectionProps {
  */
 export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const { show } = useToast();
-  const { isSuperAdmin, userId: currentUserId } = usePermissions();
+  const { isSuperAdmin, isOtAdmin, userId: currentUserId } = usePermissions();
+  // HU #13655/#13658: el Admin OT configura los permisos de los usuarios de su organismo (modo `admin`: tope y
+  // ámbito de su sesión) y consulta su auditoría. El Super Admin lo hace desde el Panel SA.
+  const canConfigurePermissions = isOtAdmin && !isSuperAdmin;
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -77,6 +81,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<OtUserItem | null>(null);
   const [auditTarget, setAuditTarget] = useState<OtUserItem | null>(null);
+  const [permissionsTarget, setPermissionsTarget] = useState<OtUserItem | null>(null);
   // Roles asignables al editar: catálogo TRANSIT_OFFICE (SuperAdmin) o los del propio tenant.
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
@@ -189,6 +194,17 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
+      });
+    }
+
+    // HU #13655: permisos individuales por módulo del Admin OT. Las invitaciones pendientes la abren para ver el
+    // aviso deshabilitado; las canceladas no tienen cuenta ni invitación vigente.
+    if (canConfigurePermissions && u.status !== "cancelled") {
+      actions.push({
+        icon: ShieldCheck,
+        label: `Permisos por módulo de ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setPermissionsTarget(u),
       });
     }
 
@@ -481,6 +497,20 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               await load();
             },
           }}
+        />
+      )}
+      {permissionsTarget && canConfigurePermissions && (
+        <UserPermissionsModal
+          user={{
+            id: permissionsTarget.id,
+            fullName: permissionsTarget.fullName,
+            email: permissionsTarget.email,
+          }}
+          mode="admin"
+          // El listado puede traer una fila por rol: los roles del usuario son todas las filas con su id.
+          roleIds={users.filter((x) => x.id === permissionsTarget.id && x.roleId).map((x) => x.roleId as string)}
+          invitationPending={isInvitationRow(permissionsTarget)}
+          onClose={() => setPermissionsTarget(null)}
         />
       )}
       {auditTarget && isSuperAdmin && (

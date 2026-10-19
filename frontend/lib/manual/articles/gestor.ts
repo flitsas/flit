@@ -842,6 +842,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "suspender",
       "desactivar",
       "bloquear",
+      "permisos por modulo",
+      "permisos individuales",
+      "fuera de tu tope",
     ],
     summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
@@ -854,7 +857,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         bullets: [
           "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
           "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
-          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4).",
+          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 6).",
         ],
         media: [
           {
@@ -888,8 +891,26 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "permisos-modulo",
+        title: "4. Permisos por módulo de una persona",
+        paragraphs: [
+          "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario pulsa «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes).",
+        ],
+        bullets: [
+          "1. Pulsa «Permisos por módulo» en la fila de la persona.",
+          "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
+          "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones que sí están dentro de tu tope. Si una persona ya tiene un permiso que otro administrador le dio y que está fuera de tu tope, verás la etiqueta «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo.",
+          },
+        ],
+      },
+      {
         id: "roles",
-        title: "4. Roles y permisos",
+        title: "5. Roles y permisos",
         paragraphs: [
           "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
         ],
@@ -908,7 +929,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       },
       {
         id: "ict",
-        title: "5. Clientes ICT (si tu compañía integra con terceros)",
+        title: "6. Clientes ICT (si tu compañía integra con terceros)",
         paragraphs: [
           "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto».",
         ],

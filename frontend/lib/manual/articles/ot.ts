@@ -264,6 +264,9 @@ export const OT_ARTICLES: ManualArticle[] = [
       "suspender",
       "acceso denegado",
       "cancelar invitacion",
+      "permisos por modulo",
+      "permisos individuales",
+      "fuera de tu tope",
     ],
     summary: "Invitar y administrar cuentas del perfil OT. Solo el administrador del organismo entra aquí.",
     blocks: [
@@ -287,8 +290,26 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "permisos-modulo",
+        title: "3. Permisos por módulo de una persona",
+        paragraphs: [
+          "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila pulsa «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial».",
+        ],
+        bullets: [
+          "1. Dock → Usuarios y pulsa «Permisos por módulo» en la fila de la persona.",
+          "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
+          "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones dentro de tu tope. Si la persona ya tiene un permiso fuera de tu tope que dio otro administrador, verás «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo.",
+          },
+        ],
+      },
+      {
         id: "seguridad",
-        title: "3. Seguridad",
+        title: "4. Seguridad",
         paragraphs: [
           "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT.",
         ],

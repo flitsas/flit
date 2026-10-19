@@ -58,7 +58,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Representantes legales: registra a quienes representan a tu compañía, sus escrituras y su firma del baúl. Ver «Representantes legales y mandatarios».",
           "Mandatarios: registra quién firma el contrato de mandato ante cada organismo por cuenta de tu compañía. Ver «Representantes legales y mandatarios».",
           "Usuarios de una hija de tu red (solo si la administras desde el panel de red): resetear contraseñas y suspender o desactivar sus usuarios.",
-          "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT).",
+          "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT). Desde allí también ajustas los «Permisos por módulo» de cada persona, dentro de tu tope.",
         ],
       },
       {
