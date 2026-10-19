@@ -220,6 +220,7 @@ export function Usuarios() {
               isSystem: r.isSystem,
               permissionCount: r.permissionCount,
               createdAt: r.createdAt,
+              productCode: r.productCode,
             })),
         );
       })
@@ -619,6 +620,7 @@ export function Usuarios() {
               : {
                   currentRoleName: editTarget.role,
                   currentRoleId: editTarget.roleId,
+                  tenantId: isSuperAdmin ? editTarget.tenantId : undefined,
                   roles: editRoles,
                   rolesLoading: editRolesLoading,
                   onAssignRole: async (roleId) => {

@@ -160,6 +160,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               isSystem: r.isSystem,
               permissionCount: r.permissionCount,
               createdAt: r.createdAt,
+              productCode: r.productCode,
             })),
         )
       : getRoles();

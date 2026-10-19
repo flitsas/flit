@@ -1,13 +1,15 @@
-// HU #13655/#13656 (Feature #13104 F-D2) — el Admin OT configura los permisos de los
-// usuarios de su organismo (modo admin) y ve a otros administradores (o su propia ficha) en solo lectura.
+// HU #13655/#13656/#13657/#13658 (Feature #13104 F-D2) — el Admin OT configura los permisos de los
+// usuarios de su organismo (modo admin), ve a otros administradores en solo lectura, es avisado al
+// cambiar un rol y consulta la auditoría de su ámbito.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import { fetchOtUsers } from "@/lib/api/admin-ot-security";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
-import { listGrantablePermissions } from "@/lib/api/permission-overrides";
+import { assignRole, getRoles } from "@/lib/api/security";
+import { countUserOverrides, listGrantablePermissions, listPermissionAudit } from "@/lib/api/permission-overrides";
 import { ADMIN_READ_ONLY_MESSAGE } from "@/lib/permissions/modulePermissions";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
@@ -24,7 +26,7 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
 vi.mock("@/lib/api/security", () => ({
   restoreUser: vi.fn(),
   assignRole: vi.fn(),
-  getRoles: vi.fn().mockResolvedValue([]),
+  getRoles: vi.fn(),
   getAccessibleModules: vi.fn().mockResolvedValue([]),
   getTenantRole: vi.fn().mockResolvedValue({ permissions: [] }),
 }));
@@ -35,6 +37,8 @@ vi.mock("@/lib/api/permission-overrides", async () => {
     ...actual,
     listGrantablePermissions: vi.fn().mockResolvedValue([]),
     listUserOverrides: vi.fn().mockResolvedValue([]),
+    countUserOverrides: vi.fn(),
+    listPermissionAudit: vi.fn(),
   };
 });
 vi.mock("@/hooks/usePermissions", () => ({
@@ -52,6 +56,11 @@ const ana = mk({});
 const beto = mk({ id: "u-2", fullName: "Beto Admin", email: "beto@transito.gov.co", role: "Admin OT", roleCode: "ot_admin", roleId: "r-adm" });
 const yo = mk({ id: "u-self", fullName: "Yo Mismo", email: "yo@transito.gov.co", role: "Admin OT", roleCode: "ot_admin", roleId: "r-adm" });
 
+const roles = [
+  { id: "r-op", code: "operador_ot", name: "Operador", description: null, isSystem: true, permissionCount: 1, createdAt: "", productCode: "tramites" },
+  { id: "r-ot2", code: "consulta_ot", name: "Consulta", description: null, isSystem: true, permissionCount: 1, createdAt: "", productCode: "tramites" },
+];
+
 const renderSection = () =>
   render(
     <ToastProvider>
@@ -62,6 +71,8 @@ const renderSection = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchOtUsers).mockResolvedValue({ data: [ana, beto, yo] });
+  vi.mocked(getRoles).mockResolvedValue(roles);
+  vi.mocked(listPermissionAudit).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
 });
 
 describe("OtUsersSection — Admin OT (#13655, #13656)", () => {
@@ -86,5 +97,57 @@ describe("OtUsersSection — Admin OT (#13655, #13656)", () => {
     await screen.findByText("Yo Mismo");
     await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Yo Mismo" }));
     expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
+  });
+});
+
+describe("OtUsersSection — aviso al cambiar el rol (#13657)", () => {
+  async function openEditAndPickRole() {
+    renderSection();
+    await screen.findByText("Ana Torres");
+    await userEvent.click(screen.getByRole("button", { name: "Editar usuario Ana Torres" }));
+    const dialog = await screen.findByRole("dialog");
+    const select = await within(dialog).findByRole("combobox", { name: "Cambiar rol del usuario" });
+    await waitFor(() => expect(select).toBeEnabled());
+    await userEvent.selectOptions(select, "r-ot2");
+    return { dialog, select };
+  }
+
+  it("AC1: con 3 permisos individuales avisa antes de confirmar y el rol solo cambia si se confirma", async () => {
+    vi.mocked(countUserOverrides).mockResolvedValue({ count: 3 });
+    vi.mocked(assignRole).mockResolvedValue(undefined);
+    await openEditAndPickRole();
+    expect(
+      await screen.findByText("Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol."),
+    ).toBeInTheDocument();
+    // Cuenta los permisos del producto del rol nuevo; el Admin OT no manda tenantId.
+    expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", undefined);
+    expect(assignRole).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Cambiar rol" }));
+    await waitFor(() => expect(assignRole).toHaveBeenCalledWith("u-1", "r-ot2"));
+  });
+
+  it("AC2: sin permisos individuales no aparece el aviso y el rol cambia directo", async () => {
+    vi.mocked(countUserOverrides).mockResolvedValue({ count: 0 });
+    vi.mocked(assignRole).mockResolvedValue(undefined);
+    await openEditAndPickRole();
+    await waitFor(() => expect(assignRole).toHaveBeenCalledWith("u-1", "r-ot2"));
+    expect(screen.queryByText(/permisos? individuales? que se eliminar/)).not.toBeInTheDocument();
+  });
+
+  it("AC3: cancelar con el aviso abierto no cambia el rol ni toca los permisos", async () => {
+    vi.mocked(countUserOverrides).mockResolvedValue({ count: 3 });
+    const { select } = await openEditAndPickRole();
+    await screen.findByText(/3 permisos individuales/);
+    await userEvent.click(screen.getByRole("button", { name: "Mantener rol actual" }));
+    expect(screen.queryByText(/3 permisos individuales/)).not.toBeInTheDocument();
+    expect(assignRole).not.toHaveBeenCalled();
+    expect(select).toHaveValue("r-op");
+  });
+
+  it("si no se puede consultar el conteo, avisa de forma genérica y no cambia el rol sin confirmar", async () => {
+    vi.mocked(countUserOverrides).mockRejectedValue(new Error("boom"));
+    await openEditAndPickRole();
+    expect(await screen.findByText(/No pudimos verificar si este usuario tiene permisos individuales/)).toBeInTheDocument();
+    expect(assignRole).not.toHaveBeenCalled();
   });
 });

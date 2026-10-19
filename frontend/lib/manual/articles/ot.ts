@@ -287,6 +287,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
           "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",
+          "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada.",
         ],
       },
       {

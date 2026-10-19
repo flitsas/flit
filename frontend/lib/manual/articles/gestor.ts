@@ -882,7 +882,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT.",
         ],
         bullets: [
-          "Editar: cambia nombre, perfil o roles.",
+          "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
           "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
           "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
           "Desactivar: bloquea el acceso de forma indefinida.",

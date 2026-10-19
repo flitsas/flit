@@ -1212,7 +1212,7 @@
             "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT."
           ],
           "bullets": [
-            "Editar: cambia nombre, perfil o roles.",
+            "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
             "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
             "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
             "Desactivar: bloquea el acceso de forma indefinida.",
@@ -1647,7 +1647,8 @@
             "Dock → Usuarios (hub OT).",
             "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
             "Verifica que el correo sea institucional del OT cuando la política lo exija.",
-            "Una invitación pendiente se puede cancelar o reenviar desde la misma fila."
+            "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",
+            "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada."
           ],
           "callouts": []
         },
@@ -2573,7 +2574,8 @@
           "paragraphs": [
             "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
             "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
-            "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué."
+            "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+            "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada."
           ],
           "bullets": [],
           "callouts": []
