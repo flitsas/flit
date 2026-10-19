@@ -28,8 +28,25 @@ internal static class PermissionOverridesEndpoints
             .RequireAuthorization(policy).WithName("ListGrantablePermissionOverrides");
 
         group.MapGet("/users/{userId:guid}/permission-overrides", (
-            Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
-            Run(caller, tenantId, async (tenant, actor) => Results.Ok(await handler.ListAsync(tenant, actor, userId, ct))))
+            Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler,
+            IPermissionAuditReader grants, CancellationToken ct) =>
+            Run(caller, tenantId, async (tenant, actor) =>
+            {
+                var items = await handler.ListAsync(tenant, actor, userId, ct);
+                // HU #13647 (FD1-8): quién otorgó y cuándo, una sola consulta; aditivo sobre el contrato de #13644.
+                var info = (await grants.GetGrantInfoAsync(tenant, userId, ct)).ToDictionary(g => g.PermissionId);
+                return Results.Ok(items.Select(i => new
+                {
+                    i.PermissionId,
+                    i.Slug,
+                    i.ProductCode,
+                    i.Effect,
+                    i.Source,
+                    i.GrantedBy,
+                    GrantedByName = info.TryGetValue(i.PermissionId, out var g) ? g.GrantedByName : null,
+                    GrantedAt = info.TryGetValue(i.PermissionId, out var g2) ? (DateTime?)g2.GrantedAt.UtcDateTime : null,
+                }));
+            }))
             .RequireAuthorization(policy).WithName("ListUserPermissionOverrides");
 
         // AC1/AC2/AC3: otorgar (allow) o denegar (deny) un permiso puntual.

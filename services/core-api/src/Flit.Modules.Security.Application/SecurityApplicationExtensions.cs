@@ -94,6 +94,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<GrantModuleOverridesHandler>();
         services.AddScoped<PermissionCapCalculator>(); // HU #13644 - tope del administrador
         services.AddScoped<ManageUserPermissionOverridesHandler>(); // HU #13644
+        services.AddScoped<QueryPermissionAuditHandler>(); // HU #13647
 
         // HU #13645 - reglas de permisos individuales (en este orden; la primera que rechaza gana).
         services.AddScoped<OverrideTargetLookup>();
