@@ -68,9 +68,14 @@ public sealed class PermisosEnforcedArchitectureTests
 
     private static Dictionary<string, string> LeerCatalogoDelDdl()
     {
-        var ddl = Path.Combine(CoreApiSrc(), "Flit.Infrastructure", "Persistence", "Sql", "Ddl", "139-HU13641-permisos-enforced.sql");
-        var catalogo = Row.Matches(File.ReadAllText(ddl)).ToDictionary(m => m.Groups["slug"].Value, m => m.Groups["v"].Value);
-        catalogo.Should().HaveCountGreaterThan(40, "el DDL 139 es la fuente única del marcador");
+        // El 139 clasifica el catálogo; los DDL posteriores con "enforced" en el nombre (Feature #13105) lo actualizan en orden.
+        var dir = Path.Combine(CoreApiSrc(), "Flit.Infrastructure", "Persistence", "Sql", "Ddl");
+        var catalogo = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var ddl in Directory.EnumerateFiles(dir, "*enforced*.sql")
+                     .OrderBy(f => int.Parse(Path.GetFileName(f).Split('-')[0], System.Globalization.CultureInfo.InvariantCulture)))
+            foreach (Match m in Row.Matches(File.ReadAllText(ddl)))
+                catalogo[m.Groups["slug"].Value] = m.Groups["v"].Value;
+        catalogo.Should().HaveCountGreaterThan(40, "los DDL del marcador son la fuente única");
         return catalogo;
     }
 

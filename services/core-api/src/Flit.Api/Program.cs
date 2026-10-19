@@ -91,6 +91,8 @@ builder.Services.AddScoped<ITransitOfficeTenantProbe, TransitOfficeTenantProbe>(
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.OtPermissionEnforcementOptions.Section)); // HU #13639
+builder.Services.Configure<Flit.Api.Authorization.ModulePermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.ModulePermissionEnforcementOptions.Section)); // Feature #13105
+builder.Services.AddSingleton<IAuthorizationHandler, Flit.Api.Authorization.ModulePermissionAuthorizationHandler>();
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
