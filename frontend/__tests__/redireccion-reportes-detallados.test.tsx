@@ -87,7 +87,7 @@ describe("HU #13582 AC3 — los enlaces antiguos redirigen a la pestaña", () =>
 
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith(NUEVA, { scroll: false }));
     expect(h.replace).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("No tienes acceso a ese módulo.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No tienes acceso a este módulo.")).not.toBeInTheDocument();
   });
 
   it("sin sesión no redirige: deja que el control de sesión lleve al login (no queda en blanco)", async () => {
@@ -123,7 +123,7 @@ describe("HU #13582 AC4 — enlace antiguo sin permiso (negativo)", () => {
     h.search = "m=reportes&reportesTab=detallados";
     rerender(<HomePage />);
 
-    expect(await screen.findByText("No tienes acceso a ese módulo.")).toBeInTheDocument();
+    expect(await screen.findByText("No tienes acceso a este módulo.")).toBeInTheDocument();
     await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/?m=dashboard", { scroll: false }));
     expect(screen.queryByTestId("modulo-reportes")).not.toBeInTheDocument();
   });
