@@ -83,8 +83,28 @@ public static class ReportesEndpoints
     {
         var a = await AlcanceAsync(usuario, capacidades, empresa, null, desde, hasta, reloj, ct).ConfigureAwait(false);
         var ids = reportes.ComparendosDeMetrica(a, usuarioId, metrica).Distinct();
-        return Results.Ok(await db.Comparendos.AsNoTracking().Where(c => ids.Contains(c.Id)).OrderByDescending(c => c.UltimoEventoEn).Take(1000)
-            .Select(c => new { c.Id, c.TenantId, c.Numero, c.Placa, c.ValorTotal, c.FechaImposicion, c.Pagado, c.TieneDp }).ToListAsync(ct).ConfigureAwait(false));
+        var filas = await db.Comparendos.AsNoTracking().Where(c => ids.Contains(c.Id)).OrderByDescending(c => c.UltimoEventoEn).Take(1000)
+            .Select(c => new { c.Id, c.TenantId, c.Numero, c.Placa, c.ValorTotal, c.FechaImposicion, c.Pagado, c.TieneDp }).ToListAsync(ct).ConfigureAwait(false);
+
+        // Lo que hizo ese usuario con cada comparendo en el periodo (no el estado del comparendo): sin esto, uno gestionado
+        // solo con contraventor o aviso salía con «—».
+        var mostrados = filas.Select(f => f.Id).ToList();
+        var acciones = new Dictionary<Guid, List<string>>();
+        foreach (var m in ServicioReportes.Metricas.Where(m => m != "gestionados"))
+        {
+            foreach (var id in await reportes.ComparendosDeMetrica(a, usuarioId, m).Where(x => mostrados.Contains(x)).Distinct().ToListAsync(ct).ConfigureAwait(false))
+            {
+                if (!acciones.TryGetValue(id, out var lista))
+                    acciones[id] = lista = [];
+                lista.Add(m);
+            }
+        }
+
+        return Results.Ok(filas.Select(f => new
+        {
+            f.Id, f.TenantId, f.Numero, f.Placa, f.ValorTotal, f.FechaImposicion, f.Pagado, f.TieneDp,
+            acciones = acciones.GetValueOrDefault(f.Id) ?? [],
+        }));
     }
 
     private static async Task<IResult> Excel(Guid? empresa, DateOnly? desde, DateOnly? hasta, UsuarioActual usuario, Capacidades capacidades, ServicioReportes reportes, Reloj reloj, CancellationToken ct)

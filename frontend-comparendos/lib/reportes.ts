@@ -76,6 +76,23 @@ export interface ComparendoMetrica {
   fechaImposicion: string | null;
   pagado: boolean;
   tieneDp: boolean;
+  /** Lo que hizo el usuario con el comparendo en el periodo (claves de métrica, sin «gestionados»). */
+  acciones: string[];
+}
+
+const ACCION: Record<string, string> = {
+  dpEnviados: "Envió DP",
+  contraventoresAsignados: "Asignó contraventor",
+  pagos: "Registró pago",
+  avisosManuales: "Envió aviso",
+  ocrRegistrados: "Registró por OCR",
+  respuestasOt: "Registró respuesta del OT",
+};
+
+/** «Registró pago · Envió aviso», en el orden de las columnas; «—» si no hay nada. */
+export function accionesProductividad(acciones: string[] | undefined): string {
+  const orden = METRICAS.map((m) => m.clave as string).filter((c) => acciones?.includes(c));
+  return orden.map((c) => ACCION[c] ?? c).join(" · ") || "—";
 }
 
 export type Metrica = Exclude<keyof FilaProductividad, "usuarioId" | "usuario">;

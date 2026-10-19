@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { errorRango, etiquetaMes, formatoTasa, inicioDeMes, numeroCorto, topeEje, totalesProductividad, valorSerie, type PuntoMensual } from "@/lib/reportes";
+import {
+  accionesProductividad,
+  errorRango,
+  etiquetaMes,
+  formatoTasa,
+  inicioDeMes,
+  numeroCorto,
+  topeEje,
+  totalesProductividad,
+  valorSerie,
+  type PuntoMensual,
+} from "@/lib/reportes";
 
-const punto: PuntoMensual = { periodo: "2026-10", ingresados: 4, valorIngresado: 100, dpEnviados: 2, dpFavorables: 1, ahorro: 50, pagosCc: 1, pagosPc: 2, pagosBc: 3 };
+const punto: PuntoMensual = {
+  periodo: "2026-10",
+  ingresados: 4,
+  valorIngresado: 100,
+  dpEnviados: 2,
+  dpFavorables: 1,
+  ahorro: 50,
+  pagosCc: 1,
+  pagosPc: 2,
+  pagosBc: 3,
+};
 
 describe("reportes", () => {
   it("formatea la tasa con coma y sin respuestas muestra raya", () => {
@@ -40,9 +61,28 @@ describe("reportes", () => {
   });
 
   it("totaliza la productividad por métrica", () => {
-    const base = { usuarioId: "u", usuario: "A", gestionados: 4, dpEnviados: 2, contraventoresAsignados: 1, pagos: 1, avisosManuales: 0, ocrRegistrados: 0, respuestasOt: 2 };
+    const base = {
+      usuarioId: "u",
+      usuario: "A",
+      gestionados: 4,
+      dpEnviados: 2,
+      contraventoresAsignados: 1,
+      pagos: 1,
+      avisosManuales: 0,
+      ocrRegistrados: 0,
+      respuestasOt: 2,
+    };
     const t = totalesProductividad([base, { ...base, usuarioId: "v", gestionados: 1 }]);
     expect(t.gestionados).toBe(5);
     expect(t.respuestasOt).toBe(4);
+  });
+});
+
+describe("accionesProductividad", () => {
+  it("dice lo que hizo el usuario, en el orden de las columnas", () => {
+    expect(accionesProductividad(["avisosManuales", "contraventoresAsignados"])).toBe(
+      "Asignó contraventor · Envió aviso",
+    );
+    expect(accionesProductividad([])).toBe("—");
   });
 });
