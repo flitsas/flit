@@ -28,7 +28,7 @@
  * una ruta de build por compose, un typo en el workflow), el respaldo volvería a clasificarlos
  * como FLIT en silencio, sin que nada fallara ni avisara. Con las negaciones horneadas aquí,
  * el respaldo es simétrico al `appsettings.json` del backend, que sí viaja con la imagen.
- * Mantener sincronizadas estas tres entradas con `cd.yml` y `frontend/.env.example`.
+ * Mantener sincronizadas estas entradas con `cd.yml` y `frontend/.env.example`.
  */
 const DEFAULT_FLIT_HOSTS = [
   "localhost",
@@ -38,6 +38,7 @@ const DEFAULT_FLIT_HOSTS = [
   "!marcablancadev.flitsas.online",
   "!marcablancaqa.flitsas.online",
   "!marcablancapdn.flitsas.online",
+  "!marcablancadag1.flitsas.online",
 ];
 
 function parseHostList(raw: string | undefined): string[] {
