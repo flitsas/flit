@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { Ban, ClipboardList, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -36,6 +36,7 @@ import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTabl
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 import { UserPermissionsModal } from "@/components/atom/modules/users/UserPermissionsModal";
+import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -82,6 +83,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [cancelTarget, setCancelTarget] = useState<OtUserItem | null>(null);
   const [auditTarget, setAuditTarget] = useState<OtUserItem | null>(null);
   const [permissionsTarget, setPermissionsTarget] = useState<OtUserItem | null>(null);
+  const [showPermissionAudit, setShowPermissionAudit] = useState(false);
   // Roles asignables al editar: catálogo TRANSIT_OFFICE (SuperAdmin) o los del propio tenant.
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
@@ -377,6 +379,18 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
             </button>
           )}
+          {canConfigurePermissions && (
+            <button
+              type="button"
+              onClick={() => setShowPermissionAudit((v) => !v)}
+              aria-pressed={showPermissionAudit}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
+              style={{ color: "#557EFF" }}
+            >
+              <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+              {showPermissionAudit ? "Ver usuarios" : "Auditoría de permisos"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setInviteOpen(true)}
@@ -397,7 +411,11 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         />
       )}
 
-      {!showDeleted && (
+      {showPermissionAudit && canConfigurePermissions && !showDeleted && (
+        <PermissionAuditView mode="admin" users={users} />
+      )}
+
+      {!showDeleted && !(showPermissionAudit && canConfigurePermissions) && (
         // Misma tabla, mismos filtros y mismas acciones que el módulo Usuarios y que la ficha
         // de compañía: antes esta sección tenía su propia <table>, sin filtros y con chips de
         // estado distintos, y por eso "no se parecía a las otras".

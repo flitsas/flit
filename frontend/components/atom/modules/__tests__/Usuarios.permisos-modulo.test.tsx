@@ -6,7 +6,7 @@ import { Usuarios } from "../Usuarios";
 import { getUsers } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
 import { ADMIN_READ_ONLY_MESSAGE } from "@/lib/permissions/modulePermissions";
-import { listGrantablePermissions } from "@/lib/api/permission-overrides";
+import { listGrantablePermissions, listPermissionAudit } from "@/lib/api/permission-overrides";
 
 const perms = vi.hoisted(() => ({ isSuperAdmin: true, isAdminCompany: false }));
 
@@ -117,7 +117,7 @@ describe("Usuarios — pestaña Auditoría de permisos (#13654)", () => {
   });
 });
 
-// HU #13655/#13656/#13657/#13658 (Feature #13104 F-D2) — Admin de Compañía en el módulo Usuarios (modo admin).
+// HU #13655/#13656/#13658 (Feature #13104 F-D2) — Admin de Compañía en el módulo Usuarios (modo admin).
 describe("Usuarios — Admin de Compañía (#13655, #13656, #13658)", () => {
   const admin: TenantUser = { ...base, id: "u-adm", fullName: "Beto Admin", email: "beto@flit.local", roleCode: "AdminCompany", roleId: "r-adm" };
   const self: TenantUser = { ...base, id: "user-1", fullName: "Yo Mismo", email: "yo@flit.local", roleCode: "AdminCompany", roleId: "r-adm" };
@@ -162,5 +162,17 @@ describe("Usuarios — Admin de Compañía (#13655, #13656, #13658)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
     await screen.findByText("Permisos por módulo — Ana Torres");
     expect(screen.queryByText(ADMIN_READ_ONLY_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it("#13658: el Admin de Compañía ve la pestaña de auditoría, sin filtro de compañía, y la API sin tenantId", async () => {
+    vi.mocked(getUsers).mockResolvedValue([base]);
+    render(<Usuarios />);
+    await screen.findByText("Ana Torres");
+    await userEvent.click(screen.getByRole("button", { name: "Auditoría de permisos" }));
+    expect(await screen.findByRole("region", { name: "Auditoría de permisos individuales" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Compañía" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Usuario" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Administrador" })).toBeInTheDocument();
+    expect(listPermissionAudit).toHaveBeenCalledWith(expect.objectContaining({ tenantId: undefined }));
   });
 });

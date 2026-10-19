@@ -119,7 +119,7 @@ export function Usuarios() {
       (t.id !== "roles" || isSuperAdmin || isAdminCompany) &&
       (t.id !== "clientes-ict" || canManageIctClients) &&
       (t.id !== "clientes-integracion" || isSuperAdmin) &&
-      (t.id !== "auditoria-permisos" || isSuperAdmin),
+      (t.id !== "auditoria-permisos" || isSuperAdmin || isAdminCompany),
   );
 
   async function loadUsers() {
@@ -551,7 +551,7 @@ export function Usuarios() {
         </div>
       )}
 
-      {tab === "auditoria-permisos" && isSuperAdmin && <PermissionAuditView mode="superadmin" users={users} />}
+      {tab === "auditoria-permisos" && canConfigurePermissions && <PermissionAuditView mode={permissionsMode} users={users} />}
 
       {tab === "roles" && isSuperAdmin && (
         // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);

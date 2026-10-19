@@ -100,6 +100,38 @@ describe("OtUsersSection — Admin OT (#13655, #13656)", () => {
   });
 });
 
+describe("OtUsersSection — auditoría del ámbito (#13658)", () => {
+  it("AC2: el Admin OT alterna a la auditoría; filtros de usuario y administrador, sin compañía", async () => {
+    renderSection();
+    await screen.findByText("Ana Torres");
+    await userEvent.click(screen.getByRole("button", { name: "Auditoría de permisos" }));
+    expect(await screen.findByRole("region", { name: "Auditoría de permisos individuales" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Compañía" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Usuario" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Administrador" })).toBeInTheDocument();
+    expect(listPermissionAudit).toHaveBeenCalledWith(expect.objectContaining({ tenantId: undefined }));
+    // La tabla de usuarios se oculta mientras se ve la auditoría y se puede volver.
+    expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ver usuarios" }));
+    expect(await screen.findByText("Ana Torres")).toBeInTheDocument();
+  });
+
+  it("AC3: si la API de auditoría falla muestra el error con reintento", async () => {
+    vi.mocked(listPermissionAudit)
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
+    renderSection();
+    await screen.findByText("Ana Torres");
+    await userEvent.click(screen.getByRole("button", { name: "Auditoría de permisos" }));
+    expect(await screen.findByText("No se pudo cargar la auditoría de permisos.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    await waitFor(() => expect(listPermissionAudit).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByText("No se pudo cargar la auditoría de permisos.")).not.toBeInTheDocument(),
+    );
+  });
+});
+
 describe("OtUsersSection — aviso al cambiar el rol (#13657)", () => {
   async function openEditAndPickRole() {
     renderSection();

@@ -267,6 +267,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       "permisos por modulo",
       "permisos individuales",
       "fuera de tu tope",
+      "auditoria de permisos",
     ],
     summary: "Invitar y administrar cuentas del perfil OT. Solo el administrador del organismo entra aquí.",
     blocks: [
@@ -313,8 +314,16 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "auditoria-permisos",
+        title: "4. Auditoría de permisos",
+        paragraphs: [
+          "En Usuarios, el botón «Auditoría de permisos» cambia la tabla por el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. «Ver usuarios» te devuelve a la tabla de usuarios.",
+          "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
+        ],
+      },
+      {
         id: "seguridad",
-        title: "4. Seguridad",
+        title: "5. Seguridad",
         paragraphs: [
           "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT.",
         ],

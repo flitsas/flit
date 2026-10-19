@@ -1192,7 +1192,7 @@
           "bullets": [
             "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
             "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
-            "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 6)."
+            "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7)."
           ],
           "callouts": []
         },
@@ -1246,8 +1246,18 @@
           ]
         },
         {
+          "id": "auditoria-permisos",
+          "title": "5. Auditoría de permisos",
+          "paragraphs": [
+            "La pestaña «Auditoría de permisos» del módulo Usuarios lista cada cambio de permisos individuales hecho en tu compañía: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. Los intentos rechazados quedan registrados con su motivo.",
+            "Solo ves los registros de las personas de tu compañía. Puedes filtrar por usuario y por administrador (no hay filtro de compañía, porque siempre es la tuya) y la lista se pagina con «Filas por página». Si ningún registro coincide con los filtros, la tabla te lo avisa. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
           "id": "roles",
-          "title": "5. Roles y permisos",
+          "title": "6. Roles y permisos",
           "paragraphs": [
             "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona."
           ],
@@ -1267,7 +1277,7 @@
         },
         {
           "id": "ict",
-          "title": "6. Clientes ICT (si tu compañía integra con terceros)",
+          "title": "7. Clientes ICT (si tu compañía integra con terceros)",
           "paragraphs": [
             "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto»."
           ],
@@ -1677,8 +1687,18 @@
           ]
         },
         {
+          "id": "auditoria-permisos",
+          "title": "4. Auditoría de permisos",
+          "paragraphs": [
+            "En Usuarios, el botón «Auditoría de permisos» cambia la tabla por el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. «Ver usuarios» te devuelve a la tabla de usuarios.",
+            "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
           "id": "seguridad",
-          "title": "4. Seguridad",
+          "title": "5. Seguridad",
           "paragraphs": [
             "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT."
           ],
@@ -2091,7 +2111,7 @@
             "Representantes legales: registra a quienes representan a tu compañía, sus escrituras y su firma del baúl. Ver «Representantes legales y mandatarios».",
             "Mandatarios: registra quién firma el contrato de mandato ante cada organismo por cuenta de tu compañía. Ver «Representantes legales y mandatarios».",
             "Usuarios de una hija de tu red (solo si la administras desde el panel de red): resetear contraseñas y suspender o desactivar sus usuarios.",
-            "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT). Desde allí también ajustas los «Permisos por módulo» de cada persona, dentro de tu tope."
+            "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT). Desde allí también ajustas los «Permisos por módulo» de cada persona, dentro de tu tope, y consultas la pestaña «Auditoría de permisos» con los cambios de tu compañía."
           ],
           "callouts": []
         },
