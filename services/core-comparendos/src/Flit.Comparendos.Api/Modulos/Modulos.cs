@@ -78,8 +78,11 @@ public static class Modulos
         // Ingesta (HU #13460, #13461). Las fuentes van por core-consultas (HU #13520); sin él, simulada en DEV y nada fuera.
         if (configuration["Comparendos:Consultas:Address"] is { Length: > 0 } consultas)
         {
+            // Un NIT con cientos de comparendos en el SIMIT (Bancolombia) pasa de los 4 MB que gRPC acepta por defecto y la
+            // clave fallaba con ResourceExhausted (prueba con SmartCloud real, 2026-10-19).
             services.AddFlitGrpcClient<Flit.Consultas.Grpc.V1.FuentesComparendosService.FuentesComparendosServiceClient>(
-                configuration, new Uri(consultas), "platform.consultas", o => o.Deadline = TimeSpan.FromSeconds(90));
+                    configuration, new Uri(consultas), "platform.consultas", o => o.Deadline = TimeSpan.FromSeconds(90))
+                .ConfigureChannel(c => c.MaxReceiveMessageSize = 64 * 1024 * 1024);
             services.AddSingleton<Ingesta.Fuentes.IFuenteComparendos, Ingesta.Fuentes.FuenteCoreConsultas>();
         }
         else if (simulacion)
