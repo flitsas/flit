@@ -88,7 +88,9 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         (octubre.GetProperty("ingresados").GetInt32(), octubre.GetProperty("dpEnviados").GetInt32(), octubre.GetProperty("dpFavorables").GetInt32(), octubre.GetProperty("pagosBc").GetInt32())
             .Should().Be((4, 2, 1, 1));
         d.GetProperty("anual").GetProperty("actual").GetArrayLength().Should().Be(12);
-        d.GetProperty("porNit").EnumerateArray().Single().GetProperty("total").GetInt32().Should().Be(4);
+        var porNit = d.GetProperty("porNit").EnumerateArray().Single();
+        porNit.GetProperty("total").GetInt32().Should().Be(4);
+        porNit.GetProperty("deudaActiva").GetDecimal().Should().Be(1604100m, "la tabla por NIT suma la misma deuda que el indicador (B13-1)");
 
         (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/nits", ct)).GetArrayLength().Should().Be(1);
         (await Super.PostAsync($"/api/v1/comparendos/admin/ingesta/trabajos/ReporteSemanal/ejecutar?empresaId={empresa}", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -106,6 +108,12 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
 
         var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/reportes/productividad/detalle?usuarioId={usuario.Id}&metrica=dpEnviados&desde=2026-10-01&hasta=2026-10-09", ct);
         detalle.EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).Should().BeEquivalentTo([ids["R2"], ids["R3"]]);
+        // El detalle de «gestionados» dice lo que hizo el usuario con cada uno; R-4 solo tiene contraventor y no puede salir vacío.
+        var gestionados = (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/reportes/productividad/detalle?usuarioId={usuario.Id}&metrica=gestionados&desde=2026-10-01&hasta=2026-10-09", ct))
+            .EnumerateArray().ToDictionary(x => x.GetProperty("id").GetGuid(), x => x.GetProperty("acciones").EnumerateArray().Select(a => a.GetString()).ToList());
+        gestionados[ids["R4"]].Should().Equal("contraventoresAsignados");
+        gestionados[ids["R1"]].Should().Equal("pagos");
+        gestionados[ids["R2"]].Should().BeEquivalentTo("dpEnviados", "respuestasOt");
         (await cliente.GetAsync($"/api/v1/comparendos/reportes/productividad/detalle?usuarioId={usuario.Id}&metrica=otra", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var excel = await cliente.GetAsync("/api/v1/comparendos/reportes/productividad/excel", ct);
         excel.Content.Headers.ContentType!.MediaType.Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

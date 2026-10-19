@@ -70,11 +70,14 @@ public sealed class ServicioReportes(ComparendosDb db, CalendarioService calenda
         join c in Comparendos(a) on d.ComparendoId equals c.Id
         select d;
 
+    /// <summary>Deuda activa: activo, sin pagar y sin un DP favorable (lo que el organismo ya revocó no es deuda).</summary>
+    private IQueryable<Guid> ConDpFavorable(Alcance a) =>
+        Dps(a).Where(d => d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Favorable).Select(d => d.ComparendoId);
+
     public async Task<Kpis> KpisAsync(Alcance a, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(a);
-        var favorables = Dps(a).Where(d => d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Favorable);
-        var conFavorable = favorables.Select(d => d.ComparendoId);
+        var conFavorable = ConDpFavorable(a);
         var deuda = Comparendos(a).Where(c => c.Activo && !c.Pagado && !conFavorable.Contains(c.Id));
         var deudaTotal = await deuda.SumAsync(c => c.ValorTotal ?? 0, ct).ConfigureAwait(false);
         var deudaCuenta = await deuda.CountAsync(ct).ConfigureAwait(false);
@@ -144,12 +147,14 @@ public sealed class ServicioReportes(ComparendosDb db, CalendarioService calenda
     public async Task<List<object>> TotalesPorNitAsync(Alcance a, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(a);
+        // La misma deuda que el indicador: la suma de la columna tiene que dar la deuda activa total (B13-1).
+        var conFavorable = ConDpFavorable(a);
         var filas = await Comparendos(a).GroupBy(c => c.IdentificacionMonitoreadaId).Select(g => new
         {
             Nit = g.Key,
             Total = g.Count(),
             Activos = g.Count(c => c.Activo),
-            Valor = g.Where(c => c.Activo && !c.Pagado).Sum(c => c.ValorTotal ?? 0),
+            Valor = g.Where(c => c.Activo && !c.Pagado && !conFavorable.Contains(c.Id)).Sum(c => c.ValorTotal ?? 0),
             ConDp = g.Count(c => c.TieneDp),
             Pagados = g.Count(c => c.Pagado),
         }).ToListAsync(ct).ConfigureAwait(false);
