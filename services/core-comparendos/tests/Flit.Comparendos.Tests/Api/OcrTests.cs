@@ -243,9 +243,11 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         var (_, cliente) = await EmpresaOcrAsync();
         api.Ocr.Responder("vacio", () => new ResultadoOcr(new Dictionary<string, CampoExtraido> { [CamposOcr.Numero] = new(null, null) }, "{}", "m"));
         var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Ilegibles", ("x.png", "vacio")), ct), ct)).GetProperty("id").GetGuid();
-        var antes = api.Ocr.Llamadas;
+        // Solo las llamadas de este documento: la cola es compartida y puede traer reintentos vencidos de otras pruebas.
+        int Llamadas() => api.Ocr.Recibidos.Count(r => Encoding.UTF8.GetString(r.Contenido) == "vacio");
+        var antes = Llamadas();
         await api.ProcesarAsync();
-        api.Ocr.Llamadas.Should().Be(antes + 1);
+        Llamadas().Should().Be(antes + 1);
         var doc = (await DocumentosAsync(paquete))["x.png"];
         (doc.Estado, doc.TipoFallo).Should().Be((EstadoDocumentoOcr.Fallido, TipoFalloOcr.Ilegible));
         (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/reintentar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);

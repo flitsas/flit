@@ -17,7 +17,9 @@ public sealed class TipologiasTests(ApiDePrueba api) : IClassFixture<ApiDePrueba
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var catalogo = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/tipologias", TestContext.Current.CancellationToken);
-        catalogo.EnumerateArray().Count(t => t.GetProperty("codigo").GetString() != "DP-RET").Should().Be(11, "el fixture es compartido y otra prueba crea DP-RET");
+        // Las once tesis sembradas de V1, por código: el fixture es compartido y otras pruebas crean tipologías propias.
+        catalogo.EnumerateArray().Select(t => t.GetProperty("codigo").GetString())
+            .Should().Contain(["AA", "AN", "DA", "DBN", "DC", "DCI", "DI", "DLL", "DP", "DPR", "DRP"]);
         var dpr = catalogo.EnumerateArray().Single(t => t.GetProperty("codigo").GetString() == "DPR");
         dpr.GetProperty("estadosLegalesPermitidos").EnumerateArray().Select(e => e.GetString()).Should().Equal("Prescrito");
         dpr.GetProperty("plazoRespuestaOtDiasHabiles").GetInt32().Should().Be(15);
