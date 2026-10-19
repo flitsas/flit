@@ -7,24 +7,10 @@ import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { useSondeo } from "@/components/ocr/comunes";
 import { Chip } from "@/components/ui/Chip";
-import {
-  BOTON_PRIMARIO_CLS,
-  controlCls,
-  ETIQUETA_CLS,
-  INPUT_CLS,
-  TEXTAREA_CLS,
-} from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
-import {
-  errorArchivoOcr,
-  ETIQUETA_CAMPO,
-  etiquetaEvaluacion,
-  type EvaluacionPrompt,
-  resumenEvaluacion,
-  TIPO_FALLO,
-  versionAnterior,
-} from "@/lib/ocr";
+import { errorArchivoOcr, ETIQUETA_CAMPO, etiquetaEvaluacion, type EvaluacionPrompt, resumenEvaluacion, TIPO_FALLO, versionAnterior } from "@/lib/ocr";
 import { useCarga } from "@/lib/useCarga";
 
 interface Version {
@@ -52,15 +38,7 @@ interface CampoEvaluado {
 
 interface DetalleEvaluacion extends Omit<EvaluacionPrompt, "habilita"> {
   versionNumero: number;
-  detalle:
-    | {
-        documentoId: string;
-        archivo: string;
-        falloCandidata: string | null;
-        falloVigente: string | null;
-        campos: CampoEvaluado[];
-      }[]
-    | null;
+  detalle: { documentoId: string; archivo: string; falloCandidata: string | null; falloVigente: string | null; campos: CampoEvaluado[] }[] | null;
 }
 
 interface Prueba {
@@ -74,15 +52,7 @@ interface Prueba {
 
 type Edicion = { id: string | null; texto: string; modelo: string };
 
-function Editor({
-  inicial,
-  onCerrar,
-  onGuardado,
-}: {
-  inicial: Edicion;
-  onCerrar: () => void;
-  onGuardado: () => void;
-}) {
+function Editor({ inicial, onCerrar, onGuardado }: { inicial: Edicion; onCerrar: () => void; onGuardado: () => void }) {
   const toast = useToast();
   const [texto, setTexto] = useState(inicial.texto);
   const [modelo, setModelo] = useState(inicial.modelo);
@@ -96,10 +66,7 @@ function Editor({
       const body = { texto, proveedor: "ANTHROPIC", modelo };
       if (inicial.id) await apiFetch(`/admin/ocr/prompts/${inicial.id}`, { method: "PUT", body });
       else await apiFetch("/admin/ocr/prompts", { method: "POST", body });
-      toast.show(
-        inicial.id ? "Versión actualizada." : "Versión creada. Pruébala antes de publicarla.",
-        "success",
-      );
+      toast.show(inicial.id ? "Versión actualizada." : "Versión creada. Pruébala antes de publicarla.", "success");
       onGuardado();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
@@ -121,12 +88,7 @@ function Editor({
           <button type="button" className={controlCls(false)} onClick={onCerrar}>
             Cancelar
           </button>
-          <button
-            type="button"
-            className={BOTON_PRIMARIO_CLS}
-            disabled={enviando || !texto.trim() || !modelo.trim()}
-            onClick={guardar}
-          >
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={enviando || !texto.trim() || !modelo.trim()} onClick={guardar}>
             {enviando ? "Guardando…" : "Guardar"}
           </button>
         </div>
@@ -140,22 +102,12 @@ function Editor({
           </label>
           <label className={ETIQUETA_CLS}>
             Modelo
-            <input
-              className={INPUT_CLS}
-              value={modelo}
-              maxLength={80}
-              onChange={(e) => setModelo(e.target.value)}
-            />
+            <input className={INPUT_CLS} value={modelo} maxLength={80} onChange={(e) => setModelo(e.target.value)} />
           </label>
         </div>
         <label className={ETIQUETA_CLS}>
           Texto del prompt ({texto.length.toLocaleString("es-CO")} / 20.000)
-          <textarea
-            className={`${TEXTAREA_CLS} min-h-[50vh] font-mono`}
-            value={texto}
-            maxLength={20000}
-            onChange={(e) => setTexto(e.target.value)}
-          />
+          <textarea className={`${TEXTAREA_CLS} min-h-[50vh] font-mono`} value={texto} maxLength={20000} onChange={(e) => setTexto(e.target.value)} />
         </label>
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
       </div>
@@ -178,9 +130,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
     try {
       const form = new FormData();
       form.append("archivo", archivo);
-      setResultado(
-        await apiFetch<Prueba>(`/admin/ocr/prompts/${v.id}/probar`, { method: "POST", body: form }),
-      );
+      setResultado(await apiFetch<Prueba>(`/admin/ocr/prompts/${v.id}/probar`, { method: "POST", body: form }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo probar.");
     } finally {
@@ -191,29 +141,11 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 
   const campos = Object.entries(resultado?.campos ?? {});
   return (
-    <Modal
-      open
-      onClose={onCerrar}
-      busy={probando}
-      size="2xl"
-      title={`Probar la versión ${v.numeroVersion}`}
-      description="Se envía un archivo de muestra al modelo con este prompt. No se guarda nada."
-    >
+    <Modal open onClose={onCerrar} busy={probando} size="2xl" title={`Probar la versión ${v.numeroVersion}`} description="Se envía un archivo de muestra al modelo con este prompt. No se guarda nada.">
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <input
-            ref={input}
-            type="file"
-            className="hidden"
-            accept=".jpg,.jpeg,.png,.tif,.tiff,.pdf"
-            onChange={(e) => e.target.files?.[0] && probar(e.target.files[0])}
-          />
-          <button
-            type="button"
-            className={BOTON_PRIMARIO_CLS}
-            disabled={probando}
-            onClick={() => input.current?.click()}
-          >
+          <input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,.png,.tif,.tiff,.pdf" onChange={(e) => e.target.files?.[0] && probar(e.target.files[0])} />
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={probando} onClick={() => input.current?.click()}>
             <FlaskConical className="h-3.5 w-3.5" aria-hidden />
             {probando ? "Extrayendo…" : "Elegir archivo de muestra"}
           </button>
@@ -221,12 +153,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         </div>
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
         {resultado && !resultado.exitoso && (
-          <InlineAlert
-            tone="error"
-            title={
-              (resultado.tipoFallo && TIPO_FALLO[resultado.tipoFallo]) ?? "Falló la extracción"
-            }
-          >
+          <InlineAlert tone="error" title={(resultado.tipoFallo && TIPO_FALLO[resultado.tipoFallo]) ?? "Falló la extracción"}>
             {resultado.mensaje}
           </InlineAlert>
         )}
@@ -238,29 +165,15 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
             emptyMessage="El modelo no devolvió campos."
             columns={[
               { key: "campo", header: "Campo", render: ([k]) => ETIQUETA_CAMPO[k] ?? k },
-              {
-                key: "valor",
-                header: "Valor",
-                render: ([, c]) => c.valor ?? <span className="opacity-50">null</span>,
-              },
-              {
-                key: "conf",
-                header: "Confianza",
-                align: "right",
-                render: ([, c]) =>
-                  c.confianza === null ? "—" : `${Math.round(c.confianza * 100)} %`,
-              },
+              { key: "valor", header: "Valor", render: ([, c]) => c.valor ?? <span className="opacity-50">null</span> },
+              { key: "conf", header: "Confianza", align: "right", render: ([, c]) => (c.confianza === null ? "—" : `${Math.round(c.confianza * 100)} %`) },
             ]}
           />
         )}
         {resultado?.crudo && (
           <details className="text-xs">
-            <summary className="cursor-pointer font-semibold">
-              JSON devuelto por {resultado.modelo}
-            </summary>
-            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">
-              {formatear(resultado.crudo)}
-            </pre>
+            <summary className="cursor-pointer font-semibold">JSON devuelto por {resultado.modelo}</summary>
+            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">{formatear(resultado.crudo)}</pre>
           </details>
         )}
       </div>
@@ -269,23 +182,15 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 }
 
 function Valor({ v, ok }: { v: string | null; ok: boolean }) {
-  return (
-    <span className={ok ? "" : "font-semibold text-[#C10000] dark:text-red-400"}>
-      {v ?? <span className="opacity-50">vacío</span>}
-    </span>
-  );
+  return <span className={ok ? "" : "font-semibold text-[#C10000] dark:text-red-400"}>{v ?? <span className="opacity-50">vacío</span>}</span>;
 }
 
 /** Campo por campo, solo donde alguna de las dos versiones no acertó. */
 function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => void }) {
-  const carga = useCarga(`evaluacion-${id}`, (signal) =>
-    apiFetch<DetalleEvaluacion>(`/admin/ocr/prompts/evaluaciones/${id}`, { signal }),
-  );
+  const carga = useCarga(`evaluacion-${id}`, (signal) => apiFetch<DetalleEvaluacion>(`/admin/ocr/prompts/evaluaciones/${id}`, { signal }));
   const e = carga.datos;
   const filas = (e?.detalle ?? []).flatMap((d) =>
-    d.campos
-      .filter((c) => !c.aciertaCandidata || !c.aciertaVigente)
-      .map((c) => ({ ...c, archivo: d.archivo, clave: `${d.documentoId}-${c.campo}` })),
+    d.campos.filter((c) => !c.aciertaCandidata || !c.aciertaVigente).map((c) => ({ ...c, archivo: d.archivo, clave: `${d.documentoId}-${c.campo}` })),
   );
   const fallos = (e?.detalle ?? []).filter((d) => d.falloCandidata || d.falloVigente);
   return (
@@ -298,15 +203,10 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
     >
       <div className="flex flex-col gap-3">
         {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
-        {e?.mensaje && (
-          <InlineAlert tone={e.estado === "Terminada" && e.aprobada ? "success" : "warning"}>
-            {e.mensaje}
-          </InlineAlert>
-        )}
+        {e?.mensaje && <InlineAlert tone={e.estado === "Terminada" && e.aprobada ? "success" : "warning"}>{e.mensaje}</InlineAlert>}
         {e?.estado === "Terminada" && (
           <p className="text-xs">
-            {e.documentos} documentos · {e.campos} campos. En rojo, lo que no coincide con lo
-            registrado.
+            {e.documentos} documentos · {e.campos} campos. En rojo, lo que no coincide con lo registrado.
           </p>
         )}
         {fallos.map((d) => (
@@ -322,27 +222,11 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
             getRowKey={(f) => f.clave}
             emptyMessage="Las dos versiones acertaron todos los campos."
             columns={[
-              {
-                key: "archivo",
-                header: "Documento",
-                render: (f) => <span className="text-[11px]">{f.archivo}</span>,
-              },
+              { key: "archivo", header: "Documento", render: (f) => <span className="text-[11px]">{f.archivo}</span> },
               { key: "campo", header: "Campo", render: (f) => ETIQUETA_CAMPO[f.campo] ?? f.campo },
-              {
-                key: "esperado",
-                header: "Registrado",
-                render: (f) => f.esperado ?? <span className="opacity-50">vacío</span>,
-              },
-              {
-                key: "candidata",
-                header: `Versión ${e.versionNumero}`,
-                render: (f) => <Valor v={f.candidata} ok={f.aciertaCandidata} />,
-              },
-              {
-                key: "vigente",
-                header: e.vigenteNumero ? `Publicada (v${e.vigenteNumero})` : "Publicada",
-                render: (f) => <Valor v={f.vigente} ok={f.aciertaVigente} />,
-              },
+              { key: "esperado", header: "Registrado", render: (f) => f.esperado ?? <span className="opacity-50">vacío</span> },
+              { key: "candidata", header: `Versión ${e.versionNumero}`, render: (f) => <Valor v={f.candidata} ok={f.aciertaCandidata} /> },
+              { key: "vigente", header: e.vigenteNumero ? `Publicada (v${e.vigenteNumero})` : "Publicada", render: (f) => <Valor v={f.vigente} ok={f.aciertaVigente} /> },
             ]}
           />
         )}
@@ -361,9 +245,7 @@ function formatear(crudo: string): string {
 
 function Prompts() {
   const toast = useToast();
-  const lista = useCarga("ocr-prompts", (signal) =>
-    apiFetch<Version[]>("/admin/ocr/prompts", { signal }),
-  );
+  const lista = useCarga("ocr-prompts", (signal) => apiFetch<Version[]>("/admin/ocr/prompts", { signal }));
   const [edicion, setEdicion] = useState<Edicion | null>(null);
   const [prueba, setPrueba] = useState<Version | null>(null);
   const [publicar, setPublicar] = useState<Version | null>(null);
@@ -372,18 +254,12 @@ function Prompts() {
   const versiones = lista.datos ?? [];
   const publicada = versiones.find((v) => v.publicada);
   const anterior = versionAnterior(versiones);
-  useSondeo(
-    versiones.some((v) => v.evaluacion?.estado === "EnCurso"),
-    lista.recargar,
-  );
+  useSondeo(versiones.some((v) => v.evaluacion?.estado === "EnCurso"), lista.recargar);
 
   const evaluar = async (v: Version) => {
     try {
       await apiFetch(`/admin/ocr/prompts/${v.id}/evaluar`, { method: "POST" });
-      toast.show(
-        `Evaluando la versión ${v.numeroVersion} contra la publicada. Tarda unos minutos.`,
-        "success",
-      );
+      toast.show(`Evaluando la versión ${v.numeroVersion} contra la publicada. Tarda unos minutos.`, "success");
       lista.recargar();
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "No se pudo evaluar.", "error");
@@ -395,10 +271,7 @@ function Prompts() {
     setOcupado(true);
     try {
       await apiFetch(`/admin/ocr/prompts/${publicar.id}/publicar`, { method: "POST" });
-      toast.show(
-        `Versión ${publicar.numeroVersion} publicada: los paquetes que se inicien desde ahora la usan.`,
-        "success",
-      );
+      toast.show(`Versión ${publicar.numeroVersion} publicada: los paquetes que se inicien desde ahora la usan.`, "success");
       setPublicar(null);
       lista.recargar();
     } catch (e) {
@@ -416,11 +289,7 @@ function Prompts() {
         acciones={
           <div className="flex flex-wrap gap-2">
             {anterior && (
-              <button
-                type="button"
-                className={controlCls(false)}
-                onClick={() => setPublicar(anterior)}
-              >
+              <button type="button" className={controlCls(false)} onClick={() => setPublicar(anterior)}>
                 <Undo2 className="h-3.5 w-3.5" aria-hidden />
                 Volver a la versión {anterior.numeroVersion}
               </button>
@@ -428,13 +297,7 @@ function Prompts() {
             <button
               type="button"
               className={BOTON_PRIMARIO_CLS}
-              onClick={() =>
-                setEdicion({
-                  id: null,
-                  texto: publicada?.texto ?? "",
-                  modelo: publicada?.modelo ?? "",
-                })
-              }
+              onClick={() => setEdicion({ id: null, texto: publicada?.texto ?? "", modelo: publicada?.modelo ?? "" })}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
               Nueva versión
@@ -444,8 +307,7 @@ function Prompts() {
       />
       {publicada && (
         <p className="text-xs">
-          Publicada: <b>versión {publicada.numeroVersion}</b> · {publicada.proveedor} /{" "}
-          {publicada.modelo}
+          Publicada: <b>versión {publicada.numeroVersion}</b> · {publicada.proveedor} / {publicada.modelo}
         </p>
       )}
       <DataTable
@@ -459,32 +321,15 @@ function Prompts() {
         renderExpanded={(v) => (
           <details className="px-3 pb-3 text-xs">
             <summary className="cursor-pointer font-semibold">Ver el texto</summary>
-            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">
-              {v.texto}
-            </pre>
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">{v.texto}</pre>
           </details>
         )}
         columns={[
-          {
-            key: "version",
-            header: "Versión",
-            align: "right",
-            render: (v) => <span className="font-semibold">{v.numeroVersion}</span>,
-          },
+          { key: "version", header: "Versión", align: "right", render: (v) => <span className="font-semibold">{v.numeroVersion}</span> },
           {
             key: "estado",
             header: "Estado",
-            render: (v) => (
-              <Chip
-                e={
-                  v.publicada
-                    ? { texto: "Publicada", tono: "success" }
-                    : v.retiradaEn
-                      ? { texto: "Retirada", tono: "neutral" }
-                      : { texto: "Borrador", tono: "neutral" }
-                }
-              />
-            ),
+            render: (v) => <Chip e={v.publicada ? { texto: "Publicada", tono: "success" } : v.retiradaEn ? { texto: "Retirada", tono: "neutral" } : { texto: "Borrador", tono: "neutral" }} />,
           },
           {
             key: "evaluacion",
@@ -494,30 +339,15 @@ function Prompts() {
                 <span className="opacity-50">—</span>
               ) : (
                 <div className="flex flex-col items-start gap-0.5">
-                  <Chip
-                    e={etiquetaEvaluacion(v.evaluacion)}
-                    title={v.evaluacion?.mensaje ?? undefined}
-                  />
-                  {v.evaluacion && resumenEvaluacion(v.evaluacion) && (
-                    <span className="text-[11px] tabular-nums opacity-70">
-                      {resumenEvaluacion(v.evaluacion)}
-                    </span>
-                  )}
+                  <Chip e={etiquetaEvaluacion(v.evaluacion)} title={v.evaluacion?.mensaje ?? undefined} />
+                  {v.evaluacion && resumenEvaluacion(v.evaluacion) && <span className="text-[11px] tabular-nums opacity-70">{resumenEvaluacion(v.evaluacion)}</span>}
                 </div>
               ),
           },
           { key: "proveedor", header: "Proveedor", render: (v) => v.proveedor },
-          {
-            key: "modelo",
-            header: "Modelo",
-            render: (v) => <span className="font-mono text-[11px]">{v.modelo}</span>,
-          },
+          { key: "modelo", header: "Modelo", render: (v) => <span className="font-mono text-[11px]">{v.modelo}</span> },
           { key: "creada", header: "Creada", render: (v) => formatoFechaHora(v.creadoEn) },
-          {
-            key: "actualizada",
-            header: "Actualizada",
-            render: (v) => formatoFechaHora(v.actualizadoEn),
-          },
+          { key: "actualizada", header: "Actualizada", render: (v) => formatoFechaHora(v.actualizadoEn) },
           {
             key: "acciones",
             header: "",
@@ -528,35 +358,19 @@ function Prompts() {
                   <FlaskConical className="h-3.5 w-3.5" aria-hidden />
                   Probar
                 </button>
-                {v.evaluacion &&
-                  v.evaluacion.estado !== "EnCurso" &&
-                  !v.publicada &&
-                  !v.retiradaEn && (
-                    <button
-                      type="button"
-                      className={controlCls(false)}
-                      onClick={() => setResultado(v.evaluacion!.id)}
-                    >
-                      <ListChecks className="h-3.5 w-3.5" aria-hidden />
-                      Resultado
-                    </button>
-                  )}
+                {v.evaluacion && v.evaluacion.estado !== "EnCurso" && !v.publicada && !v.retiradaEn && (
+                  <button type="button" className={controlCls(false)} onClick={() => setResultado(v.evaluacion!.id)}>
+                    <ListChecks className="h-3.5 w-3.5" aria-hidden />
+                    Resultado
+                  </button>
+                )}
                 {!v.publicada && !v.retiradaEn && (
                   <>
-                    <button
-                      type="button"
-                      className={controlCls(false)}
-                      onClick={() => setEdicion({ id: v.id, texto: v.texto, modelo: v.modelo })}
-                    >
+                    <button type="button" className={controlCls(false)} onClick={() => setEdicion({ id: v.id, texto: v.texto, modelo: v.modelo })}>
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className={controlCls(false)}
-                      disabled={v.evaluacion?.estado === "EnCurso"}
-                      onClick={() => evaluar(v)}
-                    >
+                    <button type="button" className={controlCls(false)} disabled={v.evaluacion?.estado === "EnCurso"} onClick={() => evaluar(v)}>
                       <Scale className="h-3.5 w-3.5" aria-hidden />
                       Evaluar
                     </button>
@@ -567,18 +381,10 @@ function Prompts() {
                     type="button"
                     className={controlCls(false)}
                     disabled={!v.puedePublicar}
-                    title={
-                      v.puedePublicar
-                        ? undefined
-                        : "Necesita una evaluación aprobada contra la versión publicada."
-                    }
+                    title={v.puedePublicar ? undefined : "Necesita una evaluación aprobada contra la versión publicada."}
                     onClick={() => setPublicar(v)}
                   >
-                    {v.retiradaEn ? (
-                      <Undo2 className="h-3.5 w-3.5" aria-hidden />
-                    ) : (
-                      <Send className="h-3.5 w-3.5" aria-hidden />
-                    )}
+                    {v.retiradaEn ? <Undo2 className="h-3.5 w-3.5" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
                     {v.retiradaEn ? "Volver a publicar" : "Publicar"}
                   </button>
                 )}
@@ -605,32 +411,21 @@ function Prompts() {
           open
           onClose={() => setPublicar(null)}
           busy={ocupado}
-          title={
-            publicar.retiradaEn
-              ? `Volver a la versión ${publicar.numeroVersion}`
-              : `Publicar la versión ${publicar.numeroVersion}`
-          }
+          title={publicar.retiradaEn ? `Volver a la versión ${publicar.numeroVersion}` : `Publicar la versión ${publicar.numeroVersion}`}
           description={`Reemplaza a la versión ${publicada?.numeroVersion ?? "—"} para los paquetes que se inicien desde ahora. Los paquetes ya procesados conservan su versión.`}
           footer={
             <div className="flex justify-end gap-2">
               <button type="button" className={controlCls(false)} onClick={() => setPublicar(null)}>
                 Cancelar
               </button>
-              <button
-                type="button"
-                className={BOTON_PRIMARIO_CLS}
-                disabled={ocupado}
-                onClick={confirmarPublicar}
-              >
+              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={confirmarPublicar}>
                 {publicar.retiradaEn ? "Volver a esta versión" : "Publicar"}
               </button>
             </div>
           }
         >
           <p className="text-xs">
-            {publicar.retiradaEn
-              ? "Ya estuvo publicada, así que no necesita evaluación."
-              : `${publicar.evaluacion?.mensaje ?? ""} Una versión publicada ya no se puede editar.`}
+            {publicar.retiradaEn ? "Ya estuvo publicada, así que no necesita evaluación." : `${publicar.evaluacion?.mensaje ?? ""} Una versión publicada ya no se puede editar.`}
           </p>
         </Modal>
       )}
