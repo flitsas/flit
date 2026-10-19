@@ -559,6 +559,7 @@ Flit.Modules.Security.Domain.Auth.IUserActivationRepository => Flit.Infrastructu
 Flit.Modules.Security.Domain.Modules.ISecurityModuleRepository => Flit.Infrastructure.Persistence.Repositories.SecurityModuleRepository (Scoped)
 Flit.Modules.Security.Domain.PermissionOverrides.IOverrideTargetDirectory => Flit.Infrastructure.Persistence.Repositories.OverrideTargetDirectory (Scoped)
 Flit.Modules.Security.Domain.PermissionOverrides.IPermissionAuditReader => Flit.Infrastructure.Persistence.Repositories.PermissionAuditReader (Scoped)
+Flit.Modules.Security.Domain.PermissionOverrides.IPermissionEnforcementState => Flit.Api.Authorization.PermissionEnforcementState (Singleton)
 Flit.Modules.Security.Domain.PermissionOverrides.IRoleChangeOverridesPurger => Flit.Infrastructure.Persistence.Repositories.RoleChangeOverridesPurger (Scoped)
 Flit.Modules.Security.Domain.PermissionOverrides.IUserPermissionOverrideRepository => Flit.Infrastructure.Persistence.Repositories.UserPermissionOverrideRepository (Scoped)
 Flit.Modules.Security.Domain.Permissions.IPermissionRepository => Flit.Infrastructure.Persistence.Repositories.PermissionRepository (Scoped)

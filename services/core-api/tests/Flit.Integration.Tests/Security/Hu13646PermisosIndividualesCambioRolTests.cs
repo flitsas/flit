@@ -198,6 +198,80 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
         (await PurgeAuditAsync(cn)).Should().Be(0);
     }
 
+    private RemoveRoleAssignmentHandler RemoveHandler(Func<IUserRoleAssignmentRepository, IUserRoleAssignmentRepository>? decorate = null)
+    {
+        var ctx = Ctx();
+        IUserRoleAssignmentRepository repo = new UserRoleAssignmentRepository(ctx);
+        return new RemoveRoleAssignmentHandler(decorate?.Invoke(repo) ?? repo, new RoleChangeOverridesPurger(ctx));
+    }
+
+    // Hallazgo de review: quitar el rol purga los overrides del producto del rol quitado (antes quedaban vivos y seguian sumando al token).
+    // Nota: el indice unico (user_id, tenant_id) impide hoy dos roles activos en un tenant, asi que la rama "queda otro rol del mismo
+    // producto" (sin purga) solo la ejercen datos previos al rol unico; su cobertura es unitaria.
+    [PostgresFact]
+    public async Task Quitar_el_rol_elimina_los_permisos_del_producto_con_bitacora_y_conserva_otro_producto()
+    {
+        await using var cn = await SeedAsync();
+
+        await RemoveHandler().HandleAsync(Target, Tenant, _roleOld, Actor, Ct);
+
+        (await ActiveAssignmentsAsync(cn, _roleOld)).Should().Be(0);
+        (await ActiveAsync(cn, "tramites")).Should().Be(0);
+        (await ActiveAsync(cn, "it46otro")).Should().Be(1);
+        (await PurgeAuditAsync(cn)).Should().Be(3);
+        (await CountAsync(cn, "SELECT count(DISTINCT batch_id) FROM security.user_permission_audit WHERE action = 'ROLE_CHANGE_PURGE'")).Should().Be(1);
+    }
+
+    [PostgresFact]
+    public async Task Quitar_un_rol_ya_inactivo_tambien_purga_sus_overrides()
+    {
+        await using var cn = await SeedAsync();
+        await ExecAsync(cn, "UPDATE security.roles SET is_active = false WHERE code = 'it46_old'");
+
+        await RemoveHandler().HandleAsync(Target, Tenant, _roleOld, Actor, Ct);
+
+        (await ActiveAsync(cn, "tramites")).Should().Be(0);
+        (await PurgeAuditAsync(cn)).Should().Be(3);
+    }
+
+    [PostgresFact]
+    public async Task Si_la_baja_del_rol_falla_no_se_purga()
+    {
+        await using var cn = await SeedAsync();
+        var handler = RemoveHandler(inner => new FailingSoftDeleteRepository(inner));
+
+        await FluentActions.Awaiting(() => handler.HandleAsync(Target, Tenant, _roleOld, Actor, Ct)).Should().ThrowAsync<InvalidOperationException>();
+
+        (await ActiveAsync(cn, "tramites")).Should().Be(3);
+        (await PurgeAuditAsync(cn)).Should().Be(0);
+        (await ActiveAssignmentsAsync(cn, _roleOld)).Should().Be(1);
+    }
+
+    /// <summary>Falla al cerrar la asignacion del rol: la baja y la purga no deben quedar a medias.</summary>
+    private sealed class FailingSoftDeleteRepository(IUserRoleAssignmentRepository inner) : IUserRoleAssignmentRepository
+    {
+        public Task<bool> UserBelongsToTenantAsync(Guid userId, Guid tenantId, CancellationToken ct) => inner.UserBelongsToTenantAsync(userId, tenantId, ct);
+
+        public Task<Guid?> GetUserTenantAsync(Guid userId, CancellationToken ct) => inner.GetUserTenantAsync(userId, ct);
+
+        public Task<RoleForAssignmentSnapshot?> GetActiveRoleAsync(Guid roleId, CancellationToken ct) => inner.GetActiveRoleAsync(roleId, ct);
+
+        public Task<string?> GetRoleProductCodeAsync(Guid roleId, CancellationToken ct) => inner.GetRoleProductCodeAsync(roleId, ct);
+
+        public Task<string> GetTenantTargetEntityTypeAsync(Guid tenantId, CancellationToken ct) => inner.GetTenantTargetEntityTypeAsync(tenantId, ct);
+
+        public Task<UserRoleAssignmentSnapshot?> GetActiveAssignmentAsync(Guid userId, Guid tenantId, Guid roleId, CancellationToken ct) =>
+            inner.GetActiveAssignmentAsync(userId, tenantId, roleId, ct);
+
+        public Task<IReadOnlyList<UserRoleAssignmentSnapshot>> GetActiveAssignmentsAsync(Guid userId, Guid tenantId, CancellationToken ct) =>
+            inner.GetActiveAssignmentsAsync(userId, tenantId, ct);
+
+        public Task SoftDeleteAssignmentAsync(Guid assignmentId, Guid deletedBy, CancellationToken ct) =>
+            throw new InvalidOperationException("fallo simulado al cerrar la asignacion");
+
+        public Task<Guid> CreateAssignmentAsync(AssignRoleData data, CancellationToken ct) => inner.CreateAssignmentAsync(data, ct);
+    }
+
     /// <summary>Falla al crear la asignacion nueva, ya con la anterior cerrada: la transaccion debe deshacerlo todo.</summary>
     private sealed class FailingCreateRepository(IUserRoleAssignmentRepository inner) : IUserRoleAssignmentRepository
     {
@@ -206,6 +280,8 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
         public Task<Guid?> GetUserTenantAsync(Guid userId, CancellationToken ct) => inner.GetUserTenantAsync(userId, ct);
 
         public Task<RoleForAssignmentSnapshot?> GetActiveRoleAsync(Guid roleId, CancellationToken ct) => inner.GetActiveRoleAsync(roleId, ct);
+
+        public Task<string?> GetRoleProductCodeAsync(Guid roleId, CancellationToken ct) => inner.GetRoleProductCodeAsync(roleId, ct);
 
         public Task<string> GetTenantTargetEntityTypeAsync(Guid tenantId, CancellationToken ct) => inner.GetTenantTargetEntityTypeAsync(tenantId, ct);
 
