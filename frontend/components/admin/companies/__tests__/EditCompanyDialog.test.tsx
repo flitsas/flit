@@ -36,6 +36,24 @@ describe("EditCompanyDialog (#10118)", () => {
     expect(code).toBeDisabled();
   });
 
+  it("deshabilita el tipo de una hija de red aunque no tenga hijos", () => {
+    const child: CompanyListItem = { ...company, parentTenantId: "00000000-0000-0000-0000-0000000000aa" };
+    render(
+      <EditCompanyDialog open company={child} onClose={vi.fn()} onUpdate={vi.fn()} onUpdated={vi.fn()} />,
+    );
+
+    expect(screen.getByLabelText(/tipo de compañía/i)).toBeDisabled();
+    expect(screen.getByText(/es cliente hijo de una red/i)).toBeInTheDocument();
+  });
+
+  it("deja el tipo habilitado en una compañía sin red", () => {
+    render(
+      <EditCompanyDialog open company={company} onClose={vi.fn()} onUpdate={vi.fn()} onUpdated={vi.fn()} />,
+    );
+
+    expect(screen.getByLabelText(/tipo de compañía/i)).toBeEnabled();
+  });
+
   it("valida requeridos en cliente y no llama a la API", async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn();

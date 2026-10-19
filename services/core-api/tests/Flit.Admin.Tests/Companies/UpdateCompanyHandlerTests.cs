@@ -300,9 +300,60 @@ public sealed class UpdateCompanyHandlerTests
         result.Company!.RazonSocial.Should().Be("Renting Andino S.A.S. (ed)");
     }
 
+    [Theory]
+    [InlineData("CONCESION")]
+    [InlineData("MARCA_BLANCA")]
+    public async Task NetworkChild_TypeChange_Returns422_AndPersistsNothing(string headType)
+    {
+        var db = NewDbName();
+        var headId = await SeedTenantAsync(db, tenantType: headType);
+        var childId = await SeedTenantAsync(db, parentTenantId: headId);
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateCompanyHandler(new CompanyWriteRepository(act));
+            var result = await handler.HandleAsync(new UpdateCompanyCommand
+            {
+                TenantId = childId,
+                Request = new UpdateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "CONCESIONARIO", true),
+            }, TestContext.Current.CancellationToken);
+
+            result.Outcome.Should().Be(UpdateCompanyOutcome.Invalid);
+            result.Errors.Should().ContainSingle(e => e.Field == "tenantType")
+                .Which.Message.Should().Contain("cliente hijo");
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.Tenants.SingleAsync(t => t.Id == childId, cancellationToken: TestContext.Current.CancellationToken))
+            .TenantType.Should().Be("RENTING");
+    }
+
+    [Fact]
+    public async Task NetworkChild_WithoutTypeChange_StillEditsOtherFields()
+    {
+        var db = NewDbName();
+        var headId = await SeedTenantAsync(db, tenantType: "MARCA_BLANCA");
+        var childId = await SeedTenantAsync(db, parentTenantId: headId);
+
+        await using var ctx = NewContext(db);
+        var handler = new UpdateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new UpdateCompanyCommand
+        {
+            TenantId = childId,
+            Request = new UpdateCompanyRequest("Renting Andino S.A.S. (ed)", "900123456-1", "renting", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UpdateCompanyOutcome.Updated);
+        result.Company!.RazonSocial.Should().Be("Renting Andino S.A.S. (ed)");
+        result.Company.TenantType.Should().Be("RENTING");
+        result.Company.ParentTenantId.Should().Be(headId);
+    }
+
     // ---------- Helpers ----------
 
-    private static async Task<Guid> SeedTenantAsync(string db, string tenantType = "RENTING", long rowVersion = 0)
+    private static async Task<Guid> SeedTenantAsync(
+        string db, string tenantType = "RENTING", long rowVersion = 0, Guid? parentTenantId = null)
     {
         var tenantId = Guid.NewGuid();
         await using var seed = NewContext(db);
@@ -313,6 +364,7 @@ public sealed class UpdateCompanyHandlerTests
             LegalName = "Renting Andino S.A.S.",
             TaxId = "900123456-1",
             TenantType = tenantType,
+            ParentTenantId = parentTenantId,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             RowVersion = rowVersion,

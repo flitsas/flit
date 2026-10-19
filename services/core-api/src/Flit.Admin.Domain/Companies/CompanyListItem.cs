@@ -21,6 +21,12 @@ public sealed class CompanyListItem
     public string TenantType { get; init; } = string.Empty;
 
     /// <summary>
+    /// Cabeza de red de la que cuelga — <c>identity.tenants.parent_tenant_id</c>; <c>null</c> si no es
+    /// cliente hijo. El tipo de una hija de red no se puede cambiar mientras esté vinculada.
+    /// </summary>
+    public Guid? ParentTenantId { get; init; }
+
+    /// <summary>
     /// <c>true</c> si el tenant es un Organismo de Tránsito (existe fila en
     /// <c>admin.transit_office_profiles</c>). Fuente de verdad OT ≠ <see cref="TenantType"/>
     /// (los OT también usan RENTING tras RestrictTenantTypeCatalog).

@@ -23,6 +23,14 @@ public static class ChildTenantTypes
         value is not null && All.Contains(value);
 
     /// <summary>
+    /// El tipo de un cliente hijo queda fijo mientras pertenezca a una red: lo eligió la cabeza al
+    /// darlo de alta. Para cambiarlo, primero se desvincula.
+    /// </summary>
+    public const string TypeChangeBlockedMessage =
+        "No se puede cambiar el tipo de un cliente hijo mientras pertenezca a una red. "
+        + "Desvincúlalo primero de su cabeza.";
+
+    /// <summary>
     /// Tipo propuesto por defecto según la cabeza de grupo (AC1 / AC9).
     /// CONCESION → CONCESIONARIO; MARCA_BLANCA → RENTING.
     /// </summary>

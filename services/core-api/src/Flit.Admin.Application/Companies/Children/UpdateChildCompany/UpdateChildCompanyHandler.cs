@@ -72,15 +72,11 @@ public sealed class UpdateChildCompanyHandler
             errors.Add(new CompanyValidationError("nit", "El NIT debe contener al menos un dígito."));
         }
 
-        var tenantType = string.Equals(requestedType, existing.TenantType, StringComparison.OrdinalIgnoreCase)
-            ? existing.TenantType
-            : requestedType;
-
-        if (!ChildTenantTypes.IsValid(tenantType))
+        // El tipo del hijo queda fijo mientras pertenezca a la red: solo se acepta el que ya tiene.
+        var tenantType = existing.TenantType;
+        if (!string.Equals(requestedType, existing.TenantType, StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add(new CompanyValidationError(
-                "tenantType",
-                $"El tipo del cliente hijo debe ser {ChildTenantTypes.DisplayList}."));
+            errors.Add(new CompanyValidationError("tenantType", ChildTenantTypes.TypeChangeBlockedMessage));
         }
 
         if (errors.Count > 0)

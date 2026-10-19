@@ -260,6 +260,7 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             RazonSocial = entity.LegalName,
             Code = entity.Code,
             TenantType = entity.TenantType,
+            ParentTenantId = entity.ParentTenantId,
             IsTransitOffice = isOt,
             EstadoActivo = entity.IsActive,
             FechaCreacion = entity.CreatedAt,
