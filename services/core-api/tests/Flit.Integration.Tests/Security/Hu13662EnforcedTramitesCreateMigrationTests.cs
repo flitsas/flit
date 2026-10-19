@@ -100,17 +100,17 @@ public sealed class Hu13662EnforcedTramitesCreateMigrationTests(PostgresDatabase
         (await ctx.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).Should().Contain(MigrationId);
     }
 
-    // AC1: todo rol activo de producto tramites (global, OT y por tenant) conserva el acceso; los de plataforma no lo reciben.
+    // AC1: quien ya tenía tramites.create (los roles que la UI dejaba crear) lo conserva; la migración no se lo da a nadie más
+    // (decisión 2026-10-19: sin backfill, para no autorizar a crear a roles de solo lectura).
     [PostgresFact]
-    public async Task AC1_Up_ConcedeElSlugATodoRolActivoDeTramites_YMarcaEnforced()
+    public async Task AC1_Up_ConservaElSlugDeQuienLoTenia_SinBackfill_YMarcaEnforced()
     {
         await using var cn = await Fixture.OpenConnectionAsync();
         await SeedAsync(cn);
         await RunAsync(cn);
 
-        foreach (var rol in new[] { "admin_tramites", "Radicador", "ot_admin", "gestor_tramites_ot", "rol_propio" })
-            (await TieneAsync(cn, rol)).Should().Be(1, rol);
-        foreach (var rol in new[] { "rol_borrado", "rol_inactivo", "SuperAdmin", "AdminCompany" })
+        (await TieneAsync(cn, "Radicador")).Should().Be(1, "lo tenía antes de la migración");
+        foreach (var rol in new[] { "admin_tramites", "ot_admin", "gestor_tramites_ot", "rol_propio", "rol_borrado", "rol_inactivo", "SuperAdmin", "AdminCompany" })
             (await TieneAsync(cn, rol)).Should().Be(0, rol);
         // AC3
         (await EnforcedAsync(cn)).Should().Be("true");
@@ -143,6 +143,6 @@ public sealed class Hu13662EnforcedTramitesCreateMigrationTests(PostgresDatabase
         }
 
         (await EnforcedAsync(cn)).Should().Be("false");
-        (await TieneAsync(cn, "ot_admin")).Should().Be(1, "los grants se conservan: no se puede distinguir cuáles puso el backfill");
+        (await TieneAsync(cn, "Radicador")).Should().Be(1, "el Down solo devuelve el marcador; los grants previos se conservan");
     }
 }

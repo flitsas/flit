@@ -2,7 +2,7 @@ using Flit.Modules.Security.Domain.Roles;
 
 namespace Flit.Modules.Security.Application.Roles;
 
-public sealed class SetRolePermissionsHandler(IRoleRepository repository, IFamilyPermissionRulePolicy? familyRules = null)
+public sealed class SetRolePermissionsHandler(IRoleRepository repository)
 {
     public async Task<RoleDetail> HandleAsync(SetRolePermissionsCommand command, CancellationToken ct)
     {
@@ -12,7 +12,7 @@ public sealed class SetRolePermissionsHandler(IRoleRepository repository, IFamil
 
         // HU #13664 AC1: «crear exige ver» por familia de trámite (detrás del flag de enforcement).
         var permissionIds = await FamilyPermissionGuard.ApplyAsync(
-            repository, familyRules, role.Permissions.Select(p => p.Slug), command.PermissionIds, ct);
+            repository, role.Permissions.Select(p => p.Slug), command.PermissionIds, ct);
 
         // HU #12964 (contrato v1 §4): un rol solo tiene permisos de módulos de su producto. SuperAdmin
         // queda exento por su bypass (§2.1). La base lo exige también (tr_role_permissions_same_product);

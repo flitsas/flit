@@ -4,13 +4,14 @@ namespace Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 
 /// <summary>Otorga (o niega) un módulo completo a un usuario en un tenant. Validaciones de tope/ámbito: HUs posteriores.</summary>
 /// <param name="ExcludedPermissionIds">HU #13645: acciones <c>enforced = 'excluded'</c>; nunca se otorgan ni se deniegan (cuentan en <c>Excluded</c>).</param>
+/// <param name="NotEnforcedPermissionIds">Hallazgo review #12753: acciones cuyo flag de enforcement está apagado (no se exigen hoy en la API); no se otorgan ni se deniegan y cuentan en <c>NotEnforced</c>.</param>
 /// <param name="AllowedPermissionIds">HU #13644: si viene, solo se otorgan las acciones de este conjunto (tope del administrador); el resto cuenta en <c>OutOfCap</c>.</param>
 public sealed record GrantModuleOverridesCommand(
     Guid TenantId, Guid UserId, Guid ActorUserId, string ModuleCode, string Effect, IReadOnlySet<Guid>? AllowedPermissionIds = null,
-    IReadOnlySet<Guid>? ExcludedPermissionIds = null);
+    IReadOnlySet<Guid>? ExcludedPermissionIds = null, IReadOnlySet<Guid>? NotEnforcedPermissionIds = null);
 
 /// <summary><c>Skipped</c> = acciones del módulo que el usuario ya tenía con un override activo (se conservan intactas).</summary>
-public sealed record GrantModuleOverridesResult(string ProductCode, Guid BatchId, int Created, int Skipped, int OutOfCap = 0, int Excluded = 0);
+public sealed record GrantModuleOverridesResult(string ProductCode, Guid BatchId, int Created, int Skipped, int OutOfCap = 0, int Excluded = 0, int NotEnforced = 0);
 
 /// <summary>
 /// "Módulo completo" es una FOTO (ADR-0071): crea un override por cada acción activa del módulo en este momento.
@@ -34,7 +35,10 @@ public sealed class GrantModuleOverridesHandler(IUserPermissionOverrideRepositor
         var batchId = Guid.NewGuid();
         var excludedIds = command.ExcludedPermissionIds ?? new HashSet<Guid>();
         var excludedCount = module.Actions.Count(a => excludedIds.Contains(a.PermissionId));
-        var notYetOverridden = module.Actions.Where(a => !existing.Contains(a.PermissionId) && !excludedIds.Contains(a.PermissionId)).ToList();
+        var notEnforcedIds = command.NotEnforcedPermissionIds ?? new HashSet<Guid>();
+        var notEnforcedCount = module.Actions.Count(a => notEnforcedIds.Contains(a.PermissionId) && !excludedIds.Contains(a.PermissionId));
+        var notYetOverridden = module.Actions
+            .Where(a => !existing.Contains(a.PermissionId) && !excludedIds.Contains(a.PermissionId) && !notEnforcedIds.Contains(a.PermissionId)).ToList();
         var pending = notYetOverridden
             .Where(a => command.AllowedPermissionIds is null || command.AllowedPermissionIds.Contains(a.PermissionId))
             .ToList();
@@ -55,6 +59,7 @@ public sealed class GrantModuleOverridesHandler(IUserPermissionOverrideRepositor
         }
 
         return new GrantModuleOverridesResult(
-            module.ProductCode, batchId, overrides.Count, module.Actions.Count - excludedCount - notYetOverridden.Count, notYetOverridden.Count - pending.Count, excludedCount);
+            module.ProductCode, batchId, overrides.Count, module.Actions.Count - excludedCount - notEnforcedCount - notYetOverridden.Count,
+            notYetOverridden.Count - pending.Count, excludedCount, notEnforcedCount);
     }
 }

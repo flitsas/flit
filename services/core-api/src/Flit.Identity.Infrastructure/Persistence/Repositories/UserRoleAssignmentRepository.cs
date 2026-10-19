@@ -49,6 +49,13 @@ public sealed class UserRoleAssignmentRepository(IIdentityDb db) : IUserRoleAssi
             .FirstOrDefaultAsync(ct);
     }
 
+    public async Task<string?> GetRoleProductCodeAsync(Guid roleId, CancellationToken ct) =>
+        await db.Roles
+            .AsNoTracking()
+            .Where(r => r.Id == roleId)
+            .Select(r => r.ProductCode)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<string> GetTenantTargetEntityTypeAsync(Guid tenantId, CancellationToken ct)
     {
         // Mismo criterio ya usado en SecurityEndpoints/AdminOtEndpoints: un tenant con

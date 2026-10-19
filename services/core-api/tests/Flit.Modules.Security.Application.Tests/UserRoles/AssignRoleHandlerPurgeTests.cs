@@ -79,4 +79,17 @@ public sealed class AssignRoleHandlerPurgeTests
 
         await _repo.Received(1).CreateAssignmentAsync(Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task Rol_nuevo_sin_producto_se_purga_como_tramites_y_no_en_silencio(string? product)
+    {
+        _repo.GetActiveRoleAsync(RoleId, Arg.Any<CancellationToken>())
+            .Returns(new RoleForAssignmentSnapshot(RoleId, "COMPANY", null, product));
+
+        await _handler.HandleAsync(Command(), CancellationToken.None);
+
+        await _purger.Received(1).PurgeAsync(TenantId, UserId, "tramites", CallerId, Arg.Any<CancellationToken>());
+    }
 }

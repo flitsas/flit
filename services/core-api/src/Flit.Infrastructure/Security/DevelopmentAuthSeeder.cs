@@ -220,6 +220,9 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        // HU #13663: los permisos Ver/Crear por familia equivalentes a tramites.read / tramites.create.
+        await GrantFamilyPermissionsLikeTramitesAsync(db, role.Id, cancellationToken);
+
         // 3. Usuario + credencial (idempotente).
         var user = await db.Users
             .FirstOrDefaultAsync(u => u.Email == DemoRadicadorEmail, cancellationToken);
@@ -1055,6 +1058,45 @@ public static class DevelopmentAuthSeeder
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // HU #13663: en una base nueva el DDL 145 corrió antes de que existieran estos grants, así que el backfill
+        // por familia no los alcanzó. Este camino solo corre al sembrar el catálogo base (early-return en bases ya
+        // sembradas), así que no re-otorga lo que un administrador haya quitado (HU #13640).
+        var adminTramitesId = await db.Roles
+            .Where(r => r.Code == ProductRoleCodes.AdminTramites && r.DeletedAt == null)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (adminTramitesId is { } atId)
+            await GrantFamilyPermissionsLikeTramitesAsync(db, atId, cancellationToken);
+    }
+
+    /// <summary>
+    /// HU #13663: un rol con <c>tramites.read</c> / <c>tramites.create</c> recibe los <c>.read</c> / <c>.create</c> de las tres
+    /// familias (matriculas, traspasos, otros-tramites), igual que el backfill del DDL 145. Solo agrega lo que falta.
+    /// </summary>
+    internal static async Task GrantFamilyPermissionsLikeTramitesAsync(FlitDbContext db, Guid roleId, CancellationToken ct)
+    {
+        var pairs = new (string Base, string[] Familias)[]
+        {
+            ("tramites.read", ["matriculas.read", "traspasos.read", "otros-tramites.read"]),
+            ("tramites.create", ["matriculas.create", "traspasos.create", "otros-tramites.create"]),
+        };
+        var slugs = pairs.SelectMany(p => p.Familias.Append(p.Base)).ToArray();
+        var idBySlug = await db.RbacActions.Where(a => slugs.Contains(a.Slug)).ToDictionaryAsync(a => a.Slug, a => a.Id, ct);
+        var existing = (await db.RoleGrants.Where(g => g.RoleId == roleId).Select(g => g.PermissionId).ToListAsync(ct)).ToHashSet();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (baseSlug, familias) in pairs)
+        {
+            if (!idBySlug.TryGetValue(baseSlug, out var baseId) || !existing.Contains(baseId))
+                continue;
+            foreach (var slug in familias)
+            {
+                if (idBySlug.TryGetValue(slug, out var id) && existing.Add(id))
+                    db.RoleGrants.Add(new RoleGrant { Id = Guid.CreateVersion7(), RoleId = roleId, PermissionId = id, CreatedAt = now });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>

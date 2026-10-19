@@ -33,6 +33,12 @@ public interface IUserRoleAssignmentRepository
     /// <summary>Todas las asignaciones ACTIVAS del usuario en el tenant (modelo aditivo multi-rol, HU #10506).</summary>
     Task<IReadOnlyList<UserRoleAssignmentSnapshot>> GetActiveAssignmentsAsync(Guid userId, Guid tenantId, CancellationToken ct);
 
+    /// <summary>
+    /// <c>product_code</c> del rol (activo o no), o <c>null</c> si el rol no existe. Lo usa la purga de permisos individuales al
+    /// quitar un rol (HU #13646), que debe funcionar también con roles ya desactivados.
+    /// </summary>
+    Task<string?> GetRoleProductCodeAsync(Guid roleId, CancellationToken ct);
+
     Task SoftDeleteAssignmentAsync(Guid assignmentId, Guid deletedBy, CancellationToken ct);
 
     Task<Guid> CreateAssignmentAsync(AssignRoleData data, CancellationToken ct);

@@ -94,7 +94,9 @@ builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions
 builder.Services.Configure<Flit.Api.Authorization.ModulePermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.ModulePermissionEnforcementOptions.Section)); // Feature #13105
 builder.Services.AddSingleton<IAuthorizationHandler, Flit.Api.Authorization.ModulePermissionAuthorizationHandler>();
 builder.Services.AddScoped<Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate, Flit.Api.Authorization.HttpProcedureFamilyPermissionGate>(); // HU #13664
-builder.Services.AddSingleton<Flit.Modules.Security.Domain.Roles.IFamilyPermissionRulePolicy, Flit.Api.Authorization.FamilyPermissionRulePolicy>(); // HU #13664
+builder.Services.AddSingleton<Flit.Api.Authorization.IFlaggedPermissionSource, Flit.Api.Authorization.FamilyFlaggedPermissionSource>(); // HU #13664: Ver/Crear por familia siguen el flag de módulos
+// Hallazgo review Épica #12753: ¿la API exige hoy este slug? (flags OT/módulos + IFlaggedPermissionSource). Ver PermissionEnforcementState.
+builder.Services.AddSingleton<Flit.Modules.Security.Domain.PermissionOverrides.IPermissionEnforcementState, Flit.Api.Authorization.PermissionEnforcementState>();
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
@@ -276,6 +278,12 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 // la red no otorga escritura sobre los hijos. Va DESPUÉS del enforcement (usa el TenantScope de Items) y
 // cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
+
+// HU #13664 (Feature #13636 F-F, Épica #12753) — «Ver por familia» en un solo punto: toda ruta por id de trámite
+// (/instances/{id}/**, /network/instances/{id}/**, /{tramiteId}/document-requirements) exige el «.read» de la familia del
+// trámite cuando Security:ModulePermissionEnforcement:Enabled está encendido; apagado, pasa sin consultar. Va tras el enforcement
+// de tenant (usa su alcance) y del enrutamiento.
+app.UseMiddleware<Flit.Api.Middleware.FamilyReadEnforcementMiddleware>();
 
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)

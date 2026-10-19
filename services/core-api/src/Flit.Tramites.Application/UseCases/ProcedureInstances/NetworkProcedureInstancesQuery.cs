@@ -172,7 +172,10 @@ public sealed record NetworkProcedureInstanceDetailDto(
     string? TenantName,
     ProcedureInstanceDetailDto Instance);
 
-public sealed class NetworkGetProcedureInstanceHandler(IProcedureInstanceRepository repo)
+public sealed class NetworkGetProcedureInstanceHandler(
+    IProcedureInstanceRepository repo,
+    // HU #13664 — Ver por familia: sin el «.read» de la familia del trámite el detalle de red responde 403 (opcional: sin él, igual que antes).
+    Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate? familyPermissions = null)
 {
     public async Task<(NetworkProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -185,6 +188,8 @@ public sealed class NetworkGetProcedureInstanceHandler(IProcedureInstanceReposit
         var instance = await repo.GetByIdWithDetailsAsync(id, scope!, ct);
         if (instance is null)
             return (null, "not_found");
+        if (familyPermissions is not null && !familyPermissions.CanRead(instance.Family))
+            return (null, "family_forbidden");
 
         // Mismo constructor del DTO que el detalle propio (AC1 HU #12358: «los mismos campos»): cualquier
         // enriquecimiento del detalle vive en BuildDetailAsync y llega aquí sin duplicar la resolución.

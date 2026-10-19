@@ -57,16 +57,19 @@ public sealed class AssignRoleHandler(
 
         // HU #13646 (FB-15): el cambio de rol y la purga de permisos individuales del producto del rol nuevo van en la
         // misma transacción; si el cambio falla no se purga. Los permisos de otros productos no se tocan.
-        if (purger is null || string.IsNullOrWhiteSpace(role.ProductCode))
+        // Un producto nulo/vacío del rol se trata como el producto por defecto (tramites, igual que Role.ProductCode): antes el cambio
+        // se hacía sin purgar en silencio y dejaba overrides vivos.
+        if (purger is null)
         {
             await ReplaceAsync(cmd, tenantId, current, ct);
             return;
         }
 
+        var product = RoleProductCode.Normalize(role.ProductCode);
         await purger.RunAtomicallyAsync(async () =>
         {
             await ReplaceAsync(cmd, tenantId, current, ct);
-            await purger.PurgeAsync(tenantId, cmd.UserId, role.ProductCode, cmd.AssignedBy, ct);
+            await purger.PurgeAsync(tenantId, cmd.UserId, product, cmd.AssignedBy, ct);
         }, ct);
     }
 

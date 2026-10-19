@@ -44,8 +44,20 @@ public sealed class HttpProcedureFamilyPermissionGate(
     }
 }
 
-/// <summary>Interruptor de «crear exige ver» en la configuración de roles: sigue al mismo flag.</summary>
-public sealed class FamilyPermissionRulePolicy(IOptionsMonitor<ModulePermissionEnforcementOptions> options) : IFamilyPermissionRulePolicy
+
+/// <summary>
+/// HU #13664 — los permisos Ver/Crear por familia solo se exigen con <c>Security:ModulePermissionEnforcement:Enabled</c>;
+/// con el flag apagado no son otorgables por usuario (falsa revocación), igual que el resto de slugs de módulo.
+/// </summary>
+public sealed class FamilyFlaggedPermissionSource(IOptionsMonitor<ModulePermissionEnforcementOptions> options) : IFlaggedPermissionSource
 {
-    public bool Enabled => options.CurrentValue.Enabled;
+    private static readonly string[] FamilySlugs =
+    [
+        .. new[] { ProcedureFamily.Matriculas, ProcedureFamily.Traspaso, ProcedureFamily.Otros }
+            .SelectMany(f => new[] { FamilyPermissionSlugs.Read(f), FamilyPermissionSlugs.Create(f) }),
+    ];
+
+    public IReadOnlyCollection<string> Slugs => FamilySlugs;
+
+    public bool IsEnabled => options.CurrentValue.Enabled;
 }

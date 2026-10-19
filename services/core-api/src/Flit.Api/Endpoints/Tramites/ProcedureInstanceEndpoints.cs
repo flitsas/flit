@@ -225,6 +225,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances/plate-history", async (
             HttpContext http,
             ListProcedureInstancesFilteredHandler filteredHandler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromQuery] string? placa,
             [FromQuery] int? skip,
             [FromQuery] int? take,
@@ -247,6 +248,7 @@ internal static class ProcedureInstanceEndpoints
             // La consulta se arma a partir del ALCANCE, no de variables sueltas: el tenant (incluido
             // el null global) sale de PlateHistoryScope y el orden/tope los fija el contrato.
             var request = PlateHistoryScope.BuildRequest(alcance, placaNormalizada, skip, take);
+            request = request with { AllowedFamilies = familyGate.ReadableFamilyCodes() }; // HU #13664 — Ver por familia
 
             // Placa sin trámites → 200 con lista vacía y total 0. NUNCA 404: la placa no es un
             // recurso de esta API, y un 404 haría que el cliente pintara un error donde solo hay
@@ -755,6 +757,10 @@ internal static class ProcedureInstanceEndpoints
             // una cabeza de grupo no puede pausar/reanudar trámites de sus hijos (CanWrite, nunca CanRead).
             if (await TenantWriteGuard.RejectIfAnyCannotWriteAsync(http, body.Ids, ct) is { } forbidden)
                 return forbidden;
+
+            // HU #13664 — Ver por familia: los ids viajan en el body, fuera del alcance de FamilyReadEnforcementMiddleware.
+            if (await Flit.Api.Middleware.FamilyReadEnforcementMiddleware.RejectIfAnyUnreadableAsync(http, body.Ids, ct) is { } familyDenied)
+                return familyDenied;
 
             var results = await handler.HandleBulkAsync(
                 body.Ids, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);

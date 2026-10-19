@@ -37,7 +37,7 @@ public sealed class ListGrantablePermissionsHandler(IRoleRepository repository)
 }
 
 /// <summary>Crea un rol COMPANY propio del tenant con sus permisos, respetando el tope de privilegios.</summary>
-public sealed partial class CreateTenantRoleHandler(IRoleRepository repository, IFamilyPermissionRulePolicy? familyRules = null)
+public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
 {
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_.-]{1,49}$")]
     private static partial Regex CodePattern();
@@ -71,7 +71,7 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository, 
         var permissionIds = command.PermissionIds.Distinct().ToList();
         await EnforceAsync(repository, command.ProductCode, permissionIds, command.CallerPermissions, enabled, ct);
         // HU #13664 AC1: un rol nuevo no puede nacer con «Crear» de una familia sin su «Ver».
-        permissionIds = [.. await FamilyPermissionGuard.ApplyAsync(repository, familyRules, [], permissionIds, ct)];
+        permissionIds = [.. await FamilyPermissionGuard.ApplyAsync(repository, [], permissionIds, ct)];
 
         if (await repository.CodeTakenForTenantAsync(command.TenantId, code, ct))
             throw new RoleCodeDuplicateException();
@@ -105,7 +105,7 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository, 
 }
 
 /// <summary>Reemplaza los permisos de un rol propio del tenant (los globales y los de otro tenant no se tocan).</summary>
-public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository, IFamilyPermissionRulePolicy? familyRules = null)
+public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository)
 {
     public async Task<RoleDetail> HandleAsync(SetTenantRolePermissionsCommand command, CancellationToken ct)
     {
@@ -121,7 +121,7 @@ public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository, 
 
         // HU #13664 AC1: «crear exige ver»; quitar «Ver» retira también su «Crear».
         var finalIds = await FamilyPermissionGuard.ApplyAsync(
-            repository, familyRules, role.Permissions.Select(x => x.Slug), permissionIds, ct);
+            repository, role.Permissions.Select(x => x.Slug), permissionIds, ct);
         await repository.SetPermissionsAsync(command.RoleId, finalIds, ct);
         return (await repository.GetByIdAsync(command.RoleId, ct))!;
     }
