@@ -350,6 +350,9 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "usuarios eliminados",
       "restaurar usuario",
       "eliminar usuario",
+      "permisos por modulo",
+      "permisos individuales",
+      "heredado del rol",
     ],
     summary: "Cómo se definen módulos, permisos y roles, quién los recibe y dónde queda el rastro.",
     blocks: [
@@ -380,6 +383,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
           "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
+          "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
         ],
       },
       {
