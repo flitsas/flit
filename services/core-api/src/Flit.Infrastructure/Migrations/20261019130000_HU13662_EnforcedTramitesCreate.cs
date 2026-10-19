@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Flit.Infrastructure.Migrations;
 
 /// <summary>
-/// HU #13662 (Feature #13105 F-E, Épica #12753) — <c>tramites.create</c> pasa a enforced y se concede a todo rol de producto
-/// <c>tramites</c> (que hoy ya crea trámites). DDL: <c>143-HU13662-enforced-tramites-create.sql</c>.
+/// HU #13662 (Feature #13105 F-E, Épica #12753) — <c>tramites.create</c> pasa a enforced, sin backfill: lo conservan los roles
+/// que ya lo tenían (la UI lo exigía para crear). DDL: <c>143-HU13662-enforced-tramites-create.sql</c>.
 /// </summary>
 [DbContext(typeof(FlitDbContext))]
 [Migration("20261019130000_HU13662_EnforcedTramitesCreate")]
