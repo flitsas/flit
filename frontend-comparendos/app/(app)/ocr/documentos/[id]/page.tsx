@@ -11,7 +11,14 @@ import { EstadoDocumento, useSondeo } from "@/components/ocr/comunes";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
-import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TITULO_CLS } from "@/components/ui/estilos";
+import {
+  BOTON_PELIGRO_CLS,
+  BOTON_PRIMARIO_CLS,
+  controlCls,
+  ETIQUETA_CLS,
+  INPUT_CLS,
+  TITULO_CLS,
+} from "@/components/ui/estilos";
 import { API_PREFIX, apiDownload, apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
@@ -75,8 +82,23 @@ interface Documento {
   motivoDescarte: string | null;
   duplicado: Duplicado | null;
   campos: Campo[];
-  ediciones: { campo: string; valorAnterior: string | null; valorNuevo: string | null; usuarioId: string; usuarioNombre: string | null; editadoEn: string; motivo: string | null }[];
-  historialIntentos: { numero: number; resultado: string; tipoError: string | null; mensajeError: string | null; intentadoEn: string; proximoReintentoEn: string | null }[];
+  ediciones: {
+    campo: string;
+    valorAnterior: string | null;
+    valorNuevo: string | null;
+    usuarioId: string;
+    usuarioNombre: string | null;
+    editadoEn: string;
+    motivo: string | null;
+  }[];
+  historialIntentos: {
+    numero: number;
+    resultado: string;
+    tipoError: string | null;
+    mensajeError: string | null;
+    intentadoEn: string;
+    proximoReintentoEn: string | null;
+  }[];
 }
 
 interface Registro {
@@ -86,7 +108,11 @@ interface Registro {
   placaYaMonitoreada: boolean;
 }
 
-const TONO_CONFIANZA = { alta: "text-[#1E7B3C]", media: "text-[#B45309]", baja: "text-[#B42318]" } as const;
+const TONO_CONFIANZA = {
+  alta: "text-[#1E7B3C]",
+  media: "text-[#B45309]",
+  baja: "text-[#B42318]",
+} as const;
 
 function Original({ d }: { d: Documento }) {
   const [zoom, setZoom] = useState(1);
@@ -101,11 +127,23 @@ function Original({ d }: { d: Documento }) {
         <div className="flex items-center gap-1">
           {vista === "imagen" && (
             <>
-              <button type="button" className={controlCls(false)} aria-label="Alejar" disabled={zoom <= 0.5} onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}>
+              <button
+                type="button"
+                className={controlCls(false)}
+                aria-label="Alejar"
+                disabled={zoom <= 0.5}
+                onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+              >
                 <ZoomOut className="h-3.5 w-3.5" aria-hidden />
               </button>
               <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)} %</span>
-              <button type="button" className={controlCls(false)} aria-label="Acercar" disabled={zoom >= 4} onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>
+              <button
+                type="button"
+                className={controlCls(false)}
+                aria-label="Acercar"
+                disabled={zoom >= 4}
+                onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+              >
                 <ZoomIn className="h-3.5 w-3.5" aria-hidden />
               </button>
             </>
@@ -119,34 +157,69 @@ function Original({ d }: { d: Documento }) {
       <div className="flex-1 overflow-auto rounded-2xl border border-[#DFE5ED] bg-[#F8FAFC] dark:border-white/15 dark:bg-[#0B0F14]">
         {vista === "imagen" && (
           // eslint-disable-next-line @next/next/no-img-element -- archivo privado servido por el proxy de la API, no un asset optimizable
-          <img src={url} alt={`Original de ${d.nombreArchivo}`} style={{ width: `${zoom * 100}%`, maxWidth: "none" }} className="block" />
+          <img
+            src={url}
+            alt={`Original de ${d.nombreArchivo}`}
+            style={{ width: `${zoom * 100}%`, maxWidth: "none" }}
+            className="block"
+          />
         )}
-        {vista === "pdf" && <iframe title={`Original de ${d.nombreArchivo}`} src={url} className="h-full min-h-[70vh] w-full" />}
+        {vista === "pdf" && (
+          <iframe
+            title={`Original de ${d.nombreArchivo}`}
+            src={url}
+            className="h-full min-h-[70vh] w-full"
+          />
+        )}
         {vista === "descarga" && (
-          <p className="p-6 text-xs opacity-70">El navegador no muestra archivos TIFF. Descárgalo para verlo junto al formulario.</p>
+          <p className="p-6 text-xs opacity-70">
+            El navegador no muestra archivos TIFF. Descárgalo para verlo junto al formulario.
+          </p>
         )}
       </div>
     </div>
   );
 }
 
-function CampoEntrada({ campo, valor, onCambio, deshabilitado }: { campo: string; valor: string; onCambio: (v: string) => void; deshabilitado: boolean }) {
+function CampoEntrada({
+  campo,
+  valor,
+  onCambio,
+  deshabilitado,
+}: {
+  campo: string;
+  valor: string;
+  onCambio: (v: string) => void;
+  deshabilitado: boolean;
+}) {
   const tipo = tipoEntrada(campo);
   if (tipo === "documento")
     return (
-      <select className={INPUT_CLS} value={valor} disabled={deshabilitado} onChange={(e) => onCambio(e.target.value)}>
+      <select
+        className={INPUT_CLS}
+        value={valor}
+        disabled={deshabilitado}
+        onChange={(e) => onCambio(e.target.value)}
+      >
         <option value="">—</option>
         {TIPOS_DOCUMENTO.map((t) => (
           <option key={t} value={t}>
             {t}
           </option>
         ))}
-        {valor && !TIPOS_DOCUMENTO.includes(valor) && <option value={valor}>{valor} (no reconocido)</option>}
+        {valor && !TIPOS_DOCUMENTO.includes(valor) && (
+          <option value={valor}>{valor} (no reconocido)</option>
+        )}
       </select>
     );
   if (tipo === "booleano")
     return (
-      <select className={INPUT_CLS} value={valor} disabled={deshabilitado} onChange={(e) => onCambio(e.target.value)}>
+      <select
+        className={INPUT_CLS}
+        value={valor}
+        disabled={deshabilitado}
+        onChange={(e) => onCambio(e.target.value)}
+      >
         <option value="">No se sabe</option>
         <option value="true">Sí, fotomulta</option>
         <option value="false">No, comparendo físico</option>
@@ -177,8 +250,14 @@ function Formulario({
   onVer: (comparendoId: string) => void;
 }) {
   const toast = useToast();
-  const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null });
-  const iniciales = Object.fromEntries(d.campos.map((c) => [c.nombreCampo, valorInicial(c.nombreCampo, c.valorFinal)]));
+  const acciones = accionesDocumento({
+    estado: d.estado,
+    reintentable: d.reintentable,
+    fuenteDuplicado: d.duplicado?.fuente ?? null,
+  });
+  const iniciales = Object.fromEntries(
+    d.campos.map((c) => [c.nombreCampo, valorInicial(c.nombreCampo, c.valorFinal)]),
+  );
   const [editados, setEditados] = useState<Record<string, string>>(iniciales);
   const [motivo, setMotivo] = useState("");
   const [modal, setModal] = useState<"guardar" | "descartar" | null>(null);
@@ -203,12 +282,19 @@ function Formulario({
 
   const guardar = () =>
     ejecutar(async () => {
-      const r = await apiFetch<{ estado: string; camposFaltantes: string[] }>(`/ocr/documentos/${d.id}/campos`, {
-        method: "PUT",
-        body: { campos: cambios, motivo: motivo.trim() || null },
-      });
+      const r = await apiFetch<{ estado: string; camposFaltantes: string[] }>(
+        `/ocr/documentos/${d.id}/campos`,
+        {
+          method: "PUT",
+          body: { campos: cambios, motivo: motivo.trim() || null },
+        },
+      );
       toast.show(
-        r.estado === "Completo" ? "Cambios guardados: el documento quedó completo." : r.estado === "Duplicado" ? "Cambios guardados: el número ya existe." : "Cambios guardados.",
+        r.estado === "Completo"
+          ? "Cambios guardados: el documento quedó completo."
+          : r.estado === "Duplicado"
+            ? "Cambios guardados: el número ya existe."
+            : "Cambios guardados.",
         r.estado === "Duplicado" ? "error" : "success",
       );
     });
@@ -222,7 +308,10 @@ function Formulario({
 
   const descartar = () =>
     ejecutar(async () => {
-      await apiFetch(`/ocr/documentos/${d.id}/descartar`, { method: "POST", body: { motivo: motivo.trim() } });
+      await apiFetch(`/ocr/documentos/${d.id}/descartar`, {
+        method: "POST",
+        body: { motivo: motivo.trim() },
+      });
       toast.show("Documento descartado.", "success");
     });
 
@@ -233,12 +322,61 @@ function Formulario({
     });
 
   const dup = d.duplicado;
+  // Arriba y al final del formulario, sin barra flotante: una barra pegada abajo con fondo tapaba los campos (B12-6).
+  const botones = opera ? (
+    <div className="flex flex-wrap justify-end gap-2">
+      {acciones.reintentar && (
+        <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          Reintentar
+        </button>
+      )}
+      {acciones.descartar && (
+        <button
+          type="button"
+          className={controlCls(false)}
+          disabled={ocupado}
+          onClick={() => setModal("descartar")}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          Descartar
+        </button>
+      )}
+      {editable && (
+        <button
+          type="button"
+          className={controlCls(sucio)}
+          disabled={ocupado || !sucio}
+          onClick={() => setModal("guardar")}
+        >
+          <Save className="h-3.5 w-3.5" aria-hidden />
+          Guardar cambios
+        </button>
+      )}
+      {acciones.registrar && (
+        <button
+          type="button"
+          className={BOTON_PRIMARIO_CLS}
+          disabled={ocupado || sucio}
+          title={sucio ? "Guarda los cambios antes de registrar" : undefined}
+          onClick={registrar}
+        >
+          {ocupado ? "Registrando…" : "Registrar comparendo"}
+        </button>
+      )}
+    </div>
+  ) : null;
   return (
     <div className="flex flex-col gap-4">
+      {botones}
       {d.estado === "Fallido" && (
-        <InlineAlert tone="error" title={(d.tipoFallo && TIPO_FALLO[d.tipoFallo]) ?? "El documento falló"}>
+        <InlineAlert
+          tone="error"
+          title={(d.tipoFallo && TIPO_FALLO[d.tipoFallo]) ?? "El documento falló"}
+        >
           {d.mensajeError}
-          {!d.reintentable && " No se reintenta: revisa el archivo y descártalo, o cárgalo de nuevo en otro paquete."}
+          {!d.reintentable &&
+            " No se reintenta: revisa el archivo y descártalo, o cárgalo de nuevo en otro paquete."}
         </InlineAlert>
       )}
 
@@ -257,7 +395,11 @@ function Formulario({
                 <dd>
                   {dup.activo === false ? "Inactivo" : "Activo"}
                   {dup.pagado ? " · pagado" : ""} ·{" "}
-                  <button type="button" className="font-semibold text-[#3B4FD6] hover:underline" onClick={() => onVer(dup.id)}>
+                  <button
+                    type="button"
+                    className="font-semibold text-[#3B4FD6] hover:underline"
+                    onClick={() => onVer(dup.id)}
+                  >
                     ver el comparendo
                   </button>
                 </dd>
@@ -267,14 +409,21 @@ function Formulario({
                 <dt className="font-semibold">Paquete</dt>
                 <dd>
                   {dup.paquete} ·{" "}
-                  <Link className="font-semibold text-[#3B4FD6] hover:underline" href={`/ocr/documentos/${dup.id}`}>
+                  <Link
+                    className="font-semibold text-[#3B4FD6] hover:underline"
+                    href={`/ocr/documentos/${dup.id}`}
+                  >
                     ver el documento original
                   </Link>
                 </dd>
               </>
             )}
           </dl>
-          {acciones.editar && opera && <p className="mt-1">Si el número quedó mal leído, corrígelo abajo y guarda: se vuelve a validar.</p>}
+          {acciones.editar && opera && (
+            <p className="mt-1">
+              Si el número quedó mal leído, corrígelo abajo y guarda: se vuelve a validar.
+            </p>
+          )}
         </InlineAlert>
       )}
 
@@ -294,7 +443,10 @@ function Formulario({
                   <span className="flex items-center gap-2 font-normal">
                     {c.valorCorregido !== null && <span className="opacity-60">corregido</span>}
                     {conf ? (
-                      <span className={TONO_CONFIANZA[conf.tono]} title="Confianza del modelo en la lectura">
+                      <span
+                        className={TONO_CONFIANZA[conf.tono]}
+                        title="Confianza del modelo en la lectura"
+                      >
                         {conf.texto}
                       </span>
                     ) : c.esNull ? (
@@ -312,7 +464,8 @@ function Formulario({
                 </div>
                 {c.nombreCampo === "fecha_notificacion" && (
                   <span className="text-[11px] font-normal opacity-70">
-                    En las fotomultas casi nunca viene impresa: se toma del sello de recibido o radicado de la empresa. Confírmala, porque de ella cuentan los plazos.
+                    En las fotomultas casi nunca viene impresa: se toma del sello de recibido o
+                    radicado de la empresa. Confírmala, porque de ella cuentan los plazos.
                   </span>
                 )}
               </label>
@@ -321,32 +474,8 @@ function Formulario({
         </div>
       )}
 
-      {opera && (
-        <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-[#DFE5ED] bg-white/95 py-3 dark:border-white/15 dark:bg-[#0B0F14]/95">
-          {acciones.reintentar && (
-            <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              Reintentar
-            </button>
-          )}
-          {acciones.descartar && (
-            <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setModal("descartar")}>
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-              Descartar
-            </button>
-          )}
-          {editable && (
-            <button type="button" className={controlCls(sucio)} disabled={ocupado || !sucio} onClick={() => setModal("guardar")}>
-              <Save className="h-3.5 w-3.5" aria-hidden />
-              Guardar cambios
-            </button>
-          )}
-          {acciones.registrar && (
-            <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sucio} title={sucio ? "Guarda los cambios antes de registrar" : undefined} onClick={registrar}>
-              {ocupado ? "Registrando…" : "Registrar comparendo"}
-            </button>
-          )}
-        </div>
+      {botones && (
+        <div className="border-t border-[#DFE5ED] pt-3 dark:border-white/15">{botones}</div>
       )}
 
       <Modal
@@ -365,11 +494,21 @@ function Formulario({
               Cancelar
             </button>
             {modal === "descartar" ? (
-              <button type="button" className={BOTON_PELIGRO_CLS} disabled={ocupado || !motivo.trim()} onClick={descartar}>
+              <button
+                type="button"
+                className={BOTON_PELIGRO_CLS}
+                disabled={ocupado || !motivo.trim()}
+                onClick={descartar}
+              >
                 Descartar
               </button>
             ) : (
-              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={guardar}>
+              <button
+                type="button"
+                className={BOTON_PRIMARIO_CLS}
+                disabled={ocupado}
+                onClick={guardar}
+              >
                 Guardar
               </button>
             )}
@@ -378,7 +517,12 @@ function Formulario({
       >
         <label className={ETIQUETA_CLS}>
           {modal === "descartar" ? "Motivo (obligatorio)" : "Motivo (opcional)"}
-          <input className={INPUT_CLS} value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} />
+          <input
+            className={INPUT_CLS}
+            value={motivo}
+            maxLength={500}
+            onChange={(e) => setMotivo(e.target.value)}
+          />
         </label>
       </Modal>
     </div>
@@ -400,7 +544,18 @@ function Historial({ d }: { d: Documento }) {
             { key: "campo", header: "Campo", render: (e) => ETIQUETA_CAMPO[e.campo] ?? e.campo },
             { key: "antes", header: "Anterior", render: (e) => e.valorAnterior ?? "—" },
             { key: "nuevo", header: "Nuevo", render: (e) => e.valorNuevo ?? "—" },
-            { key: "usuario", header: "Usuario", render: (e) => (e.usuarioNombre ? <span title={e.usuarioId}>{e.usuarioNombre}</span> : <span title={e.usuarioId} className="font-mono text-[11px] opacity-70">{e.usuarioId.slice(0, 8)}</span>) },
+            {
+              key: "usuario",
+              header: "Usuario",
+              render: (e) =>
+                e.usuarioNombre ? (
+                  <span title={e.usuarioId}>{e.usuarioNombre}</span>
+                ) : (
+                  <span title={e.usuarioId} className="font-mono text-[11px] opacity-70">
+                    {e.usuarioId.slice(0, 8)}
+                  </span>
+                ),
+            },
             { key: "motivo", header: "Motivo", render: (e) => e.motivo ?? "—" },
           ]}
         />
@@ -415,9 +570,24 @@ function Historial({ d }: { d: Documento }) {
           columns={[
             { key: "n", header: "#", align: "right", render: (i) => i.numero },
             { key: "fecha", header: "Fecha", render: (i) => formatoFechaHora(i.intentadoEn) },
-            { key: "resultado", header: "Resultado", render: (i) => (i.resultado === "EXITO" ? "Éxito" : "Error") },
-            { key: "error", header: "Error", render: (i) => (i.tipoError ? `${TIPO_FALLO[i.tipoError] ?? i.tipoError}${i.mensajeError ? `: ${i.mensajeError}` : ""}` : "—") },
-            { key: "proximo", header: "Siguiente intento", render: (i) => formatoFechaHora(i.proximoReintentoEn) },
+            {
+              key: "resultado",
+              header: "Resultado",
+              render: (i) => (i.resultado === "EXITO" ? "Éxito" : "Error"),
+            },
+            {
+              key: "error",
+              header: "Error",
+              render: (i) =>
+                i.tipoError
+                  ? `${TIPO_FALLO[i.tipoError] ?? i.tipoError}${i.mensajeError ? `: ${i.mensajeError}` : ""}`
+                  : "—",
+            },
+            {
+              key: "proximo",
+              header: "Siguiente intento",
+              render: (i) => formatoFechaHora(i.proximoReintentoEn),
+            },
           ]}
         />
       </div>
@@ -428,7 +598,9 @@ function Historial({ d }: { d: Documento }) {
 function Revision({ id }: { id: string }) {
   const { sesion } = useSesion();
   const opera = !sesion?.usuario.esSuperAdmin && tienePermiso(sesion, P.ocrGestionar);
-  const carga = useCarga(`ocr-documento:${id}`, (signal) => apiFetch<Documento>(`/ocr/documentos/${id}`, { signal }));
+  const carga = useCarga(`ocr-documento:${id}`, (signal) =>
+    apiFetch<Documento>(`/ocr/documentos/${id}`, { signal }),
+  );
   const d = carga.datos;
   const [registro, setRegistro] = useState<Registro | null>(null);
   const [verComparendo, setVerComparendo] = useState<string | null>(null);
@@ -439,7 +611,10 @@ function Revision({ id }: { id: string }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <Link href={`/ocr/paquetes/${d.paqueteId}`} className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline">
+      <Link
+        href={`/ocr/paquetes/${d.paqueteId}`}
+        className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline"
+      >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         Volver al paquete
       </Link>
@@ -455,20 +630,34 @@ function Revision({ id }: { id: string }) {
       {registro && (
         <div className="flex flex-col gap-2">
           <InlineAlert tone="success" title={`Comparendo ${registro.numero} registrado`}>
-            <button type="button" className="font-semibold text-[#3B4FD6] hover:underline" onClick={() => setVerComparendo(registro.comparendoId)}>
+            <button
+              type="button"
+              className="font-semibold text-[#3B4FD6] hover:underline"
+              onClick={() => setVerComparendo(registro.comparendoId)}
+            >
               Ver el comparendo
             </button>
           </InlineAlert>
-          {registro.placa && !registro.placaYaMonitoreada && <OfertaPlacas placas={[registro.placa]} />}
-          {registro.placa && registro.placaYaMonitoreada && <InlineAlert tone="info">La placa {registro.placa} ya está monitoreada.</InlineAlert>}
+          {registro.placa && !registro.placaYaMonitoreada && (
+            <OfertaPlacas placas={[registro.placa]} />
+          )}
+          {registro.placa && registro.placaYaMonitoreada && (
+            <InlineAlert tone="info">La placa {registro.placa} ya está monitoreada.</InlineAlert>
+          )}
         </div>
       )}
 
-      {hayEnCurso([d.estado]) && <InlineAlert tone="info">El documento está en cola; esta vista se actualiza sola.</InlineAlert>}
+      {hayEnCurso([d.estado]) && (
+        <InlineAlert tone="info">
+          El documento está en cola; esta vista se actualiza sola.
+        </InlineAlert>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <Original d={d} />
         {/* La clave fuerza un formulario nuevo cada vez que cambian los valores guardados. */}
-        <Formulario key={`${d.estado}:${d.revisadoEn ?? ""}:${d.campos.map((c) => c.valorFinal).join("|")}`} d={d}
+        <Formulario
+          key={`${d.estado}:${d.revisadoEn ?? ""}:${d.campos.map((c) => c.valorFinal).join("|")}`}
+          d={d}
           opera={opera}
           onCambio={carga.recargar}
           onRegistrado={setRegistro}
