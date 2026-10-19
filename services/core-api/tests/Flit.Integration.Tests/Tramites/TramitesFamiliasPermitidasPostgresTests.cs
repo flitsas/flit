@@ -3,6 +3,7 @@ using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
 using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
@@ -39,6 +40,25 @@ public sealed class TramitesFamiliasPermitidasPostgresTests(PostgresDatabaseFixt
         var conteos = await repo.CountByStatusFilteredAsync(
             Cliente, new ProcedureInstanceListFilter { AllowedFamilies = ["TRASPASO"] }, TestContext.Current.CancellationToken);
         conteos.Values.Sum().Should().Be(1);
+    }
+
+    // Code review 2026-10-19: el lookup del middleware de «Ver por familia» contra PostgreSQL real.
+    [PostgresFact]
+    public async Task Lookup_DevuelveLaFamiliaDelTipo_YRespetaElAlcanceDeTenant()
+    {
+        await SembrarAsync();
+        await using var ctx = NewContext();
+        var lookup = new ProcedureInstanceFamilyLookup(ctx);
+        var ct = TestContext.Current.CancellationToken;
+
+        (await lookup.GetFamilyAsync(Matricula, [Cliente], ct)).Should().Be(ProcedureFamily.Matriculas);
+        (await lookup.GetFamilyAsync(Traspaso, null, ct)).Should().Be(ProcedureFamily.Traspaso);
+        (await lookup.GetFamilyAsync(Otros, [Guid.NewGuid()], ct)).Should().BeNull("fuera del alcance de tenants no se resuelve");
+        (await lookup.GetFamilyAsync(Guid.NewGuid(), [Cliente], ct)).Should().BeNull("id inexistente");
+
+        var familias = await lookup.GetFamiliesAsync([Matricula, Traspaso, Otros], [Cliente], ct);
+        familias.Should().HaveCount(3);
+        familias[Otros].Should().Be(ProcedureFamily.Otros);
     }
 
     private static async Task<List<Guid>> IdsAsync(ProcedureInstanceRepository repo, IReadOnlyList<string>? familias)
