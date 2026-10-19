@@ -596,6 +596,12 @@ services:
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-api (canal directo e inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+      # Token de plataforma (Logs/Trazabilidad/Clientes ICT): core-ict ya NO acepta JWT sin firma. Valida firma RS256,
+      # emisor, audiencia y vencimiento con la llave publica que publica Identidad (JWKS por el gateway, igual que
+      # core-consultas/core-notificaciones). Mismo interruptor que core-api: JWT_VALIDATE_ISSUED_TOKENS (def. true);
+      # poner false SOLO en un ambiente Development. Sin llave y validando, core-ict no arranca (fail-fast).
+      Jwt__JwksUri: ${ICT_JWT_JWKS_URI:-http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json}
+      Jwt__ValidateIssuedTokens: ${JWT_VALIDATE_ISSUED_TOKENS:-true}
       # Epic #13316 (HU #13335/#13348): core-ict pide su token a Identidad (cliente svc-ict, mismo secreto que
       # SVC_ICT_CLIENT_SECRET): lo necesita para consultar en core-consultas.
       Ict__ServiceToken__UseIdentity: "true"
