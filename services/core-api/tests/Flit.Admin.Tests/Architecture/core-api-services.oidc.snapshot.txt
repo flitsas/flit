@@ -377,6 +377,7 @@ Flit.Analytics.Application.Scheduling.ListAlertRulesHandler => Flit.Analytics.Ap
 Flit.Analytics.Application.Scheduling.ListReportSchedulesHandler => Flit.Analytics.Application.Scheduling.ListReportSchedulesHandler (Scoped)
 Flit.Analytics.Application.Scheduling.UpdateAlertRuleHandler => Flit.Analytics.Application.Scheduling.UpdateAlertRuleHandler (Scoped)
 Flit.Analytics.Application.Scheduling.UpdateReportScheduleHandler => Flit.Analytics.Application.Scheduling.UpdateReportScheduleHandler (Scoped)
+Flit.Api.Authorization.IFlaggedPermissionSource => Flit.Api.Authorization.FamilyFlaggedPermissionSource (Singleton)
 Flit.Api.Authorization.ITransitOfficeTenantProbe => Flit.Api.Authorization.TransitOfficeTenantProbe (Scoped)
 Flit.Api.Consultas.AvisoKyverumConsumer => Flit.Api.Consultas.AvisoKyverumConsumer (Scoped)
 Flit.Api.Consultas.ConsultasRemotasCliente => Flit.Api.Consultas.ConsultasRemotasCliente (Scoped)

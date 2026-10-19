@@ -60,4 +60,22 @@ public sealed class PermissionEnforcementStateTests
 
         State(host).IsEffectivelyEnforced("ict.pii.reveal").Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData("matriculas.read")]
+    [InlineData("matriculas.create")]
+    [InlineData("traspasos.read")]
+    [InlineData("traspasos.create")]
+    [InlineData("otros-tramites.read")]
+    [InlineData("otros-tramites.create")]
+    public void Los_permisos_por_familia_siguen_el_flag_de_modulos(string slug)
+    {
+        using var apagado = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "false"));
+        using var encendido = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "true"));
+
+        State(apagado).IsEffectivelyEnforced(slug).Should().BeFalse();
+        State(encendido).IsEffectivelyEnforced(slug).Should().BeTrue();
+    }
 }

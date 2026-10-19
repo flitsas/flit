@@ -94,6 +94,7 @@ builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions
 builder.Services.Configure<Flit.Api.Authorization.ModulePermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.ModulePermissionEnforcementOptions.Section)); // Feature #13105
 builder.Services.AddSingleton<IAuthorizationHandler, Flit.Api.Authorization.ModulePermissionAuthorizationHandler>();
 builder.Services.AddScoped<Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate, Flit.Api.Authorization.HttpProcedureFamilyPermissionGate>(); // HU #13664
+builder.Services.AddSingleton<Flit.Api.Authorization.IFlaggedPermissionSource, Flit.Api.Authorization.FamilyFlaggedPermissionSource>(); // HU #13664: Ver/Crear por familia siguen el flag de módulos
 // Hallazgo review Épica #12753: ¿la API exige hoy este slug? (flags OT/módulos + IFlaggedPermissionSource). Ver PermissionEnforcementState.
 builder.Services.AddSingleton<Flit.Modules.Security.Domain.PermissionOverrides.IPermissionEnforcementState, Flit.Api.Authorization.PermissionEnforcementState>();
 
