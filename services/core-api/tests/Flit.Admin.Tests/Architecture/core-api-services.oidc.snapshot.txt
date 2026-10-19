@@ -1066,6 +1066,7 @@ Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.Sta
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.BulkTramitesBatchProcessorService (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoRegeneracionProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.FlitoSignals.FlitoSignalsStartupCheck (Singleton)
+Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.FlitoSignals.FlitoSignalDispatcher (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoLoteTemporalesLimpieza (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoLoteProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoLotePurgaProcessor (Singleton)
