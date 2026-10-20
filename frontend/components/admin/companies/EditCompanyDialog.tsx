@@ -66,7 +66,13 @@ export function EditCompanyDialog({
   const changingToConcesion = tenantType === "CONCESION" && company.tenantType !== "CONCESION";
   const needsOtStep = changingToConcesion;
   const isMarcaBlanca = tenantType === "MARCA_BLANCA";
-  const typeChangeBlocked = initialWasHead && activeChildrenCount > 0;
+  const headWithChildren = initialWasHead && activeChildrenCount > 0;
+  // El tipo de una hija de red (Concesión o Marca Blanca) queda fijo mientras esté vinculada.
+  const isNetworkChild = Boolean(company.parentTenantId);
+  const typeChangeBlocked = headWithChildren || isNetworkChild;
+  const typeBlockedReason = isNetworkChild
+    ? "No puedes cambiar el tipo de un cliente hijo mientras pertenezca a una red."
+    : "No puedes cambiar el tipo mientras la cabeza tenga clientes hijos vigentes.";
 
   const catalogTypes = selectableTenantTypes(isSuperAdmin);
   const typeOptions: string[] = catalogTypes.includes(tenantType as TenantType)
@@ -246,11 +252,7 @@ export function EditCompanyDialog({
                 value={tenantType}
                 onChange={(e) => setTenantType(e.target.value)}
                 disabled={typeChangeBlocked}
-                title={
-                  typeChangeBlocked
-                    ? "No puedes cambiar el tipo mientras la cabeza tenga clientes hijos vigentes."
-                    : undefined
-                }
+                title={typeChangeBlocked ? typeBlockedReason : undefined}
                 aria-describedby={typeChangeBlocked ? "ec-type-blocked" : undefined}
                 className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: errors.tenantType ? "#FF4E00" : "#DFE5ED" }}
@@ -261,11 +263,17 @@ export function EditCompanyDialog({
                   </option>
                 ))}
               </select>
-              {typeChangeBlocked && (
+              {isNetworkChild ? (
                 <p id="ec-type-blocked" className="mt-1 text-xs opacity-70">
-                  Desvincula o da de baja a los clientes hijos antes de cambiar el tipo de cabeza (
-                  {activeChildrenCount} vigente{activeChildrenCount === 1 ? "" : "s"}).
+                  Es cliente hijo de una red: desvincúlalo de su cabeza antes de cambiar el tipo.
                 </p>
+              ) : (
+                headWithChildren && (
+                  <p id="ec-type-blocked" className="mt-1 text-xs opacity-70">
+                    Desvincula o da de baja a los clientes hijos antes de cambiar el tipo de cabeza (
+                    {activeChildrenCount} vigente{activeChildrenCount === 1 ? "" : "s"}).
+                  </p>
+                )
               )}
             </Field>
 
