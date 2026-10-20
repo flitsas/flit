@@ -162,7 +162,7 @@ export function CreateDocumentTypeDialog({
       busy={submitting}
       icon={FileText}
       title={title}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
           {mode === "edit" && (
@@ -197,7 +197,7 @@ export function CreateDocumentTypeDialog({
               onChange={(e) => setNombre(sanitizeName(e.target.value))}
               maxLength={150}
               aria-describedby={errors.nombre ? "dt-nombre-error" : undefined}
-              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
               style={{ borderColor: errors.nombre ? "#FF4E00" : "#DFE5ED" }}
             />
           </Field>
@@ -210,7 +210,7 @@ export function CreateDocumentTypeDialog({
               maxLength={500}
               rows={3}
               aria-describedby={errors.descripcion ? "dt-desc-error" : undefined}
-              className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
               style={{ borderColor: errors.descripcion ? "#FF4E00" : "#DFE5ED" }}
             />
           </Field>
@@ -229,7 +229,7 @@ export function CreateDocumentTypeDialog({
               rows={3}
               placeholder="Ej.: Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda."
               aria-describedby={errors.instruccionCargue ? "dt-instruccion-error" : undefined}
-              className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
               style={{ borderColor: errors.instruccionCargue ? "#FF4E00" : "#DFE5ED" }}
             />
           </Field>
@@ -239,7 +239,7 @@ export function CreateDocumentTypeDialog({
             <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Origen del documento">
               <label
                 className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-                style={!esAutogenerado ? { borderColor: "#557EFF" } : undefined}
+                style={!esAutogenerado ? { borderColor: "var(--color-flit-brand)" } : undefined}
               >
                 <input
                   type="radio"
@@ -247,13 +247,13 @@ export function CreateDocumentTypeDialog({
                   value="cargue"
                   checked={!esAutogenerado}
                   onChange={() => setEsAutogenerado(false)}
-                  className="h-4 w-4 accent-[#557EFF]"
+                  className="h-4 w-4 accent-flit-brand"
                 />
                 Cargue
               </label>
               <label
                 className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-                style={esAutogenerado ? { borderColor: "#557EFF" } : undefined}
+                style={esAutogenerado ? { borderColor: "var(--color-flit-brand)" } : undefined}
               >
                 <input
                   type="radio"
@@ -261,7 +261,7 @@ export function CreateDocumentTypeDialog({
                   value="autogenerado"
                   checked={esAutogenerado}
                   onChange={() => setEsAutogenerado(true)}
-                  className="h-4 w-4 accent-[#557EFF]"
+                  className="h-4 w-4 accent-flit-brand"
                 />
                 Autogenerado
               </label>
@@ -281,7 +281,7 @@ export function CreateDocumentTypeDialog({
                     type="checkbox"
                     checked={mimes.includes(mime)}
                     onChange={() => toggleMime(mime)}
-                    className="h-3.5 w-3.5 accent-[#557EFF]"
+                    className="h-3.5 w-3.5 accent-flit-brand"
                   />
                   {label}
                 </label>
@@ -300,7 +300,7 @@ export function CreateDocumentTypeDialog({
               autoComplete="off"
               value={maxSizeMb}
               onChange={(e) => setMaxSizeMb(sanitizeDecimalInput(e.target.value))}
-              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             />
           </Field>
 
@@ -318,7 +318,7 @@ export function CreateDocumentTypeDialog({
               onClick={submit}
               disabled={submitting}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {submitting ? "Guardando…" : cta}

@@ -33,10 +33,10 @@ import {
 const FIELD =
   "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 const BTN_OUTLINE =
-  "rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]";
+  "rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 const BTN_PRIMARY =
-  "rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2";
-const GRADIENT = { background: "linear-gradient(135deg,#557EFF,#00DBD5)" };
+  "rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2";
+const GRADIENT = { background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" };
 
 export interface MandatoFormatoEditorProps {
   /** Código del formato a editar (el catálogo no permite crear ni eliminar). */
@@ -206,9 +206,9 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
         onClose={onClose}
         busy={busy}
         icon={FileSignature}
-        iconBg="#557EFF"
+        iconBg="var(--color-flit-brand)"
         title={title}
-        titleClassName="text-base font-bold text-[#162744]"
+        titleClassName="text-base font-bold text-flit-primary"
         size="xl"
       >
         <div className="space-y-4 text-xs" data-testid="mandato-formato-editor">
@@ -295,7 +295,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                         onClick={() => insertVariable(v.name)}
                         disabled={busy}
                         aria-label={`Insertar variable ${v.name}: ${v.description}`}
-                        className="rounded-full border border-[#557EFF]/40 px-2.5 py-1 font-mono text-[11px] text-[#162244] hover:bg-[#557EFF]/10 disabled:opacity-50 dark:text-white"
+                        className="rounded-full border border-flit-brand/40 px-2.5 py-1 font-mono text-[11px] text-[#162244] hover:bg-flit-brand/10 disabled:opacity-50 dark:text-white"
                       >
                         {`{{${v.name}}}`}
                       </button>
@@ -370,7 +370,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   onClick={() => setShowHistory((v) => !v)}
                   aria-expanded={showHistory}
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 font-semibold text-[#557EFF] disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 font-semibold text-flit-brand disabled:opacity-50"
                   data-testid="mandato-formato-historial-toggle"
                 >
                   <History className="h-3.5 w-3.5" aria-hidden="true" />
@@ -416,7 +416,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                                 onClick={() => void openVersion(v.versionNumber)}
                                 disabled={busy || loadingVersion !== null}
                                 aria-label={`Ver el texto de la versión ${v.versionNumber}`}
-                                className="inline-flex items-center gap-1 font-semibold text-[#557EFF] disabled:opacity-50"
+                                className="inline-flex items-center gap-1 font-semibold text-flit-brand disabled:opacity-50"
                               >
                                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                                 Ver
@@ -482,7 +482,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
           icon={AlertTriangle}
           iconBg="#F9AC00"
           title="Confirmar publicación de la plantilla"
-          titleClassName="text-base font-bold text-[#162744]"
+          titleClassName="text-base font-bold text-flit-primary"
           size="md"
           zClassName="z-[110]"
         >

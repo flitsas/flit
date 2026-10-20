@@ -33,7 +33,7 @@ import { findConsolidadoAttachment } from './ExpedienteVisor';
  */
 
 const BORDER = '#DFE5ED';
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 
 /**
  * Lo mínimo que el visor necesita de un adjunto. `ProcedureAttachment` encaja aquí tal cual, y el
@@ -336,7 +336,7 @@ export function AvisoDescargaFallida({
           type="button"
           onClick={preview.reintentar}
           aria-label="Reintentar la descarga del documento"
-          className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ borderColor: BLUE, color: BLUE }}
         >
           Reintentar
@@ -474,7 +474,7 @@ export function TramiteDocumentosModal({
                 >
                   <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-[#162744] dark:text-white">
+                    <p className="truncate text-xs font-semibold text-flit-primary dark:text-white">
                       {documentLabel(d.tipo)}
                     </p>
                     <p className="truncate text-xs opacity-60">
@@ -490,7 +490,7 @@ export function TramiteDocumentosModal({
                     onClick={() =>
                       void (esConsolidado(d) ? preview.openConsolidado(d.filename) : preview.open(d))
                     }
-                    className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10`}
+                    className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-flit-brand transition hover:bg-flit-brand/10`}
                     aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
                     title="Previsualizar"
                   >
@@ -501,7 +501,7 @@ export function TramiteDocumentosModal({
                     onClick={() =>
                       void (esConsolidado(d) ? preview.downloadConsolidado() : preview.download(d))
                     }
-                    className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-foreground transition hover:bg-[#557EFF]/10`}
+                    className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-foreground transition hover:bg-flit-brand/10`}
                     aria-label={`Descargar ${documentLabel(d.tipo)}`}
                     title="Descargar"
                   >
@@ -518,8 +518,8 @@ export function TramiteDocumentosModal({
                   type="button"
                   className="mt-4 inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
                   style={{
-                    background: 'linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)',
-                    boxShadow: '0 10px 24px -6px rgba(85,126,255,0.45)',
+                    background: 'linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)',
+                    boxShadow: '0 10px 24px -6px color-mix(in srgb, var(--color-flit-brand) 45%, transparent)',
                   }}
                   onClick={() => void preview.downloadConsolidado()}
                   aria-label="Descargar todo · Expediente consolidado (PDF)"

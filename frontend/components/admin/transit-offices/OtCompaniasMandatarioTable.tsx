@@ -164,7 +164,7 @@ export function OtCompaniasMandatarioTable({
             onChange={(e) => setEntrada(e.target.value)}
             placeholder="Buscar por nombre o NIT…"
             aria-describedby={corta ? "ot-mandatos-busqueda-ayuda" : undefined}
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
             data-testid="ot-mandatos-company-search"
           />
         </label>

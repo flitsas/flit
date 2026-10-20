@@ -181,7 +181,7 @@ export function SearchableSelect({
         className={
           hideLabel
             ? "sr-only"
-            : "text-[10px] font-semibold uppercase opacity-60 text-[#162744] dark:text-white"
+            : "text-[10px] font-semibold uppercase opacity-60 text-flit-primary dark:text-white"
         }
       >
         {label}
@@ -214,7 +214,7 @@ export function SearchableSelect({
           // esto un segundo clic no reabría la lista (el `focus` ya no vuelve a dispararse).
           onClick={abrir}
           onKeyDown={alTeclear}
-          className="h-10 w-full rounded-[10px] border bg-white pl-9 pr-14 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white"
+          className="h-10 w-full rounded-[10px] border bg-white pl-9 pr-14 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white"
         />
 
         <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
@@ -280,15 +280,15 @@ export function SearchableSelect({
                   onMouseDown={(e) => e.preventDefault()} // no robar el foco del input
                   onClick={() => elegir(o)}
                   className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs ${
-                    activa ? "bg-[#557EFF]/10" : ""
+                    activa ? "bg-flit-brand/10" : ""
                   }`}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[#162744] dark:text-white">{o.label}</span>
+                    <span className="block truncate text-flit-primary dark:text-white">{o.label}</span>
                     {o.hint && <span className="block truncate text-[10px] opacity-60">{o.hint}</span>}
                   </span>
                   {elegida && (
-                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: "#557EFF" }} aria-hidden="true" />
+                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
                   )}
                 </li>
               );

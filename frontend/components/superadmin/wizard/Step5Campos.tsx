@@ -31,7 +31,7 @@ export function Step5Campos({
       {vehicleActive && (
         <div
           className="rounded-2xl p-4 border"
-          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+          style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
         >
           <p className="text-xs font-semibold mb-1">Arista VEHICLE activa</p>
           <p className="text-[11px] opacity-70 mb-3">
@@ -43,7 +43,7 @@ export function Step5Campos({
             onClick={onApplyVehicleTemplate}
             disabled={loading || plateOrVinReady}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: plateOrVinReady ? '#00DBD5' : '#557EFF' }}
+            style={{ background: plateOrVinReady ? 'var(--color-flit-tech)' : 'var(--color-flit-brand)' }}
             aria-label="Aplicar plantilla RUNT vehículo a la sección de datos del vehículo"
           >
             {loading
@@ -74,7 +74,7 @@ export function Step5Campos({
               <div className="flex items-center gap-2 mb-3">
                 <span
                   className="h-6 w-6 rounded-full grid place-items-center text-[10px] font-bold text-white shrink-0"
-                  style={{ background: '#557EFF' }}
+                  style={{ background: 'var(--color-flit-brand)' }}
                   aria-hidden="true"
                 >
                   {i + 1}

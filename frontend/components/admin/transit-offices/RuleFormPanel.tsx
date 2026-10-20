@@ -129,7 +129,7 @@ export function RuleFormPanel({
           type="button"
           disabled={submitting || (!editing && !canSave)}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
           onClick={() => void submit()}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -226,7 +226,7 @@ export function RuleFormPanel({
             <button
               type="button"
               className="flex items-center gap-1 text-xs font-semibold"
-              style={{ color: "#557EFF" }}
+              style={{ color: "var(--color-flit-brand)" }}
               onClick={() => setConditions((prev) => [...prev, emptyCondition()])}
             >
               Agregar condición

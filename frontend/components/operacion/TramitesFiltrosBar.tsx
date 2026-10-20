@@ -39,7 +39,7 @@ export const PERIODOS = [
 export type Periodo = (typeof PERIODOS)[number];
 
 export const INPUT_CLS =
-  'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-[#162744] outline-none transition focus:border-[#557EFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
+  'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-flit-primary outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
 export const POPOVER_SURFACE_CLS =
   'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
 
@@ -271,14 +271,14 @@ export function PeriodoPopover({
             <button
               type="button"
               onClick={handleLimpiar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-[#59677D] transition hover:bg-[#DFE5ED]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-[#59677D] transition hover:bg-[#DFE5ED]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
             >
               Limpiar
             </button>
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               style={{ background: WIZARD_CTA_GRADIENT }}
             >
               Aplicar
@@ -396,7 +396,7 @@ function FiltroEspecificoPopover({
               <button
                 type="button"
                 onClick={() => setEditando(null)}
-                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-[#557EFF] hover:underline"
+                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-flit-brand hover:underline"
               >
                 ← Volver a los filtros
               </button>
@@ -416,7 +416,7 @@ function FiltroEspecificoPopover({
                   {condiciones.map((c) => (
                     <span
                       key={c.fieldId}
-                      className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 bg-[#557EFF]/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
                     >
                       <button
                         type="button"
@@ -459,14 +459,14 @@ function FiltroEspecificoPopover({
               type="button"
               onClick={handleEmpezarDeCero}
               disabled={empezarDeCeroDisabled}
-              className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Empezar de cero
             </button>
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               style={{ background: WIZARD_CTA_GRADIENT }}
             >
               Aplicar
@@ -576,7 +576,7 @@ export function TramitesFiltrosBar({
       {/* Búsqueda: ancho fijo w-64, icono marca — spec flit-tramites-chrome. */}
       <div className="relative w-64 shrink-0">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#557EFF]"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
           aria-hidden="true"
         />
         <input
@@ -690,7 +690,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
             type="button"
             onClick={onQuitarPeriodo}
             aria-label="Quitar filtro de periodo"
-            className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
             <X className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -699,14 +699,14 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
       {chips.map((chip) => (
         <span
           key={chip.key}
-          className="flex items-center gap-1.5 rounded-full border border-[#557EFF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
+          className="flex items-center gap-1.5 rounded-full border border-flit-brand px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
         >
           {chip.label}
           <button
             type="button"
             onClick={() => onQuitarChip(chip.key)}
             aria-label={`Quitar filtro ${chip.label}`}
-            className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
             <X className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -716,7 +716,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
         <button
           type="button"
           onClick={onLimpiarTodo}
-          className="rounded-full px-2 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="rounded-full px-2 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
         >
           Limpiar todo
         </button>

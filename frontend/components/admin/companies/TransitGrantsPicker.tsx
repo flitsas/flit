@@ -136,7 +136,7 @@ export function TransitGrantsPicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre, código o municipio…"
-          className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF]"
+          className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
           style={{ borderColor: "#DFE5ED" }}
         />
       </div>
@@ -156,7 +156,7 @@ export function TransitGrantsPicker({
           <ul className="space-y-1">
             {filtered.map((office) => (
               <li key={office.id}>
-                <label className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-[#557EFF]/5">
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-flit-brand/5">
                   <input
                     type="checkbox"
                     checked={selected.has(office.id)}

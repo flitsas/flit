@@ -106,7 +106,7 @@ export function DrilldownPanel({
                       rel="noopener noreferrer"
                       title="Se abre en una pestaña nueva"
                       className="shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white"
-                      style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+                      style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
                     >
                       Ir a gestionar ↗
                     </Link>

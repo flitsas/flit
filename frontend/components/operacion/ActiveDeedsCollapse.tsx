@@ -111,7 +111,7 @@ export function ActiveDeedsList({ loading, deeds, error }: ActiveDeedsState) {
                   className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3.5 dark:bg-[#162744]"
                 >
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold" style={{ color: '#162744' }}>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                       {deed.name}
                     </p>
                     <p className="mt-0.5 text-xs opacity-60">NIT {deed.nit}</p>
@@ -126,7 +126,7 @@ export function ActiveDeedsList({ loading, deeds, error }: ActiveDeedsState) {
                       <p className="text-xs opacity-50">Sin RL vinculado</p>
                     )}
                     {deed.description && (
-                      <p className="mt-1 text-xs font-medium" style={{ color: '#162744' }}>
+                      <p className="mt-1 text-xs font-medium" style={{ color: 'var(--color-flit-primary)' }}>
                         {deed.description}
                       </p>
                     )}
@@ -157,7 +157,7 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
   return (
     <WizardAccordion
       title="Escrituras vigentes de la compañía"
-      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />}
+      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />}
       open={open}
       onOpenChange={setOpen}
     >

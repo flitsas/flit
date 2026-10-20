@@ -42,8 +42,8 @@ export function SwitchToggle({
       />
       <span
         aria-hidden="true"
-        className="h-5 w-10 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-[#557EFF]"
-        style={{ background: checked ? "#00DBD5" : "#DFE5ED" }}
+        className="h-5 w-10 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand"
+        style={{ background: checked ? "var(--color-flit-tech)" : "#DFE5ED" }}
       />
       <span
         aria-hidden="true"

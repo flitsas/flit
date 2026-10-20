@@ -37,7 +37,7 @@ export function SessionExpiredListener() {
       aria-describedby="session-expired-desc"
     >
       <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-        <h2 id="session-expired-title" className="text-lg font-semibold text-[#162744]">
+        <h2 id="session-expired-title" className="text-lg font-semibold text-flit-primary">
           Tu sesión expiró
         </h2>
         <p id="session-expired-desc" className="mt-2 text-sm text-slate-600">
@@ -48,7 +48,7 @@ export function SessionExpiredListener() {
           autoFocus
           onClick={goToLogin}
           className="mt-5 w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90"
-          style={{ background: "#557eff" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           Ir a iniciar sesión
         </button>

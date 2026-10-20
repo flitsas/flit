@@ -178,7 +178,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
     <div className={`flex flex-col gap-4 ${embedded ? "" : "p-1"}`}>
       {!embedded && (
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-[#162744] dark:text-white flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-bold text-flit-primary dark:text-white flex flex-wrap items-center gap-2">
             Reportes Detallados
             {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="detallado-red-badge" />}
           </h2>
@@ -188,7 +188,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
               onClick={() => void handleExport()}
               disabled={exporting || uiStatus === "loading"}
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "#557EFF" }}
+              style={{ background: "var(--color-flit-brand)" }}
             >
               <Download className="h-4 w-4" aria-hidden="true" />
               {exporting ? "Descargando…" : "Descargar Excel"}

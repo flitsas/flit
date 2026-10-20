@@ -610,7 +610,7 @@ export function QueryConsole<TRow>({
               <button
                 type="button"
                 onClick={() => void handleCopyLink()}
-                className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#6B7280] hover:text-[#557EFF] dark:border-white/15 dark:text-white/60"
+                className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#6B7280] hover:text-flit-brand dark:border-white/15 dark:text-white/60"
                 data-testid={`${prefix}-enlace`}
               >
                 Copiar enlace
@@ -657,8 +657,8 @@ export function QueryConsole<TRow>({
                 title={preset.hint}
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                   presetActivo === preset.id
-                    ? "border-[#557EFF] bg-[#557EFF]/10 text-[#3355CC] dark:text-[#9DB5FF]"
-                    : "border-[#DFE5ED] text-[#6B7280] hover:text-[#557EFF] dark:border-white/15 dark:text-white/60"
+                    ? "border-flit-brand bg-flit-brand/10 text-[#3355CC] dark:text-[#9DB5FF]"
+                    : "border-[#DFE5ED] text-[#6B7280] hover:text-flit-brand dark:border-white/15 dark:text-white/60"
                 }`}
               >
                 {preset.label}
@@ -747,7 +747,7 @@ export function QueryConsole<TRow>({
           <button
             type="button"
             onClick={() => (hayTrabajoSinGuardar ? setConfirmandoLimpiar(true) : limpiar())}
-            className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
+            className="mt-1 w-full rounded-xl border border-flit-brand/30 bg-flit-brand/[0.06] px-2 py-2 text-[11px] font-semibold text-flit-brand transition hover:border-flit-brand hover:bg-flit-brand/10 dark:border-flit-brand/30 dark:bg-flit-brand/10 dark:text-[#9DB5FF]"
             data-testid={`${prefix}-nueva`}
           >
             Empezar de cero
@@ -809,7 +809,7 @@ export function QueryConsole<TRow>({
               <button
                 type="button"
                 onClick={handleOverwrite}
-                className="rounded-lg bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white"
+                className="rounded-lg bg-flit-brand px-3 py-2 text-xs font-semibold text-white"
                 data-testid={`${prefix}-guardar-sobrescribir`}
               >
                 Sobrescribir «{sugerido}»
@@ -860,7 +860,7 @@ export function QueryConsole<TRow>({
                 <button
                   type="submit"
                   disabled={!nombrando?.trim()}
-                  className="rounded-lg bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                  className="rounded-lg bg-flit-brand px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                   data-testid={`${prefix}-guardar-confirmar`}
                 >
                   Guardar

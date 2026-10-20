@@ -35,14 +35,14 @@ export function ReportesTabBar({ tabs, activeId, onChange, ariaLabel }: Reportes
             onClick={() => onChange(tab.id)}
             className={cn(
               "relative shrink-0 px-4 py-2.5 text-xs font-semibold transition",
-              active ? "text-[#557EFF] opacity-100" : "text-[#162744] dark:text-white opacity-65",
+              active ? "text-flit-brand opacity-100" : "text-flit-primary dark:text-white opacity-65",
             )}
           >
             {tab.label}
             {active && (
               <span
                 className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
               />
             )}
           </button>

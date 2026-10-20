@@ -132,8 +132,8 @@ export function DocumentPrecedenceList({
             onDrop={() => onDrop(index)}
             className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
             style={{
-              borderColor: highlighted ? "#557EFF" : undefined,
-              boxShadow: highlighted ? "0 0 0 2px #557EFF33" : undefined,
+              borderColor: highlighted ? "var(--color-flit-brand)" : undefined,
+              boxShadow: highlighted ? "0 0 0 2px color-mix(in srgb, var(--color-flit-brand) 20%, transparent)" : undefined,
             }}
           >
             {/* HU #12883 AC2 — posición a la IZQUIERDA, antes del agarrador. */}
@@ -146,7 +146,7 @@ export function DocumentPrecedenceList({
             </span>
             <button
               type="button"
-              className="cursor-grab rounded p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+              className="cursor-grab rounded p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
               aria-label={`Reordenar ${item.document_name}. Usa flechas arriba o abajo y Enter para confirmar.`}
               disabled={disabled || saving}
               onKeyDown={(e) => onKeyDown(e, index)}

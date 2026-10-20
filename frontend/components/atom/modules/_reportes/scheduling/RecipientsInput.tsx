@@ -57,7 +57,7 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
             key={email}
             data-testid="recipient-chip"
             className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
           >
             {email}
             {!disabled && (
@@ -78,7 +78,7 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
           disabled={disabled}
           aria-label="Agregar destinatario"
           placeholder={value.length === 0 ? "correo@empresa.co" : ""}
-          className="flex-1 min-w-[140px] bg-transparent text-sm outline-none py-1 text-[#162744] dark:text-slate-100 placeholder:text-slate-400"
+          className="flex-1 min-w-[140px] bg-transparent text-sm outline-none py-1 text-flit-primary dark:text-slate-100 placeholder:text-slate-400"
           onChange={(e) => {
             setLocalError(null);
             if (e.target.value.endsWith(",")) {

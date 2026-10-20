@@ -244,7 +244,7 @@ export function IdentityStatusPanel({
         {open && needsLive && (
           <span
             className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-            style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+            style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
             role="status"
             aria-live="polite"
           >
@@ -338,13 +338,13 @@ export function IdentityStatusPanel({
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-semibold opacity-70">{index + 1}.</span>
                             <StatusBadge label={label} tone={tone} />
-                            <span className="font-semibold text-[#162744] dark:text-white">
+                            <span className="font-semibold text-flit-primary dark:text-white">
                               {row.actorLabel}
                             </span>
                             {row.vigente && (
                               <span
                                 className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                                style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+                                style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
                               >
                                 Vigente
                               </span>

@@ -127,7 +127,7 @@ export function RbacAdmin() {
       header: "Permisos",
       align: "center",
       render: (mod) => (
-        <span className="font-bold" style={{ color: "#557EFF" }}>{mod.permissionCount}</span>
+        <span className="font-bold" style={{ color: "var(--color-flit-brand)" }}>{mod.permissionCount}</span>
       ),
     },
     {
@@ -155,7 +155,7 @@ export function RbacAdmin() {
               onClick={() => handleActivateModule(mod.id)}
               aria-label="Activar módulo"
               className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-              style={{ color: "#00DBD5" }}
+              style={{ color: "var(--color-flit-tech)" }}
             >
               <Power className="h-3.5 w-3.5" />
             </button>
@@ -171,7 +171,7 @@ export function RbacAdmin() {
           <button
             onClick={() => setCreatePermissionForModule(mod)}
             className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
           >
             + Permiso
           </button>
@@ -207,7 +207,7 @@ export function RbacAdmin() {
 
   return (
     <div
-      className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white"
+      className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white"
       style={{ fontFamily: "Poppins, sans-serif" }}
     >
       {/* Header — unificado con ModuleTitle (HU #10493): botón fuera de la caja del título. */}
@@ -226,7 +226,7 @@ export function RbacAdmin() {
               <button
                 onClick={() => setShowCreateModule(true)}
                 className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
               >
                 Nuevo módulo
               </button>
@@ -242,11 +242,11 @@ export function RbacAdmin() {
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className="relative px-4 py-2.5 text-xs font-semibold transition"
-            style={{ color: activeTab === t.id ? "#557EFF" : "#162744", opacity: activeTab === t.id ? 1 : 0.6 }}
+            style={{ color: activeTab === t.id ? "var(--color-flit-brand)" : "#162744", opacity: activeTab === t.id ? 1 : 0.6 }}
           >
             {t.label}
             {activeTab === t.id && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "#557EFF" }} />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "var(--color-flit-brand)" }} />
             )}
           </button>
         ))}
@@ -403,7 +403,7 @@ function RolesTabContent() {
         <button
           onClick={() => setShowCreateRole(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           Nuevo rol
         </button>
@@ -429,7 +429,7 @@ function RolesTabContent() {
             key: "perms",
             header: "Permisos",
             align: "center",
-            render: (r) => <span className="font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</span>,
+            render: (r) => <span className="font-bold" style={{ color: "var(--color-flit-brand)" }}>{r.permissionCount}</span>,
           },
           {
             key: "estado",
@@ -448,7 +448,7 @@ function RolesTabContent() {
                   aria-label={`Editar permisos de ${r.name}`}
                   disabled={busyIds[r.id]}
                   className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                  style={{ color: "#557EFF" }}
+                  style={{ color: "var(--color-flit-brand)" }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -457,7 +457,7 @@ function RolesTabContent() {
                   aria-label={r.isActive ? `Desactivar rol ${r.name}` : `Activar rol ${r.name}`}
                   disabled={busyIds[r.id]}
                   className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                  style={{ color: r.isActive ? undefined : "#00DBD5" }}
+                  style={{ color: r.isActive ? undefined : "var(--color-flit-tech)" }}
                 >
                   {r.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
                 </button>
@@ -478,7 +478,7 @@ function RolesTabContent() {
         return (
           <section key={type} className="flex flex-col gap-2">
             <h3 className="flex items-center gap-2 text-sm font-bold">
-              <Icon className="h-4 w-4" style={{ color: "#557EFF" }} aria-hidden="true" />
+              <Icon className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
               {title}
             </h3>
             <DataTable
@@ -557,12 +557,12 @@ function ModulePermissionsChecklist({
               <span
                 className="h-4 w-4 rounded border grid place-items-center flex-shrink-0"
                 style={{
-                  borderColor: allSelected || someSelected ? "#557EFF" : "#DFE5ED",
-                  background: allSelected ? "#557EFF" : someSelected ? "rgba(85,126,255,0.15)" : "transparent",
+                  borderColor: allSelected || someSelected ? "var(--color-flit-brand)" : "#DFE5ED",
+                  background: allSelected ? "var(--color-flit-brand)" : someSelected ? "color-mix(in srgb, var(--color-flit-brand) 15%, transparent)" : "transparent",
                 }}
               >
                 {(allSelected || someSelected) && (
-                  <span className="block h-2 w-2 rounded-sm" style={{ background: allSelected ? "#FFFFFF" : "#557EFF" }} />
+                  <span className="block h-2 w-2 rounded-sm" style={{ background: allSelected ? "#FFFFFF" : "var(--color-flit-brand)" }} />
                 )}
               </span>
               <span className="text-sm font-semibold">{m.name}</span>
@@ -574,7 +574,7 @@ function ModulePermissionsChecklist({
                     type="checkbox"
                     checked={selected.has(a.id)}
                     onChange={() => onToggle(a.id)}
-                    className="h-3.5 w-3.5 accent-[#557EFF]"
+                    className="h-3.5 w-3.5 accent-flit-brand"
                   />
                   <span className="text-xs">{a.name}</span>
                 </label>
@@ -665,12 +665,12 @@ function CreateRoleModal({
   }
 
   return (
-    <Modal open onClose={onClose} busy={busy} size="md" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
+    <Modal open onClose={onClose} busy={busy} size="md" title="Nuevo rol" titleClassName="text-lg font-bold text-flit-primary dark:text-white">
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
-            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand" />
           </div>
           <div>
             <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
@@ -679,7 +679,7 @@ function CreateRoleModal({
               required
               value={targetEntityType}
               onChange={(e) => setTargetEntityType(e.target.value as RoleTargetEntityType)}
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
             >
               <option value="COMPANY">Compañía</option>
               <option value="TRANSIT_OFFICE">Organismo de Tránsito</option>
@@ -688,11 +688,11 @@ function CreateRoleModal({
         </div>
         <div>
           <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
-          <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+          <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand" />
         </div>
         <div>
           <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
-          <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe brevemente el propósito del rol" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+          <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe brevemente el propósito del rol" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand" />
         </div>
         <div>
           <span className="text-xs font-semibold block mb-1.5">Permisos por módulo</span>
@@ -705,7 +705,7 @@ function CreateRoleModal({
           />
         </div>
         {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
-        <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
+        <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
           {busy ? "Creando…" : "Crear rol"}
         </button>
       </form>
@@ -784,7 +784,7 @@ function EditRolePermissionsModal({
   }
 
   return (
-    <Modal open onClose={onClose} busy={busy} size="md" title={`Editar permisos — ${role.name}`} titleClassName="text-lg font-bold text-[#162744] dark:text-white">
+    <Modal open onClose={onClose} busy={busy} size="md" title={`Editar permisos — ${role.name}`} titleClassName="text-lg font-bold text-flit-primary dark:text-white">
       <form onSubmit={handleSubmit} className="space-y-3">
         {loadingCurrent ? (
           <div className="py-10 text-center text-sm opacity-60">Cargando permisos actuales…</div>
@@ -802,7 +802,7 @@ function EditRolePermissionsModal({
           type="submit"
           disabled={busy || loadingCurrent}
           className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           {busy ? "Guardando…" : "Guardar permisos"}
         </button>
@@ -847,7 +847,7 @@ function CreateModuleModal({
   }
 
   return (
-    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo módulo" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
+    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo módulo" titleClassName="text-lg font-bold text-flit-primary dark:text-white">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label htmlFor="mod-code" className="text-xs font-semibold block mb-1">
@@ -859,7 +859,7 @@ function CreateModuleModal({
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="tramites"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
               style={{ borderColor: error?.includes("código") ? "#FF4E00" : "#DFE5ED" }}
             />
             {error?.includes("código") && (
@@ -878,7 +878,7 @@ function CreateModuleModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Trámites"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
             />
           </div>
           <div>
@@ -890,7 +890,7 @@ function CreateModuleModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Gestión de trámites vehiculares"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
             />
           </div>
           <div>
@@ -906,7 +906,7 @@ function CreateModuleModal({
               value={sortOrder}
               onChange={(e) => setSortOrder(digitsOnly(e.target.value))}
               placeholder="1"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
             />
           </div>
           {error && !error.includes("código") && (
@@ -922,7 +922,7 @@ function CreateModuleModal({
             type="submit"
             disabled={loading}
             className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {loading ? "Creando…" : "Crear módulo"}
           </button>
@@ -972,7 +972,7 @@ function CreatePermissionModal({
   }
 
   return (
-    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo permiso" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
+    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo permiso" titleClassName="text-lg font-bold text-flit-primary dark:text-white">
         <p className="text-xs opacity-60 mb-4">
           Módulo: <strong>{module.name}</strong> ({module.code})
         </p>
@@ -987,7 +987,7 @@ function CreatePermissionModal({
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="tramites.read"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF] font-mono"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand font-mono"
             />
           </div>
           <div>
@@ -1000,7 +1000,7 @@ function CreatePermissionModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Leer trámites"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
             />
           </div>
           <div>
@@ -1029,7 +1029,7 @@ function CreatePermissionModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Permite leer el listado de trámites"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand"
             />
           </div>
           {error && (
@@ -1045,7 +1045,7 @@ function CreatePermissionModal({
             type="submit"
             disabled={loading}
             className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {loading ? "Creando…" : "Crear permiso"}
           </button>

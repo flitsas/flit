@@ -54,12 +54,12 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
               aria-controls={`tabpanel-${t.id}`}
               onClick={() => setTab(t.id)}
               className="relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition"
-              style={{ color: active ? "#557EFF" : undefined, opacity: active ? 1 : 0.65 }}
+              style={{ color: active ? "var(--color-flit-brand)" : undefined, opacity: active ? 1 : 0.65 }}
             >
               <Icon className="h-3.5 w-3.5" />
               {t.label}
               {active && (
-                <span className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full" style={{ background: "#557EFF" }} />
+                <span className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full" style={{ background: "var(--color-flit-brand)" }} />
               )}
             </button>
           );

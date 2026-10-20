@@ -117,7 +117,7 @@ export function LinkCompanyDialog({
       busy={submitting}
       icon={Link2}
       title="Vincular cliente existente"
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <p className="mb-3 text-xs opacity-80">
         El cliente quedará como hijo de <strong>{headName}</strong>. Solo se listan compañías sin padre
@@ -151,7 +151,7 @@ export function LinkCompanyDialog({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por razón social, NIT o código…"
-              className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             />
           </div>
           <div
@@ -170,9 +170,9 @@ export function LinkCompanyDialog({
                       role="option"
                       aria-selected={selectedId === c.id}
                       onClick={() => setSelectedId(c.id)}
-                      className="flex w-full flex-col gap-0.5 border-b px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[#557EFF]/5"
+                      className="flex w-full flex-col gap-0.5 border-b px-3 py-2 text-left text-xs last:border-b-0 hover:bg-flit-brand/5"
                       style={{
-                        background: selectedId === c.id ? "rgba(85,126,255,0.08)" : undefined,
+                        background: selectedId === c.id ? "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)" : undefined,
                       }}
                     >
                       <span className="font-semibold">{c.razonSocial}</span>
@@ -204,7 +204,7 @@ export function LinkCompanyDialog({
           onClick={() => void submit()}
           disabled={submitting || loading || Boolean(loadError)}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
           Vincular

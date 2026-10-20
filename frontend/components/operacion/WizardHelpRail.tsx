@@ -100,8 +100,8 @@ function RailButton({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-9 w-9 place-items-center rounded-xl transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ color: '#557EFF' }}
+        className="grid h-9 w-9 place-items-center rounded-xl transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+        style={{ color: 'var(--color-flit-brand)' }}
       >
         {icon}
       </button>

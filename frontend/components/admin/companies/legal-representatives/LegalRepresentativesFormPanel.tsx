@@ -496,7 +496,7 @@ export function LegalRepresentativesFormPanel({
       open={open}
       onClose={onClose}
       title={title}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
       size="xl"
       busy={submitting}
     >
@@ -835,7 +835,7 @@ export function LegalRepresentativesFormPanel({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleProcedureType(pt.id)}
-                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                      className="h-3.5 w-3.5 accent-flit-brand"
                     />
                     <span className="font-medium">{pt.name}</span>
                   </label>

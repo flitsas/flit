@@ -77,7 +77,7 @@ export function FunnelChart({ states, previousStates, onSelectStage }: FunnelCha
                 <button
                   type="button"
                   onClick={() => onSelectStage(s.stage)}
-                  className="w-full text-left rounded-lg px-1.5 py-1 hover:bg-[#557EFF14] focus:bg-[#557EFF14] outline-none"
+                  className="w-full text-left rounded-lg px-1.5 py-1 hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)] focus:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)] outline-none"
                   aria-label={`Ver trámites en estado ${statusLabel(s.stage)}`}
                 >
                   {content}

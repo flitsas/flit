@@ -108,10 +108,10 @@ export function ConfiguracionEmpresaTab({
                 aria-label={`Ir al bloque ${b.label}`}
                 aria-current={current ? "location" : undefined}
                 onClick={(e) => goToBlock(e, b.id, setActiveBlock)}
-                className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] ${
+                className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand ${
                   current
-                    ? "border-[#557EFF] bg-[rgba(85,126,255,0.12)] text-[#557EFF]"
-                    : "border-[#DFE5ED] bg-white text-[#162744] hover:bg-[rgba(85,126,255,0.06)] dark:border-white/10 dark:bg-transparent dark:text-white"
+                    ? "border-flit-brand bg-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)] text-flit-brand"
+                    : "border-[#DFE5ED] bg-white text-flit-primary hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:border-white/10 dark:bg-transparent dark:text-white"
                 }`}
               >
                 {b.label}
@@ -229,7 +229,7 @@ export function ConfiguracionEmpresaTab({
         </div>
 
         <fieldset>
-          <legend className="text-sm font-semibold text-[#162744] dark:text-white">Destinatarios de avisos de estado</legend>
+          <legend className="text-sm font-semibold text-flit-primary dark:text-white">Destinatarios de avisos de estado</legend>
           <ClampedText
             className="mb-3 mt-0.5"
             text="El aviso llega a los perfiles encendidos. Comprador y vendedor/propietario cubren persona natural, jurídica (empresa y representante legal) y locatario si existe. Si hay más de un correo, el comprador va como destinatario principal y el resto en copia oculta."

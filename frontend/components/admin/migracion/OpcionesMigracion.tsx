@@ -93,7 +93,7 @@ export function OpcionesMigracion({
             >
               <input
                 type="checkbox"
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-flit-brand"
                 checked={marcadas.includes(instancia)}
                 disabled={ultima && marcadas.includes(instancia)}
                 onChange={() => alternar(instancia)}
@@ -169,7 +169,7 @@ function ModoEjecucion({
           deshabilitado={deshabilitado}
           titulo="Simulación"
           detalle="No escribe nada"
-          clasesActivo="border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
+          clasesActivo="border-flit-brand bg-flit-brand/10 text-flit-brand"
         />
         {/*
           «Migración» y no «Migrar de verdad»: el título largo partía en dos renglones y descuadraba

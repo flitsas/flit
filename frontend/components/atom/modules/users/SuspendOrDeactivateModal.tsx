@@ -74,7 +74,7 @@ export function SuspendOrDeactivateModal({
     }
   }
 
-  const accentColor = indefinite ? "#557EFF" : "#FF4E00";
+  const accentColor = indefinite ? "var(--color-flit-brand)" : "#FF4E00";
   const title = indefinite ? "Desactivar usuario" : "Suspender usuario";
   const submitLabel = busy ? "Aplicando…" : indefinite ? "Desactivar usuario" : "Suspender usuario";
 
@@ -117,7 +117,7 @@ export function SuspendOrDeactivateModal({
             type="checkbox"
             checked={indefinite}
             onChange={(e) => setIndefinite(e.target.checked)}
-            className="h-3.5 w-3.5 accent-[#557EFF]"
+            className="h-3.5 w-3.5 accent-flit-brand"
           />
           Sin fecha de fin (desactivar indefinidamente)
         </label>

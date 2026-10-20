@@ -204,7 +204,7 @@ export function ActionsMenu({
                 close();
                 item.onSelect();
               }}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-flit-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
                 item.attention
                   ? "bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200"
                   : item.tone === "danger"
@@ -248,10 +248,10 @@ export function ActionsMenu({
         // borde neutro y texto de marca. El kebab de tres puntos que había antes se lee como "más
         // opciones" —algo accesorio— cuando aquí vive la acción principal de la fila: aprobar,
         // rechazar, asignar placa. El chevron dice lo que de verdad pasa: se despliega una lista.
-        className={`relative flex w-full items-center justify-between gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10 ${
+        className={`relative flex w-full items-center justify-between gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition hover:bg-flit-brand/10 ${
           attention
             ? "border-amber-400/70 bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
-            : "border-[#DFE5ED] bg-white text-[#557EFF] dark:border-white/15 dark:bg-[#0B0F14]"
+            : "border-[#DFE5ED] bg-white text-flit-brand dark:border-white/15 dark:bg-[#0B0F14]"
         }`}
       >
         {triggerLabel}

@@ -101,7 +101,7 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
               checked={row.isEnabled}
               disabled={togglingId === row.id}
               aria-checked={row.isEnabled}
-              className="h-4 w-8 cursor-pointer accent-[#557EFF]"
+              className="h-4 w-8 cursor-pointer accent-flit-brand"
               onChange={(e) => void handleToggle(row, e.target.checked)}
             />
           </label>
@@ -135,7 +135,7 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
     <button
       type="button"
       className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-      style={{ background: "#557EFF" }}
+      style={{ background: "var(--color-flit-brand)" }}
       onClick={() => {
         setEditingRule(null);
         setFormOpen(true);
@@ -151,7 +151,7 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
         <button
           type="button"
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
           onClick={() => {
             setEditingRule(null);
             setFormOpen(true);

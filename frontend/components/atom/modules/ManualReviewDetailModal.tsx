@@ -28,7 +28,7 @@ export function Dato({ label, children }: { label: string; children: React.React
   return (
     <div className="min-w-0">
       <dt className="text-xs font-medium text-[#59677D] dark:text-white/70">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold text-[#162744] dark:text-white">{children}</dd>
+      <dd className="mt-0.5 text-sm font-semibold text-flit-primary dark:text-white">{children}</dd>
     </div>
   );
 }
@@ -193,8 +193,8 @@ function DetalleCuerpo({
             )}
 
             <section aria-labelledby={`${id}-consent`} className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
-              <h3 id={`${id}-consent`} className="flex items-center gap-2 text-sm font-bold text-[#162744] dark:text-white">
-                <ShieldCheck className="h-4 w-4 text-[#557EFF]" aria-hidden /> Consentimiento de tratamiento de datos
+              <h3 id={`${id}-consent`} className="flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
+                <ShieldCheck className="h-4 w-4 text-flit-brand" aria-hidden /> Consentimiento de tratamiento de datos
               </h3>
               <p className="mt-1 text-sm">
                 {detail.consentAt
@@ -204,7 +204,7 @@ function DetalleCuerpo({
             </section>
 
             <section aria-labelledby={`${id}-capturas`}>
-              <h3 id={`${id}-capturas`} className="mb-2 text-sm font-bold text-[#162744] dark:text-white">
+              <h3 id={`${id}-capturas`} className="mb-2 text-sm font-bold text-flit-primary dark:text-white">
                 Capturas del cliente
               </h3>
               {sinCapturas ? (

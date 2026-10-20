@@ -97,7 +97,7 @@ export function ImprontaHistorialSection() {
         }}
         aria-label="Filtros del historial de improntas"
       >
-        <label className="text-xs font-semibold" style={{ color: "#162744" }} htmlFor="impronta-historial-placa">
+        <label className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-historial-placa">
           Placa
           <input
             id="impronta-historial-placa"
@@ -108,7 +108,7 @@ export function ImprontaHistorialSection() {
             placeholder="ABC123"
           />
         </label>
-        <label className="text-xs font-semibold" style={{ color: "#162744" }} htmlFor="impronta-historial-desde">
+        <label className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-historial-desde">
           Desde
           <input
             id="impronta-historial-desde"
@@ -118,7 +118,7 @@ export function ImprontaHistorialSection() {
             onChange={(e) => setDateFromInput(e.target.value)}
           />
         </label>
-        <label className="text-xs font-semibold" style={{ color: "#162744" }} htmlFor="impronta-historial-hasta">
+        <label className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-historial-hasta">
           Hasta
           <input
             id="impronta-historial-hasta"
@@ -132,7 +132,7 @@ export function ImprontaHistorialSection() {
           <button
             type="submit"
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
           >
             Aplicar filtros
           </button>

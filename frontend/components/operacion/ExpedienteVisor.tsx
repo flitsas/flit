@@ -73,7 +73,7 @@ interface Props {
   consolidadoWizard?: ConsolidadoVigencia | null;
 }
 
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 const BORDER = '#DFE5ED';
 // `#557EFF` como TEXTO/relleno sólido con blanco no llega a 4.5:1 (≈3.61:1, ver auditoría de
 // diseño). `--badge-info-fg` es el mismo azul oscurecido para texto que ya usan los badges de
@@ -507,7 +507,7 @@ function ExpedienteConsolidadoBody({
       <ReconstruccionPanel fase={apertura.fase} sirvioAnterior={apertura.sirvioAnterior} />
 
       {estadoFinal ? (
-        <p className="mb-3 text-xs font-medium" style={{ color: '#557EFF' }} role="status">
+        <p className="mb-3 text-xs font-medium" style={{ color: 'var(--color-flit-brand)' }} role="status">
           El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
           definitiva. Puedes consultarla y descargarla.
         </p>
@@ -569,7 +569,7 @@ function ReconstruccionPanel({
         aria-live="polite"
         data-testid="consolidado-reconstruccion"
         className="mb-3 flex items-start gap-2 rounded-xl border p-3 text-xs"
-        style={{ borderColor: BLUE, background: 'rgba(85,126,255,0.06)', color: INK_BLUE }}
+        style={{ borderColor: BLUE, background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: INK_BLUE }}
       >
         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
         <div className="min-w-0 flex-1">
@@ -686,7 +686,7 @@ function DocRow({
       <div className="flex items-start justify-between gap-2">
         {/* Nombre en navy, puede ocupar dos líneas (propuesta): sin icono de fichero, la captura no
             lo tiene. */}
-        <p className="min-w-0 flex-1 text-xs font-semibold leading-tight" style={{ color: '#162744' }} title={label}>
+        <p className="min-w-0 flex-1 text-xs font-semibold leading-tight" style={{ color: 'var(--color-flit-primary)' }} title={label}>
           <DocumentCatalogCaption nombre={item.label} codigo={item.docTipo ?? item.key} />
         </p>
         <StatusBadge

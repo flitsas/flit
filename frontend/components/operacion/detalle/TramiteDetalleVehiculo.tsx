@@ -236,10 +236,10 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
               return (
                 <li key={check.key} className="rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 text-xs font-medium text-[#162744] dark:text-white">
+                    <span className="min-w-0 text-xs font-medium text-flit-primary dark:text-white">
                       {check.label}
                       {inline && (
-                        <span className="font-normal text-[#162744]/70 dark:text-white/70"> — {message}</span>
+                        <span className="font-normal text-flit-primary/70 dark:text-white/70"> — {message}</span>
                       )}
                     </span>
                     <StatusBadge
@@ -250,7 +250,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
                     />
                   </div>
                   {!inline && message && (
-                    <p className="mt-1 text-xs text-[#162744]/70 dark:text-white/70">{message}</p>
+                    <p className="mt-1 text-xs text-flit-primary/70 dark:text-white/70">{message}</p>
                   )}
                   {check.details && check.details.length > 0 && <FineDetailList details={check.details} />}
                 </li>

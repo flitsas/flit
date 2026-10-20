@@ -259,7 +259,7 @@ export function CreateCompanyDialog({
               : "Organismos de la Concesión"
             : "Crear compañía"
       }
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
         {pendingCreated && (
@@ -268,7 +268,7 @@ export function CreateCompanyDialog({
             style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
             role="alert"
           >
-            <p style={{ color: "#162744" }}>
+            <p style={{ color: "var(--color-flit-primary)" }}>
               La compañía <strong>{pendingCreated.razonSocial}</strong> se creó correctamente, pero quedó
               pendiente:
             </p>
@@ -285,7 +285,7 @@ export function CreateCompanyDialog({
                   onClose();
                 }}
                 className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
               >
                 Continuar
               </button>
@@ -302,7 +302,7 @@ export function CreateCompanyDialog({
                 value={razonSocial}
                 onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
                 maxLength={255}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -315,7 +315,7 @@ export function CreateCompanyDialog({
                 onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
                 maxLength={20}
                 placeholder="900123456-1"
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -331,7 +331,7 @@ export function CreateCompanyDialog({
                     setTransitGrantIds([]);
                   }
                 }}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.tenantType ? "#FF4E00" : "#DFE5ED" }}
               >
                 {tenantTypes.map((t) => (
@@ -345,7 +345,7 @@ export function CreateCompanyDialog({
             {isMarcaBlanca && (
               <div
                 className="space-y-2 rounded-xl border px-3 py-2.5"
-                style={{ borderColor: errors.domainHost ? "#FF4E00" : "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+                style={{ borderColor: errors.domainHost ? "#FF4E00" : "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
               >
                 <label htmlFor="cc-domain" className="block text-xs font-semibold">
                   Dominio de la red (opcional)
@@ -357,7 +357,7 @@ export function CreateCompanyDialog({
                   onChange={(e) => setDomainHost(e.target.value)}
                   maxLength={253}
                   placeholder="app.tudominio.com"
-                  className="w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                  className="w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   style={{ borderColor: errors.domainHost ? "#FF4E00" : "#DFE5ED" }}
                   aria-describedby="cc-domain-hint"
                   aria-invalid={Boolean(errors.domainHost)}
@@ -426,7 +426,7 @@ export function CreateCompanyDialog({
               onClick={step === "form" ? goNext : () => void submit()}
               disabled={submitting}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
               {submitting ? "Creando…" : step === "form" && needsOtStep ? "Siguiente" : "Crear compañía"}

@@ -30,10 +30,10 @@ type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 type HistoryPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
 const INPUT_CLS =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
 const TEXTAREA_CLS =
-  "w-full min-h-[8rem] rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full min-h-[8rem] rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
 function hydrateValidationMap(
   data: ImprintSignatureDto[],
@@ -460,7 +460,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         <button
           type="submit"
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
           data-testid="ot-imprint-validation-search-btn"
         >
           Consultar
@@ -547,7 +547,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
             <button
               type="button"
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ background: "#557EFF" }}
+              style={{ background: "var(--color-flit-brand)" }}
               onClick={() => void handleAcceptValidation()}
               disabled={submitting}
               data-testid="ot-imprint-validation-accept-btn"

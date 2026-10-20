@@ -111,7 +111,7 @@ export function NotificacionBuzonPruebasSection({
             type="button"
             onClick={onRetry}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             Reintentar
@@ -136,13 +136,13 @@ export function NotificacionBuzonPruebasSection({
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={saving}
                 placeholder="pruebas@flit.com.co"
-                className="flex-1 rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                className="flex-1 rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
               />
               <div className="flex gap-2">
                 <button
                   type="submit"
                   disabled={saving || email.trim().length === 0}
-                  className="rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   {saving ? "Guardando…" : "Guardar"}
                 </button>

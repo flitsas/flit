@@ -137,7 +137,7 @@ export function NotificacionEnviarPruebaModal({
                 onClose();
                 onRequestConfigureMailbox();
               }}
-              className="mt-1 w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-3 py-1.5 text-[11px] font-semibold text-white"
+              className="mt-1 w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white"
             >
               Configurar buzón
             </button>
@@ -160,7 +160,7 @@ export function NotificacionEnviarPruebaModal({
               type="button"
               disabled={!typeId}
               onClick={() => runSend(typeId)}
-              className="w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="notificaciones-enviar-prueba-confirmar"
             >
               Enviar

@@ -83,7 +83,7 @@ function DownloadButton({
       onClick={onClick}
       aria-label={`Descargar ${filename}`}
       title="Descargar"
-      className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
+      className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
       style={{ color: AZUL }}
     >
       <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -106,11 +106,11 @@ function RequisitoRow({
       className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
     >
       <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-[#162744] dark:text-white">
+        <span className="block truncate text-xs font-medium text-flit-primary dark:text-white">
           <DocumentCatalogCaption nombre={item.label} codigo={item.docTipo ?? item.key} />
         </span>
         {!item.obligatorio ? (
-          <span className="block text-xs text-[#162744]/70 dark:text-white/70">Opcional</span>
+          <span className="block text-xs text-flit-primary/70 dark:text-white/70">Opcional</span>
         ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
@@ -139,10 +139,10 @@ function AdjuntoRow({
       className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
     >
       <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-[#162744] dark:text-white">
+        <span className="block truncate text-xs font-medium text-flit-primary dark:text-white">
           {documentLabel(attachment.tipo)} · {attachment.filename}
         </span>
-        <span className="block text-xs text-[#162744]/70 dark:text-white/70">
+        <span className="block text-xs text-flit-primary/70 dark:text-white/70">
           {formatBytes(attachment.sizeBytes)} · {formatFechaHora(attachment.uploadedAt)}
         </span>
       </span>
@@ -169,10 +169,10 @@ function ConsultaRow({
   return (
     <li className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10">
       <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-[#162744] dark:text-white">
+        <span className="block truncate text-xs font-medium text-flit-primary dark:text-white">
           {documentLabel(attachment.tipo)} · {attachment.filename}
         </span>
-        <span className="block text-xs text-[#162744]/70 dark:text-white/70">
+        <span className="block text-xs text-flit-primary/70 dark:text-white/70">
           {formatBytes(attachment.sizeBytes)} · {formatFechaHora(attachment.uploadedAt)}
           {origen ? ` · ${origen}` : ''}
         </span>
@@ -183,7 +183,7 @@ function ConsultaRow({
           onClick={() => onVer(attachment)}
           aria-label={`Ver ${attachment.filename}`}
           title="Ver"
-          className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
+          className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
           style={{ color: AZUL }}
         >
           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
@@ -412,7 +412,7 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
         titulo="Documentos del trámite"
         className="h-full"
         accion={
-          <span className="shrink-0 text-xs font-semibold text-[#162744] dark:text-white">
+          <span className="shrink-0 text-xs font-semibold text-flit-primary dark:text-white">
             {satisfiedCount} de {checklist.length} requisitos cumplidos
           </span>
         }

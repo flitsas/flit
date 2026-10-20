@@ -102,7 +102,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             type="checkbox"
             checked={ocultarSinNovedad}
             onChange={(e) => cambiar(() => setOcultarSinNovedad(e.target.checked))}
-            className="h-4 w-4 accent-[#557EFF]"
+            className="h-4 w-4 accent-flit-brand"
           />
           Ocultar consultas sin novedad
         </label>
@@ -120,7 +120,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             type="button"
             aria-pressed={!soloErrores}
             onClick={() => cambiar(() => setSoloErrores(false))}
-            className={`px-3 py-1.5 text-[12px] ${!soloErrores ? "bg-[#557EFF] font-semibold text-white" : "opacity-70"}`}
+            className={`px-3 py-1.5 text-[12px] ${!soloErrores ? "bg-flit-brand font-semibold text-white" : "opacity-70"}`}
           >
             Todo
           </button>
@@ -129,7 +129,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             aria-pressed={soloErrores}
             onClick={() => cambiar(() => setSoloErrores(true))}
             className={`border-l border-[#D9DEE8] px-3 py-1.5 text-[12px] dark:border-white/15 ${
-              soloErrores ? "bg-[#557EFF] font-semibold text-white" : "opacity-70"
+              soloErrores ? "bg-flit-brand font-semibold text-white" : "opacity-70"
             }`}
           >
             Solo errores
@@ -254,7 +254,7 @@ function FilaEvento({
     <>
       <tr
         className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
-          abierto ? "shadow-[0_8px_24px_rgba(85,126,255,0.18)]" : ""
+          abierto ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -341,7 +341,7 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
             <button
               type="button"
               onClick={() => setCrudo((v) => !v)}
-              className="ml-auto text-[11px] font-medium text-[#557EFF] hover:underline"
+              className="ml-auto text-[11px] font-medium text-flit-brand hover:underline"
             >
               {crudo ? "ocultar original" : "ver original"}
             </button>
@@ -353,7 +353,7 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
         <button
           type="button"
           onClick={() => setCrudo((v) => !v)}
-          className="ml-auto text-[11px] font-medium text-[#557EFF] hover:underline"
+          className="ml-auto text-[11px] font-medium text-flit-brand hover:underline"
         >
           {crudo ? "ocultar original" : "ver original"}
         </button>
@@ -420,7 +420,7 @@ function Columna({
       <div className="flex items-center gap-2 border-b border-[#DFE5ED] bg-[#F4F6FA] px-3 py-2 dark:border-white/10 dark:bg-white/5">
         <span
           className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-            tono === "info" ? "bg-[#557EFF]/15 text-[#557EFF]" : "bg-[#16A34A]/15 text-[#15803D]"
+            tono === "info" ? "bg-flit-brand/15 text-flit-brand" : "bg-[#16A34A]/15 text-[#15803D]"
           }`}
         >
           {etiqueta}

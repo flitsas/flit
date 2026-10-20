@@ -61,7 +61,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
                 <span
                   key={r.procedureEntityCode}
                   className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
-                  style={{ background: '#557EFF' }}
+                  style={{ background: 'var(--color-flit-brand)' }}
                 >
                   {r.procedureEntityCode}
                 </span>
@@ -84,7 +84,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
                 <li key={i} className="flex items-center gap-2 text-xs">
                   <span
                     className="h-5 w-5 rounded-full grid place-items-center text-[9px] font-bold text-white shrink-0"
-                    style={{ background: '#557EFF' }}
+                    style={{ background: 'var(--color-flit-brand)' }}
                     aria-hidden="true"
                   >
                     {i + 1}
@@ -99,9 +99,9 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
         <div
           className="flex items-center gap-3 rounded-xl p-3 border text-xs"
           style={{
-            borderColor: validated ? '#00DBD5' : '#DFE5ED',
-            background: validated ? 'rgba(0,219,213,0.06)' : 'transparent',
-            color: validated ? '#00DBD5' : undefined,
+            borderColor: validated ? 'var(--color-flit-tech)' : '#DFE5ED',
+            background: validated ? 'color-mix(in srgb, var(--color-flit-tech) 6%, transparent)' : 'transparent',
+            color: validated ? 'var(--color-flit-tech)' : undefined,
           }}
         >
           <svg

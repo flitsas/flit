@@ -197,7 +197,7 @@ export function TransitOfficeQuipuxDialog({
             onClick={save}
             disabled={busy || formatoInvalido || sinDivipoConBanderas}
             className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {busy ? "Guardando…" : "Guardar"}
           </button>

@@ -121,7 +121,7 @@ function PersonalizedDocumentsPanelContent({ tenantId }: { tenantId: string }) {
     <section aria-label="Documentos personalizados de la compañía" className="space-y-4">
       <header>
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <FileText className="h-4 w-4" style={{ color: "#557EFF" }} aria-hidden />
+          <FileText className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
           Documentos personalizados
         </h2>
         <p className="mt-0.5 max-w-2xl text-xs opacity-60">
@@ -330,7 +330,7 @@ function PersonalizedDocumentSection({
         {active ? (
           <div
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-2.5"
-            style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}
+            style={{ borderColor: "var(--color-flit-tech)", background: "color-mix(in srgb, var(--color-flit-tech) 6%, transparent)" }}
           >
             <div className="flex min-w-0 items-center gap-2">
               <FileText className="h-4 w-4 shrink-0" style={{ color: "#0a8f8b" }} aria-hidden />
@@ -347,7 +347,7 @@ function PersonalizedDocumentSection({
               type="button"
               onClick={() => void openPreview(active)}
               className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "#557EFF" }}
+              style={{ background: "var(--color-flit-brand)" }}
             >
               <Eye className="h-3.5 w-3.5" aria-hidden />
               Vista previa
@@ -375,10 +375,10 @@ function PersonalizedDocumentSection({
           <label
             htmlFor={inputId}
             className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs"
-            style={file ? { borderColor: "#557EFF" } : { borderColor: "#DFE5ED" }}
+            style={file ? { borderColor: "var(--color-flit-brand)" } : { borderColor: "#DFE5ED" }}
           >
             {file ? (
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "#557EFF" }} aria-hidden />
+              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
             ) : (
               <UploadCloud className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
             )}
@@ -402,7 +402,7 @@ function PersonalizedDocumentSection({
             disabled={!file || submitting}
             onClick={() => file && setDialog({ kind: "activate", file })}
             className="flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             Cargar y activar
@@ -452,7 +452,7 @@ function PersonalizedDocumentSection({
                         {v.isActive ? (
                           <span
                             className="rounded-md px-1.5 py-0.5 text-xs font-semibold"
-                            style={{ color: "#0a8f8b", background: "rgba(0,219,213,0.12)" }}
+                            style={{ color: "#0a8f8b", background: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" }}
                           >
                             Vigente
                           </span>
@@ -574,7 +574,7 @@ function DocumentActionDialog({
       busy={busy}
       size="sm"
       icon={isActivation ? AlertTriangle : Undo2}
-      iconBg={isActivation ? "#F9AC00" : "#557EFF"}
+      iconBg={isActivation ? "#F9AC00" : "var(--color-flit-brand)"}
       title={title}
     >
       {isActivation ? (
@@ -591,7 +591,7 @@ function DocumentActionDialog({
               type="checkbox"
               checked={acknowledged}
               onChange={(e) => setAcknowledged(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#557EFF]"
+              className="mt-0.5 h-4 w-4 accent-flit-brand"
             />
             <span>Entiendo la advertencia y confirmo que quiero activar este documento.</span>
           </label>
@@ -616,7 +616,7 @@ function DocumentActionDialog({
           onClick={onConfirm}
           disabled={!canConfirm}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           {busy ? "Procesando…" : confirmLabel}
         </button>

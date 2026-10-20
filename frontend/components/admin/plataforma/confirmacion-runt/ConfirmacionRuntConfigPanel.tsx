@@ -69,7 +69,7 @@ function iguales(a: Borrador, b: Borrador): boolean {
 }
 
 const inputCls =
-  "w-full rounded-xl border bg-white px-3 py-2 text-sm text-[#162744] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border bg-white px-3 py-2 text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:bg-[#0B0F14] dark:text-white";
 
 /**
  * Plataforma → Confirmación RUNT → Configuración (HU #12279). Interruptor + cinco campos que se
@@ -178,7 +178,7 @@ export function ConfirmacionRuntConfigPanel() {
     const error = errores[campo];
     return (
       <div className="flex flex-col gap-1">
-        <label htmlFor={id} className="text-xs font-semibold text-[#162744] dark:text-white">
+        <label htmlFor={id} className="text-xs font-semibold text-flit-primary dark:text-white">
           {label}
         </label>
         <div className={`flex items-center rounded-xl border bg-white dark:bg-[#0B0F14] ${error ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}>
@@ -193,7 +193,7 @@ export function ConfirmacionRuntConfigPanel() {
             disabled={guardando}
             aria-invalid={error ? true : undefined}
             aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
-            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-[#162744] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:text-white"
+            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-white"
           />
           <span className="shrink-0 pr-3 text-[11px] text-[#59677D] dark:text-white/55">{unidad}</span>
         </div>
@@ -215,7 +215,7 @@ export function ConfirmacionRuntConfigPanel() {
         {/* Interruptor */}
         <div className="flex items-start justify-between gap-4 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
           <div className="flex flex-col gap-0.5">
-            <label htmlFor="confirmacion-runt-enabled" className="text-sm font-semibold text-[#162744] dark:text-white">
+            <label htmlFor="confirmacion-runt-enabled" className="text-sm font-semibold text-flit-primary dark:text-white">
               Consulta programada activa
             </label>
             <p id="confirmacion-runt-enabled-hint" className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
@@ -234,7 +234,7 @@ export function ConfirmacionRuntConfigPanel() {
 
         <div className="grid gap-x-5 gap-y-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
           <div className="flex flex-col gap-1">
-            <label htmlFor="confirmacion-runt-runAtLocal" className="text-xs font-semibold text-[#162744] dark:text-white">
+            <label htmlFor="confirmacion-runt-runAtLocal" className="text-xs font-semibold text-flit-primary dark:text-white">
               Hora de ejecución diaria
             </label>
             <input
@@ -258,7 +258,7 @@ export function ConfirmacionRuntConfigPanel() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="confirmacion-runt-providerKey" className="text-xs font-semibold text-[#162744] dark:text-white">
+            <label htmlFor="confirmacion-runt-providerKey" className="text-xs font-semibold text-flit-primary dark:text-white">
               Proveedor activo
             </label>
             <select
@@ -295,7 +295,7 @@ export function ConfirmacionRuntConfigPanel() {
           <button
             type="submit"
             disabled={guardando || !sucio}
-            className="rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-50"
+            className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
           >
             {guardando ? "Guardando…" : "Guardar configuración"}
           </button>
@@ -303,7 +303,7 @@ export function ConfirmacionRuntConfigPanel() {
             type="button"
             onClick={descartar}
             disabled={guardando || !sucio}
-            className="rounded-full border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-[#162744] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/10 dark:text-white"
+            className="rounded-full border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/10 dark:text-white"
           >
             Descartar cambios
           </button>
@@ -317,13 +317,13 @@ export function ConfirmacionRuntConfigPanel() {
 
       <section className="flex flex-col gap-2" aria-labelledby="confirmacion-runt-ultima-corrida">
         <div className="flex items-center justify-between">
-          <h2 id="confirmacion-runt-ultima-corrida" className="text-sm font-semibold text-[#162744] dark:text-white">
+          <h2 id="confirmacion-runt-ultima-corrida" className="text-sm font-semibold text-flit-primary dark:text-white">
             Última corrida
           </h2>
           <button
             type="button"
             onClick={() => void getLatestRuntConfirmationRun().then(setUltima).catch(() => undefined)}
-            className="flex items-center gap-1 text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="flex items-center gap-1 text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             Actualizar

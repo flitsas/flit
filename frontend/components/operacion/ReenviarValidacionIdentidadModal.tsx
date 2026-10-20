@@ -27,12 +27,12 @@ import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
  * Por eso el contrato pide solo lo mínimo (`instanceId`/`referenceNumber`), no `InstanceSummary`.
  */
 
-const FIELD_LABEL_CLS = 'block text-xs font-semibold text-[#162744] dark:text-white';
+const FIELD_LABEL_CLS = 'block text-xs font-semibold text-flit-primary dark:text-white';
 // `ring-inset`: ver el mismo comentario en `AdminTramiteAcciones.tsx` — un ring hacia afuera se
 // recorta contra el `overflow-y-auto` del Modal (que fuerza `overflow-x: auto` también) cuando el
 // campo es `w-full` sin margen horizontal.
 const FIELD_CLS =
-  'w-full rounded-xl border px-3 py-2 text-sm text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent dark:text-white';
+  'w-full rounded-xl border px-3 py-2 text-sm text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent dark:text-white';
 const FIELD_BORDER = { borderColor: '#DFE5ED' };
 
 export const PARTE_LABEL: Record<string, string> = { vendedor: 'Vendedor', comprador: 'Comprador' };
@@ -87,7 +87,7 @@ function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl border py-2.5 text-sm font-medium text-[#162744] transition hover:bg-[#162744]/[0.04] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:text-white ${className}`}
+      className={`rounded-xl border py-2.5 text-sm font-medium text-flit-primary transition hover:bg-[#162744]/[0.04] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:text-white ${className}`}
       style={FIELD_BORDER}
     >
       {children}
@@ -208,7 +208,7 @@ export function ReenviarValidacionIdentidadModal({
       open={open}
       onClose={onClose}
       title="Reenviar validación de identidad"
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
       icon={Send}
       description={`Trámite ${referenceNumber}`}
       size="sm"
@@ -255,7 +255,7 @@ export function ReenviarValidacionIdentidadModal({
               </>
             ) : null}
             {selectedValidation ? (
-              <p className="text-xs text-[#162744]/60 dark:text-white/60">
+              <p className="text-xs text-flit-primary/60 dark:text-white/60">
                 Correo registrado: <span className="font-medium">{selectedValidation.email}</span>
               </p>
             ) : null}

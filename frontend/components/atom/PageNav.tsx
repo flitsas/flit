@@ -57,8 +57,8 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
-            style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
+            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-40"
+            style={{ color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }}
             aria-label="Página anterior"
           >
             ‹
@@ -75,11 +75,11 @@ export function PageNav({
                 onClick={() => onPageChange(p)}
                 aria-label={`Página ${p}`}
                 aria-current={p === page ? 'page' : undefined}
-                className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                 style={
                   p === page
-                    ? { background: '#557EFF', color: '#fff' }
-                    : { color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
+                    ? { background: 'var(--color-flit-brand)', color: '#fff' }
+                    : { color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }
                 }
               >
                 {p}
@@ -90,8 +90,8 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
-            style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
+            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-40"
+            style={{ color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }}
             aria-label="Página siguiente"
           >
             ›

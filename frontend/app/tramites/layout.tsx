@@ -54,8 +54,8 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
       <div
         className={
           immersive
-            ? 'app-bg flex min-h-full flex-col gap-3 px-6 pt-4 pb-24 text-[#162744] dark:text-white'
-            : 'app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10 text-[#162744] dark:text-white'
+            ? 'app-bg flex min-h-full flex-col gap-3 px-6 pt-4 pb-24 text-flit-primary dark:text-white'
+            : 'app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10 text-flit-primary dark:text-white'
         }
       >
         {children}

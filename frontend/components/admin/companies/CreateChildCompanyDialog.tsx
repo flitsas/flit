@@ -115,7 +115,7 @@ export function CreateChildCompanyDialog({
       busy={submitting}
       icon={Building2}
       title="Agregar cliente a la red"
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
         <Field label="Razón Social" htmlFor="nc-razon" error={errors.razonSocial}>
@@ -125,7 +125,7 @@ export function CreateChildCompanyDialog({
             value={razonSocial}
             onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
             maxLength={255}
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
           />
         </Field>
@@ -137,7 +137,7 @@ export function CreateChildCompanyDialog({
             value={nit}
             onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
             maxLength={20}
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
           />
         </Field>
@@ -148,7 +148,7 @@ export function CreateChildCompanyDialog({
             value={tenantType}
             disabled
             aria-describedby="nc-type-hint"
-            className="w-full cursor-not-allowed rounded-xl border px-3 py-2 text-xs opacity-60 outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            className="w-full cursor-not-allowed rounded-xl border px-3 py-2 text-xs opacity-60 outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             style={{ borderColor: "#DFE5ED" }}
           >
             <option value={tenantType}>{TENANT_TYPE_LABELS[tenantType]}</option>
@@ -180,7 +180,7 @@ export function CreateChildCompanyDialog({
             onClick={() => void submit()}
             disabled={submitting}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {submitting ? "Creando…" : "Crear cliente"}

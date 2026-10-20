@@ -59,7 +59,7 @@ export function AvisoFalloRegeneracion({
         <span className="font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
           {COPY_FALLO_REGENERACION.titulo[fallo.documento]}.
         </span>{' '}
-        <span className="text-[#162744] dark:text-white/80">
+        <span className="text-flit-primary dark:text-white/80">
           {textoAvisoFalloRegeneracion(fallo, generadoEn)}
         </span>
       </p>
@@ -69,7 +69,7 @@ export function AvisoFalloRegeneracion({
           onClick={onReintentar}
           disabled={reintentando}
           aria-label={COPY_FALLO_REGENERACION.ariaReintentar[fallo.documento]}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-white px-3 py-1 text-xs font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-50 dark:bg-transparent"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-white px-3 py-1 text-xs font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50 dark:bg-transparent"
           style={{ borderColor: 'var(--badge-warning-border)', color: 'var(--badge-warning-fg)' }}
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />

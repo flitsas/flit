@@ -165,7 +165,7 @@ function HomeContent() {
           style={{
             borderColor: "#FF4E00",
             background: "rgba(255, 78, 0, 0.08)",
-            color: "#162744",
+            color: "var(--color-flit-primary)",
           }}
         >
           No se pudieron cargar los permisos de módulos. Acceso restringido hasta

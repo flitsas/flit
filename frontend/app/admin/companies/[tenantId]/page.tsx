@@ -363,7 +363,7 @@ function DomainAdminSection({ tenantId }: { tenantId: string }) {
   return (
     <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
       <div className="mb-3">
-        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
           Dominio de la red
         </h2>
         <p className="text-[11px] opacity-60">

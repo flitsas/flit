@@ -27,7 +27,7 @@ export interface PaginationProps {
 const SELECT_CLS =
   "inline-flex h-9 shrink-0 items-center rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs " +
   "font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 " +
-  "focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
+  "focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
 
 /**
  * Paginación ESTÁNDAR de las tablas FLIT (Bug #13055): la misma del listado de trámites.

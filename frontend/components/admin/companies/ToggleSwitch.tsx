@@ -49,7 +49,7 @@ export function ToggleSwitch({
     <div className="flex h-full min-h-[88px] flex-col gap-1.5 rounded-[14px] border border-[#DFE5ED] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0B0F14]">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <label htmlFor={id} className="cursor-pointer py-1 text-sm font-semibold text-[#162744] dark:text-white">
+          <label htmlFor={id} className="cursor-pointer py-1 text-sm font-semibold text-flit-primary dark:text-white">
             {label}
           </label>
           {badge}
@@ -77,8 +77,8 @@ export function ToggleSwitch({
             />
             <span
               aria-hidden="true"
-              className="h-6 w-11 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-[#557EFF] peer-focus-visible:ring-offset-2"
-              style={{ background: checked ? "#00DBD5" : "#DFE5ED" }}
+              className="h-6 w-11 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand peer-focus-visible:ring-offset-2"
+              style={{ background: checked ? "var(--color-flit-tech)" : "#DFE5ED" }}
             />
             <span
               aria-hidden="true"

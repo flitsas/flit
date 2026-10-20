@@ -190,7 +190,7 @@ export function SignatureVaultEditPanel({
           <button
             type="button"
             className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
             onClick={() => void guardar()}
             disabled={saving || !valido}
           >

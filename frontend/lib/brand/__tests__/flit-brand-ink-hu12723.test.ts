@@ -14,10 +14,10 @@ const BRAND_FILL = "#557eff";
 
 function extractBrandInkTokens(css: string): { light: string; dark: string } {
   const lightMatch = css.match(
-    /\/\* Tinta legible del azul de marca[\s\S]*?--flit-brand-ink:\s*(#[0-9A-Fa-f]{6})\s*;/,
+    /\/\* Tinta legible del azul de marca[\s\S]*?--flit-brand-ink:\s*(?:var\(--brand-ink,\s*)?(#[0-9A-Fa-f]{6})\)?\s*;/,
   );
   const darkBlock = css.split(/\.dark\s*\{/)[1] ?? "";
-  const darkMatch = darkBlock.match(/--flit-brand-ink:\s*(#[0-9A-Fa-f]{6})\s*;/);
+  const darkMatch = darkBlock.match(/--flit-brand-ink:\s*(?:var\(--brand-ink,\s*)?(#[0-9A-Fa-f]{6})\)?\s*;/);
   if (!lightMatch?.[1] || !darkMatch?.[1]) {
     throw new Error("No se encontraron ambos tokens --flit-brand-ink (claro/oscuro) en globals.css");
   }
@@ -50,7 +50,10 @@ describe("HU #12723 — --flit-brand-ink (AC1)", () => {
 describe("Dock — ítem seleccionado con el degradado del isotipo central", () => {
   it("píldora, ancestro y subítem activos usan --nav-activo e icono blanco", () => {
     expect(GLOBALS).toMatch(
-      /--nav-activo:\s*linear-gradient\(90deg,\s*#557eff\s+0%,\s*#00dbd5\s+100%\)/i,
+      /--nav-activo:\s*linear-gradient\(90deg,\s*var\(--color-flit-brand\)\s+0%,\s*var\(--color-flit-tech\)\s+100%\)/i,
+    );
+    // En FLIT el degradado sigue siendo #557EFF → #00DBD5: son los valores de respaldo de los tokens.
+    expect(GLOBALS).toMatch(/--color-flit-tech:\s*var\(--brand-accent,\s*#00dbd5\)/i
     );
     expect(GLOBALS).toMatch(
       /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/,

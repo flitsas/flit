@@ -71,7 +71,7 @@ export function UiStateBoundary({
             type="button"
             onClick={onRetry}
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
           >
             <RefreshCw className="h-3.5 w-3.5" /> Reintentar
           </button>

@@ -130,7 +130,7 @@ function CeldaPlaca({
         <button
           type="button"
           onClick={() => onAssignPlate(procedure)}
-          className="rounded-lg border px-2 py-1 text-[11px] font-semibold transition hover:bg-[#557EFF]/10"
+          className="rounded-lg border px-2 py-1 text-[11px] font-semibold transition hover:bg-flit-brand/10"
           style={{ borderColor: OT_BLUE, color: OT_BLUE }}
         >
           Asignar placa

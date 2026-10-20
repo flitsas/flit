@@ -205,7 +205,7 @@ export function Login({
           ) : networkRedirect ? (
             <div
               className="rounded-xl border p-5 flex gap-3 animate-fade-in"
-              style={{ borderColor: "var(--color-flit-brand)", background: "rgba(85,126,255,0.06)" }}
+              style={{ borderColor: "var(--color-flit-brand)", background: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }}
               role="alert"
               aria-live="assertive"
             >
