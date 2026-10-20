@@ -214,10 +214,10 @@ public sealed partial class ConsolidadoLoteEmpaquetadoIntegrationTests
             (await AuditoriasAsync(lote, ConsolidadoExportAuditEvent.ParteDescargada)).Should().Be(0, "un 404 no se audita");
 
             var nombresPdf = Enumerable.Range(0, 4).Select(k => ConsolidadoLoteNombres.Pdf(radicados[k], placas[k])).ToArray();
-            var esperado = new Dictionary<int, (string[] Pdfs, string Csv)>
+            var esperado = new Dictionary<int, string[]>
             {
-                [1] = ([nombresPdf[0], nombresPdf[1], nombresPdf[2]], "radicado;placa;motivo\r\n"),
-                [2] = ([nombresPdf[3]], "radicado;placa;motivo\r\nR13384-5;BBB505;Acceso revocado\r\n"),
+                [1] = [nombresPdf[0], nombresPdf[1], nombresPdf[2]],
+                [2] = [nombresPdf[3]],
             };
             var prohibidos = new[]
             {
@@ -247,18 +247,11 @@ public sealed partial class ConsolidadoLoteEmpaquetadoIntegrationTests
                 claro.Position = 0;
                 using var zip = new ZipArchive(claro, ZipArchiveMode.Read);
                 var entradas = zip.Entries.Select(e => e.FullName).ToList();
-                entradas.Should().Equal([.. esperado[n].Pdfs, ConsolidadoLoteNombres.OmitidosCsv],
-                    "PDF en el orden de la parte y el omitidos.csv, todo en la raíz");
+                entradas.Should().Equal(esperado[n],
+                    "solo los PDF, en el orden de la parte y en la raíz; sin omitidos.csv");
                 entradas.Should().OnlyContain(e => !e.Contains('/') && !e.Contains('\\'), "sin carpetas por compañía");
                 foreach (var p in prohibidos)
                     entradas.Should().NotContain(e => e.Contains(p, StringComparison.OrdinalIgnoreCase), "ni nombre ni id de compañía");
-
-                using var csv = new MemoryStream();
-                await using (var s = zip.GetEntry(ConsolidadoLoteNombres.OmitidosCsv)!.Open())
-                    await s.CopyToAsync(csv, Ct);
-                var bytes = csv.ToArray();
-                bytes.Take(3).Should().Equal(Encoding.UTF8.Preamble.ToArray(), "UTF-8 con BOM");
-                Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3).Should().Be(esperado[n].Csv);
             }
 
             (await AuditoriasAsync(lote, ConsolidadoExportAuditEvent.ParteDescargada)).Should().Be(2);

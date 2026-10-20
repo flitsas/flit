@@ -98,7 +98,7 @@ public sealed class EmpaquetarParteHandlerTests : IDisposable
     // ── AC1 ─────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task AC1_TresPdfYUnOmitido_ZipConLosTresPdfYOmitidosCsvDeUnaFila_YCierraCifrada()
+    public async Task AC1_TresPdfYUnOmitido_ZipSoloConLosTresPdf_YCierraCifrada()
     {
         var reclamada = Reclamada(parte: 2, intentos: 1);
         _empaquetado.Contenido = new ContenidoParteLote(
@@ -110,11 +110,9 @@ public sealed class EmpaquetarParteHandlerTests : IDisposable
         desenlace.Should().Be(EmpaquetarParteDesenlace.Cerrada);
         using var zip = ZipSubido();
         zip.Entries.Select(e => e.FullName).Should().Equal(
-            "R-1_ABC123.pdf", "R-2_SIN-PLACA.pdf", "R-3_XYZ9.pdf", ConsolidadoLoteNombres.OmitidosCsv);
+            ["R-1_ABC123.pdf", "R-2_SIN-PLACA.pdf", "R-3_XYZ9.pdf"], "el omitido no deja ningún archivo en el ZIP");
         Leer(zip.Entries[0]).Should().Be("pdf-1");
-        zip.Entries.Take(3).Should().AllSatisfy(e => e.CompressedLength.Should().Be(e.Length, "PDF sin compresión"));
-        var csv = Leer(zip.Entries[3]).TrimStart('﻿');
-        csv.Should().Be("radicado;placa;motivo\r\nR-4;QWE1;Acceso revocado\r\n", "una fila por omitido");
+        zip.Entries.Should().AllSatisfy(e => e.CompressedLength.Should().Be(e.Length, "PDF sin compresión"));
 
         var cierre = _empaquetado.Cierres.Single();
         cierre.LoteId.Should().Be(reclamada.Lote.Id);
@@ -129,16 +127,15 @@ public sealed class EmpaquetarParteHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task AC1_LoteSinItems_ParteSoloConCsvConEncabezado()
+    public async Task AC1_LoteSinItems_ParteSinEntradas()
     {
-        _empaquetado.Contenido = new ContenidoParteLote([], []);
+        _empaquetado.Contenido = new ContenidoParteLote([], [Omitido(0, "R-4", "QWE1", "Acceso revocado")]);
 
         var desenlace = await Handler().HandleAsync(Reclamada(), 3, Ct);
 
         desenlace.Should().Be(EmpaquetarParteDesenlace.Cerrada);
         using var zip = ZipSubido();
-        zip.Entries.Select(e => e.FullName).Should().Equal(ConsolidadoLoteNombres.OmitidosCsv);
-        Leer(zip.Entries[0]).TrimStart('﻿').Should().Be("radicado;placa;motivo\r\n");
+        zip.Entries.Should().BeEmpty("sin PDF el ZIP queda vacío; la UI no ofrece descargar esa parte");
     }
 
     [Fact]
@@ -164,19 +161,19 @@ public sealed class EmpaquetarParteHandlerTests : IDisposable
         await Handler().HandleAsync(Reclamada(), 3, Ct);
 
         using var zip = ZipSubido();
-        zip.Entries.Select(e => e.FullName).Should().Equal("R-1_ABC1.pdf", "R-1_ABC1_2.pdf", ConsolidadoLoteNombres.OmitidosCsv);
+        zip.Entries.Select(e => e.FullName).Should().Equal("R-1_ABC1.pdf", "R-1_ABC1_2.pdf");
         Leer(zip.Entries[1]).Should().Be("b", "el segundo en orden de la parte lleva el sufijo");
     }
 
     [Fact]
-    public void Duplicados_NombresDeEntrada_SinChoqueConUnSufijoYaUsado_NiConElCsv_NiPorMayusculas()
+    public void Duplicados_NombresDeEntrada_SinChoqueConUnSufijoYaUsado_NiPorMayusculas()
     {
         var nombres = new NombresDeEntradaZip();
 
         nombres.Reservar("X_2.pdf").Should().Be("X_2.pdf");
         nombres.Reservar("X.pdf").Should().Be("X.pdf");
         nombres.Reservar("x.PDF").Should().Be("x_3.PDF", "X_2 ya existe y la comparación ignora mayúsculas (Windows)");
-        nombres.Reservar(ConsolidadoLoteNombres.OmitidosCsv).Should().Be("omitidos_2.csv", "omitidos.csv está reservado");
+        nombres.Reservar("omitidos.csv").Should().Be("omitidos.csv", "ya no hay ningún nombre reservado de antemano");
     }
 
     // ── AC4 ─────────────────────────────────────────────────────────────────────────────────
@@ -213,11 +210,7 @@ public sealed class EmpaquetarParteHandlerTests : IDisposable
         desenlace.Should().Be(EmpaquetarParteDesenlace.Cerrada);
         _empaquetado.Cierres.Single().ItemsNoDisponibles.Should().Equal(perdido.ItemId);
         using var zip = ZipSubido();
-        zip.Entries.Select(e => e.FullName).Should().Equal("R-1_ABC1.pdf", ConsolidadoLoteNombres.OmitidosCsv);
-        Leer(zip.GetEntry(ConsolidadoLoteNombres.OmitidosCsv)!).TrimStart('﻿').Should().Be(
-            "radicado;placa;motivo\r\nR-9;ZZZ9;Acceso revocado\r\n"
-            + $"R-2;DEF2;{ConsolidadoErrorTextos.ParaLote(ConsolidadoLoteOmisiones.AdjuntoNoDisponible)}\r\n",
-            "el ítem no disponible entra al CSV por su posición");
+        zip.Entries.Select(e => e.FullName).Should().Equal(["R-1_ABC1.pdf"], "el ZIP no lleva omitidos.csv");
     }
 
     [Fact]
