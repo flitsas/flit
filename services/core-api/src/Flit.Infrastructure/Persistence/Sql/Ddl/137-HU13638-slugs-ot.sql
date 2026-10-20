@@ -23,13 +23,13 @@ SELECT v.code, v.name, v.description,
        (SELECT COALESCE(MAX(sort_order), 0) FROM security.modules)::int + v.ord,
        true, 'tramites'
   FROM (VALUES
-        (1, 'ot-tramites',    'OT: Trámites',         'Bandeja del organismo de tránsito (HU #13638)'),
-        (2, 'ot-improntas',   'OT: Validar impronta', 'Validación de improntas del organismo (HU #13638)'),
-        (3, 'ot-reportes',    'OT: Reportes',         'Reportes, consultas y alertas del organismo (HU #13638)'),
-        (4, 'ot-mandatos',    'OT: Mandatos',         'Mandatos y mandatarios del organismo (HU #13638)'),
-        (5, 'ot-documentos',  'OT: Documentos',       'Prelación documental del organismo (HU #13638)'),
-        (6, 'ot-usuarios',    'OT: Usuarios',         'Usuarios e invitaciones del organismo (HU #13638)'),
-        (7, 'ot-integracion', 'OT: Integración',      'Webhooks y bitácora API del organismo (HU #13638)')
+        (1, 'ot-tramites',    'OT: Trámites',         'Bandeja del organismo de tránsito'),
+        (2, 'ot-improntas',   'OT: Validar impronta', 'Validación de improntas del organismo'),
+        (3, 'ot-reportes',    'OT: Reportes',         'Reportes, consultas y alertas del organismo'),
+        (4, 'ot-mandatos',    'OT: Mandatos',         'Mandatos y mandatarios del organismo'),
+        (5, 'ot-documentos',  'OT: Documentos',       'Prelación documental del organismo'),
+        (6, 'ot-usuarios',    'OT: Usuarios',         'Usuarios e invitaciones del organismo'),
+        (7, 'ot-integracion', 'OT: Integración',      'Webhooks y bitácora API del organismo')
        ) AS v(ord, code, name, description)
  WHERE NOT EXISTS (SELECT 1 FROM security.modules m WHERE m.code = v.code);
 
