@@ -17,6 +17,7 @@ vi.mock("@/lib/api/permission-overrides", async () => {
     ...actual,
     listGrantablePermissions: vi.fn(),
     listUserOverrides: vi.fn(),
+    listUserRolePermissionIds: vi.fn(),
     setUserOverride: vi.fn(),
     removeUserOverride: vi.fn(),
     setModuleOverrides: vi.fn(),
@@ -31,6 +32,7 @@ import { superadminClient } from "@/lib/api/superadmin-client";
 import {
   listGrantablePermissions,
   listUserOverrides,
+  listUserRolePermissionIds,
   removeUserOverride,
   setModuleOverrides,
   setUserOverride,
@@ -66,6 +68,8 @@ beforeEach(() => {
   vi.mocked(listGrantablePermissions).mockResolvedValue(grantable);
   vi.mocked(listUserOverrides).mockResolvedValue([]);
   vi.mocked(fetchSessionPolicy).mockResolvedValue({ mode: "legacy", maxMinutes: 720 });
+  // «Heredado del rol» sale de la API (todos los roles del usuario): p1 lo da el rol.
+  vi.mocked(listUserRolePermissionIds).mockResolvedValue({ permissionIds: ["p1"] });
   vi.mocked(superadminClient.getRole).mockResolvedValue({
     id: "r1", targetEntityType: "COMPANY", code: "x", name: "Rol", description: null, isSystem: false, isActive: true,
     permissions: [{ id: "p1", slug: "tramites.view", name: "Ver trámites" }],

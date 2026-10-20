@@ -46,6 +46,7 @@ vi.mock("@/lib/api/permission-overrides", async () => {
     ...actual,
     listGrantablePermissions: vi.fn().mockResolvedValue([]),
     listUserOverrides: vi.fn().mockResolvedValue([]),
+    listUserRolePermissionIds: vi.fn().mockResolvedValue({ permissionIds: [] }),
     listPermissionAudit: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 }),
   };
 });

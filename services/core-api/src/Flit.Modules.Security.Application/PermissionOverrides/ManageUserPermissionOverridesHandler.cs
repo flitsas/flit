@@ -233,6 +233,18 @@ public sealed class ManageUserPermissionOverridesHandler(
         return result;
     }
 
+    /// <summary>
+    /// Ids de los permisos que el usuario hereda de TODOS sus roles activos en el tenant, para marcar «Heredado del rol» en la
+    /// sección «Permisos por módulo». Mismas reglas de lectura que <see cref="ListAsync"/>. Hallazgo de la prueba funcional: la UI
+    /// leía cada rol con GET /security/roles/{id}, que exige AdminCompany, y al Admin OT la sección no le cargaba.
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> ListRolePermissionIdsAsync(Guid tenantId, OverrideActor actor, Guid targetUserId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        await RunRulesAsync(tenantId, actor, targetUserId, PermissionOverrideActions.Read, null, null, null, ct).ConfigureAwait(false);
+        return await repository.GetRolePermissionIdsAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
+    }
+
     /// <summary>Overrides activos del usuario en el tenant, con el slug del permiso. Aplica las reglas de existencia y ámbito (AC7: leer también se valida).</summary>
     public async Task<IReadOnlyList<UserOverrideItem>> ListAsync(Guid tenantId, OverrideActor actor, Guid targetUserId, CancellationToken ct)
     {

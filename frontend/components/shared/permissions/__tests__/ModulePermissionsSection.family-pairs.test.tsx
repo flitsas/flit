@@ -13,6 +13,7 @@ vi.mock("@/lib/api/permission-overrides", async () => {
     ...actual,
     listGrantablePermissions: vi.fn(),
     listUserOverrides: vi.fn(),
+    listUserRolePermissionIds: vi.fn(),
     setUserOverride: vi.fn(),
     removeUserOverride: vi.fn(),
     setModuleOverrides: vi.fn(),
@@ -20,8 +21,13 @@ vi.mock("@/lib/api/permission-overrides", async () => {
 });
 
 import { getAccessibleModules } from "@/lib/api/security";
-import { superadminClient } from "@/lib/api/superadmin-client";
-import { listGrantablePermissions, listUserOverrides, removeUserOverride, setUserOverride } from "@/lib/api/permission-overrides";
+import {
+  listGrantablePermissions,
+  listUserOverrides,
+  listUserRolePermissionIds,
+  removeUserOverride,
+  setUserOverride,
+} from "@/lib/api/permission-overrides";
 import { ModulePermissionsSection } from "../ModulePermissionsSection";
 
 const FAMILIES = [
@@ -47,11 +53,9 @@ const override = (permissionId: string, slug: string, effect: "allow" | "deny") 
 const MAT = "Trámites: Matrículas";
 const sw = (label: "Ver" | "Crear", name = MAT) => screen.findByRole("switch", { name: `${label}, ${name}` });
 
+// Lo que da el rol: la API lo calcula con todos los roles del usuario (GET .../role-permissions).
 function setRole(ids: string[]) {
-  vi.mocked(superadminClient.getRole).mockResolvedValue({
-    id: "r1", targetEntityType: "COMPANY", code: "x", name: "Rol", description: null, isSystem: false, isActive: true,
-    permissions: ids.map((id) => ({ id, slug: id, name: id })),
-  });
+  vi.mocked(listUserRolePermissionIds).mockResolvedValue({ permissionIds: ids });
 }
 
 beforeEach(() => {

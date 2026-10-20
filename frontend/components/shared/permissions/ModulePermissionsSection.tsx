@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { CircleDot, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
-import { getAccessibleModules, getTenantRole, type AccessibleModule } from "@/lib/api/security";
-import { superadminClient } from "@/lib/api/superadmin-client";
+import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
 import {
   INVITATION_PENDING_MESSAGE,
   PII_REVEAL_SLUG,
   TARGET_SUPERADMIN_MESSAGE,
   listGrantablePermissions,
   listUserOverrides,
+  listUserRolePermissionIds,
   overrideErrorCode,
   overrideErrorMessage,
   removeUserOverride,
@@ -53,8 +53,8 @@ export interface ModulePermissionsSectionProps {
   tenantId?: string;
   mode: "superadmin" | "admin";
   /**
-   * Ids de los roles del usuario (el listado de usuarios trae una fila por rol). Con ellos se calcula
-   * «Heredado del rol». Sin roles, todo lo heredado se muestra deshabilitado.
+   * Ya no se usa: «Heredado del rol» sale de GET .../permission-overrides/role-permissions (todos los roles del usuario,
+   * con las reglas de ámbito del backend). Se conserva para no romper a los llamadores.
    */
   roleIds?: string[];
   /** Solo lectura: se ven los estados pero no hay controles de cambio. */
@@ -97,15 +97,10 @@ type LoadState =
       locked: Set<string>;
     };
 
-async function fetchRolePermissionIds(mode: "superadmin" | "admin", roleIds: string[]): Promise<Set<string>> {
-  const ids = new Set<string>();
-  const details = await Promise.all(
-    roleIds.map((id) =>
-      mode === "superadmin" ? superadminClient.getRole(id) : getTenantRole(id),
-    ),
-  );
-  for (const d of details) for (const p of d.permissions) ids.add(p.id);
-  return ids;
+// Lo heredado lo calcula la API con todos los roles activos del usuario. Leer cada rol con GET /security/roles/{id} exigía
+// AdminCompany: al Admin OT la sección no le cargaba (hallazgo de la prueba funcional).
+async function fetchRolePermissionIds(userId: string, tenantId: string | undefined): Promise<Set<string>> {
+  return new Set((await listUserRolePermissionIds(userId, tenantId)).permissionIds);
 }
 
 function isFamilyPairAction(actions: ActionView[], a: ActionView): boolean {
@@ -197,7 +192,6 @@ export function ModulePermissionsSection({
   userName,
   tenantId,
   mode,
-  roleIds,
   readOnly = false,
   readOnlyReason,
   targetIsSuperAdmin = false,
@@ -214,7 +208,6 @@ export function ModulePermissionsSection({
 
   // El tenant solo viaja para el Super Admin; los demás administradores usan el de su JWT.
   const tenantParam = mode === "superadmin" ? tenantId : undefined;
-  const roleKey = (roleIds ?? []).join(",");
   const skip = targetIsSuperAdmin || invitationPending;
 
   const fetchAll = useCallback(async (): Promise<LoadState> => {
@@ -223,7 +216,7 @@ export function ModulePermissionsSection({
         getAccessibleModules(),
         listGrantablePermissions(tenantParam),
         listUserOverrides(userId, tenantParam),
-        fetchRolePermissionIds(mode, roleKey ? roleKey.split(",") : []),
+        fetchRolePermissionIds(userId, tenantParam),
       ]);
       return {
         status: "ready",
@@ -239,7 +232,7 @@ export function ModulePermissionsSection({
       if (code === "INVITATION_PENDING") return { status: "pending" };
       return { status: "error", message: overrideErrorMessage(e, "No se pudieron cargar los permisos del usuario.") };
     }
-  }, [tenantParam, userId, mode, roleKey]);
+  }, [tenantParam, userId]);
 
   useEffect(() => {
     if (skip) return;

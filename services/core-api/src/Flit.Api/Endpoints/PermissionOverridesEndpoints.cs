@@ -87,6 +87,13 @@ internal static class PermissionOverridesEndpoints
             .RequireAuthorization(policy).WithName("GrantModulePermissionOverrides");
 
         // HU #13646 (FD2-5): consulta previa al cambio de rol — cuántos permisos individuales perdería el usuario.
+        // Lo que el usuario hereda de sus roles (todos), para «Heredado del rol»: sirve a los tres administradores.
+        group.MapGet("/users/{userId:guid}/permission-overrides/role-permissions", (
+            Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
+            Run(caller, tenantId, async (tenant, actor) =>
+                Results.Ok(new { permissionIds = await handler.ListRolePermissionIdsAsync(tenant, actor, userId, ct) })))
+            .RequireAuthorization(policy).WithName("ListUserRolePermissionIds");
+
         group.MapGet("/users/{userId:guid}/permission-overrides/count", (
             Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, [FromQuery] string? productCode, [FromQuery] Guid? roleId,
             ManageUserPermissionOverridesHandler handler, [FromServices] IUserRoleAssignmentRepository roles, CancellationToken ct) =>

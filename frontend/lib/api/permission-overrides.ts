@@ -101,6 +101,11 @@ export function listUserOverrides(userId: string, tenantId?: string): Promise<Us
   return apiFetch<UserPermissionOverride[]>(base(userId), { query: { tenantId } });
 }
 
+/** Ids de los permisos que el usuario hereda de todos sus roles activos (para «Heredado del rol»). */
+export function listUserRolePermissionIds(userId: string, tenantId?: string): Promise<{ permissionIds: string[] }> {
+  return apiFetch<{ permissionIds: string[] }>(`${base(userId)}/role-permissions`, { query: { tenantId } });
+}
+
 export function setUserOverride(
   userId: string,
   permissionId: string,

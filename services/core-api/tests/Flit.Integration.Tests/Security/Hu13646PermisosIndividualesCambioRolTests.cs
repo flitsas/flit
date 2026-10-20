@@ -147,6 +147,28 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
         (await ActiveAssignmentsAsync(cn, _roleNew)).Should().Be(1);
     }
 
+    // Hallazgo de la prueba funcional (Admin OT): «Heredado del rol» sale de la API con todos los roles del usuario, con las mismas
+    // reglas de lectura que el listado de permisos individuales.
+    [PostgresFact]
+    public async Task Los_permisos_heredados_del_rol_salen_de_todos_sus_roles_y_respetan_el_ambito()
+    {
+        await using var cn = await SeedAsync();
+        await ExecAsync(cn, """
+            INSERT INTO security.role_permissions (role_id, permission_id)
+              SELECT r.id, p.id FROM security.roles r, security.permissions p WHERE r.code = 'it46_old' AND p.slug IN ('it46.a', 'it46.b');
+            """);
+        var actor = new OverrideActor(Actor, false);
+
+        var ids = await ManageHandler().ListRolePermissionIdsAsync(Tenant, actor, Target, Ct);
+
+        ids.Should().BeEquivalentTo([
+            await IdAsync(cn, "SELECT id FROM security.permissions WHERE slug = 'it46.a'"),
+            await IdAsync(cn, "SELECT id FROM security.permissions WHERE slug = 'it46.b'"),
+        ]);
+        await FluentActions.Awaiting(() => ManageHandler().ListRolePermissionIdsAsync(Tenant, actor, Guid.NewGuid(), Ct))
+            .Should().ThrowAsync<PermissionOverrideRejectedException>();
+    }
+
     [PostgresFact]
     public async Task AC2_el_conteo_previo_devuelve_N_por_producto_y_respeta_existencia_y_ambito()
     {
