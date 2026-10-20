@@ -182,4 +182,49 @@ public sealed class SubmitGateTraspasoTests
             Environment.SetEnvironmentVariable("TRAMITES_DEMO_RELAX_DOCS", previo);
         }
     }
+
+    // ── HU #13710 / ADR-0051 — TRASPASO_UNILATERAL solo exige OWNER ─────────────────────────────
+
+    private static ProcedureInstance CompleteUnilateral()
+    {
+        var instance = CompleteTraspaso();
+        instance.ProcedureType = ProcedureTypeFixture.TraspasoUnilateral;
+        instance.ProcedureTypeId = ProcedureTypeFixture.TraspasoUnilateral.Id;
+        // El unilateral no autogenera compraventa: quitarla del checklist no aplica aquí; el gate
+        // documental usa TipologiaCatalog por TypeCode. Dejamos docs como están y solo cambiamos
+        // la identidad: sin biométrica del comprador.
+        instance.BiometricValidations.Remove(
+            instance.BiometricValidations.First(b => b.PartyRole == "comprador"));
+        return instance;
+    }
+
+    [Fact]
+    public void Gate_Unilateral_SoloPropietarioAprobado_NoExigeComprador()
+    {
+        // AC1 HU #13710: biometricActors=["OWNER"] → con vendedor aprobado y sin comprador, OK.
+        var instance = CompleteUnilateral();
+        var errors = SubmitGate.Evaluate(instance, Aprobadas(instance));
+        errors.Should().NotContain(SubmitGate.IdentidadNoAprobada);
+    }
+
+    [Fact]
+    public void Gate_Unilateral_SinPropietario_BloqueaPorIdentidad()
+    {
+        // AC2 HU #13710: sin vendedor aprobado → identidad_no_aprobada.
+        var instance = CompleteUnilateral();
+        instance.BiometricValidations.Clear();
+
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.IdentidadNoAprobada);
+    }
+
+    [Fact]
+    public void Gate_TraspasoStandard_SinComprador_SigueBloqueando()
+    {
+        // AC3 HU #13710: no-regresión — el estándar sigue exigiendo ambas partes.
+        var instance = CompleteTraspaso();
+        instance.BiometricValidations.Remove(
+            instance.BiometricValidations.First(b => b.PartyRole == "comprador"));
+
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.IdentidadNoAprobada);
+    }
 }
