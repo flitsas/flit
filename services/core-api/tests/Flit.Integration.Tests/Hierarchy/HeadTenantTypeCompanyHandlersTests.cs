@@ -190,6 +190,29 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
         (await check.Tenants.AsNoTracking().SingleAsync(t => t.Id == id)).TenantType.Should().Be("MARCA_BLANCA");
     }
 
+    [PostgresFact]
+    public async Task El_tipo_de_una_hija_de_red_no_se_puede_cambiar_por_edicion()
+    {
+        var headId = await CreateAsync("Cabeza", "900100200-9", "MARCA_BLANCA");
+        await SeedActorAsync(headId);
+        var child = TenantSeed.ChildOf(headId);
+        await using (var ctx = NewContext())
+        {
+            ctx.Tenants.Add(child);
+            await ctx.SaveChangesAsync();
+        }
+
+        var otherType = child.TenantType == "RENTING" ? "CONCESIONARIO" : "RENTING";
+        // El NIT sembrado es hexadecimal (único por id); se envía uno válido para que solo falle el tipo.
+        var result = await UpdateAsync(child.Id, "Hija de red", "900100201-0", otherType);
+
+        result.Outcome.Should().Be(UpdateCompanyOutcome.Invalid);
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("tenantType");
+
+        await using var check = NewContext();
+        (await check.Tenants.AsNoTracking().SingleAsync(t => t.Id == child.Id)).TenantType.Should().Be(child.TenantType);
+    }
+
     // ── (e) paridad: cliente RENTING sin jerarquía ──────────────────────────────
 
     [PostgresFact]
