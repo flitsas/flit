@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Blocks, Building2, FileClock, FileText, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { AlertCircle, Blocks, Building2, FileClock, FileText, Network, Palette, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
@@ -26,6 +26,8 @@ type TabId =
   | "representantes"
   | "mandatarios"
   | "usuarios"
+  | "hijos"
+  | "marca"
   | "historial";
 
 /**
@@ -69,6 +71,10 @@ const TABS: TabDef[] = [
   { id: "mandatarios", label: "Mandatarios", icon: UserCheck, isConfig: false },
   // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
   { id: "usuarios", label: "Usuarios", icon: UserCog, isConfig: false },
+  // Cabeza Marca Blanca: la tabla de clientes y la identidad de marca (con su dominio) eran cajas
+  // apiladas bajo las pestañas, visibles en cualquiera; ahora son pestañas propias (solo con slot).
+  { id: "hijos", label: "Clientes hijos", icon: Network, isConfig: false },
+  { id: "marca", label: "Identidad de marca", icon: Palette, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -92,6 +98,10 @@ export interface CompanyConfigTabsProps {
   mandatariosSlot?: ReactNode;
   /** Tab Usuarios scoped al tenant de la ficha (SuperAdmin). */
   usuariosSlot?: ReactNode;
+  /** Cabeza Marca Blanca: tabla de clientes hijos. Sin slot, la pestaña no aparece. */
+  childrenSlot?: ReactNode;
+  /** Cabeza Marca Blanca: identidad de marca y dominio de la red, en una misma vista. Sin slot, no aparece. */
+  brandingSlot?: ReactNode;
   /**
    * HU #11062 — compañía que se está configurando. Se rotula por ENCIMA de la barra de pestañas para
    * que sobreviva al cambio de pestaña, y se repite en la confirmación de guardado. `null` mientras
@@ -125,6 +135,8 @@ export function CompanyConfigTabs({
   legalRepresentativesSlot,
   mandatariosSlot,
   usuariosSlot,
+  childrenSlot,
+  brandingSlot,
   company,
   restrictedToRepresentatives = false,
   canConfigureImprontas = false,
@@ -138,9 +150,11 @@ export function CompanyConfigTabs({
       TABS.filter((t) =>
         restrictedToRepresentatives
           ? REPRESENTATIVE_TABS.includes(t.id) || (t.id === "usuarios" && Boolean(usuariosSlot))
-          : t.id !== "usuarios" || Boolean(usuariosSlot),
+          : (t.id !== "usuarios" || Boolean(usuariosSlot)) &&
+            (t.id !== "hijos" || Boolean(childrenSlot)) &&
+            (t.id !== "marca" || Boolean(brandingSlot)),
       ),
-    [restrictedToRepresentatives, usuariosSlot],
+    [restrictedToRepresentatives, usuariosSlot, childrenSlot, brandingSlot],
   );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
@@ -366,6 +380,8 @@ export function CompanyConfigTabs({
         {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "mandatarios" && mandatariosSlot}
         {activeTabId === "usuarios" && usuariosSlot}
+        {activeTabId === "hijos" && childrenSlot}
+        {activeTabId === "marca" && brandingSlot}
         {activeTabId === "historial" && auditSlot}
       </div>
 

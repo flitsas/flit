@@ -81,6 +81,9 @@ function CompanyDetail() {
       : tenantId;
 
   const showChildrenSection = isSuperAdmin && company && isHeadTenantType(company.tenantType);
+  // Cabeza Marca Blanca (SuperAdmin): clientes hijos e identidad de marca + dominio van en pestañas
+  // propias de la ficha, no apilados debajo. La Concesión conserva su tabla de hijos como antes.
+  const marcaBlancaHeadTabs = Boolean(isSuperAdmin && company?.tenantType === "MARCA_BLANCA");
 
   const showNetworkLink =
     (isGroupParent && callerTenantId === tenantId && isAdminCompany && !isSuperAdmin) ||
@@ -302,6 +305,17 @@ function CompanyDetail() {
                     networkHeadId={managingChild ? networkHeadId : null}
                   />
                 }
+                childrenSlot={
+                  marcaBlancaHeadTabs && company ? <CompanyChildrenSection company={company} /> : undefined
+                }
+                brandingSlot={
+                  marcaBlancaHeadTabs ? (
+                    <div className="flex flex-col gap-6">
+                      <BrandingConfigurator source="admin" tenantId={tenantId} />
+                      <DomainAdminSection tenantId={tenantId} />
+                    </div>
+                  ) : undefined
+                }
                 usuariosSlot={
                   isSuperAdmin || managingChild ? (
                     <CompanyUsersPanel
@@ -316,24 +330,8 @@ function CompanyDetail() {
         </UiStateBoundary>
       </div>
 
-      {showChildrenSection && company && <CompanyChildrenSection company={company} />}
+      {showChildrenSection && company && !marcaBlancaHeadTabs && <CompanyChildrenSection company={company} />}
 
-      {/* HU #12414 AC1/AC6 — configurador de marca embebido en la ficha SuperAdmin, solo para
-          cabezas de clase MARCA_BLANCA. La cabeza autogestiona la misma identidad desde su
-          propio panel de red (app/admin/companies/[tenantId]/children/page.tsx). */}
-      {isSuperAdmin && company?.tenantType === "MARCA_BLANCA" && (
-        <div className="mt-6">
-          <BrandingConfigurator source="admin" tenantId={tenantId} />
-        </div>
-      )}
-
-      {/* HU #12427 AC3 — estado del dominio + registro/cambio/retiro, solo cabezas MARCA_BLANCA.
-          En otro tipo de compañía, o en una sin red, esta sección no se renderiza (AC4). */}
-      {isSuperAdmin && company?.tenantType === "MARCA_BLANCA" && (
-        <div className="mt-6">
-          <DomainAdminSection tenantId={tenantId} />
-        </div>
-      )}
     </main>
   );
 }
