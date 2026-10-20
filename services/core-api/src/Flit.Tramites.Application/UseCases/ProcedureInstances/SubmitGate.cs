@@ -14,9 +14,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// única fuente de verdad. Lo evalúa <c>TramiteLifecycleService</c> antes de aplicar la transición.
 ///
 /// <para><b>Matrícula</b> exige: documentos completos y biométrica del comprador aprobada+vigente.</para>
-/// <para><b>Traspaso</b> (HU #10459) aplica el gate COMPLETO y bloquea la preparación si falta algo:
-/// documentos obligatorios completos, ambas biométricas aprobadas+vigentes, firma de compraventa de
-/// comprador y vendedor, FUR generado y organismo de tránsito seleccionado.</para>
+/// <para><b>Traspaso</b> (HU #10459, ADR-0051 / HU #13710) aplica el gate COMPLETO y bloquea la
+/// preparación si falta algo: documentos obligatorios completos, biométricas de las partes que el
+/// tipo declara en <c>biometricActors</c> (vía <see cref="PartesDeclaradas.Identidad"/> — p. ej.
+/// solo propietario en <c>TRASPASO_UNILATERAL</c>), FUR generado y organismo de tránsito
+/// seleccionado.</para>
 ///
 /// Devuelve la lista de códigos de error (vacía = puede prepararse). Códigos (contrato
 /// <see cref="TramiteEstadoErrores"/>): <c>documentos_incompletos</c>, <c>identidad_no_aprobada</c>,
@@ -75,9 +77,9 @@ public static class SubmitGate
     }
 
     /// <summary>
-    /// Gate de traspaso (HU #10459): documentos completos + ambas biométricas + firma de compraventa
-    /// de comprador y vendedor + FUR generado + organismo seleccionado. Devuelve todos los códigos
-    /// incumplidos; lista vacía = puede prepararse/radicar.
+    /// Gate de traspaso (HU #10459, HU #13710): documentos completos + biométricas de las partes
+    /// declaradas + FUR + organismo. Devuelve todos los códigos incumplidos; lista vacía = puede
+    /// prepararse/radicar.
     /// </summary>
     private static List<string> EvaluateTraspaso(
         ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
@@ -86,9 +88,9 @@ public static class SubmitGate
 
         if (!docsCompletos)
             errors.Add(DocumentosIncompletos);
-        // Identidad PER-PERSONA (documento de cada parte), referenciada de su validación vigente (HU #10350).
-        if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador)
-            || !identidadAprobadaPartes.Contains(BiometricRules.ParteVendedor))
+        // ADR-0051 / HU #13710 — mismas partes que FirmaGate/FUR: biometricActors del tipo, no la
+        // familia. TRASPASO_UNILATERAL solo exige vendedor; el estándar sigue exigiendo ambas.
+        if (!IdentidadDeclaradaCompleta(instance, identidadAprobadaPartes))
             errors.Add(IdentidadNoAprobada);
         // B12 (HU #10661, ADR-0028): la firma de compraventa NO bloquea el traspaso — negocio aún no
         // define la lógica ideal de firmas (ZapSign/baúl). Se omite el check FirmaCompraventaAmbas para
@@ -101,6 +103,26 @@ public static class SubmitGate
             errors.Add(ImprontaRequerida);
 
         return errors;
+    }
+
+    /// <summary>
+    /// ¿Todas las partes que el tipo manda a validar identidad están en el set aprobado?
+    /// Solo comprador/vendedor: son las que <c>IdentityApprovalResolver</c> acredita.
+    /// </summary>
+    private static bool IdentidadDeclaradaCompleta(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    {
+        var declaradas = PartesDeclaradas.Identidad(instance);
+        var requeridas = new[] { BiometricRules.ParteComprador, BiometricRules.ParteVendedor }
+            .Where(p => PartesDeclaradas.Incluye(declaradas, p))
+            .ToList();
+
+        // Perfil sin partes acreditables → no inventar una exigencia vacía: el comprador firma
+        // siempre (misma salvaguarda que FirmaGate.PartesQueFirman).
+        if (requeridas.Count == 0)
+            requeridas.Add(BiometricRules.ParteComprador);
+
+        return requeridas.All(identidadAprobadaPartes.Contains);
     }
 
     // internal: reutilizado por FinalizeDraftGate (HU #10349) — misma fuente de verdad de completitud
