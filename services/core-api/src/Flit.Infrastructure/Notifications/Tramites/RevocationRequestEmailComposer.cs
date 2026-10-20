@@ -53,7 +53,7 @@ public static class RevocationRequestEmailComposer
     private const string RentingLink = "#2F5BEA";
     private const string PqrsUrl = "https://usadosrentingcolombia.com";
     private const string RentingSupportEmail = "servicio@rentingcolombia.com";
-    private const string PrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";
+    private const string PrivacyPolicyUrl = "https://flitsas.com.co/privacy-policy/";
     private const string SupportEmail = "soporte@flitsas.com";
 
     /// <param name="theme">HU #12428 AC1/AC2/AC9 — igual convención que

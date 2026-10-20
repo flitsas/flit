@@ -23,7 +23,7 @@ public static class BrandedEmailChrome
     public const string FlitSupportEmail = "soporte@flitsas.com";
 
     /// <summary>Misma política de privacidad que el pie del correo FLIT.</summary>
-    public const string FlitPrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";
+    public const string FlitPrivacyPolicyUrl = "https://flitsas.com.co/privacy-policy/";
     private static readonly Regex HexColorPattern = new("^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
     /// <summary>
