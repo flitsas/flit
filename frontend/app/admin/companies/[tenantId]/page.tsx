@@ -282,17 +282,22 @@ function CompanyDetail() {
                         />
                       </div>
                     )}
-                    <OTConfigTablePanel
-                      tenantId={tenantId}
-                      mode={otPanelMode}
-                      grantScopeWarningCount={
-                        otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
-                      }
-                      blocksTenantId={blocksTenantId}
-                      grantsTenantId={
-                        managingChild && networkHeadId ? networkHeadId : tenantId
-                      }
-                    />
+                    {/* SuperAdmin sobre una cabeza MB: TransitBlocksPanel ya muestra disponibles y
+                        bloqueados; la vista de solo lectura repetiría los mismos datos (y sin
+                        refrescarse al bloquear). Queda para el AdminCompany y las hijas MB. */}
+                    {!showTransitBlocksPanel && (
+                      <OTConfigTablePanel
+                        tenantId={tenantId}
+                        mode={otPanelMode}
+                        grantScopeWarningCount={
+                          otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
+                        }
+                        blocksTenantId={blocksTenantId}
+                        grantsTenantId={
+                          managingChild && networkHeadId ? networkHeadId : tenantId
+                        }
+                      />
+                    )}
                   </>
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
