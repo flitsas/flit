@@ -27,10 +27,12 @@ public sealed record PlatformServiceCaller(string ClientId, Guid TenantId)
 /// <list type="bullet">
 ///   <item>Sin token, o con token de usuario: <c>UNAUTHENTICATED</c>. Un token de usuario nunca puede elegir empresa.</item>
 ///   <item>Token de servicio sin la audiencia de este servicio o sin el scope: <c>PERMISSION_DENIED</c>.</item>
-///   <item>Sin <c>x-flit-tenant-id</c>, o que no es un UUID: <c>INVALID_ARGUMENT</c>.</item>
+///   <item>Sin <c>x-flit-tenant-id</c>, o que no es un UUID: <c>INVALID_ARGUMENT</c>. Un servicio global (que responde
+///   por todas las empresas, como el listado de empresas) no la exige: <paramref name="requireTenant"/> en false y
+///   <see cref="PlatformServiceCaller.TenantId"/> vacío.</item>
 /// </list>
 /// </summary>
-public sealed class PlatformServiceCallInterceptor(string requiredScope, string requiredAudience) : Interceptor
+public sealed class PlatformServiceCallInterceptor(string requiredScope, string requiredAudience, bool requireTenant = true) : Interceptor
 {
     public const string TenantMetadata = "x-flit-tenant-id";
 
@@ -55,6 +57,8 @@ public sealed class PlatformServiceCallInterceptor(string requiredScope, string 
             throw PlatformRpcErrors.ToRpcException(PlatformErrorCodes.TokenAudienceMismatch, $"El token no es para el servicio «{requiredAudience}».", StatusCode.PermissionDenied);
         if (!PlatformPrincipal.HasScope(user, requiredScope))
             throw Fail(StatusCode.PermissionDenied, $"El token no tiene el scope {requiredScope}.");
+        if (!requireTenant)
+            return new PlatformServiceCaller(subject, Guid.Empty);
         if (!Guid.TryParse(tenantHeader, out var tenantId) || tenantId == Guid.Empty)
             throw Fail(StatusCode.InvalidArgument, $"Falta la metadata {TenantMetadata} con el id de la empresa.");
 

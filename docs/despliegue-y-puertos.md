@@ -150,6 +150,7 @@ no se reutilizan.
 |----------|-------------|----|-----|
 | `frontend-hub` | `4022` | `5022` | `6022` |
 | Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
+| API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
 | Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
 | `core-identity` | `4025` | `5025` | `6025` |
 
@@ -157,8 +158,8 @@ no se reutilizan.
   producto tiene API propia, va por la red interna detrás del gateway, sin puerto publicado.
 - En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
 - `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
-  `CORE_IDENTITY_PORT`); los de Comparendos y Diagnóstico se agregan cuando cada uno se
-  despliegue por primera vez (L-10). El producto `demo` se retiró (DDL 125).
+  `CORE_IDENTITY_PORT`); Comparendos ya los tiene (`COMPARENDOS_PORT`, `CORE_COMPARENDOS_PORT`;
+  perfil `comparendos`, ver `docs/suite/handoff-vps-comparendos.md`); Diagnóstico se agrega cuando se despliegue (L-10). El producto `demo` se retiró (DDL 125).
 - Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
 
 #### Puertos gRPC internos (contrato v1.3 §11, Epic #13316)
@@ -171,6 +172,7 @@ su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto apart
 | `core-api` (ICT) | `8082` | `CORE_API_GRPC_PORT` | En uso |
 | `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
 | `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
+| `core-comparendos` (`flit.comparendos.v1`) | `8086` (propuesto) | `CORE_COMPARENDOS_GRPC_PORT` | Perfil `comparendos`; encendido en [handoff-vps-comparendos.md](suite/handoff-vps-comparendos.md) |
 
 ---
 

@@ -28,6 +28,8 @@ En local se usan los mismos puertos que en DEV (así un número sirve en los dos
 | Consultas (`core-consultas`) | `4026` · gRPC `8084` | 4026 | 5026 | 6026 | Proveedores externos (RUNT, Verifik, Kyverum, Fasecolda, RUES) |
 | Notificaciones (`core-notificaciones`) | `4027` · gRPC `8085` | 4027 | 5027 | 6027 | Correo (SMTP, API de Renting), webhooks salientes, mensajes muertos |
 | RabbitMQ | `5672` · consola `15672` | — | — | — | Bus de eventos y trabajos |
+| Comparendos (`frontend-comparendos`) | `4023` | 4023 | 5023 | 6023 | App web de Gestión de Comparendos |
+| API de Comparendos (`core-comparendos`) | `4028` · gRPC `8086` | 4028 | 5028 | 6028 | Ingesta, bandeja, DP, avisos, OCR, pagos, reportes |
 
 En los servidores los puertos los pone el CD (`.github/workflows/cd.yml`, paso `env`); en local, cada
 `launchSettings.json` y los comandos de abajo. Todo por `http://127.0.0.1:<puerto>`.
@@ -174,6 +176,44 @@ identidad con el gateway arriba prueba el respaldo: en unos 3 s todo sigue por `
 
 En el servidor esto no se arma a mano: es el servicio `core-identity` del compose (perfil `identity`, su propia imagen)
 y la bandera `FLIT_IDENTITY_CLUSTER_ENABLED` del gateway.
+
+## 6. Comparendos
+
+Necesita la API (tokens y migraciones de plataforma), el broker y el gateway (§5): la app llama `/api/v1/comparendos/*`
+por el gateway, que lo manda a core-comparendos.
+
+```bash
+cp services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.json.example \
+   services/core-comparendos/src/Flit.Comparendos.Api/appsettings.Development.json   # y llena los CAMBIAR
+# Para el recorrido completo: Comparendos:Consultas:Address=http://127.0.0.1:8084 (fuentes por core-consultas, con el
+# proveedor «simulado» y los reales), Comparendos:Notificaciones:Address=http://127.0.0.1:8085 (con Smtp:Host vacío en
+# core-notificaciones el correo queda en su log) y Comparendos:Tramites:Address=http://127.0.0.1:8082 (réplica de
+# organismos; core-api con Ict__GrpcPort=8082 y Suite__Hosts__Overrides__comparendos=http://127.0.0.1:4023).
+# Para registrar empresas en el parametrizador (lista de empresas con Comparendos encendido, nombre y NIT):
+# Comparendos:Identidad:Address=http://127.0.0.1:8083, con core-identity (§4) arrancado con Identidad__GrpcPort=8083 y el
+# override de comparendos. Sin Identidad la lista sale vacía y no se puede registrar.
+# El gateway necesita los destinos locales de core-comparendos y core-consultas (están en su appsettings de ejemplo).
+# Archivos: el ejemplo trae FileManager apuntando al file-manager de DEV (MinIO), categoría «comparendos», el mismo que
+# usa core-api en local: los archivos quedan en flit-files/comparendos/<año>/<mes>/<día>. Sin FileManager:BaseUrl el
+# servicio NO arranca (guardar en la base solo lo permiten las pruebas, con Comparendos:Archivos:GuardarEnBase=true).
+# Lo guardado en la base antes de conectar el file-manager (referencias «db:…») se sigue leyendo de la base.
+cd services/core-comparendos/src/Flit.Comparendos.Api && dotnet build && \
+ASPNETCORE_ENVIRONMENT=Development dotnet bin/Debug/net10.0/Flit.Comparendos.Api.dll
+
+cp frontend-comparendos/.env.example frontend-comparendos/.env.local
+pnpm dev:comparendos        # http://127.0.0.1:4023
+```
+
+- Al arrancar migra su esquema `comparendos`, siembra calendario 2015–2040, organismos, tipologías, plantillas, prompt
+  OCR v1 y trabajos, y registra su manifiesto de permisos en la plataforma.
+- En `Development` todo lo externo se simula: SmartCloud y la fuente municipal (claves que terminan en `000` simulan
+  una caída), la API de contratos de Renting (placa par = conductor de prueba, impar = sin contrato, `0` = error) y el
+  OCR sin llave. Fuera de Dev nada se simula salvo `Comparendos:Simulacion:Habilitada=true`.
+- Para ver el producto en el hub, la empresa necesita Comparendos encendido (Compañías → Productos) y el usuario un rol
+  con permisos `comparendos.*` (`admin_comparendos`). Las capacidades (DP, OCR, reportes…) las enciende el SuperAdmin en
+  Comparendos → Parametrizador.
+- Pruebas: `cd services/core-comparendos && dotnet test` (Postgres local; crea y borra una base por clase) y
+  `pnpm test:comparendos`.
 
 ## Qué probar
 
