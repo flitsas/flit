@@ -12,6 +12,13 @@ export interface TransitGrantsPickerProps {
   /** Mensaje de error de validación (p. ej. ningún OT elegido). */
   error?: string;
   disabled?: boolean;
+  /**
+   * `marca-blanca`: la selección es la lista de OT con acceso (lo no elegido se bloquea) y no elegir
+   * ninguno deja la red con todos los OT activos de FLIT. Solo cambian los textos.
+   */
+  variant?: "concesion" | "marca-blanca";
+  /** Recibe los OT operativos listados: la Marca Blanca bloquea los que queden sin elegir. */
+  onOfficesLoaded?: (offices: TransitOffice[]) => void;
 }
 
 /** Selector embebido de organismos de tránsito (HU #12357 AC6). */
@@ -20,6 +27,8 @@ export function TransitGrantsPicker({
   onChange,
   error,
   disabled = false,
+  variant = "concesion",
+  onOfficesLoaded,
 }: TransitGrantsPickerProps) {
   const [offices, setOffices] = useState<TransitOffice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +47,9 @@ export function TransitGrantsPicker({
       const activeIds = new Set(
         operational.filter((s) => s.hasTenant && s.estadoActivo === true).map((s) => s.id),
       );
-      setOffices(catalog.filter((office) => activeIds.has(office.id)));
+      const active = catalog.filter((office) => activeIds.has(office.id));
+      setOffices(active);
+      onOfficesLoaded?.(active);
     } catch {
       if (!signal?.aborted) {
         setLoadError("No se pudo cargar el catálogo de organismos de tránsito.");
@@ -48,7 +59,7 @@ export function TransitGrantsPicker({
         setLoading(false);
       }
     }
-  }, []);
+  }, [onOfficesLoaded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,10 +115,15 @@ export function TransitGrantsPicker({
 
   return (
     <fieldset className="space-y-2" disabled={disabled}>
-      <legend className="text-xs font-semibold">Organismos de tránsito de la Concesión</legend>
+      <legend className="text-xs font-semibold">
+        {variant === "marca-blanca"
+          ? "Organismos de tránsito de la Marca Blanca"
+          : "Organismos de tránsito de la Concesión"}
+      </legend>
       <p className="text-xs opacity-60">
-        Selecciona los organismos que esta Concesión podrá usar. La Concesión y sus clientes hijos
-        verán esta lista en solo lectura.
+        {variant === "marca-blanca"
+          ? "Selecciona los organismos a los que tendrá acceso esta Marca Blanca; los demás quedan bloqueados para la red. Si no eliges ninguno, tendrá acceso a todos los organismos activos en FLIT. Podrás ajustarlo después desde la ficha."
+          : "Selecciona los organismos que esta Concesión podrá usar. La Concesión y sus clientes hijos verán esta lista en solo lectura."}
       </p>
       <label htmlFor="ot-grants-search" className="sr-only">
         Buscar organismo de tránsito
