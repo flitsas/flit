@@ -22,9 +22,9 @@ SELECT v.code, v.name, v.description,
        (SELECT COALESCE(MAX(sort_order), 0) FROM security.modules)::int + v.ord,
        true, 'tramites'
   FROM (VALUES
-        (1, 'tramites-matriculas', 'Trámites: Matrículas', 'Ver y crear trámites de la familia Matrículas (HU #13663)'),
-        (2, 'tramites-traspasos',  'Trámites: Traspasos',  'Ver y crear trámites de la familia Traspasos (HU #13663)'),
-        (3, 'tramites-otros',      'Trámites: Otros trámites', 'Ver y crear trámites de las demás familias (HU #13663)')
+        (1, 'tramites-matriculas', 'Trámites: Matrículas', 'Ver y crear trámites de la familia Matrículas'),
+        (2, 'tramites-traspasos',  'Trámites: Traspasos',  'Ver y crear trámites de la familia Traspasos'),
+        (3, 'tramites-otros',      'Trámites: Otros trámites', 'Ver y crear trámites de las demás familias')
        ) AS v(ord, code, name, description)
  WHERE NOT EXISTS (SELECT 1 FROM security.modules m WHERE m.code = v.code);
 
