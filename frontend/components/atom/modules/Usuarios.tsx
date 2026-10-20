@@ -657,10 +657,12 @@ export function Usuarios() {
             tenantId: permissionsTarget.tenantId,
           }}
           mode={permissionsMode}
-          // El listado trae una fila por rol: los roles del usuario son todas las filas con su id.
-          roleIds={users
-            .filter((x) => x.id === permissionsTarget.id && x.roleId)
-            .map((x) => x.roleId as string)}
+          // La fila trae todos los roles del usuario (roleIds); sin él, los de las filas con su id.
+          roleIds={
+            permissionsTarget.roleIds?.length
+              ? permissionsTarget.roleIds
+              : users.filter((x) => x.id === permissionsTarget.id && x.roleId).map((x) => x.roleId as string)
+          }
           targetIsSuperAdmin={users.some((x) => x.id === permissionsTarget.id && isSuperAdminRole(x.roleCode))}
           // HU #13656: en modo admin, otro administrador o la propia ficha se ven en solo lectura.
           targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}

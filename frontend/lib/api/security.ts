@@ -14,6 +14,8 @@ export interface TenantUser {
   role: string | null;
   roleCode: string | null;
   roleId: string | null;
+  /** HU #13647: todos los roles activos del usuario en el tenant (la fila muestra uno solo). */
+  roleIds?: string[];
   /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
    *  reactivable. El `id` de la fila sigue siendo el `invitationId` en "pending" y "cancelled". */
   status: "active" | "inactive" | "pending" | "cancelled";

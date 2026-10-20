@@ -318,6 +318,37 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             "las invitaciones al tenant interno deben aparecer y clasificarse como perfil FLIT");
     }
 
+    // HU #13647: la fila colapsa a un rol, pero roleIds trae todos (los espejos admin_* incluidos) para que
+    // «Permisos por módulo» marque como heredado lo que da cualquiera de ellos.
+    [Fact]
+    public async Task ListUsers_ConVariosRoles_LaFilaTraeTodosEnRoleIds()
+    {
+        await using (var db = CreateDbContext())
+        {
+            var adminComparendos = await db.Roles.AsNoTracking()
+                .SingleAsync(r => r.Code == "admin_comparendos" && r.TenantId == null, TestContext.Current.CancellationToken);
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _companyTenantId,
+                UserId = _userWithoutHomeTenantId,
+                RoleId = adminComparendos.Id,
+                AssignedBy = _superAdminUserId,
+                AssignedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var response = await _client.GetAsync("/api/v1/security/users", TestContext.Current.CancellationToken);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+            var fila = doc.RootElement.EnumerateArray().Single(r => r.GetProperty("id").GetString() == _userWithoutHomeTenantId.ToString());
+
+            fila.GetProperty("roleId").GetGuid().Should().Be(_customCompanyRoleId, "la fila sigue mostrando el rol que no es espejo");
+            fila.GetProperty("roleIds").EnumerateArray().Select(e => e.GetGuid())
+                .Should().BeEquivalentTo([_customCompanyRoleId, adminComparendos.Id]);
+        }
+    }
+
     // ── El rol SuperAdmin no sale del perfil FLIT ─────────────────────────────────────
     // Su TargetEntityType es COMPANY (el CHECK de BD no admite un valor propio), así que las
     // validaciones de coherencia lo dan por bueno dentro de cualquier compañía: sin guarda
