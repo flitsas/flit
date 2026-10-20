@@ -19,7 +19,7 @@ import {
   type OverrideEffect,
   type UserPermissionOverride,
 } from "@/lib/api/permission-overrides";
-import { buildModuleViews, outOfCapOverrideIds, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
+import { buildModuleViews, outOfCapOverrideIds, withOverrideActions, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
 import { findFamilyPair } from "@/lib/permissions/familyPairs";
 import { FamilyPairRows } from "./FamilyPairRows";
@@ -225,7 +225,14 @@ export function ModulePermissionsSection({
         listUserOverrides(userId, tenantParam),
         fetchRolePermissionIds(mode, roleKey ? roleKey.split(",") : []),
       ]);
-      return { status: "ready", modules, grantable, roleIds: roleSet, overrides, locked: new Set(outOfCapOverrideIds(grantable, overrides)) };
+      return {
+        status: "ready",
+        modules: withOverrideActions(modules, overrides),
+        grantable,
+        roleIds: roleSet,
+        overrides,
+        locked: new Set(outOfCapOverrideIds(grantable, overrides)),
+      };
     } catch (e) {
       const code = overrideErrorCode(e);
       if (code === "TARGET_SUPERADMIN") return { status: "superadmin" };
@@ -259,7 +266,12 @@ export function ModulePermissionsSection({
     const overrides = await listUserOverrides(userId, tenantParam);
     setState((prev) =>
       prev.status === "ready"
-        ? { ...prev, overrides, locked: new Set([...prev.locked, ...outOfCapOverrideIds(prev.grantable, overrides)]) }
+        ? {
+            ...prev,
+            modules: withOverrideActions(prev.modules, overrides),
+            overrides,
+            locked: new Set([...prev.locked, ...outOfCapOverrideIds(prev.grantable, overrides)]),
+          }
         : prev,
     );
     onChanged?.(overrides);

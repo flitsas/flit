@@ -7,7 +7,10 @@ namespace Flit.Modules.Security.Application.PermissionOverrides;
 /// <summary><c>Changed</c> = false cuando el usuario ya tenía exactamente ese efecto (idempotente, sin bitácora).</summary>
 public sealed record SetOverrideResult(Guid PermissionId, string Effect, bool Changed);
 
-public sealed record UserOverrideItem(Guid PermissionId, string Slug, string ProductCode, string Effect, string Source, Guid GrantedBy);
+/// <remarks>HU #13655: <c>Name</c> y <c>ModuleCode</c> permiten mostrar un permiso fuera del tope de quien consulta, que no viene en su
+/// catálogo de módulos.</remarks>
+public sealed record UserOverrideItem(
+    Guid PermissionId, string Slug, string ProductCode, string Effect, string Source, Guid GrantedBy, string? Name = null, string? ModuleCode = null);
 
 /// <summary>
 /// HU #13644 (ADR-0071, FB-5 a FB-8): otorgar, denegar y quitar permisos individuales dentro del tope del administrador.
@@ -237,7 +240,7 @@ public sealed class ManageUserPermissionOverridesHandler(
         foreach (var o in await repository.ListActiveAsync(tenantId, targetUserId, ct).ConfigureAwait(false))
         {
             var p = await repository.GetPermissionAsync(o.PermissionId, ct).ConfigureAwait(false);
-            items.Add(new UserOverrideItem(o.PermissionId, p?.Slug ?? o.PermissionId.ToString(), o.ProductCode, o.Effect, o.Source, o.GrantedBy));
+            items.Add(new UserOverrideItem(o.PermissionId, p?.Slug ?? o.PermissionId.ToString(), o.ProductCode, o.Effect, o.Source, o.GrantedBy, p?.Name, p?.ModuleCode));
         }
 
         return [.. items.OrderBy(i => i.Slug, StringComparer.Ordinal)];

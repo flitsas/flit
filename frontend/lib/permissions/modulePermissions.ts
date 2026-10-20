@@ -103,6 +103,27 @@ export function buildModuleViews(
   return views;
 }
 
+/**
+ * HU #13655 (FD2-3): el catálogo de módulos es el de quien consulta, así que un permiso individual fuera de su tope no viene
+ * en él. Se agrega a su módulo con el nombre que trae el permiso individual, para mostrarlo con «Fuera de tu tope». Las
+ * acciones ya agregadas se conservan (al quitarlo, la acción queda bloqueada en vez de desaparecer).
+ */
+export function withOverrideActions(modules: AccessibleModule[], overrides: UserPermissionOverride[]): AccessibleModule[] {
+  const known = new Set(modules.flatMap((m) => m.actions.map((a) => a.id)));
+  const extra = overrides.filter((o) => !known.has(o.permissionId) && o.moduleCode);
+  if (extra.length === 0) return modules;
+  const result = modules.map((m) => ({ ...m, actions: [...m.actions] }));
+  for (const o of extra) {
+    let module = result.find((m) => m.code === o.moduleCode);
+    if (!module) {
+      module = { id: o.moduleCode!, code: o.moduleCode!, name: o.moduleCode!, sortOrder: Number.MAX_SAFE_INTEGER, actions: [], productCode: o.productCode };
+      result.push(module);
+    }
+    module.actions.push({ id: o.permissionId, slug: o.slug, name: o.name ?? o.slug });
+  }
+  return result;
+}
+
 /** Ids de los permisos individuales que quedan fuera del tope (`grantable`) de quien consulta. */
 export function outOfCapOverrideIds(
   grantable: GrantablePermissionItem[],

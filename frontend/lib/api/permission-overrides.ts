@@ -30,6 +30,9 @@ export interface UserPermissionOverride {
   effect: OverrideEffect;
   source: "INDIVIDUAL" | "MODULE_SNAPSHOT";
   grantedBy: string;
+  /** HU #13655: nombre y módulo del permiso, para mostrarlo aunque esté fuera del tope de quien consulta. */
+  name?: string | null;
+  moduleCode?: string | null;
   /** HU #13647 (FD1-8): quién otorgó el permiso. */
   grantedByName: string | null;
   /** HU #13647 (FD1-8): instante UTC del otorgamiento. */

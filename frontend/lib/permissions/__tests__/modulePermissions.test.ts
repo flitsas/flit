@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminReadOnlyFor, buildModuleViews, outOfCapOverrideIds } from "../modulePermissions";
+import { adminReadOnlyFor, buildModuleViews, outOfCapOverrideIds, withOverrideActions } from "../modulePermissions";
 import type { AccessibleModule } from "@/lib/api/security";
 import type { GrantablePermissionItem, UserPermissionOverride } from "@/lib/api/permission-overrides";
 
@@ -109,5 +109,24 @@ describe("adminReadOnlyFor (#13656)", () => {
   });
   it("el Super Admin (modo superadmin) no queda en solo lectura por esta regla", () => {
     expect(adminReadOnlyFor("superadmin", ["AdminCompany"], false)).toBe(false);
+  });
+});
+
+describe("HU #13655 (FD2-3) — withOverrideActions: lo que está fuera del tope se muestra aunque no venga en el catálogo de quien consulta", () => {
+  const modules = [{ id: "m1", code: "ict-logs", name: "Logs ICT", sortOrder: 1, actions: [{ id: "a1", slug: "ict.reportes.read", name: "Ver reportes ICT" }] }];
+  const override = (permissionId: string, moduleCode: string | null) => ({
+    permissionId, slug: "ict.pii.reveal", productCode: "plataforma", effect: "allow" as const, source: "INDIVIDUAL" as const,
+    grantedBy: "sa", grantedByName: "SA", grantedAt: null, name: "Revelar datos personales", moduleCode,
+  });
+
+  it("agrega la acción a su módulo con el nombre del permiso individual", () => {
+    const result = withOverrideActions(modules, [override("p1", "ict-logs")]);
+    expect(result[0].actions.map((a) => a.name)).toEqual(["Ver reportes ICT", "Revelar datos personales"]);
+    expect(modules[0].actions).toHaveLength(1);
+  });
+
+  it("si el módulo no está en el catálogo lo crea; sin moduleCode no inventa nada", () => {
+    expect(withOverrideActions(modules, [override("p1", "otro")]).map((m) => m.code)).toEqual(["ict-logs", "otro"]);
+    expect(withOverrideActions(modules, [override("p1", null)])).toBe(modules);
   });
 });
