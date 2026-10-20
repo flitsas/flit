@@ -37,7 +37,7 @@ El usuario marca trámites (casillas, «Seleccionar todos» o un filtro) y pulsa
 - **El lote nunca escribe en trámites de una compañía hija** (vista de red). Si la hija no tiene consolidado, el ítem se omite como `red_sin_consolidado`.
 - **Un lote activo por usuario.** Si ya tiene uno, el alta responde 409 `lote_activo`.
 - **Tope total**: `max_items_per_batch`, 10.000 por defecto, configurable entre 1 y 32.766. Por encima responde 422 `seleccion_excede_tope` con `total` y `tope`.
-- **ZIP plano**: los PDF quedan en la raíz del ZIP con nombre `{radicado|SIN-RADICADO}_{placa|SIN-PLACA}.pdf`, y lo que no se pudo incluir va en `omitidos.csv` (`ConsolidadoLoteNombres.cs:29-58`).
+- **ZIP plano**: los PDF quedan en la raíz del ZIP con nombre `{radicado|SIN-RADICADO}_{placa|SIN-PLACA}.pdf`; el ZIP no lleva `omitidos.csv`: los omitidos solo se cuentan en el aviso, y una parte sin PDF no se ofrece para descargar (`ConsolidadoLoteNombres.cs`).
 - **Nombres de las partes:** una sola parte se llama `consolidados_yyyyMMdd_HHmm.zip` (hora de Colombia). Si hay varias, `consolidados_{marca}_parte-KK-de-TT.zip`.
 
 ---
@@ -161,7 +161,7 @@ Con trámites del mismo tipo puedes cubrir todos los caminos del lote:
 |---|---|---|
 | Con consolidado ya generado | Abre el trámite y genera su consolidado desde el detalle | PDF incluido (`existente`); el trámite no cambia |
 | Sin consolidado, con FUR | Trámite de matrícula inicial o traspaso con FUR y adjuntos | PDF generado por primera vez (`generado`) |
-| Sin FUR | Trámite sin FUR | En `omitidos.csv`: `fur_requerido` |
+| Sin FUR | Trámite sin FUR | Omitido (`fur_requerido`); no entra al ZIP |
 | Modalidad no soportada | Trámite de un tipo distinto de matrícula inicial o traspaso | `modalidad_no_soportada` |
 | Migrado sin consolidado | Trámite migrado de v1 | `migrado_solo_lectura` |
 | Adjunto caído | Borra en MinIO un adjunto del expediente | `adjunto_no_disponible` |
@@ -215,7 +215,7 @@ En local, el frontend reenvía `/api/v1/*` a `CORE_API_ORIGIN` (`http://localhos
 
 | # | Escenario | Pasos | Esperado |
 |---|---|---|---|
-| 1 | Lote con casillas | `/tramites` como Radicador: marca 3 trámites → *Descargar ZIP* → confirma | 202; aparece el aviso global; al terminar, enlace(s) de parte; ZIP con PDF y `omitidos.csv` si aplica |
+| 1 | Lote con casillas | `/tramites` como Radicador: marca 3 trámites → *Descargar ZIP* → confirma | 202; aparece el aviso global; al terminar, enlace(s) de parte; ZIP solo con los PDF |
 | 2 | «Seleccionar todos» con filtro | Filtra la tabla → *Seleccionar todos* → desmarca 1 → confirma | Modo `filtro` con `excluidos`; el total del lote coincide con el contador |
 | 3 | Partición | Pon `max_pdfs_per_part = 2` (§3.3) y lanza 5 trámites con PDF | 3 partes `parte-01-de-03`… |
 | 4 | Tope | `max_items_per_batch = 3` y selecciona 4 | 422 `seleccion_excede_tope`; el modal muestra «total 4 / tope 3» |

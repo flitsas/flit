@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import {
   LoteDescargaAlertCard,
   TEXTO_DESCARGA_EXPIRADA,
+  TEXTO_SIN_DOCUMENTOS,
   toneLoteConsolidados,
 } from '@/components/shared/LoteDescargaAlertCard';
 import { MENSAJE_REINTENTAR_DESCARGA } from '@/lib/api/consolidado-lotes-client';
@@ -157,6 +158,28 @@ describe('LoteDescargaAlertCard — HU #13382', () => {
     expect(screen.getByRole('button', { name: 'Descargar parte 1 de 3' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Descargar parte 2 de 3' })).toBeEnabled();
     expect(screen.getByRole('alert')).toHaveTextContent(MENSAJE_REINTENTAR_DESCARGA);
+  });
+
+  it('una parte sin PDF no se ofrece para descargar; las demás sí', () => {
+    montar({ lote: { ...COMPLETADO, partes: [PARTES[0], { ...PARTES[1], pdfs: 0 }, PARTES[2]] } });
+    expect(screen.getByRole('button', { name: 'Descargar parte 1 de 3' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Descargar parte 2 de 3' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Descargar parte 3 de 3' })).toBeInTheDocument();
+    expect(card()).not.toHaveTextContent(TEXTO_SIN_DOCUMENTOS);
+  });
+
+  it('todo omitido — sin botón de descarga y con el aviso de que no hay archivos', () => {
+    montar({
+      lote: {
+        ...COMPLETADO,
+        estado: 'completado_con_omitidos',
+        incluidos: 0,
+        omitidos: 1200,
+        partes: [{ ...PARTES[0], pdfs: 0, omitidos: 1200 }],
+      },
+    });
+    expect(screen.queryByRole('button', { name: /Descargar parte/ })).not.toBeInTheDocument();
+    expect(card()).toHaveTextContent(TEXTO_SIN_DOCUMENTOS);
   });
 
   it('a11y — todos los botones tienen nombre accesible', () => {

@@ -11,12 +11,12 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 /// HU #13378 (Épica #13216, ADR-0070 D4, CF-09/CF-10/CF-12) — arma, cifra, sube y cierra UNA parte ya reclamada:
 /// <list type="number">
 ///   <item><b>ZIP en archivo temporal</b> (<see cref="ZipArchive"/> sobre <see cref="FileStream"/>, nunca en memoria):
-///   los PDF de la parte en su orden (<c>processed_at, position</c>) con <see cref="CompressionLevel.NoCompression"/> y
-///   <see cref="ConsolidadoLoteNombres.OmitidosCsv"/> con <see cref="CompressionLevel.Optimal"/>. Cada PDF se copia en
-///   streaming desde el almacenamiento.</item>
+///   solo los PDF de la parte en su orden (<c>processed_at, position</c>) con <see cref="CompressionLevel.NoCompression"/>.
+///   Cada PDF se copia en streaming desde el almacenamiento. El ZIP no lleva <c>omitidos.csv</c>: los omitidos solo
+///   quedan contados en la parte (<c>omitted_count</c>) y en el aviso de la descarga.</item>
 ///   <item><b>Plan B del snapshot (AC4)</b>: si el <c>storage_path</c> capturado no se abre se usa el adjunto ACTUAL del
-///   mismo tipo (<see cref="IConsolidadoLoteAdjuntoActual"/>); si tampoco hay, el PDF no entra, el ítem va al CSV con
-///   <c>adjunto_no_disponible</c> y pasa a omitido en la transacción que cierra la parte. <b>Nunca se genera un PDF
+///   mismo tipo (<see cref="IConsolidadoLoteAdjuntoActual"/>); si tampoco hay, el PDF no entra y el ítem pasa a omitido
+///   con <c>adjunto_no_disponible</c> en la transacción que cierra la parte. <b>Nunca se genera un PDF
 ///   aquí</b>: este handler no depende de ningún generador (lo vigila un test).</item>
 ///   <item><b>Cifrado</b> a un segundo temporal con la DEK del lote (FLZ1, subclave por parte) y borrado inmediato del ZIP
 ///   en claro: el disco temporal queda en ≤ 2 × M.</item>
@@ -203,18 +203,6 @@ public sealed partial class EmpaquetarParteHandler(
                         && await AbortarSiLoteDetenidoAsync(reclamada, Checkpoint.CadaNPdf, ct).ConfigureAwait(false))
                         return null;
                 }
-
-                var filas = contenido.Omitidos
-                    .Select(o => (o.Position, Fila: new OmitidoCsvFila(o.ReferenceNumber, o.Plate, o.Motivo)))
-                    .Concat(noDisponibles.Select(p => (p.Position, Fila: new OmitidoCsvFila(
-                        p.ReferenceNumber, p.Plate, ConsolidadoErrorTextos.ParaLote(ConsolidadoLoteOmisiones.AdjuntoNoDisponible)))))
-                    .OrderBy(x => x.Position)
-                    .Select(x => x.Fila);
-                var csv = zip.CreateEntry(ConsolidadoLoteNombres.OmitidosCsv, CompressionLevel.Optimal);
-                await using (var destino = csv.Open())
-                {
-                    OmitidosCsvWriter.Escribir(destino, filas);
-                }
             }
 
             await archivo.FlushAsync(ct).ConfigureAwait(false);
@@ -342,14 +330,13 @@ public enum EmpaquetarParteDesenlace
 /// extensión, en el orden de la parte, y no error. Motivo: un error haría fallar la parte en cada reintento hasta dejar el
 /// lote <c>fallido</c> por un dato que el usuario no puede corregir, y perdería los demás PDF. El sufijo conserva todos los
 /// PDF, es estable entre reintentos (el orden de la parte es fijo: <c>processed_at, position</c>), compara sin mayúsculas
-/// (un ZIP descomprimido en Windows sobreescribiría <c>a.pdf</c> con <c>A.pdf</c>) y salta los sufijos ya usados. El
-/// nombre del CSV (<see cref="ConsolidadoLoteNombres.OmitidosCsv"/>) queda reservado desde el principio.
+/// (un ZIP descomprimido en Windows sobreescribiría <c>a.pdf</c> con <c>A.pdf</c>) y salta los sufijos ya usados.
 /// </summary>
 /// <remarks>Uso de ejemplo: <c>var n = new NombresDeEntradaZip(); n.Reservar("R-1_ABC.pdf"); n.Reservar("R-1_ABC.pdf"); // R-1_ABC_2.pdf</c>.</remarks>
 public sealed class NombresDeEntradaZip
 {
-    /// <summary>Nombres ocupados; el CSV de omitidos está reservado desde el principio.</summary>
-    private readonly HashSet<string> _usados = new(StringComparer.OrdinalIgnoreCase) { ConsolidadoLoteNombres.OmitidosCsv };
+    /// <summary>Nombres ocupados.</summary>
+    private readonly HashSet<string> _usados = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Devuelve <paramref name="nombre"/> si está libre o la primera variante <c>{base}_{n}{ext}</c> libre (n ≥ 2).</summary>
     public string Reservar(string nombre)

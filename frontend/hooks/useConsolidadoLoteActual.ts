@@ -90,8 +90,10 @@ export function loteExpirado(lote: LoteConsolidados, ahoraMs: number): boolean {
   return expira !== null && ahoraMs >= expira;
 }
 
+// La parte 1 se autodescarga solo si trae PDF: sin omitidos.csv, una parte sin PDF sería un ZIP vacío.
 const descargable = (lote: LoteConsolidados) =>
-  (lote.estado === 'completado' || lote.estado === 'completado_con_omitidos') && lote.partes.length > 0;
+  (lote.estado === 'completado' || lote.estado === 'completado_con_omitidos') &&
+  lote.partes.some((p) => p.numero === 1 && p.pdfs > 0);
 
 // ── Almacenamiento: todo acceso va en try/catch (modo privado, cuota, política del navegador) ──────
 

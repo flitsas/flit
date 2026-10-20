@@ -77,7 +77,6 @@ public sealed class ConsolidadoLoteNombresTests
     [Fact]
     public void Contrato_Constantes()
     {
-        ConsolidadoLoteNombres.OmitidosCsv.Should().Be("omitidos.csv");
         ConsolidadoLoteNombres.SanearPlaca("xyz-9 8").Should().Be("XYZ98");
     }
 
