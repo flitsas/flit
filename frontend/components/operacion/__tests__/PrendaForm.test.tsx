@@ -8,6 +8,7 @@ import {
   parseRuntGravamenesJson,
   buildRuntPrendaSummary,
   pickRuntAcreedor,
+  runtGarantiaTieneDatos,
   traspasoDecisions,
 } from '../PrendaForm';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -2011,5 +2012,107 @@ describe('Bug #13240 — adjuntos de prenda de la decisión anterior', () => {
     await elegir('solicitar');
     // Volver al tipo exigido retira el aviso.
     expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Bug #13590 (hallazgo 1) — «Tiene prendas» / «Tiene gravámenes» del detalle RUNT.
+ *
+ * Uso de ejemplo: buildRuntPrendaSummary(fieldValues).tienePrendas → 'SI' cuando la bandera es
+ * afirmativa O `runt_gravamenes` trae al menos una garantía con datos (mismo criterio que
+ * RuntGravamenSignal en core-api). Sin garantías con datos, la bandera tal cual.
+ */
+describe('Bug #13590 — señal combinada de prenda en el resumen RUNT', () => {
+  const fv = (fieldKey: string, valueText: string | null, valueJson: string | null = null): FieldValue => ({
+    formFieldId: '',
+    fieldKey,
+    valueText,
+    valueJson,
+    source: 'consultation',
+  });
+  const conBanderasNo = (gravamenesJson: string): FieldValue[] => [
+    fv('runt_tiene_prendas', 'NO'),
+    fv('runt_tiene_gravamenes', 'NO'),
+    fv('runt_gravamenes', null, gravamenesJson),
+  ];
+
+  it('banderas NO/NO + garantía con solo entidad → ambas casillas SI', () => {
+    const s = buildRuntPrendaSummary(conBanderasNo(JSON.stringify([{ entidad: 'BANCO DE PRUEBA S.A.' }])));
+    expect(s.tienePrendas).toBe('SI');
+    expect(s.tieneGravamenes).toBe('SI');
+  });
+
+  it('banderas NO/NO + garantía con solo numeroDocumentoEntidad → SI', () => {
+    const s = buildRuntPrendaSummary(conBanderasNo(JSON.stringify([{ numeroDocumentoEntidad: '900000001' }])));
+    expect(s.tienePrendas).toBe('SI');
+    expect(s.tieneGravamenes).toBe('SI');
+  });
+
+  it('banderas NO/NO + [{}] → bandera cruda NO (no inventa prenda)', () => {
+    const s = buildRuntPrendaSummary(conBanderasNo('[{}]'));
+    expect(s.tienePrendas).toBe('NO');
+    expect(s.tieneGravamenes).toBe('NO');
+  });
+
+  it('banderas NO/NO + fila con solo estado/tipoDocumentoEntidad → bandera cruda NO', () => {
+    const s = buildRuntPrendaSummary(
+      conBanderasNo(JSON.stringify([{ estado: 'VIGENTE', tipoDocumentoEntidad: 'NIT' }])),
+    );
+    expect(s.tienePrendas).toBe('NO');
+    expect(s.tieneGravamenes).toBe('NO');
+  });
+
+  it('bandera afirmativa sin garantías → SI (incluye variantes " sí ", "true", "1")', () => {
+    expect(buildRuntPrendaSummary([fv('runt_tiene_prendas', 'SI')]).tienePrendas).toBe('SI');
+    expect(buildRuntPrendaSummary([fv('runt_tiene_prendas', ' sí ')]).tienePrendas).toBe('SI');
+    expect(buildRuntPrendaSummary([fv('runt_tiene_gravamenes', 'true')]).tieneGravamenes).toBe('SI');
+    expect(buildRuntPrendaSummary([fv('runt_tiene_gravamenes', '1')]).tieneGravamenes).toBe('SI');
+  });
+
+  it('banderas ausentes y sin garantías → igual que hoy (null)', () => {
+    const s = buildRuntPrendaSummary([]);
+    expect(s.tienePrendas).toBeNull();
+    expect(s.tieneGravamenes).toBeNull();
+    const s2 = buildRuntPrendaSummary([fv('runt_tiene_prendas', '  '), fv('runt_gravamenes', null, '[]')]);
+    expect(s2.tienePrendas).toBeNull();
+    expect(s2.tieneGravamenes).toBeNull();
+  });
+
+  it('banderas ausentes + garantía con datos → SI (la garantía basta)', () => {
+    const s = buildRuntPrendaSummary([fv('runt_gravamenes', null, JSON.stringify([{ fechaRegistro: '2026-01-01' }]))]);
+    expect(s.tienePrendas).toBe('SI');
+    expect(s.tieneGravamenes).toBe('SI');
+  });
+
+  it('runtGarantiaTieneDatos: nombre, documento, idPrenda o fecha cuentan; tipo y estado no', () => {
+    const tieneDatos = runtGarantiaTieneDatos;
+    const [entidad, doc, id, fecha, soloTipo, vacio] = parseRuntGravamenesJson(
+      JSON.stringify([
+        { entidad: 'X' },
+        { numeroDocumentoAcreedor: '1' },
+        { idPrenda: 7 },
+        { fechaInscripcion: '2026-01-01' },
+        { tipoDocumentoEntidad: 'NIT', estado: 'VIGENTE' },
+        {},
+      ]),
+    );
+    expect(tieneDatos(entidad)).toBe(true);
+    expect(tieneDatos(doc)).toBe(true);
+    expect(tieneDatos(id)).toBe(true);
+    expect(tieneDatos(fecha)).toBe(true);
+    expect(tieneDatos(soloTipo)).toBe(false);
+    expect(tieneDatos(vacio)).toBe(false);
+  });
+
+  it('render: el detalle RUNT muestra «Tiene prendas: SI» con banderas NO y garantía con entidad', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValueOnce({
+      fieldValues: conBanderasNo(JSON.stringify([{ entidad: 'BANCO DE PRUEBA S.A.' }])),
+    } as never);
+    render(<PrendaForm instanceId="inst-13590" runtHasGravamen />);
+    const region = await screen.findByRole('region', { name: /detalle de prenda reportado por el runt/i });
+    const prendas = within(region).getByText('Tiene prendas').nextElementSibling;
+    const gravamenes = within(region).getByText('Tiene gravámenes').nextElementSibling;
+    expect(prendas?.textContent).toBe('SI');
+    expect(gravamenes?.textContent).toBe('SI');
   });
 });

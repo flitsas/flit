@@ -282,13 +282,51 @@ export function parseRuntGravamenesJson(raw: string | null | undefined): RuntGra
   }
 }
 
+/**
+ * Formas afirmativas de las banderas RUNT, ya en mayúscula. Espejo de
+ * `RuntGravamenDatos.ValoresAfirmativos` (core-api) para que pantalla y gate no discrepen.
+ */
+const RUNT_VALORES_AFIRMATIVOS = ['SI', 'SÍ', 'S', 'TRUE', '1'];
+
+/** ¿La bandera RUNT (`runt_tiene_prendas` / `runt_tiene_gravamenes`) es afirmativa? */
+export function esBanderaRuntAfirmativa(valor: string | null | undefined): boolean {
+  return valor != null && RUNT_VALORES_AFIRMATIVOS.includes(valor.trim().toUpperCase());
+}
+
+/**
+ * Bug #13590 — una garantía del detalle RUNT «tiene datos» si trae nombre del acreedor/entidad,
+ * documento, `idPrenda` o fecha (inscripción/registro). `tipoDocumento` y `estado` NO cuentan: una
+ * fila `{}` o con solo esos campos no es una prenda. Mismo criterio que
+ * `RuntGravamenDatos.ContarGarantias` (core-api, Bug #13203).
+ */
+export function runtGarantiaTieneDatos(item: RuntGravamenItem): boolean {
+  return Boolean(
+    item.acreedor?.trim() ||
+      item.documentoAcreedor?.trim() ||
+      item.idPrenda?.trim() ||
+      item.fechaInscripcion?.trim(),
+  );
+}
+
+/**
+ * Bug #13590 — valor a mostrar en «Tiene prendas» / «Tiene gravámenes»: `SI` si la bandera es
+ * afirmativa o hay al menos una garantía con datos (el RUNT puede contestar «NO»/«NO» y traer la
+ * garantía mobiliaria); si no, la bandera tal cual. Solo presentación: el field_value no cambia.
+ */
+function senalRuntPrenda(bandera: string, hayGarantiaConDatos: boolean): string | null {
+  if (hayGarantiaConDatos || esBanderaRuntAfirmativa(bandera)) return 'SI';
+  return bandera || null;
+}
+
 export function buildRuntPrendaSummary(fields: FieldValue[]): RuntPrendaSummary {
+  const items = parseRuntGravamenesJson(byJson(fields, 'runt_gravamenes'));
+  const hayGarantiaConDatos = items.some(runtGarantiaTieneDatos);
   return {
-    tieneGravamenes: byKey(fields, 'runt_tiene_gravamenes') || null,
-    tienePrendas: byKey(fields, 'runt_tiene_prendas') || null,
+    tieneGravamenes: senalRuntPrenda(byKey(fields, 'runt_tiene_gravamenes'), hayGarantiaConDatos),
+    tienePrendas: senalRuntPrenda(byKey(fields, 'runt_tiene_prendas'), hayGarantiaConDatos),
     prendario: byKey(fields, 'runt_prendario') || null,
     nombreAcreedor: byKey(fields, 'runt_nombre_acreedor') || null,
-    items: parseRuntGravamenesJson(byJson(fields, 'runt_gravamenes')),
+    items,
   };
 }
 
