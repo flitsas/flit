@@ -11,8 +11,6 @@ public static class InvitationEmailTemplate
     /// <summary>Asunto con el tema FLIT. Con tema de marca ver <see cref="BuildSubject"/>.</summary>
     public const string Subject = "Invitación a FLIT — Activa tu cuenta";
 
-    private const string FlitName = "FLIT";
-
     public static string BuildActivateLink(string activateUrlBase, string rawToken)
     {
         var separator = activateUrlBase.Contains('?', StringComparison.Ordinal) ? '&' : '?';
@@ -24,7 +22,7 @@ public static class InvitationEmailTemplate
     /// sin tema) es exactamente <see cref="Subject"/>.
     /// </summary>
     public static string BuildSubject(Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
-        $"Invitación a {InviterName(theme)} — Activa tu cuenta";
+        $"Invitación a {FlitBrandedEmailLayout.PlatformName(theme)} — Activa tu cuenta";
 
     public static string BuildHtmlBody(
         string fullName,
@@ -33,10 +31,8 @@ public static class InvitationEmailTemplate
         Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null)
     {
         var name = System.Net.WebUtility.HtmlEncode(fullName);
-        var inviter = InviterName(theme);
-        var linkColor = theme is { IsBrand: true }
-            ? Flit.Modules.Security.Domain.Auth.BrandedEmailChrome.LinkColor(theme)
-            : null;
+        var inviter = FlitBrandedEmailLayout.PlatformName(theme);
+        var linkColor = FlitBrandedEmailLayout.BrandLinkColor(theme);
         var body =
             FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
             + FlitBrandedEmailLayout.Paragraph($"Has sido invitado a unirte a {inviter}.")
@@ -66,10 +62,4 @@ public static class InvitationEmailTemplate
         string? assetsBaseUrl = null,
         Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
         new(BuildSubject(theme), BuildHtmlBody(fullName, link, assetsBaseUrl, theme));
-
-    /// <summary>Nombre de la marca que invita; FLIT si el tema no es de marca o viene sin nombre.</summary>
-    private static string InviterName(Flit.Modules.Security.Domain.Auth.EmailTheme? theme) =>
-        theme is { IsBrand: true } && !string.IsNullOrWhiteSpace(theme.PlatformName)
-            ? theme.PlatformName.Trim()
-            : FlitName;
 }

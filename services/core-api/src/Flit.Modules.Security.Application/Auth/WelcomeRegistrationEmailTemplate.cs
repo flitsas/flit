@@ -7,7 +7,12 @@ namespace Flit.Modules.Security.Application.Auth;
 /// </summary>
 public static class WelcomeRegistrationEmailTemplate
 {
+    /// <summary>Asunto con el tema FLIT. Con tema de marca ver <see cref="BuildSubject"/>.</summary>
     public const string Subject = "¡Gracias por registrarte! — FLIT";
+
+    /// <summary>Asunto firmado por la marca con tema de marca; exactamente <see cref="Subject"/> con FLIT.</summary>
+    public static string BuildSubject(Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
+        $"¡Gracias por registrarte! — {FlitBrandedEmailLayout.PlatformName(theme)}";
 
     /// <summary>Ruta del login principal en el frontend.</summary>
     public const string LoginPath = "/login";
@@ -49,7 +54,7 @@ public static class WelcomeRegistrationEmailTemplate
             FlitBrandedEmailLayout.Paragraph("Nos alegra que estés aquí.")
             + FlitBrandedEmailLayout.Paragraph(
                 "Para ingresar a tu cuenta haz clic en el siguiente enlace:")
-            + FlitBrandedEmailLayout.ActionLink(url, display);
+            + FlitBrandedEmailLayout.ActionLink(url, display, FlitBrandedEmailLayout.BrandLinkColor(theme));
 
         var html = FlitBrandedEmailLayout.Wrap(
             headline: "¡GRACIAS POR REGISTRARTE!",
@@ -58,7 +63,7 @@ public static class WelcomeRegistrationEmailTemplate
             assetsBaseUrl: assetsBaseUrl,
             theme: theme);
 
-        return new ComposedEmail(Subject, html);
+        return new ComposedEmail(BuildSubject(theme), html);
     }
 
     /// <summary>Texto visible del enlace sin esquema (como en el diseño de marca).</summary>
