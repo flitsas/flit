@@ -51,7 +51,7 @@ describe("CompanyUsersPanel — cambio de rol (#13657)", () => {
     expect(
       await screen.findByText("Este usuario tiene 1 permiso individual que se eliminará al cambiar su rol."),
     ).toBeInTheDocument();
-    expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", "tenant-1");
+    expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", "tenant-1", "r-ges");
     expect(assignRole).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Cambiar rol" }));
     await waitFor(() => expect(assignRole).toHaveBeenCalledWith("u-1", "r-ges"));

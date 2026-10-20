@@ -139,12 +139,12 @@ export function EditUserModal({
     setRoleBusy(true);
     setRoleError(null);
     setRoleNotice(null);
-    // HU #13657: al cambiar de rol el backend borra los permisos individuales del producto del rol nuevo;
-    // se consulta cuántos son para avisar ANTES de aplicar. Sin permisos individuales no hay aviso (AC2).
+    // HU #13657: al cambiar de rol el backend borra los permisos individuales del producto del rol nuevo y de los roles que
+    // se cierran; se consulta cuántos son (por roleId, la misma regla) para avisar ANTES de aplicar. Sin ellos no hay aviso (AC2).
     const newRole = roleSection.roles.find((r) => r.id === roleId);
     let count: number | null = null;
     try {
-      count = (await countUserOverrides(user.id, newRole?.productCode, roleSection.tenantId ?? undefined)).count;
+      count = (await countUserOverrides(user.id, newRole?.productCode, roleSection.tenantId ?? undefined, roleId)).count;
     } catch {
       count = null;
     }

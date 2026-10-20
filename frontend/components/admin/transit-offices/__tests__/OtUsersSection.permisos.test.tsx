@@ -152,7 +152,7 @@ describe("OtUsersSection — aviso al cambiar el rol (#13657)", () => {
       await screen.findByText("Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol."),
     ).toBeInTheDocument();
     // Cuenta los permisos del producto del rol nuevo; el Admin OT no manda tenantId.
-    expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", undefined);
+    expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", undefined, "r-ot2");
     expect(assignRole).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Cambiar rol" }));
     await waitFor(() => expect(assignRole).toHaveBeenCalledWith("u-1", "r-ot2"));

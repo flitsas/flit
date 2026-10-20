@@ -134,8 +134,17 @@ export function setModuleOverrides(
   });
 }
 
-export function countUserOverrides(userId: string, productCode?: string, tenantId?: string): Promise<{ count: number }> {
-  return apiFetch<{ count: number }>(`${base(userId)}/count`, { query: { productCode, tenantId } });
+/**
+ * Permisos individuales activos del usuario. Con `roleId`, los que se purgarían al asignarle ese rol: el producto del rol
+ * nuevo y los de los roles que el reemplazo cierra (`productCode` se ignora).
+ */
+export function countUserOverrides(
+  userId: string,
+  productCode?: string,
+  tenantId?: string,
+  roleId?: string,
+): Promise<{ count: number }> {
+  return apiFetch<{ count: number }>(`${base(userId)}/count`, { query: { productCode, tenantId, roleId } });
 }
 
 export function listPermissionAudit(filters: PermissionAuditFilters = {}): Promise<PermissionAuditPage> {
