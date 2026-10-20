@@ -20,7 +20,7 @@ const read = (rel: string) => readFileSync(path.join(FE_ROOT, rel), "utf8");
 describe("HU #10498 — AC1: scroll encuadrado en el Shell", () => {
   it("el contenido se renderiza dentro de un contenedor scrollable con separación del dock", () => {
     render(
-      <Shell active="dashboard" onNav={vi.fn()}>
+      <Shell visibleModuleCodes={[]}>
         <div>contenido largo</div>
       </Shell>,
     );
@@ -29,11 +29,12 @@ describe("HU #10498 — AC1: scroll encuadrado en el Shell", () => {
     // El padding inferior libera el dock flotante (nada oculto tras él).
     expect(wrapper.className).toMatch(/pb-\d/);
     // El dock sigue presente y flotante sobre el contenido.
-    expect(screen.getByRole("button", { name: "Inicio FLIT" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Inicio Trámites" })).toBeInTheDocument();
   });
 
   it("el área de contenido ya no clipa el scroll (no overflow-hidden en el wrapper de children)", () => {
-    const src = read("components/atom/Shell.tsx");
+    // B-13: el contenedor lo pone la barra de la suite (layout `app`), que Trámites usa desde Shell.tsx.
+    const src = read("../packages/shell/src/SuiteShell.tsx");
     expect(src).not.toMatch(/absolute inset-0 overflow-hidden">\{children\}/);
     // Contenedor de scroll con colchón del dock; ref para condensado + data-shell-scroll del wizard.
     expect(src).toMatch(/absolute inset-0 overflow-y-auto pb-\d+/);

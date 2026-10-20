@@ -25,6 +25,10 @@ public sealed class RolesPorTenantPostgresTests(PostgresDatabaseFixture fixture)
     {
         var cn = await Fixture.OpenConnectionAsync();
         await Exec(cn, """
+            INSERT INTO platform.products (code, name, icon) VALUES
+              ('plataforma','Plataforma','layout'),('tramites','Tramites','file'),
+              ('comparendos','Comparendos','file'),('diagnostico','Diagnostico','file')
+            ON CONFLICT (code) DO NOTHING;
             INSERT INTO identity.tenants (id, code, legal_name, tax_id, tenant_type, is_active, is_group_parent, created_at)
               VALUES ('aaaaaaaa-1340-4000-8000-00000000000a','IT-ROLES-A','A','9134000000001','CONCESIONARIO',true,false,now()),
                      ('bbbbbbbb-1340-4000-8000-00000000000b','IT-ROLES-B','B','9134000000002','CONCESIONARIO',true,false,now());

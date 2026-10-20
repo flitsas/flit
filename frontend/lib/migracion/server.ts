@@ -8,6 +8,7 @@
 // herramientas de desarrollo abiertas puede migrar lo que quiera desde su casa.
 import "server-only";
 
+import { claimsTokenFromCookieHeader, isOidcSessionMode } from "@flit/auth/request";
 import { cookies } from "next/headers";
 import { decodeJwtPayload, isSuperAdmin, TOKEN_COOKIE } from "@/lib/auth/jwt";
 
@@ -50,7 +51,11 @@ function problema(estado: number, titulo: string, detalle: string): RespuestaBff
  * token solo abre el proxy, no el migrador. Aun así es una puerta que conviene cerrar.
  */
 export async function exigirSuperAdmin(): Promise<RespuestaBff | null> {
-  const token = (await cookies()).get(TOKEN_COOKIE)?.value;
+  // A-10 (HU #13001): con la sesión de @flit/auth, los claims salen de la sesión cifrada del servidor.
+  const jar = await cookies();
+  const token = isOidcSessionMode()
+    ? await claimsTokenFromCookieHeader(jar.toString(), "tramites")
+    : jar.get(TOKEN_COOKIE)?.value;
   const payload = decodeJwtPayload(token);
 
   if (!payload || !isSuperAdmin(payload)) {

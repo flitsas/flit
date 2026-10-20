@@ -63,7 +63,7 @@ public sealed class ReportesDetalladosPermissionSeedTests
         await InvokeSeedAsync(dbName, ct);
 
         await using var check = NewContext(dbName);
-        var accessible = await new SecurityModuleRepository(check).ListAccessibleAsync([ReadSlug], includeAll: false, ct);
+        var accessible = await new SecurityModuleRepository(check).ListAccessibleAsync([ReadSlug], includeAll: false, productCode: null, ct);
         accessible.Should().ContainSingle();
         accessible[0].Code.Should().Be("reportes");
         accessible[0].Actions.Select(a => a.Slug).Should().Equal(ReadSlug);
@@ -89,7 +89,7 @@ public sealed class ReportesDetalladosPermissionSeedTests
         old.DeletedAt.Should().NotBeNull("el retiro es lógico, no físico");
         old.IsActive.Should().BeFalse();
 
-        var all = await new SecurityModuleRepository(check).ListAccessibleAsync([], includeAll: true, ct);
+        var all = await new SecurityModuleRepository(check).ListAccessibleAsync([], includeAll: true, productCode: null, ct);
         all.Select(m => m.Code).Should().NotContain("reportes-detallados");
         all.Single(m => m.Code == "reportes").Actions.Select(a => a.Slug).Should().Contain([ReadSlug, ExportSlug]);
     }
@@ -109,7 +109,7 @@ public sealed class ReportesDetalladosPermissionSeedTests
         await InvokeSeedAsync(dbName, ct);
 
         await using var check = NewContext(dbName);
-        (await new SecurityModuleRepository(check).ListAccessibleAsync(["tramites.read"], includeAll: false, ct))
+        (await new SecurityModuleRepository(check).ListAccessibleAsync(["tramites.read"], includeAll: false, productCode: null, ct))
             .Should().BeEmpty("sin reportes.detallados.read no se abre ningún módulo de reportes");
     }
 

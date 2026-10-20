@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flit.Notificaciones.Api/Flit.Notificaciones.Api.csproj" />
+    <Project Path="src/Flit.Notificaciones.Grpc.Contracts/Flit.Notificaciones.Grpc.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.Notificaciones.Tests/Flit.Notificaciones.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             Code = data.Code,
             Name = data.Name,
             Description = data.Description,
+            ProductCode = data.ProductCode,
             TenantId = data.TenantId,
             IsSystem = false,
             IsActive = true,
@@ -85,7 +87,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             role.IsSystem,
             role.IsActive && role.DeletedAt == null,
             permissions,
-            RoleProducts.Tramites,
+            role.ProductCode,
             role.TenantId);
     }
 
@@ -128,7 +130,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
                 r.IsActive,
                 permCount,
                 r.CreatedAt,
-                RoleProducts.Tramites,
+                r.ProductCode,
                 r.TenantId)
         ).ToListAsync(ct);
 
@@ -145,7 +147,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             orderby r.Name
             select new RoleSummary(
                 r.Id, r.TargetEntityType, r.Code, r.Name, r.Description, r.IsSystem, r.IsActive,
-                permCount, r.CreatedAt, RoleProducts.Tramites, r.TenantId)
+                permCount, r.CreatedAt, r.ProductCode, r.TenantId)
         ).ToListAsync(ct);
     }
 
@@ -179,26 +181,39 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             from p in db.RbacActions.AsNoTracking()
             join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
             where permissionIds.Contains(p.Id) && p.IsActive && p.DeletedAt == null && m.DeletedAt == null
-            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code,
-                RoleProducts.PlatformModuleCodes.Contains(m.Code) ? RoleProducts.Plataforma : RoleProducts.Tramites)
+            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
         ).ToListAsync(ct);
     }
 
-    public Task<IReadOnlySet<string>> GetEnabledProductCodesAsync(Guid tenantId, CancellationToken ct) =>
-        // Adaptación a staging: no hay habilitación de productos por tenant (HU #10664); todos tienen Trámites.
-        Task.FromResult(RoleProducts.Enabled);
+    public async Task<IReadOnlySet<string>> GetEnabledProductCodesAsync(Guid tenantId, CancellationToken ct)
+    {
+        var enabled = await db.Set<TenantProductEntity>().AsNoTracking()
+            .Where(t => t.TenantId == tenantId && t.Enabled)
+            .Select(t => t.ProductCode)
+            .ToListAsync(ct);
+        // El hub (plataforma) no se enciende ni se apaga por empresa.
+        return new HashSet<string>(enabled, StringComparer.Ordinal) { "plataforma" };
+    }
 
     public async Task<IReadOnlyList<PermissionInfo>> ListGrantablePermissionsAsync(IReadOnlyCollection<string> productCodes, CancellationToken ct)
     {
         return await (
             from p in db.RbacActions.AsNoTracking()
             join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
-            where p.IsActive && p.DeletedAt == null && m.DeletedAt == null
-                && productCodes.Contains(RoleProducts.PlatformModuleCodes.Contains(m.Code) ? RoleProducts.Plataforma : RoleProducts.Tramites)
+            where p.IsActive && p.DeletedAt == null && m.DeletedAt == null && productCodes.Contains(m.ProductCode)
             orderby m.Code, p.Slug
-            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code,
-                RoleProducts.PlatformModuleCodes.Contains(m.Code) ? RoleProducts.Plataforma : RoleProducts.Tramites)
+            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
         ).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<string>> GetPermissionProductCodesAsync(IReadOnlyList<Guid> permissionIds, CancellationToken ct)
+    {
+        return await (
+            from p in db.RbacActions.AsNoTracking()
+            join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
+            where permissionIds.Contains(p.Id)
+            select m.ProductCode
+        ).Distinct().ToListAsync(ct);
     }
 
     public async Task SetPermissionsAsync(

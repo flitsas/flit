@@ -99,4 +99,26 @@ public sealed class CreateRoleHandlerTests
         await _repo.DidNotReceiveWithAnyArgs().CreateAsync(
             Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>());
     }
+
+    // HU #12964 — el producto del rol tiene que existir en el contrato v1 §1
+    [Fact]
+    public async Task HandleAsync_UnknownProduct_ThrowsInvalidRoleProduct()
+    {
+        await _handler
+            .Invoking(h => h.HandleAsync(new CreateRoleCommand(TargetEntityType, Code, Name, null, "flotas"), CancellationToken.None))
+            .Should().ThrowAsync<InvalidRoleProductException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #12964 — sin producto, el rol nuevo es de Trámites
+    [Fact]
+    public async Task HandleAsync_WithoutProduct_CreatesTramitesRole()
+    {
+        _repo.CodeExistsAsync(TargetEntityType, Code, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _handler.HandleAsync(new CreateRoleCommand(TargetEntityType, Code, Name, null), CancellationToken.None);
+
+        await _repo.Received(1).CreateAsync(Arg.Is<CreateRoleData>(d => d.ProductCode == "tramites"), Arg.Any<CancellationToken>());
+    }
 }

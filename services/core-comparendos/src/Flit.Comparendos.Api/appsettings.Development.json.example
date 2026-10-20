@@ -1,0 +1,43 @@
+{
+  // core-comparendos en tu máquina (docs/suite/local.md §6). Copia este archivo a appsettings.Development.json (ignorado
+  // por git) y reemplaza cada CAMBIAR. En Development las fuentes, la API de contratos y el OCR sin llave se simulan.
+  "Urls": "http://127.0.0.1:4028",
+  "Servicio": { "GrpcPort": 8086 },
+  // Archivos al file-manager de DEV (MinIO), carpeta flit-files/comparendos, como core-api con «tramites». Sin BaseUrl el
+  // servicio no arranca: guardar en la base solo lo permiten las pruebas automáticas.
+  "FileManager": { "BaseUrl": "https://devfilemanager.flitsas.online/", "FilesPath": "api/v1/files", "Category": "comparendos", "TimeoutSeconds": 120 },
+  "ConnectionStrings": {
+    // La misma base de core-api; el servicio usa su esquema propio «comparendos» y lo migra al arrancar.
+    "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+  "Platform": {
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-comparendos-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      // deploy/rabbitmq/usuario-de-servicio.sh comparendos <clave> notificaciones
+      "ConnectionString": "amqp://comparendos:CAMBIAR@127.0.0.1:5672/flit"
+    }
+  },
+  "Comparendos": {
+    "AppUrl": "http://127.0.0.1:4023",
+    "Plataforma": {
+      // El manifiesto de permisos se registra en el gateway (o directo en core-api) al arrancar.
+      "GatewayUrl": "http://127.0.0.1:4003"
+    },
+    // Fuentes de comparendos por core-consultas (gRPC). Vacío: proveedor «simulado» local.
+    "Consultas": { "Address": "" },
+    // Productos habilitados, usuarios y la lista de empresas del parametrizador, por Identidad (gRPC). Vacío en Development:
+    // todas las empresas cuentan como habilitadas, pero no hay lista para registrar empresas. Con core-identity: "http://127.0.0.1:8083".
+    "Identidad": { "Address": "" },
+    // Vacío: los correos solo se escriben en el log. Con core-notificaciones corriendo: "http://127.0.0.1:8085".
+    "Notificaciones": { "Address": "" },
+    // Vacío: OCR simulado. Con llave: llama a Anthropic con el modelo del prompt publicado (/admin/ocr/prompts).
+    "Ocr": { "ApiKey": "" }
+  }
+}

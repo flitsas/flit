@@ -29,7 +29,7 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
         var nit = data.DocumentNumber.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             data.TenantId,
             async () =>
             {
@@ -95,7 +95,7 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
         ArgumentNullException.ThrowIfNull(data);
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             data.TenantId,
             async () =>
             {
@@ -197,7 +197,7 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
         Guid? changedBy,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

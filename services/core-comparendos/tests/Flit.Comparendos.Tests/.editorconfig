@@ -1,0 +1,3 @@
+# Pruebas: los datos de cada caso van como arreglos literales a propósito (legibilidad sobre micro-rendimiento).
+[*.cs]
+dotnet_diagnostic.CA1861.severity = none

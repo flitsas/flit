@@ -1,11 +1,11 @@
-# Frente B — Productos, suscripciones, roles por producto y hub
+# Frente B — Productos, habilitación por empresa, roles por producto y hub
 
-> **Responsable:** desarrollador de Comparendos. **Producto que construye después:** Comparendos.
-> **Skill:** `flit-suite-b-hub`. **Prefijo de rama:** `feature/AB-<HU>-suite-b-…`.
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Comparendos). **Producto que construye después:** Comparendos.
+> **Skill:** `flit-suite-b-hub`. **Rama:** una por Feature de ADO, `feature/AB-<Feature>-suite-…`, con commits `HU<id>: …` ([reglas R1](../reglas-trabajo-paralelo.md#r1-ramas-prs-y-merges)).
 >
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
 > [contrato v1](../contrato-plataforma-v1.md) §4, §5, §6, §8 y §9, [plan maestro](../plan-maestro.md)
-> §4.5 y §4.6, [ADR-0063](../adr-borradores/ADR-0063-suscripciones-producto-y-rbac-por-producto.md),
+> §4.5 y §4.6, [ADR-0063](../adr-borradores/ADR-0063-habilitacion-producto-y-rbac-por-producto.md),
 > `GUIA-DOCK-INFERIOR-FLOTANTE.md` y `docs/arbol-menu-por-rol.md`.
 
 ## Objetivo
@@ -48,27 +48,27 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ## Features sugeridas en ADO
 
-- **B1 — Productos, suscripciones y roles por producto:** B-01 a B-08.
+- **B1 — Productos, habilitación por empresa y roles por producto:** B-01 a B-08.
 - **B2 — Hub y shell común:** B-09 a B-13.
 
 ---
 
 ## Estado
 
-- [ ] B-00 Cerrar §4, §5, §6 y §8 del contrato con A y C
-- [ ] B-01 Inventario plataforma contra Trámites
-- [ ] B-02 Paquete `@flit/ui` v0
-- [ ] B-03 Módulo de plataforma y schema `platform`
-- [ ] B-04 `product_code` en módulos y roles
-- [ ] B-05 `IProductAccessResolver` con herencia de jerarquía
-- [ ] B-06 Endpoints de plataforma y `RequireProduct`
-- [ ] B-07 Migrar los booleans de módulos a suscripciones
-- [ ] B-08 `DomainContext` con producto y `tenant_domains.purpose`
-- [ ] B-09 Esqueleto de `frontend-hub`
-- [ ] B-10 Paquete `@flit/shell`
-- [ ] B-11 Inicio del hub y menú de productos
+- [x] B-00 Cerrar §4, §5, §6 y §8 del contrato con A y C
+- [x] B-01 Inventario plataforma contra Trámites
+- [x] B-02 Paquete `@flit/ui` v0
+- [x] B-03 Módulo de plataforma y schema `platform`
+- [x] B-04 `product_code` en módulos y roles
+- [x] B-05 `IProductAccessResolver` con herencia de jerarquía
+- [x] B-06 Endpoints de plataforma y `RequireProduct`
+- [x] B-07 Migrar los booleans de módulos a la habilitación de productos
+- [x] B-08 `DomainContext` con producto y `tenant_domains.purpose`
+- [x] B-09 Esqueleto de `frontend-hub`
+- [x] B-10 Paquete `@flit/shell`
+- [x] B-11 Inicio del hub y menú de productos (opción 4, provisional)
 - [ ] B-12 Administración de plataforma en el hub
-- [ ] B-13 Trámites adopta `@flit/shell`
+- [x] B-13 Trámites adopta `@flit/shell`
 
 ---
 
@@ -76,7 +76,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ### B-00 · Contrato de productos y hub · Fase 0 · semana 1 · S
 
-- **Qué:** revisar con A y C las secciones §4, §5, §6 (me/apps, manifiesto, suscripciones) y §8 (`@flit/ui`, `@flit/shell`) y cerrarlas.
+- **Qué:** revisar con A y C las secciones §4, §5, §6 (me/apps, manifiesto, habilitación de productos) y §8 (`@flit/ui`, `@flit/shell`) y cerrarlas.
 - **Hecho cuando:** PR que cambia solo el contrato, aprobado por los tres frentes.
 
 ### B-01 · Inventario plataforma contra Trámites · Fase 0 · semanas 1–2 · S
@@ -92,38 +92,39 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ### B-03 · Módulo de plataforma y schema `platform` · Fase 1 · M
 
-- **Qué:** módulo nuevo `Flit.Modules.Platform` (Domain + Application) con las tablas `platform.products` y `platform.tenant_product_subscriptions` del ADR-0063. Semilla: `plataforma`, `tramites`, `comparendos`, `diagnostico`, `demo`. Auditoría en `admin.tenant_config_audit_logs`.
-- **Dónde:** configuraciones EF en archivos propios; **turno de migración** (R6); una línea en `Program.cs` e `InfrastructureExtensions.cs` (R5).
+- **Qué:** módulo nuevo `Flit.Modules.Platform` (Domain + Application) con las tablas `platform.products` y `platform.tenant_products` (producto encendido o apagado por empresa) del ADR-0063. Semilla: `plataforma`, `tramites`, `comparendos`, `diagnostico`, `demo`. Auditoría en `admin.tenant_config_audit_logs`.
+- **Dónde:** configuraciones EF en archivos propios; migración (R6); una línea en `Program.cs` e `InfrastructureExtensions.cs` (R5).
 - **Hecho cuando:** la migración corre en DEV y todas las empresas existentes tienen `tramites` activo.
 
 ### B-04 · `product_code` en módulos y roles · Fase 1 · M
 
 - **Qué:** columna `product_code` en `security.modules` y `security.roles`. Un rol solo puede incluir permisos de módulos de su producto. Migración que etiqueta los existentes con `tramites` o `plataforma` según B-01. `GET /api/v1/security/modules?product=`.
-- **Dónde:** `Flit.Infrastructure/Persistence/Configurations/Security/RbacConfigurations.cs`, `Persistence/Entities/Security/Role.cs` y `SecurityModule.cs`, `Persistence/Repositories/SecurityModuleRepository.cs`. **Turno de migración.**
-- **Hecho cuando:** los roles actuales siguen funcionando igual y cada uno tiene producto. La HU #10664 no se revierte: los módulos siguen sin habilitación por empresa.
+- **Dónde:** `Flit.Infrastructure/Persistence/Configurations/Security/RbacConfigurations.cs`, `Persistence/Entities/Security/Role.cs` y `SecurityModule.cs`, `Persistence/Repositories/SecurityModuleRepository.cs`. Migración (R6).
+- **Rol por producto (decisión D1 del inventario B-01):** el índice de rol único de `security.user_role_assignments` pasa de (usuario, empresa) a (usuario, empresa, producto del rol). Se crea `admin_tramites` (producto `tramites`) con los permisos de Trámites que hoy tiene `AdminCompany`, y la migración se lo asigna a cada usuario con `AdminCompany`. `AdminCompany` queda solo con permisos de plataforma. El `product_code` de cada módulo y rol sale de la sección 5 de `b-inventario-plataforma-vs-tramites.md`, por `code` (el seeder solo corre en `Development`).
+- **Hecho cuando:** los roles actuales siguen funcionando igual y cada uno tiene producto. La HU #10664 no se revierte: los módulos siguen sin habilitación por empresa. Ningún usuario con `AdminCompany` pierde acceso a lo que hoy usa en Trámites.
 
 ### B-05 · `IProductAccessResolver` · Fase 1 · M
 
-- **Qué:** implementar el contrato §4. Suscripción de la empresa o de su cabeza (reglas fail-closed de ADR-0057 de jerarquía) más los roles y permisos del usuario en ese producto. Caché en Redis, invalidada por `platform.subscription.changed` y `platform.roles.changed`, que tú publicas.
+- **Qué:** implementar el contrato §4. Producto encendido para la empresa y para su cabeza (reglas fail-closed de ADR-0057 de jerarquía) más los roles y permisos del usuario en ese producto. Caché en Redis, invalidada por `platform.tenant_product.changed` y `platform.roles.changed`, que tú publicas.
 - **Entrega a A:** avísale para que borre `StubProductAccessResolver`.
-- **Hecho cuando:** pruebas de la matriz del ADR-0063: empresa con y sin producto, usuario con y sin rol, suscripción activa, suspendida o vencida, y empresa hija.
+- **Hecho cuando:** pruebas de la matriz del ADR-0063: empresa con y sin producto, usuario con y sin rol, producto encendido o apagado, empresa hija y SuperAdmin (bypass del contrato §2.1).
 
 ### B-06 · Endpoints de plataforma y `RequireProduct` · Fase 1 · M
 
-- **Qué:** `GET /api/v1/platform/me/apps`, `PUT /api/v1/platform/products/{code}/manifest` (servicio, idempotente) y administración de suscripciones para el SuperAdmin, según el contrato §6. Policy `RequireProduct` aplicada a todo el grupo de rutas de Trámites, detrás de `Suite:Subscriptions:Enforce`: apagada solo registra, encendida rechaza.
+- **Qué:** `GET /api/v1/platform/me/apps`, `PUT /api/v1/platform/products/{code}/manifest` (servicio, idempotente) y `GET/PUT /api/v1/platform/admin/tenants/{tenantId}/products` para que el SuperAdmin encienda o apague productos, según el contrato §6. Policy `RequireProduct` aplicada a todo el grupo de rutas de Trámites, detrás de `Suite:ProductAccess:Enforce`: apagada solo registra, encendida rechaza.
 - **Dónde:** `Flit.Modules.Platform` y un archivo de endpoints propio; contrato en `contracts/openapi/platform.v1.yaml`.
-- **Hecho cuando:** con la bandera encendida en DEV, una empresa sin `tramites` recibe `PRODUCT_NOT_SUBSCRIBED` en la API, no solo en el menú.
+- **Hecho cuando:** con la bandera encendida en DEV, una empresa con `tramites` apagado recibe `PRODUCT_NOT_ENABLED` en la API, no solo en el menú.
 
-### B-07 · Booleans de módulos a suscripciones · Fase 1 · S
+### B-07 · Booleans de módulos a habilitación de productos · Fase 1 · S
 
-- **Qué:** convertir `tramites_module_enabled`, `comparendos_module_enabled` y `resoluciones_module_enabled` en suscripciones. La tarjeta "Próximamente" y el fieldset de la configuración de empresa pasan a leer suscripciones. Retirar los booleans un sprint después.
+- **Qué:** convertir `tramites_module_enabled` y `comparendos_module_enabled` en filas de `platform.tenant_products`. `resoluciones_module_enabled` no se toca (Resoluciones está fuera de v1). La tarjeta "Próximamente" y el fieldset de la configuración de empresa pasan a leer la habilitación de productos. Retirar los booleans un sprint después.
 - **Dónde:** `Flit.Admin.Domain/Companies/Settings/TenantSettings.cs:135-149`, `Configurations/Admin/TenantOperationalPolicyConfiguration.cs`, `Flit.Api/Endpoints/Analytics/DashboardActiveModulesEndpoints.cs`, `frontend/components/admin/companies/tabs/ConfiguracionEmpresaTab.tsx`, `frontend/components/atom/modules/Dashboard.tsx`.
-- **Hecho cuando:** ninguna pantalla lee los booleans. **Turno de migración** para quitarlos.
+- **Hecho cuando:** ninguna pantalla lee los booleans. Migración (R6) para quitarlos.
 
 ### B-08 · `DomainContext` con producto y `tenant_domains.purpose` · Fase 1 · M
 
 - **Qué:** contrato §5. `DomainContext` gana `ProductCode`. `admin.tenant_domains` gana `purpose` (`HUB` o código de producto) y la unicidad pasa de `tenant_id` a `(tenant_id, purpose)`. Los registros actuales quedan con `purpose = HUB`.
-- **Dónde:** `Flit.Api/Authorization/DomainContext.cs` y `Middleware/DomainContextMiddleware.cs` (dueño A: PR con revisión de A), `Flit.Admin.Domain/Companies/Domains/TenantDomain.cs`, `Flit.Infrastructure/Domains/CachedTenantDomainResolver.cs`, vista `admin.v_active_network_domains`. **Turno de migración.**
+- **Dónde:** `Flit.Api/Authorization/DomainContext.cs` y `Middleware/DomainContextMiddleware.cs`, `Flit.Admin.Domain/Companies/Domains/TenantDomain.cs`, `Flit.Infrastructure/Domains/CachedTenantDomainResolver.cs`, vista `admin.v_active_network_domains`. Migración (R6).
 - **Hecho cuando:** la suite `tests/Flit.Integration.Tests/MarcaBlanca` pasa sin cambios de comportamiento, y un segundo dominio de la misma red con otro `purpose` resuelve su producto.
 
 ### B-09 · Esqueleto de `frontend-hub` · Fase 1 (inicio) · S
@@ -137,21 +138,26 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 - **Regla:** `SuiteShell` no importa nada de un producto concreto. Hoy `Shell.tsx` importa navegación de OT, plataforma y Dr. FLIT; eso pasa al catálogo que entrega Trámites.
 - **Hecho cuando:** hub y producto de prueba usan `SuiteShell` con catálogos distintos.
 
-### B-11 · Inicio del hub y menú de productos · Fase 2 · M
+### B-11 · Inicio del hub y menú de productos · Fase 2 · M (+2–3 días por la opción 4)
 
-- **Qué:** página de inicio en `flitsas.online` con las tarjetas de los productos de `GET /platform/me/apps`, solo los que el usuario puede abrir. El menú de productos es la única forma de cambiar de producto. El hub tiene su propio menú: Inicio, Empresa, Usuarios y roles, Suscripciones, Marca y dominio, Auditoría. Detrás de `Suite:Hub:Enabled`.
-- **Hecho cuando:** un usuario con dos productos ve dos tarjetas y cambia entre ellos sin volver a iniciar sesión (con A-07 listo).
+- **Qué:** el hub de `flitsas.online` según la **opción 4, «Hub con entrada directa»** (plan maestro §4.6; **provisional** mientras el CTO y el líder deciden, confirmar antes de empezar):
+  - **Sin sesión:** portada breve con la marca del host (logo, una frase, «Iniciar sesión» y cada producto con «Conocer más ↗» hacia `flitsas.com`). En Marca Blanca, solo la marca de la red.
+  - **Con dos o más productos:** inicio con saludo y las tarjetas de los productos de `GET /platform/me/apps`, solo los que el usuario puede abrir, y los accesos de administración.
+  - **Con un solo producto:** entrada directa al producto. El hub queda a un clic en ▦ → Inicio.
+  - El menú de productos es la única forma de cambiar de producto. El hub tiene su propio menú: Inicio, Empresa, Usuarios y roles, Productos, Marca y dominio, Auditoría. Detrás de `Suite:Hub:Enabled`.
+- **Hecho cuando:** un usuario con dos productos ve dos tarjetas y cambia entre ellos sin volver a iniciar sesión (con A-07 listo); un usuario con solo Trámites que abre `flitsas.online` aterriza en Trámites; sin sesión se ve la portada con la marca del host, también en un dominio de Marca Blanca.
 
 ### B-12 · Administración de plataforma en el hub · Fase 2 · L
 
-- **Qué:** mover al hub, según el inventario B-01, las pantallas de compañías y sus hijas, usuarios, RBAC por producto (evolución de `RbacAdmin.tsx`), auditoría, marca y dominio, suscripciones y catálogo de jobs. Las rutas viejas de `frontend/app/admin/**` redirigen al hub. Coordina el mapa de redirecciones con A (A-11).
+- **Qué:** mover al hub, según el inventario B-01, las pantallas de compañías y sus hijas, usuarios, RBAC por producto (evolución de `RbacAdmin.tsx`), auditoría, marca y dominio, productos habilitados y catálogo de jobs. Las rutas viejas de `frontend/app/admin/**` redirigen al hub. Coordina el mapa de redirecciones con A (A-11).
 - **Regla:** mover por secciones, un PR por sección, cada una detrás de `Suite:Hub:Enabled`.
 - **Hecho cuando:** el menú de Trámites ya no tiene entradas de plataforma y cada pantalla movida tiene su redirección.
+- **Token de producto con los roles de plataforma (transitorio, 2026-09-30):** mientras la administración de plataforma viva en las pantallas de Trámites, el token de cada producto lleva también los roles y permisos de plataforma del usuario (`AdminCompany`), además de los del producto (`OidcPrincipalFactory`). Sin esto, con la sesión de la suite el administrador de la empresa perdía la consola de su compañía y Usuarios (hallado en B-13). Cuando cada sección pase al hub, se retira ese bloque.
 
 ### B-13 · Trámites adopta `@flit/shell` · Fase 2 · M
 
 - **Qué:** `frontend/` pasa a `SuiteShell` con su catálogo de navegación. Se quitan del dock las entradas que se fueron al hub. Se conservan las de Trámites: Trámites, Preasignación, Identidad, Reportes, Historial de placa, Administración OT, Organismos de tránsito, Documental, Improntas, Quipux, Tipos de trámite, Mandatos, FUR, Causales, Generación documental, LOG QX e ICT.
-- **Coordinación:** A cambia la sesión en paralelo (A-10). Acuerden el orden de los PRs en el mensaje diario.
+- **Coordinación:** A-10 cambia la sesión de Trámites; B-13 va después de A-10 en el orden de trabajo.
 - **Hecho cuando:** las pruebas del dock y del Shell (`frontend/__tests__/Shell.*`, `dock/**`) pasan con el catálogo nuevo.
 
 ---
@@ -160,7 +166,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 | Riesgo | Qué hacer |
 |---|---|
-| Tres migraciones seguidas (B-03, B-04, B-08) chocan con las de A | Pedir el turno con anticipación en el mensaje diario (R6) |
+| Tres migraciones seguidas (B-03, B-04, B-08) chocan con las del resto del equipo en `develop` | Traer `develop` a diario y, si aparece una migración más nueva, regenerar la propia (R6) |
 | `Shell.tsx` (872 líneas) está acoplado a productos | Primero catálogo y adaptador, después `SuiteShell`; nunca los dos en el mismo PR |
 | Mover pantallas duplica código durante la transición | Una sección por PR, con redirección y bandera |
 | `RequireProduct` encendido corta a usuarios reales | Semana en modo "solo registra" y revisión de los registros antes de encender |
@@ -169,4 +175,13 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 | Fecha | Tarea | PR | Nota |
 |---|---|---|---|
-| | | | |
+| 2026-09-25 | B-03 (HU #12958) | #446 | Schema `platform`. `plataforma` no lleva filas por empresa; un disparador transitorio enciende `tramites` a cada empresa nueva hasta B-12. |
+| 2026-09-25 | B-04 (HU #12964) | Feature #12888 | `product_code` en módulos, roles y asignaciones; `admin_tramites` con los permisos de Trámites de AdminCompany. Índice de rol único por (usuario, empresa, producto). Espejo transitorio hasta B-12: asignar AdminCompany crea `admin_tramites` y quitarlo lo cierra (disparador `tr_ura_mirror_admin_tramites`), así las pantallas de un solo rol siguen igual; `admin_tramites` no se ofrece en `GET /security/roles`. SuperAdmin exento de la regla de un producto por rol. No se siembra `security.users.reset_password.all`: sería asignable a un rol de empresa por error. Verificado en un clon de DEV: permisos efectivos idénticos antes y después, y en la reversa. |
+| 2026-09-25 | B-05 (HU #12965) | Feature #12888 | `ProductAccessResolver` real: plataforma siempre encendida; otro producto solo si lo está para la empresa y cada ancestro (fail-closed). Sin caché hasta Redis (L-07) y outbox (C-01). No había stub que retirar. |
+| 2026-09-25 | B-06 (HU #12966) | Feature #12888 | `me/apps`, manifiesto (scope `platform.manifest`), `GET/PUT /admin/tenants/{id}/products` (una hija no enciende lo que su cabeza tiene apagado) y `RequireProductMiddleware` detrás de `Suite:ProductAccess:Enforce` (apagada: solo registra; caché de 30 s). Middleware y no policy por grupo: las rutas de Trámites están repartidas en decenas de `Map*Endpoints`. Contrato en `contracts/openapi/platform.v1.yaml`. |
+| 2026-09-25 | B-07 (HU #12967) | Feature #12888 | Trámites y Comparendos se leen de `platform.tenant_products` (`ITenantProductFlags`); la configuración de empresa ya no los escribe y solo el SuperAdmin los cambia, al instante, desde la misma pantalla. Columnas marcadas obsoletas; se retiran un sprint después. |
+| 2026-09-25 | B-08 (HU #12968) | Feature #12888 | `DomainContext.ProductCode` (hosts FLIT por `Suite:Hosts`; redes por `admin.tenant_domains.purpose`, HUB por defecto). Unicidad por (red, propósito); las operaciones de dominio existentes siguen sobre el HUB. MarcaBlanca 25/25 sin cambios. |
+| 2026-09-28 | B-09 (HU #12985) | Feature #12889 | `frontend-hub` (Next.js 16, puerto 4040): portada con la marca del host, proxy `/api/v1/*` que sella el dominio y `/healthz`; `app/(auth)` reservado para A-06. Sin `NEXT_PUBLIC_*`: una imagen para los tres ambientes, configuración en runtime (`FLIT_HOSTS`, `CORE_API_ORIGIN`, `TRAMITES_URL`). La marca por host sale a `@flit/brand` (Trámites reexporta, sin cambios). CD construye la imagen; en el compose el servicio va bajo el perfil `suite` y no arranca hasta encenderlo en el `.env`. Probado en local contra la API: login y `me/apps` por el proxy. |
+| 2026-09-28 | B-10 (HU #12986) | Feature #12889 | `packages/shell`: `SuiteShell` (contrato §8) con marca del host, nombre del producto, menú de productos (`me/apps`), menú de cuenta y dock inferior desde un catálogo (`NavCatalog`, Contratos A y B de la guía: orden por secciones, filtro por permiso, rol o SuperAdmin, ruta activa por prefijo más largo) y menú móvil con los mismos grupos. El dock y sus estilos se portaron del de Trámites sin su catálogo; una prueba falla si el paquete importa código de una app. El hub ya lo usa con su propio catálogo (administración de plataforma, que sigue en Trámites hasta B-12). El producto `demo` no existe aún (C-08): el segundo catálogo será el de Trámites en B-13. Probado en el navegador con AdminCompany. |
+| 2026-09-28 | B-11 (HU #12987) | Feature #12889 | Opción 4 «Hub con entrada directa» (provisional): sin sesión, portada con la marca del host y, solo en FLIT, los productos con «Conocer más ↗» a flitsas.com (en Marca Blanca solo la marca de la red); con sesión, los productos se leen en el servidor con el token del hub (`getAccessToken` de `@flit/auth`; si está por vencer, desde el navegador por el proxy) y quien tiene **un** producto entra directo a él; con dos o más, saludo, tarjetas y accesos de administración. La vuelta al hub (▦ → Inicio y el botón central del dock) lleva `?inicio=1`, que nunca redirige. Sin `Suite:Hub:Enabled`: el hub es una app aparte y lo gobiernan el perfil `suite` y `FLIT_TRAMITES_HOST_ENABLED`. Verificado con sesión real: `/` → Trámites; `/?inicio=1` → inicio con su tarjeta y la administración. |
+| 2026-09-28 | B-13 (HU #12989) | Feature #12889 | Trámites usa `SuiteShell` con su catálogo (`components/atom/dock/tramitesNav.ts`); `Shell.tsx` queda como adaptador (usuario de `flit:jwt` en las dos sesiones, tema, Dr. FLIT, pie). Las entradas son enlaces (`/tramites`, `/?m=…`, rutas `/admin/*`) y la activa sale de la URL, así que las 11 pantallas ya no pasan `active` ni `onNav`. Las reglas de acceso son las de antes, entrada por entrada; el contrato del catálogo ganó `module` (módulos RBAC, deny-by-default mientras cargan), permisos «basta uno», enlaces con consulta y contenedores. `SuiteShell` ganó el layout `app` (scroll en `[data-shell-scroll]`, que usa el asistente del trámite), enlaces y cierre de sesión propios en el menú de cuenta y el condensado por dirección de scroll que tenía Trámites. Las entradas de plataforma se quedan en el dock de Trámites hasta que B-12 mueva cada sección al hub. Corrige «Red de clientes», que el dock descartaba, y el enlace «Mi empresa» del hub, que apuntaba a una ruta inexistente. Cambios visibles: la barra de la suite (menú de productos, cuenta con «Cerrar sesión») y el menú móvil de la barra en lugar de la hoja del botón central. |

@@ -5,6 +5,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Sql;
+using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -82,26 +83,57 @@ public static class DevelopmentAuthSeeder
     public static readonly Guid OtEnvigadoProfileId =
         Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76e");
 
-    public static async Task SeedAsync(
+    public static Task SeedAsync(
         FlitDbContext db,
         IPasswordHasher passwordHasher,
         IHostEnvironment environment,
+        CancellationToken cancellationToken) =>
+        SeedAsync(db, passwordHasher, SeedSettings.From(environment), cancellationToken);
+
+    /// <summary>
+    /// HU #12895 (A-02) — el catálogo RBAC y los datos demo se siembran por separado (<see cref="SeedSettings"/>). El
+    /// orden es el de siempre; cada paso corre solo si su parte está encendida.
+    /// </summary>
+    public static async Task SeedAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        SeedSettings settings,
         CancellationToken cancellationToken)
     {
-        if (!environment.IsDevelopment())
-            return;
+        if (settings.DemoData)
+        {
+            await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
+            await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
+            await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
+        }
 
-        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
-        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
-        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
-        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("27-HU10659-transit-offices-runt-catalog-seed.sql"), cancellationToken);
-        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("34-transit-offices-city-department-names.sql"), cancellationToken);
+        if (settings.RbacCatalog)
+        {
+            await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("27-HU10659-transit-offices-runt-catalog-seed.sql"), cancellationToken);
+            await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("34-transit-offices-city-department-names.sql"), cancellationToken);
+            await EnsureSuperAdminRoleAsync(db, cancellationToken);
+            await EnsureAdminCompanyRoleAsync(db, cancellationToken);
+        }
 
-        await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
-        await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
-        await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
-        await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
-        await SeedEnvigadoOtAdminAsync(db, passwordHasher, cancellationToken);
+        if (settings.DemoData)
+        {
+            await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
+            await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
+            await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
+            await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
+            await SeedEnvigadoOtAdminAsync(db, passwordHasher, cancellationToken);
+        }
+
+        if (settings.RbacCatalog)
+            await SeedRbacCatalogAsync(db, cancellationToken);
+
+        if (settings.DemoData)
+            await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
+    }
+
+    /// <summary>Módulos y permisos de cada funcionalidad, con sus concesiones a los roles de sistema.</summary>
+    private static async Task SeedRbacCatalogAsync(FlitDbContext db, CancellationToken cancellationToken)
+    {
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
@@ -116,7 +148,6 @@ public static class DevelopmentAuthSeeder
         await SeedBannersPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
-        await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
         await SeedConsolidadoMasivoPermissionsAsync(db, cancellationToken); // Épica #13216 — HU13369
     }
 
@@ -209,7 +240,9 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
-    /// Deja al usuario con EXACTAMENTE una asignación activa, la del rol indicado.
+    /// Deja al usuario con EXACTAMENTE una asignación activa en el producto del rol indicado.
+    /// HU #12964 (decisión D1): el rol único es por producto, así que las asignaciones de otro producto
+    /// (el admin_tramites que acompaña a AdminCompany) no se tocan.
     ///
     /// <para>Reusa la fila que ya exista en vez de crear otra, y cierra cualquier asignación
     /// activa sobrante: la tabla guarda histórico en soft-delete, así que un usuario puede
@@ -219,10 +252,13 @@ public static class DevelopmentAuthSeeder
     private static async Task EnsureSingleRoleAssignmentAsync(
         FlitDbContext db, Guid userId, Guid tenantId, Guid roleId, CancellationToken cancellationToken)
     {
-        var assignments = await db.UserRoleAssignments
-            .Where(a => a.UserId == userId && a.TenantId == tenantId)
-            .OrderByDescending(a => a.AssignedAt)
-            .ToListAsync(cancellationToken);
+        var product = await db.Roles.Where(r => r.Id == roleId).Select(r => r.ProductCode).FirstAsync(cancellationToken);
+        var assignments = await (
+            from a in db.UserRoleAssignments
+            join r in db.Roles on a.RoleId equals r.Id
+            where a.UserId == userId && a.TenantId == tenantId && r.ProductCode == product
+            orderby a.AssignedAt descending
+            select a).ToListAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -256,6 +292,113 @@ public static class DevelopmentAuthSeeder
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// HU #12895 (A-02) — rol SuperAdmin con el módulo <c>auth</c> y su permiso <c>auth.me.read</c>. Antes solo se
+    /// creaba junto con la cuenta demo; ahora es catálogo y existe aunque no se siembren cuentas demo.
+    ///
+    /// HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id). SuperAdmin es transversal a todos los
+    /// tenants, pero el enum target_entity_type solo admite COMPANY|TRANSIT_OFFICE — se usa COMPANY como default y no se
+    /// expone en las pantallas de gestión de roles por tipo de entidad (decisión documentada en ADR-0023). Su producto es
+    /// <c>plataforma</c> (HU #12964); la entidad trae <c>tramites</c> por defecto, así que se fija y se repara.
+    /// </summary>
+    private static async Task<Guid> EnsureSuperAdminRoleAsync(FlitDbContext db, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules.FirstOrDefaultAsync(m => m.Code == "auth", cancellationToken);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "auth",
+                Name = "Autenticación",
+                ProductCode = PlatformProductCode,
+                SortOrder = 0,
+                IsActive = true,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var permission = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == "auth.me.read", cancellationToken);
+        if (permission is null)
+        {
+            permission = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "auth.me.read",
+                Name = "Ver perfil autenticado",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/auth/me",
+                IsActive = true,
+            };
+            db.RbacActions.Add(permission);
+        }
+
+        var role = await EnsureSystemRoleAsync(db, "SuperAdmin", "Super Administrador", cancellationToken);
+
+        if (!await db.RoleGrants.AnyAsync(g => g.RoleId == role.Id && g.PermissionId == permission.Id, cancellationToken))
+        {
+            db.RoleGrants.Add(new RoleGrant
+            {
+                Id = Guid.CreateVersion7(),
+                RoleId = role.Id,
+                PermissionId = permission.Id,
+                CreatedAt = now,
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return role.Id;
+    }
+
+    /// <summary>
+    /// HU #12895 (A-02) — rol AdminCompany (administrador de la empresa en la plataforma, HU #12964). Catálogo: existe
+    /// aunque no se siembre la cuenta demo que antes lo creaba.
+    /// </summary>
+    private static async Task<Role> EnsureAdminCompanyRoleAsync(FlitDbContext db, CancellationToken cancellationToken)
+    {
+        var role = await EnsureSystemRoleAsync(db, ProductRoleCodes.AdminCompany, "Administrador de Compañía", cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return role;
+    }
+
+    private const string PlatformProductCode = "plataforma";
+
+    /// <summary>Busca o crea un rol de sistema de plataforma por código; si existe con otro producto, lo corrige.</summary>
+    private static async Task<Role> EnsureSystemRoleAsync(
+        FlitDbContext db, string code, string name, CancellationToken cancellationToken)
+    {
+        var role = await db.Roles.FirstOrDefaultAsync(
+            r => r.Code == code && r.TargetEntityType == "COMPANY" && r.DeletedAt == null,
+            cancellationToken);
+
+        if (role is null)
+        {
+            role = new Role
+            {
+                Id = Guid.CreateVersion7(),
+                Code = code,
+                Name = name,
+                TargetEntityType = "COMPANY",
+                ProductCode = PlatformProductCode,
+                IsSystem = true,
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                RowVersion = 0,
+            };
+            db.Roles.Add(role);
+        }
+        else if (role.ProductCode != PlatformProductCode)
+        {
+            role.ProductCode = PlatformProductCode;
+        }
+
+        return role;
+    }
+
     private static async Task SeedSuperAdminAsync(
         FlitDbContext db,
         IPasswordHasher passwordHasher,
@@ -269,9 +412,7 @@ public static class DevelopmentAuthSeeder
 
         var tenantId = Guid.CreateVersion7();
         var userId = Guid.CreateVersion7();
-        var roleId = Guid.CreateVersion7();
-        var moduleId = Guid.CreateVersion7();
-        var permissionId = Guid.CreateVersion7();
+        var roleId = await EnsureSuperAdminRoleAsync(db, cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
         db.Tenants.Add(new Tenant
@@ -308,52 +449,7 @@ public static class DevelopmentAuthSeeder
             RowVersion = 0,
         });
 
-        db.SecurityModules.Add(new SecurityModule
-        {
-            Id = moduleId,
-            Code = "auth",
-            Name = "Autenticación",
-            SortOrder = 0,
-            IsActive = true,
-        });
-
         await db.SaveChangesAsync(cancellationToken);
-
-        db.RbacActions.Add(new RbacAction
-        {
-            Id = permissionId,
-            ModuleId = moduleId,
-            Slug = "auth.me.read",
-            Name = "Ver perfil autenticado",
-            HttpMethod = "GET",
-            RoutePattern = "/api/v1/auth/me",
-            IsActive = true,
-        });
-
-        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id). SuperAdmin
-        // es transversal a todos los tenants, pero el enum target_entity_type solo admite
-        // COMPANY|TRANSIT_OFFICE (no hay un tercer valor "GLOBAL"/"SYSTEM") — se usa COMPANY como
-        // default y no se expone en las pantallas de gestión de roles por tipo de entidad
-        // (decisión documentada en ADR-0023).
-        db.Roles.Add(new Role
-        {
-            Id = roleId,
-            Code = "SuperAdmin",
-            Name = "Super Administrador",
-            TargetEntityType = "COMPANY",
-            IsSystem = true,
-            IsActive = true,
-            CreatedAt = now,
-            RowVersion = 0,
-        });
-
-        db.RoleGrants.Add(new RoleGrant
-        {
-            Id = Guid.CreateVersion7(),
-            RoleId = roleId,
-            PermissionId = permissionId,
-            CreatedAt = now,
-        });
 
         db.UserRoleAssignments.Add(new UserRoleAssignment
         {
@@ -805,24 +901,7 @@ public static class DevelopmentAuthSeeder
         // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
         // busca/crea "AdminCompany" por Code + target_entity_type, nunca por tenant (evita
         // violar UNIQUE(code, target_entity_type) si ya existe de un run/tenant previo).
-        var adminCompanyRole = await db.Roles.FirstOrDefaultAsync(
-            r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null,
-            cancellationToken);
-        if (adminCompanyRole is null)
-        {
-            adminCompanyRole = new Role
-            {
-                Id = Guid.CreateVersion7(),
-                Code = "AdminCompany",
-                Name = "Administrador de Compañía",
-                TargetEntityType = "COMPANY",
-                IsSystem = true,
-                IsActive = true,
-                CreatedAt = now,
-                RowVersion = 0,
-            };
-            db.Roles.Add(adminCompanyRole);
-        }
+        var adminCompanyRole = await EnsureAdminCompanyRoleAsync(db, cancellationToken);
 
         db.Users.Add(new User
         {
@@ -894,8 +973,8 @@ public static class DevelopmentAuthSeeder
             new() { Id = Guid.CreateVersion7(), Code = "tramites",     Name = "Trámites",                 SortOrder = 2, IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), Code = "reportes",     Name = "Reportes",                 SortOrder = 3, IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), Code = "validaciones", Name = "Validaciones",             SortOrder = 4, IsActive = true, CreatedAt = now },
-            new() { Id = Guid.CreateVersion7(), Code = "usuarios",     Name = "Usuarios y Permisos",      SortOrder = 5, IsActive = true, CreatedAt = now },
-            new() { Id = Guid.CreateVersion7(), Code = "rbac",         Name = "RBAC Admin",               SortOrder = 6, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "usuarios",     Name = "Usuarios y Permisos",      SortOrder = 5, IsActive = true, CreatedAt = now, ProductCode = "plataforma" },
+            new() { Id = Guid.CreateVersion7(), Code = "rbac",         Name = "RBAC Admin",               SortOrder = 6, IsActive = true, CreatedAt = now, ProductCode = "plataforma" },
             new() { Id = Guid.CreateVersion7(), Code = "improntas",    Name = "Improntas",                SortOrder = 7, IsActive = true, CreatedAt = now },
         };
 
@@ -941,21 +1020,27 @@ public static class DevelopmentAuthSeeder
                 }));
         }
 
-        // AdminCompany: todo excepto rbac.manage
-        var adminCompanyRole = await db.Roles.FirstOrDefaultAsync(r => r.Code == "AdminCompany", cancellationToken);
-        if (adminCompanyRole is not null)
+        // AdminCompany + admin_tramites: todo excepto rbac.manage, repartido por producto (HU #12964,
+        // decisión D1): los módulos de plataforma van a AdminCompany y los de Trámites a admin_tramites.
+        // tr_role_permissions_same_product rechaza cualquier otra combinación.
+        var productByModule = modules.ToDictionary(m => m.Id, m => m.ProductCode);
+        foreach (var (roleCode, product) in new[] { (ProductRoleCodes.AdminCompany, "plataforma"), (ProductRoleCodes.AdminTramites, "tramites") })
         {
-            var existingAC = await db.RoleGrants
-                .Where(g => g.RoleId == adminCompanyRole.Id)
+            var adminRole = await db.Roles.FirstOrDefaultAsync(r => r.Code == roleCode && r.DeletedAt == null, cancellationToken);
+            if (adminRole is null)
+                continue;
+
+            var existing = await db.RoleGrants
+                .Where(g => g.RoleId == adminRole.Id)
                 .Select(g => g.PermissionId)
                 .ToListAsync(cancellationToken);
 
             db.RoleGrants.AddRange(actions
-                .Where(a => a.Slug != "rbac.manage" && !existingAC.Contains(a.Id))
+                .Where(a => a.Slug != "rbac.manage" && productByModule[a.ModuleId] == product && !existing.Contains(a.Id))
                 .Select(a => new RoleGrant
                 {
                     Id = Guid.CreateVersion7(),
-                    RoleId = adminCompanyRole.Id,
+                    RoleId = adminRole.Id,
                     PermissionId = a.Id,
                     CreatedAt = now,
                 }));
@@ -1016,8 +1101,9 @@ public static class DevelopmentAuthSeeder
         db.RbacActions.AddRange(newActions);
         await db.SaveChangesAsync(ct);
 
-        // Grants: SuperAdmin y AdminCompany reciben todos los permisos nuevos de reportes.
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        // Grants: SuperAdmin y admin_tramites reciben todos los permisos nuevos de reportes (HU #12964: los
+        // permisos de Trámites ya no van a AdminCompany, que es de plataforma).
+        foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
             foreach (var role in roles)
@@ -1105,7 +1191,7 @@ public static class DevelopmentAuthSeeder
         db.RbacActions.AddRange(newActions);
         await db.SaveChangesAsync(ct);
 
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
             foreach (var role in roles)
@@ -1353,7 +1439,7 @@ public static class DevelopmentAuthSeeder
     /// <summary>
     /// Bug #13445, punto 4 (decisión D10) — permisos propios de Trazabilidad ICT (<c>ict.trazabilidad.read</c>)
     /// y Reportes ICT (<c>ict.reportes.read</c>), en el módulo <c>ict-logs</c>, concedidos a SuperAdmin y a
-    /// AdminCompany (en staging no hay multi-producto; en develop el grant va a <c>admin_tramites</c>).
+    /// <c>admin_tramites</c> (el rol de Trámites que acompaña a AdminCompany).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1363,7 +1449,9 @@ public static class DevelopmentAuthSeeder
     /// </para>
     /// <para>
     /// Paso propio e idempotente, como <see cref="SeedIctLogsPermissionsAsync"/>: corre en cada arranque con
-    /// <c>Seed:RbacCatalog</c> encendido, también sobre bases ya sembradas, y solo agrega lo que falta.
+    /// <c>Seed:RbacCatalog</c> encendido, también sobre bases ya sembradas, y solo agrega lo que falta. El
+    /// módulo <c>ict-logs</c> es del producto <c>tramites</c> (DDL 120), por eso el grant va a
+    /// <c>admin_tramites</c> y no a AdminCompany (<c>tr_role_permissions_same_product</c> lo rechazaría).
     /// </para>
     /// </remarks>
     private static async Task SeedIctTrazabilidadYReportesPermissionsAsync(FlitDbContext db, CancellationToken ct)
@@ -1384,8 +1472,7 @@ public static class DevelopmentAuthSeeder
             ("ict.reportes.read", "Ver reportes ICT", "/api/v1/analytics/ict-reports"),
         ];
 
-        // staging: sin multi-producto el Admin de Compañía es AdminCompany; en develop es admin_tramites (DDL 120).
-        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany"];
+        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
@@ -1492,9 +1579,10 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. Se excluyen los roles
+        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. HU #12964: el de AdminCompany
+        // pasa a admin_tramites, porque historial-placa es un módulo de Trámites. Se excluyen los roles
         // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
-        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador"];
+        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites, "Radicador"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
@@ -1526,13 +1614,17 @@ public static class DevelopmentAuthSeeder
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Grants directos: <c>SuperAdmin</c>, <c>AdminCompany</c>, <c>Radicador</c> y <c>ot_admin</c>
+    /// Grants directos: <c>SuperAdmin</c>, <c>admin_tramites</c>, <c>Radicador</c> y <c>ot_admin</c>
     /// (ADR-0070 A3.5 y A5.4). Los demás roles del OT no lo reciben por defecto: se conceden por RBAC.
     /// </para>
     /// <para>
-    /// staging: sin multi-producto el Admin de Compañía es <c>AdminCompany</c> y recibe el grant directo (lo que
-    /// pidió el PO, Q4). En develop el grant va a <c>admin_tramites</c> y AdminCompany lo obtiene por el espejo del
-    /// DDL 120 (HU #12964), que staging aún no tiene.
+    /// <b>AdminCompany NO recibe grant directo</b>, aunque el PO lo pidió (Q4). <c>AdminCompany</c> es de
+    /// producto <c>plataforma</c> y el módulo es de <c>tramites</c>: el disparador
+    /// <c>security.tr_role_permissions_same_product</c> (DDL 120, HU #12964) rechaza con
+    /// <c>check_violation</c> ese grant, y la excepción en <c>SaveChangesAsync</c> tumbaría el sembrado del
+    /// catálogo RBAC en el arranque de los tres ambientes. AdminCompany lo obtiene por el espejo
+    /// AdminCompany → <c>admin_tramites</c> del mismo DDL (backfill y <c>tr_ura_mirror_admin_tramites</c>).
+    /// <c>ot_admin</c> sí es de producto <c>tramites</c>, así que el disparador lo admite.
     /// </para>
     /// </remarks>
     private static async Task SeedConsolidadoMasivoPermissionsAsync(FlitDbContext db, CancellationToken ct)
@@ -1575,9 +1667,8 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        // staging: sin multi-producto el Admin de Compañía es AdminCompany; en develop es admin_tramites (DDL 120).
-        // Se excluyen los roles borrados lógicamente.
-        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador", "ot_admin"];
+        // Sin AdminCompany (ver remarks). Se excluyen los roles borrados lógicamente.
+        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites, "Radicador", "ot_admin"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
@@ -1860,7 +1951,7 @@ public static class DevelopmentAuthSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+            foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
             {
                 var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
                 foreach (var role in roles)
@@ -1905,6 +1996,7 @@ public static class DevelopmentAuthSeeder
                 Id = Guid.CreateVersion7(),
                 Code = moduleCode,
                 Name = "Banners promocionales",
+                ProductCode = "plataforma",
                 SortOrder = 11,
                 IsActive = true,
                 CreatedAt = now,
@@ -2144,46 +2236,5 @@ public static class DevelopmentAuthSeeder
             if (wasClosed)
                 await connection.CloseAsync();
         }
-    }
-}
-
-public sealed class JwtKeyMaterial
-{
-    public required RsaSecurityKey SigningKey { get; init; }
-
-    public string Issuer { get; init; } = "https://api.flit.co";
-
-    public string Audience { get; init; } = "flit-api";
-}
-
-public static class JwtKeyMaterialLoader
-{
-    public static JwtKeyMaterial Load(JwtSettings settings, IHostEnvironment environment)
-    {
-        var pem = settings.PrivateKeyPem;
-        if (string.IsNullOrWhiteSpace(pem) && !string.IsNullOrWhiteSpace(settings.PrivateKeyPath)
-            && File.Exists(settings.PrivateKeyPath))
-            pem = File.ReadAllText(settings.PrivateKeyPath);
-
-        RSA rsa;
-        if (string.IsNullOrWhiteSpace(pem))
-        {
-            if (!environment.IsDevelopment())
-                throw new InvalidOperationException("JWT private key is required outside Development.");
-
-            rsa = RSA.Create(2048);
-        }
-        else
-        {
-            rsa = RSA.Create();
-            rsa.ImportFromPem(pem);
-        }
-
-        return new JwtKeyMaterial
-        {
-            SigningKey = new RsaSecurityKey(rsa),
-            Issuer = settings.Issuer,
-            Audience = settings.Audience,
-        };
     }
 }

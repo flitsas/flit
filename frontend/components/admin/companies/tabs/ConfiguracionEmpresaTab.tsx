@@ -29,7 +29,6 @@ export interface ConfiguracionEmpresaTabProps {
 /** Bloques de la pestaña, en orden de aparición: alimentan el índice de anclas. */
 const BLOCKS = [
   { id: "cfg-firma", label: "Firma y documentos" },
-  { id: "cfg-modulos", label: "Módulos del dashboard" },
   { id: "cfg-notificaciones", label: "Notificaciones" },
   { id: "cfg-recaudo", label: "Cobro y recaudo" },
   { id: "cfg-consultas", label: "Consultas y fuentes" },
@@ -136,35 +135,10 @@ export function ConfiguracionEmpresaTab({
             checked={form.baulFirmasActivo}
             onChange={(v) => onChange({ baulFirmasActivo: v })}
           />
-        </div>
-      </ConfigCard>
-
-      <ConfigCard
-        id="cfg-modulos"
-        title="Módulos activos del dashboard"
-        description="Decide qué servicios ve esta compañía en su dashboard. No hay regla de «al menos uno activo»: se pueden apagar los 3 sin bloquear el guardado."
-      >
-        <div className="grid gap-4 lg:grid-cols-3">
-          <ToggleSwitch
-            id="tramitesModuleEnabled"
-            label="Módulo de Trámites"
-            description="Habilita el módulo de Trámites en el dashboard de la compañía."
-            state={ESTADO_ACTIVADO}
-            checked={form.tramitesModuleEnabled}
-            onChange={(v) => onChange({ tramitesModuleEnabled: v })}
-          />
-          <ToggleSwitch
-            id="comparendosModuleEnabled"
-            label="Módulo de Comparendos"
-            description="Habilita el módulo de Comparendos en el dashboard de la compañía."
-            state={ESTADO_ACTIVADO}
-            checked={form.comparendosModuleEnabled}
-            onChange={(v) => onChange({ comparendosModuleEnabled: v })}
-          />
           <ToggleSwitch
             id="resolucionesModuleEnabled"
             label="Módulo de Resoluciones"
-            description="Habilita el módulo de Resoluciones en el dashboard de la compañía."
+            description="Habilita el módulo de Resoluciones en el dashboard de la compañía. Los productos de la suite (Trámites, Comparendos, Diagnóstico) se encienden en la pestaña «Productos»."
             state={ESTADO_ACTIVADO}
             checked={form.resolucionesModuleEnabled}
             onChange={(v) => onChange({ resolucionesModuleEnabled: v })}

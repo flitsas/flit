@@ -1,12 +1,14 @@
 // Cliente HTTP base contra el Gateway FLIT (HU #10194). Resuelve el token JWT,
 // adjunta el header Authorization y normaliza errores 422 a ApiValidationError.
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { isReauthenticating } from "@flit/auth/client";
 import { clearToken, emitSessionExpired } from "@/lib/auth/session";
-import { resolveApiBase } from "./base-url";
+import { apiBaseForPageRoot, resolveApiBase } from "./base-url";
 import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
 
+// Con la raíz de la página: en app.flitsas.com la API es api.flitsas.com (ver apiBaseForPageRoot).
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+  apiBaseForPageRoot(process.env.NEXT_PUBLIC_API_BASE_URL ?? "");
 
 /**
  * Arma una URL absoluta contra el API a partir de un `path` que ya trae el prefijo completo
@@ -100,6 +102,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     }
   }
 
+  // Si la app ya va camino al hub por una sesión nueva, no se llama a nadie: la página está por recargarse.
+  if (isReauthenticating()) return waitForReload<T>();
+
   const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) {
@@ -140,6 +145,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       // HU #10172 AC2 — sesión expirada: limpia el token y avisa al modal global.
       clearToken();
       emitSessionExpired();
+      // HU #13004 — con la sesión de la suite el aviso pide una sesión nueva al hub y la página se recarga: la llamada
+      // queda esperando en vez de fallar, así ninguna pantalla pinta «Tu sesión expiró» un instante antes de recargar.
+      if (isReauthenticating()) return waitForReload<T>();
       throw new ApiError(401, "SESSION_EXPIRED");
     }
     if (response.status === 401 && data?.error === "SESSION_DOMAIN_MISMATCH") {
@@ -154,6 +162,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   return (await safeJson(response)) as T;
+}
+
+/** Promesa que no se resuelve: la llamada «espera» hasta que la página se recarga con la sesión nueva. */
+function waitForReload<T>(): Promise<T> {
+  return new Promise<T>(() => {});
 }
 
 /**

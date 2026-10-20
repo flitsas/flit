@@ -13,11 +13,19 @@ internal sealed class OtPrendaDocumentPolicyRepository : IOtPrendaDocumentPolicy
 
     private readonly FlitDbContext _context;
     private readonly IAuditContextAccessor _auditContext;
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
-    public OtPrendaDocumentPolicyRepository(FlitDbContext context, IAuditContextAccessor auditContext)
+    public OtPrendaDocumentPolicyRepository(
+        FlitDbContext context,
+        IAuditContextAccessor auditContext,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
+
+        // Bug #12912 — compañías configurables por OT según la lista efectiva de red (HU #12347).
+        // Opcional (mismo patrón que los demás repos del bug): sin él, criterio previo de grant propio.
+        _effectiveOffices = effectiveOffices;
     }
 
     public async Task<IReadOnlyList<OtPrendaDocumentPolicyItem>> ListAsync(
@@ -81,12 +89,18 @@ internal sealed class OtPrendaDocumentPolicyRepository : IOtPrendaDocumentPolicy
         ExecuteCrossTenantReadAsync(
             async () =>
             {
-                var grants = await _context.TenantTransitOfficeGrants
-                    .AsNoTracking()
-                    .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
-                    .Select(g => g.TenantId)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                // Bug #12912 — toda la red que puede radicar en el OT (configuración, sin el filtro
+                // Ley 1581 de «solo las que radicaron»); el flag de cada fila es la política PROPIA.
+                var grants = _effectiveOffices is not null
+                    ? [.. await _effectiveOffices
+                        .ListEffectiveTenantIdsForOfficeAsync(transitOfficeId, cancellationToken)
+                        .ConfigureAwait(false)]
+                    : await _context.TenantTransitOfficeGrants
+                        .AsNoTracking()
+                        .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
+                        .Select(g => g.TenantId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
 
                 if (grants.Count == 0)
                     return (IReadOnlyList<OtPrendaDocumentPolicyCompanyItem>)[];

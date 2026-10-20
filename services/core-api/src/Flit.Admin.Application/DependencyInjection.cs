@@ -478,6 +478,15 @@ public static class DependencyInjection
         services.AddScoped<GetIctJobCatalogHandler>();
         services.AddScoped<GetIctJobRunsHandler>();
 
+        // Feature #13508 (HU #13509 / #13512) — configuración multi-proveedor IA (SuperAdmin Plataforma).
+        services.AddScoped<Plataforma.Ai.ListAiToolsHandler>();
+        services.AddScoped<Plataforma.Ai.GetAiToolSettingsHandler>();
+        services.AddScoped<Plataforma.Ai.SaveAiToolSettingsHandler>();
+        services.AddScoped<Plataforma.Ai.ActivateAiProviderHandler>();
+        services.AddScoped<Plataforma.Ai.ListAiProviderTransitionsHandler>();
+        services.AddScoped<Plataforma.Ai.ListAiFailoverAlertsHandler>();
+        services.AddScoped<Plataforma.Ai.AcknowledgeAiFailoverAlertHandler>();
+
         return services;
     }
 }

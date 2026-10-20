@@ -18,9 +18,9 @@ namespace Flit.Infrastructure.Storage;
 ///   <c>PUT</c> con los bytes crudos o <c>POST</c> multipart con los campos firmados primero, según el <c>method</c>
 ///   que devuelve el file-manager (ADR-0057 D1). Nunca pasa por <c>IAttachmentStorage.SaveAsync</c> (bufferiza en
 ///   <c>byte[]</c>). El contenido lleva <c>Content-Length</c> (sin chunked), que S3/Ceph exigen en el PUT firmado.</item>
-///   <item><c>OpenReadAsync</c> (HU #13379, M2/L1): <see cref="ConsolidadoLoteFileManager.OpenReadStreamingAsync"/> — el cuerpo
+///   <item><c>OpenReadAsync</c> (HU #13379, M2/L1): <see cref="FileManagerDownloader.OpenReadStreamingAsync"/> — el cuerpo
 ///   de S3 en streaming, sin bufferizar (una parte de 250 MB nunca entra entera en memoria); la descarga lo descifra
-///   directo hacia la respuesta HTTP. Los adjuntos siguen con <see cref="FileManagerAttachmentStorage.OpenReadAsync"/>.</item>
+///   directo hacia la respuesta HTTP. Los adjuntos y logos siguen con <see cref="FileManagerDownloader.OpenReadAsync"/>.</item>
 ///   <item><c>Delete</c>: no-op, como <c>FileManagerAttachmentStorage.Delete</c> (V-g).</item>
 /// </list>
 /// El cliente HTTP se registra sin timeout global: cada llamada al API del file-manager usa
@@ -87,7 +87,7 @@ internal sealed class ConsolidadoLoteParteStorage(
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TiempoLectura);
-        return await ConsolidadoLoteFileManager.OpenReadStreamingAsync(http, _options, storagePath, cts.Token).ConfigureAwait(false);
+        return await FileManagerDownloader.OpenReadStreamingAsync(http, _options, storagePath, cts.Token).ConfigureAwait(false);
     }
 
     public void Delete(string storagePath)
@@ -112,7 +112,7 @@ internal sealed class ConsolidadoLoteParteStorage(
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
-        ConsolidadoLoteFileManager.ApplyAuth(msg, _options);
+        FileManagerDownloader.ApplyAuth(msg, _options);
         using var resp = await http.SendAsync(msg, cts.Token).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         return await resp.Content.ReadFromJsonAsync<CreateFileResponse>(JsonOptions, cts.Token).ConfigureAwait(false);

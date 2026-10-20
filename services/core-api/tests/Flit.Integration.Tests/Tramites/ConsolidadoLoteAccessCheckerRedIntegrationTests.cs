@@ -21,17 +21,11 @@ namespace Flit.Integration.Tests.Tramites;
 /// <summary>
 /// HU #13418 (épica #13216, ADR-0070 adenda v7 A7.4, CF-R5) — rama de RED de <see cref="ConsolidadoLoteAccessChecker"/>
 /// contra PostgreSQL real sobre <see cref="HierarchyScenario"/> (P cabeza con hijas C1 y C2; X ajeno). El solicitante es
-/// el usuario de P con un único rol activo en P, <c>AdminCompany</c>, que lleva el grant de
-/// <c>consolidado-masivo.download</c>; rol y permiso se leen de la BD (no del JWT).
-/// <para>
-/// staging: sin multi-producto (uq_ura_active_user_tenant): un solo rol activo por usuario y compañía; en develop el
-/// permiso y el rol de red van en roles de productos distintos (HU #12964). Por eso aquí <c>AdminCompany</c> es a la vez
-/// el rol con el permiso (como lo siembra <c>DevelopmentAuthSeeder</c> en staging) y el rol de red.
-/// </para>
+/// el usuario de P con un rol que otorga <c>consolidado-masivo.download</c> y el rol <c>AdminCompany</c>, ambos en P y
+/// leídos de la BD (no del JWT).
 /// <list type="bullet">
 ///   <item>AC4 — C1 deja de ser hija de P ⇒ sus ítems pierden el acceso (consulta por ítem, sin caché); P y C2 siguen.</item>
-///   <item>AC5 — el solicitante pierde <c>AdminCompany</c> activo en P ⇒ en staging pierde también el permiso de descarga,
-///   así que ningún ítem del lote (ni de las hijas ni de P) tiene acceso.</item>
+///   <item>AC5 — el solicitante pierde <c>AdminCompany</c> activo en P ⇒ los ítems de las hijas pierden el acceso.</item>
 ///   <item>AC6 — <c>group_read_scope</c> apagado, o <c>network_documents_concesion</c> apagado en una cabeza CONCESIÓN
 ///   ⇒ los ítems de las hijas pierden el acceso (como mucho 60 s después: caché por lote).</item>
 ///   <item>AC7 — lote acotado a C1 ⇒ un ítem de otra compañía (C2 o la propia P) no tiene acceso.</item>
@@ -48,6 +42,7 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
     private static readonly Guid X = HierarchyScenario.X;
     private static readonly Guid Solicitante = HierarchyScenario.UserOf(P);
 
+    private static readonly Guid RolDescarga = new("e1000000-0000-4000-8000-000000013418");
     private static readonly Guid RolAdminCompany = new("e2000000-0000-4000-8000-000000013418");
     private static readonly Guid AsignacionAdmin = new("e3000000-0000-4000-8000-000000013418");
 
@@ -93,7 +88,7 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
     // ── AC5 — pérdida del rol de red ──────────────────────────────────────────────────────────
 
     [PostgresFact]
-    public async Task AC5_PierdeAdminCompanyActivoEnP_PierdeTambienElPermiso_NingunItemTieneAcceso()
+    public async Task AC5_PierdeAdminCompanyActivoEnP_LosItemsDeLasHijasPierdenElAcceso_LosDePNo()
     {
         await SeedAsync(GroupKindCodes.MarcaBlanca);
         await using (var ctx = NewContext())
@@ -107,12 +102,11 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
         var lote = Guid.NewGuid();
         (await CheckAsync(cache, Ctx(C1, lote))).Should().BeFalse("el rol de red se lee de la BD, no del JWT");
         (await CheckAsync(cache, Ctx(C2, lote))).Should().BeFalse();
-        (await CheckAsync(cache, Ctx(P, lote))).Should().BeFalse(
-            "staging: AdminCompany era el único rol activo en P y llevaba el permiso; sin él no hay permiso de descarga");
+        (await CheckAsync(cache, Ctx(P, lote))).Should().BeTrue("conserva el permiso de descarga en P por otro rol");
     }
 
     [PostgresFact]
-    public async Task AC5_Edge_RolAdminCompanyDesactivado_OSuspensionVigenteEnP_SinAccesoNiALasHijasNiAP()
+    public async Task AC5_Edge_RolAdminCompanyDesactivado_OSuspensionVigenteEnP_SinAccesoALasHijas()
     {
         await SeedAsync(GroupKindCodes.MarcaBlanca);
         await using (var ctx = NewContext())
@@ -123,12 +117,7 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
         }
 
         using (var cache = NewCache())
-        {
-            var lote = Guid.NewGuid();
-            (await CheckAsync(cache, Ctx(C1, lote))).Should().BeFalse("rol AdminCompany inactivo");
-            (await CheckAsync(cache, Ctx(P, lote))).Should().BeFalse(
-                "staging: el rol inactivo era el que llevaba el permiso de descarga en P");
-        }
+            (await CheckAsync(cache, Ctx(C1, Guid.NewGuid()))).Should().BeFalse("rol AdminCompany inactivo");
 
         await using (var ctx = NewContext())
         {
@@ -147,11 +136,7 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
         }
 
         using (var cache = NewCache())
-        {
-            var lote = Guid.NewGuid();
-            (await CheckAsync(cache, Ctx(C1, lote))).Should().BeFalse("suspensión vigente en P (VigenteEn)");
-            (await CheckAsync(cache, Ctx(P, lote))).Should().BeFalse("la suspensión en P también corta los ítems de P");
-        }
+            (await CheckAsync(cache, Ctx(C1, Guid.NewGuid()))).Should().BeFalse("suspensión vigente en P (VigenteEn)");
     }
 
     // ── AC6 — interruptores ───────────────────────────────────────────────────────────────────
@@ -236,9 +221,8 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Escenario canónico con la clase de cabeza pedida + RBAC del solicitante en P: un único rol activo,
-    /// <c>AdminCompany</c>, con el permiso de descarga (staging: uq_ura_active_user_tenant impide separar «permiso» y
-    /// «rol de red» en dos roles del mismo usuario y compañía).
+    /// Escenario canónico con la clase de cabeza pedida + RBAC del solicitante en P: un rol con el permiso de descarga
+    /// (sin ser AdminCompany) y el rol <c>AdminCompany</c> (sin el permiso), para separar «permiso» de «rol de red».
     /// </summary>
     private async Task SeedAsync(string headKind)
     {
@@ -263,15 +247,19 @@ public sealed class ConsolidadoLoteAccessCheckerRedIntegrationTests(PostgresData
             ctx.RbacActions.Add(accion);
         }
 
-        // staging: sin multi-producto (uq_ura_active_user_tenant) el usuario tiene un único rol activo en P, AdminCompany,
-        // que lleva el grant de descarga (como lo siembra DevelopmentAuthSeeder en staging) y es a la vez el rol de red.
-        ctx.Roles.Add(new Role
-        {
-            Id = RolAdminCompany, Code = "AdminCompany", Name = "Administrador de compañía",
-            IsActive = true, CreatedAt = DateTimeOffset.UtcNow,
-        });
-        ctx.RoleGrants.Add(new RoleGrant { Id = Guid.NewGuid(), RoleId = RolAdminCompany, PermissionId = accion.Id, CreatedAt = DateTimeOffset.UtcNow });
-        ctx.UserRoleAssignments.Add(Asignacion(AsignacionAdmin, RolAdminCompany));
+        ctx.Roles.AddRange(
+            new Role { Id = RolDescarga, Code = "it_13418_gestor", Name = "IT 13418 gestor", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+            new Role
+            {
+                // Como en producción: AdminCompany es del producto plataforma y el rol de descarga, de trámites
+                // (uq_ura_active_user_tenant_product: un rol activo por usuario, empresa y producto).
+                Id = RolAdminCompany, Code = "AdminCompany", Name = "Administrador de compañía", ProductCode = "plataforma",
+                IsActive = true, CreatedAt = DateTimeOffset.UtcNow,
+            });
+        ctx.RoleGrants.Add(new RoleGrant { Id = Guid.NewGuid(), RoleId = RolDescarga, PermissionId = accion.Id, CreatedAt = DateTimeOffset.UtcNow });
+        ctx.UserRoleAssignments.AddRange(
+            Asignacion(Guid.NewGuid(), RolDescarga),
+            Asignacion(AsignacionAdmin, RolAdminCompany));
         await ctx.SaveChangesAsync(Ct);
     }
 

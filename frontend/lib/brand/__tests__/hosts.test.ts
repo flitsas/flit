@@ -84,7 +84,7 @@ describe("isFlitHost — AC1/AC7 #12419", () => {
 describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
   // Lista tal como queda horneada en el build del frontend (cd.yml + .env.example).
   const HOSTS_CON_NEGACIONES =
-    "flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online";
+    "flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online";
 
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -95,7 +95,6 @@ describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
     "marcablancadev.flitsas.online",
     "marcablancaqa.flitsas.online",
     "marcablancapdn.flitsas.online",
-    "marcablancadag1.flitsas.online",
   ])("el host de prueba %s NO es FLIT (happy path)", async (host) => {
     const isFlitHost = await loadIsFlitHost(HOSTS_CON_NEGACIONES);
     expect(isFlitHost(host)).toBe(false);
@@ -140,6 +139,11 @@ describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
     expect(isFlitHost("marcablancaqa.flitsas.online")).toBe(false);
     expect(isFlitHost("marcablancapdn.flitsas.online")).toBe(false);
     expect(isFlitHost("marcablancadag1.flitsas.online")).toBe(false);
+    expect(isFlitHost("tramites.marcablancadag1.flitsas.online")).toBe(false);
+    // Suite (handoff §6.4): el dominio de Trámites de la red de prueba va negado con su nombre exacto; otro
+    // subdominio sigue siendo FLIT.
+    expect(isFlitHost("tramites.marcablancadev.flitsas.online")).toBe(false);
+    expect(isFlitHost("otro.marcablancadev.flitsas.online")).toBe(true);
     // El resto del respaldo no cambia respecto de #12419 (no regresión).
     expect(isFlitHost("localhost:3000")).toBe(true);
     expect(isFlitHost("127.0.0.1:3000")).toBe(true);

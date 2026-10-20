@@ -9,7 +9,7 @@ import { useMostrarLoteDescarga } from "@/components/shared/LoteDescargaTracker"
 import { Shell } from "../Shell";
 
 // Uso de ejemplo:
-//   <Shell active="dashboard" onNav={irA} visibleModuleCodes={modulos}>{pagina}</Shell>
+//   <Shell visibleModuleCodes={modulos}>{pagina}</Shell>
 //   // dentro de la página: const { mostrarLote } = useMostrarLoteDescarga(); mostrarLote(loteId);
 
 const nav = vi.hoisted(() => ({ pathname: "/admin/companies" }));
@@ -78,7 +78,7 @@ describe("Shell + LoteDescargaTracker — HU #13382", () => {
     conPermiso();
     servidor.actual = LOTE;
     render(
-      <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
+      <Shell visibleModuleCodes={["tramites"]}>
         <div>contenido</div>
       </Shell>,
     );
@@ -91,7 +91,7 @@ describe("Shell + LoteDescargaTracker — HU #13382", () => {
     conPermiso();
     servidor.actual = LOTE;
     render(
-      <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
+      <Shell visibleModuleCodes={["tramites"]}>
         <div>contenido</div>
       </Shell>,
     );
@@ -99,15 +99,14 @@ describe("Shell + LoteDescargaTracker — HU #13382", () => {
     const header = document.querySelector("header");
     expect(header).not.toBeNull();
     expect(header!.contains(card)).toBe(false);
-    // En el Shell de staging la marca es el <img> de BrandLogo dentro del header.
-    expect(header!.querySelector("img")).not.toBeNull();
+    expect(header!.querySelector('a[aria-label*="Trámites"]')).not.toBeNull();
     expect(card.closest("main")).not.toBeNull();
   });
 
   it("AC5 — 204: no se pinta nada", async () => {
     conPermiso();
     render(
-      <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
+      <Shell visibleModuleCodes={["tramites"]}>
         <div>contenido</div>
       </Shell>,
     );
@@ -118,7 +117,7 @@ describe("Shell + LoteDescargaTracker — HU #13382", () => {
   it("sin consolidado-masivo.download no se monta el seguimiento (sin polling)", async () => {
     window.localStorage.setItem(TOKEN_STORAGE_KEY, makeToken({ sub: "u1", role: "Gestor", permissions: ["tramites.read"] }));
     render(
-      <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
+      <Shell visibleModuleCodes={["tramites"]}>
         <div>contenido</div>
       </Shell>,
     );
@@ -140,7 +139,7 @@ describe("Shell + LoteDescargaTracker — HU #13382", () => {
       );
     }
     render(
-      <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
+      <Shell visibleModuleCodes={["tramites"]}>
         <Pagina />
       </Shell>,
     );

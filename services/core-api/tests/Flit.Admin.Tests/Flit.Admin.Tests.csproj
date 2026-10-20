@@ -16,6 +16,8 @@
     <ProjectReference Include="..\..\src\Flit.Admin.Application\Flit.Admin.Application.csproj" />
     <ProjectReference Include="..\..\src\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <ProjectReference Include="..\..\src\Flit.Api\Flit.Api.csproj" />
+    <!-- Epic #13217 (HU #13233): pruebas que levantan core-api y core-identity sobre la misma base. -->
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identity.Api\Flit.Identity.Api.csproj" />
     <ProjectReference Include="..\..\src\Flit.Infrastructure\Flit.Infrastructure.csproj" />
   </ItemGroup>
 

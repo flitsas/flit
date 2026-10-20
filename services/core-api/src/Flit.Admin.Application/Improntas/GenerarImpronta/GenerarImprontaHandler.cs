@@ -86,7 +86,8 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
                     OrgNit: null,
                     OrgCiudad: null,
                     Operador: operador,
-                    Vin: null),
+                    Vin: null,
+                    TenantId: command.TenantId),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (ImprontaRuntException ex)

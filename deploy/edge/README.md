@@ -77,7 +77,7 @@ CORS dinámico del Gateway (caché 60 s sobre `GET /internal/domains/active`) ha
 | `FRONTEND_PORT` | 4001 | 5001 | 6001 | nginx (`.conf.example`), compose |
 | `GATEWAY_PORT` | 4002 | 5002 | 6002 | nginx (`.conf.example`), compose |
 | `CORE_API_PORT` | 4003 | 5003 | 6003 | compose (interno) |
-| `FLIT_INTERNAL_SUBNET` | `172.28.40.0/24` (sugerido) | `172.28.50.0/24` (sugerido) | `172.28.60.0/24` (sugerido) | `docker-compose.prod.yml` (bloque `networks`), `DomainSeal__InternalAllowedNetworks__0` del gateway |
+| `FLIT_INTERNAL_SUBNET` | `10.114.40.0/24` (lo exporta el CD) | `10.114.50.0/24` (CD) | `10.114.60.0/24` (CD) | `docker-compose.prod.yml` (bloque `networks`), `DomainSeal__InternalAllowedNetworks__0` del gateway |
 | `FLIT_INTERNAL_API_KEY` | por ambiente, generar | por ambiente, generar | por ambiente, generar | `Internal__ApiKey` de `gateway` y `core-api` |
 
 Los tres ambientes corren con `ASPNETCORE_ENVIRONMENT=Development` (decisión ya vigente en este
@@ -86,7 +86,7 @@ VPS de cada uno, nunca `appsettings.{Environment}.json`. Si DEV/QA/PDN comparten
 físico, `FLIT_INTERNAL_SUBNET` **debe** ser distinto entre ellos — Docker rechaza crear dos redes
 con subredes solapadas en el mismo host (`docker compose up` falla con
 `Pool overlaps with other one on this address space`). Si cada ambiente vive en un VPS distinto,
-el default sugerido (`172.28.40.0/24`) es seguro de reutilizar en los tres.
+el default (`10.114.40.0/24`) es seguro de reutilizar en los tres. (`172.28.x` ya estaba ocupado en el VPS compartido.)
 
 ## (iv) Prueba de humo — AC3 (dominios existentes intactos)
 
@@ -194,8 +194,8 @@ márcalo explícitamente al ejecutar, no antes.
 | Variable | Default | Servicio(s) | Notas |
 |---|---|---|---|
 | `FLIT_INTERNAL_API_KEY` | _(vacía)_ | `gateway`, `core-api` | Generar por ambiente, nunca commitear. Vacía = fail-closed. |
-| `FLIT_INTERNAL_SUBNET` | `172.28.40.0/24` | red `default` del compose, `gateway` (`DomainSeal__InternalAllowedNetworks__0`) | Distinto por ambiente si comparten VPS. |
-| `FLIT_HOSTS` | _(comentada, sin default activo)_ | ninguno todavía (documentado para #12418/#12419) | No alimenta ningún servicio de este compose; `NEXT_PUBLIC_FLIT_HOSTS` se hornea en build (`cd.yml`), no aquí. |
+| `FLIT_INTERNAL_SUBNET` | `10.114.40.0/24` | red `default` del compose, `gateway` (`DomainSeal__InternalAllowedNetworks__0`) | Distinto por ambiente si comparten VPS. |
+| `FLIT_HOSTS` | default del compose (comodines de `flitsas.online`/`flitsas.com`) | `frontend-hub` (runtime) | En Trámites no es runtime: `NEXT_PUBLIC_FLIT_HOSTS` se hornea en build (`cd.yml`). |
 
 ## Riesgos y límites conocidos
 
@@ -225,5 +225,5 @@ márcalo explícitamente al ejecutar, no antes.
   real, un dominio de cliente sigue activándose con certificado manual. Gap declarado en
   `deploy/edge/acme/README.md`: el endpoint que lista dominios `verified` sin certificado
   (`.../internal/domains/pending-certificate`) es una propuesta, no un contrato confirmado.
-- **`FLIT_HOSTS`/`NEXT_PUBLIC_FLIT_HOSTS` sin cablear:** el nombre está reservado y documentado
-  (`.env.prod.example`), pero ningún servicio lo consume todavía — corresponde a #12418/#12419.
+- **`FLIT_HOSTS`:** la consume el hub de la FLIT Suite (`frontend-hub`) en runtime; Trámites usa
+  `NEXT_PUBLIC_FLIT_HOSTS`, horneada en build.

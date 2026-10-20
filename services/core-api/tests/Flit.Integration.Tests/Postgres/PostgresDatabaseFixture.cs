@@ -98,6 +98,13 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "audit.audit_logs",
         // HU #12958: tramites encendido para las compañías mock (backfill y disparador del DDL 119).
         "platform.tenant_products",
+        // HU #12964: la migración de la B-04 crea el rol admin_tramites. Se trunca como el resto de roles
+        // que siembran las pruebas; la que lo necesite lo crea (PlatformRbacTests).
+        "security.roles",
+        // Feature #13508 / HU #13509: seed ocr + dr_flit y transición reason=seed (configuración, no catálogo).
+        // Clasificadas a propósito para HarnessBootstrapTests (no son catálogo preservado).
+        "admin.ai_tool_provider_settings",
+        "admin.ai_provider_transitions",
         // HU #13367 (DDL 133): fila única de parámetros del motor de lotes de consolidados. Configuración, no
         // catálogo (como runt_confirmation_settings): se trunca; la prueba que la necesite reaplica el DDL 133.
         "tramites.consolidado_export_settings",

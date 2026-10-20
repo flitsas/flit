@@ -1,0 +1,37 @@
+<!-- nombre: Prescripción -->
+<p style="text-align:right">{{#si ot.municipio}}{{ot.municipio}}, {{/si}}{{dp.fecha}}<br>Radicado: <b>{{dp.radicado}}</b></p>
+<p><b>SEÑORES:</b><br><b>{{ot.nombre}}</b>{{#si ot.municipio}}<br>{{ot.municipio}}{{#si ot.departamento}}, {{ot.departamento}}{{/si}}{{/si}}</p>
+<p><b>ASUNTO: Solicitud de declaración de prescripción de acción de cobro coactivo</b></p>
+<p><b>Referencia:</b> Orden de comparendo N° {{comparendo.numero}} del {{comparendo.fecha_imposicion}}{{#si comparendo.placa}} · Placa {{comparendo.placa}}{{/si}}</p>
+<p style="text-align:justify">Yo, <b>{{rl.nombres}}</b>, identificado(a) con {{rl.tipo_documento}} No. <b>{{rl.numero_documento}}</b>, en representación de la razón social <b>{{peticionario.nombre}}</b>, identificada con el número de {{peticionario.tipo_documento}} {{peticionario.numero_documento}}, propietaria del vehículo con placa {{comparendo.placa}}, presento derecho de petición en la modalidad de petición de interés particular, de conformidad con los artículos 13 y 23 de la Constitución Política y la Ley 1755 de 2015, para solicitar la declaratoria de prescripción de la siguiente obligación:</p>
+<p><b>MULTA:</b></p>
+<table>
+<tr><th>Número de comparendo</th><th>Código de infracción</th><th>Fecha de infracción</th></tr>
+<tr><td>{{comparendo.numero}}</td><td>{{comparendo.codigo_infraccion}} {{comparendo.descripcion_infraccion}}</td><td>{{comparendo.fecha_imposicion}}</td></tr>
+</table>
+<h3 style="text-align:center">SOLICITUDES</h3>
+<ol>
+<li>Se declare la prescripción de la sanción y/o de la acción de cobro coactivo respecto del comparendo relacionado.</li>
+<li>Se ordene el archivo del proceso de cobro coactivo correspondiente.</li>
+<li>Se levanten las medidas cautelares que pudieran estar vigentes.</li>
+<li>Se actualicen las bases de datos del SIMIT, dejando sin efecto el reporte de esta obligación.</li>
+<li>Se me notifique de manera formal y por escrito la decisión adoptada dentro de los plazos establecidos por la ley.</li>
+</ol>
+<h3 style="text-align:center">FUNDAMENTOS QUE SUSTENTAN ESTA PETICIÓN</h3>
+<ol>
+<li>Prescripción de la sanción (art. 159 Ley 769 de 2002): las sanciones derivadas de infracciones de tránsito prescriben en tres (3) años contados a partir de la ocurrencia de los hechos, siempre que no exista notificación válida de mandamiento de pago dentro de dicho término.</li>
+<li>Prescripción de la acción de cobro (art. 817 Estatuto Tributario, aplicable supletoriamente): en caso de existir notificación de mandamiento de pago en tiempo, la acción de cobro prescribe en tres (3) años contados a partir de la ejecutoria de la resolución sancionatoria, salvo que exista acto interruptivo (acuerdo de pago, notificación de medidas, etc.).</li>
+<li>En el comparendo en mención han transcurrido los términos de prescripción sin que existan actos interruptivos posteriores dentro de los plazos legales, por lo que la obligación debe considerarse extinguida, toda vez que la fuente de información oficial SIMIT tiene registradas las fechas del inicio del cobro coactivo.</li>
+</ol>
+<h3 style="text-align:center">ANEXOS</h3>
+<ol>
+<li>Copia de mi cédula de ciudadanía.</li>
+<li>Copia del certificado de existencia y representación de {{peticionario.nombre}}.</li>
+<li>Copia de mi poder y nota de vigencia de mi poder.</li>
+</ol>
+<h3 style="text-align:center">NOTIFICACIONES</h3>
+{{#si empresa.correo_respuesta}}<p style="text-align:justify">Las respuestas las recibiré electrónicamente en la siguiente dirección de correo electrónico: {{empresa.correo_respuesta}}.</p>
+<p style="text-align:justify">Autorizo que la respuesta sea enviada vía correo electrónico a la dirección electrónica señalada en el acápite de notificaciones.{{#si peticionario.direccion}} Sin perjuicio de esto, comparto la dirección física de la entidad en caso de ser requerida para efectos de notificaciones: {{peticionario.direccion}}.{{/si}}</p>{{#sino}}{{#si peticionario.direccion}}<p style="text-align:justify">Recibiré notificaciones en la dirección física: {{peticionario.direccion}}.</p>{{/si}}{{/si}}
+<p>Cordialmente,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.tipo_documento}} No. {{rl.numero_documento}}<br>{{rl.cargo}}<br>{{peticionario.nombre}}</p>

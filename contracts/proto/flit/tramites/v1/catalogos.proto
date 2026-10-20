@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package flit.tramites.v1;
+
+option csharp_namespace = "Flit.Tramites.Grpc.V1";
+
+// Catálogos de la plataforma que atiende core-api (ADR-0064, ADR-0070). Hoy solo los organismos de tránsito
+// (catalogs.transit_offices, el catálogo RUNT): Comparendos guarda su réplica y la sincroniza a diario (S-66, HU #13459).
+//
+// Autenticación: token de servicio con `aud=tramites` y scope `platform.tramites.catalogos` (contrato v1.3 §3). Es un
+// catálogo global: la metadata `x-flit-tenant-id` no se usa.
+service CatalogosService {
+  // Todos los organismos, activos e inactivos, ordenados por código.
+  rpc ListarOrganismosTransito(ListarOrganismosTransitoRequest) returns (ListarOrganismosTransitoResponse);
+}
+
+message ListarOrganismosTransitoRequest {}
+
+message ListarOrganismosTransitoResponse {
+  repeated OrganismoTransito organismos = 1;
+}
+
+message OrganismoTransito {
+  // Id del organismo en la plataforma (el mismo que usa la semilla de Comparendos).
+  string id = 1;
+  // Código RUNT del organismo (puede venir sin el cero inicial: 5001000).
+  string codigo = 2;
+  string nombre = 3;
+  // Código DANE del departamento (2 cifras).
+  string departamento_codigo = 4;
+  // Código DANE del municipio (5 cifras).
+  string municipio_codigo = 5;
+  // Vacíos si la plataforma no los tiene.
+  string municipio = 6;
+  string departamento = 7;
+  bool activo = 8;
+}
