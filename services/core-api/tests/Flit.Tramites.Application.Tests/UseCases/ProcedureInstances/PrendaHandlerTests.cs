@@ -2,6 +2,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
@@ -530,5 +531,145 @@ public sealed class PrendaHandlerTests
         error.Should().Be(TramiteEstadoErrores.EstadoFinal);
         result.Should().BeNull();
         _prendas.Rows.Should().BeEmpty();
+    }
+
+    // ── C2-PUT (Bug pendiente, hijo de #13110) — la OT efectiva del PUT es la misma que la del GET ──
+
+    /// <summary>
+    /// Política que distingue por OT: «no exige» para <paramref name="otOpcional"/> y «exige» para
+    /// cualquier otra (incluida null). Reproduce el escenario del bug: el GET resolvía la OT desde
+    /// field_values y ofrecía omitir; el PUT la resolvía null y rechazaba.
+    /// </summary>
+    private static IPrendaDocumentRequirementPolicy PolicyOpcionalSoloPara(Guid otOpcional)
+    {
+        var policy = Substitute.For<IPrendaDocumentRequirementPolicy>();
+        policy.IsRequiredAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<Guid?>(1) != otOpcional);
+        return policy;
+    }
+
+    /// <summary>
+    /// Borrador previo a HU #11199: columna <c>TransitOfficeId</c> en null y la OT solo en
+    /// field_values. El repositorio real carga la instancia SIN <c>FieldValues</c>
+    /// (<c>GetByIdAsync</c>), así que los field values llegan por la proyección lean
+    /// <c>GetFieldValuesAsync</c>.
+    /// </summary>
+    private void BorradorConOt(Guid id, Guid tenantId, Guid? columna, Guid otEnFieldValues)
+    {
+        _instances.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(new ProcedureInstance
+            {
+                ProcedureType = ProcedureTypeFixture.Traspaso,
+                Id = id,
+                TenantId = tenantId,
+                ProcedureTypeId = Guid.NewGuid(),
+                ReferenceNumber = "TRM-2026-000002",
+                Status = TramiteEstado.Borrador,
+                TransitOfficeId = columna,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        _instances.GetFieldValuesAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(new List<ProcedureInstanceFieldValue>
+            {
+                new()
+                {
+                    ProcedureInstanceId = id,
+                    TenantId = tenantId,
+                    FieldKey = OtEfectivaResolver.FieldKey,
+                    ValueText = otEnFieldValues.ToString(),
+                    Source = "user",
+                },
+            });
+    }
+
+    /// <summary>
+    /// Traspaso sin columna OT y la OT (opcional) en field_values: el PUT «omitir» se acepta, igual
+    /// que el GET del wizard lo ofrece (<c>prendaOmitAllowed=true</c>).
+    /// <para>Uso de ejemplo: <c>PUT /tramites/instances/{id}/prenda { decision: "omitir" }</c> →
+    /// 200 con <c>{ decision: "omitir" }</c>.</para>
+    /// </summary>
+    [Fact]
+    public async Task Omitir_TraspasoSinColumnaOt_OtOpcionalEnFieldValues_SeAcepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId, ot) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        BorradorConOt(id, tenantId, columna: null, otEnFieldValues: ot);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyOpcionalSoloPara(ot));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be(PrendaDecision.Omitir);
+    }
+
+    /// <summary>Control — misma forma, pero la OT de field_values exige el certificado: se rechaza.</summary>
+    [Fact]
+    public async Task Omitir_TraspasoSinColumnaOt_OtQueExigeEnFieldValues_SeRechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId, ot) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        BorradorConOt(id, tenantId, columna: null, otEnFieldValues: ot);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyOpcionalSoloPara(Guid.NewGuid()));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().Be(RegistrarPrendaHandler.OmitirNoAdmitidoError);
+        result.Should().BeNull();
+        _prendas.Rows.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Con la columna <c>TransitOfficeId</c> presente, prevalece sobre field_values: columna con OT
+    /// opcional y field_values con otra que exige ⇒ se acepta, y la lectura lean de field values
+    /// ni se consulta.
+    /// </summary>
+    [Fact]
+    public async Task Omitir_TraspasoConColumnaOt_PrevaleceSobreFieldValues()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId, columna) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        BorradorConOt(id, tenantId, columna: columna, otEnFieldValues: Guid.NewGuid());
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyOpcionalSoloPara(columna));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be(PrendaDecision.Omitir);
+        await _instances.DidNotReceive().GetFieldValuesAsync(id, tenantId, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Helper compartido de la OT efectiva: columna ?? field_values (clave sin distinguir
+    /// mayúsculas); GUID vacío o inválido ⇒ null.
+    /// <para>Uso de ejemplo: <c>OtEfectivaResolver.Resolve(instance)</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(true, "fv", "col")]
+    [InlineData(false, "fv", "fv")]
+    [InlineData(false, "00000000-0000-0000-0000-000000000000", null)]
+    [InlineData(false, "no-es-guid", null)]
+    [InlineData(false, null, null)]
+    public void OtEfectivaResolver_ColumnaPrevaleceYFieldValuesDeRespaldo(
+        bool conColumna, string? valorFv, string? esperado)
+    {
+        var (col, fv) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = new ProcedureInstance { TransitOfficeId = conColumna ? col : null };
+        if (valorFv is not null)
+        {
+            instance.FieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                FieldKey = "TRANSIT_OFFICE_ID",
+                ValueText = valorFv == "fv" ? fv.ToString() : valorFv,
+                Source = "user",
+            });
+        }
+
+        var resuelto = OtEfectivaResolver.Resolve(instance);
+
+        resuelto.Should().Be(esperado switch { "col" => col, "fv" => fv, _ => (Guid?)null });
     }
 }
