@@ -32,14 +32,14 @@ export function FamiliaTabs({ value, onChange }: Props) {
             onClick={() => onChange(t.value)}
             // Clases y no `style`: el color fijo #162744 dejaba las pestañas inactivas invisibles en
             // modo oscuro.
-            className={`relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] ${
-              active ? 'text-[#557EFF]' : 'text-[#162744]/65 dark:text-white/65'
+            className={`relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand ${
+              active ? 'text-flit-brand' : 'text-flit-primary/65 dark:text-white/65'
             }`}
           >
             {t.label}
             {active ? (
               <span
-                className="absolute inset-x-2 -bottom-2.5 h-0.5 rounded-full bg-[#557EFF]"
+                className="absolute inset-x-2 -bottom-2.5 h-0.5 rounded-full bg-flit-brand"
                 aria-hidden="true"
               />
             ) : null}

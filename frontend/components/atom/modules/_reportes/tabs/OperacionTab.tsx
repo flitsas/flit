@@ -68,7 +68,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               value={formatInt(summary.entregados)}
               tooltip="Transiciones a 'entregado' dentro del rango de fechas."
               variation={kpiVariation("entregados")}
-              color="#557EFF"
+              color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Aprobados"
@@ -177,7 +177,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                           <td className={`${CARDLIST_CELL} font-medium`}>
                             <a
                               href={`/tramites/${item.instanceId}`}
-                              className="text-[#557EFF] hover:underline"
+                              className="text-flit-brand hover:underline"
                               aria-label={`Abrir el trámite ${item.referenceNumber}`}
                             >
                               {item.referenceNumber}
@@ -210,7 +210,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                     value: t.entregados,
                     hint: `${formatInt(t.rechazados)} rechazados (${formatPct(t.rejectionRatePct)})`,
                   }))}
-                  color="#557EFF"
+                  color="var(--color-flit-brand)"
                   emptyMessage="Sin entregas por tipo en el periodo."
                 />
               </section>
@@ -225,7 +225,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                     value: o.entregados,
                     hint: `${formatInt(o.aprobados)} aprobados · ${formatInt(o.rechazados)} rechazados`,
                   }))}
-                  color="#00DBD5"
+                  color="var(--color-flit-tech)"
                   emptyMessage="Sin entregas por organismo en el periodo."
                 />
               </section>

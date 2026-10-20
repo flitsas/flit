@@ -1120,7 +1120,7 @@ function ValidacionesLista({
     ) : null;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       {/* Anuncios para lector de pantalla del resultado de crear/editar/reenviar (WCAG 2.1 AA) */}
       <div className="sr-only" role="status" aria-live="polite">
         {liveMessage}
@@ -1137,7 +1137,7 @@ function ValidacionesLista({
               onClick={() => setIncidenciasOpen(true)}
               aria-label="Ver alertas de validación"
               aria-busy={stuckLoading}
-              className="relative grid h-7 w-7 place-items-center rounded-lg border border-[#DFE5ED] bg-white transition hover:bg-[#EEF5FF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] dark:bg-[#162744]"
+              className="relative grid h-7 w-7 place-items-center rounded-lg border border-[#DFE5ED] bg-white transition hover:bg-[#EEF5FF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:bg-[#162744]"
             >
               <Bell className="h-3.5 w-3.5" aria-hidden="true" />
               {!stuckLoading && stuck && stuck.total > 0 ? (
@@ -1171,8 +1171,8 @@ function ValidacionesLista({
           aria-label="Crear nueva prevalidación de identidad"
           aria-describedby={networkActive ? 'val-nueva-solo-propio' : undefined}
           title={networkActive ? 'Disponible en Mi compañía' : undefined}
-          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
-          style={{ background: 'linear-gradient(90deg, #557EFF 0%, #00DBD5 100%)' }}
+          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
+          style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
         >
           <span>Nueva</span>
           <span>prevalidación</span>
@@ -1220,7 +1220,7 @@ function ValidacionesLista({
         {empresaVista ? (
           // Salvaguarda que ya tenía el panel anterior: mirando UNA compañía ajena, lo que se haga
           // desde aquí la afecta a ella. En «Todas» cada fila lleva su compañía en la columna.
-          <p className="mt-2 text-xs" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+          <p className="mt-2 text-xs" style={{ color: 'var(--color-flit-brand)' }} role="status" aria-live="polite">
             Estás viendo los datos de <strong>{empresaVista.razonSocial}</strong>. Todo lo que hagas desde
             esta pantalla afecta a esa empresa.
           </p>
@@ -1300,8 +1300,8 @@ function ValidacionesLista({
                 <button
                   type="button"
                   onClick={handleNew}
-                  className="mt-4 mx-auto flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                  className="mt-4 mx-auto flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
                 >
                   Nueva prevalidación
                 </button>
@@ -1444,7 +1444,7 @@ function ValidacionesLista({
           aria-labelledby="val-resend-confirm-title"
         >
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
-            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-[#162744] dark:text-white">
+            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-flit-primary dark:text-white">
               Reenviar validación
             </h2>
             <p className="mt-2 text-sm opacity-70">
@@ -1475,7 +1475,7 @@ function ValidacionesLista({
                   setResendConfirmError(null);
                 }}
                 disabled={resendSubmitting}
-                className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+                className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
               >
                 Cancelar
               </button>
@@ -1483,8 +1483,8 @@ function ValidacionesLista({
                 type="button"
                 onClick={() => void handleConfirmAction()}
                 disabled={resendSubmitting}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
               >
                 {resendSubmitting ? 'Enviando…' : 'Confirmar reenvío'}
               </button>
@@ -1550,7 +1550,7 @@ function CompanyPickerDialog({
       aria-labelledby="val-pick-company-title"
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
-        <h2 id="val-pick-company-title" className="text-base font-semibold text-[#162744] dark:text-white">
+        <h2 id="val-pick-company-title" className="text-base font-semibold text-flit-primary dark:text-white">
           ¿Para qué compañía es la prevalidación?
         </h2>
         <p className="mt-1 text-sm opacity-70">
@@ -1570,7 +1570,7 @@ function CompanyPickerDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
           >
             Cancelar
           </button>
@@ -1579,7 +1579,7 @@ function CompanyPickerDialog({
             onClick={() => onPick(elegida)}
             disabled={elegida === ''}
             className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
           >
             Continuar
           </button>
@@ -1714,13 +1714,13 @@ function StuckIncidenciasDialog({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-lg p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+          className="absolute right-4 top-4 rounded-lg p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
         >
           <X className="h-4 w-4 opacity-70" aria-hidden="true" />
         </button>
         <div className="flex flex-wrap items-start justify-between gap-4 pr-8">
           <div>
-            <h2 id="incidencias-title" className="text-base font-bold" style={{ color: '#557EFF' }}>
+            <h2 id="incidencias-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
               Gestión de incidencias en validaciones
             </h2>
             <p className="mt-1 text-[13px] leading-snug opacity-70">

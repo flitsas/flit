@@ -37,7 +37,7 @@ export function UnlinkCompanyDialog({ child, headName, onClose, onUnlinked }: Un
       size="sm"
       zClassName="z-[90]"
       title="Desvincular cliente"
-      titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
     >
       <p className="mt-2 text-sm opacity-80">
         ¿Confirmas desvincular a <strong>{child.razonSocial}</strong> de la cabeza{" "}

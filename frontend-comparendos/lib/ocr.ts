@@ -79,7 +79,7 @@ export const ESTADOS_PAQUETE = Object.keys(ESTADO_PAQUETE);
 /** Estados de documento con su color de §7.6 (el morado de DUPLICADO no existe en los tonos de @flit/ui). */
 export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> = {
   Pendiente: { texto: "Pendiente", clase: "bg-[#EEF1F6] text-[#475569] dark:bg-white/10 dark:text-slate-300" },
-  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[#E8EEFF] text-[#3B4FD6] dark:bg-[#557EFF]/20 dark:text-[#8FA8FF]" },
+  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[#E8EEFF] text-[#3B4FD6] dark:bg-flit-brand/20 dark:text-[#8FA8FF]" },
   Completo: { texto: "Completo", clase: "bg-[#E7F6EC] text-[#1E7B3C] dark:bg-emerald-500/15 dark:text-emerald-300" },
   Incompleto: { texto: "Incompleto", clase: "bg-[#FFF1E5] text-[#B45309] dark:bg-orange-500/15 dark:text-orange-300" },
   Fallido: { texto: "Fallido", clase: "bg-[#FDECEC] text-[#B42318] dark:bg-red-500/15 dark:text-red-300" },

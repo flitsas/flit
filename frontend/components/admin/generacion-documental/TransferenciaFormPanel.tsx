@@ -33,7 +33,7 @@ import {
 } from "./transferencia-regimen";
 
 const FIELD_CLASS =
-  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]";
+  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 
 const TITULOS: { value: TransferTituloJuridico; label: string }[] = [
   { value: "COMPRAVENTA", label: "Compraventa" },
@@ -409,7 +409,7 @@ export function TransferenciaFormPanel() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" aria-labelledby="transferencia-form-titulo">
-      <h2 id="transferencia-form-titulo" className="text-sm font-semibold" style={{ color: "#162744" }}>
+      <h2 id="transferencia-form-titulo" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Transferencia de dominio — Documento soporte del traspaso
       </h2>
 
@@ -504,7 +504,7 @@ export function TransferenciaFormPanel() {
             <label
               key={escenario.value}
               htmlFor={`tf-escenario-${escenario.value}`}
-              className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-[11px] focus-within:ring-2 focus-within:ring-[#557EFF]"
+              className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-[11px] focus-within:ring-2 focus-within:ring-flit-brand"
             >
               <input
                 id={`tf-escenario-${escenario.value}`}
@@ -860,7 +860,7 @@ export function TransferenciaFormPanel() {
           disabled={enviando || !regimenPermiteGenerar}
           aria-describedby="tf-generar-ayuda"
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ backgroundColor: "#557EFF" }}
+          style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
           {enviando ? "Generando…" : "Generar documento"}
         </button>

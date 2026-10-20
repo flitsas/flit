@@ -115,7 +115,7 @@ export function QueryFilterBar({
       {conditions.map((condition) => (
         <span
           key={condition.fieldId}
-          className="relative inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 bg-[#557EFF]/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+          className="relative inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
         >
           <button
             type="button"
@@ -151,7 +151,7 @@ export function QueryFilterBar({
           type="button"
           disabled={disabled || disponibles.length === 0}
           onClick={() => setEditing(editing === "" ? null : "")}
-          className="rounded-full border border-dashed border-[#DFE5ED] px-3 py-1 text-xs font-semibold text-[#6B7280] hover:border-[#557EFF] hover:text-[#557EFF] disabled:opacity-40 dark:border-white/20 dark:text-white/60"
+          className="rounded-full border border-dashed border-[#DFE5ED] px-3 py-1 text-xs font-semibold text-[#6B7280] hover:border-flit-brand hover:text-flit-brand disabled:opacity-40 dark:border-white/20 dark:text-white/60"
           data-testid={`${testIdPrefix}-agregar-filtro`}
         >
           + Filtro
@@ -206,7 +206,7 @@ export function QueryFieldPicker({
     <div className={className} data-testid={`${testIdPrefix}-campos`}>
       {grupos.map((grupo) => (
         <div key={grupo} className="mb-1.5">
-          <p className="mb-1 rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#162744] dark:bg-white/[0.06] dark:text-white/75">
+          <p className="mb-1 rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:bg-white/[0.06] dark:text-white/75">
             {grupo}
           </p>
           {fields
@@ -361,7 +361,7 @@ export function ConditionEditor({
                             : [...prev, option.value],
                         )
                       }
-                      className="accent-[#557EFF]"
+                      className="accent-flit-brand"
                     />
                     <span className="min-w-0 flex-1 truncate">{option.label}</span>
                   </label>
@@ -388,7 +388,7 @@ export function ConditionEditor({
           type="button"
           onClick={aplicar}
           disabled={!esUnario && valores.length === 0}
-          className="rounded-lg bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+          className="rounded-lg bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
           data-testid={`${testIdPrefix}-aplicar-${field.id}`}
         >
           Aplicar

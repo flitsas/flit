@@ -11,7 +11,7 @@ export function CompanyNotice({ message }: { message?: string }) {
       className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
       data-testid="aviso-selecciona-compania"
     >
-      <Building2 className="h-8 w-8" style={{ color: "#557EFF" }} aria-hidden="true" />
+      <Building2 className="h-8 w-8" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
       <p className="text-sm font-medium">Selecciona una compañía</p>
       <p className="text-xs opacity-70 max-w-md">
         {message ??

@@ -300,7 +300,7 @@ export function OTConfigTablePanel({
       {legend && (
         <div
           className="mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
-          style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+          style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
           role="note"
           aria-live="polite"
         >

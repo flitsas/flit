@@ -34,8 +34,8 @@ export function Step3Aristas({ rules, onToggle }: Step3Props) {
               htmlFor={`arista-${rule.procedureEntityCode}`}
               className="flex items-center gap-4 rounded-xl p-4 border cursor-pointer transition"
               style={{
-                borderColor: rule.isActive ? '#557EFF' : '#DFE5ED',
-                background: rule.isActive ? 'rgba(85,126,255,0.06)' : 'transparent',
+                borderColor: rule.isActive ? 'var(--color-flit-brand)' : '#DFE5ED',
+                background: rule.isActive ? 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' : 'transparent',
               }}
             >
               <input
@@ -53,8 +53,8 @@ export function Step3Aristas({ rules, onToggle }: Step3Props) {
               <span
                 className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                 style={{
-                  background: rule.isActive ? 'rgba(85,126,255,0.15)' : '#DFE5ED',
-                  color: rule.isActive ? '#557EFF' : '#162744',
+                  background: rule.isActive ? 'color-mix(in srgb, var(--color-flit-brand) 15%, transparent)' : '#DFE5ED',
+                  color: rule.isActive ? 'var(--color-flit-brand)' : '#162744',
                 }}
               >
                 {rule.isActive ? 'Activa' : 'Inactiva'}

@@ -186,7 +186,7 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
   return (
     <section
       className="mt-3 rounded-2xl border p-4"
-      style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.04)' }}
+      style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 4%, transparent)' }}
       aria-label="Revisión de la carga masiva"
     >
       {/* Dos encabezados, no uno con el subtítulo cambiado. Cuando no se reconoció NADA, «Revisa
@@ -205,7 +205,7 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
           !nada ? (
             <span
               className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+              style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
               role="status"
               aria-live="polite"
             >

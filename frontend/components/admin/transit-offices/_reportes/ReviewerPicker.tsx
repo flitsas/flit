@@ -100,7 +100,7 @@ export function ReviewerPicker({
                 type="button"
                 onClick={() => onChange([])}
                 disabled={selected.length === 0}
-                className="text-[11px] font-semibold text-[#557EFF] disabled:opacity-40"
+                className="text-[11px] font-semibold text-flit-brand disabled:opacity-40"
               >
                 Todos
               </button>
@@ -133,7 +133,7 @@ export function ReviewerPicker({
                     type="checkbox"
                     checked={selected.includes(option.userId)}
                     onChange={() => toggle(option.userId)}
-                    className="accent-[#557EFF]"
+                    className="accent-flit-brand"
                   />
                   <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
                   {/* El histórico ordena la lista y da contexto: quien tiene 3 decisiones en dos

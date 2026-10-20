@@ -91,7 +91,7 @@ export default function NetworkChildrenPage() {
           aria-labelledby="domain-company-title"
         >
           <div className="mb-3">
-            <h2 id="domain-company-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+            <h2 id="domain-company-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
               Dominio de la red
             </h2>
             <p className="text-[11px] opacity-60">

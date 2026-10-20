@@ -13,8 +13,8 @@ import { OT_INPUT_CLS } from "./ot-form-styles";
  * `flit_design_tokens.json` (`color.brand` + `color.annotation.pdf20Ago.amber`).
  */
 export const TAG_COLOR_OPTIONS: { hex: string; name: string }[] = [
-  { hex: "#557EFF", name: "Azul" },
-  { hex: "#00DBD5", name: "Cian" },
+  { hex: "var(--color-flit-brand)", name: "Azul" },
+  { hex: "var(--color-flit-tech)", name: "Cian" },
   { hex: "#8CC63F", name: "Verde" },
   { hex: "#FF4E00", name: "Naranja" },
   { hex: "#162744", name: "Navy" },
@@ -71,7 +71,7 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
           type="button"
           disabled={submitting || !code.trim() || !name.trim()}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
           onClick={() => void submit()}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -110,7 +110,7 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
                 />
                 <span
                   aria-hidden="true"
-                  className="h-7 w-7 rounded-full border-2 border-white shadow-sm ring-offset-2 peer-checked:ring-2 peer-checked:ring-[#557EFF] peer-focus-visible:ring-2 peer-focus-visible:ring-[#557EFF] dark:border-[#162744]"
+                  className="h-7 w-7 rounded-full border-2 border-white shadow-sm ring-offset-2 peer-checked:ring-2 peer-checked:ring-flit-brand peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand dark:border-[#162744]"
                   style={{ background: opt.hex }}
                 />
                 {opt.name}

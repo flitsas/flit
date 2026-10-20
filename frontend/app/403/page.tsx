@@ -45,7 +45,7 @@ export default async function ForbiddenPage({ searchParams }: { searchParams: Pr
   return (
     <main className="app-bg flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
       <ShieldX className="h-14 w-14" style={{ color: "#FF4E00" }} />
-      <h1 className="text-2xl font-bold" style={{ color: "#162744" }}>
+      <h1 className="text-2xl font-bold" style={{ color: "var(--color-flit-primary)" }}>
         {denied?.title ?? "Acceso restringido"}
       </h1>
       <p className="max-w-md text-sm opacity-70">
@@ -55,7 +55,7 @@ export default async function ForbiddenPage({ searchParams }: { searchParams: Pr
       <Link
         href={href}
         className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white"
-        style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+        style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
       >
         {denied && hubUrl ? "Ir a mis productos" : "Volver al inicio"}
       </Link>

@@ -55,7 +55,7 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
             className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
           >
             <ShieldX className="h-10 w-10" style={{ color: '#FF4E00' }} aria-hidden="true" />
-            <h1 className="text-lg font-bold" style={{ color: '#162744' }}>
+            <h1 className="text-lg font-bold" style={{ color: 'var(--color-flit-primary)' }}>
               Acceso restringido
             </h1>
             <p className="text-xs opacity-70">
@@ -65,8 +65,8 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
             <button
               type="button"
               onClick={() => router.push('/')}
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-              style={{ background: '#557EFF' }}
+              className="rounded-xl px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+              style={{ background: 'var(--color-flit-brand)' }}
             >
               Volver al inicio
             </button>

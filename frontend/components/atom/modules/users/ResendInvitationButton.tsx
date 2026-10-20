@@ -111,7 +111,7 @@ export function ResendInvitationButton({
         onClick={handleClick}
         disabled={disabled}
         className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
-        style={{ color: "#557EFF" }}
+        style={{ color: "var(--color-flit-brand)" }}
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
       </button>

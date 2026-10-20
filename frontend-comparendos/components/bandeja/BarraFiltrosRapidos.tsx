@@ -44,7 +44,7 @@ export function BarraFiltrosRapidos({
             type="button"
             onClick={() => onRapido(null)}
             aria-pressed
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#557EFF] bg-[#557EFF] px-3 text-xs font-semibold text-white"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-flit-brand bg-flit-brand px-3 text-xs font-semibold text-white"
             title="Quitar el filtro del radar"
           >
             <Clock className="h-3.5 w-3.5" aria-hidden />
@@ -92,7 +92,7 @@ export function BarraFiltrosRapidos({
               aria-pressed={activo}
               onClick={() => onJuridico(activo ? null : (j.id as FiltroJuridico))}
               className={`inline-flex h-8 items-center rounded-full border px-3 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                activo ? "border-[#557EFF] bg-[#557EFF] text-white" : "border-[#DFE5ED] bg-white text-[#1E293B] dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
+                activo ? "border-flit-brand bg-flit-brand text-white" : "border-[#DFE5ED] bg-white text-[#1E293B] dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
               }`}
             >
               {j.texto}

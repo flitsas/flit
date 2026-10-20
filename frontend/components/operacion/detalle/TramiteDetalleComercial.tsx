@@ -208,7 +208,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
           <SeccionVacia mensaje="Este trámite no tiene una decisión de prenda o gravamen registrada." />
         ) : (
           <div className="flex flex-col gap-1.5">
-            <p className="text-xs text-[#162744]/70 dark:text-white/70">
+            <p className="text-xs text-flit-primary/70 dark:text-white/70">
               Decisión registrada por el operador durante la creación del trámite.
             </p>
             <StatusBadge

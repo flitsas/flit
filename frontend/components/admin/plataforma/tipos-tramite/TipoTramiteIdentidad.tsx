@@ -10,8 +10,8 @@ import type {
 } from '@/lib/api/types/procedure-parametrization';
 
 const CAMPO =
-  'w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]';
-const ETIQUETA = 'text-xs font-semibold text-[#162744] dark:text-white';
+  'w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
+const ETIQUETA = 'text-xs font-semibold text-flit-primary dark:text-white';
 
 /**
  * Identidad del tipo: nombre, descripción, familia y si está activo.
@@ -131,9 +131,9 @@ export function TipoTramiteIdentidad({
           type="checkbox"
           checked={activo}
           onChange={(e) => setActivo(e.target.checked)}
-          className="h-3.5 w-3.5 accent-[#557EFF]"
+          className="h-3.5 w-3.5 accent-flit-brand"
         />
-        <span className="text-xs text-[#162744] dark:text-white">
+        <span className="text-xs text-flit-primary dark:text-white">
           Activo en el catálogo
         </span>
       </label>
@@ -143,8 +143,8 @@ export function TipoTramiteIdentidad({
           type="button"
           onClick={() => void guardar()}
           disabled={guardando || sinCambios || nombre.trim().length === 0}
-          className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
         >
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">

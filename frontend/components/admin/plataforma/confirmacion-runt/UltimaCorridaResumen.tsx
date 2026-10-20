@@ -24,7 +24,7 @@ export function duracionDe(run: Pick<RuntConfirmationRun, "startedAt" | "finishe
 
 /** Tarjetas de resumen (patrón del artifact): la cifra manda, con su tono semántico. */
 const STAT_TONE = {
-  neutral: "text-[#162744] dark:text-white",
+  neutral: "text-flit-primary dark:text-white",
   ok: "text-[#15803D]",
   warn: "text-[#C2410C]",
   bad: "text-[#991B1B]",
@@ -64,7 +64,7 @@ export function UltimaCorridaResumen({ run, titulo }: { run: RuntConfirmationRun
 
   return (
     <div className="flex flex-col gap-2" data-testid="confirmacion-runt-ultima-corrida">
-      {titulo ? <p className="text-xs font-semibold text-[#162744] dark:text-white">{titulo}</p> : null}
+      {titulo ? <p className="text-xs font-semibold text-flit-primary dark:text-white">{titulo}</p> : null}
       {run.skippedReason ? (
         <p className="rounded-lg bg-[#FF4E00]/10 px-3 py-2 text-xs font-semibold text-[#B33600] dark:text-[#FF8A5B]">
           {SKIPPED_LABEL[run.skippedReason] ?? run.skippedReason}

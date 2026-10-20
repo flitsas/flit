@@ -69,10 +69,10 @@ const COLUMNAS = [
 const tdCls = "border-y px-4 py-3 align-middle";
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20";
+  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#557EFF]";
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
 
 interface Filtros {
   desde: string;
@@ -298,7 +298,7 @@ export function IctTrazabilidad() {
         : "ready";
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Trazabilidad ICT"
         subtitle="Qué pasó con cada trámite que entró por la integración con terceros. Busca por número, placa o VIN y abre su recorrido completo."
@@ -324,7 +324,7 @@ export function IctTrazabilidad() {
               aria-label={`${meta.label}: ${conteo} trámite${conteo === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
               style={activo ? { background: meta.style.bg } : undefined}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
@@ -334,11 +334,11 @@ export function IctTrazabilidad() {
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
                 aria-hidden="true"
               >
                 {conteo}
@@ -476,7 +476,7 @@ export function IctTrazabilidad() {
         // que quien navega con lector necesita que se le anuncie.
         <p
           role="status"
-          className="shrink-0 text-xs text-[#162744]/70 dark:text-white/70"
+          className="shrink-0 text-xs text-flit-primary/70 dark:text-white/70"
         >
           {avisoExport}
         </p>
@@ -600,8 +600,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white text-[#162744] dark:bg-[#0B0F14] dark:text-white ${TABLA_ROW_HOVER_CLS} ${
-          abierta ? "border-[#557EFF]/40" : "border-[#DFE5ED] dark:border-white/10"
+        className={`cursor-pointer bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "border-flit-brand/40" : "border-[#DFE5ED] dark:border-white/10"
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -617,12 +617,12 @@ function FilaTramite({
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
           <ChevronRight
-            className={`h-3.5 w-3.5 text-[#557EFF] transition-transform ${abierta ? "rotate-90" : ""}`}
+            className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`}
             aria-hidden="true"
           />
         </td>
         <td className={tdCls}>
-          <span className="font-mono font-semibold text-[#557EFF]">{tramite.numero}</span>
+          <span className="font-mono font-semibold text-flit-brand">{tramite.numero}</span>
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold tracking-wide">{tramite.placa}</span>

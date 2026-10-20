@@ -8,6 +8,7 @@
 // Uso de ejemplo:
 //   <head><BrandStyle brand={brand} /></head>
 import { deriveDarkPalette } from "./derive-dark";
+import { deriveAccentTone, deriveBrandSurfaces } from "./derive-tokens";
 import { isValidHexColor } from "./contrast";
 import { isFlitBrand, type Brand } from "./types";
 
@@ -33,10 +34,16 @@ export function BrandStyle({ brand }: { brand: Brand }) {
   }
 
   const dark = deriveDarkPalette({ primary, secondary, onPrimary });
+  // Degradado, fondos tintados y tinta de texto salen del color de acción: sin ellos, el menú
+  // activo, los fondos y los chips seguían con el azul/verde de FLIT en una red con marca.
+  const light = deriveBrandSurfaces(secondary);
+  const darkAccent = deriveAccentTone(dark.secondary);
 
   const css =
-    `:root{--brand-primary:${primary};--brand-secondary:${secondary};--brand-on-primary:${onPrimary};}` +
-    `.dark{--brand-primary:${dark.primary};--brand-secondary:${dark.secondary};--brand-on-primary:${dark.onPrimary};}`;
+    `:root{--brand-primary:${primary};--brand-secondary:${secondary};--brand-on-primary:${onPrimary};` +
+    `--brand-accent:${light.accent};--brand-bg:${light.bg};--brand-tint:${light.tint};--brand-ink:${light.ink};}` +
+    `.dark{--brand-primary:${dark.primary};--brand-secondary:${dark.secondary};--brand-on-primary:${dark.onPrimary};` +
+    `--brand-accent:${darkAccent};--brand-ink:${dark.secondary};}`;
 
   // Children de texto (NO dangerouslySetInnerHTML): los valores ya pasaron por
   // `isValidHexColor` línea arriba, así que no hay entrada sin sanear en el DOM.

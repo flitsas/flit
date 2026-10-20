@@ -60,8 +60,8 @@ export function BrandingPreview({
   const [tab, setTab] = useState<PreviewTab>("acceso");
 
   const scopedVars: CSSProperties = {
-    ["--preview-primary" as string]: colors?.primary ?? "#557EFF",
-    ["--preview-secondary" as string]: colors?.secondary ?? "#00DBD5",
+    ["--preview-primary" as string]: colors?.primary ?? "var(--color-flit-brand)",
+    ["--preview-secondary" as string]: colors?.secondary ?? "var(--color-flit-tech)",
     ["--preview-on-primary" as string]: colors?.onPrimary ?? "#FFFFFF",
   };
 
@@ -87,8 +87,8 @@ export function BrandingPreview({
             className="rounded-lg px-3 py-1.5 text-xs font-semibold"
             style={
               tab === t.id
-                ? { background: "#557EFF", color: "#FFFFFF" }
-                : { background: "transparent", color: "#162744" }
+                ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
+                : { background: "transparent", color: "var(--color-flit-primary)" }
             }
           >
             {t.label}
@@ -238,8 +238,8 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={
                 emailSource === value
-                  ? { background: "#557EFF", color: "#FFFFFF" }
-                  : { background: "transparent", color: "#162744" }
+                  ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
+                  : { background: "transparent", color: "var(--color-flit-primary)" }
               }
             >
               {value === "draft" ? "Borrador" : "Publicada"}
@@ -258,7 +258,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
         {sample ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs opacity-70">
-              <span className="font-semibold" style={{ color: "#162744" }}>
+              <span className="font-semibold" style={{ color: "var(--color-flit-primary)" }}>
                 Asunto:{" "}
               </span>
               {sample.subject}

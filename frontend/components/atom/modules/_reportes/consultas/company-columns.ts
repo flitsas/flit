@@ -36,7 +36,7 @@ const ESTADO_LABEL: Record<string, string> = {
  */
 const ESTADO_COLOR: Record<string, string> = {
   borrador: "#9AA5B4",
-  preparado: "#557EFF",
+  preparado: "var(--color-flit-brand)",
   preasignacion: "#E08A00",
   asignado: "#6366F1",
   entregado: "#00A8B5",

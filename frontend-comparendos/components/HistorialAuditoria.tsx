@@ -41,7 +41,7 @@ export function HistorialAuditoria({
       {lista.estado === "ready" && items.length === 0 && <p className="text-sm opacity-70">Sin cambios registrados.</p>}
       <ol className="flex flex-col gap-3">
         {items.map((a) => (
-          <li key={a.id} className="border-l-2 border-[#557EFF] pl-3 text-xs">
+          <li key={a.id} className="border-l-2 border-flit-brand pl-3 text-xs">
             <p className="font-semibold">
               {ACCION[a.accion] ? `${ACCION[a.accion]} · ` : ""}
               {nombre(a.entidadId)}

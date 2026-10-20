@@ -105,7 +105,7 @@ export function AssociatedProceduresList({
   if (!collapsible) {
     return (
       <div className="space-y-2" aria-label={ariaLabel}>
-        <p className="text-[11px] font-semibold text-[#162744] dark:text-white">Trámites asociados</p>
+        <p className="text-[11px] font-semibold text-flit-primary dark:text-white">Trámites asociados</p>
         {list}
       </div>
     );

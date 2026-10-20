@@ -61,7 +61,7 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
             id="matrix-ot"
             value={transitOfficeId}
             onChange={(e) => setTransitOfficeId(e.target.value)}
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
           >
             <option value="">Sin OT (nivel Default)</option>
             {offices.map((o) => (
@@ -77,7 +77,7 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
             type="button"
             onClick={resolve}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             <Eye className="h-3.5 w-3.5" /> Ver matriz resuelta
           </button>

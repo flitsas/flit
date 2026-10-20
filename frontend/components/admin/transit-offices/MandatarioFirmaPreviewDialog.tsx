@@ -64,7 +64,7 @@ export function MandatarioFirmaPreviewDialog({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-[#557EFF]"
+          className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-flit-brand"
         >
           Cerrar
         </button>

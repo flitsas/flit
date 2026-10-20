@@ -49,7 +49,7 @@ export function ChildCompanyStatusDialog({
       size="sm"
       zClassName="z-[90]"
       title={deactivating ? "Desactivar cliente" : "Activar cliente"}
-      titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
     >
       <p className="mt-2 text-sm opacity-80">
         ¿Confirmas {deactivating ? "desactivar" : "activar"} a <strong>{child.razonSocial}</strong> en tu
@@ -74,7 +74,7 @@ export function ChildCompanyStatusDialog({
           onClick={() => void confirm()}
           disabled={busy}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: deactivating ? "#FF4E00" : "#00DBD5" }}
+          style={{ background: deactivating ? "#FF4E00" : "var(--color-flit-tech)" }}
         >
           {busy ? "Procesando…" : deactivating ? "Desactivar" : "Activar"}
         </button>

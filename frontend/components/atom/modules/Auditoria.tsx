@@ -210,7 +210,7 @@ export function Auditoria() {
         : 'ready';
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Auditoría"
         subtitle="Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación."

@@ -147,7 +147,7 @@ export function WebhooksSection() {
             <button
               type="button"
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-              style={{ background: "#557EFF" }}
+              style={{ background: "var(--color-flit-brand)" }}
               onClick={() => {
                 setEditing(null);
                 setFormOpen(true);
@@ -301,7 +301,7 @@ export function WebhooksSection() {
               <button
                 type="submit"
                 className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
               >
                 Aplicar filtros
               </button>

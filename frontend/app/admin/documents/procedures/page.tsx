@@ -55,7 +55,7 @@ export default function DocumentProceduresPage() {
               onChange={(e) => setQ(sanitizeNoAngleBrackets(e.target.value))}
               maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Nombre o código"
-              className="w-full rounded-xl border py-2 pl-9 pr-3 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border py-2 pl-9 pr-3 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             />
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function DocumentProceduresPage() {
                   key={p.id}
                   type="button"
                   onClick={() => go(p.id)}
-                  className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-left transition hover:border-[#557EFF] dark:bg-[#0B0F14]"
+                  className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-left transition hover:border-flit-brand dark:bg-[#0B0F14]"
                 >
                   <span>
                     <span className="block text-xs font-semibold">{p.name}</span>

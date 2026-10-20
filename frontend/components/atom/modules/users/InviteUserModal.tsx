@@ -232,9 +232,9 @@ export function InviteUserModal({
           <div className="space-y-3">
             <div
               className="rounded-xl border p-3"
-              style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}
+              style={{ borderColor: "var(--color-flit-tech)", background: "color-mix(in srgb, var(--color-flit-tech) 6%, transparent)" }}
             >
-              <p className="text-sm font-semibold" style={{ color: "#00DBD5" }}>
+              <p className="text-sm font-semibold" style={{ color: "var(--color-flit-tech)" }}>
                 Invitación enviada
               </p>
               <p className="mt-0.5 text-xs opacity-70">
@@ -251,7 +251,7 @@ export function InviteUserModal({
               type="button"
               onClick={onClose}
               className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               Cerrar
             </button>
@@ -271,8 +271,8 @@ export function InviteUserModal({
                         key={p}
                         className="flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-xs transition"
                         style={{
-                          borderColor: active ? "#557EFF" : "#DFE5ED",
-                          background: active ? "rgba(85,126,255,0.06)" : undefined,
+                          borderColor: active ? "var(--color-flit-brand)" : "#DFE5ED",
+                          background: active ? "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" : undefined,
                         }}
                       >
                         <input
@@ -281,11 +281,11 @@ export function InviteUserModal({
                           value={p}
                           checked={active}
                           onChange={() => changeProfile(p)}
-                          className="mt-0.5 h-3.5 w-3.5 accent-[#557EFF]"
+                          className="mt-0.5 h-3.5 w-3.5 accent-flit-brand"
                         />
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 font-semibold">
-                            <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: "#557EFF" }} aria-hidden />
+                            <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
                             {USER_PROFILE_LABEL[p]}
                           </span>
                           <span className="mt-0.5 block opacity-70">{USER_PROFILE_DESCRIPTION[p]}</span>
@@ -301,7 +301,7 @@ export function InviteUserModal({
               <div className="rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: "#DFE5ED" }}>
                 <p className="text-[10px] font-semibold uppercase opacity-60">Destino</p>
                 <p className="mt-0.5 flex items-center gap-1.5 font-semibold">
-                  <ProfileIcon className="h-3.5 w-3.5 shrink-0" style={{ color: "#557EFF" }} aria-hidden />
+                  <ProfileIcon className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
                   {fixedTarget.name ?? USER_PROFILE_LABEL[fixedTarget.profile]}
                 </p>
               </div>
@@ -334,7 +334,7 @@ export function InviteUserModal({
             {isSuperAdmin && isFlitProfile && (
               <p
                 className="rounded-xl border px-3 py-2.5 text-xs"
-                style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}
+                style={{ borderColor: "var(--color-flit-tech)", background: "color-mix(in srgb, var(--color-flit-tech) 6%, transparent)" }}
               >
                 El perfil FLIT no pertenece a ninguna compañía ni organismo de tránsito: se creará
                 con el rol de sistema <strong>Super Administrador</strong>.
@@ -352,7 +352,7 @@ export function InviteUserModal({
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Juan Pérez"
-                className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[#557EFF]"
+                className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
               />
             </div>
 
@@ -367,7 +367,7 @@ export function InviteUserModal({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="correo@empresa.com"
-                className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[#557EFF]"
+                className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
               />
             </div>
 
@@ -390,7 +390,7 @@ export function InviteUserModal({
                           name="invite-role"
                           checked={selectedRoleIds[0] === r.id}
                           onChange={() => setSelectedRoleIds([r.id])}
-                          className="h-3.5 w-3.5 accent-[#557EFF]"
+                          className="h-3.5 w-3.5 accent-flit-brand"
                         />
                         <span>{r.name}</span>
                       </label>
@@ -438,7 +438,7 @@ export function InviteUserModal({
                 status === "loading" || (needsTenant && !selectedTenantId) || rolesRequiredAndMissing
               }
               className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {status === "loading" ? "Enviando…" : "Enviar Instrucciones"}
             </button>
@@ -482,7 +482,7 @@ function resolveErrorMessage(code: string | undefined, status: number | undefine
 
 function OnboardingSteps() {
   return (
-    <div className="rounded-xl border bg-[rgba(0,219,213,0.06)] p-3">
+    <div className="rounded-xl border bg-[color-mix(in_srgb,var(--color-flit-tech)_6%,transparent)] p-3">
       <p className="mb-2 text-[10px] font-semibold uppercase opacity-60">Onboarding</p>
       <div className="flex items-center gap-2 text-xs">
         {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
@@ -490,7 +490,7 @@ function OnboardingSteps() {
             <span
               className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold"
               style={{
-                background: i === 0 ? "#00DBD5" : "#DFE5ED",
+                background: i === 0 ? "var(--color-flit-tech)" : "#DFE5ED",
                 color: i === 0 ? "#fff" : "#162744",
               }}
             >

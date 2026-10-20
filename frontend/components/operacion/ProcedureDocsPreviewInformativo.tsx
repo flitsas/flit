@@ -38,10 +38,10 @@ const TONO_OBLIGATORIO = {
 };
 
 const TONO_OPCIONAL = {
-  bg: 'rgba(85, 126, 255, 0.14)',
+  bg: 'color-mix(in srgb, var(--color-flit-brand) 14%, transparent)',
   fg: '#3B4FD6',
-  border: 'rgba(85, 126, 255, 0.35)',
-  punto: '#557EFF',
+  border: 'color-mix(in srgb, var(--color-flit-brand) 35%, transparent)',
+  punto: 'var(--color-flit-brand)',
 };
 
 /**
@@ -93,7 +93,7 @@ function GrupoDocumentos({
               style={{ background: tono.punto }}
             />
             <div className="min-w-0">
-              <p className="text-xs" style={{ color: '#162744' }}>
+              <p className="text-xs" style={{ color: 'var(--color-flit-primary)' }}>
                 <DocumentCatalogCaption nombre={doc.nombre} codigo={doc.codigo} />
               </p>
               {/* La descripción del catálogo no está en la maqueta porque su ejemplo no tenía
@@ -182,7 +182,7 @@ export function ProcedureDocsPreviewInformativo({
           type="button"
           onClick={() => setOpen(true)}
           className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline"
-          style={{ color: '#557EFF' }}
+          style={{ color: 'var(--color-flit-brand)' }}
         >
           <FileText className="h-3.5 w-3.5" aria-hidden />
           Ver documentos a tener listos
@@ -241,8 +241,8 @@ export function ProcedureDocsPreviewInformativo({
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="shrink-0 rounded-xl border bg-white px-4 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 hover:border-[#557EFF] dark:bg-[#162744]"
-                  style={{ borderColor: '#DFE5ED', color: '#162744' }}
+                  className="shrink-0 rounded-xl border bg-white px-4 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand dark:bg-[#162744]"
+                  style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-primary)' }}
                 >
                   Entendido
                 </button>

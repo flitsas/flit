@@ -155,7 +155,7 @@ export function TransitOfficeSearchPicker({
                     className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium hover:bg-[#EFF6FF] dark:hover:bg-white/5 ${
                       i === activo ? 'bg-[#EFF6FF] dark:bg-white/5' : ''
                     }`}
-                    style={{ color: '#162744' }}
+                    style={{ color: 'var(--color-flit-primary)' }}
                   >
                     {o.name}
                   </button>

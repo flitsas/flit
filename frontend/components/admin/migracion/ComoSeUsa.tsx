@@ -22,7 +22,7 @@ export function ComoSeUsa() {
         aria-expanded={abierta}
         className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold"
       >
-        <HelpCircle className="h-4 w-4 shrink-0" aria-hidden="true" style={{ color: "#557EFF" }} />
+        <HelpCircle className="h-4 w-4 shrink-0" aria-hidden="true" style={{ color: "var(--color-flit-brand)" }} />
         Cómo se usa
         {abierta ? (
           <ChevronDown className="ml-auto h-4 w-4 opacity-60" aria-hidden="true" />

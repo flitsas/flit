@@ -16,7 +16,7 @@ import type { EventoTimeline } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
 const COLOR_ACTOR: Record<string, string> = {
-  Usuario: "#557EFF",
+  Usuario: "var(--color-flit-brand)",
   Sistema: "#5B6B82",
   Scheduler: "#8B5CF6",
   ApiExterna: "#00A3A3",
@@ -123,12 +123,12 @@ export function Timeline({
             <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{e.descripcion}</p>
             {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
-              <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-[#557EFF] hover:underline">
+              <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-flit-brand hover:underline">
                 Ver el correo
               </Link>
             )}
             {e.relacionadoTipo && ENLACE_SECCION[e.relacionadoTipo] && onIr && (
-              <button type="button" className="text-[11px] font-semibold text-[#557EFF] hover:underline" onClick={() => onIr(ENLACE_SECCION[e.relacionadoTipo!]!.seccion)}>
+              <button type="button" className="text-[11px] font-semibold text-flit-brand hover:underline" onClick={() => onIr(ENLACE_SECCION[e.relacionadoTipo!]!.seccion)}>
                 {ENLACE_SECCION[e.relacionadoTipo]!.texto}
               </button>
             )}

@@ -150,10 +150,10 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             agregar(e.dataTransfer.files);
           }}
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center text-xs transition ${
-            arrastrando ? "border-[#557EFF] bg-[#EFF6FF] dark:bg-[#557EFF]/10" : "border-[#DFE5ED] dark:border-white/15"
+            arrastrando ? "border-flit-brand bg-[#EFF6FF] dark:bg-flit-brand/10" : "border-[#DFE5ED] dark:border-white/15"
           }`}
         >
-          <Upload className="h-5 w-5 text-[#557EFF]" aria-hidden />
+          <Upload className="h-5 w-5 text-flit-brand" aria-hidden />
           <span className="font-semibold">Arrastra los archivos aquí o haz clic para elegirlos</span>
           <span className="opacity-60">JPG, PNG, TIFF o PDF · máximo 20 MB cada uno</span>
           <input

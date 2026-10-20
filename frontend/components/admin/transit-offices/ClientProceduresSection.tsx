@@ -1659,7 +1659,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                     <button
                       type="button"
                       onClick={() => setFieldsKey((k) => k + 1)}
-                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
+                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-flit-brand transition hover:bg-flit-brand/10"
                     >
                       Reintentar
                     </button>
@@ -1895,7 +1895,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 disabled={acting || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmApprove()}
               >
@@ -1950,7 +1950,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                       value={s.id}
                       checked={mandatarioChoice === s.id}
                       onChange={() => setMandatarioChoice(s.id)}
-                      className="h-4 w-4 accent-[#557EFF]"
+                      className="h-4 w-4 accent-flit-brand"
                     />
                     <span className="flex-1">
                       <span className="font-semibold">{s.nombre}</span>
@@ -1975,7 +1975,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 disabled={acting || !mandatarioChoice}
                 onClick={() => void confirmMandatario()}
               >
@@ -1994,7 +1994,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Asignar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Asignar placa al trámite</h2>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
             {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede escribir una placa
                 que termine en ese dígito o cualquier otra.
@@ -2011,7 +2011,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             )}
             {/* HU #12852 (Feature #12846) — único campo de placa: el backend siempre reserva fuera de
                 rango (HU-A1), así que ya no hay selector de modo en-rango/fuera-de-rango. */}
-            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
               Placa
               <input
                 type="text"
@@ -2027,7 +2027,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             </label>
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
             </div>
           </div>
         </div>
@@ -2041,7 +2041,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Liberar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Liberar placa</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Liberar placa</h2>
             <p className="mt-1 text-xs opacity-70">
               El trámite vuelve a Preasignación para asignarle otra placa. La placa actual queda liberada en el inventario.
             </p>
@@ -2072,7 +2072,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Decidir revocatoria"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Decidir revocatoria</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Decidir revocatoria</h2>
             <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
             <p className="mt-2 text-xs opacity-70">
               El gestor solicitó revocar este trámite. Aprobar lo revoca; rechazar lo deja Aprobado
@@ -2083,9 +2083,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 OT decidía sin poder verlos. */}
             <div
               className="mt-3 rounded-xl border p-3 text-xs"
-              style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.05)" }}
+              style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 5%, transparent)" }}
             >
-              <p className="font-semibold" style={{ color: "#162744" }}>
+              <p className="font-semibold" style={{ color: "var(--color-flit-primary)" }}>
                 Motivo de la solicitud
               </p>
               {decideRevocationDetailLoading ? (
@@ -2100,14 +2100,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => void handleVerSoporteRevocatoria()}
                 disabled={decideRevocationDetailLoading || !decideRevocationDetail?.supportDocumentId}
                 className="mt-2 font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ color: "#557EFF" }}
+                style={{ color: "var(--color-flit-brand)" }}
               >
                 Ver documento de soporte (PDF)
               </button>
             </div>
 
             <fieldset className="mt-4">
-              <legend className="text-xs font-semibold" style={{ color: "#162744" }}>Decisión</legend>
+              <legend className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>Decisión</legend>
               {/* Selector de modo, NO un botón de acción: fondo tenue en vez del mismo azul/rojo
                   sólido del botón de confirmar de abajo, para que no se lean como "dos aprobar". */}
               <div
@@ -2126,7 +2126,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   className="flex-1 rounded-lg px-3 py-1.5"
                   style={
                     decideRevocationMode === "approve"
-                      ? { background: "rgba(85,126,255,0.12)", color: "#3B5BDB" }
+                      ? { background: "color-mix(in srgb, var(--color-flit-brand) 12%, transparent)", color: "#3B5BDB" }
                       : { color: "#64748b" }
                   }
                 >
@@ -2148,7 +2148,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </div>
             </fieldset>
 
-            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
               Motivo {decideRevocationMode === "reject" ? "(obligatorio)" : "(opcional)"}
               <textarea
                 className={`mt-1 ${OT_INPUT_CLS}`}
@@ -2199,7 +2199,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: decideRevocationMode === "reject" ? "#dc2626" : "#557EFF" }}
+                style={{ background: decideRevocationMode === "reject" ? "#dc2626" : "var(--color-flit-brand)" }}
                 disabled={acting}
                 onClick={() => void confirmDecideRevocation()}
               >
@@ -2225,7 +2225,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Actualizar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#557EFF" }}>Corregir placa</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-brand)" }}>Corregir placa</h2>
             <p className="mt-2 text-sm opacity-80">
               Trámite {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}
             </p>
@@ -2236,14 +2236,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             {updatePlateTarget.plateAssignedAt && (
               <p
                 className="mt-2 text-sm font-semibold"
-                style={{ color: plateWindowJustExpired ? "#dc2626" : "#557EFF" }}
+                style={{ color: plateWindowJustExpired ? "#dc2626" : "var(--color-flit-brand)" }}
               >
                 {plateWindowJustExpired
                   ? "La ventana de 1 hora venció mientras tenías este cuadro abierto."
                   : `Tiempo restante: ${plateUpdateRemainingLabel(updatePlateTarget.plateAssignedAt)}`}
               </p>
             )}
-            <label className="mt-3 block text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="mt-3 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
               Placa correcta
               <input
                 type="text"
@@ -2256,7 +2256,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             </label>
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setUpdatePlateTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !updatePlateInput.trim() || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !updatePlateInput.trim() || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
             </div>
           </div>
         </div>
@@ -2380,7 +2380,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 disabled={acting || !ltFile || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmAdjuntarLt()}
               >

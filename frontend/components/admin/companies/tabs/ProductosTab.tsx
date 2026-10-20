@@ -117,7 +117,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
             return (
               <li key={p.productCode} className="space-y-2">
                 <div className="flex items-start gap-3">
-                  <span className="mt-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#557EFF]/10 text-[#557EFF]">
+                  <span className="mt-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-flit-brand/10 text-flit-brand">
                     {createElement(ICONS[p.productCode] ?? FileText, { className: "h-4 w-4", "aria-hidden": true })}
                   </span>
                   <div className="flex-1">

@@ -15,7 +15,7 @@ export function Step2Tipologia() {
             id="pt-description"
             rows={3}
             placeholder="Descripción opcional del flujo..."
-            className="w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] resize-none"
+            className="w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand resize-none"
           />
         </div>
 
@@ -27,7 +27,7 @@ export function Step2Tipologia() {
             id="pt-version"
             type="text"
             defaultValue="1.0"
-            className="w-32 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
+            className="w-32 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand"
           />
         </div>
 

@@ -142,8 +142,8 @@ export function ExternalClientsPanel() {
         <button
           type="button"
           onClick={() => setForm({ mode: "create" })}
-          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)" }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
         >
           <PlugZap className="h-4 w-4" aria-hidden="true" />
           Nuevo cliente
@@ -153,19 +153,19 @@ export function ExternalClientsPanel() {
       {revealed && (
         <section
           aria-labelledby="external-client-secret-title"
-          className="rounded-[18px] border border-[#557EFF]/35 bg-white p-4 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/15 dark:bg-[#162744]"
+          className="rounded-[18px] border border-flit-brand/35 bg-white p-4 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/15 dark:bg-[#162744]"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-2">
-              <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-[#162744] dark:text-white">
-                <KeyRound className="h-4 w-4 text-[#557EFF]" aria-hidden="true" />
+              <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
+                <KeyRound className="h-4 w-4 text-flit-brand" aria-hidden="true" />
                 Secreto de «{revealed.clientId}»
               </h3>
               <p className="text-xs font-semibold text-[#C2410C]">
                 Cópielo ahora: no se volverá a mostrar ni se puede recuperar. Entrégueselo al sistema externo por un
                 canal seguro.
               </p>
-              <code className="break-all rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] px-3 py-2 font-mono text-sm text-[#162744] dark:border-white/15 dark:bg-white/5 dark:text-white">
+              <code className="break-all rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] px-3 py-2 font-mono text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
                 {revealed.secret}
               </code>
             </div>
@@ -173,7 +173,7 @@ export function ExternalClientsPanel() {
               <button
                 type="button"
                 onClick={() => void copySecret()}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#557EFF] px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:hover:bg-white/5"
+                className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:hover:bg-white/5"
               >
                 {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
                 {copied ? "Copiado" : "Copiar secreto"}
@@ -182,7 +182,7 @@ export function ExternalClientsPanel() {
                 type="button"
                 aria-label="Cerrar: el secreto no se volverá a mostrar"
                 onClick={() => setRevealed(null)}
-                className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-[#162744] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:text-white dark:hover:bg-white/5"
+                className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white dark:hover:bg-white/5"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -201,7 +201,7 @@ export function ExternalClientsPanel() {
         <div className="overflow-x-auto rounded-[18px] border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#162744]">
           <table className="w-full text-sm">
             <caption className="sr-only">Clientes de integración externos</caption>
-            <thead className="bg-[#DFE5ED] text-[#162744] dark:bg-white/6 dark:text-white/72">
+            <thead className="bg-[#DFE5ED] text-flit-primary dark:bg-white/6 dark:text-white/72">
               <tr>
                 <th scope="col" className={TH_CLS}>Cliente</th>
                 <th scope="col" className={TH_CLS}>Finalidad</th>
@@ -218,7 +218,7 @@ export function ExternalClientsPanel() {
                 return (
                   <tr
                     key={c.id}
-                    className="border-t border-[#DFE5ED] text-[#162744] hover:bg-[#F4F8FF] dark:border-white/10 dark:text-white dark:hover:bg-white/4"
+                    className="border-t border-[#DFE5ED] text-flit-primary hover:bg-[#F4F8FF] dark:border-white/10 dark:text-white dark:hover:bg-white/4"
                   >
                     <td className={TD_CLS}>
                       <span className="block font-mono text-sm font-semibold">{c.clientId}</span>

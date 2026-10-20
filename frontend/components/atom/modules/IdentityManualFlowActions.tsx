@@ -34,11 +34,11 @@ const AVISO_CORREO =
   'No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido.';
 
 const BTN_BASE =
-  'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:focus-visible:ring-[#7C9BFF] disabled:cursor-not-allowed disabled:opacity-70';
+  'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:focus-visible:ring-[#7C9BFF] disabled:cursor-not-allowed disabled:opacity-70';
 /** Acción secundaria navy del guardián (patrón «NavyButton»); en tema oscuro, translúcida sobre la tarjeta #162744. */
 const NAVY_BTN = `${BTN_BASE} bg-[#162744] text-white hover:opacity-90 dark:border dark:border-white/15 dark:bg-white/10 dark:hover:bg-white/15`;
 /** Secundario «blanco con borde» del guardián. */
-const GHOST_BTN = `${BTN_BASE} border border-[#DFE5ED] bg-white text-[#162744] hover:bg-[#F4F8FF] dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5`;
+const GHOST_BTN = `${BTN_BASE} border border-[#DFE5ED] bg-white text-flit-primary hover:bg-[#F4F8FF] dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5`;
 /** CTA principal del modal: degradado primario (token gradient.primary), con el mismo valor de WIZARD_CTA_GRADIENT. */
 const CTA_BTN = `${BTN_BASE} text-white hover:opacity-90`;
 const AVISO_CLS = 'flex items-start gap-2 rounded-[10px] border text-xs';
@@ -128,7 +128,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
               ariaLabel={rechazada ? CHIP_RECHAZADA : 'Flujo manual activo'}
             />
             {v.expiresAt && (
-              <span className="text-xs text-[#162744] dark:text-white/80">
+              <span className="text-xs text-flit-primary dark:text-white/80">
                 El enlace vence: <span className="font-semibold">{formatFechaHora(v.expiresAt)}</span>
               </span>
             )}
@@ -272,12 +272,12 @@ function ManualFlowConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-md rounded-[18px] border border-[#DFE5ED] bg-white p-5 text-[#162744] shadow-2xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+        className="w-full max-w-md rounded-[18px] border border-[#DFE5ED] bg-white p-5 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
       >
         <h2 id={titleId} className="text-base font-bold">
           {titulo}
         </h2>
-        <div id={descId} className="mt-3 space-y-2 text-sm text-[#162744] dark:text-white/80">
+        <div id={descId} className="mt-3 space-y-2 text-sm text-flit-primary dark:text-white/80">
           <p>{texto}</p>
           {kyverumEnCurso && (
             <p

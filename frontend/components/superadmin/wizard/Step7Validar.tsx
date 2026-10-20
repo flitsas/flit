@@ -30,7 +30,7 @@ export function Step7Validar({ validationResult, loading, error, onValidate }: S
         onClick={onValidate}
         disabled={loading}
         className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: '#557EFF' }}
+        style={{ background: 'var(--color-flit-brand)' }}
         aria-label="Ejecutar validación de parametrización"
       >
         {loading ? 'Validando…' : 'Ejecutar validación'}
@@ -56,9 +56,9 @@ export function Step7Validar({ validationResult, loading, error, onValidate }: S
             <div
               className="flex items-center gap-3 rounded-xl p-4 border text-xs font-semibold"
               style={{
-                borderColor: '#00DBD5',
-                background: 'rgba(0,219,213,0.08)',
-                color: '#00DBD5',
+                borderColor: 'var(--color-flit-tech)',
+                background: 'color-mix(in srgb, var(--color-flit-tech) 8%, transparent)',
+                color: 'var(--color-flit-tech)',
               }}
               role="status"
             >

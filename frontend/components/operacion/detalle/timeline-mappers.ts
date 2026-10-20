@@ -15,7 +15,7 @@ const GREEN = '#8CC63F';
 const WARN = '#F9AC00';
 const RED = '#FF4E00';
 const GREY = '#94A3B8';
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 
 const PARTE_LABEL: Record<BiometricParte, string> = {
   vendedor: 'Vendedor',

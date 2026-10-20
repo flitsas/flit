@@ -96,7 +96,7 @@ function AccionDoc({
       title={title ?? label}
       aria-label={label}
       className={`grid h-7 w-7 place-items-center rounded-lg border transition disabled:opacity-50 ${
-        blanco ? "border-white/40 text-white" : "border-[#DFE5ED] hover:bg-[#557EFF]/10 dark:border-white/10"
+        blanco ? "border-white/40 text-white" : "border-[#DFE5ED] hover:bg-flit-brand/10 dark:border-white/10"
       }`}
       style={blanco ? undefined : { color: OT_BLUE }}
     >

@@ -112,7 +112,7 @@ export default function RevocatoriasPage() {
         <ModuleTitle title="Revocatorias" />
         <div
           role="alert"
-          className="rounded-2xl border border-[#DFE5ED] bg-white p-6 text-sm text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          className="rounded-2xl border border-[#DFE5ED] bg-white p-6 text-sm text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
         >
           Solo el Administrador de la compañía puede ver las solicitudes de revocatoria.
         </div>

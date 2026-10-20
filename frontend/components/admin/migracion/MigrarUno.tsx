@@ -118,7 +118,7 @@ export function MigrarUno() {
           // El color sigue al modo, no al revés: ámbar cuando va a escribir en V2. El gris de
           // antes se leía como un botón deshabilitado justo cuando sí se podía pulsar.
           className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-            dryRun ? "bg-[#557EFF]" : "bg-amber-600 hover:bg-amber-700"
+            dryRun ? "bg-flit-brand" : "bg-amber-600 hover:bg-amber-700"
           }`}
         >
           {corriendo ? (
@@ -157,7 +157,7 @@ export function MigrarUno() {
                 <Loader2
                   className="h-5 w-5 animate-spin"
                   aria-hidden="true"
-                  style={{ color: "#557EFF" }}
+                  style={{ color: "var(--color-flit-brand)" }}
                 />
                 <p className="text-sm opacity-70">Esperando al migrador…</p>
               </>

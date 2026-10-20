@@ -18,7 +18,7 @@ import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { OperacionLoadingState } from './states';
 import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
 
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 const BORDER = '#DFE5ED';
 const ALERT = '#FF4E00';
 
@@ -135,7 +135,7 @@ function TarjetaSelect({
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2.5 text-left text-[13px] outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#0B0F14]"
+        className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2.5 text-left text-[13px] outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#0B0F14]"
         style={{ borderColor: BORDER, color: elegida ? '#162744' : '#94A3B8' }}
       >
         <span className="truncate pr-2">{elegida?.label ?? placeholder}</span>
@@ -175,8 +175,8 @@ function TarjetaSelect({
                     }}
                     className={`block w-full px-3 py-2 text-left text-[13px] transition ${
                       on
-                        ? 'bg-[#EEF5FF] font-semibold text-[#162744]'
-                        : 'text-[#475569] hover:bg-[#EEF5FF] hover:text-[#162744] dark:text-white/80'
+                        ? 'bg-[#EEF5FF] font-semibold text-flit-primary'
+                        : 'text-[#475569] hover:bg-[#EEF5FF] hover:text-flit-primary dark:text-white/80'
                     }`}
                   >
                     {o.label}
@@ -334,7 +334,7 @@ export function NuevoTramiteModalContent({
         <button
           type="button"
           onClick={() => void reload()}
-          className="mt-2 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="mt-2 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ color: '#C2410C' }}
         >
           Reintentar
@@ -463,7 +463,7 @@ export function NuevoTramiteModalContent({
           type="button"
           onClick={() => void iniciar()}
           disabled={!puedeIniciar}
-          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: WIZARD_CTA_GRADIENT }}
         >
           {registrandoTerminos ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}

@@ -96,8 +96,8 @@ describe('HU #12728 — DocumentSlot cabecera (D.2)', () => {
       .parentElement;
     const infoIcon = nota?.querySelector('svg.lucide-info');
     expect(infoIcon).toBeTruthy();
-    // React serializa #557EFF como rgb en el DOM inline.
-    expect(infoIcon?.getAttribute('style')).toMatch(/#557EFF|rgb\(85,\s*126,\s*255\)/);
+    // El azul de marca va por token: en una Marca Blanca toma su color de acción.
+    expect(infoIcon?.getAttribute('style')).toMatch(/var\(--color-flit-brand\)/);
     expect(screen.getByText('Sube la factura original firmada por el concesionario.').className).toMatch(
       /opacity-70/,
     );

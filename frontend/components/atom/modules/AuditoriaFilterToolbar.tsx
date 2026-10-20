@@ -93,7 +93,7 @@ const RESULT_OPTIONS: { value: '' | AdminAuditResult; label: string }[] = [
 ];
 
 const CONTROL_CLASS =
-  'w-full rounded-xl border bg-white py-2 px-2 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]';
+  'w-full rounded-xl border bg-white py-2 px-2 text-xs outline-none focus:border-flit-brand dark:bg-[#0B0F14]';
 
 /** Campo etiquetado (label asociado al control → nombre accesible = texto de la etiqueta). */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -167,7 +167,7 @@ export function AuditoriaFilterToolbar({
           onClick={onRefresh}
           disabled={loading}
           className="mt-5 flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:mt-0"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
           aria-label="Actualizar auditoría"
         >
           <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -256,7 +256,7 @@ export function AuditoriaFilterToolbar({
             aria-expanded={showAdvanced}
             aria-controls="auditoria-filtros-avanzados"
             className="flex items-center gap-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ color: '#557EFF' }}
+            style={{ color: 'var(--color-flit-brand)' }}
           >
             <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
             {showAdvanced ? 'Menos filtros' : 'Más filtros'}
@@ -266,7 +266,7 @@ export function AuditoriaFilterToolbar({
               type="button"
               onClick={onClearFilters}
               className="flex items-center gap-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ color: '#557EFF' }}
+              style={{ color: 'var(--color-flit-brand)' }}
               aria-label="Limpiar filtros"
             >
               <X className="h-3 w-3" aria-hidden="true" />
