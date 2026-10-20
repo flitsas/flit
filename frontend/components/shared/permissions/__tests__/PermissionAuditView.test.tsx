@@ -113,6 +113,28 @@ describe("PermissionAuditView", () => {
     await waitFor(() => expect(listPermissionAudit).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, pageSize: 10 })));
   });
 
+  it("muestra nombres legibles, nunca códigos internos de permiso, módulo, acción o motivo", async () => {
+    vi.mocked(listPermissionAudit).mockResolvedValue(
+      page([
+        record({ id: "a1", permissionSlug: "traspasos.read", permissionName: "Ver trámites de Traspasos", moduleCode: "tramites-traspasos", moduleName: "Trámites: Traspasos" }),
+        record({ id: "a2", permissionSlug: null, moduleCode: "ot-mandatos", moduleName: "OT: Mandatos", action: "MODULE_SNAPSHOT", outcome: "REJECTED", reasonCode: "OT_NOT_APPLICABLE" }),
+        record({ id: "a3", action: "ALGO_NUEVO", outcome: "REJECTED", reasonCode: "MOTIVO_DESCONOCIDO" }),
+      ]),
+    );
+    render(<PermissionAuditView mode="superadmin" users={users} />);
+    const table = await screen.findByRole("table");
+    const [, r1, r2, r3] = within(table).getAllByRole("row");
+
+    expect(within(r1).getByText("Ver trámites de Traspasos")).toBeInTheDocument();
+    expect(within(r1).getByText("Trámites: Traspasos")).toBeInTheDocument();
+    expect(within(r2).getByText("Módulo completo: OT: Mandatos")).toBeInTheDocument();
+    expect(within(r2).getByText("Cambió el módulo completo")).toBeInTheDocument();
+    expect(within(r2).getByText("Rechazado: Los permisos del organismo de tránsito no aplican a usuarios de una compañía.")).toBeInTheDocument();
+    expect(within(r3).getByText("Cambió un permiso")).toBeInTheDocument();
+    expect(within(r3).getByText("Rechazado")).toBeInTheDocument();
+    expect(table).not.toHaveTextContent(/traspasos\.read|tramites-traspasos|MODULE_SNAPSHOT|OT_NOT_APPLICABLE|ALGO_NUEVO|MOTIVO_DESCONOCIDO/);
+  });
+
   it("modo admin: sin filtro ni columna de compañía y sin tenantId en la consulta", async () => {
     render(<PermissionAuditView mode="admin" users={users} />);
     await screen.findByRole("table");

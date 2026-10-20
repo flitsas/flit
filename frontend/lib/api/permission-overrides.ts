@@ -63,7 +63,10 @@ export interface PermissionAuditRecord {
   productCode: string | null;
   moduleCode: string | null;
   permissionSlug: string | null;
-  /** GRANT | DENY | REVOKE | ROLE_CHANGE_PURGE | PII_REVEAL_CONFIRMED */
+  /** Nombres legibles del catálogo: son los que se muestran (los códigos son internos). */
+  permissionName?: string | null;
+  moduleName?: string | null;
+  /** GRANT | DENY | REVOKE | MODULE_SNAPSHOT | ROLE_CHANGE_PURGE | PII_REVEAL_CONFIRMED */
   action: string;
   /** OK | REJECTED */
   outcome: string;
@@ -181,6 +184,7 @@ export const INVITATION_PENDING_MESSAGE =
 
 const REJECTION_MESSAGES: Record<string, string> = {
   OUT_OF_CAP: "Ese permiso queda fuera de lo que puedes otorgar.",
+  OT_NOT_APPLICABLE: "Los permisos del organismo de tránsito no aplican a usuarios de una compañía.",
   NOT_ENFORCED: "Ese permiso aún no se controla por usuario, por eso no se puede otorgar.",
   EXCLUDED: "Ese permiso no se configura individualmente.",
   SELF: "No puedes modificar tus propios permisos.",

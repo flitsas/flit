@@ -40,14 +40,16 @@ const ACTION_LABEL: Record<string, string> = {
   GRANT: "Otorgó",
   DENY: "Denegó",
   REVOKE: "Volvió al rol",
+  MODULE_SNAPSHOT: "Cambió el módulo completo",
   ROLE_CHANGE_PURGE: "Limpieza por cambio de rol",
   PII_REVEAL_CONFIRMED: "Confirmó ver datos personales",
 };
 
 const VALUE_LABEL: Record<string, string> = { allow: "Habilitado", deny: "Denegado" };
 
+/** Las acciones sin rótulo propio se muestran genéricas: nunca el código interno. */
 export function actionLabel(action: string): string {
-  return ACTION_LABEL[action] ?? action;
+  return ACTION_LABEL[action] ?? "Cambió un permiso";
 }
 
 function valueLabel(value: string | null): string {
@@ -62,9 +64,16 @@ function person(name: string | null, email: string | null): { main: string; sub:
   return { main: e || "—", sub: null };
 }
 
+/** Lo que se cambió, con el nombre del catálogo; el código solo si el permiso ya no existe. */
+function permissionText(r: PermissionAuditRecord): string {
+  if (r.permissionSlug) return r.permissionName ?? r.permissionSlug;
+  if (r.moduleCode) return `Módulo completo: ${r.moduleName ?? r.moduleCode}`;
+  return "—";
+}
+
 function outcomeText(r: PermissionAuditRecord): string {
   if (r.outcome === "OK") return "Aplicado";
-  const why = rejectionReasonMessage(r.reasonCode) ?? r.reasonCode;
+  const why = rejectionReasonMessage(r.reasonCode);
   return why ? `Rechazado: ${why}` : "Rechazado";
 }
 
@@ -268,8 +277,10 @@ export function PermissionAuditView({ mode, users, initialUserId }: PermissionAu
                         </Cell>
                       )}
                       <Cell>
-                        <p className="font-medium">{r.permissionSlug ?? r.moduleCode ?? "—"}</p>
-                        {r.permissionSlug && r.moduleCode && <p className="text-[10px] opacity-60">Módulo {r.moduleCode}</p>}
+                        <p className="font-medium">{permissionText(r)}</p>
+                        {r.permissionSlug && (r.moduleName || r.moduleCode) && (
+                          <p className="text-[10px] opacity-60">{r.moduleName ?? r.moduleCode}</p>
+                        )}
                       </Cell>
                       <Cell>
                         <p className="font-medium">{actionLabel(r.action)}</p>
