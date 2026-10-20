@@ -19,6 +19,7 @@ import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
+import { modulesForRoleTarget } from "@/lib/permissions/otModules";
 import {
   FAMILY_CREATE_REQUIRES_READ_MESSAGE,
   findFamilyPair,
@@ -599,8 +600,8 @@ function ModulePermissionsChecklist({
 
 /** HU #10664 — RBAC puro: los módulos son transversales (no dependen del tipo de entidad).
  * HU #12964: un rol solo puede tener permisos de módulos de su producto, así que el catálogo se
- * filtra por el producto del rol. Un rol nuevo es de Trámites. */
-function useModulesCatalog(product: string) {
+ * filtra por el producto del rol. Un rol nuevo es de Trámites. Un rol de compañía no ofrece los módulos OT. */
+function useModulesCatalog(product: string, targetEntityType: RoleTargetEntityType) {
   const [modules, setModules] = useState<AccessibleModule[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -613,7 +614,8 @@ function useModulesCatalog(product: string) {
     return () => { active = false; };
   }, [product]);
 
-  return { modules, loading };
+  const visible = useMemo(() => modulesForRoleTarget(modules, targetEntityType), [modules, targetEntityType]);
+  return { modules: visible.modules, hiddenIds: visible.hiddenIds, loading };
 }
 
 function CreateRoleModal({
@@ -626,7 +628,8 @@ function CreateRoleModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
-  const { modules, loading: modulesLoading } = useModulesCatalog("tramites");
+  const { modules, loading: modulesLoading } = useModulesCatalog("tramites", targetEntityType);
+  const catalogIds = useMemo(() => new Set(modules.flatMap((m) => m.actions.map((a) => a.id))), [modules]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -648,8 +651,10 @@ function CreateRoleModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Si se cambió el tipo a Compañía tras marcar permisos OT, esos ya no se ven y no se envían.
+    const ids = [...selected].filter((id) => catalogIds.has(id));
     // HU #10664 AC2 — un rol debe otorgar acceso a al menos un permiso (mínimo uno por módulo).
-    if (selected.size === 0) {
+    if (ids.length === 0) {
       setError("Selecciona al menos un permiso para el rol (mínimo uno por módulo).");
       return;
     }
@@ -662,7 +667,7 @@ function CreateRoleModal({
         name: name.trim(),
         description: description.trim() || undefined,
       });
-      await superadminClient.setRolePermissions(id, [...selected]);
+      await superadminClient.setRolePermissions(id, ids);
       onCreated(targetEntityType);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
@@ -732,7 +737,7 @@ function EditRolePermissionsModal({
   onSaved: (permissions: RbacRoleDetail["permissions"]) => void;
 }) {
   // HU #10664 — RBAC puro. HU #12964: solo los módulos del producto del rol.
-  const { modules, loading: modulesLoading } = useModulesCatalog(role.productCode ?? "tramites");
+  const { modules, hiddenIds, loading: modulesLoading } = useModulesCatalog(role.productCode ?? "tramites", role.targetEntityType);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -775,7 +780,8 @@ function EditRolePermissionsModal({
   // HU #12964: el servidor rechaza permisos de módulos de otro producto. Un rol anterior a la separación por producto
   // puede traer alguno; no se ve en el catálogo, así que se avisa y se quita al guardar en vez de fallar.
   const catalogIds = useMemo(() => new Set(modules.flatMap((m) => m.actions.map((a) => a.id))), [modules]);
-  const foreignCount = modulesLoading ? 0 : [...selected].filter((id) => !catalogIds.has(id)).length;
+  const foreignCount = modulesLoading ? 0 : [...selected].filter((id) => !catalogIds.has(id) && !hiddenIds.has(id)).length;
+  const otCount = modulesLoading ? 0 : [...selected].filter((id) => hiddenIds.has(id)).length;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -814,6 +820,12 @@ function EditRolePermissionsModal({
           <p role="status" className="rounded-xl border border-[#FF4E00]/40 px-3 py-2 text-xs">
             Este rol tiene {foreignCount === 1 ? "1 permiso" : `${foreignCount} permisos`} de módulos de otro producto. Un
             rol solo puede tener permisos de su producto, así que al guardar se {foreignCount === 1 ? "quita" : "quitan"}.
+          </p>
+        )}
+        {otCount > 0 && (
+          <p role="status" className="rounded-xl border border-[#FF4E00]/40 px-3 py-2 text-xs">
+            Este rol tiene {otCount === 1 ? "1 permiso" : `${otCount} permisos`} del organismo de tránsito, que no
+            {otCount === 1 ? " aplica" : " aplican"} a un rol de compañía. Al guardar se {otCount === 1 ? "quita" : "quitan"}.
           </p>
         )}
         {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}

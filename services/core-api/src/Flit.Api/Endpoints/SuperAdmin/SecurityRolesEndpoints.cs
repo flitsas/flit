@@ -96,6 +96,10 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.BadRequest(new { code = "ROLE_PERMISSION_PRODUCT_MISMATCH" });
             }
+            catch (OtPermissionNotApplicableToRoleException) // HU #13644
+            {
+                return Results.BadRequest(new { code = "OT_NOT_APPLICABLE" });
+            }
         }).WithName("SetRolePermissions")
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Update, "role", "ROLE", "id"));
