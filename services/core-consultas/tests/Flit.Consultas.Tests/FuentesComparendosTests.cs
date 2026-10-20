@@ -37,6 +37,8 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
     private const string ClaveSmartCloud = "CLAVE123";
     private readonly SimitFalso _simit = new();
     private readonly MunicipalFalsa _municipal = new();
+    private readonly ContratosRentingTests.RentingFalsa _renting = new();
+    private readonly string _pfx = Path.Combine(Path.GetTempPath(), $"renting-prueba-{Guid.NewGuid():N}.pfx");
     private readonly RsaSecurityKey _key = new(RSA.Create(2048)) { KeyId = "prueba" };
     private readonly Guid _empresa = Guid.NewGuid();
     private string _database = string.Empty;
@@ -60,8 +62,17 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
             return;
         }
 
+        // Certificado de usar y botar: Renting es falsa y nunca valida el mTLS.
+        using (var rsa = RSA.Create(2048))
+        using (var cert = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=prueba", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+                   .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1)))
+            await File.WriteAllBytesAsync(_pfx, cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx, "x"));
+        var renting = ContratosRentingTests.Config();
+        renting["RENTING_API_PFX_CERTIFICATE_PATH"] = _pfx;
+
         _app = Program.Build([], b =>
         {
+            b.Configuration.AddInMemoryCollection(renting);
             b.WebHost.UseTestServer();
             b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -89,6 +100,7 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
             s.AddHttpClient(ProveedorVerifikSimit.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new VerifikFalsa());
             s.AddHttpClient(ProveedorSmartCloud.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _simit);
             s.AddHttpClient(ProveedorMunicipal.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _municipal);
+            s.AddHttpClient(ProveedorContratosRenting.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _renting);
         });
         await Program.MigrateAsync(_app);
         await _app.StartAsync();
@@ -96,6 +108,7 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        File.Delete(_pfx);
         if (_app is not null)
             await _app.DisposeAsync();
         if (_skip is null)
@@ -279,6 +292,36 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
         var parcial = (await Consultar("municipal", CanalComparendos.MunicipalIdentificacion, numero)).Parciales.Single();
         (parcial.Resultado, parcial.TipoError).Should().Be((ResultadoFuente.Error, tipo));
+    }
+
+    [Fact]
+    public async Task HU13712_ContratoRenting_PorGrpc_YMideElConsumo()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var r = await Cliente("platform.consultas").ConsultarContratoConductorAsync(
+            new ConsultarContratoConductorRequest { Proveedor = "renting", Placa = "LZO227", Fecha = "2026-10-18" },
+            new Metadata { { "x-flit-tenant-id", _empresa.ToString() } }, cancellationToken: TestContext.Current.CancellationToken);
+        (r.Resultado, r.Conductor.NumeroDocumento, r.Conductor.Correo, r.ContactoDesviado).Should()
+            .Be((ResultadoContratoConductor.Encontrado, "1020304050", "buzon.pruebas@flitsas.com", true));
+
+        await using var scope = _app!.Services.CreateAsyncScope();
+        var consumo = await scope.ServiceProvider.GetRequiredService<ConsultasDb>().Consumos.AsNoTracking().SingleAsync(x => x.Fuente == "contratos", TestContext.Current.CancellationToken);
+        (consumo.Proveedor, consumo.Resultado, consumo.TenantId).Should().Be(("renting", "con_datos", _empresa));
+    }
+
+    [Theory]
+    [InlineData("otro", "LZO227", "2026-10-18", StatusCode.FailedPrecondition)]
+    [InlineData("renting", "", "2026-10-18", StatusCode.InvalidArgument)]
+    [InlineData("renting", "LZO227", "18/10/2026", StatusCode.InvalidArgument)]
+    public async Task HU13712_ContratoRenting_Validaciones(string proveedor, string placa, string fecha, StatusCode esperado)
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var antes = _renting.Pedidos.Count;
+        (await FluentActions.Awaiting(() => Cliente("platform.consultas").ConsultarContratoConductorAsync(
+                new ConsultarContratoConductorRequest { Proveedor = proveedor, Placa = placa, Fecha = fecha },
+                new Metadata { { "x-flit-tenant-id", _empresa.ToString() } }, cancellationToken: TestContext.Current.CancellationToken).ResponseAsync)
+            .Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(esperado);
+        _renting.Pedidos.Count.Should().Be(antes, "una petición inválida no sale a la red");
     }
 
     [Theory]

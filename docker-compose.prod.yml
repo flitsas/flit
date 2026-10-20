@@ -443,8 +443,6 @@ services:
       Comparendos__Identidad__Address: ${COMPARENDOS_IDENTIDAD_ADDRESS:-}
       # Réplica diaria del catálogo de organismos (HU #13459): el gRPC de catálogos de core-api, en su puerto gRPC interno.
       Comparendos__Tramites__Address: ${COMPARENDOS_TRAMITES_ADDRESS:-http://core-api:${CORE_API_GRPC_PORT:-8082}}
-      Comparendos__Renting__BaseUrl: ${COMPARENDOS_RENTING_API_URL:-}
-      Comparendos__Renting__ApiKey: ${COMPARENDOS_RENTING_API_KEY:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_COMPARENDOS_PORT:-4028}/health/ready"]
       interval: 30s
@@ -525,6 +523,27 @@ services:
       MUNICIPAL_INFRACCIONES_BASE_URL: ${MUNICIPAL_INFRACCIONES_BASE_URL:-}
       MUNICIPAL_INFRACCIONES_PATH: ${MUNICIPAL_INFRACCIONES_PATH:-}
       MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS: ${MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS:-60}
+      # HU #13712: API de contratos de Renting (conductor por placa y fecha). Mismo APIM, certificado y login que el canal
+      # de correo de Renting de core-notificaciones (ver su bloque y .env.renting.example). Renting solo tiene PRODUCCIÓN:
+      # el correo y el teléfono del conductor se desvían al buzón de pruebas salvo con
+      # RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED=true (solo PDN). Sin la configuración completa queda «no conectada».
+      RENTING_API_PFX_CERTIFICATE_PATH: ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}
+      RENTING_API_PASSPHRASE: ${RENTING_API_PASSPHRASE:-}
+      RENTING_API_BASE_URL: ${RENTING_API_BASE_URL:-}
+      RENTING_API_KEY_NAME: ${RENTING_API_KEY_NAME:-Ocp-Apim-Subscription-Key}
+      RENTING_API_KEY_VALUE: ${RENTING_API_KEY_VALUE:-}
+      RENTING_API_SECONDS_TIMEOUT: ${RENTING_API_SECONDS_TIMEOUT:-30}
+      RENTING_API_LOGIN_PATH: ${RENTING_API_LOGIN_PATH:-}
+      RENTING_API_LOGIN_SUBJECT: ${RENTING_API_LOGIN_SUBJECT:-}
+      RENTING_API_LOGIN_SECRET_NAME: ${RENTING_API_LOGIN_SECRET_NAME:-}
+      RENTING_API_LOGIN_CACHE_SECONDS_TTL: ${RENTING_API_LOGIN_CACHE_SECONDS_TTL:-3600}
+      RENTING_API_CONTRATOS_PATH: ${RENTING_API_CONTRATOS_PATH:-}
+      RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED: ${RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED:-false}
+      RENTING_API_CONTRATOS_DEVELOPMENT_EMAIL: ${RENTING_API_CONTRATOS_DEVELOPMENT_EMAIL:-}
+    volumes:
+      # El mismo .pfx que core-notificaciones, solo lectura y en la misma ruta a ambos lados. Si no existe, la API de
+      # contratos queda «no conectada» con la ruta en el motivo (no impide arrancar).
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
     healthcheck:
       # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready"]

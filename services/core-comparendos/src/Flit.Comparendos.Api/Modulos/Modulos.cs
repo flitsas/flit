@@ -51,7 +51,12 @@ public static class Modulos
         services.AddScoped<Trabajos.IEjecutorTrabajo, Avisos.SchedulerAvisos>();
         services.AddScoped<Correo.IReaccionCorreo, Avisos.ReaccionAvisos>();
         services.AddLimitePortal();
-        if (simulacion)
+        // API de contratos (HU #13712): por core-consultas si hay dirección; si no, simulada en DEV y nada fuera.
+        if (configuration["Comparendos:Consultas:Address"] is { Length: > 0 })
+            services.AddScoped<Contraventor.IApiContratos>(sp => new Contraventor.ApiContratosCoreConsultas(
+                sp.GetRequiredService<Flit.Consultas.Grpc.V1.FuentesComparendosService.FuentesComparendosServiceClient>(),
+                simulacion ? new Contraventor.ApiContratosSimulada() : null));
+        else if (simulacion)
             services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();
         else
             services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosNoConectada>();
