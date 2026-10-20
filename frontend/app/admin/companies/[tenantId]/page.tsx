@@ -15,11 +15,7 @@ import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
 import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
-import { TransitBlocksPanel } from "@/components/admin/companies/panels/TransitBlocksPanel";
-import {
-  resolveOtConfigPanelMode,
-  showSuperAdminTransitBlocksPanel,
-} from "@/lib/companies/ot-config-mode";
+import { resolveOtConfigPanelMode } from "@/lib/companies/ot-config-mode";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
@@ -78,8 +74,6 @@ function CompanyDetail() {
     isSuperAdmin,
     isAdminCompany,
   });
-
-  const showTransitBlocksPanel = showSuperAdminTransitBlocksPanel(company, isSuperAdmin);
 
   const blocksTenantId =
     company?.parentTenantId && parentCompany?.tenantType === "MARCA_BLANCA"
@@ -273,32 +267,21 @@ function CompanyDetail() {
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 otSlot={
-                  <>
-                    {showTransitBlocksPanel && (
-                      <div className="mb-4 rounded-2xl border p-4">
-                        <TransitBlocksPanel
-                          tenantId={tenantId}
-                          activeChildrenCount={activeChildrenCount}
-                        />
-                      </div>
-                    )}
-                    {/* SuperAdmin sobre una cabeza MB: TransitBlocksPanel ya muestra disponibles y
-                        bloqueados; la vista de solo lectura repetiría los mismos datos (y sin
-                        refrescarse al bloquear). Queda para el AdminCompany y las hijas MB. */}
-                    {!showTransitBlocksPanel && (
-                      <OTConfigTablePanel
-                        tenantId={tenantId}
-                        mode={otPanelMode}
-                        grantScopeWarningCount={
-                          otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
-                        }
-                        blocksTenantId={blocksTenantId}
-                        grantsTenantId={
-                          managingChild && networkHeadId ? networkHeadId : tenantId
-                        }
-                      />
-                    )}
-                  </>
+                  // SuperAdmin sobre una cabeza MB: la misma tabla que una compañía normal
+                  // (modo superadmin-marca-blanca: habilitar = desbloquear para la red).
+                  <OTConfigTablePanel
+                    tenantId={tenantId}
+                    mode={otPanelMode}
+                    grantScopeWarningCount={
+                      otPanelMode === "superadmin-concession" || otPanelMode === "superadmin-marca-blanca"
+                        ? activeChildrenCount
+                        : 0
+                    }
+                    blocksTenantId={blocksTenantId}
+                    grantsTenantId={
+                      managingChild && networkHeadId ? networkHeadId : tenantId
+                    }
+                  />
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 documentosSlot={
