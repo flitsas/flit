@@ -30,15 +30,18 @@ public sealed class SetOtConsultationRestrictionHandler
     private readonly ITransitOfficeCatalog _catalog;
     private readonly ITransitGrantRepository _grants;
     private readonly IOtConsultationRestrictionRepository _repository;
+    private readonly IEffectiveTransitOfficeListResolver? _effective;
 
     public SetOtConsultationRestrictionHandler(
         ITransitOfficeCatalog catalog,
         ITransitGrantRepository grants,
-        IOtConsultationRestrictionRepository repository)
+        IOtConsultationRestrictionRepository repository,
+        IEffectiveTransitOfficeListResolver? effective = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _grants = grants ?? throw new ArgumentNullException(nameof(grants));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _effective = effective;
     }
 
     public async Task<SetOtConsultationRestrictionResult> HandleAsync(
@@ -58,11 +61,10 @@ public sealed class SetOtConsultationRestrictionHandler
 
         // AC3 (2/2): el organismo debe estar habilitado (grant) para la compañía — restringir
         // un OT sin grant no significa nada.
-        var enabledOffices = await _grants
-            .ListEnabledOfficeIdsAsync(command.TenantId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!enabledOffices.Contains(command.TransitOfficeId))
+        // Grant propio o lista efectiva de la red (una cabeza Marca Blanca no tiene grants).
+        if (!await TransitOfficeEnabledCheck
+                .IsEnabledAsync(_grants, _effective, command.TenantId, command.TransitOfficeId, cancellationToken)
+                .ConfigureAwait(false))
         {
             return Invalid(
                 "transitOfficeId", TransitOfficeNotGrantedMessage, command.TransitOfficeId.ToString());

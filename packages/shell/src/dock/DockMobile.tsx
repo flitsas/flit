@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import type { DockEntry, DockGroup } from "../nav";
+import { useDockHomeMark } from "./DockHomeMark";
 
 // Navegación de la suite en móvil y tableta (<lg), donde el dock horizontal no cabe (HU #10844, GUIA-DOCK §9): un
 // lanzador redondo que abre una hoja con los mismos grupos del dock. Portado del Shell de Trámites de develop.
@@ -24,6 +25,7 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
   const [open, setOpen] = useState(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const position = scrollRef ? "absolute" : "fixed";
+  const home = useDockHomeMark(homeIconSrc);
 
   const close = () => {
     setOpen(false);
@@ -50,14 +52,13 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
         ref={launcherRef}
         type="button"
         onClick={() => setOpen(true)}
-        className={`pointer-events-auto ${position} bottom-5 left-1/2 z-40 h-14 w-14 -translate-x-1/2 overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2`}
+        className={`pointer-events-auto ${position} bottom-5 left-1/2 z-40 ${home.shape === "pill" ? "h-14 w-auto max-w-[150px] bg-white px-3.5" : "h-14 w-14"} -translate-x-1/2 overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2`}
         style={{ boxShadow: "var(--nav-sombra-activo)" }}
         aria-label="Abrir menú de navegación"
         aria-expanded={open}
         aria-controls="dock-mobile-sheet"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={homeIconSrc} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+        {home.content}
       </button>
 
       {open && (

@@ -13,7 +13,7 @@ public sealed class ProcedureTermsOptions
     public const string SectionName = "ProcedureTerms";
 
     /// <summary>Página pública con el documento completo, la misma que abre el enlace del checkbox.</summary>
-    public const string DefaultUrl = "https://www.flitsas.com/privacyPolicy/public";
+    public const string DefaultUrl = "https://flitsas.com.co/privacy-policy/";
 
     public string Url { get; set; } = DefaultUrl;
 }

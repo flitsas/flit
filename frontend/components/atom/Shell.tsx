@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
+import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
 import { usePathname } from "next/navigation";
 import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
 import { useSuiteTheme } from "@flit/shell/theme";
@@ -192,7 +193,10 @@ export function Shell({
               color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
             }}
           >
-            Políticas de Privacidad y Términos de Uso · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
+            <a href={FLIT_PRIVACY_POLICY_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+              Políticas de Privacidad y Términos de Uso
+            </a>{" "}
+            · © 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua · ISO 27001
           </footer>
         }
       >

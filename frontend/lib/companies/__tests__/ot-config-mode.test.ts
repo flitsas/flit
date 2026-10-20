@@ -44,6 +44,17 @@ describe("ot-config-mode (HU #12351 / #12408)", () => {
     expect(otConfigPanelReadOnly(mode)).toBe(false);
   });
 
+  it("SuperAdmin en cabeza Marca Blanca: la misma tabla editable que una compañía normal", () => {
+    const mode = resolveOtConfigPanelMode({
+      company: baseCompany({ tenantType: "MARCA_BLANCA" }),
+      parentTenantType: null,
+      isSuperAdmin: true,
+      isAdminCompany: false,
+    });
+    expect(mode).toBe("superadmin-marca-blanca");
+    expect(otConfigPanelReadOnly(mode)).toBe(false);
+  });
+
   it("solo SuperAdmin en Marca Blanca cabeza ve panel de bloqueos", () => {
     expect(
       showSuperAdminTransitBlocksPanel(baseCompany({ tenantType: "MARCA_BLANCA" }), true),
