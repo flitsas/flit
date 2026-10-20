@@ -2,8 +2,6 @@ using Flit.Infrastructure.Security;
 using Flit.Integration.Tests.Postgres;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Flit.Integration.Tests.Platform;
@@ -14,14 +12,13 @@ namespace Flit.Integration.Tests.Platform;
 /// (<see cref="DevelopmentAuthSeeder.DemoTenantTaxId"/>, <see cref="DevelopmentAuthSeeder.DemoEmpresaTenantTaxId"/>) y
 /// deja que Postgres asigne el código al crearlas.
 /// <para>
-/// Uso de ejemplo: <c>await DevelopmentAuthSeeder.SeedAsync(db, hasher, desarrollo, ct)</c> sobre una
+/// Uso de ejemplo: <c>await DevelopmentAuthSeeder.SeedAsync(db, hasher, new SeedSettings(true, true), ct)</c> sobre una
 /// base ya recodificada → arranca sin error y no crea una segunda «Empresa Demo».
 /// </para>
 /// </summary>
 public sealed class SeederCodigoTenantTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
-    // En staging la siembra se decide por ambiente (sin SeedSettings): Development siembra catálogo y datos demo.
-    private static readonly IHostEnvironment Desarrollo = new AmbientePrueba { EnvironmentName = Environments.Development };
+    private static readonly SeedSettings TodoEncendido = new(RbacCatalog: true, DemoData: true);
 
     /// <summary>
     /// El dev-seed 16 crea grants para dos compañías mock que siembra la migración <c>SeedMockCompanies</c>, pero el
@@ -50,7 +47,7 @@ public sealed class SeederCodigoTenantTests(PostgresDatabaseFixture fixture) : P
     private async Task SembrarAsync()
     {
         await using var db = NewContext();
-        await DevelopmentAuthSeeder.SeedAsync(db, new Argon2PasswordHasher(), Desarrollo, TestContext.Current.CancellationToken);
+        await DevelopmentAuthSeeder.SeedAsync(db, new Argon2PasswordHasher(), TodoEncendido, TestContext.Current.CancellationToken);
     }
 
     // ── AC2 — base nueva ─────────────────────────────────────────────────────
@@ -124,13 +121,5 @@ public sealed class SeederCodigoTenantTests(PostgresDatabaseFixture fixture) : P
         await using var check = NewContext();
         (await check.Tenants.CountAsync(ct)).Should().Be(tenants);
         (await check.UserRoleAssignments.CountAsync(ct)).Should().Be(asignaciones);
-    }
-
-    private sealed class AmbientePrueba : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = Environments.Development;
-        public string ApplicationName { get; set; } = "Flit.Api";
-        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

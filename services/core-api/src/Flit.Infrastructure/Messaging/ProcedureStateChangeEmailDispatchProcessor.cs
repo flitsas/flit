@@ -31,7 +31,8 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
     private const int MaxAttempts = ProcedureStateChangeEmailDispatch.MaxDeliveryAttempts;
 
     public const string StatusPendiente = "pendiente";
-    public const string StatusEnviado = "enviado";
+    public const string StatusEnviado = EstadoDespachoCorreo.Enviado;
+    public const string StatusEncolado = EstadoDespachoCorreo.Encolado;
     public const string StatusFallido = "fallido";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -302,7 +303,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                     var now = DateTimeOffset.UtcNow;
                     foreach (var row in group.Rows)
                     {
-                        row.Status = StatusEnviado;
+                        row.Status = EstadoDespachoCorreo.De(result);
                         row.FailureReason = null;
                         row.ProcessedAt = now;
                     }
@@ -325,7 +326,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
 
             // Cada grupo es un envío independiente: lo que salió queda enviado y no se reintenta,
             // y el próximo poll recarga solo las filas que siguen pendientes.
-            var noEnviadas = withEmail.Where(r => r.Status != StatusEnviado).ToList();
+            var noEnviadas = withEmail.Where(r => !EstadoDespachoCorreo.Salio(r.Status)).ToList();
             if (noEnviadas.Count == 0)
                 return;
 
@@ -336,7 +337,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            foreach (var row in withEmail.Where(r => r.Status != StatusEnviado))
+            foreach (var row in withEmail.Where(r => !EstadoDespachoCorreo.Salio(r.Status)))
             {
                 row.FailureReason = Truncate(ex.Message, 1000);
                 if (row.Attempts >= MaxAttempts)

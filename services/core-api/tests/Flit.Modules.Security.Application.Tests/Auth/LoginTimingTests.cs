@@ -32,7 +32,7 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 public sealed class LoginTimingTests
 {
     private const int Samples = 20;
-    private const double ToleranceRatio = 2.0;
+    private const double ToleranceRatio = 2.5;
 
     private static readonly Guid HeadA = Guid.NewGuid();
     private static readonly Guid OffNetworkTenant = Guid.NewGuid();

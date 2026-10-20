@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Servicio de plataforma core-plantilla (plantilla de servicio, Epic #13316, HU #13340). Nace con el SDK de plataforma:
+    tokens por JWKS, gRPC con token de servicio, outbox e inbox en su esquema propio, salud REST y grpc.health.v1.
+    Guía: docs/suite/servicio-nuevo.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Plantilla.Api</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
+    <ProjectReference Include="..\Flit.Plantilla.Grpc.Contracts\Flit.Plantilla.Grpc.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Plantilla.Tests" />
+  </ItemGroup>
+
+</Project>

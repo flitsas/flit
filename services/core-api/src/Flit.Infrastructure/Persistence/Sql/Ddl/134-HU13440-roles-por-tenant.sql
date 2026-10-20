@@ -13,9 +13,8 @@
 --     tr_roles_tenant_code_not_global, porque un indice unico no puede comparar filas de dos subconjuntos.
 --     Tambien impide crear despues un rol global con el code de un rol de tenant ya existente.
 --   * la comparacion es case-insensitive (lower(code)): "admincompany" no esquiva a "AdminCompany".
---   * admin_<producto> queda reservado para los roles de sistema aunque todavia no exista la fila global: el espejo
---     de AdminCompany de la ola multi-producto (DDL 120 y 126 de develop) lo crea despues y chocaria con el del tenant.
---     Adaptacion a staging: sin platform.products, la lista de productos es fija (la misma de develop).
+--   * admin_<producto> (platform.products) queda reservado para los roles de sistema aunque todavia no exista
+--     la fila global: el espejo de AdminCompany (DDL 120 y 126) lo crea despues y chocaria con el del tenant.
 --
 -- RLS (AC3/AC4): policy tenant_isolation = globales + propios, y bypass de SuperAdmin (app.is_superadmin).
 -- Es DEFENSA EN PROFUNDIDAD NOMINAL: la app conecta como OWNER y ningun DDL usa FORCE ROW LEVEL SECURITY, asi que el
@@ -60,7 +59,7 @@ BEGIN
             RAISE EXCEPTION 'ROLE_CODE_DUPLICATE: el code % ya existe como rol global', NEW.code
                 USING ERRCODE = '23505';
         END IF;
-        IF lower(NEW.code) IN ('admin_plataforma', 'admin_tramites', 'admin_comparendos', 'admin_diagnostico') THEN
+        IF EXISTS (SELECT 1 FROM platform.products p WHERE lower(NEW.code) = 'admin_' || p.code) THEN
             RAISE EXCEPTION 'ROLE_CODE_DUPLICATE: el code % esta reservado para el admin de un producto', NEW.code
                 USING ERRCODE = '23505';
         END IF;

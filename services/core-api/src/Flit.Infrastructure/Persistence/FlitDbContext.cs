@@ -11,14 +11,18 @@ using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Flit.Infrastructure.Persistence;
 
 public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
-    : DbContext(options), IDataProtectionKeyContext
+    : DbContext(options), IDataProtectionKeyContext, IIdentityDb
 {
+    // Epic #13217 (HU #13231): en core-api, los repositorios de identidad usan este mismo contexto vía IIdentityDb.
+    DbSet<Entities.Admin.NotificationDeliveryLogEntity> IIdentityDb.NotificationDeliveryLogs => NotificationDeliveryLogs;
+
     /// <summary>
     /// HU #12797 (F2) — acciones diferidas al fin de la transacción ambiente gestionada (borrados del
     /// reemplazo seguro del consolidado, bitácora de fallos). No es un mapeo: EF no lo toca.
@@ -405,6 +409,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
         Set<Entities.Admin.NotificationTestSettingsRow>();
 
+    // Feature #13508 (Épica #13272) — configuración multi-proveedor IA por herramienta (global SuperAdmin).
+    internal DbSet<Entities.Admin.AiToolProviderSettingsRow> AiToolProviderSettings =>
+        Set<Entities.Admin.AiToolProviderSettingsRow>();
+
+    internal DbSet<Entities.Admin.AiProviderTransitionRow> AiProviderTransitions =>
+        Set<Entities.Admin.AiProviderTransitionRow>();
+
+    internal DbSet<Entities.Admin.AiFailoverAlertRow> AiFailoverAlerts =>
+        Set<Entities.Admin.AiFailoverAlertRow>();
+
     // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
     // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
     internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>
@@ -425,6 +439,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
+        // Epic #13217 (HU #13231): las tablas de identidad viven en su propia librería, compartida con core-identity.
+        modelBuilder.ApplyConfigurationsFromAssembly(IdentityPersistence.Assembly);
+
+        // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
+        Configurations.Identity.OidcModel.Map(modelBuilder);
+
+        // HU #13350 (Epic #13316): outbox del SDK para los eventos que Trámites publica en flit.tramites.
+        modelBuilder.AddFlitOutbox("tramites");
+        // HU #13351: bandeja de entrada de los eventos que Trámites consume (avisos de Kyverum desde Consultas).
+        modelBuilder.AddFlitInbox("tramites");
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

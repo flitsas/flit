@@ -154,6 +154,61 @@ server {
     }
 }
 
+# ── Con la FLIT Suite (FLIT_SESSION_MODE=oidc) ─────────────────────────────
+# El catch-all de arriba es el de la sesión legacy: manda /api/v1 directo al
+# Gateway y el resto a Trámites. Con la suite eso ya no sirve:
+#   - el navegador no tiene token: /api/v1 debe pasar por el proxy de la app
+#     (@flit/auth pone el Bearer de la sesión), igual que en dev.tramites.;
+#   - la red necesita su hub: el login, /connect y /.well-known los sirve
+#     frontend-hub, y el emisor OIDC es el dominio HUB de la red.
+# Por eso cada red lleva DOS server{} explícitos, uno por dominio de
+# admin.tenant_domains (purpose HUB y purpose tramites), con todo a la app,
+# como flit-suite-hosts.conf.example. Requiere FLIT_NETWORK_DOMAINS_ENABLED=true
+# en el .env (docker-compose.prod.yml) y los dos dominios ACTIVOS en la base.
+# Puertos: HUB_PORT 4022/5022/6022 · FRONTEND_PORT 4001/5001/6001.
+#
+# server {                                    # dominio HUB de la red
+#     listen 443 ssl;
+#     listen [::]:443 ssl;
+#     http2 on;
+#     server_name marca.cliente.com;
+#     ssl_certificate     /etc/letsencrypt/live/marca.cliente.com/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/marca.cliente.com/privkey.pem;
+#     proxy_read_timeout 60s;
+#     proxy_http_version 1.1;
+#     proxy_set_header Host $host;
+#     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#     proxy_set_header X-Forwarded-Proto $scheme;
+#     proxy_set_header X-Real-IP $remote_addr;
+#     proxy_set_header X-Flit-Domain "";      # los sellan la app y el Gateway
+#     proxy_set_header X-Internal-Key "";
+#     client_max_body_size 50m;
+#     large_client_header_buffers 4 32k;
+#     location / {
+#         proxy_pass http://127.0.0.1:${HUB_PORT};
+#     }
+# }
+#
+# server {                                    # dominio de Trámites de la red
+#     listen 443 ssl;
+#     listen [::]:443 ssl;
+#     http2 on;
+#     server_name tramites.cliente.com;
+#     ssl_certificate     /etc/letsencrypt/live/tramites.cliente.com/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/tramites.cliente.com/privkey.pem;
+#     # (mismos proxy_*, client_max_body_size y large_client_header_buffers)
+#     location ~ ^/api/v1/consolidados/lotes/[^/]+/partes/[0-9]+$ {
+#         proxy_pass http://127.0.0.1:${FRONTEND_PORT};
+#         proxy_buffering off;
+#         proxy_request_buffering off;
+#         proxy_max_temp_file_size 0;
+#         proxy_read_timeout 300s;
+#     }
+#     location / {
+#         proxy_pass http://127.0.0.1:${FRONTEND_PORT};
+#     }
+# }
+
 # ── Opcional: clasificación de host para observabilidad (logs/métricas) ────
 # No decide enrutamiento (eso lo hacen los server{} de arriba, por precedencia
 # de server_name) — es solo para no perder de vista, en el access_log del

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Roles;
 
 namespace Flit.Modules.Security.Application.Roles;
@@ -52,7 +53,7 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
         if (!CodePattern().IsMatch(code) || name.Length is 0 or > 100)
             throw new InvalidRoleInputException();
 
-        if (!RoleProducts.All.Contains(command.ProductCode, StringComparer.Ordinal))
+        if (!ProductCodes.All.Contains(command.ProductCode, StringComparer.Ordinal))
             throw new InvalidRoleProductException();
 
         // Un rol de producto «plataforma» llevaría permisos de plataforma: no es delegable a una compañía.
@@ -60,7 +61,7 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
             throw new PrivilegeCeilingException(PrivilegeCeilingCodes.PlatformOnly, [command.ProductCode]);
 
         // admin_<producto> es de sistema aunque todavía no exista la fila global (el espejo de AdminCompany lo crea).
-        if (RoleProducts.All.Any(p => string.Equals(code, "admin_" + p, StringComparison.OrdinalIgnoreCase)))
+        if (ProductCodes.All.Any(p => string.Equals(code, "admin_" + p, StringComparison.OrdinalIgnoreCase)))
             throw new RoleCodeDuplicateException();
 
         var enabled = await repository.GetEnabledProductCodesAsync(command.TenantId, ct);

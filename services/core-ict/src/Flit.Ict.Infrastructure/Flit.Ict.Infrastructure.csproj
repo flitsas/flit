@@ -31,8 +31,26 @@
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="Grpc.Net.ClientFactory" />
+    <!-- Epic #13316 (HU #13346): cliente de core-consultas (flit.consultas.v1) generado desde contracts/proto. Va aquí y no
+         en Flit.Ict.Grpc.Contracts, que core-api referencia y donde chocaría con los tipos que core-api ya genera. -->
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <!-- Microsoft.Extensions.{Http,Options.ConfigurationExtensions,Hosting.Abstractions} los
          provee el shared framework Microsoft.AspNetCore.App (FrameworkReference arriba). -->
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ContractsProtoRoot>..\..\..\..\contracts\proto</ContractsProtoRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="$(ContractsProtoRoot)\flit\platform\v1\tipos.proto" ProtoRoot="$(ContractsProtoRoot)" GrpcServices="None" />
+    <Protobuf Include="$(ContractsProtoRoot)\flit\consultas\v1\certificaciones.proto" ProtoRoot="$(ContractsProtoRoot)" GrpcServices="None" />
+    <Protobuf Include="$(ContractsProtoRoot)\flit\consultas\v1\resultado.proto" ProtoRoot="$(ContractsProtoRoot)" GrpcServices="None" />
+    <Protobuf Include="$(ContractsProtoRoot)\flit\consultas\v1\consultas.proto" ProtoRoot="$(ContractsProtoRoot)" GrpcServices="Client" />
   </ItemGroup>
 
 </Project>

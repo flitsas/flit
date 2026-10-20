@@ -37,6 +37,7 @@ const deleteRole = vi.fn();
 const setRolePermissions = vi.fn();
 const activateRole = vi.fn();
 const deactivateRole = vi.fn();
+const getRole = vi.fn();
 
 vi.mock("@/lib/api/superadmin-client", () => ({
   superadminClient: {
@@ -48,6 +49,7 @@ vi.mock("@/lib/api/superadmin-client", () => ({
     setRolePermissions: (...args: unknown[]) => setRolePermissions(...args),
     activateRole: (...args: unknown[]) => activateRole(...args),
     deactivateRole: (...args: unknown[]) => deactivateRole(...args),
+    getRole: (...args: unknown[]) => getRole(...args),
   },
 }));
 
@@ -149,5 +151,20 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
 
     await waitFor(() => expect(deactivateRole).toHaveBeenCalledWith("role-company-1"));
     expect(within(companyRow).getByText("Inactivo")).toBeInTheDocument();
+  });
+
+  it("HU #12964: un permiso de otro producto se avisa y no se manda al guardar (el servidor lo rechazaría)", async () => {
+    const user = userEvent.setup();
+    getRole.mockResolvedValue({ permissions: [{ id: "perm-1" }, { id: "perm-plataforma" }] });
+    setRolePermissions.mockResolvedValue({ permissions: [{ id: "perm-1" }] });
+    await openRolesTab();
+
+    const companyRow = (await screen.findByText("Supervisor de trámites")).closest("tr") as HTMLElement;
+    await user.click(within(companyRow).getByRole("button", { name: /editar permisos de/i }));
+
+    expect(await screen.findByText(/1 permiso de módulos de otro producto/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /guardar permisos/i }));
+
+    await waitFor(() => expect(setRolePermissions).toHaveBeenCalledWith("role-company-1", ["perm-1"]));
   });
 });

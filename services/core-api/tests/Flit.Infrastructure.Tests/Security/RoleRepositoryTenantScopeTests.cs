@@ -1,5 +1,6 @@
 using Flit.Api.Endpoints;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Modules.Security.Application.Roles;
@@ -101,32 +102,18 @@ public sealed class RoleRepositoryTenantScopeTests
     }
 
     [Fact]
-    public async Task GetEnabledProductCodes_EnStagingSonPlataformaYTramitesParaCualquierTenant()
+    public async Task GetEnabledProductCodes_SiempreIncluyePlataformaYSoloLosEncendidosDelTenant()
     {
-        // Adaptación a staging: no hay habilitación de productos por tenant (HU #10664).
-        var (_, repo) = Build();
+        var (db, repo) = Build();
+        db.Set<TenantProductEntity>().AddRange(
+            new TenantProductEntity { Id = Guid.NewGuid(), TenantId = TenantA, ProductCode = "tramites", Enabled = true },
+            new TenantProductEntity { Id = Guid.NewGuid(), TenantId = TenantA, ProductCode = "comparendos", Enabled = false },
+            new TenantProductEntity { Id = Guid.NewGuid(), TenantId = TenantB, ProductCode = "comparendos", Enabled = true });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var enabled = await repo.GetEnabledProductCodesAsync(TenantA, TestContext.Current.CancellationToken);
 
         enabled.Should().BeEquivalentTo("plataforma", "tramites");
-    }
-
-    [Fact]
-    public async Task GetPermissionInfos_DerivaElProductoDelModulo_PlataformaParaAuthUsuariosRbacYBanners()
-    {
-        var (db, repo) = Build();
-        var banners = new SecurityModule { Id = Guid.NewGuid(), Code = "banners", Name = "b", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
-        var tramites = new SecurityModule { Id = Guid.NewGuid(), Code = "tramites", Name = "t", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
-        var a = new RbacAction { Id = Guid.NewGuid(), ModuleId = banners.Id, Slug = "banners.manage", Name = "b", HttpMethod = "GET", RoutePattern = "/b", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
-        var b = new RbacAction { Id = Guid.NewGuid(), ModuleId = tramites.Id, Slug = "tramites.read", Name = "t", HttpMethod = "GET", RoutePattern = "/t", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
-        db.SecurityModules.AddRange(banners, tramites);
-        db.RbacActions.AddRange(a, b);
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        var infos = await repo.GetPermissionInfosAsync([a.Id, b.Id], TestContext.Current.CancellationToken);
-
-        infos.Single(i => i.Slug == "banners.manage").ProductCode.Should().Be("plataforma");
-        infos.Single(i => i.Slug == "tramites.read").ProductCode.Should().Be("tramites");
     }
 
     // ── Correcciones de revisión (HU #13441) ───────────────────────────────────────────────────────
@@ -236,8 +223,8 @@ public sealed class RoleRepositoryTenantScopeTests
     public async Task GetPermissionInfos_ExcluyePermisosDeModulosBorrados()
     {
         var (db, repo) = Build();
-        var vivo = new SecurityModule { Id = Guid.NewGuid(), Code = "vivo", Name = "v", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
-        var borrado = new SecurityModule { Id = Guid.NewGuid(), Code = "muerto", Name = "m", IsActive = true, CreatedAt = DateTimeOffset.UtcNow, DeletedAt = DateTimeOffset.UtcNow };
+        var vivo = new SecurityModule { Id = Guid.NewGuid(), Code = "vivo", Name = "v", ProductCode = "tramites", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        var borrado = new SecurityModule { Id = Guid.NewGuid(), Code = "muerto", Name = "m", ProductCode = "tramites", IsActive = true, CreatedAt = DateTimeOffset.UtcNow, DeletedAt = DateTimeOffset.UtcNow };
         var a = new RbacAction { Id = Guid.NewGuid(), ModuleId = vivo.Id, Slug = "vivo.read", Name = "r", HttpMethod = "GET", RoutePattern = "/x", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
         var b = new RbacAction { Id = Guid.NewGuid(), ModuleId = borrado.Id, Slug = "muerto.read", Name = "r", HttpMethod = "GET", RoutePattern = "/y", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
         db.SecurityModules.AddRange(vivo, borrado);

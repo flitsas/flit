@@ -13,6 +13,12 @@ public interface IRoleRepository
     /// <summary>Activa/desactiva un rol del catálogo global (HU #10505). Gobernanza SuperAdmin (HU #10508).</summary>
     Task SetActiveAsync(Guid roleId, bool isActive, CancellationToken ct);
 
+    /// <summary>
+    /// Productos (<c>security.modules.product_code</c>) de los módulos a los que pertenecen esos permisos
+    /// (HU #12964). Un rol solo puede tener permisos de su producto.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetPermissionProductCodesAsync(IReadOnlyList<Guid> permissionIds, CancellationToken ct);
+
     // ── HU #13441: roles propios de un tenant (Admin de Compañía) ─────────────────────────────────
 
     /// <summary>

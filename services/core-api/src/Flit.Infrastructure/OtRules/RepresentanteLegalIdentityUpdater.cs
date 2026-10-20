@@ -41,7 +41,7 @@ internal sealed class RepresentanteLegalIdentityUpdater : IRepresentanteLegalIde
         var documento = documentNumber.Trim();
 
         return await TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

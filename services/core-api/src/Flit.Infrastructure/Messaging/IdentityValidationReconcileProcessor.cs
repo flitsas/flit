@@ -131,6 +131,7 @@ internal sealed class IdentityValidationReconcileProcessor(
 
         KyverumVerifyStatus? status = null;
         var updated = false;
+        var sinRespuesta = false;
         try
         {
             status = await kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, ct);
@@ -140,6 +141,7 @@ internal sealed class IdentityValidationReconcileProcessor(
         catch (KyverumVerifyException ex)
         {
             // Transitorio/definitivo: no se bloquea la cola; se reintenta en el próximo ciclo tras la ventana.
+            sinRespuesta = ex.Transient;
             ReconcileLog.PollFailed(logger, v.Id, ex.Transient, ex);
             await audit.LogAsync(new IdentityValidationAuditEntry(
                 IdentityValidationAuditStages.Reconcile, IdentityValidationAuditOutcomes.Error,
@@ -149,15 +151,7 @@ internal sealed class IdentityValidationReconcileProcessor(
                 Message: "Worker: falló la consulta de estado; se reintenta."), ct);
         }
 
-        // Estampa updated_at siempre (aunque siga pendiente) para no re-sondear dentro de la ventana de frescura,
-        // y consume una unidad del presupuesto de sondeo: al agotarlo el worker deja de reclamar esta validación
-        // hasta que una señal nueva (intento por webhook, (re)envío o reconcile manual) lo reinicie a 0.
-        if (v.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado
-            || BiometricRules.EsRechazoKyverumConIntentosDisponibles(v))
-        {
-            v.UpdatedAt = now;
-            v.ReconcilePollCount += 1;
-        }
+        EstamparSondeo(v, now, sinRespuesta);
 
         try
         {
@@ -201,6 +195,25 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// <summary>Recorta el mensaje de error para la bitácora (evita textos enormes de EF/Npgsql).</summary>
     private static string Truncate(string message) =>
         string.IsNullOrEmpty(message) || message.Length <= 300 ? message : message[..300];
+
+    /// <summary>
+    /// Estampa <c>updated_at</c> siempre (aunque siga pendiente) para no re-sondear dentro de la ventana de frescura, y
+    /// consume una unidad del presupuesto de sondeo: al agotarlo el worker deja de reclamar esta validación hasta que una
+    /// señal nueva (intento por webhook, (re)envío o reconcile manual) lo reinicie a 0.
+    /// HU #13351: un fallo transitorio (Consultas o Kyverum sin responder) NO consume presupuesto, porque no hubo respuesta
+    /// del proveedor. Si lo consumiera, una caída de unos minutos agotaba los sondeos y una validación ya resuelta en
+    /// Kyverum quedaba «en proceso» cuando el servicio volvía. La ventana de frescura sigue espaciando los intentos.
+    /// HU #13444: también se estampa un rechazo aplicado con intentos disponibles, que el worker sigue consultando.
+    /// </summary>
+    internal static void EstamparSondeo(ProcedureInstanceBiometricValidation v, DateTimeOffset now, bool sinRespuesta)
+    {
+        if (!(v.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado
+              || BiometricRules.EsRechazoKyverumConIntentosDisponibles(v)))
+            return;
+        v.UpdatedAt = now;
+        if (!sinRespuesta)
+            v.ReconcilePollCount += 1;
+    }
 
     /// <summary>
     /// Reclama la validación Kyverum <c>en_proceso</c> más antigua no expirada cuyo último toque

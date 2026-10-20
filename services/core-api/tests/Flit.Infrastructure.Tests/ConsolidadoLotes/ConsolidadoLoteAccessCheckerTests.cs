@@ -45,7 +45,7 @@ public sealed class ConsolidadoLoteAccessCheckerTests : IDisposable
         db.Roles.AddRange(
             new Role { Id = RolRadicador, Code = "Radicador", Name = "Radicador", IsActive = true },
             new Role { Id = RolSinPermiso, Code = "Consulta", Name = "Consulta", IsActive = true },
-            new Role { Id = RolSuperAdmin, Code = "SuperAdmin", Name = "Super Admin", IsActive = true });
+            new Role { Id = RolSuperAdmin, Code = "SuperAdmin", Name = "Super Admin", IsActive = true, ProductCode = "plataforma" });
         db.RbacActions.Add(new RbacAction { Id = Permiso, ModuleId = Guid.NewGuid(), Slug = ConsolidadoLotePermisos.Descargar, Name = "Descargar", IsActive = true });
         db.RoleGrants.AddRange(
             new RoleGrant { Id = Guid.NewGuid(), RoleId = RolRadicador, PermissionId = Permiso },

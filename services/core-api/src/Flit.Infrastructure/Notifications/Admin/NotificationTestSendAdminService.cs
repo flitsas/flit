@@ -4,8 +4,6 @@ using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.Catalog;
-using Flit.Infrastructure.Notifications.Renting;
-using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
@@ -18,7 +16,11 @@ namespace Flit.Infrastructure.Notifications.Admin;
 
 /// <summary>
 /// Envío de prueba de una plantilla del catálogo al buzón de pruebas, con límite de frecuencia
-/// persistido (HU #11368, Feature #11349, la de mayor riesgo del Feature). Desde la HU #11371
+/// persistido (HU #11368, Feature #11349, la de mayor riesgo del Feature). <b>HU #13359:</b> desde el
+/// corte el envío, la disponibilidad del canal, el remitente y si FLIT es consola los resuelve
+/// core-notificaciones (<see cref="ICanalesDeNotificaciones"/>); lo de abajo que nombra al enrutador
+/// en proceso describe la regla, que Notificaciones aplica igual. El intento queda en su registro de
+/// entregas (empresa «plataforma»). Desde la HU #11371
 /// (Feature #11349, cierra el retorno-temprano fijo que impedía usar el canal API Renting) el envío
 /// SÍ se conecta al enrutador (<see cref="IExplicitChannelEmailSender"/>) — ver comentario de AC4
 /// más abajo.
@@ -70,11 +72,8 @@ namespace Flit.Infrastructure.Notifications.Admin;
 /// </remarks>
 internal sealed partial class NotificationTestSendAdminService(
     FlitDbContext db,
-    IExplicitChannelEmailSender explicitChannelSender,
-    EmailSettings emailSettings,
-    IOptions<RentingChannelOptions> rentingOptions,
+    ICanalesDeNotificaciones canales,
     IOptions<NotificationEmailAssetsOptions> emailAssets,
-    EmailTransportDescriptor transportDescriptor,
     TimeProvider timeProvider,
     ILogger<NotificationTestSendAdminService> logger,
     IProcedureTypeCatalog procedureTypes,
@@ -183,7 +182,21 @@ internal sealed partial class NotificationTestSendAdminService(
         // NotificationChannelsAdminService para GET .../canales. Se evalúa ANTES de sellar el
         // enfriamiento: un problema de configuración no puede obligar a esperar 5 minutos para
         // probar el otro canal.
-        if (!explicitChannelSender.IsChannelAvailable(channel))
+        CanalDeNotificacion? canalInfo;
+        try
+        {
+            canalInfo = (await canales.ListarAsync(ct).ConfigureAwait(false)).FirstOrDefault(c => c.Canal == channel);
+        }
+        catch (NotificacionesNoDisponibleException)
+        {
+            return NotificationTestSendResult.Failure(
+                NotificationTestSendOutcome.TransportFailed,
+                "El servicio de notificaciones no respondió. Intenta de nuevo en unos minutos.",
+                templateId: descriptor.Id,
+                channel: SettingsWire.ToWire(channel));
+        }
+
+        if (canalInfo is not { Disponible: true })
         {
             LogChannelNotAvailable(logger, channel);
             return NotificationTestSendResult.Failure(
@@ -195,7 +208,7 @@ internal sealed partial class NotificationTestSendAdminService(
 
         // HU #11371 — remitente resuelto por canal: FlitSmtp usa la configuración SMTP; TenantApi
         // usa el remitente propio del canal Renting (el que verá quien reciba el correo).
-        var (senderEmail, senderName) = ResolveSender(channel);
+        var (senderEmail, senderName) = (NullIfBlank(canalInfo.RemitenteEmail), NullIfBlank(canalInfo.RemitenteNombre));
         if (senderEmail is null)
         {
             return NotificationTestSendResult.Failure(
@@ -274,10 +287,10 @@ internal sealed partial class NotificationTestSendAdminService(
         // HU #11371 — envía por el canal explícito elegido, SIN resolver política de tenant y SIN el
         // bypass de correos de cuenta (ya se descartó ese caso arriba). Se salta el decorador de
         // bitácora: por eso el registro propio de abajo.
-        var sendResult = await explicitChannelSender.SendAsync(channel, message, ct).ConfigureAwait(false);
+        var sendResult = await canales.EnviarPruebaAsync(channel, message, ct).ConfigureAwait(false);
 
         // AC8 — solo el canal FlitSmtp puede ser transporte de consola; TenantApi nunca lo es.
-        var isConsoleTransport = channel == NotificationChannel.FlitSmtp && transportDescriptor.IsConsole;
+        var isConsoleTransport = channel == NotificationChannel.FlitSmtp && canalInfo.Consola;
 
         var outcome = sendResult.Success
             ? NotificationTestSendOutcome.Sent
@@ -345,20 +358,6 @@ internal sealed partial class NotificationTestSendAdminService(
         var esTraspaso = string.Equals(item.Family, "TRASPASO", StringComparison.OrdinalIgnoreCase);
         return (null, new NotificationSampleProcedureType(item.Name, esTraspaso));
     }
-
-    /// <summary>
-    /// <see cref="EmailSettings.DefaultSenderName"/>; TenantApi lee
-    /// <see cref="RentingChannelOptions.SendEmailSenderEmail"/> /
-    /// <see cref="RentingChannelOptions.SendEmailSenderUsername"/> — el mismo remitente que usa el
-    /// camino normal del router para este canal (ver <c>TenantChannelEmailRouter.SendViaChannelAsync</c>).
-    /// </summary>
-    private (string? Email, string? Name) ResolveSender(NotificationChannel channel) => channel switch
-    {
-        NotificationChannel.TenantApi => (
-            NullIfBlank(rentingOptions.Value.SendEmailSenderEmail),
-            NullIfBlank(rentingOptions.Value.SendEmailSenderUsername)),
-        _ => (NullIfBlank(emailSettings.DefaultSenderEmail), NullIfBlank(emailSettings.DefaultSenderName)),
-    };
 
     private async Task<NotificationTestSettingsRow> GetRowAsync(CancellationToken ct)
     {

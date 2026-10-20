@@ -13,6 +13,7 @@ import type {
   UpdateConformationProfileRequest,
   UpdateProcedureTypeRequest,
 } from './types/procedure-parametrization';
+import { apiBaseForPageRoot, sessionAwareBase } from '@/lib/api/base-url';
 import { getToken } from './client';
 import { fetchAllCompanies } from './admin-companies';
 
@@ -51,6 +52,8 @@ export interface RbacRole {
   isActive: boolean;
   permissionCount: number;
   createdAt: string;
+  /** HU #12964: producto del rol (`plataforma` | `tramites` …). */
+  productCode?: string;
 }
 
 /** Detalle completo de un rol (respuesta de PUT .../permissions) — incluye permisos otorgados. */
@@ -74,12 +77,13 @@ export interface CompanyItem {
 
 // Misma resolución de base que lib/api/client.ts: sin env en dev local → origen del
 // frontend (rewrites Next → core-api :4003).
+// Con la raíz de la página: en app.flitsas.com la API es api.flitsas.com (ver apiBaseForPageRoot).
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
+  apiBaseForPageRoot(process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '');
 
 function resolveBaseUrl(): string {
   return (
-    BASE_URL ||
+    sessionAwareBase(BASE_URL) ||
     (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
   );
 }
@@ -311,4 +315,29 @@ export const superadminClient = {
   // internamente: pedir sin `page`/`pageSize` caía al default del backend (20 por página) y el
   // picker se quedaba solo con las 20 compañías más recientes.
   listCompanies: async () => ({ data: await fetchAllCompanies() as CompanyItem[] }),
+
+  // Mensajes muertos de Notificaciones (Epic #13316, HU #13357/#13358): correos y webhooks que agotaron sus
+  // reintentos. Reintentar y descartar quedan en la auditoría administrativa.
+  listMensajesMuertos: (cola: ColaMensajesMuertos) =>
+    request<{ mensajes: MensajeMuerto[] }>(`/api/v1/superadmin/notificaciones/mensajes-muertos?cola=${cola}`),
+  retryMensajeMuerto: (cola: ColaMensajesMuertos, id: string) =>
+    request<void>(`/api/v1/superadmin/notificaciones/mensajes-muertos/${cola}/${id}/reintentar`, { method: 'POST' }),
+  discardMensajeMuerto: (cola: ColaMensajesMuertos, id: string) =>
+    request<void>(`/api/v1/superadmin/notificaciones/mensajes-muertos/${cola}/${id}/descartar`, { method: 'POST' }),
 };
+
+/** Cola de mensajes muertos de Notificaciones (HU #13358). */
+export type ColaMensajesMuertos = 'correos' | 'webhooks';
+
+/** Un correo o webhook que agotó sus reintentos (HU #13357). */
+export interface MensajeMuerto {
+  id: string;
+  tipo: string;
+  empresaId: string | null;
+  origen: string | null;
+  ocurridoEn: string | null;
+  muertoEn: string | null;
+  motivo: string | null;
+  ultimoError: string | null;
+  intentos: number;
+}

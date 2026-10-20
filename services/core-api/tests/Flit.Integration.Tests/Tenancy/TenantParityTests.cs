@@ -91,7 +91,7 @@ public sealed class TenantParityTests(PostgresDatabaseFixture fixture) : Postgre
 
     /// <summary>
     /// AC1 — el filtro legado (<c>tenantId = S</c>) y <c>TenantScope.Single(S)</c> sobre la misma
-    /// consulta base producen los mismos ids en el mismo orden (Q01 y Q02 ≡ Q27).
+    /// consulta base producen los mismos ids en el mismo orden (Q01 y Q02 ≡ Q26).
     /// </summary>
     [PostgresFact]
     public async Task Filtro_legado_y_TenantScope_Single_son_equivalentes()
@@ -154,13 +154,15 @@ public sealed class TenantParityTests(PostgresDatabaseFixture fixture) : Postgre
 
     /// <summary>
     /// AC1 — «ninguna respuesta incorpora campos nuevos»: snapshot por reflexión de las propiedades
-    /// públicas de los DTOs de respuesta de las consultas cubiertas. <c>ParentTenantId</c> /
-    /// <c>IsGroupParent</c> viven en la entidad <c>Tenant</c>, no en estos contratos. Si un DTO gana
-    /// una propiedad, esta prueba falla y hay que decidir a conciencia (no ajustar la lista sin más).
+    /// públicas de los DTOs de respuesta de las consultas cubiertas. <c>IsGroupParent</c> /
+    /// <c>ReadTenantIds</c> viven en la entidad <c>Tenant</c>, no en estos contratos.
+    /// Excepción consciente: <c>CompanyListItem.ParentTenantId</c> se expone para que el front
+    /// bloquee el cambio de tipo en hijas de red (PR #611). Si un DTO gana otra propiedad, esta
+    /// prueba falla y hay que decidir a conciencia (no ajustar la lista sin más).
     /// </summary>
     public static IEnumerable<TheoryDataRow<Type, string>> ContratosDeRespuesta()
     {
-        yield return new(typeof(CompanyListItem), "Id Nit RazonSocial Code TenantType IsTransitOffice EstadoActivo FechaCreacion RowVersion");
+        yield return new(typeof(CompanyListItem), "Id Nit RazonSocial Code TenantType ParentTenantId IsTransitOffice EstadoActivo FechaCreacion RowVersion");
         yield return new(typeof(InstanceSummaryDto), "Id ReferenceNumber Modalidad Estado Placa Vin VehiculoMarca VehiculoLinea CompradorNombre CompradorDocumento OrganismoTransito PasoActual TotalPasos CreatedAt TenantId CompaniaNombre DraftFinalizedAt IdentityValidationStatus SignaturePending CanSubmit Prioritario VendedorNombre VendedorDocumento SubsanacionActiva SubsanacionCount UltimoRechazoMotivo IsPaused PausedObservation Origin UpdatedAt GestorNombre Fuente FirmaVendedorEstado FirmaCompradorEstado ConsolidadoAttachmentId TipoNombre TipoCodigo PasoNombre TienePrenda TieneTransformacion RuntConfirmed RevocationRequestStatus RejectedFrom ConsolidadoWizard"); // RuntConfirmed: F12276 Confirmación RUNT; RejectedFrom: ADR-0059 origen del rechazo — ninguno es campo de jerarquía; F12565: sub-estado y decisión de revocatoria
         yield return new(typeof(OtClientProcedure), "Id ClientTenantId ProcedureTypeId ProcedureTypeName ClientTenantName ReferenceNumber Status Familia PlateAssignedAt PlateUpdatedAt SoatEstado PlatePreferredLastDigit SoatPagado ImpuestoDepartamentalPagado TransitOfficeId CreatedAt SubmittedAt Prioritario Actors Placa Vin VendedorNombre CompradorNombre GestorNombre Marca Linea Modelo Color Clase Servicio Combustible Carroceria Cilindraje Capacidad Ejes EstadoVehiculo NumeroMotor NumeroChasis NumeroSerie RuntSnapshot TransformacionesDeclaradas Comercial Prenda RevocationRequestStatus RevocationDecisionStatus RevocationDecisionAt RevocationRequestReason RevocationDecisionReason ConsolidadoWizard ConsolidadoMaestro QuipuxRadicadoEn QuipuxMaestroAttachmentId"); // ADR-0059: el sub-estado de placa se retiró del contrato del OT; F12565: sub-estado y decisión de revocatoria
         yield return new(typeof(CompanyQueryRowDto), "ProcedureInstanceId ReferenceNumber Placa Vin TransitOfficeId TransitOfficeName CompaniaId CompaniaNombre ProcedureTypeId ProcedureTypeName Status Prioritario SubsanacionActiva SubsanacionCount Comprador Vendedor TienePrenda AcreedorPrenda TieneLicenciaTransito Transformaciones EsLeasing MetodoPago TipoTraspaso RadicadoPor CreadoEn EnviadoEn CerradoEn AprobadoEn ActualizadoEn DiasHastaEnvio DiasEnOrganismo Devoluciones");
@@ -189,6 +191,9 @@ public sealed class TenantParityTests(PostgresDatabaseFixture fixture) : Postgre
             .Select(p => p.Name);
 
         string.Join(' ', actual).Should().Be(expected, $"{dto.Name} no debe exponer campos nuevos de jerarquía");
-        actual.Should().NotContain(["ParentTenantId", "IsGroupParent", "ReadTenantIds"]);
+        // ParentTenantId solo permitido en CompanyListItem (ver excepción en ContratosDeRespuesta).
+        actual.Should().NotContain(["IsGroupParent", "ReadTenantIds"]);
+        if (dto != typeof(CompanyListItem))
+            actual.Should().NotContain("ParentTenantId");
     }
 }

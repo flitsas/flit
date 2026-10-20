@@ -56,6 +56,13 @@ public static class AuditVocabulary
         public const string Reactivate = "reactivate";
         public const string RemoveDefault = "remove_default";
         public const string ReassignProcedure = "reassign_procedure";
+
+        // Epic #13316 (HU #13357) — mensajes muertos de Notificaciones.
+        public const string RetryDeadLetter = "retry_dead_letter";
+        public const string DiscardDeadLetter = "discard_dead_letter";
+
+        // Feature #13508 (HU #13510) — failover automático de proveedor IA.
+        public const string Failover = "failover_auto";
     }
 
     /// <summary>Categoría transversal de la operación auditada (HU #10678).</summary>

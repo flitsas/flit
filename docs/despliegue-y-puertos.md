@@ -139,6 +139,41 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
   destinos YARP. Cambiar el puerto de un ambiente = cambiar un solo número en el `setup`
   del CD (o en el `.env`).
 
+### d) Puertos reservados para la FLIT Suite
+
+Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
+Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
+(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager (repo aparte), `x030` migración)
+no se reutilizan.
+
+| Servicio | Local y DEV | QA | PDN |
+|----------|-------------|----|-----|
+| `frontend-hub` | `4022` | `5022` | `6022` |
+| Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
+| API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
+| Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
+| `core-identity` | `4025` | `5025` | `6025` |
+
+- Bloque `x022`–`x025` (2026-10-06): un puerto por producto, el de su app web, que es a donde apunta nginx. Si un
+  producto tiene API propia, va por la red interna detrás del gateway, sin puerto publicado.
+- En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
+- `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
+  `CORE_IDENTITY_PORT`); Comparendos ya los tiene (`COMPARENDOS_PORT`, `CORE_COMPARENDOS_PORT`;
+  perfil `comparendos`, ver `docs/suite/handoff-vps-comparendos.md`); Diagnóstico se agrega cuando se despliegue (L-10). El producto `demo` se retiró (DDL 125).
+- Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
+
+#### Puertos gRPC internos (contrato v1.3 §11, Epic #13316)
+
+Solo en la red de Docker: sin mapeo en `ports`, sin nginx y el mismo número en todos los ambientes (cada ambiente es
+su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto aparte del REST.
+
+| Servicio | Puerto | Variable | Estado |
+|----------|--------|----------|--------|
+| `core-api` (ICT) | `8082` | `CORE_API_GRPC_PORT` | En uso |
+| `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
+| `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
+| `core-comparendos` (`flit.comparendos.v1`) | `8086` (propuesto) | `CORE_COMPARENDOS_GRPC_PORT` | Perfil `comparendos`; encendido en [handoff-vps-comparendos.md](suite/handoff-vps-comparendos.md) |
+
 ---
 
 ## 3. Comunicación entre servicios
@@ -203,6 +238,49 @@ El flujo es el mismo en los tres escenarios; solo cambian los hostnames/puertos.
   contenedor `frontend`). Si falta el segundo, el front de marca blanca carga pero
   todas sus llamadas a la API fallan por CORS.
 - El origen permitido debe ser la URL desde la que sirve el **frontend**.
+
+### Marca blanca: el vhost debe enrutar `/api/v1`, `/hubs` y `/ml` al Gateway (HU #12421)
+
+En un **dominio de red** (marca blanca) el navegador **no** usa la base cross-origin
+horneada en el build: `resolveApiBase()` devuelve `""` cuando `isFlitHost()` es `false`
+(`frontend/lib/api/base-url.ts`), así que llama a **su propio origen**. Y los
+`marcablanca{dev,qa,pdn}.flitsas.online` están negados a propósito en `NEXT_PUBLIC_FLIT_HOSTS`
+(HU #12761), o sea que cuentan como dominio de red.
+
+Por eso su vhost necesita, **además** del `location /` al frontend:
+
+| location | Destino | Nota |
+|---|---|---|
+| `/api/v1/` | gateway (`4002`/`5002`/`6002`) | **`/api/v1/` exacto, nunca `/api/`**: el BFF propio de Next vive en `/api/migracion` (sin `/v1/`) y debe seguir cayendo en `location /` |
+| `/hubs/` | gateway | SignalR: exige `Upgrade`/`Connection` y `proxy_read_timeout 3600s` |
+| `/ml/` | gateway | OCR/ML detrás de YARP |
+
+nginx elige por **prefijo más largo**, no por orden, así que `/api/v1/...` siempre gana
+sobre `/`. Además hay que fijar `client_max_body_size` igual que en el vhost de la API de
+ese ambiente (sin él rige el default de 1 MB y los adjuntos fallan con 413), y en QA
+replicar el `location /api/v1/tramites/ocr/` con 600 s.
+
+`X-Flit-Domain` **no se fija** en nginx: lo sella en exclusiva `DomainSealTransform` del
+gateway con el host real de la conexión (HU #12417). Pero sí conviene **borrar** el que
+mande el cliente (`proxy_set_header X-Flit-Domain "";` y lo mismo con `X-Internal-Key`):
+detrás de nginx las conexiones llegan al gateway con la IP del bridge, que cae dentro de
+`DomainSeal__InternalAllowedNetworks`, así que ese CIDR no discrimina y la única defensa
+quedaría en la clave compartida. El SSR no se ve afectado: llama al gateway por la red
+Docker, sin pasar por nginx.
+
+> **Síntoma cuando falta este enrutado:** el front carga y el SSR hasta aplica la marca
+> (título y colores correctos, porque eso va por la red interna), pero el **logo aparece
+> roto** —`logoUrl` es relativo— y toda llamada a la API responde **500**, porque la pide
+> al contenedor de Next en vez de al Gateway.
+>
+> Aplicado a mano en los tres vhosts de la 177 el **2026-09-24**. Recordar que **las
+> configuraciones de nginx de ese host no están en git**: si se recrea un vhost, hay que
+> volver a añadir estos tres `location`.
+
+El enrutado es condición necesaria pero no suficiente: el dominio tiene que estar
+**registrado y activo** en `admin.tenant_domains` de ese ambiente. Con el enrutado puesto
+pero sin registro, `/api/v1/public/branding` responde 200 con la marca de **FLIT**
+(comportamiento correcto de respaldo, AC5), no con la del cliente.
 
 ### Health checks (para verificar conectividad)
 
@@ -467,7 +545,7 @@ Un job `setup` resuelve el mapeo y los jobs siguientes lo consumen:
 |------|:---------------------:|-------|---------------|------------------------------|
 | `develop` | `dev` | `dev.flitsas.online` | `api.dev.flitsas.online` | `dev` (móvil) |
 | `staging` | `qa` | `qa.flitsas.online` | `api.qa.flitsas.online` | `qa` (móvil) |
-| `release` | `pdn` | `pdn.flitsas.online` | `api.pdn.flitsas.online` | `sha-<commit>` (**inmutable**) |
+| `release` | `pdn` | `flitsas.online` | `api.flitsas.online` | `sha-<commit>` (**inmutable**) |
 
 - **Tags publicados vs. tag de deploy:** cada build publica **3 tags** — `sha-<commit>`
   (inmutable, formato largo), el tag móvil del ambiente (`dev`/`qa`/`pdn`) y `latest`

@@ -231,7 +231,7 @@
           "id": "cambiar-contrasena",
           "title": "4. Cambiar tu contraseña",
           "paragraphs": [
-            "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú ⋮ (arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma."
+            "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú de tu cuenta (tu nombre, arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma."
           ],
           "bullets": [],
           "callouts": []
@@ -240,7 +240,7 @@
           "id": "cerrar-sesion",
           "title": "5. Cerrar sesión",
           "paragraphs": [
-            "Desde el mismo menú ⋮ selecciona «Salir» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido."
+            "Desde el mismo menú de tu cuenta selecciona «Cerrar sesión» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido."
           ],
           "bullets": [],
           "callouts": []
@@ -474,7 +474,7 @@
           "id": "que-es",
           "title": "1. Qué es el Inicio",
           "paragraphs": [
-            "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
+            "El botón central flotante (FAB) «Inicio Trámites» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
             "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
             "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
             "El volumen se resume en cinco tarjetas: Total trámites, Matrículas, Traspasos, Otros Trámites (cualquier trámite que no sea matrícula ni traspaso) y Completados."
@@ -2283,11 +2283,12 @@
           "title": "1. Compañías",
           "paragraphs": [
             "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
-            "Abrir una fila lleva a la ficha completa de la compañía, con 7 pestañas:"
+            "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:"
           ],
           "bullets": [
+            "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
             "Trámites: familias habilitadas (Matrículas, Traspaso, Otros), cada una en un acordeón con un resumen («Sin restricciones» o «N restricciones activas») y con el estado de cada opción escrito junto a su switch (por ejemplo Permitido o Bloqueado), más la lista blanca de trámites permitidos. Debajo, la sección «Improntas» tiene el interruptor «Generación de improntas» (visible solo para el Super Admin), con el estado escrito junto a él: Habilitada o Deshabilitada. Si lo desactivas, el asistente no genera la impronta automáticamente y el radicador la carga a mano; solo aplica a trámites nuevos. Se guarda con «Guardar todo».",
-            "Configuración Empresa: seis bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl), «Módulos del dashboard» (Trámites, Comparendos y Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
+            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
             "Documentos: parámetros documentales de la gestora, en una tabla con cada tipo de documento y su estado (Obligatorio, Opcional u Oculto). «Agregar parámetro» o el ícono de editar abren la ventana para elegir el documento y su estado.",
             "Representantes legales: buscador por nombre o documento, un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página».",
             "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
@@ -2415,10 +2416,11 @@
         },
         {
           "id": "fur-notif",
-          "title": "3. FUR y Notificaciones",
+          "title": "3. FUR, Notificaciones y Configuración de IA",
           "paragraphs": [
             "FUR: simula cómo se construye el Formulario Único de Registro con datos sintéticos, para validar plantillas sin un trámite real.",
-            "Notificaciones: banco de plantillas de correo por canal y compañía (lectura), con vista previa que respeta el tema de la red (marca blanca en Marca Blanca). Antes de mandar una prueba, configura el buzón de pruebas (un correo propio para recibirlas); sin él, el botón de envío de prueba te pide configurarlo primero. Con el buzón listo, «Enviar prueba» manda el correo real a esa bandeja para revisar Seguridad, Trámites o Analítica antes de que lo reciba un cliente."
+            "Notificaciones: banco de plantillas de correo por canal y compañía (lectura), con vista previa que respeta el tema de la red (marca blanca en Marca Blanca). Antes de mandar una prueba, configura el buzón de pruebas (un correo propio para recibirlas); sin él, el botón de envío de prueba te pide configurarlo primero. Con el buzón listo, «Enviar prueba» manda el correo real a esa bandeja para revisar Seguridad, Trámites o Analítica antes de que lo reciba un cliente.",
+            "Configuración de IA: define por herramienta (OCR y DR. FLIT) el proveedor activo y el orden de prioridad entre Anthropic, OpenAI, Kimi y DeepSeek. Solo ves si la API key está configurada en el entorno y una máscara; nunca el secreto. Puedes activar un proveedor con confirmación, guardar prioridad y opciones, revisar el historial de cambios y marcar como leídas las alertas de failover automático. Esta sección solo la ve el Super Admin."
           ],
           "bullets": [],
           "callouts": []

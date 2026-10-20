@@ -1,0 +1,4 @@
+<Project>
+  <!-- Epic #13316 — core-consultas comparte las reglas de compilación de core-api, igual que core-identity. -->
+  <Import Project="..\core-api\Directory.Build.props" />
+</Project>

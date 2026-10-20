@@ -112,22 +112,36 @@ builder.Services.AddRateLimiter(o =>
             }));
 });
 
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(r => r.AddService("flit-gateway"))
-    .WithTracing(t => t
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddOtlpExporter());
+// HU #13332 (Epic #13316): solo con un colector configurado. Antes exportaba siempre a localhost:4317, donde en los
+// servidores no escucha nadie; ahora, sin OTEL_EXPORTER_OTLP_ENDPOINT, no se registra (igual que core-api e identidad).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService("flit-gateway"))
+        .WithTracing(t => t
+            .AddAspNetCoreInstrumentation(o => o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health"))
+            .AddHttpClientInstrumentation()
+            .AddOtlpExporter());
+}
 
 var reverseProxyBuilder = builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
     .AddTransforms<DomainSealTransform>();
-if (builder.Environment.IsDevelopment())
+// HU #12895 (FLIT Suite A-02): el filtro lo decide Gateway:DisableJwtPolicy, por defecto solo en Development. Hoy no
+// cambia nada funcional —JwtRequired deja pasar todo—; la API es quien valida el token (HU #12896).
+if (builder.Configuration.GetValue("Gateway:DisableJwtPolicy", builder.Environment.IsDevelopment()))
 {
     Log.Warning(
-        "Development: JWT no exigido en rutas YARP (sin login en frontend). " +
+        "JWT no exigido en rutas YARP (Gateway:DisableJwtPolicy). " +
         "Activar JwtRequired al integrar autenticación.");
     reverseProxyBuilder.AddConfigFilter<DevelopmentNoJwtProxyConfigFilter>();
+}
+
+// HU #13225 (Epic #13217): las rutas del login van a core-identity solo con esta bandera; apagada, todo a core-api.
+if (builder.Configuration.GetValue<bool>(IdentityClusterProxyConfigFilter.EnabledKey))
+{
+    Log.Information("Rutas de identidad hacia {Cluster} ({Flag}).", IdentityClusterProxyConfigFilter.ClusterId, IdentityClusterProxyConfigFilter.EnabledKey);
+    reverseProxyBuilder.AddConfigFilter<IdentityClusterProxyConfigFilter>();
 }
 
 builder.Services.AddHealthChecks();
@@ -173,3 +187,6 @@ app.MapHealthEndpoints();
 app.MapReverseProxy();
 
 app.Run();
+
+/// <summary>Punto de entrada expuesto para pruebas (WebApplicationFactory, HU #13225).</summary>
+public partial class Program;

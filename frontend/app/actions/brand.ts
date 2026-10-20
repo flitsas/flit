@@ -7,7 +7,7 @@
 //   await refreshBrand();
 //   router.refresh();
 import { updateTag } from "next/cache";
-import { BRAND_CACHE_TAG } from "@/lib/brand/types";
+import { BRAND_CACHE_TAG } from "@flit/brand/types";
 
 export async function refreshBrand(): Promise<void> {
   updateTag(BRAND_CACHE_TAG);

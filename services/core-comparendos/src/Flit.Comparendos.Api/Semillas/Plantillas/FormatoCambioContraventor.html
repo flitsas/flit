@@ -1,0 +1,18 @@
+<!-- nombre: Formato de solicitud de cambio de contraventor -->
+<p style="text-align:right">{{ot.municipio}}, {{hoy}}</p>
+<p>Señores<br><b>{{ot.nombre}}</b><br>{{ot.municipio}}, {{ot.departamento}}</p>
+<p><b>Referencia:</b> Solicitud de cambio de contraventor — comparendo {{comparendo.numero}}</p>
+<p style="text-align:justify">{{rl.nombres}}, identificado(a) con {{rl.tipo_documento}} {{rl.numero_documento}}, en calidad de {{rl.cargo}} de <b>{{peticionario.nombre}}</b> ({{peticionario.tipo_documento}} {{peticionario.numero_documento}}), propietaria del vehículo de placa {{comparendo.placa}}, solicito el cambio de contraventor del comparendo de la referencia, porque en la fecha de la infracción el vehículo estaba bajo la tenencia y responsabilidad de la siguiente persona:</p>
+<table>
+<tr><th>Nombre</th><td>{{conductor.nombres}}</td></tr>
+<tr><th>Documento</th><td>{{conductor.tipo_documento}} {{conductor.numero_documento}}</td></tr>
+<tr><th>Dirección</th><td>{{#si conductor.direccion}}{{conductor.direccion}}{{#sino}}—{{/si}}</td></tr>
+<tr><th>Ciudad</th><td>{{#si conductor.ciudad}}{{conductor.ciudad}}{{#sino}}—{{/si}}</td></tr>
+<tr><th>Teléfono</th><td>{{#si conductor.telefono}}{{conductor.telefono}}{{#sino}}—{{/si}}</td></tr>
+<tr><th>Correo</th><td>{{#si conductor.correo}}{{conductor.correo}}{{#sino}}—{{/si}}</td></tr>
+</table>
+<p style="text-align:justify">Datos del comparendo: número {{comparendo.numero}}, fecha {{comparendo.fecha_imposicion}}, infracción {{comparendo.codigo_infraccion}}, dirección {{comparendo.direccion_infraccion}}.</p>
+<p>Adjunto la cédula y la licencia de conducción del conductor y el certificado de existencia y representación de la empresa.</p>
+<p>Atentamente,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.cargo}}<br>{{peticionario.nombre}}</p>

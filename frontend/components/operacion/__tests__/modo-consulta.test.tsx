@@ -80,13 +80,6 @@ vi.mock('@/lib/api/tramites-client', () => ({
   setActiveTramitesTenant: vi.fn(),
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
-  // useNetworkScope (staging) hace `err instanceof TramitesApiError`: sin el export el mock lanza
-  // «No "TramitesApiError" export is defined» como error no manejado en cada render.
-  TramitesApiError: class TramitesApiError extends Error {
-    constructor(public readonly status: number, message: string) {
-      super(message);
-    }
-  },
 }));
 
 vi.mock('@/lib/api/ui-preferences', () => ({

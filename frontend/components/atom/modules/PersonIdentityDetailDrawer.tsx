@@ -74,13 +74,13 @@ export interface PersonIdentityDetailDrawerProps {
    * trámites de la hija, bitácora por la ruta de red). Ausente = la vista propia de siempre.
    */
   networkTenantId?: string;
-  /** Super Admin: abre el detalle de una validación manual en su pestaña (el detalle actual se cierra aparte). */
-  onVerEnManuales?: (validationId: string) => void;
   /**
    * Historial de la validación PROPIA de un mandatario (fila «Mandatario»): se pide aparte y es solo consulta;
    * se gestiona desde la ficha del mandatario.
    */
   mandatario?: boolean;
+  /** Super Admin: abre el detalle de una validación manual en su pestaña (el detalle actual se cierra aparte). */
+  onVerEnManuales?: (validationId: string) => void;
 }
 
 export function PersonIdentityDetailDrawer({
@@ -89,8 +89,8 @@ export function PersonIdentityDetailDrawer({
   onClose,
   onStatusChanged,
   networkTenantId,
-  onVerEnManuales,
   mandatario = false,
+  onVerEnManuales,
 }: PersonIdentityDetailDrawerProps) {
   const esRed = Boolean(networkTenantId);
   const soloConsulta = esRed || mandatario;
@@ -321,13 +321,13 @@ export function PersonIdentityDetailDrawer({
                     defaultOpen={idx === 0}
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
+                    red={esRed}
                     onManualChanged={() => {
                       void load();
                       // La lista de abajo y el contador de «Validaciones manuales» se actualizan al instante.
                       onStatusChanged?.();
                     }}
                     onVerEnManuales={onVerEnManuales}
-                    red={esRed}
                   />
                 ))}
               </div>
@@ -345,9 +345,9 @@ function ValidationAccordionItem({
   defaultOpen,
   trackingTick,
   soloConsulta = false,
+  red = false,
   onManualChanged,
   onVerEnManuales,
-  red = false,
 }: {
   validation: BiometricValidation;
   /** HU #13288 — recarga el detalle tras activar el flujo manual o regenerar el enlace. */

@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package flit.notificaciones.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Flit.Notificaciones.Grpc.V1";
+
+// Notificaciones (Epic #13316, HU #13353; ADR-0064, ADR-0070). Envía correos ya armados por el servicio que los pide
+// (asunto, HTML y tema son de quien pide; decisión del Feature #13324) por el canal que ese servicio resolvió, y deja
+// cada intento en su registro de entregas. Lo normal es pedir el envío por el bus (`notificaciones.email.send`); esta
+// llamada es para lo que necesita la respuesta en el momento (el buzón de pruebas).
+//
+// Autenticación: token de servicio con `aud=notificaciones` y scope `platform.notificaciones.send`; la empresa en la
+// metadata `x-flit-tenant-id`.
+service NotificacionesService {
+  // Envía un correo y devuelve el resultado del transporte. Nunca falla por el transporte: el resultado lo dice.
+  rpc EnviarCorreo(EnviarCorreoRequest) returns (EnviarCorreoResponse);
+
+  // Entregas de la empresa de la metadata, de la más reciente a la más antigua.
+  rpc ListarEntregas(ListarEntregasRequest) returns (ListarEntregasResponse);
+
+  // Canales de este ambiente con su remitente y si se puede enviar por ellos (HU #13359: pantallas de canales y del
+  // buzón de pruebas del SuperAdmin, que ya no tienen los transportes en core-api).
+  rpc ListarCanales(ListarCanalesRequest) returns (ListarCanalesResponse);
+}
+
+// HU #13359: lo que es de la plataforma y no de una empresa (simulación de mandato, buzón de pruebas, recuperación de
+// contraseña de un usuario sin rol, reportes de alcance SuperAdmin) usa esta empresa fija en x-flit-tenant-id y en el
+// tenant del trabajo: 00000000-0000-0000-0000-0000000f1170.
+
+// Por dónde sale el correo. Lo resuelve quien lo pide (canal de la empresa; los correos de cuenta siempre por FLIT).
+enum Canal {
+  CANAL_UNSPECIFIED = 0;
+  CANAL_FLIT_SMTP = 1;
+  // API de correo de la empresa (hoy, Renting).
+  CANAL_EMPRESA_API = 2;
+}
+
+enum ResultadoEnvio {
+  RESULTADO_ENVIO_UNSPECIFIED = 0;
+  RESULTADO_ENVIO_ENVIADO = 1;
+  RESULTADO_ENVIO_AUTENTICACION_FALLIDA = 2;
+  RESULTADO_ENVIO_DESTINATARIO_RECHAZADO = 3;
+  RESULTADO_ENVIO_CONTENIDO_RECHAZADO = 4;
+  RESULTADO_ENVIO_LIMITE_ALCANZADO = 5;
+  RESULTADO_ENVIO_PROVEEDOR_NO_DISPONIBLE = 6;
+  RESULTADO_ENVIO_TIEMPO_AGOTADO = 7;
+  RESULTADO_ENVIO_CONFIGURACION_INCOMPLETA = 8;
+}
+
+message Correo {
+  // Clave de la plantilla con la que se armó (security.invitation, tramites.aprobado, …): para el registro.
+  string plantilla = 1;
+  Canal canal = 2;
+  string destinatario_email = 3;
+  string destinatario_nombre = 4;
+  string asunto = 5;
+  string html = 6;
+  repeated Adjunto adjuntos = 7;
+  repeated string copia_oculta = 8;
+  optional string remitente_nombre = 9;
+  // Tema con el que se armó (flit | marca) y su versión publicada: para el registro.
+  optional string tema = 10;
+  optional int32 tema_version = 11;
+}
+
+message Adjunto {
+  string nombre = 1;
+  string content_type = 2;
+  bytes contenido = 3;
+}
+
+message EnviarCorreoRequest {
+  Correo correo = 1;
+}
+
+message EnviarCorreoResponse {
+  ResultadoEnvio resultado = 1;
+  string mensaje = 2;
+  // El canal de la empresa desvió el destinatario al buzón de control (ambientes que no son PDN).
+  bool desviado = 3;
+  string entrega_id = 4;
+}
+
+message ListarEntregasRequest {
+  int32 tamano_pagina = 1;
+  int32 pagina = 2;
+}
+
+message ListarEntregasResponse {
+  repeated Entrega entregas = 1;
+  int32 total = 2;
+}
+
+message Entrega {
+  string id = 1;
+  string plantilla = 2;
+  Canal canal = 3;
+  string destinatario = 4;
+  bool enviado = 5;
+  ResultadoEnvio resultado = 6;
+  optional string motivo_fallo = 7;
+  int32 duracion_ms = 8;
+  bool desviado = 9;
+  google.protobuf.Timestamp ocurrido_en = 10;
+  optional string origen = 11;
+}
+
+message ListarCanalesRequest {}
+
+message ListarCanalesResponse {
+  repeated CanalInfo canales = 1;
+}
+
+message CanalInfo {
+  Canal canal = 1;
+  // Se puede enviar por él en este ambiente (el canal de la empresa solo si su API está habilitada).
+  bool disponible = 2;
+  optional string remitente_email = 3;
+  optional string remitente_nombre = 4;
+  // FLIT sin servidor SMTP: el correo se escribe en el log en vez de enviarse (solo ambientes de desarrollo).
+  bool consola = 5;
+}

@@ -55,7 +55,7 @@ public sealed class RolesPorTenantDdlTests
             .And.Contain("WHERE deleted_at IS NULL AND tenant_id IS NOT NULL");
         ddl.Should().Contain("tr_roles_tenant_code_not_global")
             .And.Contain("g.tenant_id IS NULL AND g.deleted_at IS NULL AND lower(g.code) = lower(NEW.code)")
-            .And.Contain("lower(NEW.code) IN ('admin_plataforma', 'admin_tramites', 'admin_comparendos', 'admin_diagnostico')")
+            .And.Contain("lower(NEW.code) = 'admin_' || p.code")
             .And.Contain("ERRCODE = '23505'");
     }
 
