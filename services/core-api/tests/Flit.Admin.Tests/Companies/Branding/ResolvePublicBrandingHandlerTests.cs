@@ -257,6 +257,53 @@ public sealed class ResolvePublicBrandingHandlerTests
         AssertIsFlitIdentity(second);
     }
 
+    // ── Publicar desde otro proceso (core-api publica, core-identity sirve /public/branding) ──
+
+    [Fact]
+    public async Task PublicarEnOtroProceso_ElSelloCambia_SeVeLaMarcaNuevaSinEsperarLaCache()
+    {
+        var v1 = new BrandingDraft("Movilidad Andina", Colors, Guid.NewGuid());
+        var v2 = new BrandingDraft("Movilidad Andina", new BrandColors("#064E3B", "#047857", "#FFFFFF"), v1.LogoId);
+        var brandingRepo = Substitute.For<ITenantBrandingRepository>();
+        brandingRepo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new TenantBranding { TenantId = TenantId, Draft = v1, Published = v1, PublishedVersion = 1, RowVersion = 5 });
+        brandingRepo.GetStampAsync(TenantId, Arg.Any<CancellationToken>()).Returns(5L);
+        var tenantLookup = Substitute.For<IBrandingTenantLookup>();
+        tenantLookup.GetAsync(TenantId, Arg.Any<CancellationToken>()).Returns(ActiveMarcaBlancaHead(TenantId));
+        var handler = NewHandler(brandingRepo, tenantLookup);
+
+        (await handler.HandleAsync(true, TenantId, TestContext.Current.CancellationToken)).Version.Should().Be(1);
+
+        // Otro proceso publica: la invalidación en memoria NO llega aquí, pero la fila cambia de sello.
+        brandingRepo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new TenantBranding { TenantId = TenantId, Draft = v2, Published = v2, PublishedVersion = 2, RowVersion = 6 });
+        brandingRepo.GetStampAsync(TenantId, Arg.Any<CancellationToken>()).Returns(6L);
+
+        var after = await handler.HandleAsync(true, TenantId, TestContext.Current.CancellationToken);
+
+        after.Version.Should().Be(2);
+        after.Colors.Secondary.Should().Be("#047857");
+    }
+
+    [Fact]
+    public async Task MismoSello_SirveLaCacheSinReleerLaMarca()
+    {
+        var draft = new BrandingDraft("Movilidad Andina", Colors, Guid.NewGuid());
+        var brandingRepo = Substitute.For<ITenantBrandingRepository>();
+        brandingRepo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new TenantBranding { TenantId = TenantId, Draft = draft, Published = draft, PublishedVersion = 1, RowVersion = 5 });
+        brandingRepo.GetStampAsync(TenantId, Arg.Any<CancellationToken>()).Returns(5L);
+        var tenantLookup = Substitute.For<IBrandingTenantLookup>();
+        tenantLookup.GetAsync(TenantId, Arg.Any<CancellationToken>()).Returns(ActiveMarcaBlancaHead(TenantId));
+        var handler = NewHandler(brandingRepo, tenantLookup);
+
+        await handler.HandleAsync(true, TenantId, TestContext.Current.CancellationToken);
+        await handler.HandleAsync(true, TenantId, TestContext.Current.CancellationToken);
+
+        await brandingRepo.Received(1).GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>());
+        await tenantLookup.Received(1).GetAsync(TenantId, Arg.Any<CancellationToken>());
+    }
+
     private static void AssertIsFlitIdentity(BrandIdentityResponse response)
     {
         response.PlatformName.Should().Be(BrandIdentity.Flit.PlatformName);
