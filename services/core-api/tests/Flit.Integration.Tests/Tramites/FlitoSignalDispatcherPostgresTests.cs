@@ -40,6 +40,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await SembrarAsync();
         await RadicarAsync(Radicado);
         await using var sp = Servicios();
+        await EsperarHorizonteDelFeedAsync();
 
         (await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
 
@@ -64,6 +65,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await SembrarAsync();
         await RadicarAsync(Radicado);
         await using var sp = Servicios();
+        await EsperarHorizonteDelFeedAsync();
 
         await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken);
 
@@ -103,6 +105,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
     {
         await SembrarAsync();
         await using var sp = Servicios();
+        await EsperarHorizonteDelFeedAsync();
 
         await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken);
 
@@ -119,6 +122,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await RadicarAsync(Radicado);
         await EjecutarAsync($"UPDATE tramites.procedure_instances SET deleted_at = now() WHERE id = '{Radicado}'");
         await using var sp = Servicios();
+        await EsperarHorizonteDelFeedAsync();
 
         await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken);
 
@@ -148,6 +152,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         var a = Despachador(sp);
         var b = Despachador(sp);
         var ct = TestContext.Current.CancellationToken;
+        await EsperarHorizonteDelFeedAsync();
         for (var ronda = 0; ronda < 10; ronda++)
         {
             await Task.WhenAll(a.ProcesarPendientesAsync(ct), b.ProcesarPendientesAsync(ct));
@@ -192,6 +197,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await SembrarAsync();
         await RadicarAsync(Radicado);
         await using var sp = Servicios(outboxQueFalla: true);
+        await EsperarHorizonteDelFeedAsync();
 
         (await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken))
             .Should().Be(1, "solo cuenta el borrador, que se cierra sin enviar; el aviso que falla se aparta sin frenar el ciclo");
@@ -207,9 +213,11 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await RadicarAsync(Radicado);
         await using var sp = Servicios();
         var d = Despachador(sp);
+        await EsperarHorizonteDelFeedAsync();
         await d.ProcesarPendientesAsync(TestContext.Current.CancellationToken);
 
         await EjecutarAsync($"UPDATE tramites.procedure_instances SET status = status WHERE id = '{Radicado}'");
+        await EsperarHorizonteDelFeedAsync();
         await d.ProcesarPendientesAsync(TestContext.Current.CancellationToken);
 
         var versiones = (await TrabajosAsync())
@@ -246,6 +254,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         (await EstadoAvisoAsync(Radicado)).Pendiente.Should().BeTrue();
 
         await txL.CommitAsync(ct);
+        await EsperarHorizonteDelFeedAsync();
         await d.ProcesarPendientesAsync(ct);
         (await TrabajosAsync()).Should().ContainSingle();
     }
@@ -305,6 +314,7 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await Task.WhenAll(escritores);
         await fin.CancelAsync();
         await despachador;
+        await EsperarHorizonteDelFeedAsync();
         while (await d.ProcesarPendientesAsync(TestContext.Current.CancellationToken) > 0)
         {
         }
@@ -330,6 +340,26 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
 
         (await EscalarAsync<long>("SELECT count(*) FROM integrations.flito_sync_signals WHERE pendiente_desde IS NOT NULL"))
             .Should().Be(0, "no queda nada pendiente");
+    }
+
+    /// <summary>
+    /// El despachador solo toma cambios por debajo de <c>pg_snapshot_xmin</c>, que es de TODO el servidor: en CI los
+    /// proyectos de prueba corren en paralelo contra el mismo Postgres y una transacción suya que siga abierta retiene
+    /// el aviso (la misma regla que fija <see cref="UnaTransaccionMasAntiguaAbiertaRetieneElAvisoComoElFeed"/>). Antes
+    /// de despachar se espera a que el horizonte supere las versiones de los trámites de esta prueba, en vez de suponer
+    /// que el primer ciclo ya los ve.
+    /// </summary>
+    private async Task EsperarHorizonteDelFeedAsync()
+    {
+        var limite = DateTime.UtcNow.AddSeconds(60);
+        while (await EscalarAsync<bool>(
+                   $"SELECT EXISTS (SELECT 1 FROM tramites.procedure_instances WHERE tenant_id = '{Cliente}' " +
+                   "AND COALESCE(sync_xact, '0'::xid8) >= pg_snapshot_xmin(pg_current_snapshot()))"))
+        {
+            if (DateTime.UtcNow > limite)
+                throw new TimeoutException("Una transacción ajena siguió abierta 60 s: el feed no alcanzó los trámites de la prueba.");
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
     }
 
     private async Task<T> EscalarAsync<T>(string sql)
