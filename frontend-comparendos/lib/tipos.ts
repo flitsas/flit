@@ -68,6 +68,8 @@ export interface Nit {
   activo: boolean;
   creadoEn: string;
   comparendosActivos: number;
+  /** HU #13712: el conductor de sus comparendos se consulta en la API de contratos. Solo lo cambia el SuperAdmin. */
+  consultaContratoApi: boolean;
 }
 
 export interface PlacaMonitoreada {

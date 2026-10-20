@@ -111,6 +111,8 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         var config = await capacidades.ExigirAsync(c.TenantId, Capacidad.ConsultaContraventor, ct).ConfigureAwait(false);
         if (config.TipoIntegracionConductor != TipoIntegracionConductor.ApiRenting)
             throw new ReglaException("SIN_INTEGRACION", "Tu empresa asigna el conductor a mano: no tiene una API de contratos configurada.");
+        if (!ConsultaPorApi.DeNitMarcado(c, await ConsultaPorApi.MarcadosAsync(db, c.TenantId, ct).ConfigureAwait(false)))
+            throw new ReglaException("NIT_SIN_API", "La API de contratos no aplica para el propietario de este comparendo: asigna el conductor a mano.");
         if (c.OrganismoTransitoId is { } ot && !(await permisos.DeAsync(c.TenantId, ot, null, ct).ConfigureAwait(false)).Consulta)
             throw new ReglaException("OT_BLOQUEADO", "La consulta de contraventor está bloqueada para este organismo de tránsito.");
         if (c.Placa is null || (c.FechaImposicion ?? c.FechaNotificacion) is not { } fecha)

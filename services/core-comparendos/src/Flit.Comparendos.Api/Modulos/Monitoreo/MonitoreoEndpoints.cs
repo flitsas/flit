@@ -17,7 +17,8 @@ namespace Flit.Comparendos.Api.Modulos.Monitoreo;
 /// </summary>
 public static class MonitoreoEndpoints
 {
-    public sealed record NitDto(Guid Id, string TipoDocumento, string NumeroBase, short? DigitoVerificacion, string Numero, string? NombreTitular, bool Activo, DateTimeOffset CreadoEn, int ComparendosActivos = 0);
+    public sealed record NitDto(Guid Id, string TipoDocumento, string NumeroBase, short? DigitoVerificacion, string Numero, string? NombreTitular, bool Activo, DateTimeOffset CreadoEn, int ComparendosActivos = 0,
+        bool ConsultaContratoApi = false);
 
     public sealed record PlacaDto(Guid Id, string Placa, bool Activo, string OrigenRegistro, DateTimeOffset CreadoEn, int ComparendosActivos = 0);
 
@@ -64,9 +65,9 @@ public static class MonitoreoEndpoints
         return Results.Ok(new { total = items.Count, pagina = 1, tamano = items.Count, items });
     }
 
-    private static NitDto ANit(IdentificacionMonitoreada n) => new(
+    internal static NitDto ANit(IdentificacionMonitoreada n) => new(
         n.Id, n.TipoDocumento.ToString(), n.NumeroBase, n.DigitoVerificacion,
-        n.DigitoVerificacion is { } dv ? $"{n.NumeroBase}-{dv}" : n.NumeroBase, n.NombreTitular, n.Activo, n.CreadoEn);
+        n.DigitoVerificacion is { } dv ? $"{n.NumeroBase}-{dv}" : n.NumeroBase, n.NombreTitular, n.Activo, n.CreadoEn, ConsultaContratoApi: n.ConsultaContratoApi);
 
     private static PlacaDto APlaca(PlacaMonitoreada p) => new(p.Id, p.Placa, p.Activo, p.OrigenRegistro, p.CreadoEn);
 

@@ -2498,6 +2498,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("actualizado_por");
 
+                    b.Property<bool>("ConsultaContratoApi")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consulta_contrato_api");
+
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
