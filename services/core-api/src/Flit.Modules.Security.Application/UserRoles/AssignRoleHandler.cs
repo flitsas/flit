@@ -55,8 +55,8 @@ public sealed class AssignRoleHandler(
         if (current.Any(a => a.RoleId == cmd.RoleId))
             throw new RoleAlreadyAssignedException();
 
-        // HU #13646 (FB-15): el cambio de rol y la purga de permisos individuales del producto del rol nuevo van en la
-        // misma transacción; si el cambio falla no se purga. Los permisos de otros productos no se tocan.
+        // HU #13646 (FB-15): el cambio de rol y la purga de permisos individuales van en la misma transacción; si el cambio
+        // falla no se purga. Los permisos de productos en los que el usuario no cambia de rol no se tocan.
         // Un producto nulo/vacío del rol se trata como el producto por defecto (tramites, igual que Role.ProductCode): antes el cambio
         // se hacía sin purgar en silencio y dejaba overrides vivos.
         if (purger is null)
@@ -65,11 +65,18 @@ public sealed class AssignRoleHandler(
             return;
         }
 
-        var product = RoleProductCode.Normalize(role.ProductCode);
+        // Hallazgo de la prueba funcional: el reemplazo cierra TODAS las asignaciones del tenant, no solo la del producto del rol
+        // nuevo (un Radicador que pasa a AdminCompany pierde su rol de tramites). Se purgan el producto del rol nuevo y el de
+        // cada rol que se cierra; sin esto los permisos individuales de tramites seguían vivos tras el cambio.
+        var products = new SortedSet<string>(StringComparer.Ordinal) { RoleProductCode.Normalize(role.ProductCode) };
+        foreach (var assignment in current)
+            products.Add(RoleProductCode.Normalize(await repo.GetRoleProductCodeAsync(assignment.RoleId, ct)));
+
         await purger.RunAtomicallyAsync(async () =>
         {
             await ReplaceAsync(cmd, tenantId, current, ct);
-            await purger.PurgeAsync(tenantId, cmd.UserId, product, cmd.AssignedBy, ct);
+            foreach (var product in products)
+                await purger.PurgeAsync(tenantId, cmd.UserId, product, cmd.AssignedBy, ct);
         }, ct);
     }
 

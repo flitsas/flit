@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Flit.Modules.Security.Application.Tests.UserRoles;
 
-/// <summary>HU #13646 (FB-15): el cambio de rol purga los permisos individuales del producto del rol nuevo, atómicamente.</summary>
+/// <summary>HU #13646 (FB-15): el cambio de rol purga los permisos individuales del producto del rol nuevo y de los roles que cierra, atómicamente.</summary>
 public sealed class AssignRoleHandlerPurgeTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -43,6 +43,25 @@ public sealed class AssignRoleHandlerPurgeTests
         await _purger.Received(1).RunAtomicallyAsync(Arg.Any<Func<Task>>(), Arg.Any<CancellationToken>());
         await _purger.Received(1).PurgeAsync(TenantId, UserId, "tramites", CallerId, Arg.Any<CancellationToken>());
         await _repo.Received(1).CreateAssignmentAsync(Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
+    }
+
+    // Hallazgo de la prueba funcional: Radicador (tramites) → AdminCompany (plataforma). El reemplazo cierra el rol de tramites,
+    // así que sus permisos individuales también se purgan, no solo los del producto del rol nuevo.
+    [Fact]
+    public async Task Cambio_a_un_rol_de_otro_producto_purga_tambien_el_producto_del_rol_que_se_cierra()
+    {
+        var rolAnterior = Guid.NewGuid();
+        _repo.GetActiveRoleAsync(RoleId, Arg.Any<CancellationToken>())
+            .Returns(new RoleForAssignmentSnapshot(RoleId, "COMPANY", null, "plataforma"));
+        _repo.GetActiveAssignmentsAsync(UserId, TenantId, Arg.Any<CancellationToken>())
+            .Returns(new List<UserRoleAssignmentSnapshot> { new(Guid.NewGuid(), UserId, rolAnterior) });
+        _repo.GetRoleProductCodeAsync(rolAnterior, Arg.Any<CancellationToken>()).Returns("tramites");
+
+        await _handler.HandleAsync(Command(), CancellationToken.None);
+
+        await _purger.Received(1).PurgeAsync(TenantId, UserId, "plataforma", CallerId, Arg.Any<CancellationToken>());
+        await _purger.Received(1).PurgeAsync(TenantId, UserId, "tramites", CallerId, Arg.Any<CancellationToken>());
+        await _purger.Received(1).RunAtomicallyAsync(Arg.Any<Func<Task>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
