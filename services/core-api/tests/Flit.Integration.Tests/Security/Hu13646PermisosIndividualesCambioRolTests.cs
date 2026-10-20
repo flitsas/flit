@@ -161,6 +161,26 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
             .Should().ThrowAsync<PermissionOverrideRejectedException>();
     }
 
+    // Hallazgo de la prueba funcional (Radicador → AdminCompany): el rol nuevo es de otro producto y el reemplazo cierra el de
+    // tramites. El conteo previo por rol anticipa lo que se purga, y se purgan los dos productos.
+    [PostgresFact]
+    public async Task Cambio_a_un_rol_de_otro_producto_cuenta_y_purga_tambien_el_producto_del_rol_que_se_cierra()
+    {
+        await using var cn = await SeedAsync();
+        await ExecAsync(cn, "INSERT INTO security.roles (code, name, is_system, is_active, target_entity_type, product_code) VALUES ('it46_otrorol','Otro rol',false,true,'COMPANY','it46otro')");
+        var otroRol = await IdAsync(cn, "SELECT id FROM security.roles WHERE code = 'it46_otrorol'");
+        await using var ctx = Ctx();
+
+        (await ManageHandler().CountForRoleChangeAsync(Tenant, new OverrideActor(Actor, false), Target, otroRol, new UserRoleAssignmentRepository(ctx), Ct))
+            .Should().Be(4, "3 de tramites (el rol que se cierra) + 1 de it46otro (el rol nuevo)");
+
+        await AssignHandler().HandleAsync(new AssignRoleCommand(Tenant, Target, otroRol, Actor), Ct);
+
+        (await ActiveAsync(cn, "tramites")).Should().Be(0);
+        (await ActiveAsync(cn, "it46otro")).Should().Be(0);
+        (await PurgeAuditAsync(cn)).Should().Be(4);
+    }
+
     [PostgresFact]
     public async Task AC3_los_permisos_de_otro_producto_se_conservan_al_cambiar_el_rol_en_tramites()
     {

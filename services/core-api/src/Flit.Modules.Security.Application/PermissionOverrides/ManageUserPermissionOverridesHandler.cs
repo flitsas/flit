@@ -1,5 +1,7 @@
 using Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 using Flit.Modules.Security.Domain.PermissionOverrides;
+using Flit.Modules.Security.Application.UserRoles;
+using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Modules.Security.Domain.Roles;
 
 namespace Flit.Modules.Security.Application.PermissionOverrides;
@@ -256,6 +258,27 @@ public sealed class ManageUserPermissionOverridesHandler(
         await RunRulesAsync(tenantId, actor, targetUserId, PermissionOverrideActions.Read, null, null, null, ct).ConfigureAwait(false);
         var active = await repository.ListActiveAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(productCode) ? active.Count : active.Count(o => o.ProductCode == productCode);
+    }
+
+    /// <summary>
+    /// Cuántos permisos individuales purgaría asignarle <paramref name="roleId"/>: los del producto del rol nuevo y los de cada rol
+    /// activo que el reemplazo cierra (misma regla que <c>AssignRoleHandler</c>). Para el aviso previo de FD2-5.
+    /// </summary>
+    public async Task<int> CountForRoleChangeAsync(
+        Guid tenantId, OverrideActor actor, Guid targetUserId, Guid roleId, IUserRoleAssignmentRepository roles, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(roles);
+        await RunRulesAsync(tenantId, actor, targetUserId, PermissionOverrideActions.Read, null, null, null, ct).ConfigureAwait(false);
+        var products = new HashSet<string>(StringComparer.Ordinal)
+        {
+            RoleProductCode.Normalize(await roles.GetRoleProductCodeAsync(roleId, ct).ConfigureAwait(false)),
+        };
+        foreach (var assignment in await roles.GetActiveAssignmentsAsync(targetUserId, tenantId, ct).ConfigureAwait(false))
+            products.Add(RoleProductCode.Normalize(await roles.GetRoleProductCodeAsync(assignment.RoleId, ct).ConfigureAwait(false)));
+
+        var active = await repository.ListActiveAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
+        return active.Count(o => products.Contains(o.ProductCode));
     }
 
     /// <summary>Catálogo otorgable (AC5): Super Admin = todo lo <c>enforced = 'true'</c>; el resto, solo su tope.</summary>

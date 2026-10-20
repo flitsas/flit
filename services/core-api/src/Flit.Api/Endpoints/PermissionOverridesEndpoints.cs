@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Modules.Security.Application.PermissionOverrides;
 using Flit.Modules.Security.Domain.PermissionOverrides;
+using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -87,10 +88,16 @@ internal static class PermissionOverridesEndpoints
 
         // HU #13646 (FD2-5): consulta previa al cambio de rol — cuántos permisos individuales perdería el usuario.
         group.MapGet("/users/{userId:guid}/permission-overrides/count", (
-            Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, [FromQuery] string? productCode,
-            ManageUserPermissionOverridesHandler handler, CancellationToken ct) =>
+            Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, [FromQuery] string? productCode, [FromQuery] Guid? roleId,
+            ManageUserPermissionOverridesHandler handler, [FromServices] IUserRoleAssignmentRepository roles, CancellationToken ct) =>
             Run(caller, tenantId, async (tenant, actor) =>
-                Results.Ok(new { count = await handler.CountAsync(tenant, actor, userId, productCode, ct) })))
+                // roleId: lo que purgaría asignar ese rol (producto nuevo + productos de los roles que se cierran), como AssignRoleHandler.
+                Results.Ok(new
+                {
+                    count = roleId is { } r
+                        ? await handler.CountForRoleChangeAsync(tenant, actor, userId, r, roles, ct)
+                        : await handler.CountAsync(tenant, actor, userId, productCode, ct),
+                })))
             .RequireAuthorization(policy).WithName("CountUserPermissionOverrides");
     }
 
