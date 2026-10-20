@@ -1,6 +1,6 @@
 'use client';
 
-import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
 import type {
   BiometricParte,
@@ -1204,9 +1204,21 @@ export default function MatriculaResumen({
             );
           });
           if (extrasSlot) {
-            Children.forEach(extrasSlot, (child) => {
-              if (child) cells.push(child);
-            });
+            // `Children.forEach` no entra a los Fragment, y `FirmaFurStep` manda organismo + placa
+            // en `<>…</>`: sin desenvolverlo quedaban en una sola celda, la tarjeta del organismo
+            // (`h-full`) tomaba toda su altura y la de placa se desbordaba encima de «Documentos
+            // cargados».
+            const pushCells = (node: ReactNode) => {
+              Children.forEach(node, (child) => {
+                if (!child) return;
+                if (isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment) {
+                  pushCells(child.props.children);
+                } else {
+                  cells.push(child);
+                }
+              });
+            };
+            pushCells(extrasSlot);
           }
           const total = cells.length;
           return (
