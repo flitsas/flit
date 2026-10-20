@@ -47,6 +47,8 @@ export function BrandingLogoUploader({
       const uploaded = await uploadBrandLogo(source, file, tenantId);
       onUploaded(uploaded);
     } catch (err) {
+      // El servidor lo rechazó: no se guardó, así que la vista previa vuelve al logotipo vigente.
+      setLocalPreview(null);
       setError(brandingErrorMessage(brandingErrorCode(err)) || "No se pudo cargar el logotipo.");
     } finally {
       setUploading(false);
@@ -94,7 +96,7 @@ export function BrandingLogoUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/png,image/jpeg"
         aria-label="Cargar logotipo de marca"
         className="sr-only"
         onChange={(e) => void handleFileChange(e)}
