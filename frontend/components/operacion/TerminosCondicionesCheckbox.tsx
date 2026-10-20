@@ -11,7 +11,7 @@ const BORDER = '#DFE5ED';
  * Enlace que se muestra mientras el backend no ha dicho cuál es el vigente (o si no responde). Es
  * el mismo valor por defecto de `ProcedureTermsOptions.DefaultUrl`: el documento público de FLIT 1.
  */
-export const TERMINOS_URL_FALLBACK = 'https://www.flitsas.com/privacyPolicy/public';
+export const TERMINOS_URL_FALLBACK = 'https://flitsas.com.co/privacy-policy/';
 
 /**
  * Qué documento enlazar. Sale del backend para que el enlace que ve el usuario y el `terms_url`
