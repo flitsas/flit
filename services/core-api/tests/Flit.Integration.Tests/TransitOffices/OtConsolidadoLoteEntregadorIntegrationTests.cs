@@ -349,7 +349,7 @@ public sealed class OtConsolidadoLoteEntregadorIntegrationTests(PostgresDatabase
     /// omitido tardío (parte extra solo con CSV) daría 3 partes y lo cubren los tests de <c>AsignadorDePartes</c>.</para>
     /// </summary>
     [PostgresFact]
-    public async Task AC9_LoteOtDePuntaAPunta_DosPartesConNombres_OmitidosCsvPorParte_YLoteFinalizado()
+    public async Task AC9_LoteOtDePuntaAPunta_DosPartesConNombres_SinOmitidosCsv_YLoteFinalizado()
     {
         await SembrarAsync(maxPdfsPorParte: 1);
         var c1 = HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C1);
@@ -427,13 +427,13 @@ public sealed class OtConsolidadoLoteEntregadorIntegrationTests(PostgresDatabase
             consultado.Partes.Select(p => (p.Numero, p.Pdfs, p.Omitidos)).Should().Equal((1, 1, 1), (2, 1, 0));
         }
 
-        // Descarga por el ot_admin dueño (#13379): ZIP descifrado con su PDF y su omitidos.csv; parte_descargada en BD.
-        var esperado = new Dictionary<int, (Guid Pdf, string[] Filas)>
+        // Descarga por el ot_admin dueño (#13379): ZIP descifrado solo con su PDF (sin omitidos.csv); parte_descargada en BD.
+        var esperado = new Dictionary<int, Guid>
         {
-            [1] = (primero, [$"{radicado[x]};{HierarchyScenario.SharedPlate};Acceso revocado"]),
-            [2] = (segundo, []),
+            [1] = primero,
+            [2] = segundo,
         };
-        foreach (var (numero, (pdf, filas)) in esperado)
+        foreach (var (numero, pdf) in esperado)
         {
             await using var ctx = NewContext();
             var handler = new DescargarParteHandler(new ConsolidadoLoteLectura(ctx), empaquetado.Partes, cifrador);
@@ -450,13 +450,7 @@ public sealed class OtConsolidadoLoteEntregadorIntegrationTests(PostgresDatabase
             claro.Position = 0;
             using var zip = new ZipArchive(claro, ZipArchiveMode.Read);
             var nombrePdf = ConsolidadoLoteNombres.Pdf(radicado[pdf], HierarchyScenario.SharedPlate);
-            zip.Entries.Select(e => e.FullName).Should().BeEquivalentTo([nombrePdf, ConsolidadoLoteNombres.OmitidosCsv]);
-
-            var csv = LeerEntrada(zip, ConsolidadoLoteNombres.OmitidosCsv);
-            csv.Take(3).Should().Equal(Encoding.UTF8.Preamble.ToArray(), "UTF-8 con BOM");
-            Encoding.UTF8.GetString(csv, 3, csv.Length - 3).Should().Be(
-                string.Concat(new[] { OmitidosCsvWriter.Encabezado }.Concat(filas).Select(f => f + "\r\n")),
-                "separador «;», cabecera radicado;placa;motivo y la fila de X solo en la parte que le corresponde");
+            zip.Entries.Select(e => e.FullName).Should().Equal([nombrePdf], "el ZIP no lleva omitidos.csv");
             LeerEntrada(zip, nombrePdf).Should().Equal(
                 AdjuntosEnMemoria.Contenido(generador.RutaDe(pdf)), "el PDF es el snapshot del ítem");
         }

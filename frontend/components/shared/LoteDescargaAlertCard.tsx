@@ -59,6 +59,9 @@ import {
 
 /** AC2/AC4 — texto aprobado del lote expirado. */
 export const TEXTO_DESCARGA_EXPIRADA = 'Descarga expirada';
+/** Lote terminado sin ningún PDF: el ZIP no lleva omitidos.csv, así que no hay nada que descargar. */
+export const TEXTO_SIN_DOCUMENTOS =
+  'Ninguno de los trámites seleccionados tenía el documento disponible: no hay archivos para descargar.';
 /** HU #13388 AC3 — texto aprobado del lote cancelado. */
 export const TEXTO_DESCARGA_CANCELADA = 'Descarga cancelada';
 
@@ -192,7 +195,10 @@ export function LoteDescargaAlertCard({
   const tone = toneLoteConsolidados(lote, expirado);
   const Icono = ICONO[tone];
   const terminado = lote.estado === 'completado' || lote.estado === 'completado_con_omitidos';
-  const conPartes = terminado && !expirado && lote.partes.length > 0;
+  // Una parte sin PDF no se ofrece: sin omitidos.csv su ZIP saldría vacío.
+  const partesConPdf = lote.partes.filter((p) => p.pdfs > 0);
+  const conPartes = terminado && !expirado && partesConPdf.length > 0;
+  const sinDocumentos = terminado && !expirado && partesConPdf.length === 0;
   const activo = loteActivo(lote, expirado);
   const porcentaje = porcentajeLote(lote, expirado);
   const totalPartes = lote.partes.length;
@@ -325,7 +331,7 @@ export function LoteDescargaAlertCard({
             aria-label="Partes de la descarga"
             className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-white/10"
           >
-            {lote.partes.map((parte) => {
+            {partesConPdf.map((parte) => {
               const descargando = descargandoParte === parte.numero;
               return (
                 <li key={parte.numero} className="flex items-center justify-between gap-2 py-1">
@@ -351,6 +357,10 @@ export function LoteDescargaAlertCard({
               );
             })}
           </ul>
+        ) : null}
+
+        {sinDocumentos ? (
+          <p className="mt-1.5 text-flit-primary/80 dark:text-white/80">{TEXTO_SIN_DOCUMENTOS}</p>
         ) : null}
 
         {errorDescarga ? (

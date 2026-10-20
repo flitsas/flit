@@ -12,11 +12,11 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 ///   cierra sin él. Una parte también se cierra al llegar a N PDF o a M bytes. Un PDF mayor que M va solo
 ///   (AC2). Así N+1 PDF dan exactamente 2 partes (AC1).</item>
 ///   <item><b>Omitidos</b>: todos los omitidos sin parte van en la primera parte que sale del reparto, cada parte con
-///   sus propios omitidos (v2.1; su <c>omitidos.csv</c>).</item>
+///   sus propios omitidos (v2.1; solo se cuentan, el ZIP no los lista).</item>
 ///   <item><see cref="ModoAsignacion.Parcial"/> (cierre de un ítem): solo salen las partes llenas; el resto espera.
 ///   <see cref="ModoAsignacion.Final"/> (fin del carril de ítems): sale también la parte en curso. Si en el modo
-///   final no sale ningún PDF pero quedan omitidos sin parte, o el lote no tiene ninguna parte, sale una parte solo
-///   con <c>omitidos.csv</c> (AC3; también el lote de selección vacía, que queda con una parte sin filas).</item>
+///   final no sale ningún PDF pero quedan omitidos sin parte, o el lote no tiene ninguna parte, sale una parte sin PDF
+///   (AC3; la UI no ofrece descargarla; también el lote de selección vacía, que queda con una parte sin filas).</item>
 /// </list>
 /// Repartir en tandas (parcial tras cada PDF + final) da el mismo resultado que repartir todo de una vez, porque la
 /// parte en curso nunca se cierra antes de tiempo.
@@ -48,7 +48,7 @@ public static class AsignadorDePartes
     /// <param name="maxPdfs">N (<c>max_pdfs_per_part</c>), al menos 1.</param>
     /// <param name="maxBytes">M en bytes, al menos 1.</param>
     /// <param name="modo">Parcial (cierre de ítem) o final (fin del carril).</param>
-    /// <param name="loteSinPartes">El lote aún no tiene ninguna parte (decide la parte solo con CSV en el final).</param>
+    /// <param name="loteSinPartes">El lote aún no tiene ninguna parte (decide la parte sin PDF en el final).</param>
     public static IReadOnlyList<PartePlaneada> Planear(
         IReadOnlyList<ItemSinParte> sinParte, int maxPdfs, long maxBytes, ModoAsignacion modo, bool loteSinPartes)
     {
@@ -98,8 +98,8 @@ public static class AsignadorDePartes
                 pdfs.Sum(p => Math.Max(0, p.SizeBytes))));
         }
 
-        // AC3: en el final, los omitidos que no encontraron parte (o el lote sin ninguna parte) van en una parte solo
-        // con omitidos.csv.
+        // AC3: en el final, los omitidos que no encontraron parte (o el lote sin ninguna parte) van en una parte
+        // sin PDF.
         if (plan.Count == 0 && modo == ModoAsignacion.Final && (omitidos.Count > 0 || loteSinPartes))
             plan.Add(new PartePlaneada([], omitidos, 0));
 
@@ -116,7 +116,7 @@ public enum ModoAsignacion
 
 /// <summary>Ítem cerrado de un lote sin parte asignada.</summary>
 /// <param name="Id">Id del ítem.</param>
-/// <param name="Incluido"><c>true</c> si su PDF entra en el ZIP; <c>false</c> si es omitido (fila del CSV).</param>
+/// <param name="Incluido"><c>true</c> si su PDF entra en el ZIP; <c>false</c> si es omitido.</param>
 /// <param name="SizeBytes">Tamaño del PDF en claro (snapshot); 0 en omitidos.</param>
 /// <param name="ProcesadoEn">Cierre del ítem (<c>processed_at</c>).</param>
 /// <param name="Posicion">Orden en la selección (<c>position</c>), desempate estable.</param>
@@ -124,6 +124,6 @@ public sealed record ItemSinParte(Guid Id, bool Incluido, long SizeBytes, DateTi
 
 /// <summary>Una parte nueva del plan: sus PDF (en orden) y sus omitidos (en orden de posición).</summary>
 /// <param name="Pdfs">Ids de los ítems incluidos.</param>
-/// <param name="Omitidos">Ids de los ítems omitidos (filas de su <c>omitidos.csv</c>).</param>
+/// <param name="Omitidos">Ids de los ítems omitidos.</param>
 /// <param name="Bytes">Suma del tamaño en claro de sus PDF.</param>
 public sealed record PartePlaneada(IReadOnlyList<Guid> Pdfs, IReadOnlyList<Guid> Omitidos, long Bytes);
