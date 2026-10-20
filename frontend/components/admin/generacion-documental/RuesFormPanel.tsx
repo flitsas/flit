@@ -27,9 +27,9 @@ export function RuesFormPanel({ status = "empty", onRetry, children }: RuesFormP
   return (
     <section aria-labelledby="gd-rues-title" className="flex flex-1 flex-col gap-3">
       <header className="flex items-start gap-2">
-        <FileText className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#557EFF" }} aria-hidden="true" />
+        <FileText className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
         <div>
-          <h2 id="gd-rues-title" className="text-sm font-semibold" style={{ color: "#162744" }}>
+          <h2 id="gd-rues-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Certificado RUES
           </h2>
           <p className="mt-1 text-xs opacity-70">

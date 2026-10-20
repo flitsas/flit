@@ -26,7 +26,7 @@ export const AYUDA_FAQ = [
 
 export function Ayuda() {
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Centro de Ayuda"
         subtitle="Documentación operativa, chat DR. FLIT y canales de soporte."
@@ -54,9 +54,9 @@ export function Ayuda() {
             <div className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border h-full">
               <div
                 className="h-10 w-10 rounded-xl grid place-items-center mb-2"
-                style={{ background: "rgba(0,219,213,0.15)" }}
+                style={{ background: "color-mix(in srgb, var(--color-flit-tech) 15%, transparent)" }}
               >
-                <Icon className="h-5 w-5" style={{ color: "#00DBD5" }} />
+                <Icon className="h-5 w-5" style={{ color: "var(--color-flit-tech)" }} />
               </div>
               <p className="text-xs font-bold">{k.l}</p>
               <p className="text-[10px] opacity-60 mt-0.5">{k.d}</p>

@@ -203,7 +203,7 @@ export function EditCompanyDialog({
       busy={submitting}
       icon={Building2}
       title={step === "ot" ? "Organismos de la Concesión" : "Editar compañía"}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
         {step === "form" && (
@@ -216,7 +216,7 @@ export function EditCompanyDialog({
                 value={razonSocial}
                 onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
                 maxLength={255}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -229,7 +229,7 @@ export function EditCompanyDialog({
                 onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
                 maxLength={20}
                 placeholder="900123456-1"
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -254,7 +254,7 @@ export function EditCompanyDialog({
                 disabled={typeChangeBlocked}
                 title={typeChangeBlocked ? typeBlockedReason : undefined}
                 aria-describedby={typeChangeBlocked ? "ec-type-blocked" : undefined}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: errors.tenantType ? "#FF4E00" : "#DFE5ED" }}
               >
                 {typeOptions.map((t) => (
@@ -280,7 +280,7 @@ export function EditCompanyDialog({
             {isMarcaBlanca && (
               <div
                 className="space-y-2 rounded-xl border px-3 py-2.5"
-                style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+                style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
               >
                 <p className="text-xs font-semibold">Dominio de integración</p>
                 <input
@@ -353,7 +353,7 @@ export function EditCompanyDialog({
             onClick={step === "form" ? goNext : () => void submit()}
             disabled={submitting}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {submitting ? "Guardando…" : step === "form" && needsOtStep ? "Siguiente" : "Guardar cambios"}

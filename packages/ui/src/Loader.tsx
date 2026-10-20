@@ -6,7 +6,7 @@ export function VehicleLoader({ label = "Procesando…" }: { label?: string }) {
       <div className="flit-loader" role="status" aria-label={label}>
         <div className="flit-vehicle"><Car className="h-8 w-8" /></div>
       </div>
-      <p className="text-xs font-mono uppercase tracking-wider text-[#162744]/70 dark:text-white/60">{label}</p>
+      <p className="text-xs font-mono uppercase tracking-wider text-flit-primary/70 dark:text-white/60">{label}</p>
     </div>
   );
 }

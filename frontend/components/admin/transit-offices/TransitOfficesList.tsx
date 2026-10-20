@@ -70,10 +70,10 @@ function matchesQuipux(office: TransitOfficeOperationalStatus, filter: QuipuxFil
 
 // Selects de filtro — tokens FLIT (borde soft, foco azul marca).
 const FILTER_SELECT_CLS =
-  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white px-3 py-2 text-sm text-[#162744] outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
-const FILTER_OPTION_CLS = "bg-white text-[#162744] dark:bg-[#0B0F14] dark:text-white";
+  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white px-3 py-2 text-sm text-flit-primary outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+const FILTER_OPTION_CLS = "bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white";
 const FILTER_INPUT_CLS =
-  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white py-2 pl-9 pr-3 text-sm text-[#162744] outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white py-2 pl-9 pr-3 text-sm text-flit-primary outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
 export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps = {}) {
   const router = useRouter();
@@ -417,7 +417,7 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
   return (
     <div className="flex flex-col gap-1">
       {office.divipoCode ? (
-        <span className="font-mono text-xs text-[#162744] dark:text-white">{office.divipoCode}</span>
+        <span className="font-mono text-xs text-flit-primary dark:text-white">{office.divipoCode}</span>
       ) : (
         <StatusBadge
           label="Sin código integrador"

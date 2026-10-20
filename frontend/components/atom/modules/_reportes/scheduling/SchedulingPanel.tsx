@@ -60,7 +60,7 @@ export function SchedulingPanel({
       "flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-colors",
       active
         ? "text-white"
-        : "text-[#162744] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800",
+        : "text-flit-primary dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800",
     );
 
   return (
@@ -79,7 +79,7 @@ export function SchedulingPanel({
       >
         <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-5 py-4">
           <div>
-            <h2 className="text-lg font-bold" style={{ color: "#557EFF" }}>
+            <h2 className="text-lg font-bold" style={{ color: "var(--color-flit-brand)" }}>
               Programación y alertas
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -92,7 +92,7 @@ export function SchedulingPanel({
             type="button"
             aria-label="Cerrar"
             onClick={onClose}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-[#162744] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-flit-primary dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -103,7 +103,7 @@ export function SchedulingPanel({
             type="button"
             onClick={() => setTab("schedules")}
             className={tabClass(tab === "schedules")}
-            style={tab === "schedules" ? { background: "#557EFF" } : undefined}
+            style={tab === "schedules" ? { background: "var(--color-flit-brand)" } : undefined}
             aria-current={tab === "schedules" ? "page" : undefined}
           >
             <CalendarClock className="h-4 w-4" aria-hidden="true" /> Informes programados
@@ -112,7 +112,7 @@ export function SchedulingPanel({
             type="button"
             onClick={() => setTab("alerts")}
             className={tabClass(tab === "alerts")}
-            style={tab === "alerts" ? { background: "#557EFF" } : undefined}
+            style={tab === "alerts" ? { background: "var(--color-flit-brand)" } : undefined}
             aria-current={tab === "alerts" ? "page" : undefined}
           >
             <BellRing className="h-4 w-4" aria-hidden="true" /> Alertas

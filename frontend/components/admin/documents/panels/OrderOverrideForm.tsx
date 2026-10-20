@@ -97,7 +97,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
             value={orden}
             onChange={(e) => setOrden(digitsOnly(e.target.value))}
             disabled={disabled}
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
           />
         </div>
@@ -106,7 +106,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
           onClick={submit}
           disabled={disabled || submitting}
           className="inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Agregar

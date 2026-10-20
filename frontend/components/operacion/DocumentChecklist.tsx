@@ -119,7 +119,7 @@ export function DocumentUploadModeToggle({
               on
                 ? {
                     background: '#EFF6FF',
-                    color: '#557EFF',
+                    color: 'var(--color-flit-brand)',
                     boxShadow: '0 4px 20px -2px rgba(15,23,42,0.05)',
                   }
                 : { color: '#64748B' }
@@ -607,7 +607,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
             </p>
           )}
           {fields.length > 0 && (
-            <p className="mt-1.5 text-xs font-medium" style={{ color: '#557EFF' }}>
+            <p className="mt-1.5 text-xs font-medium" style={{ color: 'var(--color-flit-brand)' }}>
               Clic para ver {fields.length} campo{fields.length === 1 ? '' : 's'}
             </p>
           )}
@@ -644,7 +644,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                 <h3
                   id={`ocr-detail-title-${tipo}`}
                   className="text-sm font-semibold"
-                  style={{ color: '#162744' }}
+                  style={{ color: 'var(--color-flit-primary)' }}
                 >
                   OCR — {nombre}
                   <span className="mt-0.5 block text-xs font-bold" style={{ color: palette.color }}>
@@ -820,7 +820,7 @@ export function DocumentSlot({
         'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
         (isAuto || (done && !ocrRejected)
           ? 'border'
-          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
+          : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]')
       }
       style={{ borderColor: '#E2E8F0' }}
     >
@@ -847,7 +847,7 @@ export function DocumentSlot({
 
       <p
         className="pr-28 text-[13px] font-semibold leading-tight"
-        style={{ color: '#162744' }}
+        style={{ color: 'var(--color-flit-primary)' }}
       >
         <DocumentCatalogCaption nombre={item.label} codigo={tipo} />
       </p>
@@ -862,13 +862,13 @@ export function DocumentSlot({
               de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
               vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
           <span className="opacity-70">{instruccion}</span>
         </p>
       )}
       {improntaSoloManual && !readOnly && !attachment && !isAuto && (
         <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
           <span className="opacity-70">
             {IMPRONTA_MANUAL_TEXTO}
             {item.obligatorio ? ' Debe cargarla para radicar.' : ''}
@@ -900,7 +900,7 @@ export function DocumentSlot({
               className={`h-full rounded-full ${analyzing || generating ? 'animate-pulse' : ''}`}
               style={{
                 width: analyzing || generating ? '60%' : '100%',
-                background: analyzing || generating ? '#557EFF' : ocrRejected ? 'var(--badge-danger-fg)' : '#8CC63F',
+                background: analyzing || generating ? 'var(--color-flit-brand)' : ocrRejected ? 'var(--badge-danger-fg)' : '#8CC63F',
               }}
           />
         </div>
@@ -917,7 +917,7 @@ export function DocumentSlot({
               type="button"
               onClick={() => onPreview(attachment)}
               className="text-xs font-semibold"
-              style={{ color: '#557EFF' }}
+              style={{ color: 'var(--color-flit-brand)' }}
               aria-label={`Previsualizar ${caption}`}
             >
               Ver
@@ -930,7 +930,7 @@ export function DocumentSlot({
                 type="button"
                 onClick={() => onPreview(attachment)}
                 className="rounded-lg border p-1 disabled:opacity-60"
-                style={{ color: '#557EFF' }}
+                style={{ color: 'var(--color-flit-brand)' }}
                 aria-label={`Previsualizar ${caption}`}
                 >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
@@ -951,7 +951,7 @@ export function DocumentSlot({
                   onClick={() => inputRef.current?.click()}
                   disabled={busy}
                   className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
-                  style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                  style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
                 >
                   {analyzing
                     ? 'Analizando documento...'
@@ -967,7 +967,7 @@ export function DocumentSlot({
                     onClick={() => void handleGenerate()}
                     disabled={busy}
                     className="h-9 rounded-lg px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ background: '#557EFF' }}
+                    style={{ background: 'var(--color-flit-brand)' }}
                   >
                     {generating ? 'Generando impronta…' : 'Generar impronta'}
                   </button>

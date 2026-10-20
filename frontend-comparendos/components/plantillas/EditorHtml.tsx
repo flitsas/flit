@@ -12,7 +12,7 @@ function Boton({ titulo, onClick, children }: { titulo: string; onClick: () => v
       type="button"
       title={titulo}
       aria-label={titulo}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#162744] hover:bg-[#EFF6FF] dark:text-white dark:hover:bg-white/10"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-flit-primary hover:bg-[#EFF6FF] dark:text-white dark:hover:bg-white/10"
       // mousedown: que el foco y la selección sigan en el área de edición.
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
@@ -123,7 +123,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
           aria-multiline
           aria-label="Contenido de la plantilla"
           onInput={emitir}
-          className="plantilla-editor min-h-[360px] overflow-auto rounded-xl border border-[#DFE5ED] bg-white p-4 text-sm leading-relaxed text-[#1F2A3D] focus:border-[#557EFF] focus:outline-none dark:border-white/15 dark:bg-[#0B0F14] dark:text-white [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:bg-[#EEF2F7] [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-6"
+          className="plantilla-editor min-h-[360px] overflow-auto rounded-xl border border-[#DFE5ED] bg-white p-4 text-sm leading-relaxed text-[#1F2A3D] focus:border-flit-brand focus:outline-none dark:border-white/15 dark:bg-[#0B0F14] dark:text-white [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:bg-[#EEF2F7] [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-6"
         />
       ) : (
         <textarea className={`${TEXTAREA_CLS} min-h-[360px] font-mono`} value={codigo} onChange={(e) => setCodigo(e.target.value)} aria-label="Código HTML de la plantilla" />

@@ -105,11 +105,15 @@ export function OTConfigTablePanel({
       try {
         const needsBlocks = showMarcaBlocks;
         const needsPolicies = !readOnly;
+        // En Marca Blanca la lista se calcula como operables menos bloqueados: los grants no se usan.
+        const needsGrants = !showMarcaBlocks;
 
         const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows, blocks] =
           await Promise.all([
             fetchTransitOffices(undefined, signal),
-            fetchTransitGrants(effectiveGrantsTenantId, signal),
+            needsGrants
+              ? fetchTransitGrants(effectiveGrantsTenantId, signal)
+              : Promise.resolve({ transitOfficeIds: [] as string[] }),
             needsPolicies
               ? fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] }))
               : Promise.resolve({ transitOfficeIds: [] }),
@@ -296,7 +300,7 @@ export function OTConfigTablePanel({
       {legend && (
         <div
           className="mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
-          style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+          style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
           role="note"
           aria-live="polite"
         >

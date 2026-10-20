@@ -12,7 +12,7 @@ export function AvisoHayCambios({ onActualizar }: { onActualizar: () => void }) 
       <button
         type="button"
         onClick={onActualizar}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[#557EFF]/40 bg-[#557EFF]/10 px-3 py-1.5 text-xs font-semibold text-[#3A5FD9] transition hover:bg-[#557EFF]/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-[#8FA9FF]"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-flit-brand/40 bg-flit-brand/10 px-3 py-1.5 text-xs font-semibold text-[#3A5FD9] transition hover:bg-flit-brand/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-[#8FA9FF]"
       >
         <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
         Hay cambios — Actualizar

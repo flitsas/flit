@@ -95,7 +95,7 @@ export function ImpuestoDepartamentalCheck({
       >
         <input
           type="checkbox"
-          className="h-4 w-4 accent-[#557EFF]"
+          className="h-4 w-4 accent-flit-brand"
           checked={deFlito || checked}
           onChange={(e) => onChange(e.target.checked)}
           disabled={disabled || deFlito || cargando}

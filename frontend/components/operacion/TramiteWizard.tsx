@@ -327,8 +327,8 @@ const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
     titulo: 'Enviado a tránsito — solo visualización.',
     detalle:
       'Este trámite ya no puede editarse, pero aún puedes generar o descargar el expediente consolidado.',
-    border: '#557EFF',
-    bg: 'rgba(85,126,255,0.06)',
+    border: 'var(--color-flit-brand)',
+    bg: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)',
   },
   aprobado: {
     titulo: 'Trámite aprobado — solo visualización.',
@@ -367,8 +367,8 @@ const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
 const READ_ONLY_NOTICE_FALLBACK: ReadOnlyNoticeStyle = {
   titulo: 'Solo visualización.',
   detalle: 'Este trámite no puede editarse en su estado actual.',
-  border: '#557EFF',
-  bg: 'rgba(85,126,255,0.06)',
+  border: 'var(--color-flit-brand)',
+  bg: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)',
 };
 
 function ReadOnlyStateNotice({
@@ -388,7 +388,7 @@ function ReadOnlyStateNotice({
   return (
     <div
       className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-      style={{ borderColor: notice.border, background: notice.bg, color: '#162744' }}
+      style={{ borderColor: notice.border, background: notice.bg, color: 'var(--color-flit-primary)' }}
       role="status"
       aria-live="polite"
     >
@@ -1797,7 +1797,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             disabled={cancelandoSubsanacion}
-            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
             style={{ color: puedeCancelarSubsanacion ? '#C2410C' : '#59677D' }}
             aria-label={
               puedeCancelarSubsanacion
@@ -1823,13 +1823,13 @@ export function TramiteWizard(props: Props) {
         </div>
 
         {/* Franja de identidad del expediente (prototipo Lovable MatriculaInicial / Traspaso):
-            pastilla azul sólido `#557EFF`, rótulos white/80, valores blancos, chip de estado
+            pastilla azul sólido `var(--color-flit-brand)`, rótulos white/80, valores blancos, chip de estado
             glass (border-white/30 + bg-white/15). Autoridad visual: prototipo + captura de
             referencia del PO — no sustituir por tinte claro. */}
         {(refLabel || identificador) && (
           <div
             className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5"
-            style={{ background: '#557EFF', color: '#fff' }}
+            style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
             data-testid="tramite-identity-strip"
           >
             {refLabel && (
@@ -1885,7 +1885,7 @@ export function TramiteWizard(props: Props) {
                     type="button"
                     onClick={() => void activarSubsanacion()}
                     disabled={activandoSubsanacion}
-                    className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+                    className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
                     style={{ background: WIZARD_CTA_GRADIENT }}
                     title="Reabre el trámite para corregir lo que observó el organismo de tránsito y volver a radicarlo"
                   >
@@ -1921,7 +1921,7 @@ export function TramiteWizard(props: Props) {
       {draftFinalized && (
         <div
           className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#162744' }}
+          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: 'var(--color-flit-primary)' }}
           role="status"
           aria-live="polite"
         >
@@ -2124,7 +2124,7 @@ export function TramiteWizard(props: Props) {
                     (!fullReadOnly && !canRadicar && draftFinalized)
                   }
                   aria-describedby={mandatarioBloquea ? MANDATARIO_ALERTA_ID : undefined}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT_DONE }}
                   title={
                     mandatarioBloquea
@@ -2149,7 +2149,7 @@ export function TramiteWizard(props: Props) {
               // Misma altura que las acciones de la derecha: en la propuesta el pie es una sola
               // línea de botones, y un "Anterior" más bajo la partía en dos.
               className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-[#162744] disabled:opacity-30`}
-              style={{ borderColor: '#162744', color: '#162744' }}
+              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
@@ -2203,7 +2203,7 @@ export function TramiteWizard(props: Props) {
                       })();
                     }}
                     disabled={continuing || reradicando}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                     style={{ background: WIZARD_CTA_GRADIENT }}
                     title="Guarda los cambios de este paso y habilita Re-radicar"
                   >
@@ -2217,7 +2217,7 @@ export function TramiteWizard(props: Props) {
                     type="button"
                     onClick={() => void reradicar()}
                     disabled={!reradicarHabilitado}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#00DBD5] disabled:opacity-50`}
+                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-tech disabled:opacity-50`}
                     style={{
                       background: reradicarHabilitado ? WIZARD_CTA_GRADIENT_DONE : '#94A3B8',
                     }}
@@ -2239,7 +2239,7 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT }}
                 >
                   {submitting ? 'Finalizando…' : 'Finalizar'}
@@ -2249,7 +2249,7 @@ export function TramiteWizard(props: Props) {
               <button
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
-                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                 style={{ background: WIZARD_CTA_GRADIENT }}
               >
                 Continuar
@@ -2274,7 +2274,7 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleContinue()}
                   disabled={continueDisabled}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-40`}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-40`}
                   // Deshabilitado en gris pleno, no el degradado atenuado: media opacidad sobre un
                   // degradado deja un azul lavado que sigue leyéndose como acción disponible.
                   style={{ background: continueDisabled ? '#94A3B8' : WIZARD_CTA_GRADIENT }}
@@ -2318,7 +2318,7 @@ export function TramiteWizard(props: Props) {
                 disabled={anulando}
                 aria-describedby={errorAnulacion ? 'wizard-motivo-anulacion-err' : undefined}
                 placeholder="Por qué se anula este trámite"
-                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
+                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
               />
               <p className="mt-1 text-[11px] opacity-60">
                 Queda en la trazabilidad del trámite.
@@ -2352,7 +2352,7 @@ export function TramiteWizard(props: Props) {
                 setErrorAnulacion(null);
               }}
               disabled={anulando}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
             >
               Continuar editando
             </button>
@@ -2383,7 +2383,7 @@ export function TramiteWizard(props: Props) {
             <button
               type="button"
               onClick={() => setConfirmRadicar(false)}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             >
               Revisar datos
             </button>
@@ -2393,7 +2393,7 @@ export function TramiteWizard(props: Props) {
                 setConfirmRadicar(false);
                 void handleRadicarTramite();
               }}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               style={{ background: WIZARD_CTA_GRADIENT_DONE }}
             >
               Sí, radicar trámite
@@ -2418,7 +2418,7 @@ export function TramiteWizard(props: Props) {
           onExit();
         }}
         title="¡Trámite completado!"
-        titleClassName="text-lg font-bold text-[#557EFF]"
+        titleClassName="text-lg font-bold text-flit-brand"
         size="sm"
       >
         <div className="text-center">
@@ -2427,7 +2427,7 @@ export function TramiteWizard(props: Props) {
           </p>
           <p
             className="mt-1 text-3xl font-bold"
-            style={{ color: '#162744', letterSpacing: radicado?.placa ? '0.35em' : '0.12em' }}
+            style={{ color: 'var(--color-flit-primary)', letterSpacing: radicado?.placa ? '0.35em' : '0.12em' }}
           >
             {radicado?.placa ?? radicado?.referencia ?? '—'}
           </p>
@@ -2451,8 +2451,8 @@ export function TramiteWizard(props: Props) {
               setRadicado(null);
               onExit();
             }}
-            className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
           >
             Ir al listado de trámites
           </button>
@@ -2605,7 +2605,7 @@ function VehicleDataCard({
             {plate && (
               <p
                 className="shrink-0 font-mono text-sm font-extrabold tracking-[0.2em]"
-                style={{ color: '#162744' }}
+                style={{ color: 'var(--color-flit-primary)' }}
               >
                 {plate}
               </p>
@@ -2624,7 +2624,7 @@ function VehicleDataCard({
             <div className="flex shrink-0 flex-wrap items-start gap-4">
               {(soatVencimiento || soatAseguradora) && (
                 <div>
-                  <p className="text-xs font-bold" style={{ color: '#162744' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--color-flit-primary)' }}>
                     SOAT
                   </p>
                   {soatVencimiento && (
@@ -2639,7 +2639,7 @@ function VehicleDataCard({
               )}
               {rtmVencimiento && (
                 <div>
-                  <p className="text-xs font-bold" style={{ color: '#162744' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--color-flit-primary)' }}>
                     Tecno-mecánica
                   </p>
                   <p className="whitespace-nowrap text-xs opacity-70">
@@ -2664,8 +2664,8 @@ function VehicleDataCard({
                         <button
                           type="button"
                           onClick={onEditOrganismo}
-                          className="mt-0.5 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                          style={{ color: '#557EFF' }}
+                          className="mt-0.5 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                          style={{ color: 'var(--color-flit-brand)' }}
                         >
                           Editar
                         </button>
@@ -2706,9 +2706,9 @@ function VehicleDataCard({
         <div className="flex items-center gap-3 border-b px-4 py-3">
           <span
             className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
-            style={{ background: 'rgba(85,126,255,0.10)' }}
+            style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)' }}
           >
-            <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
+            <Car className="h-4 w-4" style={{ color: 'var(--color-flit-brand)' }} />
           </span>
           <div className="min-w-0 flex-1">
             <WizardCardHeader
@@ -2729,12 +2729,12 @@ function VehicleDataCard({
         {plate && (
           <div
             className="rounded-xl border-2 px-4 py-2 text-center"
-            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+            style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
           >
             <p className="text-xs font-semibold uppercase opacity-50">Placa</p>
             <p
               className="font-mono text-lg font-extrabold tracking-widest"
-              style={{ color: '#557EFF' }}
+              style={{ color: 'var(--color-flit-brand)' }}
             >
               {plate}
             </p>
@@ -2761,9 +2761,9 @@ function VehicleDataCard({
           <div className="flex shrink-0 flex-wrap gap-2">
             {(soatVencimiento || soatAseguradora) && (
               <div className="flex min-w-0 items-start gap-1.5 rounded-xl border px-2.5 py-1.5">
-                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>SOAT</p>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--color-flit-brand)' }}>SOAT</p>
                   {soatVencimiento && (
                     <p className="text-xs font-semibold">Vence: {formatDateOnly(soatVencimiento)}</p>
                   )}
@@ -2810,9 +2810,9 @@ function VehicleDataCard({
           <div className="flex flex-wrap gap-3">
             {(soatVencimiento || soatAseguradora) && (
               <div className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2">
-                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>SOAT</p>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--color-flit-brand)' }}>SOAT</p>
                   {soatVencimiento && (
                     <p className="text-xs font-semibold">Vence: {formatDateOnly(soatVencimiento)}</p>
                   )}
@@ -3976,8 +3976,8 @@ function ConsultaStep({
         !identificadorCompleto ||
         (secretariaAntesDeConsultar && !transitOfficeId)
       }
-      className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 bg-[#557EFF] text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
-      style={{ backgroundColor: '#557EFF', backgroundImage: 'none' }}
+      className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 bg-flit-brand text-white focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-50`}
+      style={{ backgroundColor: 'var(--color-flit-brand)', backgroundImage: 'none' }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
@@ -4259,13 +4259,13 @@ function ConsultaStep({
           <div
             className="min-w-0 flex-1 rounded-xl border p-3.5"
             style={{
-              borderColor: '#557EFF',
+              borderColor: 'var(--color-flit-brand)',
               background: '#EFF6FF',
-              boxShadow: '0 0 0 3px rgba(85,126,255,0.15)',
+              boxShadow: '0 0 0 3px color-mix(in srgb, var(--color-flit-brand) 15%, transparent)',
             }}
             aria-current="step"
           >
-            <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
               {tipoNombre}
             </p>
             <p className="mt-0.5 text-xs opacity-70">
@@ -4280,7 +4280,7 @@ function ConsultaStep({
             <button
               type="button"
               onClick={() => setPendingTipo('__selector__')}
-              className="shrink-0 rounded-xl border px-4 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 hover:border-[#557EFF]"
+              className="shrink-0 rounded-xl border px-4 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand"
             >
               Cambiar tipo
             </button>
@@ -4510,7 +4510,7 @@ function ConsultaStep({
               role="status"
               aria-label={`Secretaría de tránsito: ${transitOfficeNombreTraspaso}`}
             >
-              <span className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
+              <span className="truncate text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                 {transitOfficeNombreTraspaso}
               </span>
             </div>
@@ -4538,8 +4538,8 @@ function ConsultaStep({
             <button
               type="button"
               onClick={handleRetomarDuplicado}
-              className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+              style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
               aria-label="Retomar el trámite existente"
             >
               Retomar
@@ -4580,7 +4580,7 @@ function ConsultaStep({
             checked={pazSalvoConfirmado}
             onChange={(e) => void handlePazSalvo(e.target.checked)}
             disabled={readOnly || pazSalvoSaving}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-flit-brand disabled:opacity-60"
           />
           <span className="text-xs">
             <span className="font-semibold">Confirmo paz y salvo de impuesto vehicular</span>
@@ -4634,7 +4634,7 @@ function ConsultaStep({
         open={!!pendingTipo}
         onClose={() => setPendingTipo(null)}
         title="Nuevo trámite"
-        titleClassName="text-[22px] font-bold text-[#557EFF] dark:text-[#557EFF]"
+        titleClassName="text-[22px] font-bold text-flit-brand dark:text-flit-brand"
         description="Se actualizarán las validaciones y los documentos requeridos, y se perderá lo capturado en este paso."
         size="xl"
       >
@@ -5255,7 +5255,7 @@ function StepBody({
               style={
                 paqueteDocsStatus === 'error'
                   ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
-                  : { borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.06)' }
+                  : { borderColor: '#DFE5ED', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }
               }
               role="status"
               aria-live="polite"
@@ -5281,13 +5281,13 @@ function StepBody({
           {!identityApproved && (
             <div
               className="rounded-xl p-3 text-xs border flex items-start gap-2"
-              style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+              style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--color-flit-primary)' }}
               role="status"
               aria-live="polite"
             >
-              <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
+              <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
               <span>
-                <span className="font-semibold" style={{ color: '#557EFF' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                   El FUR y la firma se generarán automáticamente
                 </span>{' '}
                 cuando el cliente valide su identidad. No necesitas generarlos a mano: completa los datos

@@ -125,7 +125,7 @@ export function SubsanacionPanel({
           <h3 id="subsanacion-heading" className="text-sm font-bold" style={{ color: '#B45309' }}>
             Trámite en subsanación
           </h3>
-          <p className="mt-1 text-xs" style={{ color: '#162744' }}>
+          <p className="mt-1 text-xs" style={{ color: 'var(--color-flit-primary)' }}>
             {rejectionReason ? (
               <>
                 El Organismo de Tránsito devolvió el trámite para corrección.{' '}

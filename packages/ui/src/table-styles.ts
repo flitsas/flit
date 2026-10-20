@@ -33,7 +33,7 @@ export const TABLA_HEADER_CELL_CLS =
  * borde azul que usaba el gestor competía con el borde de estado y decía otra cosa.
  */
 export const TABLA_ROW_HOVER_CLS =
-  'transition hover:shadow-[0_8px_24px_rgba(85,126,255,0.18)]';
+  'transition hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]';
 
 /** Línea secundaria dentro de una celda (fechas bajo el radicado, gestor bajo la empresa…). */
 export const TABLA_CELDA_SECUNDARIA_CLS = 'text-[10px] opacity-55';

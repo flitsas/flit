@@ -18,7 +18,7 @@ export default function AdminIctJobSettingsPage() {
           type="button"
           onClick={() => router.push("/admin/jobs")}
           className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-          style={{ color: "#557EFF" }}
+          style={{ color: "var(--color-flit-brand)" }}
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
           Volver al catálogo

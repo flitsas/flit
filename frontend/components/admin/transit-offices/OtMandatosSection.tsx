@@ -86,7 +86,7 @@ export function OtFormatoContratoChip({ formato }: { formato: OtFormatoVista | n
         className="inline-flex items-center gap-2 rounded-full border border-[#D6E2FF] bg-[#EFF4FF] px-3 py-1.5 text-xs text-[#59677D] dark:border-white/15 dark:bg-white/5 dark:text-white/70"
         data-testid="ot-formato-contrato"
       >
-        <FileText className="h-3.5 w-3.5 shrink-0 text-[#557EFF]" aria-hidden />
+        <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden />
         <span>
           Formato de contrato:{" "}
           <span className="font-semibold text-[#162244] dark:text-white">{formato.nombre}</span>

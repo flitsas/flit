@@ -136,7 +136,7 @@ export function IctJobSettingsForm() {
 
       <InlineAlert tone="info">
         Los cambios aplican en el siguiente ciclo, sin redeploy. Zona horaria America/Bogota.{" "}
-        <a href={ICT_JOBS_REPORT_HREF} className="font-semibold underline" style={{ color: "#557EFF" }}>
+        <a href={ICT_JOBS_REPORT_HREF} className="font-semibold underline" style={{ color: "var(--color-flit-brand)" }}>
           Ver últimas corridas (Reportes ICT → Jobs)
         </a>
       </InlineAlert>
@@ -342,7 +342,7 @@ export function IctJobSettingsForm() {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <header className="border-b border-[#DFE5ED] pb-3 dark:border-white/10">
-      <h2 className="text-sm font-semibold text-[#162744] dark:text-white">{title}</h2>
+      <h2 className="text-sm font-semibold text-flit-primary dark:text-white">{title}</h2>
       <p className="mt-0.5 text-xs leading-snug text-[#59677D] dark:text-white/70">{description}</p>
     </header>
   );

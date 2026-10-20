@@ -93,9 +93,9 @@ export function FechaCalendario({
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 dark:bg-[#0B0F14] ${
+        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 dark:bg-[#0B0F14] ${
           invalid ? "border-[#E5484D]" : "border-[#DFE5ED] dark:border-white/15"
-        } ${value ? "text-[#162744] dark:text-white" : "text-[#59677D]"}`}
+        } ${value ? "text-flit-primary dark:text-white" : "text-[#59677D]"}`}
       >
         <span>{texto}</span>
         <CalendarDays className="h-4 w-4 shrink-0 text-[#59677D]" aria-hidden="true" />
@@ -123,12 +123,12 @@ export function FechaCalendario({
                 }}
                 components={{ DayButton: Dia }}
                 classNames={{
-                  root: "rdp-root text-[#162744] dark:text-white",
-                  chevron: "fill-[#557EFF]",
+                  root: "rdp-root text-flit-primary dark:text-white",
+                  chevron: "fill-flit-brand",
                   day_button:
-                    "rounded-lg text-xs font-medium hover:bg-[#557EFF]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]",
-                  selected: "bg-[#557EFF] text-white hover:bg-[#557EFF] hover:text-white",
-                  today: "font-bold text-[#557EFF]",
+                    "rounded-lg text-xs font-medium hover:bg-flit-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand",
+                  selected: "bg-flit-brand text-white hover:bg-flit-brand hover:text-white",
+                  today: "font-bold text-flit-brand",
                   outside: "text-[#667085] opacity-50 dark:text-white/40",
                 }}
               />

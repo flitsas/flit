@@ -95,7 +95,7 @@ function AdminTransitOfficesPageInner() {
         <span className="sr-only">Cargando…</span>
         <div
           className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: "#557EFF", borderTopColor: "transparent" }}
+          style={{ borderColor: "var(--color-flit-brand)", borderTopColor: "transparent" }}
           aria-hidden="true"
         />
       </div>

@@ -53,7 +53,7 @@ function ExpedienteTimelineList({ statusHistory }: { statusHistory: StatusHistor
         <li key={`${e.toStatus}-${e.changedAt}-${i}`} className="relative">
           <span
             className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full"
-            style={{ background: i === statusHistory.length - 1 ? '#8CC63F' : '#557EFF' }}
+            style={{ background: i === statusHistory.length - 1 ? '#8CC63F' : 'var(--color-flit-brand)' }}
             aria-hidden="true"
           />
           <p className="text-xs font-semibold">{hitoLabel(e)}</p>

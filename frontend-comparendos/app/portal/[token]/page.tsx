@@ -45,7 +45,7 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null | un
   return (
     <div className="flex flex-col gap-0.5 border-b border-[#EEF1F6] py-2 last:border-0">
       <dt className="text-xs uppercase tracking-wide text-slate-500">{etiqueta}</dt>
-      <dd className="text-sm font-medium text-[#162744]">{valor || "—"}</dd>
+      <dd className="text-sm font-medium text-flit-primary">{valor || "—"}</dd>
     </div>
   );
 }
@@ -57,7 +57,7 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
   if (!portal) {
     return (
       <main className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-[#162744]">Este enlace no está disponible</h1>
+        <h1 className="text-xl font-semibold text-flit-primary">Este enlace no está disponible</h1>
         <p className="text-sm text-slate-600">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
       </main>
     );
@@ -109,7 +109,7 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
 
         {(portal.evidencia.foto || portal.evidencia.documento) && (
           <section className="rounded-xl bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-sm font-semibold text-[#162744]">Evidencia</h2>
+            <h2 className="mb-2 text-sm font-semibold text-flit-primary">Evidencia</h2>
             {portal.evidencia.foto ? (
               // eslint-disable-next-line @next/next/no-img-element -- la foto viene de la fuente con su propia URL
               <img src={portal.evidencia.foto} alt="Evidencia del comparendo" className="w-full rounded-lg" />

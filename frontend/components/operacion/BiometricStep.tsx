@@ -531,9 +531,9 @@ export function BiometricStep({
       {!hideIntro && (
         <div
           className={`${WIZARD_CARD}`}
-          style={{ borderLeft: '3px solid #557EFF' }}
+          style={{ borderLeft: '3px solid var(--color-flit-brand)' }}
         >
-          <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
             La validación se inicia automáticamente al continuar
           </p>
           <p className="mt-1 text-xs opacity-70">
@@ -952,8 +952,8 @@ function TrazabilidadDisclosure({ children }: { children: ReactNode }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex items-center gap-1.5 rounded-lg text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-        style={{ color: '#557EFF' }}
+        className="flex items-center gap-1.5 rounded-lg text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+        style={{ color: 'var(--color-flit-brand)' }}
       >
         Ver trazabilidad de validación
         <ChevronDown
@@ -979,19 +979,19 @@ function VaultCoveredView() {
   return (
     <div
       className="flex items-center gap-3 rounded-xl p-3"
-      style={{ background: 'rgba(85,126,255,0.10)', border: '1px solid rgba(85,126,255,0.35)' }}
+      style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--color-flit-brand) 35%, transparent)' }}
       role="status"
       aria-live="polite"
     >
       <span
         className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
-        style={{ background: '#557EFF', color: 'white' }}
+        style={{ background: 'var(--color-flit-brand)', color: 'white' }}
         aria-hidden
       >
         <FileSignature className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
-        <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+        <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
           Firma electrónica (baúl)
         </p>
         <p className="text-xs opacity-70">
@@ -1036,8 +1036,8 @@ function KyverumPendingIntro({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: '#557EFF' }} aria-hidden />
-        <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           Esperando validación de {v.name}
         </p>
       </div>
@@ -1171,7 +1171,7 @@ function ReconcileAction({
         onClick={() => void handleReconcile()}
         disabled={submitting || !instanceId}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#557EFF', color: '#557EFF' }}
+        style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         aria-label="Actualizar estado de la validación consultando al proveedor"
       >
         <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
@@ -1270,8 +1270,8 @@ function SentPendingView({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5" style={{ color: '#557EFF' }} aria-hidden />
-        <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+        <RefreshCw className="h-3.5 w-3.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           {headline} de {v.name}
         </p>
       </div>
@@ -1475,7 +1475,7 @@ function StartAction({
           ref={confirmDialogRef}
           tabIndex={-1}
           className="rounded-xl border p-3 text-xs outline-none focus:ring-0"
-          style={{ borderColor: '#557EFF' }}
+          style={{ borderColor: 'var(--color-flit-brand)' }}
           role="alertdialog"
           aria-modal="true"
           aria-label="Confirmar envío de validación"

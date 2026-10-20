@@ -217,7 +217,7 @@ export function TransitBlocksPanel({
           errorMessage="No se pudieron cargar los bloqueos de organismos."
           skeletonRows={3}
         >
-          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-[#557EFF] dark:bg-[#0B0F14]">
+          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
             <Search className="h-4 w-4 opacity-60" aria-hidden />
             <label htmlFor="ot-blocks-search" className="sr-only">
               Buscar organismo de tránsito

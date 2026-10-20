@@ -64,7 +64,7 @@ export function OtSidePanel({
       header={({ titleId }) => (
         <div className="flex items-start justify-between gap-3">
           {/* El nombre accesible del diálogo es `ariaLabel`; el texto visible es `title`. */}
-          <h2 id={titleId} aria-label={ariaLabel} className="text-base font-bold text-[#162744] dark:text-white">
+          <h2 id={titleId} aria-label={ariaLabel} className="text-base font-bold text-flit-primary dark:text-white">
             {title}
           </h2>
           <button

@@ -20,7 +20,7 @@ import type { CampoHidratado, DiscrepanciaPrellenado } from "./prefill-hidrataci
 import { etiquetaFuente } from "./useEncadenamientoPrefill";
 
 export const FIELD_CLASS =
-  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]";
+  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 
 export interface CampoPrellenadoProps {
   id: string;
@@ -99,8 +99,8 @@ export function CampoPrellenado({
             <button
               type="button"
               onClick={onLiberar}
-              className="ml-1 rounded px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-              style={{ color: "#557EFF" }}
+              className="ml-1 rounded px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+              style={{ color: "var(--color-flit-brand)" }}
             >
               Liberar {label.toLocaleLowerCase("es-CO")}
             </button>
@@ -124,7 +124,7 @@ export function CampoPrellenado({
             <button
               type="button"
               onClick={onAdoptarValorFuente}
-              className="rounded px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              className="rounded px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             >
               Usar el de {etiquetaFuente(discrepancia.fuente)}
             </button>
@@ -133,7 +133,7 @@ export function CampoPrellenado({
             <button
               type="button"
               onClick={onDescartarDiscrepancia}
-              className="rounded px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              className="rounded px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             >
               Mantener el mío
             </button>

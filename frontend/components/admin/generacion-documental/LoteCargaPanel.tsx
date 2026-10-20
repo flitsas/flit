@@ -159,11 +159,11 @@ export function LoteCargaPanel() {
       <header className="flex items-start gap-2">
         <FileSpreadsheet
           className="mt-0.5 h-4 w-4 shrink-0"
-          style={{ color: "#557EFF" }}
+          style={{ color: "var(--color-flit-brand)" }}
           aria-hidden="true"
         />
         <div>
-          <h2 id="gd-lotes-title" className="text-sm font-semibold" style={{ color: "#162744" }}>
+          <h2 id="gd-lotes-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Carga masiva
           </h2>
           <p className="mt-1 text-xs opacity-70">
@@ -188,8 +188,8 @@ export function LoteCargaPanel() {
           onClick={descargarPlantilla}
           disabled={descargando}
           data-testid="lote-descargar-plantilla"
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-          style={{ background: "#557EFF" }}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          style={{ background: "var(--color-flit-brand)" }}
         >
           <Download className="h-3.5 w-3.5" aria-hidden="true" />
           {descargando ? "Preparando la plantilla…" : "Descargar plantilla (.xlsx)"}
@@ -212,12 +212,12 @@ export function LoteCargaPanel() {
             elegir(e.dataTransfer?.files?.[0]);
           }}
           className="mt-3 rounded-xl border border-dashed p-4 transition"
-          style={{ borderColor: arrastrando ? "#557EFF" : undefined }}
+          style={{ borderColor: arrastrando ? "var(--color-flit-brand)" : undefined }}
         >
           <label
             htmlFor="lote-archivo"
             className="block text-xs font-semibold"
-            style={{ color: "#162744" }}
+            style={{ color: "var(--color-flit-primary)" }}
           >
             Archivo de la plantilla diligenciada
           </label>
@@ -255,8 +255,8 @@ export function LoteCargaPanel() {
           onClick={cargar}
           disabled={!archivo || subiendo}
           data-testid="lote-cargar"
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-          style={{ background: "#557EFF" }}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          style={{ background: "var(--color-flit-brand)" }}
         >
           <Upload className="h-3.5 w-3.5" aria-hidden="true" />
           {subiendo ? "Cargando el lote…" : "Cargar y procesar"}

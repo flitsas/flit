@@ -33,7 +33,7 @@ export interface GlobalFiltersProps {
 }
 
 const inputClass =
-  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white";
+  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white";
 
 export function GlobalFilters({
   filters,
@@ -98,7 +98,7 @@ export function GlobalFilters({
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
           aria-expanded={showAdvanced}
-          className="h-10 flex items-center gap-1.5 rounded-[10px] border px-3 text-xs font-semibold hover:bg-[#557EFF14]"
+          className="h-10 flex items-center gap-1.5 rounded-[10px] border px-3 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)]"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
           {showAdvanced ? "Ocultar filtros" : "Más filtros"}

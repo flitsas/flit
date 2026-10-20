@@ -20,9 +20,9 @@ export function FormatosContratoModal({
       open
       onClose={onClose}
       icon={FileText}
-      iconBg="#557EFF"
+      iconBg="var(--color-flit-brand)"
       title="Formatos de contrato"
-      titleClassName="text-base font-bold text-[#162744] dark:text-white"
+      titleClassName="text-base font-bold text-flit-primary dark:text-white"
       size="md"
     >
       <div className="space-y-3 text-xs" data-testid="formatos-contrato-compania">
@@ -37,10 +37,10 @@ export function FormatosContratoModal({
                 key={o.transitOfficeId}
                 className="flex flex-col gap-0.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
-                <span className="font-medium text-[#162744] dark:text-white">{o.name}</span>
+                <span className="font-medium text-flit-primary dark:text-white">{o.name}</span>
                 <span
                   className="w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                  style={{ background: "rgba(85,126,255,0.10)", color: "#3F5FD0" }}
+                  style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "#3F5FD0" }}
                 >
                   {o.formatName}
                 </span>

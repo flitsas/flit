@@ -282,17 +282,22 @@ function CompanyDetail() {
                         />
                       </div>
                     )}
-                    <OTConfigTablePanel
-                      tenantId={tenantId}
-                      mode={otPanelMode}
-                      grantScopeWarningCount={
-                        otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
-                      }
-                      blocksTenantId={blocksTenantId}
-                      grantsTenantId={
-                        managingChild && networkHeadId ? networkHeadId : tenantId
-                      }
-                    />
+                    {/* SuperAdmin sobre una cabeza MB: TransitBlocksPanel ya muestra disponibles y
+                        bloqueados; la vista de solo lectura repetiría los mismos datos (y sin
+                        refrescarse al bloquear). Queda para el AdminCompany y las hijas MB. */}
+                    {!showTransitBlocksPanel && (
+                      <OTConfigTablePanel
+                        tenantId={tenantId}
+                        mode={otPanelMode}
+                        grantScopeWarningCount={
+                          otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
+                        }
+                        blocksTenantId={blocksTenantId}
+                        grantsTenantId={
+                          managingChild && networkHeadId ? networkHeadId : tenantId
+                        }
+                      />
+                    )}
                   </>
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
@@ -358,7 +363,7 @@ function DomainAdminSection({ tenantId }: { tenantId: string }) {
   return (
     <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
       <div className="mb-3">
-        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
           Dominio de la red
         </h2>
         <p className="text-[11px] opacity-60">

@@ -238,7 +238,7 @@ export function CompanyConfigTabs({
                 <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
                   Configurando
                 </span>
-                <span className="text-sm font-bold text-[#162744] dark:text-white">
+                <span className="text-sm font-bold text-flit-primary dark:text-white">
                   {company.razonSocial}
                 </span>
                 <span className="text-xs opacity-70">NIT {company.nit}</span>
@@ -274,10 +274,10 @@ export function CompanyConfigTabs({
                 disabled={confirmOpen}
                 aria-describedby={pendingChangeCount === 0 ? `${baseId}-sin-cambios` : undefined}
                 title={pendingChangeCount === 0 ? "No hay cambios por guardar" : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-60 ${
+                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-60 ${
                   pendingChangeCount === 0 ? "opacity-60" : ""
                 }`}
-                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
               >
                 <Save className="h-4 w-4" aria-hidden /> Guardar todo
               </button>
@@ -313,14 +313,14 @@ export function CompanyConfigTabs({
               tabIndex={active ? 0 : -1}
               onClick={() => setTab(t.id)}
               onKeyDown={(e) => onTabKeyDown(e, i)}
-              className={`relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF] ${
-                active ? "text-[#557EFF]" : "text-[#162744] opacity-70 dark:text-white/[0.78] dark:opacity-100"
+              className={`relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand ${
+                active ? "text-flit-brand" : "text-flit-primary opacity-70 dark:text-white/[0.78] dark:opacity-100"
               }`}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden />
               {t.label}
               {active && (
-                <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#557EFF]" aria-hidden />
+                <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-flit-brand" aria-hidden />
               )}
             </button>
           );

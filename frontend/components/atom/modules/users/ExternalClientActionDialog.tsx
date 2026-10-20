@@ -105,7 +105,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
       busy={busy}
       title={copy.title}
       icon={copy.icon}
-      iconBg={copy.danger ? "#FF4E00" : "#557EFF"}
+      iconBg={copy.danger ? "#FF4E00" : "var(--color-flit-brand)"}
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
@@ -113,7 +113,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-[#162744] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
+            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
           >
             Cancelar
           </button>
@@ -121,11 +121,11 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
             type="button"
             onClick={() => void handleConfirm()}
             disabled={busy}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-70"
+            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
             style={{
               background: copy.danger
                 ? "linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)"
-                : "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)",
+                : "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)",
             }}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
@@ -134,10 +134,10 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
         </div>
       }
     >
-      <div className="flex flex-col gap-3 text-sm text-[#162744] dark:text-white">
+      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-white">
         <p>{copy.body}</p>
         {action === "regenerate" && (
-          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] p-3 focus-within:ring-2 focus-within:ring-[#557EFF] focus-within:ring-offset-2 dark:border-white/15">
+          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] p-3 focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 dark:border-white/15">
             <input
               type="checkbox"
               checked={revocarAnterior}

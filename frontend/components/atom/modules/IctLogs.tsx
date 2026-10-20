@@ -49,16 +49,16 @@ const LOG_TYPES: ReadonlyArray<{ value: IctLogType; label: string }> = [
 const BORDER = "#DFE5ED";
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] bg-white px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 dark:border-white/15 dark:bg-[#0B0F14]";
+  "rounded-lg border border-[#D9DEE8] bg-white px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 dark:border-white/15 dark:bg-[#0B0F14]";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] px-3 py-2 text-xs font-medium opacity-80 hover:border-[#557EFF] hover:opacity-100 dark:border-white/15";
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] px-3 py-2 text-xs font-medium opacity-80 hover:border-flit-brand hover:opacity-100 dark:border-white/15";
 
 export function IctLogs() {
   const [tab, setTab] = useState<Tab>("logs");
 
   return (
-    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-24 text-[#162744] dark:text-white">
+    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-24 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Log ICT"
         subtitle="Peticiones HTTP de la integración con terceros, ya enmascaradas. El recorrido por trámite está en Trazabilidad ICT."
@@ -204,7 +204,7 @@ function LogsTab() {
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center gap-2 rounded-lg bg-[#557EFF] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="flex items-center gap-2 rounded-lg bg-flit-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           Buscar
         </button>
@@ -276,7 +276,7 @@ function LogsTab() {
                             style={{ borderColor: BORDER }}
                           >
                             <ChevronRight
-                              className={`h-4 w-4 text-[#557EFF] transition ${open ? "rotate-90" : ""}`}
+                              className={`h-4 w-4 text-flit-brand transition ${open ? "rotate-90" : ""}`}
                               aria-hidden="true"
                             />
                             <span className="sr-only">{open ? "Ocultar detalle" : "Ver detalle"}</span>
@@ -391,17 +391,17 @@ function LogDetail({ row }: { row: IctLogEntry }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[#59677D] dark:text-white/70">
         <span>
-          ID: <span className="font-mono text-[#162744] dark:text-white">{row.id}</span>
+          ID: <span className="font-mono text-flit-primary dark:text-white">{row.id}</span>
         </span>
         <span>
           Correlación:{" "}
-          <span className="font-mono text-[#162744] dark:text-white">{row.correlationId ?? "—"}</span>
+          <span className="font-mono text-flit-primary dark:text-white">{row.correlationId ?? "—"}</span>
         </span>
         <span>
-          Usuario: <span className="font-mono text-[#162744] dark:text-white">{row.usuario ?? "—"}</span>
+          Usuario: <span className="font-mono text-flit-primary dark:text-white">{row.usuario ?? "—"}</span>
         </span>
         <span>
-          Tenant: <span className="font-mono text-[#162744] dark:text-white">{row.tenantId ?? "—"}</span>
+          Tenant: <span className="font-mono text-flit-primary dark:text-white">{row.tenantId ?? "—"}</span>
         </span>
       </div>
       {present.length === 0 ? (
@@ -432,12 +432,12 @@ function JsonBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-[#162744] dark:text-white">{label}</span>
+        <span className="text-xs font-semibold text-flit-primary dark:text-white">{label}</span>
         <button type="button" onClick={copy} className={ghostCls}>
           {copied ? "Copiado" : "Copiar"}
         </button>
       </div>
-      <pre className="max-h-64 overflow-auto rounded-xl border border-[#DFE5ED] bg-white p-3 font-mono text-xs leading-snug text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white">
+      <pre className="max-h-64 overflow-auto rounded-xl border border-[#DFE5ED] bg-white p-3 font-mono text-xs leading-snug text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white">
         {pretty}
       </pre>
     </div>
@@ -503,7 +503,7 @@ function MetricCard({ label, value, warn }: { label: string; value: number | str
       }}
     >
       <p className="text-xs font-medium text-[#59677D] dark:text-white/70">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${warn ? "text-[#FF4E00]" : "text-[#162744] dark:text-white"}`}>
+      <p className={`mt-1 text-2xl font-semibold ${warn ? "text-[#FF4E00]" : "text-flit-primary dark:text-white"}`}>
         {value}
       </p>
     </div>
@@ -569,7 +569,7 @@ function IctAlertEventsList() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-[#162744] dark:text-white">Eventos de alerta ICT</h2>
+      <h2 className="text-sm font-semibold text-flit-primary dark:text-white">Eventos de alerta ICT</h2>
       {acking ? <CarLoaderModal label="Reconociendo alerta…" /> : null}
       {status === "loading" ? (
         <div className="py-10">
@@ -626,7 +626,7 @@ function IctAlertEventsList() {
                     {e.ruleName}
                   </td>
                   <td
-                    className="border-y px-4 py-3 text-right align-middle font-semibold text-[#557EFF]"
+                    className="border-y px-4 py-3 text-right align-middle font-semibold text-flit-brand"
                     style={{ borderColor: BORDER }}
                   >
                     {e.metricValue}

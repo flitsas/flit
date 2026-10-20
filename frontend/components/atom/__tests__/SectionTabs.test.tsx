@@ -14,14 +14,14 @@ describe('SectionTabs: color en tema oscuro', () => {
     expect(inactiva.getAttribute('style') ?? '').not.toMatch(/color|opacity/i);
     expect(inactiva.className).toContain('dark:text-white/[0.78]');
     expect(inactiva.className).toContain('dark:opacity-100');
-    expect(inactiva.className).toContain('text-[#162744]');
+    expect(inactiva.className).toContain('text-flit-primary');
   });
 
   it('la activa conserva su azul y sin estilo inline', () => {
     render(<SectionTabs tabs={tabs} active="a" onChange={() => {}} ariaLabel="Secciones" />);
     const activa = screen.getByRole('tab', { name: 'Primera' });
     expect(activa.getAttribute('style') ?? '').toBe('');
-    expect(activa.className).toContain('text-[#557EFF]');
+    expect(activa.className).toContain('text-flit-brand');
     expect(activa.className).not.toContain('dark:text-white');
   });
 });

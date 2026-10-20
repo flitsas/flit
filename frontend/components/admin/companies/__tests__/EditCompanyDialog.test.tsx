@@ -98,9 +98,9 @@ describe("EditCompanyDialog (#10118)", () => {
     expect(onUpdated).toHaveBeenCalledWith(updated);
   });
 
-  it("preserva un tipo heredado fuera del catálogo B2B (no lo fuerza a Renting)", async () => {
+  it("preserva un tipo heredado fuera del catálogo B2B (no lo fuerza a Radicadora)", async () => {
     // El listado incluye tenants con tipos heredados (p.ej. 'standard'); editar solo la
-    // razón social debe conservar ese tipo, no mostrar 'Renting' por defecto ni enviarlo.
+    // razón social debe conservar ese tipo, no mostrar 'Radicadora' por defecto ni enviarlo.
     const user = userEvent.setup();
     const legacy: CompanyListItem = { ...company, tenantType: "standard", code: "DEMO" };
     const onUpdate = vi.fn().mockResolvedValue(legacy);
@@ -109,7 +109,7 @@ describe("EditCompanyDialog (#10118)", () => {
       <EditCompanyDialog open company={legacy} onClose={vi.fn()} onUpdate={onUpdate} onUpdated={vi.fn()} />,
     );
 
-    // El select preselecciona el tipo heredado con su etiqueta legible, no 'Renting'.
+    // El select preselecciona el tipo heredado con su etiqueta legible, no 'Radicadora'.
     const select = screen.getByLabelText(/tipo de compañía/i) as HTMLSelectElement;
     expect(select.value).toBe("standard");
 

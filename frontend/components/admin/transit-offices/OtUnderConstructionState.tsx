@@ -25,8 +25,8 @@ export function OtUnderConstructionState({
       className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-6 py-14 text-center dark:border-white/10 dark:bg-[#0B0F14]"
     >
       <div
-        className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#557EFF]/10"
-        style={{ color: "#557EFF" }}
+        className="flex h-12 w-12 items-center justify-center rounded-xl bg-flit-brand/10"
+        style={{ color: "var(--color-flit-brand)" }}
         aria-hidden="true"
       >
         <BarChart3 className="h-6 w-6" strokeWidth={1.8} />
@@ -37,7 +37,7 @@ export function OtUnderConstructionState({
       >
         {code}
       </p>
-      <h2 className="text-base font-semibold text-[#162744] dark:text-white">{title}</h2>
+      <h2 className="text-base font-semibold text-flit-primary dark:text-white">{title}</h2>
       <p className="max-w-md text-sm text-[#59677D] dark:text-white/65">{description}</p>
       <span className="sr-only">
         {code}. {title}. {description}

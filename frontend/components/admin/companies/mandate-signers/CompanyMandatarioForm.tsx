@@ -311,7 +311,7 @@ export function CompanyMandatarioForm({
   };
 
   const inputClass =
-    "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 dark:bg-[#0B0F14]";
+    "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 dark:bg-[#0B0F14]";
 
   // Pasos visibles, numerados de corrido (con Persona jurídica o Formato en blanco hay menos).
   let numero = 0;
@@ -347,7 +347,7 @@ export function CompanyMandatarioForm({
             </p>
           )}
           <p className="text-xs leading-snug text-[#59677D] dark:text-white/65" data-testid="mandatario-resumen">
-            <span className="font-semibold text-[#162744] dark:text-white">Al guardar: </span>
+            <span className="font-semibold text-flit-primary dark:text-white">Al guardar: </span>
             {resumen.join(" · ")}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -355,7 +355,7 @@ export function CompanyMandatarioForm({
               type="button"
               onClick={onCancel}
               disabled={saving}
-              className="rounded-full border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#162744] disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-white"
+              className="rounded-full border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-primary disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-white"
             >
               Cancelar
             </button>
@@ -364,7 +364,7 @@ export function CompanyMandatarioForm({
               onClick={() => void handleSave()}
               disabled={saving}
               className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+              style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
             >
               {saving ? "Guardando…" : "Guardar"}
             </button>
@@ -636,7 +636,7 @@ export function CompanyMandatarioForm({
             <fieldset>
               <legend className="mb-1.5 block text-xs font-semibold">Organismos de tránsito</legend>
               {isHub ? (
-                <p className="text-xs font-semibold text-[#162744] dark:text-white" data-testid="mandatario-organismo-fijo">
+                <p className="text-xs font-semibold text-flit-primary dark:text-white" data-testid="mandatario-organismo-fijo">
                   {visibleOffices[0]?.name ?? "Este organismo"}
                   {visibleOffices[0]?.code ? (
                     <span className="ml-1 font-normal text-[#59677D]">· {visibleOffices[0].code}</span>
@@ -713,11 +713,11 @@ function Paso({
       aria-labelledby={`${id}-titulo`}
       className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/15 dark:bg-[#162744]"
     >
-      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-[#162744] dark:text-white">
+      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
         <span
           aria-hidden="true"
           className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           {numero}
         </span>
@@ -746,7 +746,7 @@ function TarjetaOpcion({
 }) {
   return (
     <label
-      className="flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors hover:bg-[rgba(85,126,255,0.04)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF] has-[:focus-visible]:ring-offset-2"
+      className="flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_4%,transparent)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand has-[:focus-visible]:ring-offset-2"
       style={
         checked
           ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" }
@@ -761,9 +761,9 @@ function TarjetaOpcion({
         aria-label={label}
         className="sr-only"
       />
-      <span className="mt-0.5 shrink-0 text-[#557EFF]">{icono}</span>
+      <span className="mt-0.5 shrink-0 text-flit-brand">{icono}</span>
       <span className="min-w-0">
-        <span className="block text-xs font-semibold leading-snug text-[#162744]">{label}</span>
+        <span className="block text-xs font-semibold leading-snug text-flit-primary">{label}</span>
         <span className="mt-0.5 block text-xs text-[#59677D]">{ayuda}</span>
       </span>
     </label>
@@ -784,8 +784,8 @@ function Segmento({
 }) {
   return (
     <label
-      className="relative cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF]"
-      style={checked ? { background: "#557EFF", color: "#FFFFFF" } : { color: "#59677D" }}
+      className="relative cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand"
+      style={checked ? { background: "var(--color-flit-brand)", color: "#FFFFFF" } : { color: "#59677D" }}
       // El radio está oculto con position:absolute. Si toma el foco, el modal (overlay con
       // desenfoque) lo lleva al inicio del scroll. El clic sigue cambiando la opción.
       onMouseDown={(e) => e.preventDefault()}

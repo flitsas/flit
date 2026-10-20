@@ -96,7 +96,7 @@ export function ProductMenu({
                         className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
                           app.comingSoon ? "bg-[var(--nav-app-bg)] text-flit-brand" : "text-white"
                         }`}
-                        style={app.comingSoon ? undefined : { background: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)" }}
+                        style={app.comingSoon ? undefined : { background: "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)" }}
                       >
                         {createElement(appIcon(app.icon), { className: "h-5 w-5", "aria-hidden": true })}
                       </span>

@@ -53,10 +53,10 @@
   }
 
   .app-bg {
-    background-color: #eef5ff;
+    background-color: var(--color-flit-bg);
     background-image:
-      radial-gradient(at 20% 0%, rgba(85, 126, 255, 0.08), transparent 50%),
-      radial-gradient(at 100% 100%, rgba(0, 219, 213, 0.07), transparent 50%);
+      radial-gradient(at 20% 0%, color-mix(in srgb, var(--color-flit-brand) 8%, transparent), transparent 50%),
+      radial-gradient(at 100% 100%, color-mix(in srgb, var(--color-flit-tech) 7%, transparent), transparent 50%);
   }
 
   .dark .glass {
@@ -68,8 +68,8 @@
   .dark .app-bg {
     background-color: #0a1428;
     background-image:
-      radial-gradient(at 20% 0%, rgba(85, 126, 255, 0.18), transparent 50%),
-      radial-gradient(at 100% 100%, rgba(0, 219, 213, 0.12), transparent 50%);
+      radial-gradient(at 20% 0%, color-mix(in srgb, var(--color-flit-brand) 18%, transparent), transparent 50%),
+      radial-gradient(at 100% 100%, color-mix(in srgb, var(--color-flit-tech) 12%, transparent), transparent 50%);
   }
 
   @keyframes flit-orbit {
@@ -101,10 +101,10 @@
     position: absolute;
     inset: 0;
     border-radius: 9999px;
-    border: 2px solid #557eff;
+    border: 2px solid var(--color-flit-brand);
     box-shadow:
-      0 0 12px 2px rgba(85, 126, 255, 0.55),
-      inset 0 0 6px rgba(85, 126, 255, 0.4);
+      0 0 12px 2px color-mix(in srgb, var(--color-flit-brand) 55%, transparent),
+      inset 0 0 6px color-mix(in srgb, var(--color-flit-brand) 40%, transparent);
     border-top-color: transparent;
     animation: flit-orbit 1.2s linear infinite;
   }
@@ -115,7 +115,7 @@
     display: grid;
     place-items: center;
     animation: flit-counter 1.2s linear infinite;
-    color: #00dbd5;
+    color: var(--color-flit-tech);
   }
 
   /* Escena del CarLoader, calcada del loader de pestaña nueva (`open-document-tab.ts`): la pista
@@ -144,8 +144,8 @@
 
 /* HU #12724 — DateRangePicker (react-day-picker) con tokens FLIT */
 .flit-date-range-picker .rdp-root {
-  --rdp-accent-color: var(--color-flit-brand, #557eff);
-  --rdp-accent-background-color: rgba(85, 126, 255, 0.14);
+  --rdp-accent-color: var(--color-flit-brand);
+  --rdp-accent-background-color: color-mix(in srgb, var(--color-flit-brand) 14%, transparent);
   --rdp-day-height: 36px;
   --rdp-day-width: 36px;
   --rdp-day_button-height: 34px;

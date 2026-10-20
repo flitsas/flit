@@ -148,7 +148,7 @@ export function PrevalidacionDetailDrawer({
             >
               <ScanFace className="h-4 w-4" />
             </span>
-            <h2 id={titleId} className="truncate text-sm font-bold text-[#162744] dark:text-white">
+            <h2 id={titleId} className="truncate text-sm font-bold text-flit-primary dark:text-white">
               {title}
             </h2>
           </div>
@@ -197,7 +197,7 @@ export function PrevalidacionDetailDrawer({
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-[#162744] dark:text-white">{detail.name}</p>
+                  <p className="text-sm font-semibold text-flit-primary dark:text-white">{detail.name}</p>
                 )}
                 <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} wrap />
               </div>
@@ -281,7 +281,7 @@ export function PrevalidacionDetailDrawer({
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
-                <p className="mb-1 text-[11px] font-semibold text-[#162744] dark:text-white">
+                <p className="mb-1 text-[11px] font-semibold text-flit-primary dark:text-white">
                   Tracking del proceso
                 </p>
                 <p className="mb-2 text-[10px] opacity-60">

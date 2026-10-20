@@ -46,7 +46,7 @@ export function GraficoBarras({
   return (
     <figure className="flex flex-col gap-2">
       <figcaption className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-[#162744] dark:text-white">{titulo}</span>
+        <span className="text-sm font-semibold text-flit-primary dark:text-white">{titulo}</span>
         {series.length > 1 && (
           <span className="flex flex-wrap items-center gap-3 text-[11px] text-[#5B6B82] dark:text-slate-300">
             {series.map((s) => (

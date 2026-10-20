@@ -85,7 +85,7 @@ export function BusquedaRapidaAcordeon({
           aria-expanded={abierto}
           aria-controls={panelId}
           onClick={alternar}
-          className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-[#162744] transition hover:bg-[#557EFF]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] dark:text-white"
+          className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-flit-primary transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:text-white"
         >
           Búsqueda rápida
           <ChevronDown
@@ -106,10 +106,10 @@ export function BusquedaRapidaAcordeon({
                 title={item.hint}
                 disabled={disabled}
                 onClick={() => onSelect(activo ? '' : item.key)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-60 ${
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60 ${
                   activo
-                    ? 'border-[#557EFF] bg-[#557EFF]/10 text-[#3A5FD9] dark:text-[#8FA9FF]'
-                    : 'border-[#DFE5ED] text-[#162744] hover:border-[#557EFF] dark:border-white/15 dark:text-white/80'
+                    ? 'border-flit-brand bg-flit-brand/10 text-[#3A5FD9] dark:text-[#8FA9FF]'
+                    : 'border-[#DFE5ED] text-flit-primary hover:border-flit-brand dark:border-white/15 dark:text-white/80'
                 }`}
               >
                 {item.label}

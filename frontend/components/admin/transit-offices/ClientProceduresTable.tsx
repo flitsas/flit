@@ -184,7 +184,7 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-[#162744] shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-flit-primary shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
         >
           <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
             Ordenar por

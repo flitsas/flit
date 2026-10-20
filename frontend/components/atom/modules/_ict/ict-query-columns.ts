@@ -40,7 +40,7 @@ export interface IctEstadoMeta {
 export const ICT_ESTADO_META: Record<string, IctEstadoMeta> = {
   recibido: { label: "Recibido", color: "#94A3B8" },
   en_validacion_negocio: { label: "En validación de negocio", color: "#F9AC00" },
-  en_validacion_externa: { label: "En validación externa", color: "#557EFF" },
+  en_validacion_externa: { label: "En validación externa", color: "var(--color-flit-brand)" },
   con_novedades: { label: "Con novedades", color: "#FF4E00" },
   borrador_creado: { label: "Borrador creado", color: "#8CC63F" },
   anulado: { label: "Anulado", color: "#64748B" },

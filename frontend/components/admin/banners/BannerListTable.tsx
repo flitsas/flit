@@ -156,8 +156,8 @@ export function BannerListTable({
                         rel="noopener noreferrer"
                         aria-label={`Abrir el enlace del banner ${b.name}`}
                         title={b.linkUrl}
-                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition hover:bg-[#557EFF]/10"
-                        style={{ color: "#557EFF" }}
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition hover:bg-flit-brand/10"
+                        style={{ color: "var(--color-flit-brand)" }}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>

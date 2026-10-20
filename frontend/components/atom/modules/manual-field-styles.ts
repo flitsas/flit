@@ -18,7 +18,7 @@ export const MANUAL_INPUT_CLASS =
  */
 export const MANUAL_AVISO = {
   info:
-    'border-[#557EFF]/35 bg-[#557EFF]/[0.14] text-[#3B4FD6] dark:border-[#557EFF]/40 dark:bg-[#557EFF]/[0.22] dark:text-[#A5B8FF]',
+    'border-flit-brand/35 bg-flit-brand/[0.14] text-[#3B4FD6] dark:border-flit-brand/40 dark:bg-flit-brand/[0.22] dark:text-[#A5B8FF]',
   success:
     'border-[#CDEB9C] bg-[#F3FBE8] text-[#4F7A12] dark:border-[#8CC63F]/45 dark:bg-[#8CC63F]/[0.22] dark:text-[#B8E986]',
   warning:
@@ -32,10 +32,10 @@ export const MANUAL_AVISO_BASE = 'flex items-start gap-2 rounded-2xl border px-4
 
 /** Foco de teclado: anillo de 2px #557EFF (#7C9BFF en oscuro) con desfase de 2px. */
 export const MANUAL_FOCO =
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] dark:focus-visible:outline-[#7C9BFF]';
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:focus-visible:outline-[#7C9BFF]';
 
 /** Botón secundario de pastilla (el «Cancelar» / «Cerrar» de los diálogos FLIT): borde de marca, navy / blanco. */
 export const MANUAL_BTN_SECUNDARIO =
-  'rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-[#162744] transition hover:bg-[#F4F8FF] disabled:cursor-not-allowed disabled:opacity-70 ' +
+  'rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary transition hover:bg-[#F4F8FF] disabled:cursor-not-allowed disabled:opacity-70 ' +
   'dark:border-white/15 dark:text-white dark:hover:bg-white/5 ' +
   MANUAL_FOCO;

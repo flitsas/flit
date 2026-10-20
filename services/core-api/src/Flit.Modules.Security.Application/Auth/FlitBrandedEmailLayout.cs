@@ -23,8 +23,8 @@ public static class FlitBrandedEmailLayout
     public const string DefaultAssetsBaseUrl = "http://localhost:3000/email-assets";
     public const string DefaultHeaderFileName = "tramite-cambio-estado-header.png";
     public const string DefaultLogoFileName = "flit-logo.png";
-    public const string PrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";
-    public const string SupportEmail = "soporte@flitsas.com";
+    public const string PrivacyPolicyUrl = Flit.Modules.Security.Domain.Auth.BrandedEmailChrome.FlitPrivacyPolicyUrl;
+    public const string SupportEmail = Flit.Modules.Security.Domain.Auth.BrandedEmailChrome.FlitSupportEmail;
 
     private const string PrimaryBlue = "#6080F0";
     private const string TitleHighlight = "#E8EEFF";
@@ -125,14 +125,27 @@ public static class FlitBrandedEmailLayout
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Nombre de la plataforma que firma el correo: el de la marca con tema <c>Brand</c> (y nombre
+    /// informado); <c>"FLIT"</c> en cualquier otro caso, para que la salida FLIT no cambie.
+    /// </summary>
+    public static string PlatformName(Flit.Modules.Security.Domain.Auth.EmailTheme? theme) =>
+        theme is { IsBrand: true } && !string.IsNullOrWhiteSpace(theme.PlatformName)
+            ? theme.PlatformName.Trim()
+            : "FLIT";
+
+    /// <summary>Color del enlace de acción: el principal de la marca con tema <c>Brand</c>; <c>null</c> (azul FLIT) si no.</summary>
+    public static string? BrandLinkColor(Flit.Modules.Security.Domain.Auth.EmailTheme? theme) =>
+        theme is { IsBrand: true } ? Flit.Modules.Security.Domain.Auth.BrandedEmailChrome.LinkColor(theme) : null;
+
     public static string Paragraph(string text) =>
         $"<p style=\"margin:0 0 12px;\">{Enc(text)}</p>";
 
     public static string ParagraphHtml(string innerHtml) =>
         $"<p style=\"margin:0 0 12px;\">{innerHtml}</p>";
 
-    public static string ActionLink(string href, string label) =>
-        $"<p style=\"margin:0 0 16px;\"><a href=\"{EncAttr(href)}\" style=\"color:{LinkBlue};font-size:15px;text-decoration:underline;word-break:break-all;\">{Enc(label)}</a></p>";
+    public static string ActionLink(string href, string label, string? linkColor = null) =>
+        $"<p style=\"margin:0 0 16px;\"><a href=\"{EncAttr(href)}\" style=\"color:{linkColor ?? LinkBlue};font-size:15px;text-decoration:underline;word-break:break-all;\">{Enc(label)}</a></p>";
 
     private static string CombineAssetUrl(string assetsBaseUrl, string fileName)
     {

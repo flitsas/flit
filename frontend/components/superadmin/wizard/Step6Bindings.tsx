@@ -14,7 +14,7 @@ export function Step6Bindings() {
       >
         <span
           className="px-3 py-1 rounded-full text-[10px] font-bold text-white"
-          style={{ background: '#557EFF' }}
+          style={{ background: 'var(--color-flit-brand)' }}
         >
           Próximamente
         </span>

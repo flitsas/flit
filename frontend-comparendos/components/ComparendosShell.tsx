@@ -48,7 +48,7 @@ export function ComparendosShell({ user, tramitesUrl, children }: { user: Usuari
   return (
     <SesionContext.Provider value={estado}>
       <SuiteShell productCode="comparendos" productName="Comparendos" nav={nav} user={user} accountUrl={tramitesUrl} layout="app">
-        <div className="app-bg flex min-h-full flex-col gap-4 px-4 pt-6 pb-28 text-[#162744] md:px-6 dark:text-white">{children}</div>
+        <div className="app-bg flex min-h-full flex-col gap-4 px-4 pt-6 pb-28 text-flit-primary md:px-6 dark:text-white">{children}</div>
       </SuiteShell>
     </SesionContext.Provider>
   );

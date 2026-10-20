@@ -69,7 +69,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               tooltip="Mediana de horas entre la última entrega y la decisión (aprobado/rechazado)."
               variation={kpiVariation("p50ApprovalHours")}
               invertVariationColor
-              color="#557EFF"
+              color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Aprobación p90"
@@ -117,7 +117,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
                   valueLabel: formatHours(summary.p50ApprovalHours),
                 },
               ]}
-              color="#557EFF"
+              color="var(--color-flit-brand)"
               emptyMessage="Sin trámites entregados en el periodo."
               testId="ciclo-interno-vs-ot"
             />
@@ -221,7 +221,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
                       contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="p50Hours" name="p50 (mediana)" fill="#557EFF" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                    <Bar dataKey="p50Hours" name="p50 (mediana)" fill="var(--color-flit-brand)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                     <Bar dataKey="p90Hours" name="p90" fill="#9B8AFB" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -273,7 +273,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               </h2>
               <div className="grid grid-cols-2 gap-3" data-testid="reincidencia-bloque">
                 <Stat label="Rechazadas" value={formatInt(metrics.data.current.reincidence.rechazadas)} color="#FF4E00" tooltip="Instancias con al menos un rechazo en el rango." />
-                <Stat label="Reintentadas" value={formatInt(metrics.data.current.reincidence.reintentadas)} color="#557EFF" tooltip="Rechazadas que volvieron a borrador para corregirse." />
+                <Stat label="Reintentadas" value={formatInt(metrics.data.current.reincidence.reintentadas)} color="var(--color-flit-brand)" tooltip="Rechazadas que volvieron a borrador para corregirse." />
                 <Stat label="Ciclos promedio" value={formatNumber(metrics.data.current.reincidence.avgCiclos)} color="#F9AC00" tooltip="Promedio de veces que una instancia pasó por 'rechazado'." />
                 <Stat label="Ciclos máximo" value={formatInt(metrics.data.current.reincidence.maxCiclos)} color="#9B8AFB" tooltip="Máximo de pasadas por 'rechazado' de una misma instancia." />
               </div>

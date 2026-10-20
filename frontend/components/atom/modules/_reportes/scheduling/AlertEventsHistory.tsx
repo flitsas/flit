@@ -80,7 +80,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
   return (
     <div data-testid="alert-events-history" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-bold text-[#162744] dark:text-slate-100">Historial de disparos</h4>
+        <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">Historial de disparos</h4>
         <select
           aria-label="Filtrar por alerta"
           value={ruleId}
@@ -88,7 +88,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
             setPage(1);
             setRuleId(e.target.value);
           }}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-[#162744] dark:text-slate-100"
+          className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-flit-primary dark:text-slate-100"
         >
           <option value="">Todas las alertas</option>
           {rules.map((r) => (
@@ -123,7 +123,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
                 <tr key={e.id} data-testid="alert-event-row" className={CARDLIST_ROW}>
                   <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{formatDateTime(e.triggeredAt)}</td>
                   <td className={CARDLIST_CELL}>{e.ruleName}</td>
-                  <td className={`${CARDLIST_CELL} text-right font-semibold`} style={{ color: "#557EFF" }}>
+                  <td className={`${CARDLIST_CELL} text-right font-semibold`} style={{ color: "var(--color-flit-brand)" }}>
                     {e.metricValue}
                   </td>
                   <td className={`${CARDLIST_CELL} text-right`}>{e.threshold}</td>
@@ -135,7 +135,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
                     {e.acknowledgedAt ? (
                       <span
                         className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                        style={{ background: "#557EFF1A", color: "#557EFF" }}
+                        style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }}
                       >
                         <Check className="h-3 w-3" aria-hidden="true" /> Reconocida
                       </span>

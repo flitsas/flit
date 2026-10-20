@@ -96,8 +96,8 @@ const RANGE_TABS: ReadonlyArray<TabId> = ["novedades", "jobs", "webhooks"];
  * un color de marca.
  */
 const CAUSA_COLOR: Record<string, string> = {
-  SOAT: "#557EFF",
-  RTM: "#00DBD5",
+  SOAT: "var(--color-flit-brand)",
+  RTM: "var(--color-flit-tech)",
   RNMC: "#9B8AFB",
   "Documento faltante": "#F9AC00",
   "Otra/sin clasificar": "#162744",
@@ -268,7 +268,7 @@ export function IctReports() {
   const nothingToExport = tabTotals[activeTab] === 0;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Reportes de Integración con Terceros"
         subtitle="Novedades, atascados y entregas de ICT, con consultas propias y envío programado."
@@ -400,7 +400,7 @@ function ExcelExportButton({
         // fila —allí, el PDF ejecutivo—, y una exportación a Excel no lo es en ninguno de los
         // módulos: que ICT lo usara era la excepción, no la regla.
         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border disabled:opacity-50"
-        style={{ color: "#162744" }}
+        style={{ color: "var(--color-flit-primary)" }}
         data-testid="ict-reportes-exportar-excel"
       >
         {busy ? (
@@ -762,7 +762,7 @@ function JobsTab({
               value={formatInt(report.total)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
-              color="#557EFF"
+              color="var(--color-flit-brand)"
             />
             {/* Cero incumplimientos es buena noticia y se pinta como tal; en cuanto hay uno, pasa
                 al naranja. Un rojo permanente en una tarjeta que dice "0" enseña a ignorarla. */}
@@ -864,7 +864,7 @@ function WebhooksTab({
               value={formatInt(report.total)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
-              color="#00DBD5"
+              color="var(--color-flit-tech)"
             />
             <KpiCard
               label="Entregados"

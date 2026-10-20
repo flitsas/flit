@@ -111,7 +111,7 @@ export function CancelacionCausalCard({
       <div
         className={cn(
           'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md sm:max-w-sm dark:bg-[#162744]',
-          causal ? 'border' : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]',
+          causal ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]',
         )}
         style={{ borderColor: '#E2E8F0' }}
       >
@@ -125,7 +125,7 @@ export function CancelacionCausalCard({
           {causal ? 'Validado' : '* Obligatorio'}
         </span>
 
-        <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: '#162744' }}>
+        <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: 'var(--color-flit-primary)' }}>
           Causal de cancelación
         </p>
 
@@ -177,7 +177,7 @@ export function CancelacionCausalCard({
       <p
         aria-live="polite"
         className={cn('rounded-xl px-3 py-2 text-xs', causal ? 'font-medium' : 'opacity-70')}
-        style={causal ? { background: 'rgba(85,126,255,0.08)', color: '#557EFF' } : undefined}
+        style={causal ? { background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)', color: 'var(--color-flit-brand)' } : undefined}
       >
         {causal
           ? `Se registrará en el FUR — ${cancelacionObservacionFur(causal)}`

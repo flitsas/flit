@@ -9,15 +9,16 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   /* HU #12419 (ADR-0060 §D5) — alias a `--brand-*` con el hex FLIT como valor por defecto. Sin
    * `<style id="brand-tokens">` inyectado (host FLIT, BrandStyle.tsx), `var(--brand-primary, …)`
-   * resuelve al fallback y el CSS computa EXACTAMENTE los mismos valores de siempre (AC7). Solo
-   * primary/secondary tienen equivalente en la marca (`BrandColors{primary,secondary,onPrimary}`);
-   * tech/alert/bg/gray son decorativos/semánticos de FLIT y no varían por red. */
+   * resuelve al fallback y el CSS computa EXACTAMENTE los mismos valores de siempre (AC7).
+   * primary = identidad (títulos, encabezados); secondary = acción (botones, enlaces, menú activo).
+   * `--brand-accent` (cierre del degradado) y `--brand-bg` (fondo tintado) los deriva BrandStyle
+   * del secundario; alert/gray son semánticos de FLIT y no varían por red. */
   --color-flit-primary: var(--brand-primary, #162744);
   --color-flit-brand: var(--brand-secondary, #557eff);
   --color-flit-brand-ink: var(--flit-brand-ink);
-  --color-flit-tech: #00dbd5;
+  --color-flit-tech: var(--brand-accent, #00dbd5);
   --color-flit-alert: #ff4e00;
-  --color-flit-bg: #eef5ff;
+  --color-flit-bg: var(--brand-bg, #eef5ff);
   --color-flit-gray: #dfe5ed;
   /* Dock inferior — utilities desde tokens §2D (GUIA-DOCK) alineados a flit_design_tokens */
   --color-nav-app: var(--nav-app-bg);
@@ -126,9 +127,9 @@
   --badge-pending-bg: rgba(255, 78, 0, 0.12);
   --badge-pending-fg: #bf3b00;
   --badge-pending-border: rgba(255, 78, 0, 0.32);
-  --badge-info-bg: rgba(85, 126, 255, 0.14);
-  --badge-info-fg: #3b4fd6;
-  --badge-info-border: rgba(85, 126, 255, 0.35);
+  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 14%, transparent);
+  --badge-info-fg: var(--brand-ink, #3b4fd6);
+  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 35%, transparent);
   --badge-neutral-bg: rgba(223, 229, 237, 0.55);
   --badge-neutral-fg: #445569;
   --badge-neutral-border: rgba(223, 229, 237, 0.9);
@@ -145,7 +146,7 @@
   /* Tinta legible del azul de marca (#557eff) cuando se usa como TEXTO pequeño: sobre blanco da
      3,61:1 (no AA). El azul de marca sigue en iconos, bordes y rellenos; esta variable es solo
      para labels y copy. HU #12723 — #476BD9 sobre #FFFFFF = 4,80:1 (WCAG 2.1 AA). */
-  --flit-brand-ink: #476bd9;
+  --flit-brand-ink: var(--brand-ink, #476bd9);
 
   /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
      tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
@@ -163,18 +164,19 @@
   --nav-vidrio-dark: rgba(22, 39, 68, 0.9);
   --nav-panel-bg: #ffffff;
   --nav-borde: #dde5f0;
-  --nav-app-bg: #eaf2ff;
+  --nav-app-bg: var(--brand-tint, #eaf2ff);
   --nav-texto: #59677d;
-  --nav-texto-fuerte: #162744;
+  --nav-texto-fuerte: var(--color-flit-primary);
   --nav-texto-tenue: #667085;
-  --nav-focus: #4f74c9;
-  /* Mismo degradado horizontal del isotipo central (favicon.svg: #557EFF → #00DBD5). */
-  --nav-activo: linear-gradient(90deg, #557eff 0%, #00dbd5 100%);
+  --nav-focus: var(--brand-ink, #4f74c9);
+  /* Mismo degradado horizontal del isotipo central (favicon.svg: #557EFF → #00DBD5); en una
+     Marca Blanca, sus colores. */
+  --nav-activo: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%);
   --nav-radio-pill: 999px;
   --nav-radio-panel: 18px;
   --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
   --nav-sombra-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
-  --nav-sombra-activo: 0 10px 22px rgba(79, 116, 201, 0.22);
+  --nav-sombra-activo: 0 10px 22px color-mix(in srgb, var(--brand-ink, #4f74c9) 22%, transparent);
   --nav-duracion: 180ms;
   --nav-ease: cubic-bezier(0.2, 0, 0, 1);
   --alto-navegacion: 0px;
@@ -229,9 +231,9 @@
   --badge-pending-bg: rgba(255, 78, 0, 0.2);
   --badge-pending-fg: #fca574;
   --badge-pending-border: rgba(255, 78, 0, 0.4);
-  --badge-info-bg: rgba(85, 126, 255, 0.22);
-  --badge-info-fg: #a5b8ff;
-  --badge-info-border: rgba(85, 126, 255, 0.4);
+  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
+  --badge-info-fg: var(--brand-ink, #a5b8ff);
+  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 40%, transparent);
   --badge-neutral-bg: rgba(255, 255, 255, 0.08);
   --badge-neutral-fg: #cbd5e1;
   --badge-neutral-border: rgba(255, 255, 255, 0.15);
@@ -241,7 +243,7 @@
   --flit-success-ink: #8cc63f;
 
   /* Azul de marca como texto sobre fondo dock oscuro (#162744): #6FA5FF = 6,04:1 (HU #12723). */
-  --flit-brand-ink: #6fa5ff;
+  --flit-brand-ink: var(--brand-ink, #6fa5ff);
 
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
   --table-header-bg: rgba(255, 255, 255, 0.06);

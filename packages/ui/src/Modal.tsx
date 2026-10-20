@@ -67,8 +67,8 @@ export function Modal({
   onClose,
   title,
   icon: Icon,
-  iconBg = "#557EFF",
-  titleClassName = "text-base font-bold text-[#162744] dark:text-white",
+  iconBg = "var(--color-flit-brand)",
+  titleClassName = "text-base font-bold text-flit-primary dark:text-white",
   description,
   size = "md",
   zClassName = "z-[100]",
@@ -127,7 +127,7 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
+        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-flit-primary shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
           <div className="mb-4 shrink-0">{resolvedHeader}</div>

@@ -323,7 +323,7 @@ export function MandatosCatalogPanel() {
                 pg.setPage(1);
               }}
               placeholder="Buscar OT o plantilla…"
-              className="w-full rounded-xl border border-[#DFE5ED] bg-white py-2 pr-3 pl-9 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+              className="w-full rounded-xl border border-[#DFE5ED] bg-white py-2 pr-3 pl-9 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
             />
           </label>
         </div>
@@ -443,7 +443,7 @@ function ResetFormatoDialog({
       icon={AlertTriangle}
       iconBg="#F9AC00"
       title="Restablecer redacción de fábrica"
-      titleClassName="text-base font-bold text-[#162744]"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
     >
       <div className="space-y-3 text-xs" data-testid="mandatos-formato-reset-dialog">
@@ -472,7 +472,7 @@ function ResetFormatoDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {busy ? "Restableciendo…" : "Restablecer"}
           </button>
@@ -516,7 +516,7 @@ function ResetConfirmDialog({
       icon={AlertTriangle}
       iconBg="#F9AC00"
       title="Restablecer configuración"
-      titleClassName="text-base font-bold text-[#162744]"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
     >
       <div className="space-y-3 text-xs" data-testid="mandatos-reset-dialog">
@@ -549,7 +549,7 @@ function ResetConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {busy ? "Restableciendo…" : "Restablecer"}
           </button>

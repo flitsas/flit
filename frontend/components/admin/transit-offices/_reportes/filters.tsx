@@ -102,8 +102,8 @@ export function RangePresets({
             onClick={() => onChange(target)}
             className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
               active
-                ? "border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
-                : "border-[#DFE5ED] text-[#6B7280] hover:border-[#557EFF] dark:border-white/10 dark:text-white/50"
+                ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
+                : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand dark:border-white/10 dark:text-white/50"
             }`}
           >
             {preset.label}

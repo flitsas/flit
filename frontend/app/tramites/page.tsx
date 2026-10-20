@@ -33,7 +33,7 @@ export default function TramitesPage() {
         open={eligiendo}
         onClose={() => setEligiendo(false)}
         title="Nuevo trámite"
-        titleClassName="text-[22px] font-bold text-[#557EFF] dark:text-[#557EFF]"
+        titleClassName="text-[22px] font-bold text-flit-brand dark:text-flit-brand"
         description="Selecciona el trámite principal y completa su configuración. Al iniciar entrarás directamente al Paso 1."
         size="xl"
       >

@@ -237,7 +237,7 @@ export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSecti
           <button
             type="button"
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
             disabled={savingRevocationWindow}
             onClick={() => void handleSaveRevocationWindow()}
           >

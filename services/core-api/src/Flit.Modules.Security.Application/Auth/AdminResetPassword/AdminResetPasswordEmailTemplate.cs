@@ -14,7 +14,12 @@ namespace Flit.Modules.Security.Application.Auth.AdminResetPassword;
 /// </remarks>
 public static class AdminResetPasswordEmailTemplate
 {
+    /// <summary>Asunto con el tema FLIT. Con tema de marca ver <see cref="BuildSubject"/>.</summary>
     public const string Subject = "Tu contraseña fue restablecida — FLIT";
+
+    /// <summary>Asunto firmado por la marca con tema de marca; exactamente <see cref="Subject"/> con FLIT.</summary>
+    public static string BuildSubject(Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
+        $"Tu contraseña fue restablecida — {FlitBrandedEmailLayout.PlatformName(theme)}";
 
     /// <summary>
     /// HU #11351 — composición pura: asunto y cuerpo a partir únicamente de
@@ -27,7 +32,7 @@ public static class AdminResetPasswordEmailTemplate
         string temporaryPassword,
         string? assetsBaseUrl = null,
         Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
-        new(Subject, BuildBody(displayName, temporaryPassword, assetsBaseUrl, theme));
+        new(BuildSubject(theme), BuildBody(displayName, temporaryPassword, assetsBaseUrl, theme));
 
     private static string BuildBody(
         string displayName,
@@ -41,7 +46,7 @@ public static class AdminResetPasswordEmailTemplate
         var body =
             FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
             + FlitBrandedEmailLayout.Paragraph(
-                "Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:")
+                $"Un administrador restableció tu contraseña en {FlitBrandedEmailLayout.PlatformName(theme)}. Tu contraseña temporal es:")
             + FlitBrandedEmailLayout.ParagraphHtml(
                 $"<strong style=\"font-size:18px;letter-spacing:0.04em;\">{password}</strong>")
             + FlitBrandedEmailLayout.Paragraph(

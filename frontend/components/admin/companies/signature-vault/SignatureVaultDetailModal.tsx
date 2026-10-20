@@ -53,7 +53,7 @@ export function SignatureVaultDetailModal({ item, onClose }: SignatureVaultDetai
           type="button"
           onClick={onClose}
           className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           Cerrar
         </button>

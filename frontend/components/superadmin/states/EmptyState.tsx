@@ -7,11 +7,11 @@ export function EmptyState({ onNew }: EmptyStateProps) {
     <div className="flex-1 flex flex-col items-center justify-center gap-4 py-16">
       <div
         className="h-16 w-16 rounded-2xl grid place-items-center"
-        style={{ background: 'rgba(85,126,255,0.10)' }}
+        style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)' }}
       >
         <svg
           className="h-8 w-8"
-          style={{ color: '#557EFF' }}
+          style={{ color: 'var(--color-flit-brand)' }}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
@@ -34,7 +34,7 @@ export function EmptyState({ onNew }: EmptyStateProps) {
       <button
         onClick={onNew}
         className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white"
-        style={{ background: '#557EFF' }}
+        style={{ background: 'var(--color-flit-brand)' }}
         aria-label="Crear nuevo flujo de parametrización"
       >
         Nuevo flujo

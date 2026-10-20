@@ -32,7 +32,7 @@ export function DateRangeFilter({ value, onChange, disabled, permiteSinRango }: 
           </span>
           <button
             type="button"
-            className="h-10 rounded-[10px] border border-[#DFE5ED] px-3 text-xs font-medium text-[#162744] transition hover:bg-[#557EFF]/10 disabled:opacity-60 dark:border-white/15 dark:text-white"
+            className="h-10 rounded-[10px] border border-[#DFE5ED] px-3 text-xs font-medium text-flit-primary transition hover:bg-flit-brand/10 disabled:opacity-60 dark:border-white/15 dark:text-white"
             disabled={disabled || vacio}
             aria-pressed={vacio}
             title={

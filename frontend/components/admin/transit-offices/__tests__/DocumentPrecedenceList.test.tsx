@@ -64,7 +64,7 @@ describe("DocumentPrecedenceList — HU #12883 AC2", () => {
     });
   });
 
-  it("AC2 marca con borde #557EFF la fila destino durante el dragover", () => {
+  it("AC2 marca con el borde de marca la fila destino durante el dragover", () => {
     renderList();
     const rows = screen.getAllByRole("listitem");
     const source = rows[0];
@@ -73,7 +73,7 @@ describe("DocumentPrecedenceList — HU #12883 AC2", () => {
     fireEvent.dragStart(source);
     fireEvent.dragOver(target);
 
-    expect(target.style.borderColor).toBe("rgb(85, 126, 255)");
+    expect(target.style.borderColor).toBe("var(--color-flit-brand)");
   });
 
   it("conserva el reordenamiento por teclado (ArrowDown + Enter guarda)", async () => {
