@@ -8,14 +8,14 @@ el porqué de cada pieza.
 
 ## 0. Orden (importa)
 
-El job `deploy-dev-gitops` de `cd.yml` **falla a propósito** si una imagen que tiene que actualizar no está en
+El job `deploy-gitops` de `cd.yml` **falla a propósito** si una imagen que tiene que actualizar no está en
 `services/flit2-dev/kustomization.yaml` (evita despliegues a medias). Por eso:
 
 1. **flit-gitops primero:** los manifiestos de §3 y §4 y las dos imágenes en la kustomization (con el tag que haya;
    `replicas: 0` en los dos Deployments hasta tener la base y los secretos), más los cambios de §5 en los servicios
    existentes.
 2. **Después el PR de Comparendos a develop:** agrega `core-comparendos` y `frontend-comparendos` a la lista del job
-   `deploy-dev-gitops` (los dos builds ya existen en `cd.yml`). Al fusionar, el job escribe sus digests.
+   `deploy-gitops` (los dos builds ya existen en `cd.yml`). Al fusionar, el job escribe sus digests.
 3. **Base y RabbitMQ** (§1 y §2), secretos sellados (§3), `replicas: 1` y Argo sincroniza.
 
 ## 1. Base de datos
