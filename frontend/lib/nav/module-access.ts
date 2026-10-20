@@ -18,6 +18,9 @@ import { type JwtPayload, hasPermission, hasRoleCode, isOtUser, isSuperAdmin } f
 // como literales para que este módulo no dependa de constantes en tiempo de carga.
 const ADMIN_COMPANY_ROLE = "AdminCompany";
 const OT_ADMIN_ROLE = "ot_admin";
+/** Slugs OT que el Admin OT puede delegar por usuario (OtPermissionMap.cs). */
+export const OT_DOCUMENTOS_PERMISSION = "ot.documentos.manage";
+export const OT_MANDATARIOS_PERMISSION = "ot.mandatarios.manage";
 
 /** Lo que la API exige para el módulo. `authenticated` = solo sesión (el menú puede ser más estricto, nunca menos). */
 export type ApiGuard =
@@ -39,6 +42,12 @@ export interface AccessRequirement {
   permissionsAny?: readonly string[];
   /** Basta uno de estos roles del token. */
   rolesAny?: readonly string[];
+  /**
+   * Alternativa a `rolesAny`: el permiso OT que el Admin OT delega por usuario (Anexo A §1.4, HU #13639). Con él,
+   * `rolesAny` deja de exigirse; la API lo respeta solo con `Security:OtPermissionEnforcement` encendido, que es
+   * cuando ese permiso se puede otorgar.
+   */
+  delegatedBy?: string;
   /** Usuario de un organismo de tránsito (`entity_type = TRANSIT_OFFICE` u `ot_admin`). */
   transitOfficeUser?: boolean;
   /** Qué exige la API para este módulo. */
@@ -137,7 +146,13 @@ export function canAccess(subject: AccessSubject, requirement: AccessRequirement
   if (superAdmin) return true;
 
   if (requirement.transitOfficeUser && !isOtUser(claims)) return false;
-  if (requirement.rolesAny && !requirement.rolesAny.some((role) => hasRoleCode(claims, role))) return false;
+  if (
+    requirement.rolesAny &&
+    !requirement.rolesAny.some((role) => hasRoleCode(claims, role)) &&
+    !(requirement.delegatedBy && hasPermission(claims, requirement.delegatedBy))
+  ) {
+    return false;
+  }
   if (requirement.permissionsAny && !requirement.permissionsAny.some((slug) => hasPermission(claims, slug))) return false;
   return true;
 }
@@ -191,13 +206,14 @@ export const ROUTE_ACCESS: readonly RouteAccessRule[] = [
     pattern: /^\/admin\/transit-offices\/[^/]+\/(rules|requirements|configuracion)(\/|$)/,
     requirement: { superAdminOnly: true, api: ROUTE_API_ADMIN },
   },
-  // HU #12860 — Documentos del organismo: ot_admin o SuperAdmin.
+  // HU #12860 — Documentos del organismo: ot_admin o SuperAdmin; HU #13639 — o quien tenga ot.documentos.manage.
   {
     id: "admin-transit-offices-documents",
     pattern: /^\/admin\/transit-offices\/[^/]+\/documents(\/|$)/,
     requirement: {
       transitOfficeUser: true,
       rolesAny: [OT_ADMIN_ROLE],
+      delegatedBy: OT_DOCUMENTOS_PERMISSION,
       api: { kind: "policy", policy: "OtAdminOrSuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminOtEndpoints.cs" },
     },
   },

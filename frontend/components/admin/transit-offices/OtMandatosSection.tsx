@@ -38,7 +38,8 @@ import {
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "@/lib/auth/jwt";
+import { decodeJwtPayload, hasPermission, isOtAdmin, isSuperAdmin } from "@/lib/auth/jwt";
+import { OT_MANDATARIOS_PERMISSION } from "@/lib/nav/module-access";
 import { ApiError } from "@/lib/api/types";
 import {
   etiquetaTipoFirma,
@@ -136,7 +137,7 @@ export function OtMandatosSection({
   // (HU #13123). Al Operador OT (gestor_tramites_ot) no se le ofrece registrar mandatarios.
   const [canRegisterSigner] = useState(() => {
     const payload = decodeJwtPayload(getToken());
-    return isSuperAdmin(payload) || isOtAdmin(payload);
+    return isSuperAdmin(payload) || isOtAdmin(payload) || hasPermission(payload, OT_MANDATARIOS_PERMISSION);
   });
   // Alta desde el panel de configuración: siempre un mandatario del organismo (el OT no registra los de las compañías).
   const [registrando, setRegistrando] = useState(false);

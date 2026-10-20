@@ -5,12 +5,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildDock } from "@flit/shell/nav";
 import { tramitesNav } from "@/components/atom/dock/tramitesNav";
+import { COPY } from "@/lib/copy/copy-catalog";
 import {
   MODULE_ACCESS,
   canAccess,
   canAccessModule,
   moduleRequirement,
   navGatingFor,
+  resolveRouteAccess,
   type AccessRequirement,
   type ModuleAccessKey,
 } from "../module-access";
@@ -154,5 +156,28 @@ describe("navGatingFor — el dock lee el mismo requisito", () => {
       permission: ["generacion-documental.read"],
     });
     expect(navGatingFor("dashboard")).toEqual({});
+  });
+});
+
+describe("HU #13639 (Anexo A §1.4) — Documentos del organismo se delega con ot.documentos.manage", () => {
+  const otUser = (permissions: string[], roles: { code: string }[] = [{ code: "gestor_tramites_ot" }]) =>
+    claims({ roles, permissions, entity_type: "TRANSIT_OFFICE" });
+
+  it("la ruta abre para el ot_admin y para el usuario OT con el permiso delegado, no para el resto", () => {
+    expect(resolveRouteAccess(otUser([], [{ code: "ot_admin" }]), "/admin/transit-offices/x/documents").allowed).toBe(true);
+    expect(resolveRouteAccess(otUser(["ot.documentos.manage"]), "/admin/transit-offices/x/documents").allowed).toBe(true);
+    expect(resolveRouteAccess(otUser(["ot.tramites.manage"]), "/admin/transit-offices/x/documents").allowed).toBe(false);
+  });
+
+  it("el dock muestra Documentos con el permiso delegado; Usuarios sigue siendo solo del ot_admin", () => {
+    const keys = (ctx: { isOtAdmin: boolean; hasOtDocumentos: boolean }) =>
+      buildDock(
+        tramitesNav({ isOtUser: true, isAdminCompany: false, isGroupParent: false, tenantId: null, otTransitOfficeId: "ot-1", ...ctx }),
+        { permissions: [], isSuperAdmin: false },
+        "/",
+      ).flatMap((g) => g.items.map((i) => i.label));
+    expect(keys({ isOtAdmin: false, hasOtDocumentos: true })).toContain("Documentos");
+    expect(keys({ isOtAdmin: false, hasOtDocumentos: true })).not.toContain(COPY.B21Usuarios);
+    expect(keys({ isOtAdmin: false, hasOtDocumentos: false })).not.toContain("Documentos");
   });
 });

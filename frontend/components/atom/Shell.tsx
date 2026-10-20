@@ -7,6 +7,7 @@ import { useSuiteTheme } from "@flit/shell/theme";
 import {
   canDescargarConsolidadosMasivo,
   decodeJwtPayload,
+  hasPermission,
   isAdminCompany,
   isGroupParent,
   isOtAdmin,
@@ -19,6 +20,7 @@ import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import { DrFlitAssistant } from "@/components/dr-flit";
 import { LoteDescargaTracker, LoteDescargaTrackerProvider } from "@/components/shared/LoteDescargaTracker";
+import { OT_DOCUMENTOS_PERMISSION } from "@/lib/nav/module-access";
 import { tramitesNav } from "./dock/tramitesNav";
 
 export type ModuleId =
@@ -71,6 +73,7 @@ function useCurrentUser() {
       isAdminCompany: isAdminCompany(payload),
       isGroupParent: isGroupParent(payload),
       isOtAdmin: isOtAdmin(payload),
+      hasOtDocumentos: hasPermission(payload, OT_DOCUMENTOS_PERMISSION),
       // Cualquier rol de un tenant OT (no solo ot_admin) opera la superficie del organismo.
       isOtUser: isOtUser(payload),
       tenantId: (payload.tenant_id as string) ?? null,
@@ -127,6 +130,7 @@ export function Shell({
       tramitesNav({
         isOtUser: Boolean(currentUser?.isOtUser),
         isOtAdmin: Boolean(currentUser?.isOtAdmin),
+        hasOtDocumentos: Boolean(currentUser?.hasOtDocumentos),
         isAdminCompany: Boolean(currentUser?.isAdminCompany),
         isGroupParent: Boolean(currentUser?.isGroupParent),
         tenantId: currentUser?.tenantId ?? null,

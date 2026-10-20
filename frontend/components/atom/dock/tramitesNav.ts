@@ -57,6 +57,8 @@ export interface TramitesNavContext {
   isOtUser: boolean;
   /** `ot_admin`: además ve Documentos y Usuarios del organismo. */
   isOtAdmin: boolean;
+  /** Usuario OT con `ot.documentos.manage` delegado por su Admin OT (HU #13639): ve Documentos. */
+  hasOtDocumentos?: boolean;
   isAdminCompany: boolean;
   isGroupParent: boolean;
   tenantId: string | null;
@@ -172,9 +174,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
     });
     entries.push(
       ot(OT_ADM_DOCK.tramites, COPY.B21Tramites, "client-procedures", FileStack),
-      ...(ctx.isOtAdmin
-        ? [ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText), ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users)]
-        : []),
+      ...(ctx.isOtAdmin || ctx.hasOtDocumentos ? [ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText)] : []),
+      ...(ctx.isOtAdmin ? [ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users)] : []),
       ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", BarChart3),
       ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", FileSignature),
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),
