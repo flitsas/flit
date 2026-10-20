@@ -1227,4 +1227,30 @@ public sealed class TramiteLifecycleServiceTests
 
         outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.CamaraComercioPendiente);
     }
+
+    // ── C2-PUT (Bug pendiente, hijo de #13110) — el gate Preparar resuelve la OT como el wizard ─────
+
+    /// <summary>
+    /// Borrador sin columna <c>TransitOfficeId</c> (previo a HU #11199) y la OT en field_values: el
+    /// override del OT se evalúa contra ESA OT (la misma que el GET del wizard y el PUT de prenda), no
+    /// contra null. Con la OT exigiendo el certificado y sin documento, Preparar bloquea con el código
+    /// del OT.
+    /// </summary>
+    [Fact]
+    public async Task OverrideOt_SinColumnaOt_ResuelveLaOtDeFieldValues()
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        i.TransitOfficeId = null;
+        SeleccionarOt(i, otId);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, Arg.Any<Guid?>(), i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<Guid?>(1) == otId);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
 }
