@@ -15131,6 +15131,9 @@ components:
         effect: { type: string, enum: [allow, deny] }
         source: { type: string, enum: [INDIVIDUAL, MODULE_SNAPSHOT] }
         grantedBy: { type: string, format: uuid }
+        name: { type: string, nullable: true, description: "Nombre del permiso (HU #13655)." }
+        moduleCode: { type: string, nullable: true, description: "Codigo del modulo del permiso (HU #13655)." }
+        moduleName: { type: string, nullable: true, description: "Nombre del modulo, para mostrar un permiso fuera del tope de quien consulta (HU #13655)." }
         grantedByName: { type: string, nullable: true, description: "Nombre de quien otorgo el permiso (HU #13647)." }
         grantedAt: { type: string, format: date-time, nullable: true, description: "Fecha UTC en que se otorgo (HU #13647)." }
 

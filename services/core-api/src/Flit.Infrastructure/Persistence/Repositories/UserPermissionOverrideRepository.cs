@@ -120,18 +120,20 @@ internal sealed class UserPermissionOverrideRepository(FlitDbContext db) : IUser
         public string ProductCode { get; set; } = string.Empty;
 
         public string Enforced { get; set; } = "false";
+
+        public string? ModuleName { get; set; }
     }
 
     private IQueryable<CatalogRow> Catalog() => db.Database.SqlQuery<CatalogRow>($"""
         SELECT p.id AS id, p.slug AS slug, p.name AS name, m.code AS module_code,
-               m.product_code AS product_code, p.enforced AS enforced
+               m.product_code AS product_code, p.enforced AS enforced, m.name AS module_name
           FROM security.permissions p
           JOIN security.modules m ON m.id = p.module_id
          WHERE p.is_active AND p.deleted_at IS NULL AND m.deleted_at IS NULL
         """);
 
     private static PermissionCatalogEntry ToEntry(CatalogRow r) =>
-        new(r.Id, r.Slug, r.Name, r.ModuleCode, r.ProductCode, r.Enforced);
+        new(r.Id, r.Slug, r.Name, r.ModuleCode, r.ProductCode, r.Enforced, r.ModuleName);
 
     public async Task<PermissionCatalogEntry?> GetPermissionAsync(Guid permissionId, CancellationToken ct)
     {

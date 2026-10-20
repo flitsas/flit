@@ -119,7 +119,8 @@ public interface IUserPermissionOverrideRepository
 }
 
 /// <summary>Permiso del catálogo. <c>Enforced</c>: 'true' | 'false' | 'excluded'.</summary>
-public sealed record PermissionCatalogEntry(Guid Id, string Slug, string Name, string ModuleCode, string ProductCode, string Enforced)
+public sealed record PermissionCatalogEntry(
+    Guid Id, string Slug, string Name, string ModuleCode, string ProductCode, string Enforced, string? ModuleName = null)
 {
     public bool IsEnforced => Enforced == "true";
 }

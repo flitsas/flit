@@ -116,7 +116,7 @@ export function withOverrideActions(modules: AccessibleModule[], overrides: User
   for (const o of extra) {
     let module = result.find((m) => m.code === o.moduleCode);
     if (!module) {
-      module = { id: o.moduleCode!, code: o.moduleCode!, name: o.moduleCode!, sortOrder: Number.MAX_SAFE_INTEGER, actions: [], productCode: o.productCode };
+      module = { id: o.moduleCode!, code: o.moduleCode!, name: o.moduleName ?? o.moduleCode!, sortOrder: Number.MAX_SAFE_INTEGER, actions: [], productCode: o.productCode };
       result.push(module);
     }
     module.actions.push({ id: o.permissionId, slug: o.slug, name: o.name ?? o.slug });

@@ -53,6 +53,7 @@ internal static class PermissionOverridesEndpoints
                     i.GrantedBy,
                     i.Name, // HU #13655: para mostrar lo que está fuera del tope de quien consulta
                     i.ModuleCode,
+                    i.ModuleName,
                     GrantedByName = info.TryGetValue(i.PermissionId, out var g) ? g.GrantedByName : null,
                     GrantedAt = info.TryGetValue(i.PermissionId, out var g2) ? (DateTime?)g2.GrantedAt.UtcDateTime : null,
                 }));

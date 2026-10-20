@@ -129,4 +129,9 @@ describe("HU #13655 (FD2-3) — withOverrideActions: lo que está fuera del tope
     expect(withOverrideActions(modules, [override("p1", "otro")]).map((m) => m.code)).toEqual(["ict-logs", "otro"]);
     expect(withOverrideActions(modules, [override("p1", null)])).toBe(modules);
   });
+
+  it("el módulo creado lleva el nombre que trae la API, no su código", () => {
+    const result = withOverrideActions(modules, [{ ...override("p1", "logqx"), moduleName: "LOG QX" }]);
+    expect(result[1].name).toBe("LOG QX");
+  });
 });

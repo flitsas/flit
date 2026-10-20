@@ -33,6 +33,8 @@ export interface UserPermissionOverride {
   /** HU #13655: nombre y módulo del permiso, para mostrarlo aunque esté fuera del tope de quien consulta. */
   name?: string | null;
   moduleCode?: string | null;
+  /** Nombre del módulo, para titular el que solo existe por un permiso fuera del tope (no su código). */
+  moduleName?: string | null;
   /** HU #13647 (FD1-8): quién otorgó el permiso. */
   grantedByName: string | null;
   /** HU #13647 (FD1-8): instante UTC del otorgamiento. */
