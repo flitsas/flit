@@ -62,6 +62,31 @@ export function meetsMinimumContrast(ratio: number, min: number = MIN_CONTRAST_R
   return ratio >= min;
 }
 
+export interface BrandContrastPair {
+  /** Texto para la UI: "texto/principal" o "texto/secundario". */
+  label: string;
+  /** `null` si alguno de los dos colores no es `#RRGGBB` válido. */
+  ratio: number | null;
+  ok: boolean;
+}
+
+/**
+ * Los dos pares que valida el backend al guardar (`BrandAssetValidator`): el texto sobre el color
+ * principal y el texto sobre el secundario. Si cualquiera queda bajo 4.5:1, el borrador no se guarda.
+ */
+export function brandContrastPairs(colors: { primary: string; secondary: string; onPrimary: string }): BrandContrastPair[] {
+  return [
+    { label: "texto/principal", background: colors.primary },
+    { label: "texto/secundario", background: colors.secondary },
+  ].map(({ label, background }) => {
+    if (!isValidHexColor(colors.onPrimary) || !isValidHexColor(background)) {
+      return { label, ratio: null, ok: false };
+    }
+    const ratio = contrastRatio(colors.onPrimary, background);
+    return { label, ratio, ok: meetsMinimumContrast(ratio) };
+  });
+}
+
 /** Ratio redondeado a 2 decimales, para mostrar en UI ("4.52"). */
 export function formatContrastRatio(ratio: number): string {
   return ratio.toFixed(2);

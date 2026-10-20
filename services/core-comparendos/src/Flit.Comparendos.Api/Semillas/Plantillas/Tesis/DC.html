@@ -1,0 +1,25 @@
+<!-- nombre: Caducidad masiva -->
+<p style="text-align:right">{{#si ot.municipio}}{{ot.municipio}}, {{/si}}{{dp.fecha}}<br>Radicado: <b>{{dp.radicado}}</b></p>
+<p><b>SEÑORES:<br>{{ot.nombre}}</b>{{#si comparendo.es_fotomulta == "fotomulta"}}<br><b>INSPECTOR DE FOTODETECCIONES</b>{{/si}}{{#si ot.municipio}}<br>{{ot.municipio}}{{#si ot.departamento}}, {{ot.departamento}}{{/si}}{{/si}}<br><b>E. S. H. D.</b></p>
+<p><b>ASUNTO: DERECHO DE PETICIÓN ARTÍCULO 23 CONSTITUCIÓN POLÍTICA DE COLOMBIA – SOLICITUD DE CADUCIDAD DE PROCESO CONTRAVENCIONAL</b></p>
+<p><b>Referencia:</b> Orden de comparendo N° {{comparendo.numero}} del {{comparendo.fecha_imposicion}}{{#si comparendo.placa}} · Placa {{comparendo.placa}}{{/si}}</p>
+<table>
+<tr><th>N° de comparendo</th><th>Fecha del comparendo</th><th>Infracción</th><th>Placa</th></tr>
+<tr><td>{{comparendo.numero}}</td><td>{{comparendo.fecha_imposicion}}</td><td>{{comparendo.codigo_infraccion}}</td><td>{{comparendo.placa}}</td></tr>
+</table>
+<p><b>Cordial saludo,</b></p>
+<p style="text-align:justify"><b>{{peticionario.nombre}}</b>, identificado(a) con {{peticionario.tipo_documento}} <b>{{peticionario.numero_documento}}</b>{{#si rl.nombres}}, actuando por intermedio de {{rl.nombres}}, identificado(a) con {{rl.tipo_documento}} No. {{rl.numero_documento}}, en calidad de {{rl.cargo}},{{/si}} en ejercicio del derecho de petición consagrado en el artículo 23 de la Constitución Política de Colombia y con el lleno de los requisitos de los artículos 5, 15 y 16 del Código de Procedimiento Administrativo y de lo Contencioso Administrativo, Ley 1437 de 2011, modificado por el artículo 1 de la Ley 1755 de 2015, respetuosamente me dirijo a su despacho con el fin de solicitarle:</p>
+<ol>
+<li>Solicito por favor la caducidad del proceso contravencional del comparendo No. {{comparendo.numero}} del {{comparendo.fecha_imposicion}}, teniendo en cuenta que desde la fecha de imposición ya ha pasado más de un año para imponer la sanción económica a la presunta contravención.</li>
+<li>Solicito por favor retirar de la base de datos de SIMIT la información del comparendo No. {{comparendo.numero}}, asociada a nuestra razón social y {{peticionario.tipo_documento}}.</li>
+</ol>
+<h3 style="text-align:center">RAZONES QUE SUSTENTAN ESTA PETICIÓN</h3>
+<p style="text-align:justify">El artículo 2 del Código Nacional de Tránsito define que el significado de comparendo es una orden de comparecer ante la autoridad de tránsito ante la comisión de una presunta infracción a las normas de tránsito vigentes; por lo tanto, los términos de ley que se establecen en la caducidad indican lo siguiente:</p>
+<p style="text-align:justify"><b>CADUCIDAD. LEY 1843 DE 2017, ARTÍCULO 11:</b> El artículo 161 de la Ley 769 de 2002 quedará así: «Artículo 161. Caducidad. La acción por contravención de las normas de tránsito caduca al año (1), contado a partir de la ocurrencia de los hechos que dieron origen a ella. En consecuencia, durante este término se deberá decidir sobre la imposición de la sanción, en tal momento se entenderá realizada efectivamente la audiencia e interrumpida la caducidad. La decisión que resuelve los recursos, de ser procedentes, deberá ser expedida en un término de un (1) año contado a partir de su debida y oportuna interposición; si los recursos no se deciden en el término fijado en esta disposición, se entenderán fallados a favor del recurrente. La revocación directa solo podrá proceder en forma supletiva al proceso contravencional y en el evento de ser resuelta a favor de los intereses del presunto infractor sus efectos serán a futuro, iniciando la contabilización de la caducidad a partir de la notificación de la aceptación de su solicitud o su declaratoria de oficio, permitiendo al presunto infractor contar con los términos establecidos en la ley para la obtención de los descuentos establecidos en la ley o la realización de la audiencia contemplados en el Código Nacional de Tránsito».</p>
+<p style="text-align:justify">Teniendo en cuenta lo anterior y ante la evidencia aportada en la consulta del comparendo en la plataforma de SIMIT, el comparendo referenciado tiene más de un año desde el momento de la ocurrencia de los hechos, razón por la cual se solicita la caducidad del proceso contravencional y proceder a quitar, bajar y/o eliminar de la base de datos del SIMIT la información de este comparendo.</p>
+<h3 style="text-align:center">NOTIFICACIONES</h3>
+{{#si empresa.correo_respuesta}}<p style="text-align:justify">Las respuestas las recibiré electrónicamente en la siguiente dirección de correo electrónico: {{empresa.correo_respuesta}}. Autorizo que la respuesta sea enviada vía correo electrónico a dicha dirección.</p>{{/si}}
+{{#si peticionario.direccion}}<p style="text-align:justify">Dirección física para efectos de notificaciones, en caso de ser requerida: {{peticionario.direccion}}.</p>{{/si}}
+<p>ATENTAMENTE,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.tipo_documento}} No. {{rl.numero_documento}}<br>{{rl.cargo}}<br>{{peticionario.nombre}}<br>{{peticionario.tipo_documento}} {{peticionario.numero_documento}}</p>

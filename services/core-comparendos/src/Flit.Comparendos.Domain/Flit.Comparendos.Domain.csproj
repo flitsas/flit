@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reglas de negocio de Gestión de Comparendos (Epic #12878, GDC-0) sin dependencias: calendario hábil colombiano,
+    plazos legales, descuentos, estado legal, normalización de identificadores y máquinas de estado. Lo usan la API y
+    las pruebas; no conoce la base, la red ni el reloj (recibe la fecha de hoy).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Comparendos.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Comparendos.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,36 @@
+<!-- nombre: Responsabilidad de persona jurídica -->
+<p style="text-align:right">{{#si ot.municipio}}{{ot.municipio}}, {{/si}}{{dp.fecha}}<br>Radicado: <b>{{dp.radicado}}</b></p>
+<p><b>SEÑORES:</b><br><b>{{ot.nombre}}</b>{{#si ot.municipio}}<br>{{ot.municipio}}{{#si ot.departamento}}, {{ot.departamento}}{{/si}}{{/si}}</p>
+<p><b>ASUNTO: DERECHO DE PETICIÓN – IMPUGNACIÓN DE MEDIDA SANCIONATORIA POR FOTO DETECCIÓN – SENTENCIA C-035 DE 2019</b></p>
+<p><b>Referencia:</b> Orden de comparendo N° {{comparendo.numero}} del {{comparendo.fecha_imposicion}}{{#si comparendo.placa}} · Placa {{comparendo.placa}}{{/si}}</p>
+<p>Cordial saludo,</p>
+<p style="text-align:justify">Yo, <b>{{rl.nombres}}</b>, identificado(a) con {{rl.tipo_documento}} No. <b>{{rl.numero_documento}}</b>, en representación de la razón social <b>{{peticionario.nombre}}</b>, identificada con {{peticionario.tipo_documento}} <b>{{peticionario.numero_documento}}</b>, propietaria del vehículo de placas <b>{{comparendo.placa}}</b>, acudo respetuosamente ante su despacho para formular <b>Derecho de Petición</b>, de conformidad con el artículo 23 de la Constitución Política, la Ley 1755 de 2015 y los artículos 13, 14, 16 y 19 del CPACA.</p>
+<h3 style="text-align:center">HECHOS</h3>
+<ol>
+<li>El organismo de tránsito impuso un comparendo por presunta infracción detectada mediante medio técnico o electrónico (fotodetección), identificado con el número <b>{{comparendo.numero}}</b>, supuestamente ocurrido el día <b>{{comparendo.fecha_imposicion}}</b>.</li>
+<li>A la fecha, no existe prueba válida, suficiente ni idónea que demuestre que yo era el conductor del vehículo de placas <b>{{comparendo.placa}}</b> al momento de la presunta infracción.</li>
+<li>Conforme a la <b>Sentencia C-035 de 2019</b>, la responsabilidad por infracciones detectadas por fotodetección no puede ser objetiva ni presumirse respecto del propietario del vehículo.</li>
+<li>Pese a lo anterior, la entidad pretende imponer una sanción sin acreditar de forma plena la identidad del conductor, trasladando indebidamente la carga probatoria al administrado.</li>
+</ol>
+{{#si conductor.nombres}}<p style="text-align:justify"><b>{{peticionario.nombre}}</b> es propietario inscrito del vehículo relacionado a continuación; dicho automotor fue entregado en arrendamiento operativo así:</p>
+<table>
+<tr><th>Placa</th><th>Comparendo</th><th>Conductor</th><th>Documento</th></tr>
+<tr><td>{{comparendo.placa}}</td><td>{{comparendo.numero}}</td><td>{{conductor.nombres}}</td><td>{{conductor.tipo_documento}} {{conductor.numero_documento}}</td></tr>
+</table>{{/si}}
+<h3 style="text-align:center">FUNDAMENTOS DE DERECHO</h3>
+<p style="text-align:justify"><b>Sentencia C-035 de 2019 – Corte Constitucional</b><br>La Corte Constitucional estableció que la responsabilidad sancionatoria en materia de tránsito no puede ser objetiva y que la carga de la prueba corresponde al organismo de tránsito, quien debe demostrar plenamente quién conducía el vehículo al momento de la infracción.</p>
+<p style="text-align:justify">La administración no puede presumir la culpabilidad del propietario ni imponer sanciones sin prueba suficiente, respetando el debido proceso y la presunción de inocencia consagrados en el artículo 29 de la Constitución Política.</p>
+<p style="text-align:justify"><b>CPACA – Ley 1437 de 2011</b><br>Artículo 3: Principio de imparcialidad.<br>Artículo 34: Carga de la prueba en actuaciones administrativas.<br>Artículo 36: Necesidad de pruebas suficientes para adoptar decisiones sancionatorias.</p>
+<h3 style="text-align:center">SOLICITUDES</h3>
+<ol>
+<li>Dejar sin efectos el comparendo No. <b>{{comparendo.numero}}</b> y la multa derivada del mismo, por inexistencia de prueba válida que determine quién conducía el vehículo.</li>
+<li>Acreditar por escrito y con evidencia verificable las pruebas que sustenten la supuesta responsabilidad del suscrito.</li>
+<li>Certificar que no existen obligaciones pendientes derivadas de este proceso sancionatorio.</li>
+<li>En caso de no acceder a la nulidad solicitada, remitir copia íntegra del expediente, prueba de notificación, calibración del equipo de fotodetección y demás soportes probatorios.</li>
+</ol>
+<h3 style="text-align:center">NOTIFICACIONES</h3>
+{{#si empresa.correo_respuesta}}<p style="text-align:justify">Las respuestas las recibiré electrónicamente en la siguiente dirección de correo electrónico: {{empresa.correo_respuesta}}. Autorizo que la respuesta sea enviada vía correo electrónico a dicha dirección.</p>{{/si}}
+{{#si peticionario.direccion}}<p style="text-align:justify">Dirección física para efectos de notificaciones, en caso de ser requerida: {{peticionario.direccion}}.</p>{{/si}}
+<p>Cordialmente,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.tipo_documento}} No. {{rl.numero_documento}}<br>{{rl.cargo}}<br>{{peticionario.nombre}}</p>

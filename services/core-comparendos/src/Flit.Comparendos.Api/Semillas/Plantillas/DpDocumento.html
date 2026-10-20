@@ -1,0 +1,20 @@
+<!-- nombre: Derecho de petición -->
+<p style="text-align:right">{{ot.municipio}}, {{dp.fecha}}</p>
+<p>Señores<br><b>{{ot.nombre}}</b><br>{{ot.municipio}}, {{ot.departamento}}</p>
+<p><b>Referencia:</b> Derecho de petición — {{dp.tipologia_nombre}}<br><b>Comparendo:</b> {{comparendo.numero}} · <b>Placa:</b> {{comparendo.placa}}<br><b>Radicado interno:</b> {{dp.radicado}}</p>
+<p style="text-align:justify">{{rl.nombres}}, identificado(a) con {{rl.tipo_documento}} {{rl.numero_documento}}, en calidad de {{rl.cargo}} de <b>{{peticionario.nombre}}</b>, identificada con {{peticionario.tipo_documento}} {{peticionario.numero_documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, presento la siguiente petición respecto del comparendo de la referencia.</p>
+<h3>Hechos</h3>
+<ol>
+<li>El {{comparendo.fecha_imposicion}} se impuso el comparendo {{comparendo.numero}} ({{comparendo.es_fotomulta}}) por la infracción {{comparendo.codigo_infraccion}}: {{comparendo.descripcion_infraccion}}</li>
+<li>El comparendo fue notificado el {{comparendo.fecha_notificacion}} y su valor registrado es {{comparendo.valor_total}}.</li>
+<li>El vehículo de placa {{comparendo.placa}} figura a nombre de {{peticionario.nombre}}.</li>
+</ol>
+<h3>Fundamento</h3>
+<p style="text-align:justify">{{dp.fundamento}}</p>
+<h3>Petición</h3>
+<p style="text-align:justify">Con base en lo expuesto, solicito que se resuelva de fondo esta petición respecto del comparendo {{comparendo.numero}}, dentro de los quince (15) días hábiles siguientes a su radicación (artículo 14 de la Ley 1755 de 2015), y que se me comunique la decisión adoptada.</p>
+<h3>Notificaciones</h3>
+<p>Recibiré notificaciones en {{peticionario.direccion}} y en el correo electrónico {{empresa.correo_respuesta}}.</p>
+<p>Atentamente,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.cargo}}<br>{{rl.tipo_documento}} {{rl.numero_documento}}<br>{{peticionario.nombre}}</p>

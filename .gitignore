@@ -53,6 +53,7 @@ infra/secrets/
 # Servicios de plataforma (Epic #13316): la copia local del *.example lleva llaves de proveedores y SMTP reales.
 services/core-consultas/**/appsettings.Development.json
 services/core-notificaciones/**/appsettings.Development.json
+services/core-comparendos/**/appsettings.Development.json
 
 # Logs
 *.log

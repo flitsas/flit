@@ -2,7 +2,7 @@
 
 import { useId, useMemo } from "react";
 import { Check, X } from "lucide-react";
-import { contrastRatio, formatContrastRatio, isValidHexColor, meetsMinimumContrast } from "@/lib/brand/contrast";
+import { brandContrastPairs, formatContrastRatio, isValidHexColor } from "@/lib/brand/contrast";
 import type { BrandColors } from "@/lib/api/branding";
 
 export interface BrandingColorPickerProps {
@@ -21,12 +21,13 @@ const FIELDS: Array<{ key: keyof BrandColors; label: string; hint: string }> = [
 export function BrandingColorPicker({ colors, onChange, disabled = false }: BrandingColorPickerProps) {
   const baseId = useId();
 
-  const ratio = useMemo(() => {
-    if (!isValidHexColor(colors.primary) || !isValidHexColor(colors.onPrimary)) return null;
-    return contrastRatio(colors.primary, colors.onPrimary);
-  }, [colors.primary, colors.onPrimary]);
+  const pairs = useMemo(
+    () => brandContrastPairs(colors),
+    [colors],
+  );
 
-  const contrastOk = ratio !== null && meetsMinimumContrast(ratio);
+  const contrastOk = pairs.every((p) => p.ok);
+  const computable = pairs.every((p) => p.ratio !== null);
 
   function handleFieldChange(key: keyof BrandColors, value: string) {
     onChange({ ...colors, [key]: value });
@@ -91,20 +92,21 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
         ) : (
           <X className="h-4 w-4 shrink-0" style={{ color: "#F9AC00" }} aria-hidden />
         )}
-        <span style={{ color: "#162744" }}>
-          {ratio !== null ? (
-            <>
-              Contraste texto/principal: <strong>{formatContrastRatio(ratio)}:1</strong>{" "}
-              {contrastOk ? "cumple el mínimo (4.5:1)." : "no cumple el mínimo (4.5:1)."}
-            </>
-          ) : (
-            "Introduce colores válidos para calcular el contraste."
-          )}
+        <span className="flex flex-col gap-0.5" style={{ color: "#162744" }}>
+          {computable
+            ? pairs.map((p) => (
+                <span key={p.label}>
+                  Contraste {p.label}: <strong>{formatContrastRatio(p.ratio as number)}:1</strong>{" "}
+                  {p.ok ? "cumple el mínimo (4.5:1)." : "no cumple el mínimo (4.5:1)."}
+                </span>
+              ))
+            : "Introduce colores válidos para calcular el contraste."}
         </span>
       </div>
       {!contrastOk && (
         <p className="text-[11px] opacity-70">
-          Puedes guardar el borrador con este contraste, pero no podrás publicarlo hasta corregirlo.
+          Corrige el contraste para poder guardar o publicar: el color de texto debe tener al menos 4.5:1
+          sobre el color principal y sobre el secundario.
         </p>
       )}
     </fieldset>

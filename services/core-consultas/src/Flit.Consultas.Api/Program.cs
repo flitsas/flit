@@ -56,7 +56,8 @@ public static class Program
         builder.Services.AddFlitGrpcServer()
             .RequireServiceToken<ConsultasGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
             .RequireServiceToken<ConsultasAdminGrpcService>(ConsultasAdminGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
-            .RequireServiceToken<ValidacionIdentidadGrpcService>(ValidacionIdentidadGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
+            .RequireServiceToken<ValidacionIdentidadGrpcService>(ValidacionIdentidadGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
+            .RequireServiceToken<Comparendos.FuentesComparendosGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
         builder.Services.AddFlitOutbox<ConsultasDb>(builder.Configuration);
 
         // HU #13343 (ADR-0065): los proveedores del módulo, con sus modos mock|real y credenciales (las mismas claves de
@@ -69,6 +70,25 @@ public static class Program
         builder.Services.AddScoped<IAvaluoProviderPolicy, ConsultasAvaluoPolicy>();
         builder.Services.AddScoped<IAvaluoMockValueSource, ValoresMockDeAvaluo>(); // HU #13348
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
+
+        // HU #13520: fuentes de Gestión de Comparendos (separadas de ConsultarMultas). Verifik SIMIT con las mismas
+        // credenciales de Trámites; el simulado solo en DEV (Development o Consultations:ComparendosSimulados=true).
+        builder.Services.AddHttpClient(Comparendos.ProveedorVerifikSimit.HttpClientName, (sp, c) =>
+        {
+            var o = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Flit.Infrastructure.Consultations.VerifikOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        builder.Services.AddScoped<Comparendos.IProveedorComparendos, Comparendos.ProveedorVerifikSimit>();
+        // SmartCloud = los SOAP del SIMIT y la API municipal, con el contrato del BackCrudSmartCloud de V1 (HU #13465-#13467).
+        var smartCloud = Comparendos.SmartCloudOpciones.Desde(builder.Configuration);
+        builder.Services.AddHttpClient(Comparendos.ProveedorSmartCloud.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(smartCloud.TimeoutSegundos));
+        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSmartCloud(sp.GetRequiredService<IHttpClientFactory>(), smartCloud));
+        var municipal = Comparendos.MunicipalOpciones.Desde(builder.Configuration);
+        builder.Services.AddHttpClient(Comparendos.ProveedorMunicipal.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(municipal.TimeoutSegundos));
+        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorMunicipal(sp.GetRequiredService<IHttpClientFactory>(), municipal));
+        var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
+        builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 
         // HU #13351 (ADR-0065 §6-7): Kyverum Verify por Consultas. Mismas variables que core-api (la de entorno primero);
         // KYVERUM_WEBHOOK_CALLBACK_URL apunta al receptor de Consultas (AvisosKyverumEndpoints.Ruta sin el id). Las llaves
@@ -122,6 +142,7 @@ public static class Program
         app.MapGrpcService<ConsultasGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<ConsultasAdminGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<ValidacionIdentidadGrpcService>().RequireHost(grpcHost);
+        app.MapGrpcService<Comparendos.FuentesComparendosGrpcService>().RequireHost(grpcHost);
         app.MapAvisosKyverum(); // HU #13351: receptor público de avisos (lo expone el gateway)
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;

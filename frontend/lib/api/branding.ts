@@ -222,7 +222,14 @@ export function isBrandingNotFound(error: unknown): boolean {
 /** Código de error de marca (`BRANDING_*`, `CONCURRENCY_CONFLICT`) de un `ApiError`, si lo trae. */
 export function brandingErrorCode(error: unknown): string | null {
   if (!(error instanceof ApiError)) return null;
-  const body = error.body as { error?: unknown; code?: unknown } | null | undefined;
+  const body = error.body as { error?: unknown; code?: unknown; errors?: unknown } | null | undefined;
   const code = body?.error ?? body?.code;
-  return typeof code === "string" ? code : null;
+  if (typeof code === "string") return code;
+  // Los 422 de validación (borrador y logotipo) llegan como `{ errors: [{ code, field }] }`: se toma el
+  // primero para mostrar su texto en vez del mensaje genérico.
+  if (Array.isArray(body?.errors)) {
+    const first = (body.errors as Array<{ code?: unknown }>).find((e) => typeof e?.code === "string");
+    if (first) return first.code as string;
+  }
+  return null;
 }

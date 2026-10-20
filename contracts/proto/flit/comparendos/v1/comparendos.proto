@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package flit.comparendos.v1;
+
+option csharp_namespace = "Flit.Comparendos.Grpc.V1";
+
+// Comparendos (Epic #12878, GDC V2; ADR-0064, ADR-0070). Lo que otros servicios de la suite pueden pedirle a
+// Comparendos por la red interna. Hoy solo el resumen de una empresa (para el hub y los reportes de plataforma); la
+// operación del producto va por su REST (/api/v1/comparendos/*) con el token del usuario.
+//
+// Autenticación: token de servicio con `aud=comparendos`; la empresa en la metadata `x-flit-tenant-id`. Se publica
+// cuando exista el primer consumidor y su scope en el contrato de plataforma (§3).
+service ComparendosService {
+  // Totales de la empresa de la metadata: comparendos activos, deuda activa y próximos a vencer.
+  rpc ObtenerResumenEmpresa(ObtenerResumenEmpresaRequest) returns (ObtenerResumenEmpresaResponse);
+}
+
+message ObtenerResumenEmpresaRequest {}
+
+message ObtenerResumenEmpresaResponse {
+  // Comparendos activos de la empresa.
+  int32 activos = 1;
+  // Suma del valor de los activos sin pagar, en pesos, como decimal en texto ("1234567.00").
+  string deuda_activa = 2;
+  // Activos en tiempo cuya ventana de gestión vence en 2 días hábiles o menos.
+  int32 proximos_a_vencer = 3;
+}

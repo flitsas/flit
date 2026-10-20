@@ -18,6 +18,8 @@ public static class OidcDefaults
         ["platform.manifest"] = ServiceAudiences.Plataforma,
         ["platform.me.read"] = ServiceAudiences.Plataforma,
         ["platform.identidad.read"] = ServiceAudiences.Plataforma,
+        // GDC B2-1/B2-4: listado global de empresas con un producto encendido (EmpresasService). Solo para el servicio que lo pide.
+        ["platform.identidad.empresas"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).
         ["platform.consultas.admin"] = ServiceAudiences.Consultas,
@@ -25,6 +27,8 @@ public static class OidcDefaults
         // HU #13357: administración de mensajes muertos de Notificaciones (la usa la consola del SuperAdmin).
         ["platform.notificaciones.admin"] = ServiceAudiences.Notificaciones,
         ["platform.tramites.ict"] = ServiceAudiences.Tramites,
+        // HU #13459: catálogos de la plataforma por gRPC (organismos de tránsito para la réplica de Comparendos).
+        ["platform.tramites.catalogos"] = ServiceAudiences.Tramites,
     };
 
     /// <summary>Prefijo de los clientes de servicio (contrato §3, <c>svc-&lt;código&gt;</c>): su <c>sub</c> en el token.</summary>
