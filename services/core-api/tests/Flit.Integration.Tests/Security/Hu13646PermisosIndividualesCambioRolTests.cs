@@ -79,20 +79,19 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
         return new ManageUserPermissionOverridesHandler(repo, new PermissionCapCalculator(repo), new GrantModuleOverridesHandler(repo), rules);
     }
 
-    // Target con rol it46_old (tramites), 3 permisos individuales en tramites y 1 en el producto it46otro.
+    // Target con rol it46_old (tramites), 3 permisos individuales en tramites y 1 en comparendos (producto sembrado por la migracion; uno propio quedaria en platform.products, que el reset no trunca).
     private async Task<NpgsqlConnection> SeedAsync()
     {
         var cn = await Fixture.OpenConnectionAsync();
         await ExecAsync(cn, $"""
             INSERT INTO platform.products (code, name, icon) VALUES ('tramites','Tramites','file') ON CONFLICT (code) DO NOTHING;
-            INSERT INTO platform.products (code, name, icon) VALUES ('it46otro','Otro','file') ON CONFLICT (code) DO NOTHING;
             INSERT INTO identity.tenants (id, code, legal_name, tax_id, tenant_type, is_active, is_group_parent, created_at)
               VALUES ('{Tenant}','IT-46-A','A','9136460000001','CONCESIONARIO',true,false,now());
             INSERT INTO identity.users (id, email, display_name, status, home_tenant_id, created_at) VALUES
               ('{Actor}','actor13646@it.local','Actor','active','{Tenant}',now()),
               ('{Target}','t13646@it.local','T','active','{Tenant}',now());
             INSERT INTO security.modules (code, name, sort_order, is_active, product_code) VALUES
-              ('it46_m','IT 46',1,true,'tramites'), ('it46_o','IT 46 otro',2,true,'it46otro');
+              ('it46_m','IT 46',1,true,'tramites'), ('it46_o','IT 46 otro',2,true,'comparendos');
             INSERT INTO security.permissions (module_id, slug, name, http_method, route_pattern, is_active, enforced)
               SELECT m.id, v.slug, v.slug, 'GET', '/api/v1/it46/' || v.slug, true, 'true'
                 FROM security.modules m JOIN (VALUES ('it46_m','it46.a'),('it46_m','it46.b'),('it46_m','it46.c'),('it46_o','it46.otro')) AS v(mod, slug)
@@ -176,7 +175,7 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
         var actor = new OverrideActor(Actor, false);
 
         (await ManageHandler().CountAsync(Tenant, actor, Target, "tramites", Ct)).Should().Be(3);
-        (await ManageHandler().CountAsync(Tenant, actor, Target, "it46otro", Ct)).Should().Be(1);
+        (await ManageHandler().CountAsync(Tenant, actor, Target, "comparendos", Ct)).Should().Be(1);
         (await ManageHandler().CountAsync(Tenant, actor, Target, null, Ct)).Should().Be(4);
 
         await FluentActions.Awaiting(() => ManageHandler().CountAsync(Tenant, actor, Guid.NewGuid(), "tramites", Ct))
@@ -189,17 +188,17 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
     public async Task Cambio_a_un_rol_de_otro_producto_cuenta_y_purga_tambien_el_producto_del_rol_que_se_cierra()
     {
         await using var cn = await SeedAsync();
-        await ExecAsync(cn, "INSERT INTO security.roles (code, name, is_system, is_active, target_entity_type, product_code) VALUES ('it46_otrorol','Otro rol',false,true,'COMPANY','it46otro')");
+        await ExecAsync(cn, "INSERT INTO security.roles (code, name, is_system, is_active, target_entity_type, product_code) VALUES ('it46_otrorol','Otro rol',false,true,'COMPANY','comparendos')");
         var otroRol = await IdAsync(cn, "SELECT id FROM security.roles WHERE code = 'it46_otrorol'");
         await using var ctx = Ctx();
 
         (await ManageHandler().CountForRoleChangeAsync(Tenant, new OverrideActor(Actor, false), Target, otroRol, new UserRoleAssignmentRepository(ctx), Ct))
-            .Should().Be(4, "3 de tramites (el rol que se cierra) + 1 de it46otro (el rol nuevo)");
+            .Should().Be(4, "3 de tramites (el rol que se cierra) + 1 de comparendos (el rol nuevo)");
 
         await AssignHandler().HandleAsync(new AssignRoleCommand(Tenant, Target, otroRol, Actor), Ct);
 
         (await ActiveAsync(cn, "tramites")).Should().Be(0);
-        (await ActiveAsync(cn, "it46otro")).Should().Be(0);
+        (await ActiveAsync(cn, "comparendos")).Should().Be(0);
         (await PurgeAuditAsync(cn)).Should().Be(4);
     }
 
@@ -211,7 +210,7 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
         await AssignHandler().HandleAsync(new AssignRoleCommand(Tenant, Target, _roleNew, Actor), Ct);
 
         (await ActiveAsync(cn, "tramites")).Should().Be(0);
-        (await ActiveAsync(cn, "it46otro")).Should().Be(1);
+        (await ActiveAsync(cn, "comparendos")).Should().Be(1);
     }
 
     [PostgresFact]
@@ -259,7 +258,7 @@ public sealed class Hu13646PermisosIndividualesCambioRolTests(PostgresDatabaseFi
 
         (await ActiveAssignmentsAsync(cn, _roleOld)).Should().Be(0);
         (await ActiveAsync(cn, "tramites")).Should().Be(0);
-        (await ActiveAsync(cn, "it46otro")).Should().Be(1);
+        (await ActiveAsync(cn, "comparendos")).Should().Be(1);
         (await PurgeAuditAsync(cn)).Should().Be(3);
         (await CountAsync(cn, "SELECT count(DISTINCT batch_id) FROM security.user_permission_audit WHERE action = 'ROLE_CHANGE_PURGE'")).Should().Be(1);
     }
