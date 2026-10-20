@@ -63,7 +63,7 @@ export function CatalogSearchSelect({
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
         aria-invalid={invalid || undefined}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
         style={invalid ? { borderColor: '#FF4E00', borderWidth: 2 } : undefined}
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
@@ -89,7 +89,7 @@ export function CatalogSearchSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={placeholder}
-              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
               aria-label={`Buscar en ${label}`}
               autoComplete="off"
             />
@@ -107,10 +107,10 @@ export function CatalogSearchSelect({
                       role="option"
                       aria-selected={selected}
                       onClick={() => pick(opt)}
-                      className="w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[rgba(85,126,255,0.08)]"
+                      className="w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_8%,transparent)]"
                       style={
                         selected
-                          ? { background: 'rgba(85,126,255,0.12)', color: '#557EFF', fontWeight: 600 }
+                          ? { background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)', fontWeight: 600 }
                           : undefined
                       }
                     >

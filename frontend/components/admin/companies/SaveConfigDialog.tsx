@@ -7,7 +7,7 @@ import type { ConfigChangeGroup, ConfigChangeItem } from "./settingsForm";
 const TONE_COLORS: Record<ConfigChangeItem["tone"], string> = {
   on: "#0a8f8b",
   off: "#FF4E00",
-  neutral: "#557EFF",
+  neutral: "var(--color-flit-brand)",
 };
 
 // Ventana emergente de confirmación de "Guardar todo" (HU #10194, AC2). Detecta los cambios
@@ -53,9 +53,9 @@ export function SaveConfigDialog({
       size="sm"
       zClassName="z-[95]"
       icon={phase === "success" ? CheckCircle2 : undefined}
-      iconBg="#00DBD5"
+      iconBg="var(--color-flit-tech)"
       title={phase === "success" ? "Cambios guardados" : "Confirmar guardado"}
-      titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
     >
         {company && <CompanyCallout company={company} />}
         {phase === "success" ? (
@@ -71,7 +71,7 @@ export function SaveConfigDialog({
                 type="button"
                 onClick={onClose}
                 className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
               >
                 Cerrar
               </button>
@@ -104,7 +104,7 @@ export function SaveConfigDialog({
                 onClick={onConfirm}
                 disabled={saving}
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
               >
                 {saving ? "Guardando…" : "Guardar cambios"}
               </button>
@@ -124,11 +124,11 @@ function CompanyCallout({ company }: { company: { razonSocial: string; nit: stri
   return (
     <div
       className="mt-2 rounded-xl border px-3 py-2"
-      style={{ borderColor: "#557EFF", background: "rgba(85,126,255,0.06)" }}
+      style={{ borderColor: "var(--color-flit-brand)", background: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }}
       data-testid="save-config-company"
     >
       <p className="text-xs font-semibold uppercase tracking-wider opacity-60">Compañía</p>
-      <p className="text-sm font-bold text-[#162744] dark:text-white">{company.razonSocial}</p>
+      <p className="text-sm font-bold text-flit-primary dark:text-white">{company.razonSocial}</p>
       <p className="text-xs opacity-70">NIT {company.nit}</p>
     </div>
   );
@@ -139,7 +139,7 @@ function ChangeList({ changes }: { changes: ConfigChangeGroup[] }) {
     <div className="mt-3 space-y-2.5 rounded-xl border p-3 text-xs">
       {changes.map((group) => (
         <div key={group.module}>
-          <p className="font-semibold" style={{ color: "#557EFF" }}>
+          <p className="font-semibold" style={{ color: "var(--color-flit-brand)" }}>
             {group.module}
           </p>
           <ul className="mt-1 space-y-1">

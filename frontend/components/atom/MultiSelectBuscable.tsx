@@ -172,7 +172,7 @@ export function MultiSelectBuscable({
             return (
               <label
                 key={o.id}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF] has-[:focus-visible]:ring-offset-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand has-[:focus-visible]:ring-offset-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                 style={
                   activa
                     ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" }
@@ -188,7 +188,7 @@ export function MultiSelectBuscable({
                   aria-label={etiquetaAccesible(o)}
                 />
                 {activa ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
-                <span className="text-[#162744]">{o.label}</span>
+                <span className="text-flit-primary">{o.label}</span>
                 {o.detalle ? <span className="font-normal text-[#59677D]">· {o.detalle}</span> : null}
               </label>
             );
@@ -230,7 +230,7 @@ export function MultiSelectBuscable({
                 background: "rgba(140,198,63,0.12)",
               }}
             >
-              <span className="text-[#162744]">{s.detalle ? `${s.label} · ${s.detalle}` : s.label}</span>
+              <span className="text-flit-primary">{s.detalle ? `${s.label} · ${s.detalle}` : s.label}</span>
               <button
                 type="button"
                 onClick={() => quitar(s.id)}
@@ -261,7 +261,7 @@ export function MultiSelectBuscable({
           placeholder={buscarPlaceholder}
           disabled={disabled}
           aria-controls={listaId}
-          className="w-full rounded-xl border bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
+          className="w-full rounded-xl border bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-flit-brand dark:bg-[#0B0F14]"
         />
       </div>
 
@@ -274,7 +274,7 @@ export function MultiSelectBuscable({
           onClick={marcarFiltradas}
           disabled={disabled || !faltanPorMarcar || exigeFiltro}
           title={exigeFiltro ? "Escribe en el buscador para elegir varias a la vez" : undefined}
-          className="rounded-full border px-3 py-1 text-xs font-semibold text-[#162744] disabled:opacity-40"
+          className="rounded-full border px-3 py-1 text-xs font-semibold text-flit-primary disabled:opacity-40"
         >
           Seleccionar las filtradas
         </button>
@@ -295,7 +295,7 @@ export function MultiSelectBuscable({
           filtradas.map((o) => (
             <label
               key={o.id}
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[rgba(85,126,255,0.06)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#557EFF]"
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand"
             >
               <input
                 type="checkbox"
@@ -303,7 +303,7 @@ export function MultiSelectBuscable({
                 disabled={disabled}
                 onChange={() => alternar(o)}
                 aria-label={etiquetaAccesible(o)}
-                className="h-4 w-4 accent-[#557EFF]"
+                className="h-4 w-4 accent-flit-brand"
               />
               <span>
                 {o.label}

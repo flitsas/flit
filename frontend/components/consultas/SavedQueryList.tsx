@@ -199,7 +199,7 @@ function ConsultasConDesborde({
         <button
           type="button"
           onClick={() => setModalAbierto(true)}
-          className="w-full rounded-lg border border-[#DFE5ED] px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF]/50 hover:text-[#557EFF] dark:border-white/15 dark:text-white/50"
+          className="w-full rounded-lg border border-[#DFE5ED] px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] transition hover:border-flit-brand/50 hover:text-flit-brand dark:border-white/15 dark:text-white/50"
           data-testid={`${testIdPrefix}-ver-todas-${grupoId}`}
         >
           Ver todas ({items.length})
@@ -283,7 +283,7 @@ function BuscadorDeConsultas({
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar por nombre…"
           aria-label="Buscar consulta"
-          className="w-full rounded-lg border border-[#DFE5ED] bg-transparent py-2 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15"
+          className="w-full rounded-lg border border-[#DFE5ED] bg-transparent py-2 pl-8 pr-2 text-xs outline-none focus:border-flit-brand dark:border-white/15"
           data-testid={`${testIdPrefix}-buscar-${grupoId}`}
         />
       </div>
@@ -342,8 +342,8 @@ function Grupo({
   return (
     <div className={separado ? "border-t border-[#DFE5ED] pt-4 dark:border-white/10" : undefined}>
       <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-[#F5F7FA] px-2 py-1.5 dark:bg-white/[0.06]">
-        <Icono className="h-3.5 w-3.5 shrink-0 text-[#557EFF] dark:text-[#9DB5FF]" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-wider text-[#162744] dark:text-white/75">
+        <Icono className="h-3.5 w-3.5 shrink-0 text-flit-brand dark:text-[#9DB5FF]" aria-hidden="true" />
+        <p className="text-[11px] font-bold uppercase tracking-wider text-flit-primary dark:text-white/75">
           {titulo}
         </p>
         <span className="ml-auto rounded-full bg-white px-1.5 py-px text-[10px] font-semibold tabular-nums text-[#6B7280] dark:bg-white/10 dark:text-white/50">
@@ -424,8 +424,8 @@ function Item({
         title={query.descripcion ?? undefined}
         className={`w-full cursor-pointer rounded-xl border py-2 pl-2.5 pr-7 text-left transition ${
           activo
-            ? "border-[#557EFF] bg-[#557EFF]/[0.07] shadow-[inset_3px_0_0_0_#557EFF]"
-            : "border-[#DFE5ED] hover:border-[#557EFF]/50 hover:bg-[#F5F7FA] dark:border-white/10 dark:hover:border-[#557EFF]/40 dark:hover:bg-white/5"
+            ? "border-flit-brand bg-flit-brand/[0.07] shadow-[inset_3px_0_0_0_var(--color-flit-brand)]"
+            : "border-[#DFE5ED] hover:border-flit-brand/50 hover:bg-[#F5F7FA] dark:border-white/10 dark:hover:border-flit-brand/40 dark:hover:bg-white/5"
         }`}
         data-testid={`${testIdPrefix}-guardada-${query.id}`}
       >
@@ -442,7 +442,7 @@ function Item({
             {query.nombre}
           </span>
           {activo && !modificada && (
-            <Check className="mt-[3px] h-3 w-3 shrink-0 text-[#557EFF]" aria-hidden="true" />
+            <Check className="mt-[3px] h-3 w-3 shrink-0 text-flit-brand" aria-hidden="true" />
           )}
         </span>
 
@@ -476,7 +476,7 @@ function Item({
               onClick={() => onSchedule(query)}
               aria-label={`Programar informe de ${query.nombre}`}
               title={`Programar informe de «${query.nombre}»`}
-              className="rounded-md p-1 text-[#9AA5B4] transition hover:bg-[#557EFF]/10 hover:text-[#557EFF] dark:text-white/30"
+              className="rounded-md p-1 text-[#9AA5B4] transition hover:bg-flit-brand/10 hover:text-flit-brand dark:text-white/30"
             >
               <CalendarPlus className="h-3 w-3" aria-hidden="true" />
             </button>

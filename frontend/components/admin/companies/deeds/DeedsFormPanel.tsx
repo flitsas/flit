@@ -192,7 +192,7 @@ export function DeedsFormPanel({
       open={open}
       onClose={onClose}
       title={editing ? "Editar escritura" : "Nueva escritura"}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
       busy={submitting}
       zClassName={zClassName}
     >
@@ -214,7 +214,7 @@ export function DeedsFormPanel({
             className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs"
             style={{ borderColor: "#DFE5ED" }}
           >
-            <Building2 className="h-4 w-4 shrink-0" style={{ color: "#557EFF" }} />
+            <Building2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             <span className="min-w-0">
               <span className="block truncate font-semibold">{company?.name ?? "—"}</span>
               {company?.nit && <span className="block font-mono opacity-60">{company.nit}</span>}
@@ -257,14 +257,14 @@ export function DeedsFormPanel({
             className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed px-3 py-3 text-xs"
             style={
               form.file
-                ? { borderColor: "#557EFF" }
+                ? { borderColor: "var(--color-flit-brand)" }
                 : missingFile
                   ? { borderColor: "#FF4E00" }
                   : undefined
             }
           >
             {form.file ? (
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "#557EFF" }} />
+              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             ) : (
               <UploadCloud className="h-4 w-4 shrink-0 opacity-60" />
             )}

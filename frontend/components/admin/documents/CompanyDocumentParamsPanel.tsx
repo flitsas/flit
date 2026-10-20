@@ -56,8 +56,8 @@ const STATE_META: Record<CompanyDocumentParamState, StateMeta> = {
 const STATES: CompanyDocumentParamState[] = ["OBLIGATORIO", "OPCIONAL", "OCULTO"];
 
 const FIELD_CLS =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162744] " +
-  "focus:outline-none focus-visible:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 " +
+  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-flit-primary " +
+  "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 " +
   "disabled:opacity-60 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
 
 /** Motivo legible de un fallo de red/HTTP: nunca un texto genérico que oculte el 403/500 real. */
@@ -170,7 +170,7 @@ export function CompanyDocumentParamsPanel({
       header: "Documento",
       render: (item) => (
         <div className="min-w-0">
-          <p className="font-medium text-[#162744] dark:text-white">{documentName(item.documentTypeCode)}</p>
+          <p className="font-medium text-flit-primary dark:text-white">{documentName(item.documentTypeCode)}</p>
           <p className="font-mono text-xs opacity-70">{item.documentTypeCode}</p>
         </div>
       ),
@@ -380,15 +380,15 @@ function DocumentParamModal({
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setState(s)}
-                  className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] ${
+                  className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ${
                     selected
-                      ? "border-[#557EFF] bg-[#557EFF]/10"
+                      ? "border-flit-brand bg-flit-brand/10"
                       : "border-[#DFE5ED] hover:bg-[#F4F7FC] dark:border-white/15 dark:hover:bg-white/5"
                   }`}
                 >
                   <span className="flex items-center gap-1.5 text-xs font-semibold">
                     {selected ? (
-                      <CheckCircle2 className="h-4 w-4 text-[#557EFF]" aria-hidden />
+                      <CheckCircle2 className="h-4 w-4 text-flit-brand" aria-hidden />
                     ) : (
                       <Icon className="h-4 w-4" aria-hidden />
                     )}
@@ -413,15 +413,15 @@ function DocumentParamModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/15 dark:hover:bg-white/5"
+            className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/15 dark:hover:bg-white/5"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={saving || !trimmed}
-            className="rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            className="rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {saving ? "Guardando…" : "Guardar"}
           </button>

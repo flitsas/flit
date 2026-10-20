@@ -80,7 +80,7 @@ export function TablaLote({
               <input
                 type="checkbox"
                 aria-label="Seleccionar todos los pendientes"
-                className="h-4 w-4 accent-[#557EFF]"
+                className="h-4 w-4 accent-flit-brand"
                 checked={todasMarcadas}
                 onChange={alternarTodas}
                 disabled={bloqueada || seleccionables.length === 0}
@@ -105,7 +105,7 @@ export function TablaLote({
                     <input
                       type="checkbox"
                       aria-label={`Seleccionar ${ETIQUETA_TRAMITE[fila.tramite]} ${fila.v1Id}`}
-                      className="h-4 w-4 accent-[#557EFF]"
+                      className="h-4 w-4 accent-flit-brand"
                       checked={seleccion.has(clave)}
                       onChange={() => alternar(fila)}
                       disabled={bloqueada}
@@ -137,7 +137,7 @@ export function TablaLote({
                           target="_blank"
                           rel="noreferrer"
                           className="flex items-center gap-1 text-xs font-semibold"
-                          style={{ color: "#557EFF" }}
+                          style={{ color: "var(--color-flit-brand)" }}
                         >
                           Ver en V2
                           <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
@@ -212,7 +212,7 @@ const TONO: Record<EstadoFila, string> = {
   en_curso: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   // Deliberadamente NO verde: una simulación no migró nada, y el verde es la señal universal de
   // «hecho». Se parece más a un pendiente informado que a un logro.
-  simulado: "bg-[#557EFF]/10 text-[#557EFF] dark:text-[#8AA6FF]",
+  simulado: "bg-flit-brand/10 text-flit-brand dark:text-[#8AA6FF]",
   migrado: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   con_avisos: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   fallido: "bg-red-500/10 text-red-600 dark:text-red-400",

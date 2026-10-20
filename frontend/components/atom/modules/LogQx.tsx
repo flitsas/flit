@@ -319,14 +319,14 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   }, [aplicar, filtros]);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="LOG QX"
         subtitle="Trámites con integración Quipux. Filtra por fecha, placa, documento o estado, y abre la trazabilidad completa del que necesites."
       />
 
       {aplicados.instanceId && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.07] px-3 py-2 text-xs">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-flit-brand/30 bg-flit-brand/[0.07] px-3 py-2 text-xs">
           <span>
             Mostrando solo el trámite{" "}
             <span className="font-mono">{aplicados.instanceId}</span>
@@ -334,7 +334,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           <button
             type="button"
             onClick={quitarTramite}
-            className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 px-2 py-0.5 font-medium text-[#557EFF] hover:bg-[#557EFF]/10"
+            className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 font-medium text-flit-brand hover:bg-flit-brand/10"
           >
             <X className="h-3 w-3" aria-hidden="true" /> Ver todos
           </button>
@@ -361,7 +361,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
               aria-label={`${meta.label}: ${total} trámite${total === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
               style={activo ? { background: meta.style.bg } : undefined}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
@@ -371,11 +371,11 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
                 aria-hidden="true"
               >
                 {total}
@@ -570,10 +570,10 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 }
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20";
+  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#557EFF]";
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
 
 /** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
 const COLUMNAS = [
@@ -639,7 +639,7 @@ function FilaTramite({
     <>
       <tr
         className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
-          abierta ? "shadow-[0_8px_24px_rgba(85,126,255,0.18)]" : ""
+          abierta ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -659,7 +659,7 @@ function FilaTramite({
           />
         </td>
         <td className={tdCls}>
-          <span className="font-mono font-semibold text-[#557EFF]">{entry.referenceNumber}</span>
+          <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
             <span className="ml-1.5 rounded-full bg-[#FF4E00]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#C2410C]">
               {entry.intentos} intentos
@@ -766,7 +766,7 @@ function Vistazo({
           <button
             type="button"
             onClick={onAbrir}
-            className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
             style={{ background: WIZARD_CTA_GRADIENT }}
           >
             Ver trazabilidad completa
@@ -779,7 +779,7 @@ function Vistazo({
         <Link
           href={hrefTramite(entry.procedureInstanceId, entry.clientTenantId, esAdmin)}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent"
         >
           Ver trámite
         </Link>

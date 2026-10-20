@@ -10,6 +10,7 @@
     "./hosts": "./src/hosts.ts",
     "./contrast": "./src/contrast.ts",
     "./derive-dark": "./src/derive-dark.ts",
+    "./derive-tokens": "./src/derive-tokens.ts",
     "./resolve-brand.server": "./src/resolve-brand.server.ts",
     "./BrandProvider": "./src/BrandProvider.tsx",
     "./BrandStyle": "./src/BrandStyle.tsx",

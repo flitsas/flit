@@ -173,7 +173,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
         <label
           htmlFor="sv-upload"
           className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed py-8 text-xs font-semibold"
-          style={{ borderColor: "#557EFF", color: "#557EFF" }}
+          style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
         >
           <Upload className="h-6 w-6" />
           Selecciona un archivo PNG con la firma
@@ -224,7 +224,7 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
-      style={active ? { background: "#557EFF", borderColor: "#557EFF", color: "#fff" } : { borderColor: "#DFE5ED" }}
+      style={active ? { background: "var(--color-flit-brand)", borderColor: "var(--color-flit-brand)", color: "#fff" } : { borderColor: "#DFE5ED" }}
     >
       {children}
     </button>

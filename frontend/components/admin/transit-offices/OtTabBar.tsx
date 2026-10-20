@@ -29,14 +29,14 @@ export function OtTabBar({ tabs, activeId, onChange, ariaLabel }: OtTabBarProps)
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.id)}
-            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 rounded-t-md"
-            style={{ color: active ? "#557EFF" : undefined, opacity: active ? 1 : 0.65 }}
+            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 rounded-t-md"
+            style={{ color: active ? "var(--color-flit-brand)" : undefined, opacity: active ? 1 : 0.65 }}
           >
             {tab.label}
             {active && (
               <span
                 className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
               />
             )}
           </button>

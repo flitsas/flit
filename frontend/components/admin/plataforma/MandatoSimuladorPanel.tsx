@@ -498,7 +498,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
               disabled={busy || !officeId || !procedureTypeCode}
               onClick={() => void handleSend()}
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+              style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
             >
               <Mail className="h-3.5 w-3.5" aria-hidden="true" />
               {sending ? "Enviando…" : "Enviar por correo"}
@@ -511,7 +511,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
           disabled={busy || !officeId || !procedureTypeCode}
           onClick={() => void handlePreview()}
           className="ml-auto inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+          style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
         >
           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
           {previewing ? "Generando…" : "Ver PDF"}

@@ -192,21 +192,21 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
             setFormError(null);
           }}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           Nuevo cliente
         </button>
       </div>
 
       {revealed && (
-        <div className="rounded-xl border border-[#557EFF]/40 bg-[#557EFF]/5 p-3">
+        <div className="rounded-xl border border-flit-brand/40 bg-flit-brand/5 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-semibold text-[#162744] dark:text-slate-100">
+              <p className="text-xs font-semibold text-flit-primary dark:text-slate-100">
                 <KeyRound className="mr-1 inline h-3.5 w-3.5" />
                 Secreto de «{revealed.username}» — cópielo ahora, no se volverá a mostrar.
               </p>
-              <code className="rounded bg-white px-2 py-1 font-mono text-sm text-[#162744] dark:bg-slate-900 dark:text-slate-100">
+              <code className="rounded bg-white px-2 py-1 font-mono text-sm text-flit-primary dark:bg-slate-900 dark:text-slate-100">
                 {revealed.secret}
               </code>
             </div>
@@ -214,7 +214,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
               <button
                 type="button"
                 onClick={copySecret}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-[#557EFF] hover:bg-[#557EFF]/10"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-flit-brand hover:bg-flit-brand/10"
               >
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied ? "Copiado" : "Copiar"}
@@ -269,7 +269,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
           <button
             type="submit"
             disabled={creating}
-            className="rounded-md bg-[#557EFF] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+            className="rounded-md bg-flit-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
             {creating ? "Creando…" : "Crear cliente"}
           </button>

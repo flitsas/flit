@@ -149,7 +149,7 @@ export function IntentoDetalle({
   return (
     <div
       id={`intento-detalle-${row.id}`}
-      className="mx-1 rounded-2xl border border-[#557EFF]/30 bg-white dark:border-white/10 dark:bg-[#0B0F14]"
+      className="mx-1 rounded-2xl border border-flit-brand/30 bg-white dark:border-white/10 dark:bg-[#0B0F14]"
       data-testid="intento-detalle"
     >
       <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-[#DFE5ED] px-3 dark:border-white/10">
@@ -165,16 +165,16 @@ export function IntentoDetalle({
               disabled={deshabilitada}
               title={deshabilitada ? "Este intento no guardó respuesta del proveedor" : undefined}
               onClick={() => setPestana(p.id)}
-              className={`relative whitespace-nowrap px-3 py-2.5 text-xs font-semibold transition disabled:opacity-35 ${activa ? "text-[#557EFF]" : "opacity-60 hover:opacity-100"}`}
+              className={`relative whitespace-nowrap px-3 py-2.5 text-xs font-semibold transition disabled:opacity-35 ${activa ? "text-flit-brand" : "opacity-60 hover:opacity-100"}`}
             >
               {p.label}
-              {activa && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-t bg-[#557EFF]" aria-hidden="true" />}
+              {activa && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-t bg-flit-brand" aria-hidden="true" />}
             </button>
           );
         })}
       </div>
 
-      <div className="p-4 text-xs text-[#162744] dark:text-white">
+      <div className="p-4 text-xs text-flit-primary dark:text-white">
         {pestana === "veredicto" && (
           <div className="flex flex-col gap-4">
             {/* El veredicto y su porqué, juntos y arriba: es lo que vino a leer quien abrió la fila. */}
@@ -220,7 +220,7 @@ export function IntentoDetalle({
               <button
                 type="button"
                 onClick={onVerTramite}
-                className="inline-flex items-center rounded-lg bg-[#557EFF]/10 px-3 py-2 text-[11px] font-semibold text-[#557EFF] hover:bg-[#557EFF]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                className="inline-flex items-center rounded-lg bg-flit-brand/10 px-3 py-2 text-[11px] font-semibold text-flit-brand hover:bg-flit-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
               >
                 Ver todos los intentos del trámite
               </button>
@@ -230,7 +230,7 @@ export function IntentoDetalle({
                   type="button"
                   onClick={() => setConfirmando(true)}
                   data-testid="consultar-ahora"
-                  className="ml-auto rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-3 py-2 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+                  className="ml-auto rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-2 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                 >
                   Consultar ahora
                 </button>
@@ -243,7 +243,7 @@ export function IntentoDetalle({
                     onClick={() => void consultarAhora()}
                     disabled={consultando}
                     data-testid="consultar-ahora-confirmar"
-                    className="rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
                   >
                     {consultando ? "Consultando…" : "Sí, consultar"}
                   </button>
@@ -311,7 +311,7 @@ function Dato({ label, value, mono = false }: { label: string; value: string; mo
 function JsonCrudo({ titulo, valor }: { titulo: string; valor: unknown }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-wider text-[#557EFF]">{titulo}</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</span>
       <pre
         tabIndex={0}
         aria-label={titulo}
@@ -353,7 +353,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
   if (vista.resultado !== "encontrado") {
     return (
       <section className="flex flex-col gap-2">
-        {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#557EFF]">{titulo}</h4> : null}
+        {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
         <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "#C2410C" }}>
           {vista.resultado === "no_encontrado"
             ? `El proveedor no encontró el vehículo con ese documento${vista.mensaje ? `: «${vista.mensaje}»` : "."}`
@@ -367,11 +367,11 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
 
   return (
     <div className="flex flex-col gap-3">
-      {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#557EFF]">{titulo}</h4> : null}
+      {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
       <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_2fr]">
         {/* Secciones de negocio, no un volcado JSON (mismo patrón que Trazabilidad ICT → Datos). */}
         <section className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
-          <h5 className="text-[10px] font-bold uppercase tracking-wider text-[#557EFF]">Vehículo en el RUNT</h5>
+          <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">Vehículo en el RUNT</h5>
           {vista.vehiculo.map((d) => (
             <div key={d.etiqueta} className="flex justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10">
               <span className="shrink-0 opacity-55">{d.etiqueta}</span>
@@ -381,7 +381,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
         </section>
 
         <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
-          <h5 className="text-[10px] font-bold uppercase tracking-wider text-[#557EFF]">
+          <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">
             Solicitudes ante el RUNT
             <span className="ml-2 font-mono font-medium normal-case tracking-normal opacity-55">{vista.solicitudes.length}</span>
           </h5>
@@ -457,7 +457,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
 
       {vista.garantias.length > 0 ? (
         <section className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
-          <h5 className="text-[10px] font-bold uppercase tracking-wider text-[#557EFF]">Garantías inscritas</h5>
+          <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">Garantías inscritas</h5>
           {vista.garantias.map((g) => (
             <div key={`${g.acreedor}-${g.fechaInscripcion}`} className="flex flex-wrap justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10">
               <span className="font-medium">{g.acreedor}</span>

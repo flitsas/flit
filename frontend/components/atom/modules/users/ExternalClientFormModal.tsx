@@ -21,14 +21,14 @@ import {
 import { externalClientErrorMessage } from "./externalClientErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-[#162744] " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 " +
+  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
   "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-[#162744] dark:text-white";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-[#162744] dark:text-white";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
 const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
 const OPTIONAL_SCOPE_CLS =
-  "flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-white p-3 text-sm text-[#162744] " +
-  "focus-within:ring-2 focus-within:ring-[#557EFF] focus-within:ring-offset-2 dark:border-white/15 dark:bg-[#162744] dark:text-white";
+  "flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-white p-3 text-sm text-flit-primary " +
+  "focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 dark:border-white/15 dark:bg-[#162744] dark:text-white";
 const MANAGED_SCOPES = [EXTERNAL_SCOPE_READ, EXTERNAL_SCOPE_PII, EXTERNAL_SCOPE_ATTACHMENTS];
 
 export interface ExternalClientFormModalProps {
@@ -101,7 +101,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-[#162744] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
+            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
           >
             Cancelar
           </button>
@@ -109,8 +109,8 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
             type="submit"
             form="external-client-form"
             disabled={busy}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-70"
-            style={{ background: "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)" }}
+            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
+            style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {editing ? "Guardar cambios" : "Crear cliente"}
@@ -160,9 +160,9 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
         </label>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-semibold text-[#162744] dark:text-white">Permisos</legend>
-          <label className="flex items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-[#162744] dark:border-white/15 dark:bg-white/5 dark:text-white">
-            <input type="checkbox" checked disabled className="mt-0.5 h-4 w-4 accent-[#557EFF]" />
+          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Permisos</legend>
+          <label className="flex items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
+            <input type="checkbox" checked disabled className="mt-0.5 h-4 w-4 accent-flit-brand" />
             <span>
               <span className="font-semibold">Lectura de trámites</span>
               <span className={`block ${HINT_CLS}`}>Obligatorio: feed de sincronización y URL de la factura.</span>
@@ -173,7 +173,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
               type="checkbox"
               checked={pii}
               onChange={(e) => setPii(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#557EFF] focus-visible:outline-none"
+              className="mt-0.5 h-4 w-4 accent-flit-brand focus-visible:outline-none"
             />
             <span>
               <span className="font-semibold">Datos personales sin enmascarar</span>
@@ -187,7 +187,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
               type="checkbox"
               checked={attachments}
               onChange={(e) => setAttachments(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#557EFF] focus-visible:outline-none"
+              className="mt-0.5 h-4 w-4 accent-flit-brand focus-visible:outline-none"
             />
             <span>
               <span className="font-semibold">Envío de adjuntos</span>

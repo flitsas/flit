@@ -16,8 +16,8 @@ export interface RowAction {
 // desaparecía; en dark pasa a un neutro claro. `primary`/`danger` son colores de marca que
 // ya contrastan en ambos temas.
 const TONE: Record<NonNullable<RowAction["tone"]>, string> = {
-  default: "text-[#162744] dark:text-slate-200",
-  primary: "text-[#557EFF]",
+  default: "text-flit-primary dark:text-slate-200",
+  primary: "text-flit-brand",
   danger: "text-[#FF4E00]",
 };
 
@@ -61,7 +61,7 @@ export function RowActions({
             aria-label={a.label}
             aria-disabled={a.disabled || undefined}
             title={a.disabled ? (a.disabledTitle ?? a.label) : a.label}
-            className={`${ICON_BUTTON_HIT_AREA} rounded-lg p-1.5 transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 ${TONE[a.tone ?? "default"]}`}
+            className={`${ICON_BUTTON_HIT_AREA} rounded-lg p-1.5 transition hover:bg-flit-brand/10 disabled:cursor-not-allowed disabled:opacity-40 ${TONE[a.tone ?? "default"]}`}
           >
             <Icon className="h-4 w-4" />
           </button>

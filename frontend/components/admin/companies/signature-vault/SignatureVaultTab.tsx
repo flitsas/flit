@@ -88,7 +88,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
     <button
       type="button"
       className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-      style={{ background: "#557EFF" }}
+      style={{ background: "var(--color-flit-brand)" }}
       onClick={() => setFormOpen(true)}
     >
       Registrar primera firma
@@ -106,7 +106,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
         <button
           type="button"
           className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
           onClick={() => setFormOpen(true)}
         >
           Nueva firma

@@ -23,10 +23,10 @@ import {
 import { companyRoleErrorMessage } from "./companyRoleErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-[#162744] " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 " +
+  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
   "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-[#162744] dark:text-white";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-[#162744] dark:text-white";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
 const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
 const PRODUCT_LABEL: Record<string, string> = {
   tramites: "Trámites",
@@ -190,7 +190,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-[#162744] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
+            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
           >
             {readOnly ? "Cerrar" : "Cancelar"}
           </button>
@@ -199,8 +199,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
               type="submit"
               form="company-role-form"
               disabled={busy || loading || loadError !== null}
-              className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-70"
-              style={{ background: "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)" }}
+              className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
+              style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               {creating ? "Crear rol" : "Guardar cambios"}
@@ -281,12 +281,12 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
           )}
 
           <fieldset className="flex flex-col gap-3">
-            <legend className="mb-1 text-sm font-semibold text-[#162744] dark:text-white">
+            <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">
               Permisos{readOnly && detail ? ` (${detail.permissions.length})` : ""}
             </legend>
             {readOnly ? (
               detail && detail.permissions.length > 0 ? (
-                <ul className="flex flex-col gap-1 text-sm text-[#162744] dark:text-white">
+                <ul className="flex flex-col gap-1 text-sm text-flit-primary dark:text-white">
                   {detail.permissions.map((p) => (
                     <li key={p.id}>
                       {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
@@ -297,7 +297,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                 <p className="text-sm text-[#59677D] dark:text-white/70">Este rol no tiene permisos asignados.</p>
               )
             ) : byModule.length === 0 ? (
-              <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-[#162744] dark:border-white/15 dark:bg-white/5 dark:text-white">
+              <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
                 No tienes permisos para otorgar en este producto. El rol se puede crear sin permisos y completarlo después.
               </p>
             ) : (
@@ -306,25 +306,25 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                 const allOn = ids.every((id) => selected.has(id));
                 return (
                   <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
-                    <label className="flex items-center gap-2 text-sm font-semibold capitalize text-[#162744] dark:text-white">
+                    <label className="flex items-center gap-2 text-sm font-semibold capitalize text-flit-primary dark:text-white">
                       <input
                         type="checkbox"
                         checked={allOn}
                         onChange={(e) => toggleModule(ids, e.target.checked)}
                         aria-label={`Seleccionar todos los permisos de ${moduleCode}`}
-                        className="h-4 w-4 accent-[#557EFF]"
+                        className="h-4 w-4 accent-flit-brand"
                       />
                       {moduleCode}
                     </label>
                     <ul className="mt-2 flex flex-col gap-1.5 pl-6">
                       {perms.map((p) => (
                         <li key={p.id}>
-                          <label className="flex items-start gap-2 text-sm text-[#162744] dark:text-white">
+                          <label className="flex items-start gap-2 text-sm text-flit-primary dark:text-white">
                             <input
                               type="checkbox"
                               checked={selected.has(p.id)}
                               onChange={() => toggle(p.id)}
-                              className="mt-0.5 h-4 w-4 accent-[#557EFF]"
+                              className="mt-0.5 h-4 w-4 accent-flit-brand"
                             />
                             <span>
                               {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>

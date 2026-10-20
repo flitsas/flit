@@ -329,7 +329,7 @@ export function DeclaracionesTramite({
                           type="button"
                           onClick={() => void handleConsultarRues()}
                           disabled={ruesLoading || !empresaVinculadoraNit.trim()}
-                          className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-1.5 bg-[#557EFF] text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
+                          className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-1.5 bg-flit-brand text-white focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-50`}
                           style={{ background: WIZARD_BTN_SOLID }}
                           aria-label="Buscar empresa en RUES"
                         >
@@ -402,7 +402,7 @@ export function DeclaracionesTramite({
               <button
                 type="button"
                 onClick={() => void handleConsultarRues()}
-                className="shrink-0 rounded-xl bg-[#557EFF] px-4 py-2 text-xs font-semibold text-white"
+                className="shrink-0 rounded-xl bg-flit-brand px-4 py-2 text-xs font-semibold text-white"
                 style={{ background: WIZARD_BTN_SOLID }}
                 aria-label="Reintentar consulta al RUES"
               >

@@ -56,7 +56,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
         className="pointer-events-none absolute inset-0 opacity-90 dark:opacity-60"
         style={{
           backgroundImage:
-            "radial-gradient(at 15% 0%, rgba(85,126,255,0.22), transparent 55%), radial-gradient(at 95% 60%, rgba(0,219,213,0.18), transparent 50%)",
+            "radial-gradient(at 15% 0%, color-mix(in srgb, var(--color-flit-brand) 22%, transparent), transparent 55%), radial-gradient(at 95% 60%, color-mix(in srgb, var(--color-flit-tech) 18%, transparent), transparent 50%)",
         }}
       />
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 pb-20 [&>*]:min-w-0 pt-16 md:px-6 lg:grid-cols-[1.1fr_1fr] lg:pb-28 lg:pt-24">

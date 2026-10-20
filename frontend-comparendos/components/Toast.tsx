@@ -7,7 +7,7 @@ import { AlertTriangle, CheckCircle2, X, XCircle } from "lucide-react";
 // Región aria-live para accesibilidad (WCAG 2.1 AA).
 export type ToastType = "success" | "warning" | "error";
 
-const COLOR_TOAST: Record<ToastType, string> = { success: "#00DBD5", warning: "#D9A400", error: "#FF4E00" };
+const COLOR_TOAST: Record<ToastType, string> = { success: "var(--color-flit-tech)", warning: "#D9A400", error: "#FF4E00" };
 
 interface ToastItem {
   id: number;

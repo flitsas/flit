@@ -164,9 +164,9 @@ describe("BrandingPreview — pestaña Correo, source=company (AC1)", () => {
 });
 
 describe("BrandingPreview — pestaña Correo, source=admin (ficha SuperAdmin)", () => {
-  it("usa getNotificationSample con el tenantId, sin conmutador Borrador/Publicada", async () => {
+  it("usa getNotificationSample con la invitación (no exige tipo de trámite) y el tenantId, sin conmutador Borrador/Publicada", async () => {
     getNotificationSample.mockResolvedValue({
-      templateId: "tramites.aprobado",
+      templateId: "security.invitation",
       subject: "Tu trámite fue aprobado",
       html: "<p>Hola desde admin</p>",
       theme: { kind: "brand", platformName: "Movilidad Andina", version: 4, senderName: "Movilidad Andina" },
@@ -176,7 +176,7 @@ describe("BrandingPreview — pestaña Correo, source=admin (ficha SuperAdmin)",
     await openCorreoTab();
 
     await waitFor(() =>
-      expect(getNotificationSample).toHaveBeenCalledWith("tramites.aprobado", { tenantId: "tenant-1" }),
+      expect(getNotificationSample).toHaveBeenCalledWith("security.invitation", { tenantId: "tenant-1" }),
     );
     expect(screen.queryByRole("button", { name: /^borrador$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^publicada$/i })).not.toBeInTheDocument();

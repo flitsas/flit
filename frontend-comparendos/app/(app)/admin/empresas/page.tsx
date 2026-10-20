@@ -141,7 +141,7 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
       {lista.datos?.length === 0 && <p className="text-sm opacity-70">Sin cambios registrados.</p>}
       <ol className="flex flex-col gap-3">
         {(lista.datos ?? []).map((a) => (
-          <li key={a.id} className="border-l-2 border-[#557EFF] pl-3 text-xs">
+          <li key={a.id} className="border-l-2 border-flit-brand pl-3 text-xs">
             <p className="font-semibold">
               {a.accion} · {a.entidad}
             </p>

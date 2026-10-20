@@ -9,7 +9,7 @@ import {
 } from "./transferencia-regimen";
 
 const OPCION_CLASS =
-  "flex items-start gap-2 rounded-lg px-2 py-1.5 text-[11px] focus-within:ring-2 focus-within:ring-[#557EFF]";
+  "flex items-start gap-2 rounded-lg px-2 py-1.5 text-[11px] focus-within:ring-2 focus-within:ring-flit-brand";
 
 export interface RegimenAplicableControlProps {
   seleccion: RegimenSeleccion;

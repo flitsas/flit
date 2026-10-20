@@ -84,7 +84,7 @@ export function WizardCardHeader({
         {/* Azul de marca: es la regla de títulos del sistema y es lo que hacen las dos pantallas de
             la propuesta. Al extraer el átomo se perdió el color y las tarjetas quedaron
             descoloridas frente a la cabecera del propio paso. */}
-        <Tag id={id} className="text-sm font-bold leading-tight" style={{ color: '#557EFF' }}>
+        <Tag id={id} className="text-sm font-bold leading-tight" style={{ color: 'var(--color-flit-brand)' }}>
           {title}
         </Tag>
         {/* opacity-70 es el piso del sistema sobre texto; por debajo el contraste efectivo cae de AA. */}
@@ -157,7 +157,7 @@ export function WizardSegmented<T extends string>({
               aria-pressed={active}
               className={
                 'rounded-[10px] px-4 py-1.5 text-xs font-semibold transition ' +
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40 ' +
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40 ' +
                 'disabled:cursor-not-allowed disabled:opacity-50 ' +
                 (active ? '' : 'opacity-70 hover:opacity-100')
               }
@@ -165,7 +165,7 @@ export function WizardSegmented<T extends string>({
                 active
                   ? {
                       background: '#FFFFFF',
-                      color: '#557EFF',
+                      color: 'var(--color-flit-brand)',
                       // `shadow.card` del token file. La sombra de la propuesta se apoya en
                       // rgba(15,23,42,…) —slate-900— y no en el navy de marca.
                       boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)',
@@ -231,8 +231,8 @@ export function WizardSelectCards<T extends string>({
               key={o.value}
               className={
                 'flex items-start gap-2 rounded-xl border px-3 py-2.5 transition-colors ' +
-                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-[#557EFF] ' +
-                (optionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[rgba(85,126,255,0.04)]')
+                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-flit-brand ' +
+                (optionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_4%,transparent)]')
               }
               style={
                 active
@@ -295,7 +295,7 @@ export function WizardFieldToggle({
   const hintId = description ? `${id}-hint` : undefined;
   return (
     <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-[13px] font-medium text-[#162744] dark:text-white">
+      <label htmlFor={id} className="block text-[13px] font-medium text-flit-primary dark:text-white">
         {label}
       </label>
       <button
@@ -306,17 +306,17 @@ export function WizardFieldToggle({
         aria-describedby={hintId}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className="flex h-[42px] w-full items-center justify-between rounded-xl border bg-white px-3 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]"
+        className="flex h-[42px] w-full items-center justify-between rounded-xl border bg-white px-3 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]"
         style={{
-          borderColor: checked ? '#557EFF' : '#DFE5ED',
-          color: checked ? '#557EFF' : '#162744',
+          borderColor: checked ? 'var(--color-flit-brand)' : '#DFE5ED',
+          color: checked ? 'var(--color-flit-brand)' : '#162744',
         }}
       >
         <span>{checked ? labelOn : labelOff}</span>
         <span
           aria-hidden="true"
           className="relative inline-block h-5 w-9 shrink-0 rounded-full transition"
-          style={{ background: checked ? '#557EFF' : '#CBD5E1' }}
+          style={{ background: checked ? 'var(--color-flit-brand)' : '#CBD5E1' }}
         >
           <span
             className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"

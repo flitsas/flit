@@ -34,8 +34,8 @@ export interface AuditLogTableProps {
 }
 
 const FIELD_CLS =
-  "h-10 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-[#162744] " +
-  "focus:outline-none focus-visible:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 " +
+  "h-10 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-flit-primary " +
+  "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 " +
   "dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
 
 const ALL_EVENTS = "";
@@ -107,7 +107,7 @@ export function AuditLogTable({
       header: "Campo modificado",
       render: (entry) => (
         <span
-          className="font-medium text-[#162744] dark:text-white"
+          className="font-medium text-flit-primary dark:text-white"
           title={technicalKey(entry.entityName, entry.fieldName)}
         >
           {eventLabel(entry.entityName, entry.fieldName)}
@@ -180,7 +180,7 @@ export function AuditLogTable({
           <button
             type="button"
             onClick={clearFilters}
-            className="h-10 rounded-xl border border-[#DFE5ED] px-4 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:hover:bg-white/5"
+            className="h-10 rounded-xl border border-[#DFE5ED] px-4 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:hover:bg-white/5"
           >
             Limpiar filtros
           </button>
@@ -255,7 +255,7 @@ function ParsedValue({ parsed, onDetail }: { parsed: ParsedAuditValue; onDetail?
         <button
           type="button"
           onClick={onDetail}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[#557EFF] hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-flit-brand hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           title={parsed.summary}
         >
           <Eye className="h-4 w-4" aria-hidden />
@@ -291,7 +291,7 @@ function AuditDetailModal({ entry, onClose }: { entry: AuditLogEntry | null; onC
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:hover:bg-white/5"
+            className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:hover:bg-white/5"
           >
             Cerrar
           </button>

@@ -45,7 +45,7 @@ export interface ColumnSelectorProps {
 const DEFAULT_BUTTON_CLS =
   'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border ' +
   'border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition ' +
-  'hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] ' +
+  'hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
   'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ' +
   'dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
 
@@ -167,7 +167,7 @@ export function ColumnSelector({
                       <label
                         key={col.key}
                         htmlFor={checkboxId}
-                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition hover:bg-[#557EFF]/10 ${
+                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition hover:bg-flit-brand/10 ${
                           isOnlyChecked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
                         }`}
                         title={
@@ -180,7 +180,7 @@ export function ColumnSelector({
                           checked={checked}
                           disabled={isOnlyChecked}
                           onChange={() => toggle(col.key)}
-                          className="h-3.5 w-3.5 shrink-0 accent-[#557EFF]"
+                          className="h-3.5 w-3.5 shrink-0 accent-flit-brand"
                         />
                         <span className="min-w-0 flex-1 truncate">{col.label}</span>
                       </label>

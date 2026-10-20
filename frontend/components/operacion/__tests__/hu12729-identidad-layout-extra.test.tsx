@@ -61,7 +61,7 @@ describe('HU #12729 — AC4 botones azules corporativos', () => {
 
 describe('HU #12729 — AC5 foco teclado / contraste documentado', () => {
   it('contrato: focus-visible ring en disclosure y botones brand', () => {
-    expect(biometric).toMatch(/focus-visible:ring-2 focus-visible:ring-\[#557EFF\]/);
+    expect(biometric).toMatch(/focus-visible:ring-2 focus-visible:ring-flit-brand/);
     expect(styles).toMatch(/focus-visible:outline/);
   });
 });

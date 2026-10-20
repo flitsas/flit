@@ -106,7 +106,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
             type="button"
             onClick={onClose}
             aria-label="Cerrar detalle"
-            className="h-8 w-8 grid place-items-center rounded-lg border hover:bg-[#557EFF1A]"
+            className="h-8 w-8 grid place-items-center rounded-lg border hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)]"
           >
             <X className="h-4 w-4" />
           </button>

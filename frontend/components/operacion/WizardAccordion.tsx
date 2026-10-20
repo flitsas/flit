@@ -145,11 +145,11 @@ export function WizardAccordion({
             onClick={toggle}
             aria-expanded={open}
             aria-controls={panelId}
-            className="w-full rounded-xl text-left transition hover:bg-[#557EFF]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+            className="w-full rounded-xl text-left transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
           >
             <span className="flex min-w-0 items-center gap-2">
               {icon}
-              <span className="truncate text-sm font-bold" style={{ color: '#557EFF' }}>
+              <span className="truncate text-sm font-bold" style={{ color: 'var(--color-flit-brand)' }}>
                 {title}
               </span>
             </span>
@@ -168,7 +168,7 @@ export function WizardAccordion({
             aria-expanded={open}
             aria-controls={panelId}
             aria-label={open ? `Contraer ${title}` : `Expandir ${title}`}
-            className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <ChevronDown
               className={`h-4 w-4 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`}

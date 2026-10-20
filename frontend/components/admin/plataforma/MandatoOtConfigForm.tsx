@@ -704,7 +704,7 @@ export function MandatoOtConfigForm({
                 disabled={busy}
                 onClick={() => void handleSaveMeta()}
                 className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+                style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
               >
                 {saving ? "Guardando…" : "Guardar plantilla"}
               </button>
@@ -717,7 +717,7 @@ export function MandatoOtConfigForm({
                   disabled={busy}
                   onClick={() => void handleSaveOtDefaultSigner()}
                   className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+                  style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
                 >
                   {saving ? "Guardando…" : "Guardar mandatario general"}
                 </button>
@@ -727,7 +727,7 @@ export function MandatoOtConfigForm({
                 disabled={busy}
                 onClick={onClose}
                 className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+                style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
               >
                 Cerrar
               </button>
@@ -844,15 +844,15 @@ export function MandatoOtConfigForm({
 
             {templateCode === "auto" ? (
               <div
-                className="relative overflow-hidden rounded-2xl border border-[#DFE5ED] bg-gradient-to-br from-[#F4F7FC] via-white to-[rgba(0,219,213,0.08)] px-4 py-3 dark:border-white/10 dark:from-white/5 dark:via-[#0B0F14] dark:to-[rgba(85,126,255,0.12)]"
+                className="relative overflow-hidden rounded-2xl border border-[#DFE5ED] bg-gradient-to-br from-[#F4F7FC] via-white to-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)] px-4 py-3 dark:border-white/10 dark:from-white/5 dark:via-[#0B0F14] dark:to-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)]"
                 data-testid="mandato-system-template-badge"
                 role="status"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-[#162244] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-[#557EFF]">
+                  <span className="inline-flex items-center rounded-full bg-[#162244] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-flit-brand">
                     Sistema
                   </span>
-                  <span className="inline-flex items-center rounded-full border border-[#557EFF]/35 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-[#162244] dark:border-[#00DBD5]/40 dark:bg-white/10 dark:text-white">
+                  <span className="inline-flex items-center rounded-full border border-flit-brand/35 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-[#162244] dark:border-flit-tech/40 dark:bg-white/10 dark:text-white">
                     {effectiveTemplateName}
                   </span>
                 </div>
@@ -868,15 +868,15 @@ export function MandatoOtConfigForm({
 
             {hasCustom ? (
               <div
-                className="rounded-2xl border border-[#557EFF]/35 bg-[rgba(85,126,255,0.06)] px-4 py-3 dark:border-[#00DBD5]/35 dark:bg-[rgba(0,219,213,0.08)]"
+                className="rounded-2xl border border-flit-brand/35 bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] px-4 py-3 dark:border-flit-tech/35 dark:bg-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)]"
                 data-testid="mandato-custom-template-banner"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#557EFF] to-[#00DBD5] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-flit-brand to-flit-tech px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                     Propia
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#162244] dark:text-white">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-[#557EFF]" aria-hidden="true" />
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden="true" />
                     {view.customTemplateKind === "pdf"
                       ? (view.customTemplateFileName ?? "plantilla.pdf")
                       : "Editor rellenable"}
@@ -956,7 +956,7 @@ export function MandatoOtConfigForm({
                     disabled={busy}
                     onClick={() => void handleSaveEditor()}
                     className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
-                    style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+                    style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
                   >
                     {saving ? "Guardando editor…" : "Guardar plantilla del editor"}
                   </button>
@@ -1053,7 +1053,7 @@ export function MandatoOtConfigForm({
                     {/* El OT es dueño del mandatario general: se registra en el propio organismo, no en una compañía. */}
                     <button
                       type="button"
-                      className="w-fit text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+                      className="w-fit text-left text-xs font-semibold text-flit-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
                       disabled={busy}
                       data-testid="mandato-ot-register-signer"
                       onClick={() => onRegisterSigner()}
@@ -1137,7 +1137,7 @@ export function MandatoOtConfigForm({
                       }}
                       placeholder="Buscar compañía…"
                       disabled={busy}
-                      className="w-full rounded-lg border border-[#DFE5ED] bg-white py-1.5 pl-8 pr-2 text-[11px] text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                      className="w-full rounded-lg border border-[#DFE5ED] bg-white py-1.5 pl-8 pr-2 text-[11px] text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
                       data-testid="mandato-company-search"
                     />
                   </label>
@@ -1292,7 +1292,7 @@ function MandatarioActualReadOnly({
                 </span>
                 <button
                   type="button"
-                  className="shrink-0 rounded-lg p-1 text-[#557EFF] hover:bg-[#EFF6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                  className="shrink-0 rounded-lg p-1 text-flit-brand hover:bg-[#EFF6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                   aria-label="Copiar huella de integridad"
                   onClick={() => void copyHash()}
                 >

@@ -22,7 +22,7 @@ const CATEGORIA_A_FAMILIA: Record<string, ProcedureFamily> = {
 };
 
 const inputClass =
-  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] dark:bg-[#0B0F14] dark:text-white";
+  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand dark:bg-[#0B0F14] dark:text-white";
 
 interface DetailedReportFiltersPanelProps {
   filters: DetailedReportFiltersState;
@@ -144,7 +144,7 @@ export function DetailedReportFiltersPanel({
           onClick={onSearch}
           disabled={!canSearch}
           className="h-10 rounded-[10px] px-4 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           Buscar
         </button>

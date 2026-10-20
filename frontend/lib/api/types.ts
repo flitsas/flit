@@ -76,7 +76,7 @@ export type ChildTenantType = "RENTING" | "CONCESIONARIO";
 
 /** Etiquetas legibles para el tipo de compañía (el valor enviado sigue siendo el enum). */
 export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
-  RENTING: "Renting",
+  RENTING: "Radicadora",
   CONCESIONARIO: "Cliente concesión",
   FLIT: "FLIT",
   CONCESION: "Concesión",

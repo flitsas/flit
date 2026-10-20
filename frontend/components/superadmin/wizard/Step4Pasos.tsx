@@ -32,12 +32,12 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
         {steps.map((step, index) => (
           <div
             key={index}
-            className="flex items-center gap-3 rounded-xl p-3 border bg-[rgba(85,126,255,0.03)] dark:bg-white/5"
+            className="flex items-center gap-3 rounded-xl p-3 border bg-[color-mix(in_srgb,var(--color-flit-brand)_3%,transparent)] dark:bg-white/5"
           >
             <GripVertical className="h-4 w-4 opacity-30 shrink-0" aria-hidden="true" />
             <span
               className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
-              style={{ background: '#557EFF' }}
+              style={{ background: 'var(--color-flit-brand)' }}
               aria-hidden="true"
             >
               {index + 1}
@@ -83,13 +83,13 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
           value={newStepName}
           onChange={(e) => setNewStepName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
+          className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand"
         />
         <button
           onClick={handleAdd}
           disabled={!newStepName.trim()}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-40"
-          style={{ background: '#557EFF' }}
+          style={{ background: 'var(--color-flit-brand)' }}
           aria-label="Agregar nuevo paso"
         >
           Agregar

@@ -15,7 +15,7 @@ export function Progreso({ p }: { p: ContadoresPaquete }) {
   return (
     <div className="flex min-w-40 items-center gap-2 text-xs">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#EEF1F6] dark:bg-white/10">
-        <div className="h-full rounded-full bg-[#557EFF]" style={{ width: `${r.porcentaje}%` }} />
+        <div className="h-full rounded-full bg-flit-brand" style={{ width: `${r.porcentaje}%` }} />
       </div>
       <span className="whitespace-nowrap tabular-nums opacity-70">{r.texto}</span>
     </div>
@@ -27,7 +27,7 @@ export function Contador({ etiqueta, valor, clase }: { etiqueta: string; valor: 
   return (
     <div className="flex min-w-24 flex-col gap-0.5 rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/15">
       <span className="text-[11px] font-semibold text-[#5B6B82] dark:text-slate-300">{etiqueta}</span>
-      <span className={`text-lg font-semibold tabular-nums ${clase ?? "text-[#162744] dark:text-white"}`}>{valor ?? 0}</span>
+      <span className={`text-lg font-semibold tabular-nums ${clase ?? "text-flit-primary dark:text-white"}`}>{valor ?? 0}</span>
     </div>
   );
 }

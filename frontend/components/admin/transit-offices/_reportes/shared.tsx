@@ -68,7 +68,7 @@ export function Tile({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-left transition hover:border-[#557EFF] hover:shadow-sm dark:border-white/10 dark:hover:border-[#557EFF]"
+      className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-left transition hover:border-flit-brand hover:shadow-sm dark:border-white/10 dark:hover:border-flit-brand"
     >
       {content}
     </button>
@@ -139,7 +139,7 @@ export function Bar({
   onClick?: () => void;
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((value / total) * 100));
-  const fill = color ?? "linear-gradient(135deg,#557EFF,#00DBD5)";
+  const fill = color ?? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))";
 
   const content = (
     <>

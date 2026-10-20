@@ -170,7 +170,7 @@ export function CreateTransitOfficeTenantDialog({
       busy={submitting}
       icon={Landmark}
       title="Activar Organismo de Tránsito"
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
           <Field label="Oficina del catálogo" htmlFor="cot-office" error={errors.transitOfficeId}>
@@ -189,7 +189,7 @@ export function CreateTransitOfficeTenantDialog({
                 id="cot-office"
                 value={transitOfficeId}
                 onChange={(e) => setTransitOfficeId(e.target.value)}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.transitOfficeId ? "#FF4E00" : undefined }}
               >
                 <option value="">Selecciona una oficina…</option>
@@ -209,7 +209,7 @@ export function CreateTransitOfficeTenantDialog({
               value={legalName}
               onChange={(e) => setLegalName(sanitizeName(e.target.value))}
               maxLength={255}
-              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
               style={{ borderColor: errors.legalName ? "#FF4E00" : undefined }}
             />
           </Field>
@@ -222,7 +222,7 @@ export function CreateTransitOfficeTenantDialog({
               onChange={(e) => setTaxId(sanitizeTaxId(e.target.value))}
               maxLength={20}
               placeholder="900123456-1"
-              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
               style={{ borderColor: errors.taxId ? "#FF4E00" : undefined }}
             />
           </Field>
@@ -247,7 +247,7 @@ export function CreateTransitOfficeTenantDialog({
               onClick={submit}
               disabled={submitting || officesLoading}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {submitting ? "Activando…" : "Activar Organismo de Tránsito"}

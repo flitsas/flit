@@ -36,7 +36,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
       <button
         onClick={onRetry}
         className="px-5 py-2.5 rounded-xl text-xs font-semibold border"
-        style={{ borderColor: '#557EFF', color: '#557EFF' }}
+        style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         aria-label="Reintentar cargar parametrizaciones"
       >
         Reintentar

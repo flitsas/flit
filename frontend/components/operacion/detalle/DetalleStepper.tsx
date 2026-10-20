@@ -44,7 +44,7 @@ export function DetalleStepper({
                 aria-controls={`detalle-panel-${paso.id}`}
                 aria-label={`Paso ${i + 1}: ${paso.label}`}
                 onClick={() => onSelect(paso.id)}
-                className="flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+                className="flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                 style={isSel ? { boxShadow: `0 0 0 1.5px ${DETALLE_BLUE}` } : undefined}
               >
                 <span

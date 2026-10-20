@@ -62,7 +62,7 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
           disabled={disabled || busy !== null}
           aria-busy={busy === "excel"}
           className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border disabled:opacity-50"
-          style={{ color: "#162744" }}
+          style={{ color: "var(--color-flit-primary)" }}
         >
           {busy === "excel" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -78,7 +78,7 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
           disabled={disabled || busy !== null}
           aria-busy={busy === "pdf"}
           className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           {busy === "pdf" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

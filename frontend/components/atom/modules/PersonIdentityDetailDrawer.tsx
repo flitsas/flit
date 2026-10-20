@@ -288,7 +288,7 @@ export function PersonIdentityDetailDrawer({
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[15px] font-bold uppercase tracking-wide text-[#162744] dark:text-white">
+                    <p className="text-[15px] font-bold uppercase tracking-wide text-flit-primary dark:text-white">
                       {personName}
                     </p>
                   )}
@@ -389,7 +389,7 @@ function ValidationAccordionItem({
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="text-[13px] font-semibold text-[#162744] dark:text-white">{title}</span>
+        <span className="text-[13px] font-semibold text-flit-primary dark:text-white">{title}</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
           style={{ color: FLIT.brand.blue }}
@@ -477,7 +477,7 @@ function ValidationAccordionItem({
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
           <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
-            <p className="mb-1 text-[13px] font-semibold text-[#162744] dark:text-white">
+            <p className="mb-1 text-[13px] font-semibold text-flit-primary dark:text-white">
               Tracking de auditoría y proceso (tiempo real)
             </p>
             <p className="mb-2 text-[11px]" style={{ color: FLIT.text.secondary }}>

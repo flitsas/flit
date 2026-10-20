@@ -121,14 +121,14 @@ export function ManualImageGallery({
           const { title, alt } = MANUAL_IMAGE_TEXT[kind];
           return (
             <li key={kind} className="flex flex-col gap-1.5">
-              <p className="text-xs font-semibold text-[#162744] dark:text-white">{title}</p>
+              <p className="text-xs font-semibold text-flit-primary dark:text-white">{title}</p>
               <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] dark:border-white/10 dark:bg-[#162744]">
                 {estado.status === 'ready' ? (
                   <button
                     type="button"
                     onClick={() => setAmpliada(kind)}
                     aria-label={`Ampliar ${title.toLowerCase()}`}
-                    className="h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#557EFF] dark:focus-visible:outline-[#7C9BFF]"
+                    className="h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand dark:focus-visible:outline-[#7C9BFF]"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida */}
                     <img src={estado.url} alt={alt} className="h-full w-full object-contain" />
@@ -145,7 +145,7 @@ export function ManualImageGallery({
                       type="button"
                       onClick={() => reintentar(kind)}
                       aria-label={`Reintentar ${title.toLowerCase()}`}
-                      className={`inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] bg-white px-3 py-1 text-xs font-semibold text-[#162744] dark:border-white/15 dark:bg-white/[0.08] dark:text-white ${MANUAL_FOCO}`}
+                      className={`inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] bg-white px-3 py-1 text-xs font-semibold text-flit-primary dark:border-white/15 dark:bg-white/[0.08] dark:text-white ${MANUAL_FOCO}`}
                     >
                       <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Reintentar
                     </button>
@@ -215,7 +215,7 @@ function ManualImageViewer({
   }, [ir]);
 
   const botonNav =
-    'inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#DFE5ED] bg-white text-[#162744] transition hover:bg-[#F4F8FF] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/10 ' +
+    'inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#DFE5ED] bg-white text-flit-primary transition hover:bg-[#F4F8FF] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/10 ' +
     MANUAL_FOCO;
 
   return (

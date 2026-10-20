@@ -113,7 +113,7 @@ const MECANISMO_FIRMA_LABEL: Record<string, string> = {
 
 /** Porcentaje de propiedad (Múltiple Propietario) — solo se pinta con 2+ actores del mismo lado. */
 function PorcentajeSoft({ porcentaje }: { porcentaje: number }) {
-  return <DetalleBadgeSoft text={`${formatPorcentaje(porcentaje)}%`} color="#557EFF" />;
+  return <DetalleBadgeSoft text={`${formatPorcentaje(porcentaje)}%`} color="var(--color-flit-brand)" />;
 }
 
 /** `33.33` en vez de `33.330000000000005` — mismo redondeo de 2 decimales que `ActorsForm.tsx`. */

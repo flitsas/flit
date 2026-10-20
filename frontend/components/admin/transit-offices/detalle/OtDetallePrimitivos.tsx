@@ -43,8 +43,8 @@ export function OtListaCampos({ children }: { children: ReactNode }) {
 export function OtCampo({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
-      <dt className="text-xs text-[#162744]/70 dark:text-white/70">{campo}</dt>
-      <dd className="break-words text-xs font-medium text-[#162744] dark:text-white">
+      <dt className="text-xs text-flit-primary/70 dark:text-white/70">{campo}</dt>
+      <dd className="break-words text-xs font-medium text-flit-primary dark:text-white">
         {valor === null || valor === undefined || valor === "" ? "—" : valor}
       </dd>
     </>
@@ -80,7 +80,7 @@ export function OtCargando({ etiqueta, filas = 3 }: { etiqueta: string; filas?: 
 
 /** Estado «vacío»: se dice qué falta, nunca se deja el hueco mudo. */
 export function OtVacio({ mensaje }: { mensaje: string }) {
-  return <p className="text-xs text-[#162744]/70 dark:text-white/70">{mensaje}</p>;
+  return <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>;
 }
 
 /** Estado «error» con reintento. `contexto` da nombre accesible propio a cada botón del panel. */
@@ -95,12 +95,12 @@ export function OtError({
 }) {
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
-      <p className="text-xs text-[#162744]/70 dark:text-white/70">{mensaje}</p>
+      <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>
       <button
         type="button"
         onClick={onReintentar}
         aria-label={contexto ? `Reintentar ${contexto}` : undefined}
-        className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+        className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
         style={{ borderColor: OT_BLUE, color: OT_BLUE }}
       >
         Reintentar

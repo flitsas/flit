@@ -36,7 +36,7 @@ export function OtScopeConfirmDialog({
       icon={AlertTriangle}
       iconBg="#F9AC00"
       title="Confirmar cambio de organismos"
-      titleClassName="text-base font-bold text-[#162744]"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
     >
       <div className="space-y-3 text-xs">
@@ -65,7 +65,7 @@ export function OtScopeConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             Confirmar cambio
           </button>

@@ -68,7 +68,7 @@ export function FranjaEstados({
             title={item.title}
             disabled={disabled}
             onClick={() => onSelect?.(activo ? '' : item.key)}
-            className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60"
             style={activo ? { background: item.activeBg } : undefined}
           >
             {/* Decorativo: el nombre accesible del botón ya dice la tarjeta y el conteo. */}
@@ -83,7 +83,7 @@ export function FranjaEstados({
             />
             {/* Hasta dos líneas: «Solicitud de revocatoria» no cabe en una y truncarla la
                 confundía con la tarjeta de al lado. */}
-            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-[#162744] dark:text-white/70">
+            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-flit-primary dark:text-white/70">
               {item.label}
             </span>
             <span

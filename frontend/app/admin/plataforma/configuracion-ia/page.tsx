@@ -20,7 +20,7 @@ export default function AdminConfiguracionIaPage() {
         <button
           type="button"
           onClick={() => router.push("/")}
-          className="flex w-fit items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="flex w-fit items-center gap-1.5 rounded-md text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
           Volver al inicio

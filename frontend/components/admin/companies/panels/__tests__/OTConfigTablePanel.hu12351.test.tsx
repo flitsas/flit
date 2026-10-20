@@ -35,6 +35,7 @@ import {
   fetchOtConsultationRestrictions,
   fetchOtPrendaDocumentPolicies,
   fetchTransitAgreements,
+  fetchTransitBlocks,
   fetchTransitGrants,
   fetchTransitOffices,
 } from "@/lib/api/admin-companies";
@@ -126,5 +127,16 @@ describe("OTConfigTablePanel HU #12351", () => {
 
     await user.click(screen.getByRole("button", { name: /confirmar cambio/i }));
     await waitFor(() => expect(addTransitGrant).toHaveBeenCalledWith(TENANT, "o2"));
+  });
+
+  it("Marca Blanca — lista operables menos bloqueados sin pedir los grants (no se usan)", async () => {
+    arrange(["o2"]);
+    vi.mocked(fetchTransitBlocks).mockResolvedValue({ transitOfficeIds: ["o2"] });
+    render(<OTConfigTablePanel tenantId={TENANT} mode="readonly-marca-blanca" />);
+
+    const table = await screen.findByRole("table", { name: /organismos de tránsito/i });
+    expect(within(table).getByText("Secretaría Bogotá")).toBeInTheDocument();
+    expect(within(table).queryByText("Medellín")).not.toBeInTheDocument();
+    expect(fetchTransitGrants).not.toHaveBeenCalled();
   });
 });

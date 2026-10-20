@@ -27,7 +27,7 @@ export function DetailedReportKpiStrip({ summary }: DetailedReportKpiStripProps)
         label="Categoría principal"
         value={topCategory ? `${topCategory.label} (${formatNumber(topCategory.count)})` : "—"}
         tooltip="Categoría con más trámites en el resultado filtrado."
-        color="#557EFF"
+        color="var(--color-flit-brand)"
         testId="detailed-kpi-category"
       />
       <KpiCard

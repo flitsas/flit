@@ -147,7 +147,7 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
 function OrganismoInfoCard({ name }: { name: string }) {
   return (
     <ResumenCard title="Organismo de tránsito">
-      <p className="text-sm font-semibold" style={{ color: '#162744' }}>
+      <p className="text-sm font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
         {name || 'Sin seleccionar'}
       </p>
       {/* El gestor solo llega a este paso con un OT que ya pasó la re-confirmación contra grants y
@@ -940,7 +940,7 @@ export function PlacaPreasignadaSection({
       <div className="mb-3 flex items-center gap-2">
         <span
           className="h-4 w-1 shrink-0 rounded-full"
-          style={{ background: '#557EFF' }}
+          style={{ background: 'var(--color-flit-brand)' }}
           aria-hidden="true"
         />
         <WizardCardHeader title="Placa" level="h4" className="" />
@@ -1135,9 +1135,9 @@ function OrganismoModal({
             onClick={() => void persist(runtSuggestion)}
             disabled={saving}
             className="mb-3 w-full text-left rounded-xl border p-3 disabled:opacity-50"
-            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+            style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
           >
-            <p className="text-xs font-semibold uppercase" style={{ color: '#557EFF' }}>
+            <p className="text-xs font-semibold uppercase" style={{ color: 'var(--color-flit-brand)' }}>
               Usar el organismo registrado en RUNT
             </p>
             <p className="text-xs font-semibold mt-0.5">{runtSuggestion.name}</p>
@@ -1173,7 +1173,7 @@ function OrganismoModal({
                 type="button"
                 onClick={() => void persist(o)}
                 disabled={saving}
-                className="w-full text-left rounded-xl border p-2.5 hover:border-[#557EFF] disabled:opacity-50"
+                className="w-full text-left rounded-xl border p-2.5 hover:border-flit-brand disabled:opacity-50"
               >
                 <p className="text-xs font-semibold">{o.name}</p>
                 <p className="text-xs opacity-70">{o.code}</p>
@@ -1469,7 +1469,7 @@ function ParticipantRow({
             onClick={() => void handleReinvite()}
             disabled={busy || !instanceId}
             className="rounded-xl border px-3 py-1.5 text-xs font-semibold shrink-0 disabled:opacity-50"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
           >
             {busy ? 'Reinvitando…' : 'Reinvitar'}
           </button>

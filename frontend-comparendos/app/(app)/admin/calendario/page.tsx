@@ -13,7 +13,7 @@ import { nombreMes } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
 
 const COLOR: Record<ReturnType<typeof tipoDia>, string> = {
-  habil: "bg-white text-[#162744] hover:border-[#557EFF] dark:bg-transparent dark:text-white",
+  habil: "bg-white text-flit-primary hover:border-flit-brand dark:bg-transparent dark:text-white",
   finDeSemana: "bg-[#F1F4F9] text-[#8A97AB] dark:bg-white/5 dark:text-slate-500",
   festivo: "bg-[#FFE8DC] font-semibold text-[#B03A00] hover:border-[#FF4E00] dark:bg-[#FF4E00]/20 dark:text-[#FFB38F]",
 };
@@ -105,7 +105,7 @@ function Mes({ datos, mes, onElegir }: { datos: AnioCalendario; mes: number; onE
   const semanas = semanasDelMes(datos.dias, datos.anio, mes);
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="text-xs font-semibold capitalize text-[#162744] dark:text-white">{nombreMes(mes)}</h3>
+      <h3 className="text-xs font-semibold capitalize text-flit-primary dark:text-white">{nombreMes(mes)}</h3>
       <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-[#8A97AB]">
         {DIAS_SEMANA.map((d) => (
           <span key={d}>{d}</span>
@@ -124,7 +124,7 @@ function Mes({ datos, mes, onElegir }: { datos: AnioCalendario; mes: number; onE
                 className={`relative h-7 rounded-md border border-transparent text-[11px] transition disabled:cursor-default ${COLOR[tipoDia(d)]}`}
               >
                 {Number(d.fecha.slice(8))}
-                {d.origen === "MANUAL" && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[#557EFF]" aria-label="Cambio manual" />}
+                {d.origen === "MANUAL" && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-flit-brand" aria-label="Cambio manual" />}
               </button>
             ) : (
               <span key={`v${j}`} />
@@ -179,7 +179,7 @@ function Calendario() {
               <span className="h-3 w-3 rounded-sm bg-[#F1F4F9]" aria-hidden /> Fin de semana
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#557EFF]" aria-hidden /> Cambio manual
+              <span className="h-1.5 w-1.5 rounded-full bg-flit-brand" aria-hidden /> Cambio manual
             </span>
           </div>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

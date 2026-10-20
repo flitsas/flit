@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 const BORDER = '#DFE5ED';
 
 /**
@@ -61,7 +61,7 @@ export function TerminosCondicionesCheckbox({ checked, onChange, disabled }: Pro
       className="flex items-start gap-3 rounded-2xl border p-4 transition"
       style={{
         borderColor: checked ? BLUE : BORDER,
-        background: checked ? 'rgba(85,126,255,0.06)' : undefined,
+        background: checked ? 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' : undefined,
       }}
     >
       <input
@@ -70,9 +70,9 @@ export function TerminosCondicionesCheckbox({ checked, onChange, disabled }: Pro
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#557EFF] disabled:opacity-60"
+        className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-flit-brand disabled:opacity-60"
       />
-      <span className="text-[13px] leading-snug text-[#162744] dark:text-white">
+      <span className="text-[13px] leading-snug text-flit-primary dark:text-white">
         <label htmlFor={checkboxId} className="cursor-pointer">
           Acepto los Términos y Condiciones de uso de la plataforma.
         </label>{' '}
@@ -80,7 +80,7 @@ export function TerminosCondicionesCheckbox({ checked, onChange, disabled }: Pro
           href={termsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 font-semibold underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="inline-flex items-center gap-1 font-semibold underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ color: BLUE }}
         >
           Ver Términos y Condiciones

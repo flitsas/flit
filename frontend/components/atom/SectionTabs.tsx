@@ -67,14 +67,14 @@ export function SectionTabs<Id extends string>({
               title={tab.title}
               onClick={() => onChange(tab.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className={`relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF] ${
-                selected ? "text-[#557EFF]" : "text-[#162744] opacity-70 dark:text-white/[0.78] dark:opacity-100"
+              className={`relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand ${
+                selected ? "text-flit-brand" : "text-flit-primary opacity-70 dark:text-white/[0.78] dark:opacity-100"
               }`}
             >
               {tab.label}
               {tab.count !== undefined && <span className="ml-1.5 font-normal opacity-80">· {tab.count}{tab.countLabel ? ` ${tab.countLabel}` : ""}</span>}
               {selected && (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[#557EFF]" />
+                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-flit-brand" />
               )}
             </button>
           );

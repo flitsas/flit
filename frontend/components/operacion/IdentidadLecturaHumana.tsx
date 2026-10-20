@@ -89,8 +89,8 @@ export function IdentidadLecturaHumana({
       className="rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#162744]"
     >
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-[#DFE5ED] px-4 py-3 dark:border-white/10">
-        <span className="text-sm font-bold text-[#162744] dark:text-white">{validation.name}</span>
-        <span className="text-xs text-[#162744]/55 dark:text-white/50">
+        <span className="text-sm font-bold text-flit-primary dark:text-white">{validation.name}</span>
+        <span className="text-xs text-flit-primary/55 dark:text-white/50">
           {[validation.documentType, validation.documentNumber].filter(Boolean).join(' ')}
           {rolLabel ? ` · ${rolLabel.toLocaleLowerCase('es')}` : ''}
         </span>
@@ -104,12 +104,12 @@ export function IdentidadLecturaHumana({
       {estado.explicacion || estado.accion ? (
         <div className="border-b border-[#DFE5ED] px-4 py-3 dark:border-white/10">
           {estado.explicacion ? (
-            <p className="text-xs leading-relaxed text-[#162744]/85 dark:text-white/75">
+            <p className="text-xs leading-relaxed text-flit-primary/85 dark:text-white/75">
               {estado.explicacion}
             </p>
           ) : null}
           {estado.accion ? (
-            <p className="mt-1 text-xs leading-relaxed text-[#162744]/60 dark:text-white/50">
+            <p className="mt-1 text-xs leading-relaxed text-flit-primary/60 dark:text-white/50">
               {estado.accion}
             </p>
           ) : null}
@@ -118,7 +118,7 @@ export function IdentidadLecturaHumana({
 
       <div className="px-4 py-3">
         {cargando ? (
-          <p className="text-xs text-[#162744]/55 dark:text-white/50" role="status" aria-live="polite">
+          <p className="text-xs text-flit-primary/55 dark:text-white/50" role="status" aria-live="polite">
             Cargando el historial…
           </p>
         ) : fallo ? (
@@ -126,7 +126,7 @@ export function IdentidadLecturaHumana({
              poder distinguirlas. Con el reintento a mano, además, se resuelve solo el caso más
              común, que es un corte de red pasajero. */
           <div role="alert">
-            <p className="text-xs text-[#162744]/70 dark:text-white/60">
+            <p className="text-xs text-flit-primary/70 dark:text-white/60">
               No se pudo cargar el historial de esta validación.
             </p>
             <button
@@ -142,7 +142,7 @@ export function IdentidadLecturaHumana({
             </button>
           </div>
         ) : hitos.length === 0 ? (
-          <p className="text-xs text-[#162744]/55 dark:text-white/50">
+          <p className="text-xs text-flit-primary/55 dark:text-white/50">
             Todavía no hay movimientos que mostrar.
           </p>
         ) : (
@@ -180,7 +180,7 @@ const TONO_CLS: Record<TonoIdentidad, string> = {
   ok: 'bg-[#8CC63F]/15 text-[#3F6212]',
   pendiente: 'bg-[#F9AC00]/15 text-[#92400E]',
   alerta: 'bg-[#FF4E00]/12 text-[#C2410C]',
-  neutro: 'bg-[#557EFF]/12 text-[#1E40AF]',
+  neutro: 'bg-flit-brand/12 text-[#1E40AF]',
 };
 
 function Pildora({ label, tono }: { label: string; tono: TonoIdentidad }) {
@@ -197,7 +197,7 @@ const TONO_PUNTO: Record<TonoIdentidad, string> = {
   ok: '#8CC63F',
   pendiente: '#F9AC00',
   alerta: '#FF4E00',
-  neutro: '#557EFF',
+  neutro: 'var(--color-flit-brand)',
 };
 
 function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
@@ -213,11 +213,11 @@ function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
         }}
         aria-hidden="true"
       />
-      <p className="text-xs font-semibold text-[#162744] dark:text-white">{hito.titulo}</p>
+      <p className="text-xs font-semibold text-flit-primary dark:text-white">{hito.titulo}</p>
       {hito.detalle ? (
-        <p className="mt-0.5 text-xs text-[#162744]/70 dark:text-white/60">{hito.detalle}</p>
+        <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{hito.detalle}</p>
       ) : null}
-      <p className="mt-0.5 font-mono text-[11px] text-[#162744]/50 dark:text-white/40">
+      <p className="mt-0.5 font-mono text-[11px] text-flit-primary/50 dark:text-white/40">
         {fecha(hito.cuando)}
       </p>
     </li>
