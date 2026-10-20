@@ -6,7 +6,7 @@ vi.mock("server-only", () => ({}));
 const host = vi.hoisted(() => ({ value: "" }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ host: host.value }) }));
 
-describe("resolveBrand con FLIT_HOSTS", () => {
+describe("resolveFreshBrand con FLIT_HOSTS", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
@@ -19,9 +19,9 @@ describe("resolveBrand con FLIT_HOSTS", () => {
   it("un host de la lista es FLIT y no llama al gateway", async () => {
     vi.stubEnv("FLIT_HOSTS", "hub.interno.test");
     host.value = "hub.interno.test";
-    const { resolveBrand } = await import("@flit/brand/resolve-brand.server");
+    const { resolveFreshBrand } = await import("@flit/brand/resolve-brand.server");
 
-    const brand = await resolveBrand();
+    const brand = await resolveFreshBrand();
 
     expect(brand.version).toBe(0);
     expect(fetch).not.toHaveBeenCalled();
@@ -30,11 +30,23 @@ describe("resolveBrand con FLIT_HOSTS", () => {
   it("un host fuera de la lista se trata como dominio de red y pide su marca", async () => {
     vi.stubEnv("FLIT_HOSTS", "*.flitsas.online,!marcablancadev.flitsas.online");
     host.value = "marcablancadev.flitsas.online";
-    const { resolveBrand } = await import("@flit/brand/resolve-brand.server");
+    const { resolveFreshBrand } = await import("@flit/brand/resolve-brand.server");
 
-    await resolveBrand();
+    await resolveFreshBrand();
 
     const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>)["X-Flit-Domain"]).toBe("marcablancadev.flitsas.online");
+  });
+
+  it("el hub no guarda la marca en la caché de Next: tras publicar se ve al instante", async () => {
+    vi.stubEnv("FLIT_HOSTS", "*.flitsas.online,!marcablancadev.flitsas.online");
+    host.value = "marcablancadev.flitsas.online";
+    const { resolveFreshBrand } = await import("@flit/brand/resolve-brand.server");
+
+    await resolveFreshBrand();
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit & { next?: unknown }];
+    expect(init.cache).toBe("no-store");
+    expect(init.next).toBeUndefined();
   });
 });
