@@ -173,6 +173,46 @@ public sealed class ContraventorTests(ApiConFuente api) : IClassFixture<ApiConFu
             .Should().BeFalse("si llegó por un NIT, decide ese NIT y no el documento");
     }
 
+    /// <summary>
+    /// HU #13712 — hallazgo con Renting real (2026-10-20): la API trae nombre y correo, no el documento. El conductor se
+    /// asigna con «documento pendiente», el operador lo completa sin reemplazarlo, y sin documento no se pide el cambio.
+    /// </summary>
+    [Fact]
+    public async Task HU13712_ConductorSinDocumento_SeAsigna_YSeCompletaDespues()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Contratos["SND124"] = new RespuestaContrato(ResultadoContrato.Encontrado,
+            new ConductorEncontrado(null, null, "ANA MARIA PEREZ", "samuel.cardenas@flitsas.com", null, null, null, null, "RENTING"), null, null);
+        var empresa = await EmpresaAsync(api, consulta: true, cambio: true, integracion: "ApiRenting");
+        var id = (await IngresarAsync(api, empresa, Item("K-10", placa: "SND124")))["K10"];
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [.. Operador, Permisos.CambioContraventorSolicitar]));
+
+        (await (await cliente.PostAsync($"/api/v1/comparendos/comparendos/{id}/contraventor/consultar", null, ct)).Content.ReadFromJsonAsync<JsonElement>(ct))
+            .GetProperty("resultado").GetString().Should().Be("Encontrado");
+        var k = (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}", ct)).GetProperty("contraventor");
+        (k.GetProperty("nombres").GetString(), k.GetProperty("documentoPendiente").GetBoolean(), k.GetProperty("origen").GetString()).Should().Be(("ANA MARIA PEREZ", true, "Api"));
+        k.GetProperty("numeroDocumento").ValueKind.Should().Be(JsonValueKind.Null);
+
+        var viabilidad = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/cambio-contraventor/viabilidad", ct);
+        viabilidad.GetProperty("condiciones").EnumerateArray().Single(c => c.GetProperty("codigo").GetString() == "DOCUMENTO_CONDUCTOR").GetProperty("cumple").GetBoolean()
+            .Should().BeFalse("el formato al OT necesita el documento");
+
+        var sinDoc = await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor", Conductor(""), ct);
+        sinDoc.IsSuccessStatusCode.Should().BeFalse("a mano el documento sigue siendo obligatorio");
+
+        (await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor/documento", new { tipoDocumento = "CC", numeroDocumento = "1020304050" }, ct)).EnsureSuccessStatusCode();
+        var completo = (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}", ct));
+        completo.GetProperty("contraventor").GetProperty("documentoPendiente").GetBoolean().Should().BeFalse();
+        (completo.GetProperty("contraventor").GetProperty("tipoDocumento").GetString(), completo.GetProperty("contraventor").GetProperty("origen").GetString())
+            .Should().Be(("CC", "Api"), "completar no es reemplazar: el origen sigue siendo la API");
+        completo.GetProperty("historialContraventor").GetArrayLength().Should().Be(2, "la asignación y el documento completado quedan en la traza");
+
+        var otraVez = await cliente.PutAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/contraventor/documento", new { tipoDocumento = "CC", numeroDocumento = "999" }, ct);
+        (await otraVez.Content.ReadAsStringAsync(ct)).Should().Contain("DOCUMENTO_YA_REGISTRADO");
+    }
+
     [Fact]
     public async Task SinCapacidadDeConsulta_Responde403()
     {

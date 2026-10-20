@@ -108,7 +108,7 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
             ["dp.tipologia_nombre"] = extras.Tipologia?.Nombre,
             ["dp.fundamento"] = extras.Tipologia?.DescripcionJuridica,
             ["conductor.nombres"] = conductor?.Nombres,
-            ["conductor.tipo_documento"] = conductor?.TipoDocumento.ToString(),
+            ["conductor.tipo_documento"] = conductor?.TipoDocumento?.ToString(),
             ["conductor.numero_documento"] = conductor?.NumeroDocumento,
             ["conductor.correo"] = conductor?.Correo,
             ["conductor.telefono"] = conductor?.Telefono,

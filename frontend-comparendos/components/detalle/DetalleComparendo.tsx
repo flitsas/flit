@@ -199,7 +199,14 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
         <Datos
           filas={[
             ["Nombre", k.nombres],
-            ["Documento", `${k.tipoDocumento} ${k.numeroDocumento}`],
+            [
+              "Documento",
+              k.documentoPendiente ? (
+                <StatusBadge key="d" label="Pendiente: la API de contratos no lo trae" tone="warning" />
+              ) : (
+                `${k.tipoDocumento} ${k.numeroDocumento}`
+              ),
+            ],
             ["Correo", k.correo],
             ["Teléfono", k.telefono],
             ["Dirección", [k.direccion, k.ciudad].filter(Boolean).join(", ")],

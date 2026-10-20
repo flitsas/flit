@@ -5,7 +5,7 @@ using Grpc.Core;
 namespace Flit.Comparendos.Api.Modulos.Contraventor;
 
 /// <summary>El conductor que devuelve la API de contratos de la gestora.</summary>
-public sealed record ConductorEncontrado(TipoDocumento TipoDocumento, string NumeroDocumento, string Nombres, string? Correo, string? Telefono,
+public sealed record ConductorEncontrado(TipoDocumento? TipoDocumento, string? NumeroDocumento, string Nombres, string? Correo, string? Telefono,
     string? Direccion, string? Ciudad, string? Sucursal, string? TipoContrato);
 
 public enum ResultadoContrato
@@ -82,12 +82,15 @@ internal sealed class ApiContratosCoreConsultas(FuentesComparendosService.Fuente
         switch (r.Resultado)
         {
             case ResultadoContratoConductor.Encontrado when r.Conductor is { } k:
-                // Sin documento no se puede asignar (RN del conductor): se deja para asignarlo a mano, sin reintentos.
-                if (!k.HasNumeroDocumento || !k.HasTipoDocumento || !Enum.TryParse<TipoDocumento>(k.TipoDocumento, true, out var tipo) || !Enum.IsDefined(tipo))
+                // Sin nombre no hay a quién asignar: se deja para asignarlo a mano, sin reintentos.
+                if (!k.HasNombres || string.IsNullOrWhiteSpace(k.Nombres))
                     return new RespuestaContrato(ResultadoContrato.NoEncontrado, null,
-                        $"Renting encontró el contrato de {placa} pero no trae el tipo y número de documento del conductor: asígnalo a mano.", null);
-                return new RespuestaContrato(ResultadoContrato.Encontrado, new ConductorEncontrado(tipo, k.NumeroDocumento,
-                    k.HasNombres ? k.Nombres : string.Empty, k.HasCorreo ? k.Correo : null, k.HasTelefono ? k.Telefono : null, k.HasDireccion ? k.Direccion : null,
+                        $"Renting encontró el contrato de {placa} pero no trae el nombre del cliente: asígnalo a mano.", null);
+                // Renting real (2026-10-20) no devuelve el documento: se asigna con nombre y correo y queda «documento pendiente».
+                // Si algún día lo trae completo y válido, se usa.
+                TipoDocumento? tipo = k.HasNumeroDocumento && k.HasTipoDocumento && Enum.TryParse<TipoDocumento>(k.TipoDocumento, true, out var t) && Enum.IsDefined(t) ? t : null;
+                return new RespuestaContrato(ResultadoContrato.Encontrado, new ConductorEncontrado(tipo, tipo is null ? null : k.NumeroDocumento,
+                    k.Nombres, k.HasCorreo ? k.Correo : null, k.HasTelefono ? k.Telefono : null, k.HasDireccion ? k.Direccion : null,
                     k.HasCiudad ? k.Ciudad : null, k.HasSucursal ? k.Sucursal : null, k.HasTipoContrato ? k.TipoContrato : null), null, null);
             case ResultadoContratoConductor.NoEncontrado:
                 return new RespuestaContrato(ResultadoContrato.NoEncontrado, null, $"Sin contrato vigente para {placa} el {fecha:yyyy-MM-dd}.", null);

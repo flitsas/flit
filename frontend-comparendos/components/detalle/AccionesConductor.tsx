@@ -154,6 +154,58 @@ function CargarDocumento({ ctx }: { ctx: ContextoDetalle }) {
 }
 
 /**
+ * El conductor que trajo la API de contratos llega sin documento (HU #13712): se completa aquí sin reemplazarlo, así no se
+ * revocan sus enlaces del portal ni se reinician sus avisos. Sin documento no se solicita el cambio de contraventor.
+ */
+function CompletarDocumento({ ctx }: { ctx: ContextoDetalle }) {
+  const toast = useToast();
+  const [tipo, setTipo] = useState("CC");
+  const [numero, setNumero] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const valido = numero.trim().length > 0 && numero.trim().length <= 20;
+
+  const guardar = async () => {
+    setOcupado(true);
+    try {
+      await apiFetch(`/comparendos/${ctx.detalle.id}/contraventor/documento`, {
+        method: "PUT",
+        body: { tipoDocumento: tipo, numeroDocumento: numero.trim() },
+      });
+      toast.show("Documento del conductor completado.", "success");
+      ctx.recargar();
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "No se pudo guardar el documento.", "error");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <InlineAlert tone="warning" title="Falta el documento del conductor">
+      <p className="mb-2 text-xs">
+        La API de contratos trae el nombre y el correo, pero no el documento. Complétalo para poder solicitar el cambio de
+        contraventor.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className={ETIQUETA_CLS}>
+          Tipo
+          <select className={`${INPUT_CLS} w-24`} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {TIPOS_DOCUMENTO.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Número
+          <input className={INPUT_CLS} value={numero} onChange={(e) => setNumero(e.target.value)} />
+        </label>
+        <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!valido || ocupado} onClick={guardar}>
+          {ocupado ? "Guardando…" : "Guardar documento"}
+        </button>
+      </div>
+    </InlineAlert>
+  );
+}
+
+/**
  * Acciones del conductor dentro del acordeón Contraventor (HU #13481, §7.4): asignar o cambiar, consultar la API de
  * contratos (si la empresa la tiene), cargar documentos y marcar que ya fue notificado en persona.
  */
@@ -161,7 +213,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   const toast = useToast();
   const [modal, setModal] = useState(false);
   const [consultando, setConsultando] = useState(false);
-  const [confirmar, setConfirmar] = useState<{ nombres: string; numeroDocumento: string } | null>(null);
+  const [confirmar, setConfirmar] = useState<{ nombres: string; numeroDocumento: string | null } | null>(null);
   const d = ctx.detalle;
   const puedeAsignar = tienePermiso(ctx.sesion, P.contraventorAsignar);
   const puedeConsultar = tienePermiso(ctx.sesion, P.contraventorConsultar) && capacidades(ctx.sesion).consultaContraventor;
@@ -171,7 +223,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   const consultar = async (confirmarReemplazo = false) => {
     setConsultando(true);
     try {
-      const r = await apiFetch<{ resultado: string; mensaje: string | null; conductor: { nombres: string; numeroDocumento: string } | null; requiereConfirmarReemplazo: boolean }>(
+      const r = await apiFetch<{ resultado: string; mensaje: string | null; conductor: { nombres: string; numeroDocumento: string | null } | null; requiereConfirmarReemplazo: boolean }>(
         `/comparendos/${d.id}/contraventor/consultar`,
         { method: "POST", query: { confirmarReemplazo: confirmarReemplazo || undefined } },
       );
@@ -218,6 +270,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
         )}
         {puedeDocumentos && <CargarDocumento ctx={ctx} />}
       </div>
+      {puedeAsignar && d.contraventor?.documentoPendiente && <CompletarDocumento ctx={ctx} />}
       {puedeAsignar && (
         <Interruptor activo={d.notificadoFisicamente} onCambio={notificado} etiqueta="Notificado en persona" ayuda="El conductor ya conoce el comparendo: no recibe avisos automáticos." />
       )}
@@ -236,7 +289,8 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
             </div>
           }
         >
-          {confirmar.nombres} ({confirmar.numeroDocumento}). ¿Reemplazar al conductor actual?
+          {confirmar.nombres}
+          {confirmar.numeroDocumento ? ` (${confirmar.numeroDocumento})` : ""}. ¿Reemplazar al conductor actual?
         </InlineAlert>
       )}
       {modal && <ModalConductor ctx={ctx} onCerrar={() => setModal(false)} />}

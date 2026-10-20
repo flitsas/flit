@@ -114,8 +114,10 @@ export interface CambioCampo {
 }
 
 export interface Contraventor {
-  tipoDocumento: string;
-  numeroDocumento: string;
+  /** Nulos cuando lo trajo la API de contratos, que no devuelve el documento (HU #13712): «documento pendiente». */
+  tipoDocumento: string | null;
+  numeroDocumento: string | null;
+  documentoPendiente: boolean;
   nombres: string;
   correo: string | null;
   telefono: string | null;

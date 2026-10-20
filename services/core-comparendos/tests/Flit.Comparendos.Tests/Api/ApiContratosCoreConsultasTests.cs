@@ -35,16 +35,26 @@ public sealed class ApiContratosCoreConsultasTests
         cliente.Empresa.Should().Be(Empresa.ToString());
     }
 
+    /// <summary>Renting real (2026-10-20) no devuelve el documento: se asigna con nombre y correo, documento pendiente.</summary>
     [Theory]
+    [InlineData(null, null)]
     [InlineData(null, "1020304050")]
     [InlineData("CC", null)]
     [InlineData("XX", "1020304050")]
-    public async Task AC1_SinTipoONumeroDeDocumento_SeAsignaAMano_SinReintentos(string? tipo, string? numero)
+    public async Task AC1_SinDocumentoValido_SeAsignaConDocumentoPendiente(string? tipo, string? numero)
     {
-        var conductor = new ConductorDeContrato { Nombres = "ANA PEREZ" };
+        var conductor = new ConductorDeContrato { Nombres = "ANA PEREZ", Correo = "buzon.pruebas@flitsas.com" };
         if (tipo is not null) conductor.TipoDocumento = tipo;
         if (numero is not null) conductor.NumeroDocumento = numero;
         var r = await Consultar(new ConsultarContratoConductorResponse { Resultado = ResultadoContratoConductor.Encontrado, Conductor = conductor });
+        r.Resultado.Should().Be(ResultadoContrato.Encontrado);
+        (r.Conductor!.TipoDocumento, r.Conductor.NumeroDocumento, r.Conductor.Nombres, r.Conductor.Correo).Should().Be(((TipoDocumento?)null, (string?)null, "ANA PEREZ", "buzon.pruebas@flitsas.com"));
+    }
+
+    [Fact]
+    public async Task AC1_SinNombre_SeAsignaAMano()
+    {
+        var r = await Consultar(new ConsultarContratoConductorResponse { Resultado = ResultadoContratoConductor.Encontrado, Conductor = new ConductorDeContrato { Correo = "x@flitsas.com" } });
         (r.Resultado, r.Conductor).Should().Be((ResultadoContrato.NoEncontrado, (ConductorEncontrado?)null));
         r.Mensaje.Should().Contain("asígnalo a mano");
     }
