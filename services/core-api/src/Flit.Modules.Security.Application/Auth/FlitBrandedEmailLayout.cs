@@ -125,6 +125,19 @@ public static class FlitBrandedEmailLayout
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Nombre de la plataforma que firma el correo: el de la marca con tema <c>Brand</c> (y nombre
+    /// informado); <c>"FLIT"</c> en cualquier otro caso, para que la salida FLIT no cambie.
+    /// </summary>
+    public static string PlatformName(Flit.Modules.Security.Domain.Auth.EmailTheme? theme) =>
+        theme is { IsBrand: true } && !string.IsNullOrWhiteSpace(theme.PlatformName)
+            ? theme.PlatformName.Trim()
+            : "FLIT";
+
+    /// <summary>Color del enlace de acción: el principal de la marca con tema <c>Brand</c>; <c>null</c> (azul FLIT) si no.</summary>
+    public static string? BrandLinkColor(Flit.Modules.Security.Domain.Auth.EmailTheme? theme) =>
+        theme is { IsBrand: true } ? Flit.Modules.Security.Domain.Auth.BrandedEmailChrome.LinkColor(theme) : null;
+
     public static string Paragraph(string text) =>
         $"<p style=\"margin:0 0 12px;\">{Enc(text)}</p>";
 

@@ -8,7 +8,12 @@ namespace Flit.Modules.Security.Application.Auth.ForgotPassword;
 /// </summary>
 public static class ForgotPasswordEmailTemplate
 {
+    /// <summary>Asunto con el tema FLIT. Con tema de marca ver <see cref="BuildSubject"/>.</summary>
     public const string Subject = "Recuperación de contraseña — FLIT";
+
+    /// <summary>Asunto firmado por la marca con tema de marca; exactamente <see cref="Subject"/> con FLIT.</summary>
+    public static string BuildSubject(Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
+        $"Recuperación de contraseña — {FlitBrandedEmailLayout.PlatformName(theme)}";
 
     public static string BuildResetLink(string resetUrlBase, string rawToken)
     {
@@ -27,7 +32,7 @@ public static class ForgotPasswordEmailTemplate
         int lifetimeMinutes,
         string? assetsBaseUrl = null,
         Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
-        new(Subject, BuildHtmlBody(displayName, link, lifetimeMinutes, assetsBaseUrl, theme));
+        new(BuildSubject(theme), BuildHtmlBody(displayName, link, lifetimeMinutes, assetsBaseUrl, theme));
 
     private static string BuildHtmlBody(
         string displayName,
@@ -41,8 +46,8 @@ public static class ForgotPasswordEmailTemplate
         var body =
             FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
             + FlitBrandedEmailLayout.Paragraph(
-                "Recibimos una solicitud para restablecer tu contraseña en FLIT. Haz clic en el siguiente enlace para crear una nueva contraseña:")
-            + FlitBrandedEmailLayout.ActionLink(link, "Restablecer mi contraseña")
+                $"Recibimos una solicitud para restablecer tu contraseña en {FlitBrandedEmailLayout.PlatformName(theme)}. Haz clic en el siguiente enlace para crear una nueva contraseña:")
+            + FlitBrandedEmailLayout.ActionLink(link, "Restablecer mi contraseña", FlitBrandedEmailLayout.BrandLinkColor(theme))
             + FlitBrandedEmailLayout.Paragraph(
                 $"El enlace caduca en {lifetimeMinutes} minutos. Si no solicitaste este cambio, puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.");
 

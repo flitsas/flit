@@ -41,4 +41,38 @@ public sealed class BrandEmailGoldenTests
             new EmailMessage(Guid.Empty, "security.invitation", "destinatario@ejemplo.test", FullName, composed.Subject, composed.HtmlBody),
             "security-invitation-brand");
     }
+
+    [Fact]
+    public void RecuperacionContrasena_brand_conserva_asunto_y_cuerpo()
+    {
+        var link = Flit.Modules.Security.Application.Auth.ForgotPassword.ForgotPasswordEmailTemplate.BuildResetLink(
+            "https://app.flit.test/auth/reset-password", RawToken);
+        var composed = Flit.Modules.Security.Application.Auth.ForgotPassword.ForgotPasswordEmailTemplate.Compose(
+            FullName, link, 30, theme: BrandTheme);
+
+        EmailGolden.Assert(
+            new EmailMessage(Guid.Empty, "security.forgot-password", "destinatario@ejemplo.test", FullName, composed.Subject, composed.HtmlBody),
+            "security-forgot-password-brand");
+    }
+
+    [Fact]
+    public void ResetAdministrativo_brand_conserva_asunto_y_cuerpo()
+    {
+        var composed = Flit.Modules.Security.Application.Auth.AdminResetPassword.AdminResetPasswordEmailTemplate.Compose(
+            FullName, "Temp-0000!", theme: BrandTheme);
+
+        EmailGolden.Assert(
+            new EmailMessage(Guid.Empty, "security.admin-reset-password", "destinatario@ejemplo.test", FullName, composed.Subject, composed.HtmlBody),
+            "security-admin-reset-password-brand");
+    }
+
+    [Fact]
+    public void Bienvenida_brand_conserva_asunto_y_cuerpo()
+    {
+        var composed = WelcomeRegistrationEmailTemplate.Compose("https://app.flit.test/login", theme: BrandTheme);
+
+        EmailGolden.Assert(
+            new EmailMessage(Guid.Empty, "security.welcome", "destinatario@ejemplo.test", FullName, composed.Subject, composed.HtmlBody),
+            "security-welcome-brand");
+    }
 }
