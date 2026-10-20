@@ -350,6 +350,15 @@ describe("ModulePermissionsSection — modo admin y tope (#13655)", () => {
     expect(screen.queryByRole("button", { name: /Volver Crear trámites/ })).not.toBeInTheDocument();
   });
 
+  it("AC2: sin ninguna acción del módulo en el tope, «Habilitar módulo» se deshabilita y «Denegar módulo» no", async () => {
+    vi.mocked(listGrantablePermissions).mockResolvedValue([]);
+    vi.mocked(listUserOverrides).mockResolvedValue([individual]);
+    renderSection(adminProps);
+    const tramites = await screen.findByTestId("module-tramites");
+    expect(within(tramites).getByRole("button", { name: /Habilitar el módulo Trámites completo/ })).toBeDisabled();
+    expect(within(tramites).getByRole("button", { name: /Denegar el módulo Trámites completo/ })).toBeEnabled();
+  });
+
   it("AC2: «módulo completo» avisa que solo abarcó lo que está dentro del tope", async () => {
     vi.mocked(setModuleOverrides).mockResolvedValue({
       productCode: "tramites", batchId: "b", created: 1, skipped: 0, outOfCap: 1, excluded: 0,

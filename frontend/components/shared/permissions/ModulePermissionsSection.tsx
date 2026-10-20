@@ -395,7 +395,7 @@ export function ModulePermissionsSection({
                   <div className="ml-auto flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      disabled={controlsOff}
+                      disabled={controlsOff || (mode === "admin" && m.actions.length > 0 && m.actions.every((a) => a.outOfCap === true))}
                       onClick={() => void setModule(m, "allow")}
                       aria-label={`Habilitar el módulo ${m.name} completo`}
                       className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
