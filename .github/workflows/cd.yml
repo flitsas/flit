@@ -694,7 +694,7 @@ jobs:
             # solo sirve su propio host: las negaciones de los otros dos son inertes.
             # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
             # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
-            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online
+            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online,!tramites.marcablancadag1.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -1014,16 +1014,18 @@ jobs:
           cache-from: type=gha,scope=core-ict
           cache-to: type=gha,mode=max,scope=core-ict
 
-  # DEV ya NO se despliega aqui: desde el 2026-10-17 vive en el k3s de la 177 y lo despliega
-  # deploy-dev-gitops (abajo). Si este job corriera en develop, levantaria otra vez el stack
-  # docker de /opt/flitdev junto al de k3s: dos copias de DEV sobre la misma base, con jobs,
-  # correos y consumidores duplicados. QA (staging) sigue por aqui.
+  # DEV y QA ya NO se despliegan aqui: viven en el k3s de la 177 (DEV desde el 2026-10-17, QA
+  # desde el 2026-10-18) y los despliega deploy-gitops (abajo). Si este job corriera en develop o
+  # staging, levantaria otra vez el stack docker de /opt/flitdev o /opt/flitqa junto al de k3s:
+  # dos copias del ambiente sobre la misma base, con jobs, correos y consumidores duplicados.
+  # OJO PDN: la rama release tiene su propio deploy-pdn-gitops (PR #587) que este archivo aun no
+  # trae; al nivelar release con staging hay que conservarlo.
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
     needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
     # HU #13329: corre aunque falle el build de algún servicio. En despliegue por servicio (FLIT_DEPLOY_ROLLING) se
     # despliegan los demás y el que falló conserva su versión; sin él, se detiene sin tocar nada, como antes.
-    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name != 'develop' }}
+    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name == 'release' }}
     runs-on: ubuntu-latest
     # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
     timeout-minutes: 15
@@ -1334,31 +1336,36 @@ jobs:
           echo "Rollback manual: ssh al VPS y ejecuta:"
           echo "  cd <deploy-path> && docker compose down && docker compose up -d"
 
-  # ── DEV: GitOps (k3s de la 177 + Argo CD) ────────────────────────────────────
+  # ── DEV y QA: GitOps (k3s de la 177 + Argo CD) ───────────────────────────────
   # Mismo patron que deploy-pdn-gitops en release (PR #587): este job NO toca ningun
   # servidor. Escribe los digests recien publicados en
-  # flit-gitops/services/flit2-dev/kustomization.yaml y Argo CD los aplica en la 177
-  # (Application flit2-dev, leida por root-vps-177).
+  # flit-gitops/services/flit2-<dev|qa>/kustomization.yaml y Argo CD los aplica en la 177
+  # (Applications flit2-dev y flit2-qa, leidas por root-vps-177). develop -> flit2-dev,
+  # staging -> flit2-qa (sale de setup.env_name).
   #
-  # Por digest y no por tag: el tag `dev` se mueve, el digest no, y asi git dice que corre en
-  # DEV. Rollback = revertir ese commit en flit-gitops.
+  # Por digest y no por tag: el tag `dev`/`qa` se mueve, el digest no, y asi git dice que corre
+  # en el ambiente. Rollback = revertir ese commit en flit-gitops.
   #
   # Si el build de una imagen falla, su digest no se toca (ese servicio conserva su version)
   # y el job termina en rojo, igual que el despliegue por servicio de deploy-to-vps.
   #
-  # OJO: la CONFIGURACION de DEV ya no sale de docker-compose.prod.yml ni del .env de la 177.
-  # Vive en flit-gitops/services/flit2-dev/ (configmaps.yaml + sealed-secrets.yaml). Una
-  # variable nueva en el compose NO llega a DEV sola: hay que agregarla alla.
-  deploy-dev-gitops:
-    name: Deploy DEV (GitOps → k3s 177)
+  # OJO: la CONFIGURACION de DEV/QA ya no sale de docker-compose.prod.yml ni del .env de la
+  # 177. Vive en flit-gitops/services/flit2-<ambiente>/ (configmaps.yaml + sealed-secrets.yaml).
+  # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
+  deploy-gitops:
+    name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → k3s 177)
     needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
-    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name == 'develop' }}
+    if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: develop
-      url: https://dev.flitsas.online
+      # develop / staging: cada Environment tiene su GITOPS_TOKEN.
+      name: ${{ needs.setup.outputs.gh_env }}
+      url: https://${{ needs.setup.outputs.front_domain }}
     env:
+      AMBIENTE: ${{ needs.setup.outputs.env_name }}
+      FRONT_DOMAIN: ${{ needs.setup.outputs.front_domain }}
+      API_DOMAIN: ${{ needs.setup.outputs.api_domain }}
       R_CORE_API: ${{ needs.build-core-api.result }}
       D_CORE_API: ${{ needs.build-core-api.outputs.digest }}
       R_CORE_IDENTITY: ${{ needs.build-core-identity.result }}
@@ -1386,7 +1393,7 @@ jobs:
           fetch-depth: 0
 
       # Aviso, no bloqueo: si este push cambio docker-compose.prod.yml, lo mas probable es que
-      # traiga una variable de entorno nueva que en DEV hay que replicar a mano en flit-gitops.
+      # traiga una variable de entorno nueva que hay que replicar a mano en flit-gitops.
       - name: Avisar si cambio docker-compose.prod.yml
         env:
           BEFORE: ${{ github.event.before }}
@@ -1397,7 +1404,7 @@ jobs:
             exit 0
           fi
           if ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml; then
-            echo "::warning title=Revisar config de DEV::docker-compose.prod.yml cambio en este despliegue. DEV ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-dev/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
+            echo "::warning title=Revisar config de ${AMBIENTE^^}::docker-compose.prod.yml cambio en este despliegue. ${AMBIENTE^^} ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-${AMBIENTE}/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
             git diff "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml | grep -E '^[+-][^+-]' | head -60 || true
           fi
 
@@ -1408,7 +1415,7 @@ jobs:
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${GITOPS_TOKEN}@github.com/${{ github.repository_owner }}/flit-gitops.git" gitops
           cd gitops
-          K=services/flit2-dev/kustomization.yaml
+          K="services/flit2-${AMBIENTE}/kustomization.yaml"
           FAILED=""
           MSG=""
           # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
@@ -1443,7 +1450,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Los digests ya eran estos: nada que desplegar."
           else
-            git commit -m "flit2-dev: despliegue ${GITHUB_SHA::7} (flitsas/flit develop)" -m "${MSG#$'\n'}"
+            git commit -m "flit2-${AMBIENTE}: despliegue ${GITHUB_SHA::7} (flitsas/flit ${GITHUB_REF_NAME})" -m "${MSG#$'\n'}"
             pushed=0
             for i in 1 2 3; do
               if git push; then pushed=1; break; fi
@@ -1460,19 +1467,19 @@ jobs:
             exit 1
           fi
 
-      # Argo CD sondea el repo cada ~3 min. Esto comprueba que DEV SIGUE SANO tras el
-      # despliegue; la revision que corre se ve en Argo CD (Application flit2-dev de la 177).
-      - name: Comprobar que DEV responde
+      # Argo CD sondea el repo cada ~3 min. Esto comprueba que el ambiente SIGUE SANO tras el
+      # despliegue; la revision que corre se ve en Argo CD (Application flit2-<ambiente> de la 177).
+      - name: Comprobar que el ambiente responde
         run: |
           sleep 180
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 10 -o /dev/null https://api.dev.flitsas.online/health \
-               && curl -fsS --max-time 10 -o /dev/null https://dev.flitsas.online/; then
-              echo "DEV responde (intento $i)."
+            if curl -fsS --max-time 10 -o /dev/null "https://${API_DOMAIN}/health" \
+               && curl -fsS --max-time 10 -o /dev/null "https://${FRONT_DOMAIN}/"; then
+              echo "${AMBIENTE^^} responde (intento $i)."
               exit 0
             fi
             echo "Intento $i: aun no responde; reintento en 15 s"
             sleep 15
           done
-          echo "::error::DEV no responde 10 min despues del despliegue. Revisar Argo CD (flit2-dev) en la 177; rollback = revertir el commit de flit-gitops."
+          echo "::error::${AMBIENTE^^} no responde 10 min despues del despliegue. Revisar Argo CD (flit2-${AMBIENTE}) en la 177; rollback = revertir el commit de flit-gitops."
           exit 1

@@ -44,12 +44,14 @@ public sealed class ReservedHostsTests
         "marcablancadev.flitsas.online",
         "marcablancaqa.flitsas.online",
         "marcablancapdn.flitsas.online",
+        "marcablancadag1.flitsas.online",
     ];
 
     [Theory]
     [InlineData("marcablancadev.flitsas.online")]
     [InlineData("marcablancaqa.flitsas.online")]
     [InlineData("marcablancapdn.flitsas.online")]
+    [InlineData("marcablancadag1.flitsas.online")]
     public void AC1_HostDePruebaPermitido_NoEsReservado(string host)
     {
         ReservedHosts.IsReserved(host, Patterns, Allowed).Should().BeFalse();
