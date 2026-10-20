@@ -18,6 +18,10 @@ internal sealed class OverrideTargetDirectory(FlitDbContext db) : IOverrideTarge
 {
     private const string SuperAdminRole = "SuperAdmin";
 
+    // Mismo criterio que el listado de usuarios (TenantType): el tenant tiene perfil de organismo de tránsito.
+    public Task<bool> IsTransitOfficeTenantAsync(Guid tenantId, CancellationToken ct) =>
+        db.TransitOfficeProfiles.AsNoTracking().AnyAsync(p => p.TenantId == tenantId, ct);
+
     public async Task<OverrideTargetInfo> GetAsync(Guid tenantId, Guid userId, CancellationToken ct)
     {
         var tenantExists = await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct).ConfigureAwait(false);

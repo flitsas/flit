@@ -514,6 +514,7 @@ Flit.Modules.Security.Application.PermissionOverrides.IPermissionOverrideRule =>
 Flit.Modules.Security.Application.PermissionOverrides.IPermissionOverrideRule => Flit.Modules.Security.Application.PermissionOverrides.TenantScopeRule (Scoped)
 Flit.Modules.Security.Application.PermissionOverrides.IPermissionOverrideRule => Flit.Modules.Security.Application.PermissionOverrides.TargetIsAdminRule (Scoped)
 Flit.Modules.Security.Application.PermissionOverrides.IPermissionOverrideRule => Flit.Modules.Security.Application.PermissionOverrides.ExcludedPermissionRule (Scoped)
+Flit.Modules.Security.Application.PermissionOverrides.IPermissionOverrideRule => Flit.Modules.Security.Application.PermissionOverrides.OtPermissionTenantRule (Scoped)
 Flit.Modules.Security.Application.PermissionOverrides.IPermissionOverrideRule => Flit.Modules.Security.Application.PermissionOverrides.InvitationPendingRule (Scoped)
 Flit.Modules.Security.Application.PermissionOverrides.ManageUserPermissionOverridesHandler => Flit.Modules.Security.Application.PermissionOverrides.ManageUserPermissionOverridesHandler (Scoped)
 Flit.Modules.Security.Application.PermissionOverrides.OverrideTargetLookup => Flit.Modules.Security.Application.PermissionOverrides.OverrideTargetLookup (Scoped)

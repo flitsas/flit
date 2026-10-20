@@ -159,6 +159,8 @@ internal static class PermissionOverridesEndpoints
             StatusCodes.Status403Forbidden, ex.ReasonCode, "Al Super Admin no se le configuran permisos individuales.", ex.Slug),
         PermissionOverrideReasons.TargetIsAdmin => Error(
             StatusCodes.Status403Forbidden, ex.ReasonCode, "Solo el Super Admin modifica a otro administrador.", ex.Slug),
+        PermissionOverrideReasons.OtNotApplicable => Error(
+            StatusCodes.Status403Forbidden, ex.ReasonCode, "Los permisos del organismo de tránsito solo aplican a usuarios de un organismo.", ex.Slug),
         PermissionOverrideReasons.OutOfScope => Error(
             StatusCodes.Status403Forbidden, ex.ReasonCode, "El usuario no pertenece a la compañía sobre la que operas.", ex.Slug),
         PermissionOverrideReasons.FamilyCreateRequiresRead => Error(

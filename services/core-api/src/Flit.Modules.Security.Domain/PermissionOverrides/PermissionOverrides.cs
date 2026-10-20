@@ -154,6 +154,9 @@ public static class PermissionOverrideReasons
 
     /// <summary>HU #13666: se pidió «Crear» de una familia de trámite sin «Ver» efectivo (rol + individuales).</summary>
     public const string FamilyCreateRequiresRead = "FAMILY_CREATE_REQUIRES_READ";
+
+    /// <summary>Permiso OT (<c>ot.*</c>) sobre un usuario de un tenant que no es organismo de tránsito: no tendría efecto.</summary>
+    public const string OtNotApplicable = "OT_NOT_APPLICABLE";
 }
 
 /// <summary>
@@ -174,6 +177,20 @@ public interface IOverrideTargetDirectory
 {
     /// <summary>Estado del usuario respecto al tenant, con filtros explícitos por tenant (la app conecta como owner y la RLS no aplica).</summary>
     Task<OverrideTargetInfo> GetAsync(Guid tenantId, Guid userId, CancellationToken ct);
+
+    /// <summary>
+    /// ¿El tenant es un organismo de tránsito? Los permisos <c>ot.*</c> solo aplican ahí: en una compañía la política OtModule
+    /// rechaza la ruta igual, así que ni se ofrecen ni se otorgan. Por defecto <c>true</c> (sin dato, no se oculta nada).
+    /// </summary>
+    Task<bool> IsTransitOfficeTenantAsync(Guid tenantId, CancellationToken ct) => Task.FromResult(true);
+}
+
+/// <summary>Permisos del organismo de tránsito: slugs <c>ot.*</c> y módulos <c>ot-*</c>.</summary>
+public static class OtPermissions
+{
+    public static bool IsOt(string? slugOrModule) =>
+        slugOrModule is not null
+        && (slugOrModule.StartsWith("ot.", StringComparison.Ordinal) || slugOrModule.StartsWith("ot-", StringComparison.Ordinal));
 }
 
 public sealed class PermissionNotFoundForOverrideException(Guid permissionId)

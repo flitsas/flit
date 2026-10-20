@@ -104,6 +104,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<IPermissionOverrideRule, TenantScopeRule>();
         services.AddScoped<IPermissionOverrideRule, TargetIsAdminRule>();
         services.AddScoped<IPermissionOverrideRule, ExcludedPermissionRule>();
+        services.AddScoped<IPermissionOverrideRule, OtPermissionTenantRule>();
         services.AddScoped<IPermissionOverrideRule, InvitationPendingRule>();
 
         return services;

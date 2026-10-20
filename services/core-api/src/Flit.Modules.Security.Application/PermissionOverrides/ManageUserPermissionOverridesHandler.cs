@@ -25,7 +25,8 @@ public sealed class ManageUserPermissionOverridesHandler(
     PermissionCapCalculator capCalculator,
     GrantModuleOverridesHandler moduleHandler,
     IEnumerable<IPermissionOverrideRule> rules,
-    IPermissionEnforcementState? enforcement = null)
+    IPermissionEnforcementState? enforcement = null,
+    IOverrideTargetDirectory? targets = null)
 {
     // Hallazgo review Épica #12753: sin estado de enforcement (null) todo permiso enforced='true' se considera exigido.
     private bool IsLive(string slug) => enforcement?.IsEffectivelyEnforced(slug) ?? true;
@@ -300,7 +301,9 @@ public sealed class ManageUserPermissionOverridesHandler(
         var all = await repository.ListEnforcedPermissionsAsync(ct).ConfigureAwait(false);
         var cap = await capCalculator.GetCapAsync(tenantId, actor, ct).ConfigureAwait(false);
         // Los permisos cuyo flag de enforcement está apagado no se ofrecen: otorgarlos o denegarlos no tendría efecto en la API.
-        return [.. all.Where(p => cap.Contains(p.Id) && IsLive(p.Slug))];
+        // Tampoco los OT (ot.*) en un tenant que no es organismo de tránsito: ahí la política OtModule rechaza la ruta igual.
+        var otApplies = targets is null || await targets.IsTransitOfficeTenantAsync(tenantId, ct).ConfigureAwait(false);
+        return [.. all.Where(p => cap.Contains(p.Id) && IsLive(p.Slug) && (otApplies || !OtPermissions.IsOt(p.Slug)))];
     }
 
     // ── HU #13666: regla «crear exige ver» por familia sobre permisos individuales ─────────────────────────────

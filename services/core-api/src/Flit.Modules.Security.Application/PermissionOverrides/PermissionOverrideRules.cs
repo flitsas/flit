@@ -139,6 +139,26 @@ public sealed class ExcludedPermissionRule : IPermissionOverrideRule
     }
 }
 
+/// <summary>
+/// Los permisos OT (<c>ot.*</c>) solo se configuran en usuarios de un organismo de tránsito: en un usuario de compañía no
+/// tendrían efecto. Quitar uno que ya exista (REVOKE) sí se permite, para limpiar.
+/// </summary>
+public sealed class OtPermissionTenantRule(IOverrideTargetDirectory directory) : IPermissionOverrideRule
+{
+    public async Task<string?> CheckAsync(PermissionOverrideRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (PermissionOverrideActions.IsRead(request.Action) || request.Action == "REVOKE" || !OtPermissions.IsOt(request.PermissionSlug))
+        {
+            return null;
+        }
+
+        return await directory.IsTransitOfficeTenantAsync(request.TenantId, ct).ConfigureAwait(false)
+            ? null
+            : PermissionOverrideReasons.OtNotApplicable;
+    }
+}
+
 /// <summary>AC6: un usuario que aún no aceptó su invitación no se configura; el flujo de invitación no cambia.</summary>
 public sealed class InvitationPendingRule(OverrideTargetLookup lookup) : IPermissionOverrideRule
 {
