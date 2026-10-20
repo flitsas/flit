@@ -82,25 +82,71 @@ FLIT 2 avisa a FLITO, con un webhook firmado, cada vez que un trámite radicado 
 v3.1. Es independiente del cliente de integración de los pasos 1 a 4: aquí no hay secreto de cliente, sino una
 **clave HMAC por ambiente**, la misma para todos los tenants.
 
-| Ambiente | `FLITO_SIGNALS_TARGET_URL` | Encendido |
+| Ambiente | Destino (`TargetUrl`) | Encendido |
 |---|---|---|
-| DEV | `https://dev.operaciones.flitsas.online/api/flito/sync/flit2/avisos` | Sí |
+| DEV | `https://dev.operaciones.flitsas.online/api/flito/sync/flit2/avisos` | Sí, desde el 2026-10-20 (evidencias en la Épica #13614) |
 | QA | `https://qa.operaciones.flitsas.online/api/flito/sync/flit2/avisos` | Sí, cuando QA tenga RabbitMQ y core-notificaciones (Epic #13316) |
 | PDN | `https://operaciones.flitsas.com/api/flito/sync/flit2/avisos` | **No**, hasta acordarlo con FLITO |
 
+### Dónde se configura
+
+core-api lee la sección `Integrations:FlitoSignals`. El nombre de cada variable depende de cómo se despliega el
+ambiente:
+
+| Valor | Ambiente con GitOps (k3s, repo `flitsas/flit-gitops`) | Ambiente con `docker compose` (`.env` del VPS) |
+|---|---|---|
+| Encendido | `Integrations__FlitoSignals__Enabled: "true"` en el ConfigMap `core-api-config` | `FLITO_SIGNALS_ENABLED=true` |
+| Destino | `Integrations__FlitoSignals__TargetUrl` en el ConfigMap `core-api-config` | `FLITO_SIGNALS_TARGET_URL` |
+| Clave | `Integrations__FlitoSignals__SigningKey` en el SealedSecret `core-api-secrets` | `FLITO_SIGNALS_SIGNING_KEY` |
+
+- Desde el 2026-10-17, DEV corre en el k3s de la 177 (namespace `flit2-dev`, carpeta `services/flit2-dev/`). Su `.env`
+  del VPS **ya no tiene efecto**: lo que se escriba ahí no llega a core-api. QA siguió el mismo camino (`flit2-qa`).
+  Antes de tocar un ambiente, revisar en el job de despliegue del CD (`deploy-*-gitops` o `deploy-to-vps`) cómo se
+  despliega.
+- Una variable nueva en `docker-compose.prod.yml` **no llega sola** a GitOps: hay que agregarla al ConfigMap o al
+  SealedSecret del ambiente.
+- Las claves de DEV, QA y PDN ya están selladas en los dos lados (flit-gitops PR 31): `core-api-secrets` en FLIT 2 y
+  `FLIT2_AVISOS_SECRETO` en FLITO. **No sellar una clave nueva** salvo que se esté rotando: si los dos lados no tienen
+  la misma, todas las firmas fallan con 401.
+- Cambiar flit-gitops requiere permiso de escritura en ese repo. Quien no lo tenga le pasa el cambio a quien lo
+  administre.
+
 ### Encender o rotar la clave
 
-1. En el VPS del ambiente, generar la clave sin dejarla en el historial de la terminal:
-   `openssl rand -base64 32` (44 caracteres; el mínimo es 32).
-2. Escribirla en el `.env` del ambiente junto con el destino:
-   `FLITO_SIGNALS_ENABLED=true`, `FLITO_SIGNALS_TARGET_URL=<la de la tabla>` y `FLITO_SIGNALS_SIGNING_KEY=<clave>`.
-3. Entregar la clave a FLITO por el canal fuera de banda acordado (el mismo de los secretos de cliente: **nunca**
-   correo, chat, ADO, GitHub ni las herramientas de trabajo con IA). FLITO la carga en su receptor del mismo ambiente.
-4. Reiniciar `core-api` (`docker compose up -d core-api`). En el log de arranque debe aparecer
-   `Avisos a FLITO encendidos hacia <host>`. Si dice «mal configurados», revisar la URL (HTTPS absoluta) y el largo
-   de la clave: core-api arranca igual, pero no envía avisos.
-5. Para **rotar**, coordinar la hora con FLITO: los avisos firmados con la clave vieja que sigan en reintento fallarán
-   la firma en FLITO, y su lectura de respaldo cada hora los recupera.
+1. **Clave**, solo si es nueva o se está rotando. En el servidor del ambiente, generarla sin dejarla en el historial de
+   la terminal: `openssl rand -base64 32` (44 caracteres; el mínimo es 32).
+   - GitOps: sellarla con la llave del clúster y llevar el resultado (cifrado; puede ir a git) a `core-api-secrets` →
+     `spec.encryptedData`:
+     `printf '%s' "$KEY" | kubeseal --raw --namespace <ns> --name core-api-secrets --controller-namespace kube-system --controller-name sealed-secrets-controller`
+   - `docker compose`: escribirla en el `.env` como `FLITO_SIGNALS_SIGNING_KEY=<clave>`.
+2. **Entregar la clave a FLITO** por el canal fuera de banda acordado (el mismo de los secretos de cliente: **nunca**
+   correo, chat, ADO, GitHub ni las herramientas de trabajo con IA). FLITO la carga en su receptor del mismo ambiente
+   y lo enciende. Para comprobar que ya está encendido: un POST sin firma al destino pasa de 404 a **401**. Para
+   comprobar que los dos lados tienen la misma clave sin mostrarla, cada lado compara los 8 primeros caracteres del
+   SHA-256 del valor.
+3. **Encendido y destino**: `Enabled` en `true` y `TargetUrl` con el destino de la tabla, en el ConfigMap (GitOps) o
+   en el `.env` (`docker compose`).
+4. **Probar la red desde el ambiente**, antes de reiniciar. FLIT 2 y FLITO pueden compartir servidor (en la 177
+   comparten el k3s), así que la prueba se hace desde dentro:
+   `kubectl -n <ns> exec deploy/core-notificaciones -- sh -c "wget -S -O /dev/null --post-data='' <destino> 2>&1 | grep HTTP/"`
+   (con `docker compose`: `docker compose exec core-notificaciones …`). Debe responder **401**. Siempre se usa el
+   hostname HTTPS público. Un `/etc/hosts` o un Service interno que resuelva a una IP privada no sirve: el filtro
+   anti-SSRF de core-notificaciones lo bloquea, y es correcto que lo haga.
+5. **Cerrar los avisos pendientes, justo antes del reinicio** (ver «Encender por primera vez» más abajo).
+6. **Reiniciar `core-api`**. Un cambio de ConfigMap o de Secret **no reinicia el pod**, y `Enabled` solo se lee al
+   arrancar: sin este paso los avisos siguen apagados aunque Argo CD ya haya aplicado el cambio.
+   - GitOps: `kubectl -n <ns> rollout restart deployment/core-api` y `kubectl -n <ns> rollout status deployment/core-api`.
+   - `docker compose`: `docker compose up -d core-api`. `docker compose restart` no relee el `.env`.
+7. **Verificar**:
+   - Log de arranque (`kubectl -n <ns> logs deploy/core-api | grep -i "avisos a flito"`): debe decir
+     `Avisos a FLITO encendidos hacia <host>` (EventId 13626). `apagados` (13625) significa que el reinicio fue
+     anterior al cambio. `mal configurados` (13627) significa que hay que revisar la URL (HTTPS absoluta) y el largo
+     de la clave: core-api arranca igual, pero no envía avisos.
+   - Primer aviso: cambiar un trámite radicado y, unos 6 a 8 s después, comprobar la entrega:
+     `SELECT resultado, codigo_http, ocurrido_en FROM notificaciones.webhooks WHERE origen = 'flito' ORDER BY ocurrido_en DESC LIMIT 5;`
+     Debe salir `entregado` con 200.
+8. Para **rotar**, coordinar la hora con FLITO: los avisos firmados con la clave vieja que sigan en reintento fallarán
+   la firma en FLITO, y su lectura de respaldo los recupera.
 
 ### Encender PDN (o encender por primera vez un ambiente con historia)
 
@@ -109,7 +155,7 @@ propia de PDN.
 
 Mientras los avisos están apagados, cada trámite que cambia queda con su aviso pendiente. En el primer encendido
 saldría un aviso por cada trámite modificado desde el despliegue, que pueden ser miles. No se pierde nada, pero
-FLITO ya tiene esos cambios por su lectura periódica. Para evitar la ráfaga, **justo antes** del paso 4 (reiniciar
+FLITO ya tiene esos cambios por su lectura periódica. Para evitar la ráfaga, **justo antes** del paso 6 (reiniciar
 `core-api`), cerrar los pendientes:
 
 ```sql
@@ -123,5 +169,6 @@ algún trámite, ese cambio sale avisado (no se pierde).
 
 ### Apagar
 
-`FLITO_SIGNALS_ENABLED=false` y reiniciar `core-api`. Los cambios siguen quedando registrados como pendientes y salen
-al volver a encender. FLITO no pierde datos mientras tanto: su lectura de respaldo cada hora lee el feed.
+`Enabled` en `false` (ConfigMap o `.env`) y reiniciar `core-api` como en el paso 6. Los cambios siguen quedando
+registrados como pendientes y salen al volver a encender. FLITO no pierde datos mientras tanto: su lectura de respaldo
+lee el feed.
