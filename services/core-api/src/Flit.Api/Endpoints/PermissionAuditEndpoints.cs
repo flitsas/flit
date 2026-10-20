@@ -44,6 +44,8 @@ internal static class PermissionAuditEndpoints
                         r.ProductCode,
                         r.ModuleCode,
                         r.PermissionSlug,
+                        r.PermissionName,
+                        r.ModuleName,
                         r.Action,
                         r.Outcome,
                         r.ReasonCode,

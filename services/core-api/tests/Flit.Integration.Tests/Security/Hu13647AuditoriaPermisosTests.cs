@@ -139,6 +139,25 @@ public sealed class Hu13647AuditoriaPermisosTests(PostgresDatabaseFixture fixtur
     }
 
     [Fact]
+    public async Task AC3_El_permiso_y_el_modulo_llegan_con_su_nombre_legible_no_con_el_codigo()
+    {
+        await SeedAsync();
+        await using (var cn = await Fixture.OpenConnectionAsync())
+        {
+            await ExecAsync(cn, """
+                INSERT INTO security.modules (code, name, sort_order, is_active, product_code) VALUES ('it47_m','Reportes IT 47',1,true,'tramites');
+                INSERT INTO security.permissions (module_id, slug, name, http_method, route_pattern, is_active, enforced)
+                  SELECT id, 'it47.reportes.read', 'Ver reportes', 'GET', '/api/v1/it47/r', true, 'true'
+                  FROM security.modules WHERE code = 'it47_m';
+                """);
+        }
+
+        var r = (await Handler().HandleAsync(TenantB, false, null, null, null, null, null, null, 100, Ct)).Items.Should().ContainSingle().Subject;
+
+        (r.PermissionName, r.ModuleName).Should().Be(("Ver reportes", "Reportes IT 47"));
+    }
+
+    [Fact]
     public async Task AC4_Rechazos_y_confirmacion_PII_aparecen_en_la_consulta()
     {
         await SeedAsync();

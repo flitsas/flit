@@ -15153,6 +15153,8 @@ components:
         productCode: { type: string, nullable: true }
         moduleCode: { type: string, nullable: true }
         permissionSlug: { type: string, nullable: true }
+        permissionName: { type: string, nullable: true, description: Nombre legible del permiso (el que se muestra). }
+        moduleName: { type: string, nullable: true, description: Nombre legible del módulo (el que se muestra). }
         action: { type: string, description: "Ej. GRANT, DENY, REMOVE, PII_REVEAL_CONFIRMED." }
         outcome: { type: string, enum: [OK, REJECTED] }
         reasonCode: { type: string, nullable: true }

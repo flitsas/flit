@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// HU #13647: lectura de <c>security.user_permission_audit</c> con nombres de actor, usuario y tenant resueltos por
+/// HU #13647: lectura de <c>security.user_permission_audit</c> con nombres de actor, usuario, tenant, permiso y módulo resueltos por
 /// LEFT JOIN en una sola consulta. Filtros explícitos por tenant (la app conecta como owner y la RLS no aplica);
 /// el orden created_at DESC usa <c>ix_user_permission_audit_tenant_target</c> / <c>_tenant_actor</c>.
 /// </summary>
@@ -52,7 +52,9 @@ internal sealed class PermissionAuditReader(FlitDbContext db) : IPermissionAudit
             select new PermissionAuditRecord(
                 a.Id, a.TenantId, t.LegalName, a.ActorUserId, ua.DisplayName, ua.Email, a.TargetUserId, ut.DisplayName, ut.Email,
                 a.ProductCode, a.ModuleCode, a.PermissionSlug, a.Action, a.Outcome, a.ReasonCode, a.ValueBefore, a.ValueAfter,
-                a.BatchId, a.CreatedAt))
+                a.BatchId, a.CreatedAt,
+                db.RbacActions.Where(p => p.Slug == a.PermissionSlug).Select(p => p.Name).FirstOrDefault(),
+                db.SecurityModules.Where(m => m.Code == a.ModuleCode).Select(m => m.Name).FirstOrDefault()))
             .Skip((filter.Page - 1) * filter.PageSize).Take(filter.PageSize)
             .ToListAsync(ct).ConfigureAwait(false);
         return new PermissionAuditPage(rows, total, filter.Page, filter.PageSize);

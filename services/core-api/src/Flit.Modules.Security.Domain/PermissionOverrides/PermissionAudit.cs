@@ -34,7 +34,9 @@ public sealed record PermissionAuditRecord(
     string? ValueBefore,
     string? ValueAfter,
     Guid? BatchId,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? PermissionName = null,
+    string? ModuleName = null);
 
 public sealed record PermissionAuditPage(IReadOnlyList<PermissionAuditRecord> Items, int Total, int Page, int PageSize);
 
