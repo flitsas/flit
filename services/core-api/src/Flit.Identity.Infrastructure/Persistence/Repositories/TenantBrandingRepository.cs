@@ -45,6 +45,14 @@ internal sealed class TenantBrandingRepository : ITenantBrandingRepository
         return entity is null ? null : Map(entity);
     }
 
+    public async Task<long?> GetStampAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        await _context.TenantBrandings
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => (long?)x.RowVersion)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     public async Task<TenantBranding> UpsertDraftAsync(
         Guid tenantId,
         BrandingDraft draft,
