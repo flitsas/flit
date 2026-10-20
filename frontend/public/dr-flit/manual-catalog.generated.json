@@ -2069,7 +2069,7 @@
           ],
           "bullets": [
             "Red de clientes: píldora aparte del dock, solo si tu compañía es cabeza de Concesión o Marca Blanca. Ver «Red de clientes».",
-            "Marca y dominio de la red: dentro del panel de Red de clientes, solo si tu compañía es cabeza Marca Blanca. Ver «Marca y dominio de la red».",
+            "Marca y dominio de la red: pestaña «Identidad de marca» del panel de Red de clientes, solo si tu compañía es cabeza Marca Blanca. Ver «Marca y dominio de la red».",
             "Generación documental: píldora aparte del dock, solo si tu rol tiene habilitado ese módulo. Ver «Generación documental sin trámite»."
           ],
           "callouts": []
@@ -2205,7 +2205,7 @@
           "id": "configurador",
           "title": "1. Configurador de marca",
           "paragraphs": [
-            "Solo si tu compañía es cabeza Marca Blanca: en Administración → Red de clientes encuentras el configurador de marca, debajo del listado de clientes. Ahí defines logotipo, color principal, color secundario, color de texto y el nombre visible en el acceso y en el correo. La previsualización muestra la pantalla de acceso, la cabecera de la aplicación y una muestra de correo con el tema aplicado."
+            "Solo si tu compañía es cabeza Marca Blanca: en Administración → Red de clientes, la pestaña «Identidad de marca» (junto a «Clientes hijos») tiene el configurador de marca. Ahí defines logotipo, color principal, color secundario, color de texto y el nombre visible en el acceso y en el correo. La previsualización muestra la pantalla de acceso, la cabecera de la aplicación y una muestra de correo con el tema aplicado."
           ],
           "bullets": [
             "«Guardar borrador» conserva el trabajo sin afectar a nadie.",
@@ -2218,7 +2218,7 @@
           "id": "dominio",
           "title": "2. Dominio de la red",
           "paragraphs": [
-            "En la misma página, debajo del configurador de marca, ves el panel «Dominio de la red»: el estado del dominio propio desde el que tu red accede y recibe comunicaciones, y el botón «Comprobar ahora» para volver a validar el registro TXT en tu DNS. Aquí es de solo lectura: registrar el dominio por primera vez, cambiarlo o retirarlo lo hace el equipo FLIT."
+            "En la misma pestaña «Identidad de marca», debajo del configurador, ves el panel «Dominio de la red»: el estado del dominio propio desde el que tu red accede y recibe comunicaciones, y el botón «Comprobar ahora» para volver a validar el registro TXT en tu DNS. Aquí es de solo lectura: registrar el dominio por primera vez, cambiarlo o retirarlo lo hace el equipo FLIT."
           ],
           "bullets": [
             "Estados: Pendiente de comprobación → Verificado → Activo. Un fallo muestra el motivo (TXT no encontrado o con valor distinto) y, mientras corre el plazo de gracia, el dominio sigue operando.",
