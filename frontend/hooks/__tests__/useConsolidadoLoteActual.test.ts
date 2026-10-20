@@ -248,6 +248,21 @@ describe('useConsolidadoLoteActual — HU #13382', () => {
     expect(descargar).not.toHaveBeenCalled();
   });
 
+  it('todo omitido — la parte 1 sin PDF no se autodescarga (sería un ZIP vacío)', async () => {
+    servidor.lote = { ...BASE, id: 'todo-omitido' };
+    const { result } = montar();
+    await avanzar(0);
+    servidor.lote = terminado(servidor.lote, {
+      estado: 'completado_con_omitidos',
+      incluidos: 0,
+      omitidos: BASE.total,
+      partes: [{ ...PARTES[0], nombreArchivo: 'consolidados_20261007_1000.zip', pdfs: 0, omitidos: BASE.total }],
+    });
+    await avanzar(INTERVALO_POLLING_LOTE_MS + VENTANA_CANDADO_MS + 10);
+    expect(result.current.lote?.estado).toBe('completado_con_omitidos');
+    expect(descargar).not.toHaveBeenCalled();
+  });
+
   it('AC4 — recarga con lote terminado hace menos de 24 h: sin autodescarga y sin expirar', async () => {
     servidor.lote = terminado({ ...BASE, id: 'ac4-recarga' }, {
       terminadoEn: new Date(AHORA - 3_600_000).toISOString(),
