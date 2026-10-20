@@ -32,7 +32,10 @@ export interface BrandingConfiguratorProps {
   tenantId?: string;
 }
 
-const DEFAULT_COLORS: BrandColors = { primary: "#557EFF", secondary: "#00DBD5", onPrimary: "#FFFFFF" };
+// Cumplen los dos pares de contraste que exige el backend (blanco sobre azul 5.21:1, sobre verde
+// azulado 4.95:1): con los anteriores (#557EFF/#00DBD5) el primer "Guardar borrador" de toda marca
+// nueva quedaba bloqueado por contraste.
+const DEFAULT_COLORS: BrandColors = { primary: "#3D63DD", secondary: "#0E7C86", onPrimary: "#FFFFFF" };
 
 /**
  * HU #12414 — Configurador de marca (AC6: un único componente para la cabeza de red y para el

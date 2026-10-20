@@ -134,6 +134,19 @@ describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar
 });
 
 describe("BrandingConfigurator — rechazos con mensaje claro y sin guardar", () => {
+  it("los colores por defecto de una marca nueva cumplen el contraste y el borrador se envía", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockRejectedValue(new ApiError(404, "BRANDING_NOT_FOUND"));
+    vi.mocked(upsertBrandingDraft).mockResolvedValue(branding());
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    await waitFor(() => expect(upsertBrandingDraft).toHaveBeenCalled());
+    expect(screen.queryByText(/menor a 4\.5:1/i)).not.toBeInTheDocument();
+  });
+
   it("contraste < 4.5:1 en el secundario: avisa y no envía el borrador", async () => {
     const user = userEvent.setup();
     vi.mocked(getBranding).mockResolvedValue(

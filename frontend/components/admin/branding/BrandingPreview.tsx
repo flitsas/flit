@@ -34,6 +34,9 @@ const TABS: Array<{ id: PreviewTab; label: string }> = [
 ];
 
 const DEFAULT_TEMPLATE_ID = "tramites.aprobado";
+// La muestra de la consola de plantillas exige `procedureTypeId` para las de Trámites (400
+// procedure_type_id_invalido sin él); la invitación no lo necesita y también lleva el tema de la red.
+const ADMIN_TEMPLATE_ID = "security.invitation";
 
 /**
  * HU #12414 AC4 — previsualización sin publicar. Reproduce las superficies "acceso" y
@@ -181,7 +184,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
         setStatus("error");
         return;
       }
-      getNotificationSample(DEFAULT_TEMPLATE_ID, { tenantId })
+      getNotificationSample(ADMIN_TEMPLATE_ID, { tenantId })
         .then((data) => {
           setSample(data);
           setStatus("ready");
