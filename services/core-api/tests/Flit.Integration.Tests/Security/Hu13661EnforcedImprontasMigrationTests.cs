@@ -12,8 +12,8 @@ namespace Flit.Integration.Tests.Security;
 
 /// <summary>
 /// HU #13661 (Feature #13105 F-E, Épica #12753) contra PostgreSQL real: el DDL 142 marca <c>improntas.read</c> e
-/// <c>improntas.generate</c> como <c>enforced = 'true'</c> (AC3), es idempotente y su Down los devuelve a 'false'.
-/// <para>Uso de ejemplo: <c>await SeedAsync(cn); await ExecAsync(cn, EmbeddedDdl.LoadUp(DdlFile)); await ValorAsync(cn, "improntas.read") == "true"</c></para>
+/// <c>improntas.generate</c> como <c>enforced = 'excluded'</c> (AC3, decisión del PO), es idempotente y su Down los devuelve a 'false'.
+/// <para>Uso de ejemplo: <c>await SeedAsync(cn); await ExecAsync(cn, EmbeddedDdl.LoadUp(DdlFile)); await ValorAsync(cn, "improntas.read") == "excluded"</c></para>
 /// </summary>
 public sealed class Hu13661EnforcedImprontasMigrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
@@ -72,8 +72,8 @@ public sealed class Hu13661EnforcedImprontasMigrationTests(PostgresDatabaseFixtu
 
         await ExecAsync(cn, EmbeddedDdl.LoadUp(DdlFile));
 
-        (await ValorAsync(cn, "improntas.read")).Should().Be("true");
-        (await ValorAsync(cn, "improntas.generate")).Should().Be("true");
+        (await ValorAsync(cn, "improntas.read")).Should().Be("excluded");
+        (await ValorAsync(cn, "improntas.generate")).Should().Be("excluded");
         (await ValorAsync(cn, "slug.otro")).Should().Be("false");
     }
 
@@ -85,8 +85,8 @@ public sealed class Hu13661EnforcedImprontasMigrationTests(PostgresDatabaseFixtu
         await ExecAsync(cn, EmbeddedDdl.LoadUp(DdlFile));
         await ExecAsync(cn, EmbeddedDdl.LoadUp(DdlFile));
 
-        (await ValorAsync(cn, "improntas.read")).Should().Be("true");
-        (await ValorAsync(cn, "improntas.generate")).Should().Be("true");
+        (await ValorAsync(cn, "improntas.read")).Should().Be("excluded");
+        (await ValorAsync(cn, "improntas.generate")).Should().Be("excluded");
     }
 
     [PostgresFact]

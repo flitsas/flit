@@ -9,7 +9,7 @@ namespace Flit.Infrastructure.Migrations;
 
 /// <summary>
 /// HU #13661 (Feature #13105 F-E, Épica #12753) — marca <c>improntas.read</c> e <c>improntas.generate</c> como
-/// <c>enforced = 'true'</c>. DDL: <c>142-HU13661-enforced-improntas.sql</c>.
+/// <c>enforced = 'excluded'</c> (rutas solo de SuperAdmin: configurarlos por usuario no tendría efecto). DDL: <c>142-HU13661-enforced-improntas.sql</c>.
 /// </summary>
 [DbContext(typeof(FlitDbContext))]
 [Migration("20261019120000_HU13661_EnforcedImprontas")]
