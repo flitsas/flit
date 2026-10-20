@@ -196,6 +196,42 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
         await AssertNoBloqueada(admin);
     }
 
+    // ── Anexo A §1.4: mandatarios, baúl y prelación se delegan por slug, no por rol ──────────────
+
+    [Theory]
+    [MemberData(nameof(RutasDelegables))]
+    public async Task FlagEncendido_OperadorOtConElSlug_ObtieneLoMismoQueElOtAdmin(string firma)
+    {
+        var slug = OtPermissionMap.BySignature[firma];
+        var admin = await Llamar(_encendido, firma, Token("ot_admin", TodosLosSlugs));
+        var operador = await Llamar(_encendido, firma, Token("gestor_tramites_ot", [slug]));
+
+        await AssertNoBloqueada(operador);
+        operador.StatusCode.Should().Be(admin.StatusCode, firma);
+    }
+
+    [Theory]
+    [MemberData(nameof(RutasDelegables))]
+    public async Task FlagEncendido_OperadorOtSinElSlug_403PorPermiso(string firma)
+    {
+        var response = await Llamar(_encendido, firma, Token("gestor_tramites_ot", SlugsDock));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden, firma);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("OT_PERMISSION_REQUIRED");
+    }
+
+    [Theory]
+    [MemberData(nameof(RutasDelegables))]
+    public async Task FlagApagado_OperadorOtConElSlug_SigueRecibiendo403PorRol(string firma)
+    {
+        var response = await Llamar(_apagado, firma, Token("gestor_tramites_ot", [OtPermissionMap.BySignature[firma]]));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden, firma);
+    }
+
+    public static TheoryData<string> RutasDelegables() =>
+        Datos(slug => slug is OtPermissionMap.Mandatarios or OtPermissionMap.Documentos);
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────
 
     private static async Task AssertNoBloqueada(HttpResponseMessage response)
