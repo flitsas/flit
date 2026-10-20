@@ -535,7 +535,7 @@ public sealed class TramiteLifecycleService(
         // HABILITADO para la empresa. Se promueve a la columna TransitOfficeId para que el motor de
         // reglas OT y la bandeja del OT operen sobre el id real; sin el grant el trámite entregado
         // NO aparecería en ninguna bandeja (el diagnóstico operativo lo da el endpoint /health).
-        var selectedOfficeId = TransitOfficeIdFromFieldValues(instance);
+        var selectedOfficeId = OtEfectivaResolver.FromFieldValues(instance.FieldValues);
         if (selectedOfficeId is { } officeId)
         {
             var enabled = await transitOfficeGrantGate
@@ -571,19 +571,6 @@ public sealed class TramiteLifecycleService(
                 "El trámite está bloqueado por una regla OT activa.");
 
         return (null, null);
-    }
-
-    /// <summary>
-    /// Id del organismo de tránsito elegido en el FUR, leído del field_value
-    /// <c>transit_office_id</c> (lo persiste el wizard al seleccionar). <c>null</c> si no hay
-    /// selección o no es un GUID válido (p. ej. instancias previas a la persistencia del id).
-    /// </summary>
-    private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
-    {
-        var raw = instance.FieldValues.FirstOrDefault(f =>
-            string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
-
-        return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 
     /// <summary>
@@ -751,9 +738,11 @@ public sealed class TramiteLifecycleService(
             : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 
         // Compañía+OT: default exige certificado; opt-out al CreatedAt ⇒ opcional. Aplica a
-        // matrícula, traspaso y cualquier otra modalidad con OT.
+        // matrícula, traspaso y cualquier otra modalidad con OT. La OT es la EFECTIVA (columna ??
+        // field_values), la misma que el estado del wizard y el PUT de prenda: un borrador previo a
+        // HU #11199 solo la tiene en field_values hasta que la radicación la promueve.
         var documentoExigido = await _prendaDocumentRequirementPolicy
-            .IsRequiredAsync(instance.TenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .IsRequiredAsync(instance.TenantId, OtEfectivaResolver.Resolve(instance), instance.CreatedAt, ct)
             .ConfigureAwait(false);
         var otError = PrendaGate.EvaluateOtOverride(documentoExigido, prenda?.Decision, docTipos);
         if (otError is not null)

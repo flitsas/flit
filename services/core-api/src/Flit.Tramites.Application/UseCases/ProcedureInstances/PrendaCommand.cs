@@ -100,7 +100,7 @@ public sealed class RegistrarPrendaHandler(
         // guardadas no se revisan: la regla mira la elección nueva, no reabre trámites en curso.
         if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase)
             && await _documentPolicy
-                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+                .IsRequiredAsync(tenantId, await ResolveOtEfectivaAsync(instance, ct).ConfigureAwait(false), instance.CreatedAt, ct)
                 .ConfigureAwait(false))
         {
             return (null, OmitirNoAdmitidoError);
@@ -179,6 +179,23 @@ public sealed class RegistrarPrendaHandler(
         await prendas.SaveChangesAsync(ct);
 
         return (ToDto(nueva), null);
+    }
+
+    /// <summary>
+    /// OT efectiva del trámite (<see cref="OtEfectivaResolver"/>), la MISMA que usa el estado del wizard
+    /// para publicar <c>prendaOmitAllowed</c>: sin ella, un borrador sin columna <c>TransitOfficeId</c>
+    /// (previo a HU #11199) veía «Omitir prenda» ofrecido en el GET y rechazado en el PUT.
+    /// <c>GetByIdAsync</c> no carga <c>FieldValues</c>, así que con la columna vacía se leen por la
+    /// proyección lean del repositorio (solo en ese caso: la columna prevalece).
+    /// </summary>
+    private async Task<Guid?> ResolveOtEfectivaAsync(ProcedureInstance instance, CancellationToken ct)
+    {
+        var desdeInstancia = OtEfectivaResolver.Resolve(instance);
+        if (desdeInstancia is not null)
+            return desdeInstancia;
+
+        var fieldValues = await instances.GetFieldValuesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+        return OtEfectivaResolver.FromFieldValues(fieldValues);
     }
 
     internal static PrendaDto ToDto(ProcedureInstancePrenda p) =>
