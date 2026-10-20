@@ -16,6 +16,11 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 /// columna del master traiga un id con equivalencia exacta, venga o no la transformación (cubre el
 /// trámite principal 5/9 sin <c>more_transaction</c>). Sin equivalencia exacta no se envía valor y el
 /// gestor lo elige en el wizard.</para>
+/// <para><b>Color y carrocería (Bug #13590):</b> la <c>description</c> de la transformación 7 / 6 es el
+/// valor nuevo que eligió el gestor ICT y viaja tal cual (solo Trim, sin normalizar) como
+/// <c>vehicle_color</c> / <c>vehicle_body_type</c> junto a su bandera; si el código se repite, gana la
+/// primera no vacía. Sin descripción solo va la bandera. core-api no lo pisa con el RUNT porque la bandera
+/// <c>cambio_*</c> va en el mismo borrador.</para>
 /// <para><b>El valor implica su bandera:</b> si se envía <c>vehicle_fuel</c> se envía también
 /// <c>cambio_combustible="true"</c>, y si se envía <c>blindaje_nivel</c> también <c>blindaje="true"</c>
 /// (una sola vez, aunque el código 5/9 también la produzca). Motivo: el preflight de core-api
@@ -112,11 +117,13 @@ internal static class IctDraftFieldValuesMapper
         if (codigos.Contains(TransformacionCarroceria))
         {
             Add(values, "cambio_carroceria", True);
+            AddIfPresent(values, "vehicle_body_type", PrimeraDescripcion(master, TransformacionCarroceria));
         }
 
         if (codigos.Contains(TransformacionColor))
         {
             Add(values, "cambio_color", True);
+            AddIfPresent(values, "vehicle_color", PrimeraDescripcion(master, TransformacionColor));
         }
 
         if (codigos.Contains(TransformacionCombustible) || combustibleWeb is not null)
@@ -129,6 +136,13 @@ internal static class IctDraftFieldValuesMapper
             Add(values, "vehicle_fuel", combustibleWeb);
         }
     }
+
+    /// <summary>Primera <c>description</c> no vacía del código, en el orden de la lista ICT.</summary>
+    private static string? PrimeraDescripcion(ExternalIntegrationMaster master, int codigo) =>
+        master.Transformations
+            .Where(t => t.IdTransformationType == codigo)
+            .Select(t => t.Description)
+            .FirstOrDefault(d => !string.IsNullOrWhiteSpace(d));
 
     private static void AddPrenda(List<FieldValue> values, ExternalIntegrationMaster master)
     {
