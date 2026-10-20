@@ -7,6 +7,7 @@ import type { DockEntry, DockGroup } from "../nav";
 import { useDisclosureNav } from "./useDisclosureNav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { useEdgeClamp } from "./useEdgeClamp";
+import { useDockHomeMark } from "./DockHomeMark";
 
 // Dock inferior flotante de la suite (GUIA-DOCK-INFERIOR-FLOTANTE.md), portado del de Trámites sin su catálogo:
 // recibe los grupos ya filtrados (buildDock) y no sabe de ningún producto. Escritorio (lg+); en pantallas pequeñas
@@ -28,6 +29,16 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   const atBottom = useDockScrollCondense(scrollRef);
   const showLabels = !atBottom || !!openSection;
   const large = atBottom && !openSection;
+  const home = useDockHomeMark(homeIconSrc);
+  // Logo con texto de una Marca Blanca: pastilla a la altura del dock con un ancho máximo.
+  const homeSize =
+    home.shape === "pill"
+      ? large
+        ? "h-14 w-auto max-w-[150px] px-3.5"
+        : "h-11 w-auto max-w-[120px] px-3"
+      : large
+        ? "h-14 w-14"
+        : "h-11 w-11";
 
   const left = groups.filter((g) => g.side === "left");
   const right = groups.filter((g) => g.side === "right");
@@ -63,15 +74,12 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
         <Link
           href={homeHref}
           onClick={close}
-          className={`mx-2 shrink-0 overflow-hidden rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${
-            large ? "h-14 w-14" : "h-11 w-11"
-          }`}
+          className={`mx-2 shrink-0 overflow-hidden rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${homeSize} ${home.shape === "pill" ? "bg-white" : ""}`}
           style={{ boxShadow: "var(--nav-sombra-activo)" }}
           aria-label={homeLabel}
           aria-current={homeActive ? "page" : undefined}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={homeIconSrc} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+          {home.content}
         </Link>
         {right.map(pill)}
         {Array.from({ length: sideLen - right.length }).map((_, i) => (
