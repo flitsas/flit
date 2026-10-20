@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13316 (HU #13353) — transportes de correo de FLIT: SMTP (MailKit), consola y la API de correo de Renting (mTLS,
+    caché de token, desvío de destinatarios). Sin base de datos ni reglas de negocio: los usa core-api (en proceso,
+    hasta el corte #13359) y core-notificaciones. Los tipos conservan sus espacios de nombres
+    (Flit.Infrastructure.Email, Flit.Infrastructure.Notifications.Renting).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Modules.Notificaciones</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Identity.Infrastructure" />
+    <InternalsVisibleTo Include="Flit.Infrastructure" />
+    <InternalsVisibleTo Include="Flit.Api" />
+    <InternalsVisibleTo Include="Flit.Notificaciones.Api" />
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
+    <InternalsVisibleTo Include="Flit.Notificaciones.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

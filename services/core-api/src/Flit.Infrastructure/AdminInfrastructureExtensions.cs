@@ -13,6 +13,9 @@ using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.Improntas;
 using Flit.Admin.Domain.Ict;
+using Flit.Admin.Domain.Plataforma.Ai;
+using Flit.Admin.Application.Plataforma.Ai;
+using Flit.Infrastructure.Ai;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtRequirements;
 using Flit.Admin.Domain.OtWebhooks;
@@ -54,15 +57,11 @@ public static class AdminInfrastructureExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // RNF01 (ADR-0024) — auditoría mínima de configuración: acceso a IP/usuario de la
-        // petición (sin acoplar Application a HTTP) + writer de fallos en scope independiente.
-        services.AddHttpContextAccessor();
-        services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
+        // RNF01 (ADR-0024) / HU #10678 — contexto de auditoría de la petición y rastro administrativo en su propio scope.
+        // Epic #13217 (HU #13232): compartidos con core-identity (IdentityInfrastructureExtensions.AddIdentityAuditing).
+        services.AddIdentityAuditing();
+        // Writer de fallos en scope independiente (solo core-api).
         services.AddScoped<IAuditFailureWriter, AuditFailureWriter>();
-
-        // HU #10678 — rastro de auditoría administrativa/seguridad transversal (usuarios,
-        // roles, permisos, autenticación) sobre el mismo scope independiente que AuditFailureWriter.
-        services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
 
         // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
         // auditoría administrativa/seguridad.
@@ -70,6 +69,10 @@ public static class AdminInfrastructureExtensions
 
         // HU #12512 — ict.job_settings (schema ict, DDL de core-ict; SQL parametrizado).
         services.AddScoped<IIctJobSettingsRepository, IctJobSettingsRepository>();
+
+        // Feature #13508 (HU #13509) — admin.ai_tool_provider_settings + transiciones manuales.
+        services.AddScoped<IAiToolProviderSettingsRepository, AiToolProviderSettingsRepository>();
+        services.AddSingleton<IAiApiKeyEnvironmentProbe, AiApiKeyEnvironmentProbe>();
         // HU #12513 — ict.job_runs (último ciclo / take acotado; sin error_message).
         services.AddScoped<IIctJobRunRepository, IctJobRunRepository>();
 
@@ -78,84 +81,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ICompanyHierarchyRepository, CompanyHierarchyRepository>();
         services.AddScoped<Flit.Admin.Application.Companies.Invitations.IGroupHeadInvitationRolePolicy,
             Flit.Infrastructure.Security.GroupHeadInvitationRolePolicy>();
-        services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
-
-        // HU #12412 (Feature #12366, ADR-0060 D1) — identidad de marca de la cabeza MARCA_BLANCA.
-        services.AddScoped<Flit.Admin.Domain.Companies.Branding.ITenantBrandingRepository, TenantBrandingRepository>();
+        // Epic #13217 (HU #13232): Marca Blanca de lectura (configuración operativa, marca, tema de correo, dominios y
+        // pertenencia a red) compartida con core-identity (IdentityInfrastructureExtensions.AddIdentityMarcaBlanca).
+        services.AddIdentityMarcaBlanca(configuration);
+        // Logos de marca: core-api los lee y los guarda (core-identity solo los lee).
         services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandLogoStorage,
             Flit.Infrastructure.Storage.BrandLogoStorage>();
-        // HU #12413 (Feature #12366, ADR-0060 D1) — formato/peso/dimensiones/contraste reales.
-        // Mismo patrón que DomainOptions/ImprontaValidationPolicyOptions: Application consume el
-        // POCO YA resuelto, sin IOptions. PermissiveBrandAssetValidator queda como respaldo
-        // fail-open documentado (no se borra, solo se deja de registrar).
-        if (configuration is not null)
-        {
-            services.Configure<Flit.Admin.Application.Companies.Branding.BrandingOptions>(
-                configuration.GetSection(Flit.Admin.Application.Companies.Branding.BrandingOptions.SectionName));
-            services.AddSingleton(sp =>
-                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Branding.BrandingOptions>>().Value);
-        }
-        else
-        {
-            services.AddSingleton(new Flit.Admin.Application.Companies.Branding.BrandingOptions());
-        }
-
-        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandAssetValidator,
-            Flit.Admin.Application.Companies.Branding.BrandAssetValidator>();
-
-        // HU #12418 (Feature #12366, ADR-0060 D2) — resolución pública/sesión de marca. Lectura
-        // directa del estado del tenant (sin caché propia) + caché de 60 s del resultado resuelto,
-        // sobre el MISMO IMemoryCache singleton (AddMemoryCache más abajo) que invalida
-        // Publish/RetireBrandingHandler y CompanyWriteRepository.
-        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandingTenantLookup, BrandingTenantLookupRepository>();
-        services.AddScoped<Flit.Admin.Application.Companies.Branding.ResolvePublicBranding.ResolvePublicBrandingHandler>();
-        services.AddScoped<Flit.Admin.Application.Companies.Branding.ResolveSessionBranding.ResolveSessionBrandingHandler>();
-        services.AddScoped<Flit.Admin.Application.Companies.Branding.GetPublicBrandLogo.GetPublicBrandLogoHandler>();
-        services.AddSingleton<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>();
-        services.AddSingleton<Flit.Admin.Application.Companies.Branding.ResolvePublicBranding.IPublicBrandingCache>(
-            sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
-        services.AddSingleton<Flit.Admin.Application.Companies.Branding.IBrandingCacheInvalidator>(
-            sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
-
-        // HU #12428 (Feature #12405, Épica #12237 Marca Blanca, ADR-0060) — resolutor del tema de
-        // correo. Misma herencia de marca que #12418, sobre el MISMO IMemoryCache singleton (arriba)
-        // — MemoryPublicBrandingCache.InvalidateTenant ya limpia también esta clave.
-        if (configuration is not null)
-        {
-            services.AddSingleton(sp =>
-            {
-                var options = new Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions();
-                configuration.GetSection(Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions.SectionName).Bind(options);
-                return options;
-            });
-        }
-        else
-        {
-            services.AddSingleton(new Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions());
-        }
-        services.AddScoped<Flit.Modules.Security.Domain.Auth.IEmailThemeResolver,
-            Flit.Infrastructure.Notifications.Theme.DbEmailThemeResolver>();
-
-        // HU #12416 (Feature #12368, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA.
-        services.AddScoped<Flit.Admin.Domain.Companies.Domains.ITenantDomainRepository, TenantDomainRepository>();
-        // Resolutor por host con caché de 60 s (ADR-0060 D2): IMemoryCache es Singleton, la clase es
-        // Scoped (una FlitDbContext por resolución vía ITenantDomainRepository), el caché se comparte.
-        services.AddMemoryCache();
-        services.AddScoped<Flit.Admin.Application.Companies.Domains.ITenantDomainResolver,
-            Flit.Infrastructure.Domains.CachedTenantDomainResolver>();
-        // Reservados y CNAME del borde (Domains:Reserved, Domains:EdgeTarget). Igual que
-        // ImprontaValidationPolicyOptions: Application consume el POCO YA resuelto, sin IOptions.
-        if (configuration is not null)
-        {
-            services.Configure<Flit.Admin.Application.Companies.Domains.DomainOptions>(
-                configuration.GetSection(Flit.Admin.Application.Companies.Domains.DomainOptions.SectionName));
-            services.AddSingleton(sp =>
-                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Domains.DomainOptions>>().Value);
-        }
-        else
-        {
-            services.AddSingleton(new Flit.Admin.Application.Companies.Domains.DomainOptions());
-        }
 
         // HU #12416 — handlers de la consola SuperAdmin de dominio (alta/cambio, consulta y retiro).
         // Bug #12735: los endpoints de AdminCompaniesDomainEndpoints los resuelven por [FromServices],
@@ -192,12 +123,6 @@ public static class AdminInfrastructureExtensions
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
-
-        // HU #12422 (Feature #12369, ADR-0060 D3) — pertenencia a una red MARCA_BLANCA (cabeza o hija)
-        // + dominio activo de esa cabeza, sobre el mismo dato estructural que ITenantScopeResolver.
-        // Sin caché propia: se invoca solo en login/recuperación, no en cada petición runtime.
-        services.AddScoped<Flit.Modules.Security.Application.Auth.Network.ITenantNetworkMembership,
-            Flit.Infrastructure.Persistence.DbTenantNetworkMembership>();
 
         // HU #12323 (Feature #12254) — interruptores globales de la jerarquía leídos por petición,
         // sin caché y fail-closed (fila ausente/error ⇒ apagado). El resolver los consulta antes que
@@ -301,15 +226,13 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
 
-        // HU #11367 (Feature #11349) — canales de notificación con su remitente resuelto por
-        // configuración (EmailSettings / RentingChannelOptions). Sin adaptador de envío: lee, no
-        // construye — mantiene el Feature #11349 independiente del #11348.
+        // HU #11367 (Feature #11349) — canales de notificación con su remitente; desde el corte (HU #13359) los da
+        // core-notificaciones (ICanalesDeNotificaciones, que registra Flit.Api).
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService>();
 
-        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido. Usa el
-        // IEmailSender del proceso (registrado en AddPostgresInfrastructure, ya decorado con
-        // bitácora) y EmailTransportDescriptor para declarar si el transporte fue de consola (AC8).
+        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido; envía por
+        // core-notificaciones (HU #13359).
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
 
@@ -349,12 +272,8 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.IPdfDocumentInspector,
             Flit.Infrastructure.Documents.PdfSharpDocumentInspector>();
 
-        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío: repositorio
-        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo). El escritor
-        // (INotificationDeliveryLogWriter) se registra en InfrastructureExtensions.AddPostgresInfrastructure,
-        // junto al decorador de IEmailSender.
-        services.AddScoped<Flit.Admin.Application.Companies.NotificationDeliveryLogs.INotificationDeliveryLogRepository,
-            Flit.Infrastructure.Persistence.Repositories.NotificationDeliveryLogRepository>();
+        // HU #11363 — el registro de entregas lo lleva core-notificaciones desde el corte (HU #13359): el repositorio lo
+        // registra Flit.Api (gRPC ListarEntregas).
 
         // HU #11764 (ADR-0050) — el bloque de validación de identidad administrativa desacoplada por
         // correo (HU #10907/#11028) se RETIRA por completo: sin consumidor real (el módulo Identidad es
@@ -442,11 +361,6 @@ public static class AdminInfrastructureExtensions
         // ProcedureStateChangeNotifierRegistration (HU #11464), invocado desde AddIctStateReflection
         // (con o sin canal inverso), para que un sink nuevo no silencie OT al registrarse aparte.
         services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
-
-        services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(30);
-        });
 
         // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
         services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();

@@ -23,8 +23,6 @@ El frontend descarga con `downloadFile` (`frontend/lib/api/download.ts`) y la ba
 | `legacy` en dominio de red con base vacía (mismo origen) | `https://<dominio-red>/api/v1/…` | nginx catch-all → gateway | `flit-network-domains.conf` (plantilla actualizada) | gateway (`GATEWAY_PORT`) |
 | `oidc` (FLIT Suite, `dev.tramites.flitsas.online`) | `https://<env>.tramites…/api/v1/…` (mismo origen) | nginx → Next (middleware → BFF `/bff/api/v1/*`) → gateway | `flit-suite-hosts.conf`, `server{}` de Trámites (plantilla actualizada) | **frontend** (`FRONTEND_PORT`), nunca el gateway |
 
-> En la rama staging aún no está la FLIT Suite (modo `oidc` ni `flit-suite-hosts.conf.example`): aplican solo las dos primeras filas.
-
 En modo `oidc` el token vive en la sesión del servidor de Next y el BFF (`packages/auth/src/proxy.ts`)
 lo añade al reenviar; el navegador no lo tiene. Mandar la ruta directo al gateway devolvería 401. El
 BFF ya entrega el cuerpo en streaming (`new Response(upstream.body)`), así que basta con que nginx no
@@ -59,7 +57,7 @@ Puertos: `GATEWAY_PORT` 4002 / 5002 / 6002 · `FRONTEND_PORT` 4001 / 5001 / 6001
    mismo bloque, en el `server{}` de 443, junto a `location /api/v1/` (ver la plantilla
    `deploy/edge/nginx/flit-network-domains.conf.example`).
 4. **Host de Trámites de la Suite** (solo si `dev.tramites.flitsas.online` o su equivalente ya está
-   encendido; en la rama staging todavía no existe la FLIT Suite ni su plantilla, así que este paso se omite): el bloque de `deploy/edge/nginx/flit-suite-hosts.conf.example`, con
+   encendido): el bloque de `deploy/edge/nginx/flit-suite-hosts.conf.example`, con
    `proxy_pass http://127.0.0.1:<FRONTEND_PORT>;` — al frontend, no al gateway.
 5. Prueba y recarga (reload, no restart: no corta las conexiones en curso):
    ```bash

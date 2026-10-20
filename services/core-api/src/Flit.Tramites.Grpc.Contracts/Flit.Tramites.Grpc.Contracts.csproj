@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Contrato gRPC de catálogos de core-api (flit.tramites.v1, ADR-0070), generado desde contracts/proto. Cliente y
+    servidor (Both): core-api atiende; Comparendos sincroniza su réplica de organismos de tránsito (HU #13459, S-66).
+    Ver la nota sobre el contexto de Docker en contracts/proto/README.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Tramites.Grpc.V1</RootNamespace>
+    <ProtoRoot>..\..\..\..\contracts\proto</ProtoRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="$(ProtoRoot)\flit\tramites\v1\*.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="Both" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Tools">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

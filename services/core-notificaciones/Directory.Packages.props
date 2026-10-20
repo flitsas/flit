@@ -1,0 +1,4 @@
+<Project>
+  <!-- Epic #13316 — versiones de paquetes centralizadas: las mismas que core-api, como en core-identity. -->
+  <Import Project="..\core-api\Directory.Packages.props" />
+</Project>

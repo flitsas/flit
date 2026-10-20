@@ -10,10 +10,12 @@ namespace Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 public sealed class GetTenantSettingsHandler
 {
     private readonly ITenantSettingsRepository _repository;
+    private readonly ITenantProductFlags _products;
 
-    public GetTenantSettingsHandler(ITenantSettingsRepository repository)
+    public GetTenantSettingsHandler(ITenantSettingsRepository repository, ITenantProductFlags products)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _products = products ?? throw new ArgumentNullException(nameof(products));
     }
 
     public async Task<TenantSettingsResponse?> HandleAsync(
@@ -24,6 +26,15 @@ public sealed class GetTenantSettingsHandler
 
         var settings = await _repository.GetAsync(query.TenantId, cancellationToken).ConfigureAwait(false);
 
-        return settings is null ? null : SettingsMapper.ToResponse(settings);
+        if (settings is null)
+            return null;
+
+        // HU #12967 (B-07): Trámites y Comparendos salen de platform.tenant_products.
+        var products = await _products.GetAsync(query.TenantId, cancellationToken).ConfigureAwait(false);
+        return SettingsMapper.ToResponse(settings) with
+        {
+            TramitesModuleEnabled = products.Tramites,
+            ComparendosModuleEnabled = products.Comparendos,
+        };
     }
 }

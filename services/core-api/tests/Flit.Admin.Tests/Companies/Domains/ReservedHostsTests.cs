@@ -76,6 +76,17 @@ public sealed class ReservedHostsTests
     }
 
     [Fact]
+    public void SuiteDominioDeProductoDeLaRed_ListadoExacto_NoEsReservado_YSusVecinosSi()
+    {
+        // Con la suite la red de prueba usa un segundo dominio, de Trámites (handoff-vps-suite.md §6.4).
+        string[] allowed = [.. Allowed, "tramites.marcablancadev.flitsas.online"];
+
+        ReservedHosts.IsReserved("tramites.marcablancadev.flitsas.online", Patterns, allowed).Should().BeFalse();
+        ReservedHosts.IsReserved("otro.marcablancadev.flitsas.online", Patterns, allowed).Should().BeTrue();
+        ReservedHosts.IsReserved("x.tramites.marcablancadev.flitsas.online", Patterns, allowed).Should().BeTrue();
+    }
+
+    [Fact]
     public void AC3_HostQueSoloPrefijaAlPermitido_NoEsExceptuado()
     {
         // Fuera de la zona reservada: no es reservado, pero tampoco por la excepción (no coincide exacto).

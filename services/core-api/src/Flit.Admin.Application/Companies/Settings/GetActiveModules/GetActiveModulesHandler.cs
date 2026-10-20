@@ -15,10 +15,12 @@ namespace Flit.Admin.Application.Companies.Settings.GetActiveModules;
 public sealed class GetActiveModulesHandler
 {
     private readonly ITenantSettingsRepository _repository;
+    private readonly ITenantProductFlags _products;
 
-    public GetActiveModulesHandler(ITenantSettingsRepository repository)
+    public GetActiveModulesHandler(ITenantSettingsRepository repository, ITenantProductFlags products)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _products = products ?? throw new ArgumentNullException(nameof(products));
     }
 
     public async Task<ActiveModulesResponse> HandleAsync(
@@ -30,9 +32,12 @@ public sealed class GetActiveModulesHandler
         var settings = await _repository.GetAsync(query.TenantId, cancellationToken).ConfigureAwait(false)
             ?? TenantSettings.Default(query.TenantId);
 
+        // HU #12967 (B-07): Trámites y Comparendos salen de platform.tenant_products; Resoluciones sigue
+        // en la política porque está fuera de la suite v1.
+        var products = await _products.GetAsync(query.TenantId, cancellationToken).ConfigureAwait(false);
         return new ActiveModulesResponse(
-            settings.TramitesModuleEnabled,
-            settings.ComparendosModuleEnabled,
+            products.Tramites,
+            products.Comparendos,
             settings.ResolucionesModuleEnabled);
     }
 }

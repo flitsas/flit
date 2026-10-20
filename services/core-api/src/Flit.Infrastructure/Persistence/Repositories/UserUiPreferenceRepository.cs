@@ -24,7 +24,7 @@ internal sealed class UserUiPreferenceRepository : IUserUiPreferenceRepository
         string scope,
         CancellationToken cancellationToken = default) =>
         await TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -46,7 +46,7 @@ internal sealed class UserUiPreferenceRepository : IUserUiPreferenceRepository
         string valueJson,
         CancellationToken cancellationToken = default) =>
         await TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

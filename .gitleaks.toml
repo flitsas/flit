@@ -31,4 +31,7 @@ paths = [
 # de usuario semilla usado solo en builds de desarrollo.
 regexes = [
   '''01900000-100b-7001-8001-000000000001''',
+  # Nombres (ids) de las llaves OIDC de la FLIT Suite en appsettings (Suite:Oidc:SigningKeyId/EncryptionKeyId).
+  # Son etiquetas; las llaves reales se generan y se guardan cifradas en security.jwt_signing_keys.
+  '''flit-oidc-(signing|encryption)-v[0-9]+''',
 ]

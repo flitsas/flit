@@ -1,24 +1,30 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
 using Flit.Infrastructure.Persistence;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Infrastructure.Messaging;
 
 /// <summary>
-/// STUB de publicación a RabbitMQ (HU #10233, contratos fase 2). NO publica a ningún broker: encola el
-/// evento en la outbox (igual que el dispatcher in-process, para no perder el evento) y registra un log
-/// indicando lo que se publicaría. Se cableará a un broker real + worker lector de la outbox en la fase
-/// 2 del Feature #10235. No se registra por defecto: se activa con <c>Messaging:IdentityValidation=rabbitmq</c>.
+/// HU #13350 (antes stub de la HU #10233): encola el evento en la outbox propia, de la que sigue saliendo el
+/// auto-flujo de firma/FUR de los 'completed', y lo publica en <c>flit.tramites</c>
+/// (<c>tramites.identity_validation.*</c>) por la outbox del SDK, ambos en la unidad de trabajo del caso de uso.
+/// Se registra con el bus de Trámites encendido (<see cref="TramitesBusOptions.Habilitado"/>).
 /// </summary>
 internal sealed class RabbitMqIdentityValidationEventPublisher(
     FlitDbContext db,
+    IPlatformOutbox bus,
     ILogger<RabbitMqIdentityValidationEventPublisher> logger) : IIdentityValidationEventPublisher
 {
     public async Task PublishAsync(IdentityValidationEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
-        await IdentityValidationOutboxWriter.EnqueueAsync(db, evt, ct);
-        IdentityValidationLog.RabbitMqStub(logger, evt.EventType, evt.ValidationId);
+        // null = 'completed' ya encolado antes para esta validación: el evento ya salió una vez.
+        if (await IdentityValidationOutboxWriter.EnqueueAsync(db, evt, ct) is null)
+            return;
+
+        var sobre = bus.Enqueue(TramitesEventos.DeValidacion(evt), 1, evt.TenantId, TramitesEventos.Datos(evt));
+        IdentityValidationLog.EnqueuedToBus(logger, sobre.Type, evt.ValidationId, sobre.EventId);
     }
 }

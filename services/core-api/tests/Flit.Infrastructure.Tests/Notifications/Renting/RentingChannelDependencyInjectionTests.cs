@@ -1,8 +1,9 @@
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Flit.Infrastructure;
+using System.Security.Cryptography;
 using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure;
+using Flit.Modules.Notificaciones;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -136,17 +137,7 @@ public sealed class RentingChannelDependencyInjectionTests : IDisposable
     /// </summary>
     private static void InvokeAddRentingChannel(IServiceCollection services, IConfiguration configuration)
     {
-        var method = typeof(InfrastructureExtensions).GetMethod(
-            "AddRentingChannel", BindingFlags.NonPublic | BindingFlags.Static);
-        method.Should().NotBeNull();
-
-        try
-        {
-            method!.Invoke(null, [services, configuration]);
-        }
-        catch (TargetInvocationException ex) when (ex.InnerException is not null)
-        {
-            throw ex.InnerException;
-        }
+        // HU #13232: método de extensión público en Flit.Identity.Infrastructure (compartido con core-identity).
+        services.AddRentingChannel(configuration);
     }
 }

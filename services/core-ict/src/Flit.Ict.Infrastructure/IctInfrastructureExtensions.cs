@@ -1,4 +1,6 @@
 using Flit.Ict.Application.Register;
+using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Trazabilidad;
 using Flit.Ict.Grpc.Contracts;
@@ -11,6 +13,7 @@ using Flit.Ict.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Ict.Infrastructure;
@@ -119,22 +122,19 @@ public static class IctInfrastructureExtensions
             configuration.GetSection(Security.IctServiceTokenOptions.SectionName));
         services.AddSingleton<Security.IctServiceTokenProvider>();
         services.AddSingleton<Security.IctServiceTokenClientInterceptor>();
+        var useIdentityToken = AddIdentityServiceToken(services, configuration);
 
         // Cliente gRPC hacia core-api (orquestación + consultas). Cada llamada adjunta el service-token.
         var grpcAddress = configuration["CoreApiGrpc:Address"];
         if (!string.IsNullOrWhiteSpace(grpcAddress))
         {
             var grpcUri = new Uri(grpcAddress);
-            services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
-                    options.Address = grpcUri)
-                .AddInterceptor<Security.IctServiceTokenClientInterceptor>();
+            WithServiceToken(services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
+                    options.Address = grpcUri), useIdentityToken);
             services.AddScoped<IProcedureDraftClient, IctGrpcProcedureDraftClient>();
 
-            // Consulta real de fuentes externas: se delega en core-api (reusa RUNT/SOAT/RTM/RNMC).
-            services.AddGrpcClient<IctConsultation.IctConsultationClient>(options =>
-                    options.Address = grpcUri)
-                .AddInterceptor<Security.IctServiceTokenClientInterceptor>();
-            services.AddScoped<IConsultationClient, IctGrpcConsultationClient>();
+            // Consulta real de fuentes externas: directo a core-consultas (HU #13348), sin pasar por core-api.
+            AddConsultasRemoto(services, configuration, useIdentityToken);
         }
         else
         {
@@ -145,4 +145,90 @@ public static class IctInfrastructureExtensions
 
         return services;
     }
+    /// <summary>
+    /// Epic #13316 (HU #13335): con <c>Ict:ServiceToken:UseIdentity</c> el token sale de Identidad. Sin endpoint o sin
+    /// secreto no arranca: es preferible un error claro al desplegar que llamadas que fallan en silencio en cada ciclo.
+    /// </summary>
+    internal static bool AddIdentityServiceToken(IServiceCollection services, IConfiguration configuration)
+    {
+        var options = configuration.GetSection(Security.IctServiceTokenOptions.SectionName).Get<Security.IctServiceTokenOptions>()
+            ?? new Security.IctServiceTokenOptions();
+        if (!options.UseIdentity)
+            return false;
+
+        if (!Uri.TryCreate(options.TokenEndpoint, UriKind.Absolute, out _) || string.IsNullOrWhiteSpace(options.ClientSecret))
+        {
+            throw new InvalidOperationException(
+                "Ict:ServiceToken:UseIdentity está encendida pero faltan Ict:ServiceToken:TokenEndpoint o Ict:ServiceToken:ClientSecret.");
+        }
+
+        services.AddHttpClient(Security.IdentityServiceTokenProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<Security.IdentityServiceTokenProvider>();
+        return true;
+    }
+
+    /// <summary>
+    /// El token de Identidad se pide de forma asíncrona, así que va como credencial de llamada (no como interceptor). El
+    /// canal interno es h2c sin TLS: gRPC solo manda credenciales por un canal así si se le permite explícitamente.
+    /// </summary>
+    private static void WithServiceToken(IHttpClientBuilder client, bool useIdentityToken)
+    {
+        if (!useIdentityToken)
+        {
+            client.AddInterceptor<Security.IctServiceTokenClientInterceptor>();
+            return;
+        }
+
+        client.AddCallCredentials(async (context, metadata, serviceProvider) =>
+            {
+                var token = await serviceProvider.GetRequiredService<Security.IdentityServiceTokenProvider>()
+                    .GetTokenAsync(context.CancellationToken).ConfigureAwait(false);
+                metadata.Add("Authorization", "Bearer " + token);
+            })
+            .ConfigureChannel(channel => channel.UnsafeUseInsecureChannelCallCredentials = true);
+    }
+
+    /// <summary>
+    /// Epic #13316 (HU #13346/#13348): las consultas van directo a core-consultas (<c>CoreConsultas:Address</c>,
+    /// obligatoria con el canal de core-api) con el cliente svc-ict (scope platform.consultas), sin respaldo: si no
+    /// responde, el error se propaga y el orquestador reintenta (fail-closed). Necesita el token de Identidad
+    /// (<c>Ict:ServiceToken:UseIdentity</c>).
+    /// </summary>
+    internal static void AddConsultasRemoto(IServiceCollection services, IConfiguration configuration, bool useIdentityToken)
+    {
+        var address = configuration["CoreConsultas:Address"];
+        if (!useIdentityToken || !Uri.TryCreate(address, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidOperationException(
+                "CoreConsultas:Address necesita una URL absoluta y Ict:ServiceToken:UseIdentity encendida (svc-ict pide su token a Identidad).");
+        }
+
+        var deadline = TimeSpan.FromSeconds(configuration.GetValue("CoreConsultas:DeadlineSegundos", 90));
+        services.AddGrpcClient<Flit.Consultas.Grpc.V1.ConsultasService.ConsultasServiceClient>(options => options.Address = uri)
+            .AddCallCredentials(async (context, metadata, serviceProvider) =>
+            {
+                var token = await serviceProvider.GetRequiredService<Security.IdentityServiceTokenProvider>()
+                    .GetTokenAsync("platform.consultas", context.CancellationToken).ConfigureAwait(false);
+                metadata.Add("Authorization", "Bearer " + token);
+            })
+            .ConfigureChannel(channel => channel.UnsafeUseInsecureChannelCallCredentials = true)
+            .AddInterceptor(() => new DeadlinePorDefecto(deadline));
+        services.AddScoped<IConsultationClient, ConsultasConsultationClient>();
+    }
+
+    /// <summary>Deadline por llamada si quien llama no fija uno (contrato v1.3 §6.1).</summary>
+    private sealed class DeadlinePorDefecto(TimeSpan deadline) : Interceptor
+    {
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
+            TRequest request, ClientInterceptorContext<TRequest, TResponse> context, AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
+        {
+            ArgumentNullException.ThrowIfNull(continuation);
+            if (context.Options.Deadline is null)
+                context = new ClientInterceptorContext<TRequest, TResponse>(context.Method, context.Host, context.Options.WithDeadline(DateTime.UtcNow.Add(deadline)));
+
+            return continuation(request, context);
+        }
+    }
 }
+

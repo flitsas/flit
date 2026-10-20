@@ -114,7 +114,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
         {
             var result = await provider.StartAsync(
                 new IdentityProviderStartRequest(
-                    v.ProcedureInstanceId, v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email),
+                    v.ProcedureInstanceId, v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email, v.TenantId),
                 ct);
 
             // Envío logrado → en_proceso con los datos del proveedor.

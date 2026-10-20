@@ -272,6 +272,7 @@ public sealed class ConsolidadoLoteItemProcesoIntegrationTests(PostgresDatabaseF
                     Id = Guid.NewGuid(),
                     Code = "SuperAdmin",
                     Name = "Super Admin",
+                    ProductCode = "plataforma",
                     IsSystem = true,
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,

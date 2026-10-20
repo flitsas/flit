@@ -20,6 +20,8 @@ public sealed class AdminAuditWriterTests
     {
         var services = new ServiceCollection();
         services.AddDbContext<FlitDbContext>(options => options.UseInMemoryDatabase(dbName));
+        // HU #13231: los escritores resuelven IIdentityDb en su propio scope, como en producción.
+        services.AddScoped<IIdentityDb>(sp => sp.GetRequiredService<FlitDbContext>());
         services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
         return services.BuildServiceProvider();
     }

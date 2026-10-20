@@ -40,6 +40,7 @@ public sealed class ModuleAccessRbacTests : IClassFixture<WebApplicationFactory<
         var result = await repo.ListAccessibleAsync(
             permissionSlugs: [],
             includeAll: true,
+            productCode: null,
             ct: TestContext.Current.CancellationToken);
 
         var ids = result.Select(m => m.Id).ToList();
@@ -64,6 +65,7 @@ public sealed class ModuleAccessRbacTests : IClassFixture<WebApplicationFactory<
         var result = await repo.ListAccessibleAsync(
             permissionSlugs: [visible.ActionSlug],
             includeAll: false,
+            productCode: null,
             ct: TestContext.Current.CancellationToken);
 
         var ids = result.Select(m => m.Id).ToList();

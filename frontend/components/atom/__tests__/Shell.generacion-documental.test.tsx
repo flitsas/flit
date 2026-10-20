@@ -20,7 +20,7 @@ function makeToken(payload: Record<string, unknown>): string {
 
 function renderShell(visibleModuleCodes?: string[]) {
   return render(
-    <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={visibleModuleCodes}>
+    <Shell visibleModuleCodes={visibleModuleCodes}>
       <div>contenido</div>
     </Shell>,
   );
@@ -43,7 +43,7 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell(["tramites", "generacion-documental"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    expect(screen.getByRole("button", { name: "Generación documental" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Generación documental" })).toHaveAttribute("href", "/admin/generacion-documental");
   });
 
   it("un usuario cuyo listado de módulos NO incluye el módulo no ve la entrada", async () => {
@@ -51,14 +51,22 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
 
     renderShell(["tramites", "reportes"]);
 
-    // "Administración" (AdminCompany) sigue existiendo, pero sin la entrada del módulo.
-    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
-    expect(
-      screen.queryByRole("button", { name: "Generación documental" }),
-    ).not.toBeInTheDocument();
+    // "Administración" (AdminCompany) sigue existiendo, sola: sin la entrada del módulo es un enlace directo.
+    expect(screen.getByRole("link", { name: "Administración" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Generación documental" })).not.toBeInTheDocument();
   });
 
-  it("sin lista de módulos resuelta (undefined) la entrada no se muestra, ni siquiera a SuperAdmin", () => {
+  it("sin lista de módulos resuelta (undefined) un AdminCompany no la ve (deny-by-default)", () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, ADMIN_COMPANY_TOKEN);
+
+    renderShell();
+
+    expect(screen.queryByRole("link", { name: "Generación documental" })).not.toBeInTheDocument();
+  });
+
+  // B-13: el catálogo de la suite deja pasar al SuperAdmin en todo (contrato §2.1). La API ya le devuelve todos los
+  // módulos, así que el resultado final es el mismo; solo cambia que no espera a que carguen.
+  it("el SuperAdmin la ve aunque los módulos no hayan cargado", async () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "SuperAdmin", email: "super@flit.local" }),
@@ -66,9 +74,8 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
 
     renderShell();
 
-    expect(
-      screen.queryByRole("button", { name: "Generación documental" }),
-    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    expect(screen.getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
   });
 
   it("un SuperAdmin con el módulo accesible también la ve (misma vía: módulos, no rol)", async () => {
@@ -80,6 +87,6 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell(["generacion-documental"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    expect(screen.getByRole("button", { name: "Generación documental" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
   });
 });

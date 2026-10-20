@@ -3,7 +3,7 @@
   "info": {
     "title": "FLIT — API externa de sincronización de trámites",
     "version": "3.2.0",
-    "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épicas #12737 y #12741. Lectura por pull: el consumidor recorre el feed por cursor cada 5 minutos y a demanda. Escritura: el consumidor adjunta al trámite el comprobante de pago del impuesto departamental (v3.2). Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos, envío de adjuntos) está en docs/integraciones/external-api-tramites-sync.md §5 y §7.",
+    "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épicas #12737 y #12741. Lectura por pull: el consumidor recorre el feed por cursor al recibir un aviso de FLIT 2 (webhook firmado, §8 de la guía y AsyncAPI flito-webhook/tramite.cambio), periódicamente como respaldo y a demanda. Escritura: el consumidor adjunta al trámite el comprobante de pago del impuesto departamental (v3.2). Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos, envío de adjuntos) está en docs/integraciones/external-api-tramites-sync.md §5 y §7.",
     "contact": {
       "name": "Equipo FLIT"
     },

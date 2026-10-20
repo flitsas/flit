@@ -30,4 +30,15 @@ internal static class TestEnvironment
     {
         Environment.SetEnvironmentVariable("OCR_PROVIDER", "mock");
     }
+
+    /// <summary>
+    /// HU #13348 (Epic #13316): core-api llama a core-consultas siempre, así que el host exige el secreto del cliente de
+    /// servicio svc-tramites al arrancar. En las pruebas basta uno cualquiera: ninguna llama al servicio de verdad
+    /// (las que prueban la llamada reemplazan el cliente gRPC).
+    /// </summary>
+    [ModuleInitializer]
+    public static void ServiceClientDePrueba()
+    {
+        Environment.SetEnvironmentVariable("Platform__ServiceClient__ClientSecret", "secreto-de-pruebas");
+    }
 }
