@@ -16,6 +16,7 @@ import { OTConfigModal } from "@/components/admin/companies/OTConfigModal";
 import { OtScopeConfirmDialog } from "@/components/admin/companies/OtScopeConfirmDialog";
 import { TransitBlocksReadOnlySection } from "@/components/admin/companies/panels/TransitBlocksReadOnlySection";
 import {
+  addTransitBlock,
   addTransitGrant,
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
@@ -24,6 +25,7 @@ import {
   fetchTransitBlocks,
   fetchTransitGrants,
   fetchTransitOffices,
+  removeTransitBlock,
   removeTransitGrant,
   setTransitAgreement,
   setOtBlockingPolicy,
@@ -76,6 +78,9 @@ export function OTConfigTablePanel({
   const legend = otConfigPanelLegend(mode);
   const showMarcaBlocks = mode === "readonly-marca-blanca";
   const inheritedOnly = mode === "readonly-concession-inherited";
+  // SuperAdmin sobre una cabeza Marca Blanca: la MISMA tabla que una compañía normal, pero su acceso
+  // es «operables menos bloqueados»: habilitar desbloquea el OT para la red y deshabilitar lo bloquea.
+  const marcaBlancaEditable = mode === "superadmin-marca-blanca";
   const effectiveBlocksTenantId = blocksTenantId ?? tenantId;
   const effectiveGrantsTenantId = grantsTenantId ?? tenantId;
 
@@ -103,10 +108,10 @@ export function OTConfigTablePanel({
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const needsBlocks = showMarcaBlocks;
+        const needsBlocks = showMarcaBlocks || marcaBlancaEditable;
         const needsPolicies = !readOnly;
         // En Marca Blanca la lista se calcula como operables menos bloqueados: los grants no se usan.
-        const needsGrants = !showMarcaBlocks;
+        const needsGrants = !showMarcaBlocks && !marcaBlancaEditable;
 
         const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows, blocks] =
           await Promise.all([
@@ -149,7 +154,7 @@ export function OTConfigTablePanel({
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, readOnly, showMarcaBlocks, effectiveBlocksTenantId, effectiveGrantsTenantId],
+    [tenantId, readOnly, showMarcaBlocks, marcaBlancaEditable, effectiveBlocksTenantId, effectiveGrantsTenantId],
   );
 
   useEffect(() => {
@@ -167,6 +172,17 @@ export function OTConfigTablePanel({
   };
 
   const persistGrantToggle = async (officeId: string, enabled: boolean) => {
+    if (marcaBlancaEditable) {
+      if (enabled) {
+        await removeTransitBlock(tenantId, officeId);
+      } else {
+        await addTransitBlock(tenantId, officeId);
+      }
+      setBlockedIds((current) =>
+        enabled ? current.filter((id) => id !== officeId) : Array.from(new Set([...current, officeId])),
+      );
+      return;
+    }
     if (enabled) {
       await addTransitGrant(tenantId, officeId);
     } else {
@@ -180,7 +196,7 @@ export function OTConfigTablePanel({
   const requestGrantToggle = async (officeId: string, enabled: boolean) => {
     const office = offices.find((o) => o.id === officeId);
     const officeName = office?.name ?? "organismo";
-    if (mode === "superadmin-concession" && grantScopeWarningCount > 0) {
+    if ((mode === "superadmin-concession" || marcaBlancaEditable) && grantScopeWarningCount > 0) {
       await new Promise<void>((resolve, reject) => {
         setGrantConfirmResolver({ resolve, reject });
         setPendingGrant({ officeId, officeName, enabled });
@@ -224,22 +240,34 @@ export function OTConfigTablePanel({
       });
     }
 
+    if (marcaBlancaEditable) {
+      // Todos los operables: los bloqueados aparecen como «No habilitado», igual que sin grant.
+      return offices.filter((office) => {
+        const op = operationalById[office.id];
+        return Boolean(op?.hasTenant && op.estadoActivo);
+      });
+    }
+
     return offices.filter((office) => {
       if (grantedIds.includes(office.id)) return true;
       const op = operationalById[office.id];
       return Boolean(op?.hasTenant && op.estadoActivo);
     });
-  }, [offices, grantedIds, operationalById, inheritedOnly, showMarcaBlocks, blockedIds]);
+  }, [offices, grantedIds, operationalById, inheritedOnly, showMarcaBlocks, marcaBlancaEditable, blockedIds]);
 
   const displayGrantedIds = useMemo(() => {
     if (showMarcaBlocks) {
       return visibleOffices.map((o) => o.id);
     }
+    if (marcaBlancaEditable) {
+      const blocked = new Set(blockedIds);
+      return visibleOffices.filter((o) => !blocked.has(o.id)).map((o) => o.id);
+    }
     if (inheritedOnly) {
       return grantedIds;
     }
     return grantedIds;
-  }, [showMarcaBlocks, visibleOffices, inheritedOnly, grantedIds]);
+  }, [showMarcaBlocks, marcaBlancaEditable, visibleOffices, inheritedOnly, grantedIds, blockedIds]);
 
   // Bug #13055 — la búsqueda filtra la lista COMPLETA antes de paginar; antes filtraba solo las
   // 10 filas de la página visible.

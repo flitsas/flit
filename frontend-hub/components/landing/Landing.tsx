@@ -5,6 +5,7 @@ import { PRODUCTS, type ProductInfo } from "@/lib/products";
 import { COMPANY, CONTACT, PILLARS, STEPS, demoMailto } from "@/lib/site";
 import { LandingNav } from "./LandingNav";
 import { BRAND_GRADIENT as GRADIENT, ProductIcon } from "@/components/ui/ProductIcon";
+import { FLIT_PRIVACY_POLICY_URL } from "@flit/brand/types";
 import { StatusChip } from "@/components/ui/StatusChip";
 
 // Landing de FLIT en la raíz del hub, sin sesión (B-11): qué es FLIT, sus productos, cómo empezar y contacto. Sigue
@@ -354,7 +355,10 @@ function Footer({ loginUrl }: { loginUrl: string }) {
         </nav>
       </div>
       <p className="border-t border-[var(--color-flit-gray)] px-4 py-5 text-center text-[11px] text-[#59677d] dark:border-white/10 dark:text-white/50">
-        Políticas de Privacidad y Términos de Uso · © {new Date().getFullYear()} FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua
+        <a href={FLIT_PRIVACY_POLICY_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+          Políticas de Privacidad y Términos de Uso
+        </a>{" "}
+        · © {new Date().getFullYear()} FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua
       </p>
     </footer>
   );

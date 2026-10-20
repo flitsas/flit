@@ -12,6 +12,15 @@ public interface ITenantBrandingRepository
     Task<TenantBranding?> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Sello de la fila (<c>row_version</c>, cambia con cada borrador, publicación o retiro);
+    /// <c>null</c> si la cabeza no tiene fila. Las cachés de marca lo comparan para no servir una
+    /// marca vieja cuando otro proceso (core-api publica, core-identity sirve <c>/public/branding</c>)
+    /// escribió la fila: la invalidación en memoria solo alcanza al proceso que publicó.
+    /// </summary>
+    async Task<long?> GetStampAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        (await GetByTenantIdAsync(tenantId, cancellationToken).ConfigureAwait(false))?.RowVersion;
+
+    /// <summary>
     /// Crea la fila (primer <c>PUT</c> del SuperAdmin, AC1) o reemplaza el borrador de la existente
     /// (AC4: no afecta lo publicado). Audita <c>TenantBranding.draft</c> old/new en el mismo
     /// <c>SaveChanges</c>. Lanza <see cref="BrandingTenantNotMarcaBlancaException"/> si el disparador

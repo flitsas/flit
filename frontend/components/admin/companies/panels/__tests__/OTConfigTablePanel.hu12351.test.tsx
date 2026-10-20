@@ -14,6 +14,8 @@ vi.mock("@/lib/api/admin-companies", () => ({
   fetchOtPrendaDocumentPolicies: vi.fn(),
   fetchTransitBlocks: vi.fn(),
   addTransitGrant: vi.fn(),
+  addTransitBlock: vi.fn(),
+  removeTransitBlock: vi.fn(),
   removeTransitGrant: vi.fn(),
   setTransitAgreement: vi.fn(),
   setOtBlockingPolicy: vi.fn(),
@@ -30,7 +32,10 @@ vi.mock("@/components/admin/Toast", () => ({
 }));
 
 import {
+  addTransitBlock,
   addTransitGrant,
+  removeTransitBlock,
+  removeTransitGrant,
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
   fetchOtPrendaDocumentPolicies,
@@ -103,6 +108,41 @@ describe("OTConfigTablePanel HU #12351", () => {
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /acciones para/i })).not.toBeInTheDocument();
     expect(addTransitGrant).not.toHaveBeenCalled();
+  });
+
+  it("SuperAdmin en cabeza Marca Blanca: misma tabla; el bloqueado sale no habilitado y habilitarlo lo desbloquea", async () => {
+    const user = userEvent.setup();
+    arrange([]);
+    vi.mocked(fetchTransitBlocks).mockResolvedValue({ transitOfficeIds: ["o2"] });
+    vi.mocked(removeTransitBlock).mockResolvedValue(undefined);
+    render(<OTConfigTablePanel tenantId={TENANT} mode="superadmin-marca-blanca" />);
+
+    const table = await screen.findByRole("table", { name: /organismos de tránsito/i });
+    expect(within(table).getByText("Secretaría Bogotá")).toBeInTheDocument();
+    expect(within(table).getByText("Medellín")).toBeInTheDocument();
+    // Mismo interruptor que una compañía normal: Bogotá habilitado, Medellín (bloqueado) no.
+    expect(screen.getByRole("switch", { name: /deshabilitar secretaría bogotá/i })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /^habilitar medellín/i })).toBeInTheDocument();
+    expect(fetchTransitGrants).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("switch", { name: /habilitar medellín/i }));
+
+    await waitFor(() => expect(removeTransitBlock).toHaveBeenCalledWith(TENANT, "o2"));
+    expect(addTransitGrant).not.toHaveBeenCalled();
+  });
+
+  it("SuperAdmin en cabeza Marca Blanca: deshabilitar bloquea el OT para la red", async () => {
+    const user = userEvent.setup();
+    arrange([]);
+    vi.mocked(fetchTransitBlocks).mockResolvedValue({ transitOfficeIds: [] });
+    vi.mocked(addTransitBlock).mockResolvedValue(undefined);
+    render(<OTConfigTablePanel tenantId={TENANT} mode="superadmin-marca-blanca" />);
+
+    await screen.findByText("Medellín");
+    await user.click(screen.getByRole("switch", { name: /deshabilitar medellín/i }));
+
+    await waitFor(() => expect(addTransitBlock).toHaveBeenCalledWith(TENANT, "o2"));
+    expect(removeTransitGrant).not.toHaveBeenCalled();
   });
 
   it("AC5 — SuperAdmin en Concesión pide confirmación de alcance antes de habilitar", async () => {

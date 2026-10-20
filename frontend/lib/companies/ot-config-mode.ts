@@ -6,7 +6,8 @@ export type OtConfigPanelMode =
   | "readonly-concession-head"
   | "readonly-concession-inherited"
   | "readonly-marca-blanca"
-  | "superadmin-concession";
+  | "superadmin-concession"
+  | "superadmin-marca-blanca";
 
 export function resolveOtConfigPanelMode(input: {
   company: CompanyListItem | null;
@@ -21,6 +22,8 @@ export function resolveOtConfigPanelMode(input: {
 
   if (isSuperAdmin) {
     if (company.tenantType === "CONCESION") return "superadmin-concession";
+    // Cabeza MB: la misma tabla editable que una compañía normal (habilitar = desbloquear).
+    if (company.tenantType === "MARCA_BLANCA" && !company.parentTenantId) return "superadmin-marca-blanca";
     if (company.tenantType === "MARCA_BLANCA") return "readonly-marca-blanca";
     return "editable";
   }
@@ -45,7 +48,7 @@ export function resolveOtConfigPanelMode(input: {
 }
 
 export function otConfigPanelReadOnly(mode: OtConfigPanelMode): boolean {
-  return mode !== "editable" && mode !== "superadmin-concession";
+  return mode !== "editable" && mode !== "superadmin-concession" && mode !== "superadmin-marca-blanca";
 }
 
 export function otConfigPanelLegend(mode: OtConfigPanelMode): string | null {
