@@ -204,7 +204,8 @@ public static class IctInfrastructureExtensions
                 "CoreConsultas:Address necesita una URL absoluta y Ict:ServiceToken:UseIdentity encendida (svc-ict pide su token a Identidad).");
         }
 
-        var deadline = TimeSpan.FromSeconds(configuration.GetValue("CoreConsultas:DeadlineSegundos", 90));
+        // HU #13762: alineado con Consultas:Remoto:DeadlineSegundos de core-api (default 180).
+        var deadline = TimeSpan.FromSeconds(configuration.GetValue("CoreConsultas:DeadlineSegundos", 180));
         services.AddGrpcClient<Flit.Consultas.Grpc.V1.ConsultasService.ConsultasServiceClient>(options => options.Address = uri)
             .AddCallCredentials(async (context, metadata, serviceProvider) =>
             {
