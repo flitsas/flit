@@ -3,7 +3,9 @@ using Flit.Diagnostico.Api.Modulos.Carga;
 using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
+using Flit.Diagnostico.Domain.Consultas;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -84,6 +86,15 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaPlantilla = Program.Prefijo + CargaEndpoints.RutaPlantilla;
 
+    /// <summary>
+    /// Grilla del tablero (HU #13743): cada empresa siembra un lote con un vehículo y su celda; la grilla devuelve el id del
+    /// lote y el del vehículo, y con el token de A no debe aparecer nada de B (la de B responde 404).
+    /// </summary>
+    public const string RutaGrilla = Program.Prefijo + EndpointsTablero.RutaGrilla;
+
+    /// <summary>Historial de estados del lote (HU #13743): devuelve el id del lote; el de B responde 404 al token de A.</summary>
+    public const string RutaHistorial = Program.Prefijo + EndpointsTablero.RutaHistorial;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -94,6 +105,16 @@ public static class EscenariosDeFuga
             Task.FromResult(new Sembrado(RutaTiposTramite, ["TRASPASO_STANDARD"], Exclusivos: [empresa.Id.ToString()]))),
         new EscenarioDeFuga(RutaPlantilla, (empresa, _) =>
             Task.FromResult(new Sembrado(RutaPlantilla, ["[Content_Types].xml", "xl/worksheets/sheet1.xml"], Exclusivos: [empresa.Id.ToString()]))),
+        new EscenarioDeFuga(RutaGrilla, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST901", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            return new Sembrado(Tablero.Tablero.RutaGrilla(lote.Id), [lote.Id.ToString(), lote.Vehiculos.Single().Id.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaHistorial, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST902", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            return new Sembrado(Tablero.Tablero.RutaHistorial(lote.Id), [lote.Id.ToString()]);
+        }),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

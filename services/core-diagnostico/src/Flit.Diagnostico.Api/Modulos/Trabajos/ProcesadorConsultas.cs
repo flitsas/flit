@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Platform.Sdk.Tenancy;
@@ -15,7 +16,8 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 /// EN_CURSO con su lease y otra réplica la retoma al vencer; un fallo inesperado del ejecutor la deja en ERROR (definitivo).
 /// Cada ejecución deja un intento auditable (<see cref="RegistroIntentos"/>, HU #13737) y un error transitorio con reintentos
 /// disponibles vuelve a la cola con backoff (<see cref="PoliticaReintentos"/>, <c>Diagnostico:Consultas:MaxReintentos</c>, D-12). Al cerrar la RUNT de un vehículo, <see cref="OrquestadorVehiculo"/> libera
-/// o bloquea sus demás celdas en la misma transacción (HU #13730). Si hay más de un ejecutor para una fuente, gana el primero
+/// o bloquea sus demás celdas en la misma transacción (HU #13730), y tras toda celda terminal <see cref="RecalculadorEstado"/>
+/// recalcula el estado global del lote en esa misma transacción (HU #13743). Si hay más de un ejecutor para una fuente, gana el primero
 /// registrado. Los logs llevan ids, fuente y tipo de error, nunca datos de la fuente.
 /// </summary>
 internal sealed partial class ProcesadorConsultas(
@@ -87,6 +89,8 @@ internal sealed partial class ProcesadorConsultas(
         // RUNT va primero (HU #13730): su cierre libera o bloquea las demás celdas del vehículo en la misma transacción. Un
         // reintento no es un cierre: las demás celdas siguen esperando.
         resultado = OrquestadorVehiculo.TrasEjecutar(celda, resultado, reloj);
+        // HU #13743: tras cada celda terminal, el estado global del lote se recalcula en la misma transacción de cierre.
+        resultado = RecalculadorEstado.TrasCerrar(celda, resultado, reloj);
         if (!await new EscritorCeldas(db, reloj).CerrarAsync(celda, resultado, ct, intento).ConfigureAwait(false))
         {
             LeasePerdido(log, celda.Id, celda.Fuente);

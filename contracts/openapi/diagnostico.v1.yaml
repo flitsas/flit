@@ -49,6 +49,11 @@ tags:
     description: >
       Confirmación de los vehículos del lote (MOD02, HU #13751): revalidación en servidor, documento del locatario
       cifrado y entrega de la lista limpia al motor de consultas. Campos en snake_case y códigos de la base.
+  - name: Tablero
+    description: >
+      Tablero del lote (MOD04, HU #13743): grilla incremental por versión (polling cada 3 s), estado global, cierre
+      del panel e historial de estados. Todo con diagnostico.diagnosticos.ver y la visibilidad de la compañía
+      (visibilidad_usuario=PROPIOS limita al creador; el admin de la compañía ve todos). Campos en snake_case.
   - name: Express
     description: >
       Diagnóstico Express de un solo vehículo (MOD02, HU #13753): cabecera y vehículo en una transacción, con las mismas
@@ -616,6 +621,156 @@ paths:
             `campo` = Identificador_Vehiculo: COLUMNA_REQUERIDA. `campo` = correcciones: CORRECCIONES_INVALIDAS (JSON mal
             formado, no es una lista, sin `fila` entera, fila repetida, fila que el archivo no tiene o un valor que no es
             texto ni null).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/grilla:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Tablero]
+      operationId: obtenerGrillaDiagnostico
+      summary: Grilla incremental del lote (solo lo cambiado desde la versión del cliente)
+      description: >
+        HU #13743 (F04-H1, F04-C1/C3/C8/C10/C11/C13, plan §6.1 fila 04). Permiso diagnostico.diagnosticos.ver.
+        Devuelve la versión actual del tablero (`version`), el estado global, las columnas del alcance agrupadas y el
+        avance del lote, y SOLO las celdas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
+        `vehiculos` van solo los vehículos con alguna celda cambiada y, de cada uno, solo esas celdas; `terminado` se
+        calcula con todas sus celdas (COMPLETADO o NA, R-7). El cliente guarda `version`, la manda como `desde` en el
+        siguiente sondeo y fusiona por `vehiculos[].id` y `celdas[].fuente`. DTO de cliente: nunca lleva el origen de
+        la celda, el usuario que la llenó a mano, el payload ni documentos (R-20). Con estimado_consultas=AL_FINALIZAR
+        en la copia de configuración del lote y el lote COMPLETADO o INCOMPLETO trae `estimado_consultas` (estimado por
+        fuente frente a consumidas: intentos con desde_cache=false, sin los de llenado manual); en otro caso la clave
+        no viene. Otra compañía, o un lote de otro usuario con visibilidad_usuario=PROPIOS, responde 404.
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Grilla del lote desde la versión dada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Grilla"
+        "400":
+          description: "`code` = DESDE_INVALIDO (`campo` = desde): desde es negativo. Un desde no numérico también responde 400."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: no existe, es de otra compañía o (con PROPIOS) de otro usuario."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/cerrar-panel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Tablero]
+      operationId: cerrarPanelDiagnostico
+      summary: Cierra el panel de un lote con celdas en ERROR (pasa a INCOMPLETO)
+      description: >
+        HU #13743 (F04-C5/C7, plan §3.5 y §6.1 fila 04). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la
+        grilla. Sin cuerpo. Un lote EN_PROCESO con todas sus celdas terminadas y al menos una en ERROR pasa a
+        INCOMPLETO con cerrado_en y una fila del historial disparador=CIERRE_PANEL con el usuario del token. Un lote
+        sin ERROR se completa solo (lo hace el procesador, disparador AUTO). Ningún endpoint edita el estado a mano.
+      responses:
+        "200":
+          description: Lote cerrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CierrePanel"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver; sin compañía (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: no existe, es de otra compañía o (con PROPIOS) de otro usuario."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            No procede y nada cambia: `code` = LOTE_NO_EN_PROCESO (CREADO, COMPLETADO o INCOMPLETO),
+            CELDAS_SIN_TERMINAR (hay celdas PENDIENTE o EN_CURSO), LOTE_SIN_ERRORES (todas terminaron sin ERROR) o
+            LOTE_MODIFICADO (el lote cambió mientras se cerraba: volver a leer la grilla).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/historial:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Tablero]
+      operationId: obtenerHistorialDiagnostico
+      summary: Historial de estados del lote
+      description: >
+        HU #13743 (F04-C7, R-8). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la grilla. Transiciones de
+        diagnostico.historial_estado_diagnostico (solo inserción), de la más antigua a la más reciente: anterior (null en
+        la creación), nuevo, disparador, usuario (null si fue el procesador) y fecha.
+      responses:
+        "200":
+          description: Estado actual y transiciones del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorialLote"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: no existe, es de otra compañía o (con PROPIOS) de otro usuario."
           content:
             application/json:
               schema:
@@ -1677,6 +1832,178 @@ components:
           description: Solo cuando mostrar_estimado es verdadero.
           items:
             $ref: "#/components/schemas/EstimadoFuente"
+
+    Grilla:
+      type: object
+      required: [id, nombre, estado, version, desde, columnas, avance, vehiculos]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        version:
+          type: integer
+          format: int64
+          description: Versión actual del tablero; el cliente la manda como `desde` en el siguiente sondeo.
+        desde:
+          type: integer
+          format: int64
+          description: La versión pedida (eco).
+        columnas:
+          $ref: "#/components/schemas/Alcance"
+        avance:
+          $ref: "#/components/schemas/AvanceLote"
+        vehiculos:
+          type: array
+          description: Solo los vehículos con celdas cambiadas desde `desde` (todos con desde=0), en el orden del lote.
+          items:
+            $ref: "#/components/schemas/FilaVehiculo"
+        estimado_consultas:
+          type: array
+          description: Solo con estimado_consultas=AL_FINALIZAR y el lote COMPLETADO o INCOMPLETO; si no, la clave no viene.
+          items:
+            $ref: "#/components/schemas/EstimadoVsConsumido"
+
+    AvanceLote:
+      type: object
+      required: [vehiculos, terminados]
+      properties:
+        vehiculos:
+          type: integer
+          description: Vehículos del lote.
+        terminados:
+          type: integer
+          description: Vehículos con todas sus celdas en COMPLETADO o NA (R-7).
+
+    FilaVehiculo:
+      type: object
+      required: [id, orden, identificador, tipo_identificador, placa, vin, terminado, celdas]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orden:
+          type: integer
+        identificador:
+          type: string
+          description: Placa o VIN normalizado.
+        tipo_identificador:
+          type: string
+          example: PLACA_CARRO
+        placa:
+          type: string
+          nullable: true
+        vin:
+          type: string
+          nullable: true
+        terminado:
+          type: boolean
+          description: Todas sus celdas (no solo las de esta respuesta) en COMPLETADO o NA.
+        celdas:
+          type: array
+          description: Solo las celdas cambiadas desde `desde`, en el orden del alcance.
+          items:
+            $ref: "#/components/schemas/CeldaGrilla"
+
+    CeldaGrilla:
+      type: object
+      description: Sin origen, usuario manual, payload ni documentos (R-20).
+      required: [id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fuente:
+          $ref: "#/components/schemas/Fuente"
+        estado:
+          type: string
+          enum: [PENDIENTE, EN_CURSO, COMPLETADO, ERROR, NA]
+        motivo_na:
+          type: string
+          nullable: true
+          description: "Solo con estado NA: SERVICIO_PUBLICO, DEPARTAMENTO_NO_SOPORTADO o SIN_DOCUMENTO_LOCATARIO."
+        tipo_error:
+          type: string
+          nullable: true
+          description: Solo con estado ERROR (código del tipo de error de la fuente o BLOQUEADA_POR_RUNT).
+          example: TIMEOUT
+        dato_obtenido_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha y hora del dato (D-10); en la reutilizada, la del dato original.
+        reutilizada:
+          type: boolean
+          description: El dato se reutilizó de una consulta del mismo día de la compañía, sin consumo (D-10).
+        version:
+          type: integer
+          format: int64
+          description: Versión del tablero en el último cambio de la celda.
+
+    EstimadoVsConsumido:
+      type: object
+      required: [fuente, estimadas, consumidas]
+      properties:
+        fuente:
+          $ref: "#/components/schemas/Fuente"
+        estimadas:
+          type: integer
+          description: Estimado de la fuente (vehículos menos N/A previsibles, HU #13747).
+        consumidas:
+          type: integer
+          description: Intentos con desde_cache=false, sin los de llenado manual.
+
+    CierrePanel:
+      type: object
+      required: [id, estado, cerrado_en]
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        cerrado_en:
+          type: string
+          format: date-time
+
+    HistorialLote:
+      type: object
+      required: [diagnostico_id, estado, transiciones]
+      properties:
+        diagnostico_id:
+          type: string
+          format: uuid
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        transiciones:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransicionLote"
+
+    TransicionLote:
+      type: object
+      required: [estado_anterior, estado_nuevo, disparador, usuario_id, en]
+      properties:
+        estado_anterior:
+          type: string
+          nullable: true
+          description: Null en la creación del lote; si no, CREADO, EN_PROCESO, COMPLETADO o INCOMPLETO.
+        estado_nuevo:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        disparador:
+          type: string
+          enum: [AUTO, CIERRE_PANEL, REPROCESO, MANUAL]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario que la provocó; null si fue el procesador.
+        en:
+          type: string
+          format: date-time
 
     ErrorRegla:
       type: object

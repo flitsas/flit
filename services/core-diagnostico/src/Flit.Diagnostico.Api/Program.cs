@@ -65,6 +65,8 @@ public static class Program
         builder.Services.AddMotorConsultas(builder.Configuration);
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
+        // HU #13743: tablero del lote (grilla incremental, cierre del panel e historial de estados).
+        Modulos.Tablero.EndpointsTablero.AddTablero(builder.Services);
         // HU #13725: fuente RUNT del vehículo (no conectada por defecto; simulada de Intempo solo con configuración explícita en LOCAL o DEV).
         builder.Services.AddFuentesConsultas(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
