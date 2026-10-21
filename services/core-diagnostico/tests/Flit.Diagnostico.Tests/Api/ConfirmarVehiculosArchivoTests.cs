@@ -52,7 +52,7 @@ public sealed class ConfirmarVehiculosArchivoTests
         var respuesta = await Lotes.ConfirmarArchivoAsync(cliente, id, archivo, "lote.csv", "[]", ct);
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
         texto.Should().NotContain(Documento).And.Contain("****5432");
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         vehiculos.Select(v => v.IdentificadorNorm).Should().Equal("ABC123", "XYZ987");
@@ -79,7 +79,7 @@ public sealed class ConfirmarVehiculosArchivoTests
 
         var respuesta = await Lotes.ConfirmarArchivoAsync(cliente, id, File.ReadAllBytes(Path.Combine(Fixtures, "carga-mixta.xlsx")), "carga-mixta.xlsx", null, ct);
 
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, await respuesta.Content.ReadAsStringAsync(ct));
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var xyz = vehiculos.Single(v => v.IdentificadorNorm == "XYZ98A");
@@ -110,7 +110,7 @@ public sealed class ConfirmarVehiculosArchivoTests
         var respuesta = await Lotes.ConfirmarArchivoAsync(cliente, id, archivo, "lote.csv", Correcciones, ct);
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
         texto.Should().NotContain("5566778899").And.NotContain("70707070");
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         vehiculos.Select(v => (v.Orden, v.IdentificadorNorm)).Should().Equal((1, "ABC123"), (2, "DEF456"), (3, "XYZ987"));
@@ -143,7 +143,7 @@ public sealed class ConfirmarVehiculosArchivoTests
         var respuesta = await Lotes.ConfirmarArchivoAsync(cliente, id, archivo, "lote.csv", Correcciones, ct);
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
         var json = JsonDocument.Parse(texto).RootElement;
         json.GetProperty("confirmados").GetInt32().Should().Be(1);
         json.GetProperty("invalidos").GetInt32().Should().Be(2);
@@ -201,7 +201,7 @@ public sealed class ConfirmarVehiculosArchivoTests
 
         (await Lotes.TodosLosVehiculosAsync(api, ct)).Should().Be(0, "ningún rechazo guarda vehículos");
         var despues = await Lotes.ConfirmarArchivoAsync(cliente, id, valido, "lote.csv", null, ct);
-        despues.StatusCode.Should().Be(HttpStatusCode.Created, await despues.Content.ReadAsStringAsync(ct));
+        despues.StatusCode.Should().Be(HttpStatusCode.Accepted, await despues.Content.ReadAsStringAsync(ct));
     }
 
     // Fuga entre compañías — B reenvía un archivo contra la cabecera de A: 404, nada persiste y la respuesta no lleva nada de A ni del archivo.
@@ -244,7 +244,7 @@ public sealed class ConfirmarVehiculosArchivoTests
 
         var respuesta = await Lotes.ConfirmarArchivoAsync(cliente, id, archivo, "lote.csv", """[{"fila": 3, "documento_locatario": "64646464"}]""", ct);
 
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, await respuesta.Content.ReadAsStringAsync(ct));
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
         logs.Mensajes.Should().Contain(m => m.Contains(id.ToString(), StringComparison.Ordinal), "la confirmación deja su log de conteos");
         logs.Mensajes.Should().NotContain(m =>
             m.Contains("61616161", StringComparison.Ordinal) || m.Contains("62626262", StringComparison.Ordinal)

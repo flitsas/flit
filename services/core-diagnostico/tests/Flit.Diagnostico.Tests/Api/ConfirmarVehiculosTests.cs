@@ -49,7 +49,7 @@ public sealed class ConfirmarVehiculosTests
         ], ct);
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
         var json = JsonDocument.Parse(texto).RootElement;
         json.GetProperty("confirmados").GetInt32().Should().Be(3);
         json.GetProperty("invalidos").GetInt32().Should().Be(2, "MAL y el documento con letras");
@@ -64,7 +64,7 @@ public sealed class ConfirmarVehiculosTests
         vehiculos.Should().OnlyContain(v => v.TenantId == empresa.Id && v.LocatarioDocCifrado == null && v.LocatarioDocOrigen == null);
         json.GetProperty("vehiculos").EnumerateArray().Select(v => v.GetProperty("identificador_norm").GetString())
             .Should().Equal("ABC123", "9FBTEST1234567890", "R12345");
-        (await Cabeceras.LeerAsync(api, empresa.Id, id, ct)).Estado.Should().Be(EstadoDiagnostico.Creado, "esta HU no cambia el estado");
+        (await Cabeceras.LeerAsync(api, empresa.Id, id, ct)).Estado.Should().Be(EstadoDiagnostico.Creado, "con el espía del encolador nadie cambia el estado (el real lo pasa a EN_PROCESO, HU #13727)");
     }
 
     // Escenario 3 (F02-C4) — un inválido enviado directamente a la API no se persiste ni llega al encolador.
@@ -82,7 +82,7 @@ public sealed class ConfirmarVehiculosTests
         var respuesta = await Lotes.ConfirmarAsync(cliente, id,
             [Lotes.Fila("XYZ987"), Lotes.Fila("NO-ES-PLACA"), Lotes.Fila("AB1234567"), Lotes.Fila("9FBTEST12345678901"), Lotes.Fila("   "), Lotes.Fila(null)], ct);
 
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, await respuesta.Content.ReadAsStringAsync(ct));
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
         (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Select(v => v.IdentificadorNorm).Should().Equal("XYZ987");
         espia.Entregas.Should().ContainSingle();
         espia.Entregas[0].DiagnosticoId.Should().Be(id);
@@ -146,7 +146,7 @@ public sealed class ConfirmarVehiculosTests
 
         // Exactamente en el límite sí se confirma.
         var justo = await Lotes.ConfirmarAsync(cliente, id, Placas(500).Select(p => Lotes.Fila(p)), ct);
-        justo.StatusCode.Should().Be(HttpStatusCode.Created, await justo.Content.ReadAsStringAsync(ct));
+        justo.StatusCode.Should().Be(HttpStatusCode.Accepted, await justo.Content.ReadAsStringAsync(ct));
         (await Lotes.TodosLosVehiculosAsync(api, ct)).Should().Be(500);
     }
 
@@ -165,7 +165,7 @@ public sealed class ConfirmarVehiculosTests
         var respuesta = await Lotes.ConfirmarAsync(cliente, id, [Lotes.Fila("ABC123", "cc", Documento), Lotes.Fila("XYZ987")], ct);
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
         texto.Should().NotContain(Documento, "la respuesta trae el documento enmascarado").And.Contain("****4050");
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         var conDocumento = vehiculos.Single(v => v.IdentificadorNorm == "ABC123");
@@ -201,7 +201,7 @@ public sealed class ConfirmarVehiculosTests
         var respuesta = await Lotes.ConfirmarAsync(cliente, id, [Lotes.Fila("ABC123", "CC", "1020304050"), Lotes.Fila("XYZ987"), Lotes.Fila("MAL")], ct);
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         espia.Entregas.Should().ContainSingle();
         var entrega = espia.Entregas[0];
@@ -266,7 +266,7 @@ public sealed class ConfirmarVehiculosTests
         textoAjena.Should().NotContain(empresas.A.Id.ToString()).And.NotContain("Lote a confirmar");
         noCreado.StatusCode.Should().Be(HttpStatusCode.Conflict, await noCreado.Content.ReadAsStringAsync(ct));
         (await Codigo(noCreado, ct)).Should().Be(ServicioCabecera.CodigoNoEditable);
-        primera.StatusCode.Should().Be(HttpStatusCode.Created, await primera.Content.ReadAsStringAsync(ct));
+        primera.StatusCode.Should().Be(HttpStatusCode.Accepted, await primera.Content.ReadAsStringAsync(ct));
         segunda.StatusCode.Should().Be(HttpStatusCode.Conflict, await segunda.Content.ReadAsStringAsync(ct));
         (await Codigo(segunda, ct)).Should().Be("VEHICULOS_YA_CONFIRMADOS");
         (await Lotes.VehiculosAsync(api, empresas.A.Id, idA, ct)).Select(v => v.IdentificadorNorm).Should().Equal("ABC123");

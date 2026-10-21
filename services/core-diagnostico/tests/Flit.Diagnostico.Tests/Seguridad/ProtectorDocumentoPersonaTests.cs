@@ -140,7 +140,7 @@ public sealed class ProtectorDocumentoPersonaTests
 
         var respuesta = await Lotes.ConfirmarAsync(cliente, id, [Lotes.Fila("ABC123", "CC", Documento), Lotes.Fila("MAL", "CC", "80808080")], ct);
 
-        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, await respuesta.Content.ReadAsStringAsync(ct));
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
         logs.Mensajes.Should().NotBeEmpty("la petición dejó logs");
         logs.Mensajes.Should().Contain(m => m.Contains(id.ToString(), StringComparison.Ordinal), "la confirmación deja su log de conteos");
         logs.Mensajes.Should().NotContain(m => m.Contains(Documento, StringComparison.Ordinal) || m.Contains("80808080", StringComparison.Ordinal));

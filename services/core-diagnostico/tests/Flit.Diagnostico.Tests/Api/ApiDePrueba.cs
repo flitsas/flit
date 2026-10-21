@@ -131,6 +131,8 @@ public sealed class ApiDePrueba : IAsyncDisposable
         // HU #13751: llaves de Data Protection protegidas con un certificado efímero (sin él el servicio no arranca).
         [CertificadoDePrueba.ClaveRuta] = CertificadoDePrueba.Ruta,
         [CertificadoDePrueba.ClaveClave] = CertificadoDePrueba.Clave,
+        // HU #13727: el trabajador hospedado de la cola no corre en las pruebas; cada prueba llama al procesador directo.
+        ["Diagnostico:Procesador:Habilitado"] = "false",
     };
 
     public HttpClient Anonimo() => App.GetTestClient();

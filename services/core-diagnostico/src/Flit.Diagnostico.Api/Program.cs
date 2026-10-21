@@ -58,10 +58,11 @@ public static class Program
         // HU #13750: crear y editar la cabecera del diagnóstico.
         builder.Services.AddScoped<Modulos.Diagnosticos.ServicioCabecera>();
         // HU #13751: Data Protection con el anillo en la base cifrado con el certificado de la configuración (fail-closed),
-        // confirmación de los vehículos del lote y el puerto al motor de consultas (en D1 no hace nada; #13719 lo reemplaza).
+        // confirmación de los vehículos del lote.
         builder.Services.AddProteccionDocumentos(builder.Configuration);
         builder.Services.AddScoped<Modulos.Vehiculos.ServicioConfirmacionVehiculos>();
-        builder.Services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Modulos.Consultas.EncoladorConsultasNulo>();
+        // HU #13727: motor de consultas (encolador real, cola durable con lease y procesador en segundo plano).
+        builder.Services.AddMotorConsultas(builder.Configuration);
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
         // HU #13725: fuente RUNT del vehículo (no conectada por defecto; simulada de Intempo solo con configuración explícita en LOCAL o DEV).

@@ -16,7 +16,8 @@ namespace Flit.Diagnostico.Api.Modulos.Vehiculos;
 /// MISMO archivo del análisis (<see cref="CargaEndpoints.CampoArchivo"/>, mismas reglas y topes: 413/415/422) y el JSON de
 /// <see cref="LoteDesdeArchivo.CampoCorrecciones"/> (decisión del usuario 2026-10-21 «Reenviar el archivo»: el análisis
 /// enmascara el documento del locatario y solo el archivo lo trae completo, R-3); el lote lo arma
-/// <see cref="LoteDesdeArchivo"/> y lo confirma <see cref="ServicioConfirmacionVehiculos"/> (201). El documento nunca vuelve
+/// <see cref="LoteDesdeArchivo"/> y lo confirma <see cref="ServicioConfirmacionVehiculos"/>; responde 202 porque los vehículos
+/// quedan encolados en el motor de consultas y el lote pasa a EN_PROCESO (HU #13727). El documento nunca vuelve
 /// completo en la respuesta. Los logs solo llevan conteos.
 /// </summary>
 internal static partial class VehiculosEndpoints
@@ -84,7 +85,7 @@ internal static partial class VehiculosEndpoints
         return Results.Json(
             new ResultadoConfirmacionDto(
                 confirmacion.DiagnosticoId, vehiculos.Count, resultado.Invalidos, resultado.Duplicados, resultado.LimiteVehiculosLote, vehiculos, estimado),
-            statusCode: StatusCodes.Status201Created);
+            statusCode: StatusCodes.Status202Accepted);
     }
 
     [LoggerMessage(EventId = 13752, Level = LogLevel.Information,

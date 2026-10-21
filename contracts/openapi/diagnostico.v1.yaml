@@ -553,8 +553,9 @@ paths:
         limite_vehiculos_lote de la copia de configuración, responde 422 y no guarda nada. En una sola transacción guarda
         los válidos en el orden del archivo, cifra el documento completo del locatario declarado (origen DECLARADO_CLIENTE; nunca en
         logs ni eventos), deja el estimado de consultas en la cabecera y entrega la lista limpia al motor de consultas
-        (en D1 la entrega no hace nada; #13719 crea las celdas y pasa el lote a EN_PROCESO). No cambia el estado de la
-        cabecera. La respuesta trae estimado_consultas solo con estimado_consultas = ANTES_DE_LANZAR.
+        (HU #13727: crea una celda PENDIENTE por vehículo y fuente del alcance, que es la cola durable del procesador, y
+        pasa el lote de CREADO a EN_PROCESO con historial AUTO). Responde 202: las consultas corren en segundo plano y
+        el avance se lee en el tablero. La respuesta trae estimado_consultas solo con estimado_consultas = ANTES_DE_LANZAR.
       requestBody:
         required: true
         content:
@@ -562,8 +563,10 @@ paths:
             schema:
               $ref: "#/components/schemas/ConfirmacionVehiculos"
       responses:
-        "201":
-          description: Vehículos confirmados (documento del locatario enmascarado «****» y los 4 últimos).
+        "202":
+          description: >
+            Vehículos confirmados y encolados; el lote queda EN_PROCESO (documento del locatario enmascarado «****» y los
+            4 últimos). Hasta HU #13727 era 201.
           content:
             application/json:
               schema:
@@ -631,7 +634,8 @@ paths:
         Después, en una sola transacción, crea la cabecera en CREADO con es_express = true y las mismas reglas de
         POST /diagnosticos (422 con su campo; 503 con CON_ANALISIS y el catálogo caído) y confirma el vehículo como
         POST /diagnosticos/{id}/vehiculos (documento del locatario cifrado con origen DECLARADO_CLIENTE, estimado en la
-        cabecera, entrega al motor de consultas). Si algo falla no queda cabecera ni vehículo. Sin nombre (o solo
+        cabecera, entrega al motor de consultas, que crea las celdas y deja el lote EN_PROCESO, HU #13727; por eso
+        `estado` llega EN_PROCESO). Si algo falla no queda cabecera ni vehículo. Sin nombre (o solo
         espacios) se autogenera «Express IDENTIFICADOR dd/mm/aaaa» con el identificador normalizado y la fecha de
         Colombia; un nombre enviado se valida como en POST /diagnosticos (máximo 150).
       requestBody:

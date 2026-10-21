@@ -23,8 +23,8 @@ internal sealed record ConfirmacionLote(Guid DiagnosticoId, ResultadoConfirmacio
 /// servidor revalida todo (<see cref="ConfirmadorVehiculos"/>): sin válidos o por encima del límite de la copia de
 /// configuración responde 422 sin guardar nada. En una transacción: guarda los válidos (documento del locatario cifrado
 /// con <see cref="IProtectorDocumentoPersona"/> y origen DECLARADO_CLIENTE, R-3), deja el estimado en la cabecera y
-/// entrega la lista limpia a <see cref="IEncoladorConsultas"/>; si el encolador falla no queda nada. No cambia el estado
-/// de la cabecera. Los logs solo llevan conteos.
+/// entrega la lista limpia a <see cref="IEncoladorConsultas"/>, que crea las celdas y pasa el lote a EN_PROCESO (HU #13727);
+/// si el encolador falla no queda nada. Los logs solo llevan conteos.
 /// </summary>
 internal sealed partial class ServicioConfirmacionVehiculos(
     DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IEncoladorConsultas encolador, ILogger<ServicioConfirmacionVehiculos> log)
