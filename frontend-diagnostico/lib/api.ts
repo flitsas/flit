@@ -7,6 +7,10 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly code?: string,
+    /** Campo del cuerpo que incumple la regla (ErrorRegla.campo, en los 422 de la cabecera). */
+    readonly campo?: string,
+    /** Segundos de la cabecera Retry-After (503 CATALOGO_NO_DISPONIBLE). */
+    readonly retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -33,7 +37,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   });
   if (response.status === 204) return undefined as T;
 
-  const data = (await safeJson(response)) as { code?: string; error?: string; detail?: string; title?: string } | null;
+  const data = (await safeJson(response)) as { code?: string; error?: string; detail?: string; title?: string; campo?: string } | null;
   if (response.ok) return data as T;
 
   if (response.status === 401) {
@@ -42,7 +46,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     if (isReauthenticating()) return waitForReload<T>();
   }
 
-  throw new ApiError(response.status, friendlyMessage(response.status, data), data?.code);
+  throw new ApiError(response.status, friendlyMessage(response.status, data), data?.code, data?.campo, retryAfter(response));
 }
 
 function friendlyMessage(status: number, data: { error?: string; detail?: string; title?: string } | null): string {
@@ -52,6 +56,11 @@ function friendlyMessage(status: number, data: { error?: string; detail?: string
   if (status === 403) return "No tienes permiso para esta acción.";
   if (status === 404) return "No se encontró lo que buscas.";
   return "No se pudo completar la acción.";
+}
+
+function retryAfter(response: Response): number | undefined {
+  const valor = Number.parseInt(response.headers.get("Retry-After") ?? "", 10);
+  return Number.isFinite(valor) && valor >= 0 ? valor : undefined;
 }
 
 async function safeJson(response: Response): Promise<unknown> {
