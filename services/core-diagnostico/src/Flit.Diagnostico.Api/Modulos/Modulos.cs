@@ -50,7 +50,8 @@ public static class Modulos
 
     /// <summary>
     /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
-    /// el procesador y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar. El trabajador en segundo
+    /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza), el procesador
+    /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar. El trabajador en segundo
     /// plano solo se registra con <c>Diagnostico:Procesador:Habilitado=true</c>; no mira <c>IHostEnvironment</c>.
     /// </summary>
     public static IServiceCollection AddMotorConsultas(this IServiceCollection services, IConfiguration configuration)
@@ -58,6 +59,7 @@ public static class Modulos
         ArgumentNullException.ThrowIfNull(configuration);
         services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Consultas.EncoladorConsultas>();
         services.AddScoped<Trabajos.ColaConsultas>();
+        services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaRunt>();
         services.AddTransient<Trabajos.ProcesadorConsultas>();
         services.AddOptions<Trabajos.OpcionesProcesador>()
             .Bind(configuration.GetSection(Trabajos.OpcionesProcesador.Seccion))

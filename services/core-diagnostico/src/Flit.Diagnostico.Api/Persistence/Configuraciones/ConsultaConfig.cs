@@ -31,6 +31,7 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
             t.HasCheckConstraint("ck_consultas_origen", $"origen IS NULL OR origen IN ({CodigosDeEnum.ListaSql<OrigenCelda>()})");
             t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
             t.HasCheckConstraint("ck_consultas_intentos_auto", "intentos_auto >= 0");
+            t.HasCheckConstraint("ck_consultas_tipo_error", $"tipo_error IS NULL OR estado = '{CodigosDeEnum.Codigo(EstadoCelda.Error)}'");
         });
         builder.HasKey(x => x.Id).HasName("pk_consultas");
         builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_consultas_tenant_id");
@@ -47,6 +48,9 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
         builder.Property(x => x.MotivoNa)
             .HasConversion(CodigosDeEnum.Convertidor<MotivoNa>()).HasMaxLength(32)
             .HasComment("SERVICIO_PUBLICO, DEPARTAMENTO_NO_SOPORTADO o SIN_DOCUMENTO_LOCATARIO; solo con estado NA (R-9, R-3).");
+        builder.Property(x => x.TipoError)
+            .HasMaxLength(32)
+            .HasComment("Causa del ERROR (HU #13730): código de TipoErrorFuente o BLOQUEADA_POR_RUNT; solo con estado ERROR.");
         builder.Property(x => x.Origen)
             .HasConversion(CodigosDeEnum.Convertidor<OrigenCelda>()).HasMaxLength(8)
             .HasComment("API o MANUAL; null mientras no hay dato.");

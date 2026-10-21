@@ -379,6 +379,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("tenant_id")
                         .HasComment("Empresa dueña del lote (la misma del vehículo).");
 
+                    b.Property<string>("TipoError")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tipo_error")
+                        .HasComment("Causa del ERROR (HU #13730): código de TipoErrorFuente o BLOQUEADA_POR_RUNT; solo con estado ERROR.");
+
                     b.Property<Guid?>("UsuarioManualId")
                         .HasColumnType("uuid")
                         .HasColumnName("usuario_manual_id")
@@ -439,6 +445,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_consultas_origen", "origen IS NULL OR origen IN ('API', 'MANUAL')");
 
                             t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
+
+                            t.HasCheckConstraint("ck_consultas_tipo_error", "tipo_error IS NULL OR estado = 'ERROR'");
 
                             t.HasCheckConstraint("ck_motivo_na", "(estado = 'NA') = (motivo_na IS NOT NULL)");
                         });

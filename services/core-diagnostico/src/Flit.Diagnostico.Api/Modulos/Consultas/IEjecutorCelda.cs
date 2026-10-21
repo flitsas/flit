@@ -22,14 +22,27 @@ public interface IEjecutorCelda
 /// <summary>La celda tomada y la base con la empresa de esa celda.</summary>
 public sealed record ContextoCelda(CeldaTomada Celda, DiagnosticoDb Db);
 
-/// <summary>Cómo queda una celda tras ejecutarla: completada con su dato, en error o N/A con motivo.</summary>
-public sealed record ResultadoCelda(EstadoCelda Estado, string? Payload, MotivoNa? MotivoNa, OrigenCelda? Origen, DateTimeOffset? DatoObtenidoEn)
+/// <summary>
+/// Lo que se escribe junto con el cierre de una celda, en la MISMA transacción y solo si el lease sigue siendo de quien la tomó
+/// (HU #13730): recibe el contexto de la celda (con su empresa) y la versión del tablero de ese cierre. Lo que modifique con
+/// el contexto lo guarda el escritor; no debe llamar a <c>SaveChanges</c>.
+/// </summary>
+public delegate Task EfectosDeCierre(Persistence.DiagnosticoDb db, long versionTablero, CancellationToken ct);
+
+/// <summary>
+/// Cómo queda una celda tras ejecutarla: completada con su dato, en error (con su tipo) o N/A con motivo, y los efectos que se
+/// guardan con el cierre (los datos del vehículo, en la RUNT).
+/// </summary>
+public sealed record ResultadoCelda(
+    EstadoCelda Estado, string? Payload, MotivoNa? MotivoNa, OrigenCelda? Origen, DateTimeOffset? DatoObtenidoEn, string? TipoError = null,
+    EfectosDeCierre? Efectos = null)
 {
     /// <summary>Con dato de la fuente (objeto JSON normalizado, R-13).</summary>
-    public static ResultadoCelda Completado(string payload, DateTimeOffset obtenidoEn) => new(EstadoCelda.Completado, payload, null, OrigenCelda.Api, obtenidoEn);
+    public static ResultadoCelda Completado(string payload, DateTimeOffset obtenidoEn, EfectosDeCierre? efectos = null) =>
+        new(EstadoCelda.Completado, payload, null, OrigenCelda.Api, obtenidoEn, null, efectos);
 
-    /// <summary>Falló; se puede reprocesar.</summary>
-    public static ResultadoCelda Error() => new(EstadoCelda.Error, null, null, null, null);
+    /// <summary>Falló; se puede reprocesar. <paramref name="tipoError"/> es el código de la causa, si se conoce.</summary>
+    public static ResultadoCelda Error(string? tipoError = null) => new(EstadoCelda.Error, null, null, null, null, tipoError);
 
     /// <summary>No aplica, con su motivo.</summary>
     public static ResultadoCelda Na(MotivoNa motivo) => new(EstadoCelda.Na, null, motivo, null, null);

@@ -12,7 +12,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// de la celda (lo fija el procesador): la escritura pasa por EF, así que <c>TenantFilter</c> filtra la lectura y valida el
 /// guardado, y la subida de la versión (<c>ExecuteUpdate</c>) también lleva el filtro. Solo cierra si la celda sigue siendo
 /// de ESE lease (EN_CURSO con el mismo <c>lease_hasta</c>, y el <c>xmin</c> de la lectura): si venció y otro procesador la
-/// retomó, no pisa su trabajo y devuelve false.
+/// retomó, no pisa su trabajo y devuelve false. Los <see cref="ResultadoCelda.Efectos"/> (datos del vehículo, liberación o
+/// bloqueo de sus demás celdas, HU #13730) se aplican en esa misma transacción: o queda todo o no queda nada.
 /// </summary>
 internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
 {
@@ -39,11 +40,14 @@ internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
             celda.Estado = resultado.Estado;
             celda.Payload = resultado.Payload;
             celda.MotivoNa = resultado.MotivoNa;
+            celda.TipoError = resultado.Estado == EstadoCelda.Error ? resultado.TipoError : null;
             celda.Origen = resultado.Origen;
             celda.DatoObtenidoEn = resultado.DatoObtenidoEn;
             celda.LeaseHasta = null;
             celda.ActualizadoEn = reloj.GetUtcNow();
             celda.VersionTablero = version;
+            if (resultado.Efectos is { } efectos)
+                await efectos(db, version, ct).ConfigureAwait(false);
             try
             {
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);

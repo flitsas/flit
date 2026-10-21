@@ -29,6 +29,12 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     /// <summary>Motivo de N/A; presente si y solo si <see cref="Estado"/> es <see cref="EstadoCelda.Na"/>.</summary>
     public MotivoNa? MotivoNa { get; set; }
 
+    /// <summary>
+    /// Por qué la celda está en ERROR (HU #13730): el código del <c>TipoErrorFuente</c> de la fuente o
+    /// <c>BLOQUEADA_POR_RUNT</c> si no se consultó porque la RUNT del vehículo falló; null fuera de ERROR o sin causa tipada.
+    /// </summary>
+    public string? TipoError { get; set; }
+
     /// <summary>De dónde salió el dato; null mientras no hay dato.</summary>
     public OrigenCelda? Origen { get; set; }
 

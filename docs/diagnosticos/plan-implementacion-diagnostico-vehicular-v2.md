@@ -732,6 +732,7 @@ CREATE TABLE diagnostico.consultas (
   motivo_na          varchar(32) NULL CHECK (motivo_na IN
                      ('SERVICIO_PUBLICO','DEPARTAMENTO_NO_SOPORTADO','SIN_DOCUMENTO_LOCATARIO')),  -- R-9, R-3
   origen             varchar(8) NULL CHECK (origen IN ('API','MANUAL')),
+  tipo_error         varchar(32) NULL,                  -- causa del ERROR: código de TipoErrorFuente o BLOQUEADA_POR_RUNT (HU #13730, D2_TipoErrorCelda); ck_consultas_tipo_error: solo con estado ERROR
   payload            jsonb NULL CHECK (payload IS NULL OR jsonb_typeof(payload) = 'object'),  -- normalizado, nunca el crudo (R-13); @pii:medium
   usuario_manual_id  uuid NULL,                         -- nunca en DTO de cliente
   dato_obtenido_en   timestamptz NULL,                  -- fecha y hora del dato que muestra la celda (D-10)

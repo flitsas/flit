@@ -13,7 +13,9 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 /// toma nada), las ejecuta en paralelo y cierra cada una con <see cref="EscritorCeldas"/>. Cada ejecución fija la empresa de
 /// su celda en un contexto propio ANTES de leer o escribir. Si el proceso se cancela (el pod se detiene) la celda queda
 /// EN_CURSO con su lease y otra réplica la retoma al vencer; un fallo inesperado del ejecutor la deja en ERROR (los
-/// reintentos de errores transitorios son de F03-H6). Los logs llevan ids, fuente y tipo de error, nunca datos de la fuente.
+/// reintentos de errores transitorios son de F03-H6). Al cerrar la RUNT de un vehículo, <see cref="OrquestadorVehiculo"/> libera
+/// o bloquea sus demás celdas en la misma transacción (HU #13730). Si hay más de un ejecutor para una fuente, gana el primero
+/// registrado. Los logs llevan ids, fuente y tipo de error, nunca datos de la fuente.
 /// </summary>
 internal sealed partial class ProcesadorConsultas(
     IServiceScopeFactory scopes, IOptions<OpcionesProcesador> opciones, TimeProvider reloj, ILogger<ProcesadorConsultas> log)
@@ -41,6 +43,7 @@ internal sealed partial class ProcesadorConsultas(
     private async Task EjecutarAsync(CeldaTomada celda, CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
+        // Gana el primero registrado para la fuente: las pruebas ponen su doble antes que Program (como con TryAdd).
         var ejecutor = scope.ServiceProvider.GetServices<IEjecutorCelda>().First(e => e.Fuente == celda.Fuente);
         await using var db = new DiagnosticoDb(
             scope.ServiceProvider.GetRequiredService<DbContextOptions<DiagnosticoDb>>(), new EmpresaDeLaCelda(celda.TenantId));
@@ -63,6 +66,8 @@ internal sealed partial class ProcesadorConsultas(
             resultado = ResultadoCelda.Error();
         }
 
+        // RUNT va primero (HU #13730): su cierre libera o bloquea las demás celdas del vehículo en la misma transacción.
+        resultado = OrquestadorVehiculo.TrasEjecutar(celda, resultado, reloj);
         if (!await new EscritorCeldas(db, reloj).CerrarAsync(celda, resultado, ct).ConfigureAwait(false))
             LeasePerdido(log, celda.Id, celda.Fuente);
     }
