@@ -407,7 +407,10 @@ Basado en la plantilla [.env.prod.example](../.env.prod.example). Variables a te
 | `CORS_ORIGIN` | ✅ | URL pública **exacta** del frontend (esquema + host, **sin** barra final), p. ej. `https://dev.flitsas.online`. Si no coincide con el origen real, el navegador bloquea las respuestas. |
 | `VERIFIK_API_TOKEN` | ✅ | Token Verifik (RUNT). Secreto. |
 | `VERIFIK_BASE_URL` | ⛔ opc. | Default `https://api.verifik.co`. |
-| `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default `30`. |
+| `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Verifik. |
+| `KYVERUM_RUNT_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum RUNT. |
+| `KYVERUM_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum Verify. |
+| `KYVERUM_FINES_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum comparendos. |
 | `FRONTEND_PORT` / `GATEWAY_PORT` / `CORE_API_PORT` / `PYTHON_ML_PORT` / `MIGRACION_API_PORT` | ⛔ opc.* | Puertos del ambiente (DEV 40xx / QA 50xx / PDN 60xx). *El **CD los inyecta** automáticamente; defínelos en el `.env` solo para operación manual. Defaults DEV. `MIGRACION_API_PORT` (4030/5030/6030) no se publica en el host, pero lo leen **dos** servicios (migracion-api y el destino del gateway): si falta o diverge, `/admin/migracion` responde 502 sin cuerpo. |
 | `CORE_API_TAG` / `FRONTEND_TAG` / `PYTHON_ML_TAG` | ⛔ opc.* | Default `latest`. El **CD los inyecta**: tag móvil (`dev`/`qa`) en DEV/QA y `sha-<commit>` inmutable en PDN. **Para rollback manual**, fija el `sha-<commit>` deseado. |
 | `COMPOSE_PROJECT_NAME` | ⛔ opc. | El compose ya fija `name: flitdev`. Solo defínela si necesitas aislar varias instancias en el mismo VPS (evita que `up --remove-orphans` borre contenedores de otro stack). |
