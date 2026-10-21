@@ -20,8 +20,9 @@ namespace Flit.Diagnostico.Tests.Api;
 /// <summary>
 /// La API de Diagnóstico de verdad (<c>Program.Build</c>) con tokens de producto firmados con una llave propia servida
 /// como JWKS (patrón de Comparendos). Con base: un Postgres real con una base efímera, migrada como al arrancar
-/// (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres se omite en local y falla en CI. Sin base: la cadena apunta a un
-/// puerto cerrado, para probar lo que no depende de la base o su ausencia.
+/// (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres se omite en local y falla en CI, también si a CI le falta
+/// <c>ConnectionStrings__Core</c> (HU #13722). Sin base: la cadena apunta a un puerto cerrado, para probar lo que no depende
+/// de la base o su ausencia. <c>mapear</c> agrega rutas de prueba antes de arrancar (sondas de fuga, endpoints fantasma).
 /// </summary>
 /// <example>
 /// <code>
@@ -52,9 +53,15 @@ public sealed class ApiDePrueba : IAsyncDisposable
     public string BaseDeDatos { get; }
 
     /// <summary>Crea una base efímera, arranca la API y aplica sus migraciones como al arrancar.</summary>
-    public static async Task<ApiDePrueba> ConBaseAsync()
+    public static async Task<ApiDePrueba> ConBaseAsync(Action<WebApplication>? mapear = null, Func<string, string?>? entorno = null)
     {
-        var server = Environment.GetEnvironmentVariable("ConnectionStrings__Core") ?? $"Host=127.0.0.1;Port=5432;Username={Environment.UserName}";
+        entorno ??= Environment.GetEnvironmentVariable;
+        var enCi = string.Equals(entorno("CI"), "true", StringComparison.OrdinalIgnoreCase);
+        var server = entorno("ConnectionStrings__Core");
+        if (server is null && enCi)
+            throw new InvalidOperationException(
+                "CI=true sin ConnectionStrings__Core: en CI las pruebas de integración no se omiten. Configure el Postgres del job.");
+        server ??= $"Host=127.0.0.1;Port=5432;Username={Environment.UserName}";
         var api = new ApiDePrueba(new NpgsqlConnectionStringBuilder(server) { Database = $"flit_dgn_{Guid.NewGuid():N}"[..30] }.ConnectionString);
         try
         {
@@ -64,23 +71,25 @@ public sealed class ApiDePrueba : IAsyncDisposable
             await create.ExecuteNonQueryAsync();
             api._baseCreada = true;
         }
-        catch (NpgsqlException ex) when (!string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase))
+        catch (NpgsqlException ex) when (!enCi)
         {
             api.Omitir = $"Postgres no alcanzable: {ex.Message}";
             return api;
         }
 
         api.App = api.Construir();
+        mapear?.Invoke(api.App);
         await Program.MigrateAsync(api.App);
         await api.App.StartAsync();
         return api;
     }
 
     /// <summary>Arranca la API con la base inalcanzable y sin migrar.</summary>
-    public static async Task<ApiDePrueba> SinBaseAsync()
+    public static async Task<ApiDePrueba> SinBaseAsync(Action<WebApplication>? mapear = null)
     {
         var api = new ApiDePrueba(BaseInalcanzable);
         api.App = api.Construir();
+        mapear?.Invoke(api.App);
         await api.App.StartAsync();
         return api;
     }
@@ -107,14 +116,14 @@ public sealed class ApiDePrueba : IAsyncDisposable
         return client;
     }
 
-    /// <summary>Token de producto firmado con la llave del JWKS de prueba (empresa y usuario ficticios).</summary>
-    public string Token(string audiencia = ServicioSettings.Codigo)
+    /// <summary>Token de producto firmado con la llave del JWKS de prueba (usuario ficticio; empresa ficticia si no se da).</summary>
+    public string Token(string audiencia = ServicioSettings.Codigo, Guid? empresa = null)
     {
         var claims = new List<Claim>
         {
             new("sub", Guid.NewGuid().ToString()),
             new("email", "operador@empresa.test"),
-            new("tenant_id", Guid.NewGuid().ToString()),
+            new("tenant_id", (empresa ?? Guid.NewGuid()).ToString()),
             new("company_name", "Empresa de prueba"),
             new("role_code", "admin_diagnostico"),
             new("permissions", "[]", JsonClaimValueTypes.JsonArray),

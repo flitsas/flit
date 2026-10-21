@@ -23,6 +23,57 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Comun.LecturaBackoffice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<Guid>("EmpresaConsultada")
+                        .HasColumnType("uuid")
+                        .HasColumnName("empresa_consultada")
+                        .HasComment("Empresa cuyos datos se leyeron (?empresa=).");
+
+                    b.Property<DateTimeOffset>("Fecha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha")
+                        .HasDefaultValueSql("now()")
+                        .HasComment("Momento de la lectura.");
+
+                    b.Property<string>("Ruta")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("ruta")
+                        .HasComment("Ruta y consulta leídas, sin cuerpo.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa del lector (token del backoffice).");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Usuario que leyó (claim sub, seudónimo).");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lecturas_backoffice");
+
+                    b.HasIndex("TenantId", "Fecha")
+                        .HasDatabaseName("ix_lecturas_backoffice_tenant_fecha");
+
+                    b.HasIndex("TenantId", "EmpresaConsultada", "Fecha")
+                        .HasDatabaseName("ix_lecturas_backoffice_tenant_empresa_fecha");
+
+                    b.ToTable("lecturas_backoffice", "diagnostico", t =>
+                        {
+                            t.HasComment("Lecturas entre empresas del backoffice FLIT (D-16, ADR-0069/ADR-0072). Solo inserción.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Platform.Sdk.Messaging.InboxMessage", b =>
                 {
                     b.Property<Guid>("EventId")
