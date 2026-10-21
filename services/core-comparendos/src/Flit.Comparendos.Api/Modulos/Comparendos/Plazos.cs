@@ -11,6 +11,12 @@ namespace Flit.Comparendos.Api.Modulos.Comparendos;
 /// </summary>
 public static class Plazos
 {
+    /// <summary>
+    /// HU #13784 (hallazgo B16-1): SIMIT y la fuente municipal escriben 01-01-2000 cuando no tienen la fecha de
+    /// notificación. Como fecha real daba comparendos «Prescritos» sin avisos ni descuentos: se trata como ausente.
+    /// </summary>
+    public static readonly DateOnly FechaVaciaDeLasFuentes = new(2000, 1, 1);
+
     public static TipoImposicion Tipo(Comparendo c)
     {
         ArgumentNullException.ThrowIfNull(c);
