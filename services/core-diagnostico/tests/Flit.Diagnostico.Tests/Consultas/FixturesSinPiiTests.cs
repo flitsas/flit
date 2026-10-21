@@ -13,9 +13,10 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// <item>Placas: <c>TST</c> + tres dígitos (<see cref="RangoPlaca"/>).</item>
 /// <item>VIN: <c>9ZZPRUEBA</c> + ocho dígitos (<see cref="RangoVin"/>).</item>
 /// <item>Documentos (cédula y NIT): prefijo <c>99999</c> + cuatro o cinco dígitos (<see cref="RangoDocumento"/>); cualquier
-/// otra cadena de seis o más dígitos en un fixture también debe caer en ese rango.</item>
-/// <item>Nombres: solo los de <see cref="NombresFicticios"/>.</item>
-/// <item>Sin direcciones, teléfonos ni correos.</item>
+/// otra cadena de cinco o más dígitos en un fixture también debe caer en ese rango (salvo GUID y fechas).</item>
+/// <item>Nombres: solo los de <see cref="NombresFicticios"/>; todo texto sin dígitos bajo una clave que contenga
+/// <c>nombre</c>, <c>razon</c> o <c>name</c> (sin distinguir mayúsculas) se trata como nombre.</item>
+/// <item>Sin direcciones, teléfonos ni correos: los correos se buscan en todo texto, no solo por clave.</item>
 /// </list>
 /// </summary>
 /// <example>
@@ -69,8 +70,13 @@ public sealed partial class FixturesSinPiiTests
     [GeneratedRegex("^99999[0-9]{4,5}$")]
     public static partial Regex RangoDocumento();
 
-    [GeneratedRegex("[0-9]{6,}")]
+    [GeneratedRegex("[0-9]{5,}")]
     private static partial Regex SecuenciaLarga();
+
+    [GeneratedRegex(@"[^\s@]+@[^\s@]+\.[^\s@]+")]
+    private static partial Regex Correo();
+
+    private static readonly string[] FragmentosClaveNombre = ["nombre", "razon", "name"];
 
     [Fact]
     public void Fixtures_cubren_persona_natural_NIT_y_leasing_con_locatario_C_y_N()
@@ -87,13 +93,74 @@ public sealed partial class FixturesSinPiiTests
         var hallazgos = new List<string>();
         var documentos = 0;
         foreach (var (archivo, json) in fixtures)
-        {
-            using var doc = JsonDocument.Parse(json);
-            Revisar(archivo, "$", null, doc.RootElement, hallazgos, ref documentos);
-        }
+            documentos += Analizar(archivo, json, hallazgos);
 
         hallazgos.Should().BeEmpty();
         documentos.Should().BeGreaterThanOrEqualTo(8, "los fixtures traen documentos de propietarios y locatarios");
+    }
+
+    /// <summary>
+    /// JSON inventado en memoria (nunca un fixture ni una muestra) con un caso por regla endurecida tras la revisión del
+    /// security-agent: nombres bajo claves no listadas, correo en un campo libre y un número de cinco dígitos fuera de rango.
+    /// </summary>
+    private const string JsonConFugas = """
+        {
+          "informacionGeneral": { "noPlaca": "TST001", "modelo": "2020" },
+          "propietariosActuales": [
+            {
+              "noDocumento": "999990001",
+              "nombrePropietario": "NOMBRE INVENTADO FUERA DE LISTA",
+              "RazonSocialTitular": "OTRA RAZON INVENTADA",
+              "nombreRazonSocial": "PERSONA PRUEBA UNO",
+              "observacion": "contacto persona@ejemplo.test",
+              "referencia": "12345",
+              "codigo": 54321
+            }
+          ]
+        }
+        """;
+
+    // (a) Texto sin dígitos bajo cualquier clave con nombre/razon/name, salvo los de NombresFicticios.
+    [Fact]
+    public void Regla_nombre_detecta_texto_bajo_clave_con_nombre_razon_o_name_fuera_de_la_lista()
+    {
+        var hallazgos = new List<string>();
+        Analizar("en-memoria", JsonConFugas, hallazgos);
+
+        hallazgos.Should().Contain(h => h.Contains(".nombrePropietario") && h.Contains("nombre fuera de la lista ficticia"));
+        hallazgos.Should().Contain(h => h.Contains(".RazonSocialTitular") && h.Contains("nombre fuera de la lista ficticia"));
+        hallazgos.Should().NotContain(h => h.Contains(".nombreRazonSocial"), "PERSONA PRUEBA UNO está en NombresFicticios");
+    }
+
+    // (b) Correo (@ + dominio) en cualquier texto, no solo bajo claves de contacto.
+    [Fact]
+    public void Regla_correo_detecta_correo_en_cualquier_texto()
+    {
+        var hallazgos = new List<string>();
+        Analizar("en-memoria", JsonConFugas, hallazgos);
+
+        hallazgos.Should().Contain(h => h.Contains(".observacion") && h.Contains("correo"));
+    }
+
+    // (c) Secuencias de cinco o más dígitos fuera del rango ficticio, en texto y en número.
+    [Fact]
+    public void Regla_secuencia_detecta_cinco_digitos_fuera_del_rango_ficticio()
+    {
+        var hallazgos = new List<string>();
+        Analizar("en-memoria", JsonConFugas, hallazgos);
+
+        hallazgos.Should().Contain(h => h.Contains(".referencia") && h.Contains("fuera del rango ficticio"));
+        hallazgos.Should().Contain(h => h.Contains(".codigo") && h.Contains("fuera del rango ficticio"));
+        hallazgos.Should().NotContain(h => h.Contains(".modelo") || h.Contains(".noPlaca") || h.Contains(".noDocumento"));
+    }
+
+    /// <summary>Revisa un JSON y agrega sus hallazgos; devuelve cuántos documentos encontró.</summary>
+    private static int Analizar(string archivo, string json, List<string> hallazgos)
+    {
+        var documentos = 0;
+        using var doc = JsonDocument.Parse(json);
+        Revisar(archivo, "$", null, doc.RootElement, hallazgos, ref documentos);
+        return documentos;
     }
 
     private static void Revisar(string archivo, string ruta, string? clave, JsonElement valor, List<string> hallazgos, ref int documentos)
@@ -124,6 +191,8 @@ public sealed partial class FixturesSinPiiTests
 
     private static void RevisarTexto(string archivo, string ruta, string? clave, string texto, List<string> hallazgos, ref int documentos)
     {
+        if (Correo().IsMatch(texto))
+            hallazgos.Add($"{archivo} {ruta}: correo no permitido");
         if (clave is null || texto.Length == 0)
             return;
         if (ClavesDocumento.Contains(clave))
@@ -133,6 +202,11 @@ public sealed partial class FixturesSinPiiTests
                 hallazgos.Add($"{archivo} {ruta}: documento fuera del rango ficticio");
         }
         else if (ClavesNombre.Contains(clave))
+        {
+            if (!NombresFicticios.Contains(texto))
+                hallazgos.Add($"{archivo} {ruta}: nombre fuera de la lista ficticia");
+        }
+        else if (EsClaveNombre(clave) && !texto.Any(char.IsAsciiDigit))
         {
             if (!NombresFicticios.Contains(texto))
                 hallazgos.Add($"{archivo} {ruta}: nombre fuera de la lista ficticia");
@@ -152,6 +226,9 @@ public sealed partial class FixturesSinPiiTests
             hallazgos.Add($"{archivo} {ruta}: secuencia de dígitos fuera del rango ficticio");
         }
     }
+
+    private static bool EsClaveNombre(string clave) =>
+        FragmentosClaveNombre.Any(f => clave.Contains(f, StringComparison.OrdinalIgnoreCase));
 
     private static bool EsFecha(string texto) => DateTimeOffset.TryParse(texto, System.Globalization.CultureInfo.InvariantCulture, out _);
 }
