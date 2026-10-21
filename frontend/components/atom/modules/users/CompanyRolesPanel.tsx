@@ -103,7 +103,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
                   <th
                     key={col}
                     scope="col"
-                    className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-center" : ""}`}
+                    className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-right" : ""}`}
                     style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     {col}
@@ -132,7 +132,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
                   <td className="border-y px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "#557EFF" }}>
                     {r.permissionCount}
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-center" style={{ borderColor: "#DFE5ED" }}>
+                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
                     {/* HU #13653: un solo botón «Acciones» con menú, como trámites y mandatos. */}
                     <RowActionsMenu
                       ariaLabel={`Acciones de ${r.name}`}
