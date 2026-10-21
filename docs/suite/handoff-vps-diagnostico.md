@@ -81,6 +81,47 @@ DIAGNOSTICO_IDENTIDAD_ADDRESS=http://core-identity:8083   # obligatoria: vacía 
 
 La suscripción simulada es solo para pruebas en local y no se pone en ningún ambiente.
 
+El compose ya fija, sin variable del `.env`: `Diagnostico__Tramites__Address=http://core-api:${CORE_API_GRPC_PORT}`
+(sin ella `GET /tipos-tramite` responde 503) y `Diagnostico__Fuentes__ImpuestoDisponible=false`.
+
+### 4.1 Certificado de Data Protection (HU #13751, obligatorio)
+
+Los documentos de propietario y locatario se guardan cifrados. El anillo de llaves vive en
+`diagnostico.data_protection_keys`, cifrado con un certificado `.pfx` RSA que **no** está en la base, ni en el repo, ni en
+la imagen. Sin él (o con clave errada) `core-diagnostico` **no arranca**, en ningún ambiente (los tres corren como
+Development: no hay excepción).
+
+**Uno por ambiente, con respaldo.** Perder el certificado o su clave deja **ilegibles para siempre** los documentos ya
+cifrados en ese ambiente. Antes de encender, guardar `.pfx` + clave en el gestor de secretos del equipo (fuera del VPS).
+No copiar el de DEV a QA/PDN.
+
+```bash
+sudo install -d -m 700 /etc/flit/secrets
+CLAVE=$(openssl rand -base64 32 | tr -d '/+=')
+openssl req -x509 -newkey rsa:3072 -nodes -days 3650 -subj "/CN=flit-diagnostico-<amb>"         -keyout /tmp/dp.key -out /tmp/dp.crt
+sudo openssl pkcs12 -export -inkey /tmp/dp.key -in /tmp/dp.crt -out /etc/flit/secrets/diagnostico-dp.pfx -passout pass:"$CLAVE"
+shred -u /tmp/dp.key /tmp/dp.crt
+sudo chmod 400 /etc/flit/secrets/diagnostico-dp.pfx   # legible por el usuario con que corre el contenedor
+```
+
+En el `.env` (variables nuevas):
+
+```
+DIAGNOSTICO_DP_CERT_FILE=/etc/flit/secrets/diagnostico-dp.pfx   # se monta como secreto en /run/secrets/diagnostico_dp_pfx
+DIAGNOSTICO_DP_CERT_PASSWORD=<CLAVE>
+```
+
+El compose pasa `Diagnostico__DataProtection__CertificadoRuta=/run/secrets/diagnostico_dp_pfx` y
+`Diagnostico__DataProtection__CertificadoClave=${DIAGNOSTICO_DP_CERT_PASSWORD}`. En DEV/QA por GitOps el equivalente es
+un sealed secret con el `.pfx` montado como archivo y la clave como variable en `flit-gitops/services/flit2-<amb>/`.
+
+**Comprobar:** el log de arranque no dice «no puede arrancar: las llaves de Data Protection…» y `/health/ready` responde.
+**Volver atrás:** detener el servicio (§7); nunca borrar el certificado ni las filas de `data_protection_keys`.
+
+**Rotación (pendiente, sin procedimiento aún).** Hoy el servicio carga un solo certificado: reemplazarlo deja sin poder
+descifrar el anillo existente. Hasta que exista soporte para certificados anteriores (solo descifrado) y un runbook de
+rotación, **no rotar**; si el certificado se compromete, escalar al líder técnico antes de tocar nada.
+
 ## 5. Encender
 
 ```bash

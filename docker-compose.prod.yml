@@ -484,6 +484,17 @@ services:
       # Suscripción por petición (HU #13726, fail-closed): el gRPC de Identidad. Vacío = ninguna empresa habilitada.
       # La suscripción simulada es solo para pruebas en local: no va en ningún ambiente.
       Diagnostico__Identidad__Address: ${DIAGNOSTICO_IDENTIDAD_ADDRESS:-}
+      # Tipos de trámite publicados (GET /tipos-tramite) por el gRPC ListarTiposTramite de core-api. Sin ella: 503.
+      Diagnostico__Tramites__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
+      # Fuente de impuestos aún sin proveedor: apagada en los tres ambientes (se revisa al cerrar #13716).
+      Diagnostico__Fuentes__ImpuestoDisponible: "false"
+      # Data Protection (HU #13751, fail-closed): el anillo de llaves en la base va cifrado con este certificado RSA.
+      # El .pfx vive FUERA del repo (DIAGNOSTICO_DP_CERT_FILE, ver secrets: al final) y entra como secreto; la clave
+      # sale del .env del ambiente. Perder el certificado deja ilegibles los documentos cifrados: respaldo obligatorio.
+      Diagnostico__DataProtection__CertificadoRuta: /run/secrets/diagnostico_dp_pfx
+      Diagnostico__DataProtection__CertificadoClave: ${DIAGNOSTICO_DP_CERT_PASSWORD:-}
+    secrets:
+      - diagnostico_dp_pfx
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_DIAGNOSTICO_PORT:-4029}/health/ready"]
       interval: 30s
@@ -1159,6 +1170,13 @@ volumes:
   observabilidad-datos:
   # HU #13349: datos del broker (vhost, colas y mensajes durables).
   rabbitmq-datos:
+
+# Secretos de archivo (montados en /run/secrets/<nombre>, nunca dentro del repo ni de la imagen).
+secrets:
+  # HU #13751: certificado .pfx (RSA con llave privada) que protege las llaves de Data Protection de core-diagnostico.
+  # Uno por ambiente, con respaldo fuera del VPS. Ruta en DIAGNOSTICO_DP_CERT_FILE del .env del ambiente.
+  diagnostico_dp_pfx:
+    file: ${DIAGNOSTICO_DP_CERT_FILE:-/etc/flit/secrets/diagnostico-dp.pfx}
 
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
 # Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
