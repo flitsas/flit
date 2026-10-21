@@ -11,7 +11,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// <c>disparador=AUTO</c> y <c>usuario_id</c> nulo. El procesador lo inserta en la MISMA transacción que cierra la celda
 /// (<see cref="EscritorCeldas"/>); si el lease se perdió y la celda no se cierra, lo guarda solo (<see cref="GuardarSoloAsync"/>):
 /// la llamada se hizo y queda auditada. Una ejecución que devuelve N/A no llamó a ninguna fuente y no deja intento. Escribe con
-/// el contexto de la empresa de la celda (<c>TenantFilter.ValidarEscritura</c>).
+/// el contexto de la empresa de la celda (<c>TenantFilter.ValidarEscritura</c>). La reutilización del mismo día (HU #13739, D-10)
+/// también deja su intento, con <c>desde_cache=true</c> y sin servicio ni transacción: no se llamó a la fuente ni hubo consumo.
 /// </summary>
 /// <example>
 /// <code>
@@ -53,6 +54,7 @@ internal static class RegistroIntentos
             TipoError = exito ? null : resultado.TipoError,
             MensajeError = exito ? null : Recortar(datos?.MensajeError, LargoMensaje),
             TransaccionProveedorId = Recortar(datos?.TransaccionProveedorId, LargoTransaccion),
+            DesdeCache = exito && resultado.ReutilizadaDeId is not null,
             UsuarioId = null,
         };
     }

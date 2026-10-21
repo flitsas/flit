@@ -2,6 +2,7 @@ using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Vehiculos;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
 
@@ -37,20 +38,49 @@ internal static class DocumentosVehiculo
         }
 
         var locatario = runt.Locatarios.Count > 0 ? runt.Locatarios[0] : null;
-        var decision = ResolucionLocatario.Resolver(vehiculo.LocatarioDocOrigen, proveedorLoTrae: locatario is not null);
-        if (decision.Reemplazar && locatario is not null)
-        {
-            // El declarado no se pierde (HU #13730b): sus bytes ya cifrados pasan al respaldo antes de reemplazarlo.
-            if (ResolucionLocatario.RespaldarDeclarado(vehiculo.LocatarioDocOrigen, proveedorLoTrae: true))
-            {
-                vehiculo.LocatarioDeclaradoDocTipo = vehiculo.LocatarioDocTipo;
-                vehiculo.LocatarioDeclaradoDocCifrado = vehiculo.LocatarioDocCifrado;
-            }
+        if (locatario is not null)
+            ReemplazarLocatario(vehiculo, locatario.TipoDocumento, protector.Proteger(locatario.NumeroDocumento));
+    }
 
-            vehiculo.LocatarioDocTipo = locatario.TipoDocumento;
-            vehiculo.LocatarioDocCifrado = protector.Proteger(locatario.NumeroDocumento);
-            vehiculo.LocatarioDocOrigen = decision.Origen;
+    /// <summary>
+    /// Copia al vehículo <paramref name="destino"/> los documentos que el RUNT dejó en <paramref name="origen"/> (HU #13739,
+    /// reutilización del mismo día, D-10): el del propietario y, solo si en el origen el locatario es del proveedor, el del
+    /// locatario, con la MISMA precedencia y el mismo respaldo del declarado que <see cref="Aplicar"/>. Copia los bytes cifrados
+    /// sin descifrarlos: el propósito de la protección no depende del vehículo ni de la empresa, así que el cifrado vale tal cual.
+    /// El declarado del origen nunca se copia: es un dato que capturó el cliente para ESE vehículo, no del RUNT.
+    /// </summary>
+    public static void Copiar(VehiculoDiagnostico destino, VehiculoDiagnostico origen)
+    {
+        ArgumentNullException.ThrowIfNull(destino);
+        ArgumentNullException.ThrowIfNull(origen);
+
+        if (origen.PropietarioDocCifrado is { } propietario)
+        {
+            destino.PropietarioDocTipo = origen.PropietarioDocTipo;
+            destino.PropietarioDocCifrado = (byte[])propietario.Clone();
         }
+
+        if (origen.LocatarioDocOrigen == OrigenDocumento.Proveedor && origen.LocatarioDocTipo is { } tipo && origen.LocatarioDocCifrado is { } locatario)
+            ReemplazarLocatario(destino, tipo, (byte[])locatario.Clone());
+    }
+
+    /// <summary>El locatario que trae el proveedor reemplaza al guardado (<see cref="ResolucionLocatario"/>); el declarado pasa al respaldo.</summary>
+    private static void ReemplazarLocatario(VehiculoDiagnostico vehiculo, string tipo, byte[] cifrado)
+    {
+        var decision = ResolucionLocatario.Resolver(vehiculo.LocatarioDocOrigen, proveedorLoTrae: true);
+        if (!decision.Reemplazar)
+            return;
+
+        // El declarado no se pierde (HU #13730b): sus bytes ya cifrados pasan al respaldo antes de reemplazarlo.
+        if (ResolucionLocatario.RespaldarDeclarado(vehiculo.LocatarioDocOrigen, proveedorLoTrae: true))
+        {
+            vehiculo.LocatarioDeclaradoDocTipo = vehiculo.LocatarioDocTipo;
+            vehiculo.LocatarioDeclaradoDocCifrado = vehiculo.LocatarioDocCifrado;
+        }
+
+        vehiculo.LocatarioDocTipo = tipo;
+        vehiculo.LocatarioDocCifrado = cifrado;
+        vehiculo.LocatarioDocOrigen = decision.Origen;
     }
 
     /// <summary>Verdadero si los tipos de documento caben en sus columnas (un código desconocido del proveedor puede no caber).</summary>

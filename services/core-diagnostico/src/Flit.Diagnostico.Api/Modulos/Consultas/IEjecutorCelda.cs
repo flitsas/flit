@@ -58,6 +58,12 @@ public sealed record ResultadoCelda(
     /// celda vuelve a PENDIENTE con ese <c>disponible_desde</c> en lugar de quedar en ERROR. Null en todo otro caso.
     /// </summary>
     public DateTimeOffset? ReintentarDesde { get; init; }
+
+    /// <summary>
+    /// Celda de la misma empresa, del mismo día, cuyo dato se copió sin llamar a la fuente (HU #13739, D-10): la escribe el
+    /// escritor en <c>consultas.reutilizada_de_id</c> y el intento queda con <c>desde_cache=true</c>. Null si hubo llamada.
+    /// </summary>
+    public Guid? ReutilizadaDeId { get; init; }
 }
 
 /// <summary>Datos de la llamada a la fuente para <c>intentos_consulta</c> (HU #13737); nunca un documento en claro.</summary>

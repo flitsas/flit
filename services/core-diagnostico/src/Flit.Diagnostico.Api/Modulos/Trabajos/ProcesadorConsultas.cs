@@ -17,7 +17,9 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 /// Cada ejecución deja un intento auditable (<see cref="RegistroIntentos"/>, HU #13737) y un error transitorio con reintentos
 /// disponibles vuelve a la cola con backoff (<see cref="PoliticaReintentos"/>, <c>Diagnostico:Consultas:MaxReintentos</c>, D-12). Al cerrar la RUNT de un vehículo, <see cref="OrquestadorVehiculo"/> libera
 /// o bloquea sus demás celdas en la misma transacción (HU #13730), y tras toda celda terminal <see cref="RecalculadorEstado"/>
-/// recalcula el estado global del lote en esa misma transacción (HU #13743). Si hay más de un ejecutor para una fuente, gana el primero
+/// recalcula el estado global del lote en esa misma transacción (HU #13743). Antes de llamar al ejecutor, <see cref="ReutilizacionMismoDia"/>
+/// copia el dato de hoy de la misma compañía, placa y fuente si existe (HU #13739, D-10): no se llama a la fuente y la celda se
+/// cierra por el mismo camino, con su intento <c>desde_cache=true</c>. Si hay más de un ejecutor para una fuente, gana el primero
 /// registrado. Los logs llevan ids, fuente y tipo de error, nunca datos de la fuente.
 /// </summary>
 internal sealed partial class ProcesadorConsultas(
@@ -58,7 +60,12 @@ internal sealed partial class ProcesadorConsultas(
         var inicio = reloj.GetUtcNow();
         try
         {
-            resultado = await ejecutor.EjecutarAsync(new ContextoCelda(celda, db), ct).ConfigureAwait(false);
+            // HU #13739 (D-10): si la misma compañía ya tiene hoy el dato de esa placa y fuente, se copia sin llamar ni consumir.
+            var contexto = new ContextoCelda(celda, db);
+            var reutilizado = await ReutilizacionMismoDia.BuscarAsync(contexto, inicio, ct).ConfigureAwait(false);
+            if (reutilizado is not null)
+                Reutilizada(log, celda.Id, celda.Fuente, reutilizado.ReutilizadaDeId!.Value);
+            resultado = reutilizado ?? await ejecutor.EjecutarAsync(contexto, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -104,6 +111,9 @@ internal sealed partial class ProcesadorConsultas(
 
     [LoggerMessage(EventId = 137271, Level = LogLevel.Warning, Message = "La celda {CeldaId} de {Fuente} cambió de lease mientras se ejecutaba: no se cierra")]
     private static partial void LeasePerdido(ILogger logger, Guid celdaId, Fuente fuente);
+
+    [LoggerMessage(EventId = 137390, Level = LogLevel.Information, Message = "La celda {CeldaId} de {Fuente} reutilizó sin consumo el dato del mismo día de la celda {Original}")]
+    private static partial void Reutilizada(ILogger logger, Guid celdaId, Fuente fuente, Guid original);
 
     [LoggerMessage(EventId = 137370, Level = LogLevel.Information, Message = "La celda {CeldaId} de {Fuente} terminó en {TipoError} (transitorio): reintento {Reintento} de {Maximo} con backoff")]
     private static partial void Reintento(ILogger logger, Guid celdaId, Fuente fuente, string tipoError, int reintento, int maximo);

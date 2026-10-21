@@ -15,7 +15,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// retomó, no pisa su trabajo y devuelve false. Los <see cref="ResultadoCelda.Efectos"/> (datos del vehículo, liberación o
 /// bloqueo de sus demás celdas, HU #13730) y el intento auditable (HU #13737) se aplican en esa misma transacción: o queda todo o
 /// no queda nada. Un reintento (HU #13737) deja la celda en PENDIENTE con <c>disponible_desde</c> del backoff e
-/// <c>intentos_auto</c> + 1.
+/// <c>intentos_auto</c> + 1. Una celda que reutiliza el dato del mismo día (HU #13739, D-10) se cierra por este mismo camino, con
+/// <c>reutilizada_de_id</c>: sube la versión del tablero y dispara los mismos efectos que una llamada real.
 /// </summary>
 internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
 {
@@ -49,6 +50,8 @@ internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
             celda.TipoError = resultado.Estado == EstadoCelda.Error ? resultado.TipoError : null;
             celda.Origen = resultado.Origen;
             celda.DatoObtenidoEn = resultado.DatoObtenidoEn;
+            // HU #13739 (D-10): la celda que copió el dato del mismo día apunta a la original.
+            celda.ReutilizadaDeId = resultado.Estado == EstadoCelda.Completado ? resultado.ReutilizadaDeId : null;
             celda.LeaseHasta = null;
             celda.ActualizadoEn = reloj.GetUtcNow();
             celda.VersionTablero = version;
