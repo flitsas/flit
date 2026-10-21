@@ -167,7 +167,8 @@ describe("CompanyRolesPanel — roles globales (AC1)", () => {
 
     const dialog = await screen.findByRole("dialog");
     // HU #13666: solo el nombre del permiso, sin el código interno; y sin el código del rol FLIT.
-    expect(await within(dialog).findByText("Ver trámites")).toBeInTheDocument();
+    await ue.click(await within(dialog).findByRole("tab", { name: "Módulos" }));
+    expect(await within(dialog).findByText("Ver trámites")).toBeVisible();
     expect(within(dialog).queryByText("tramites.read")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/^código/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /guardar/i })).not.toBeInTheDocument();
@@ -187,6 +188,8 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     const dialog = await screen.findByRole("dialog");
     await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
     await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    // HU #13653: los permisos viven en la pestaña «Módulos».
+    await ue.click(within(dialog).getByRole("tab", { name: "Módulos" }));
     await ue.click(within(dialog).getByRole("checkbox", { name: /ver trámites/i }));
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
@@ -210,11 +213,14 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
+    await ue.click(await within(dialog).findByRole("tab", { name: "Módulos" }));
 
     expect(await within(dialog).findByRole("checkbox", { name: /ver trámites/i })).toBeInTheDocument();
     expect(within(dialog).getByRole("checkbox", { name: /crear trámites/i })).toBeInTheDocument();
     // Comparendos es otro producto: un rol no mezcla productos.
     expect(within(dialog).queryByRole("checkbox", { name: /ver comparendos/i })).not.toBeInTheDocument();
+    // El producto se elige en «Datos del rol».
+    await ue.click(within(dialog).getByRole("tab", { name: "Datos del rol" }));
     expect(within(dialog).getByRole("combobox", { name: /producto/i })).toBeInTheDocument();
   });
 
@@ -247,6 +253,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
+    await ue.click(await within(dialog).findByRole("tab", { name: "Módulos" }));
 
     await within(dialog).findByRole("checkbox", { name: /ver trámites/i });
     expect(within(dialog).queryByRole("checkbox", { name: /invitar usuarios/i })).not.toBeInTheDocument();
@@ -313,9 +320,10 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     const dialog = await screen.findByRole("dialog");
     const nombre = await within(dialog).findByLabelText(/^nombre/i);
     expect(within(dialog).getByLabelText(/^código/i)).toBeDisabled();
-    expect(within(dialog).getByRole("checkbox", { name: /ver trámites/i })).toBeChecked();
     await ue.clear(nombre);
     await ue.type(nombre, "Contador senior");
+    await ue.click(within(dialog).getByRole("tab", { name: "Módulos" }));
+    expect(within(dialog).getByRole("checkbox", { name: /ver trámites/i })).toBeChecked();
     await ue.click(within(dialog).getByRole("checkbox", { name: /crear trámites/i }));
     await ue.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
 

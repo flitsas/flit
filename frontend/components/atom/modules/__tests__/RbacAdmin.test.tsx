@@ -75,17 +75,22 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
   it("AC2: muestra SIEMPRE las dos tablas (Compañía y Organismo de Tránsito) con sus roles", async () => {
     await openRolesTab();
 
-    expect(await screen.findByText("Roles de Compañía")).toBeInTheDocument();
-    expect(await screen.findByText("Roles de Organismo de Tránsito")).toBeInTheDocument();
-    expect(await screen.findByText("Supervisor de trámites")).toBeInTheDocument();
-    expect(await screen.findByText("Supervisor OT")).toBeInTheDocument();
+    // HU #13653: cada tabla en su sub-pestaña «Compañía | Organismo de Tránsito»; «Compañía» abre primero.
+    const compania = await screen.findByRole("tab", { name: "Compañía" });
+    expect(compania).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Supervisor de trámites")).toBeVisible();
+    expect(await screen.findByText("Supervisor OT")).not.toBeVisible();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Organismo de Tránsito" }));
+    expect(screen.getByText("Supervisor OT")).toBeVisible();
+    expect(screen.getByText("Supervisor de trámites")).not.toBeVisible();
   });
 
   it("AC1: crear un rol lo agrega de inmediato a la tabla de su tipo de entidad", async () => {
     const user = userEvent.setup();
     createRole.mockResolvedValue({ id: "role-new" });
     await openRolesTab();
-    await screen.findByText("Roles de Compañía");
+    await screen.findByRole("tab", { name: "Compañía" });
 
     // Tras crear, se recarga la tabla COMPANY con el nuevo rol incluido.
     listRoles.mockImplementation((type: string) =>
@@ -98,6 +103,8 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await user.type(await screen.findByLabelText(/código/i), "NUEVO");
     await user.type(screen.getByLabelText(/^nombre/i), "Rol Nuevo");
     // HU #10664 AC2 — hay que marcar al menos un permiso; si no, el formulario se bloquea.
+    // HU #13653: los permisos viven en la pestaña «Módulos» del editor.
+    await user.click(screen.getByRole("tab", { name: "Módulos" }));
     await user.click(await screen.findByRole("checkbox", { name: /leer trámites/i }));
     await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
 
@@ -114,7 +121,7 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
   it("AC2 (#10664): no permite crear un rol sin al menos un permiso", async () => {
     const user = userEvent.setup();
     await openRolesTab();
-    await screen.findByText("Roles de Compañía");
+    await screen.findByRole("tab", { name: "Compañía" });
 
     await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
     await user.type(await screen.findByLabelText(/código/i), "SINPERM");
@@ -122,6 +129,26 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
 
     expect(await screen.findByText(/al menos un permiso/i)).toBeInTheDocument();
+    expect(createRole).not.toHaveBeenCalled();
+  });
+
+  it("HU #13653: el editor separa «Datos del rol | Módulos»; sin nombre vuelve a «Datos del rol» con un aviso", async () => {
+    const user = userEvent.setup();
+    await openRolesTab();
+    await screen.findByRole("tab", { name: "Compañía" });
+
+    await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("tab", { name: "Datos del rol" })).toHaveAttribute("aria-selected", "true");
+    // Sin tipos de servicio en el catálogo no hay pestaña «Tipos de servicio».
+    expect(within(dialog).queryByRole("tab", { name: "Tipos de servicio" })).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("tab", { name: "Módulos" }));
+    await user.click(await within(dialog).findByRole("checkbox", { name: /leer trámites/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^crear rol$/i }));
+
+    expect(await within(dialog).findByText("Escribe el código y el nombre del rol.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("tab", { name: "Datos del rol" })).toHaveAttribute("aria-selected", "true");
     expect(createRole).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findFamilyPair, familyRole, isFamilyCreateRequiresReadError, normalizeFamilyPairs, toggleRolePermission } from "../familyPairs";
+import { findFamilyPair, familyRole, isFamilyCreateRequiresReadError, isServiceTypeModule, normalizeFamilyPairs, toggleRolePermission } from "../familyPairs";
 
 const modules = [
   { actions: [{ id: "r", slug: "matriculas.read" }, { id: "c", slug: "matriculas.create" }] },
@@ -32,5 +32,12 @@ describe("familyPairs (HU #13666)", () => {
     expect(isFamilyCreateRequiresReadError({ body: { code: "FAMILY_CREATE_REQUIRES_READ" } })).toBe(true);
     expect(isFamilyCreateRequiresReadError(new Error('400: {"code":"FAMILY_CREATE_REQUIRES_READ"}'))).toBe(true);
     expect(isFamilyCreateRequiresReadError(new Error("boom"))).toBe(false);
+  });
+});
+
+describe("isServiceTypeModule (HU #13653)", () => {
+  it("reconoce los módulos de tipo de servicio por código o por su par Ver / Crear", () => {
+    expect(isServiceTypeModule({ code: "tramites-matriculas", actions: [] })).toBe(true);
+    expect(isServiceTypeModule({ code: "dashboard", actions: [{ id: "a", slug: "dashboard.read" }] })).toBe(false);
   });
 });

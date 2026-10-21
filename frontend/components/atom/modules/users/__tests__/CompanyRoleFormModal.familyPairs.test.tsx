@@ -88,20 +88,31 @@ async function openCreate() {
   return { ue, dialog, onSaved };
 }
 
+// HU #13653: el editor se divide en «Datos del rol | Módulos | Tipos de servicio».
+async function goTo(ue: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, tab: "Datos del rol" | "Módulos" | "Tipos de servicio") {
+  await ue.click(within(dialog).getByRole("tab", { name: tab }));
+}
+
 describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #13666)", () => {
   it("muestra el par «Ver y crear» de Matrículas, Traspasos y Otros trámites con los nombres del Panel SA", async () => {
-    const { dialog } = await openCreate();
+    const { ue, dialog } = await openCreate();
+    expect(within(dialog).getByRole("tab", { name: "Datos del rol" })).toHaveAttribute("aria-selected", "true");
+    await goTo(ue, dialog, "Tipos de servicio");
     for (const name of ["Trámites: Matrículas", "Trámites: Traspasos", "Trámites: Otros trámites"]) {
       const group = within(dialog).getByRole("group", { name: `Ver y crear — ${name}` });
       expect(within(group).getByRole("checkbox", { name: `Ver — ${name}` })).toBeInTheDocument();
       expect(within(group).getByRole("checkbox", { name: `Crear — ${name}` })).toBeInTheDocument();
     }
-    // Los módulos que no son de familia siguen con su lista normal.
+    // Los módulos que no son de familia siguen con su lista normal, en la pestaña «Módulos».
+    expect(within(dialog).queryByRole("checkbox", { name: /ver reportes/i })).not.toBeInTheDocument();
+    await goTo(ue, dialog, "Módulos");
     expect(within(dialog).getByRole("checkbox", { name: /ver reportes/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("group", { name: /Ver y crear/ })).not.toBeInTheDocument();
   });
 
   it("«Crear» está deshabilitado mientras «Ver» esté apagado y se habilita al marcar «Ver»", async () => {
     const { ue, dialog } = await openCreate();
+    await goTo(ue, dialog, "Tipos de servicio");
     const crear = within(dialog).getByRole("checkbox", { name: "Crear — Trámites: Matrículas" });
     expect(crear).toBeDisabled();
 
@@ -112,6 +123,7 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
 
   it("quitar «Ver» quita también «Crear» y lo deja deshabilitado", async () => {
     const { ue, dialog } = await openCreate();
+    await goTo(ue, dialog, "Tipos de servicio");
     const ver = within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Traspasos" });
     const crear = within(dialog).getByRole("checkbox", { name: "Crear — Trámites: Traspasos" });
     await ue.click(ver);
@@ -128,6 +140,7 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
     const { ue, dialog, onSaved } = await openCreate();
     await ue.type(within(dialog).getByLabelText(/^código/i), "auditor_ext");
     await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await goTo(ue, dialog, "Tipos de servicio");
     // Marca Ver + Crear de Otros trámites y luego quita Ver; marca Ver + Crear de Matrículas.
     await ue.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Otros trámites" }));
     await ue.click(within(dialog).getByRole("checkbox", { name: "Crear — Trámites: Otros trámites" }));
@@ -144,6 +157,7 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
 
   it("desmarcar todo el módulo apaga el par y marcarlo enciende Ver y Crear juntos", async () => {
     const { ue, dialog } = await openCreate();
+    await goTo(ue, dialog, "Tipos de servicio");
     const todos = within(dialog).getByRole("checkbox", { name: "Seleccionar todos los permisos de Trámites: Matrículas" });
     await ue.click(todos);
     expect(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Matrículas" })).toBeChecked();
@@ -158,6 +172,7 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
     const ue = userEvent.setup();
     render(<CompanyRoleFormModal mode={{ kind: "edit", role: own }} onClose={vi.fn()} onSaved={vi.fn()} />);
     const dialog = await screen.findByRole("dialog");
+    await ue.click(await within(dialog).findByRole("tab", { name: "Tipos de servicio" }));
     const ver = await within(dialog).findByRole("checkbox", { name: "Ver — Trámites: Matrículas" });
     expect(within(dialog).getByRole("checkbox", { name: "Crear — Trámites: Matrículas" })).toBeChecked();
 
@@ -167,6 +182,24 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
     await waitFor(() => expect(setTenantRolePermissions).toHaveBeenCalledTimes(1));
     const [, ids] = vi.mocked(setTenantRolePermissions).mock.calls[0];
     expect([...ids].sort()).toEqual(["rp", "tr"]);
+  });
+
+  it("HU #13653: sin nombre vuelve a «Datos del rol» con el aviso; «Crear rol» guarda desde cualquier pestaña", async () => {
+    const { ue, dialog } = await openCreate();
+    await ue.type(within(dialog).getByLabelText(/^código/i), "auditor_ext");
+    await goTo(ue, dialog, "Tipos de servicio");
+    await ue.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Matrículas" }));
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("El nombre es obligatorio.");
+    expect(within(dialog).getByRole("tab", { name: "Datos del rol" })).toHaveAttribute("aria-selected", "true");
+    expect(createTenantRole).not.toHaveBeenCalled();
+
+    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await goTo(ue, dialog, "Módulos");
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+    await waitFor(() => expect(createTenantRole).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(createTenantRole).mock.calls[0][0].permissionIds).toEqual(["mr"]);
   });
 
   it("un 400 FAMILY_CREATE_REQUIRES_READ se muestra con un mensaje claro en español, sin códigos", async () => {

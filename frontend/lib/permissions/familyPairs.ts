@@ -37,6 +37,14 @@ export function familyModuleName(moduleCode: string): string | null {
   return FAMILY_MODULE_NAMES[moduleCode] ?? null;
 }
 
+/**
+ * HU #13653: ¿es un módulo de tipo de servicio (Matrículas, Traspasos, Otros trámites)? Los editores de permisos los
+ * muestran en su propia pestaña «Tipos de servicio», separados de los demás módulos.
+ */
+export function isServiceTypeModule(m: { code: string; actions: readonly SlugAction[] }): boolean {
+  return familyModuleName(m.code) !== null || findFamilyPair(m.actions) !== null;
+}
+
 /** El par Ver / Crear de una familia dentro de las acciones de un módulo, o `null` si el módulo no es de familia. */
 export function findFamilyPair<A extends SlugAction>(actions: readonly A[]): FamilyPairActions<A> | null {
   for (const { read, create } of FAMILY_SLUG_PAIRS) {

@@ -21,7 +21,8 @@ import {
 } from "@/lib/api/permission-overrides";
 import { buildModuleViews, outOfCapOverrideIds, withOverrideActions, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
-import { findFamilyPair } from "@/lib/permissions/familyPairs";
+import { findFamilyPair, isServiceTypeModule } from "@/lib/permissions/familyPairs";
+import { SectionTabs } from "@/components/atom/SectionTabs";
 import { FamilyPairRows } from "./FamilyPairRows";
 import {
   OUT_OF_CAP_LABEL,
@@ -211,6 +212,7 @@ export function ModulePermissionsSection({
   // HU #13653 (AC3): aviso de vigencia tras guardar (FC-3) y permiso PII a la espera de confirmación (AC2).
   const [vigencia, setVigencia] = useState<string | null>(null);
   const [pendingPii, setPendingPii] = useState<ActionView | null>(null);
+  const [subTab, setSubTab] = useState<"modulos" | "tipos">("modulos");
 
   // El tenant solo viaja para el Super Admin; los demás administradores usan el de su JWT.
   const tenantParam = mode === "superadmin" ? tenantId : undefined;
@@ -362,6 +364,137 @@ export function ModulePermissionsSection({
 
   const controlsOff = readOnly || busy;
 
+  // HU #13653: los tipos de servicio (Matrículas, Traspasos, Otros trámites) van en su propia pestaña.
+  const moduleViews = views.filter((v) => !isServiceTypeModule(v));
+  const serviceViews = views.filter(isServiceTypeModule);
+
+  const renderModule = (m: ModuleView) => (
+    <li key={m.id} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-[#162744] dark:text-white">{m.name}</h3>
+        <OriginBadge origin={m.origin} />
+        <span className="text-[10px] opacity-60">
+          {m.enabledCount} de {m.actions.length} habilitadas
+        </span>
+        {!readOnly && (
+          <div className="ml-auto flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              disabled={controlsOff || (mode === "admin" && m.actions.length > 0 && m.actions.every((a) => a.outOfCap === true))}
+              onClick={() => void setModule(m, "allow")}
+              aria-label={`Habilitar el módulo ${m.name} completo`}
+              className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              style={{ color: "var(--permiso-habilitado)" }}
+            >
+              Habilitar módulo
+            </button>
+            <button
+              type="button"
+              disabled={controlsOff}
+              onClick={() => void setModule(m, "deny")}
+              aria-label={`Denegar el módulo ${m.name} completo`}
+              className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              style={{ color: "var(--permiso-deshabilitado)" }}
+            >
+              Denegar módulo
+            </button>
+            {m.origin !== "inherited" && (
+              <button
+                type="button"
+                disabled={controlsOff}
+                onClick={() => void moduleBackToRole(m)}
+                aria-label={`Volver el módulo ${m.name} a lo que dicta el rol`}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              >
+                <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                Volver al rol
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <ul className="mt-2 flex flex-col divide-y divide-[#DFE5ED] dark:divide-white/10">
+        {(() => {
+          // HU #13666: par Ver / Crear por tipo de servicio (módulos tramites-matriculas/-traspasos/-otros).
+          const pair = findFamilyPair(m.actions);
+          return pair ? (
+            <FamilyPairRows
+              moduleName={m.name}
+              read={pair.read}
+              create={pair.create}
+              readOnly={readOnly}
+              showOutOfCap={mode === "admin"}
+              controlsOff={controlsOff || (mode === "admin" && (pair.read.outOfCap === true || pair.create.outOfCap === true))}
+              onToggle={(a) => void toggleAction(a)}
+              onBackToRole={(a) => void backToRole(a)}
+            />
+          ) : null;
+        })()}
+        {m.actions.filter((a) => !isFamilyPairAction(m.actions, a)).map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={a.enabled}
+              aria-label={`${a.name}, módulo ${m.name}`}
+              disabled={controlsOff || (mode === "admin" && a.outOfCap === true)}
+              onClick={() => void toggleAction(a)}
+              className="relative h-5 w-9 shrink-0 rounded-full border transition disabled:opacity-50"
+              style={{
+                background: a.enabled ? "var(--permiso-habilitado)" : "transparent",
+                borderColor: a.enabled ? "var(--permiso-habilitado)" : "var(--permiso-deshabilitado)",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-all"
+                style={{
+                  left: a.enabled ? "1.15rem" : "0.15rem",
+                  background: a.enabled ? "#FFFFFF" : "var(--permiso-deshabilitado)",
+                }}
+              />
+            </button>
+            <span className="min-w-0 flex-1 text-xs">
+              <span className="font-medium">{a.name}</span>
+              {a.superAdminOnly && (
+                <span className="ml-2 align-middle">
+                  <SoloSaChip />
+                </span>
+              )}
+              {a.origin === "individual" && a.grantedByName && (
+                <span className="block text-[10px] opacity-60">
+                  Otorgado por {a.grantedByName}
+                  {a.grantedAt ? ` el ${formatFechaHora(a.grantedAt)}` : ""}
+                </span>
+              )}
+            </span>
+            <StateText enabled={a.enabled} />
+            <OriginBadge origin={a.origin} />
+            {mode === "admin" && a.outOfCap && (
+              <OutOfCapChip
+                id={`cap-${m.code}-${a.id}`}
+                tooltip={a.origin === "individual" ? OUT_OF_CAP_TOOLTIP : OUT_OF_CAP_LOCKED_TOOLTIP}
+              />
+            )}
+            {a.origin === "individual" && !readOnly && (
+              <button
+                type="button"
+                disabled={controlsOff}
+                onClick={() => void backToRole(a)}
+                aria-label={`Volver ${a.name} a lo que dicta el rol`}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
+              >
+                <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                Volver al rol
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+
   return (
     <section aria-label="Permisos por módulo" className="flex flex-col gap-3" aria-busy={busy || state.status === "loading"}>
       {readOnly && (
@@ -393,134 +526,29 @@ export function ModulePermissionsSection({
         onRetry={retry}
         emptyMessage="No hay permisos que se puedan configurar individualmente para este usuario."
       >
-        <ul className="flex flex-col gap-3">
-          {views.map((m) => (
-            <li key={m.id} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold text-[#162744] dark:text-white">{m.name}</h3>
-                <OriginBadge origin={m.origin} />
-                <span className="text-[10px] opacity-60">
-                  {m.enabledCount} de {m.actions.length} habilitadas
-                </span>
-                {!readOnly && (
-                  <div className="ml-auto flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      disabled={controlsOff || (mode === "admin" && m.actions.length > 0 && m.actions.every((a) => a.outOfCap === true))}
-                      onClick={() => void setModule(m, "allow")}
-                      aria-label={`Habilitar el módulo ${m.name} completo`}
-                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ color: "var(--permiso-habilitado)" }}
-                    >
-                      Habilitar módulo
-                    </button>
-                    <button
-                      type="button"
-                      disabled={controlsOff}
-                      onClick={() => void setModule(m, "deny")}
-                      aria-label={`Denegar el módulo ${m.name} completo`}
-                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ color: "var(--permiso-deshabilitado)" }}
-                    >
-                      Denegar módulo
-                    </button>
-                    {m.origin !== "inherited" && (
-                      <button
-                        type="button"
-                        disabled={controlsOff}
-                        onClick={() => void moduleBackToRole(m)}
-                        aria-label={`Volver el módulo ${m.name} a lo que dicta el rol`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
-                      >
-                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                        Volver al rol
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <ul className="mt-2 flex flex-col divide-y divide-[#DFE5ED] dark:divide-white/10">
-                {(() => {
-                  // HU #13666: par Ver / Crear por tipo de servicio (módulos tramites-matriculas/-traspasos/-otros).
-                  const pair = findFamilyPair(m.actions);
-                  return pair ? (
-                    <FamilyPairRows
-                      moduleName={m.name}
-                      read={pair.read}
-                      create={pair.create}
-                      readOnly={readOnly}
-                      showOutOfCap={mode === "admin"}
-                      controlsOff={controlsOff || (mode === "admin" && (pair.read.outOfCap === true || pair.create.outOfCap === true))}
-                      onToggle={(a) => void toggleAction(a)}
-                      onBackToRole={(a) => void backToRole(a)}
-                    />
-                  ) : null;
-                })()}
-                {m.actions.filter((a) => !isFamilyPairAction(m.actions, a)).map((a) => (
-                  <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={a.enabled}
-                      aria-label={`${a.name}, módulo ${m.name}`}
-                      disabled={controlsOff || (mode === "admin" && a.outOfCap === true)}
-                      onClick={() => void toggleAction(a)}
-                      className="relative h-5 w-9 shrink-0 rounded-full border transition disabled:opacity-50"
-                      style={{
-                        background: a.enabled ? "var(--permiso-habilitado)" : "transparent",
-                        borderColor: a.enabled ? "var(--permiso-habilitado)" : "var(--permiso-deshabilitado)",
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-all"
-                        style={{
-                          left: a.enabled ? "1.15rem" : "0.15rem",
-                          background: a.enabled ? "#FFFFFF" : "var(--permiso-deshabilitado)",
-                        }}
-                      />
-                    </button>
-                    <span className="min-w-0 flex-1 text-xs">
-                      <span className="font-medium">{a.name}</span>
-                      {a.superAdminOnly && (
-                        <span className="ml-2 align-middle">
-                          <SoloSaChip />
-                        </span>
-                      )}
-                      {a.origin === "individual" && a.grantedByName && (
-                        <span className="block text-[10px] opacity-60">
-                          Otorgado por {a.grantedByName}
-                          {a.grantedAt ? ` el ${formatFechaHora(a.grantedAt)}` : ""}
-                        </span>
-                      )}
-                    </span>
-                    <StateText enabled={a.enabled} />
-                    <OriginBadge origin={a.origin} />
-                    {mode === "admin" && a.outOfCap && (
-                      <OutOfCapChip
-                        id={`cap-${m.code}-${a.id}`}
-                        tooltip={a.origin === "individual" ? OUT_OF_CAP_TOOLTIP : OUT_OF_CAP_LOCKED_TOOLTIP}
-                      />
-                    )}
-                    {a.origin === "individual" && !readOnly && (
-                      <button
-                        type="button"
-                        disabled={controlsOff}
-                        onClick={() => void backToRole(a)}
-                        aria-label={`Volver ${a.name} a lo que dicta el rol`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
-                      >
-                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                        Volver al rol
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
+        {serviceViews.length === 0 || moduleViews.length === 0 ? (
+          <ul className="flex flex-col gap-3">{views.map(renderModule)}</ul>
+        ) : (
+          // Sub-pestañas «Módulos | Tipos de servicio» con el mismo componente que Mandatos. Solo aparecen cuando la ficha
+          // tiene las dos clases; si no (p. ej. la del Admin OT, sin tipos de servicio), se ve la lista sola.
+          <SectionTabs
+            ariaLabel="Permisos por módulo y por tipo de servicio"
+            active={subTab}
+            onChange={setSubTab}
+            tabs={[
+              {
+                id: "modulos",
+                label: "Módulos",
+                content: <ul className="flex flex-col gap-3">{moduleViews.map(renderModule)}</ul>,
+              },
+              {
+                id: "tipos",
+                label: "Tipos de servicio",
+                content: <ul className="flex flex-col gap-3">{serviceViews.map(renderModule)}</ul>,
+              },
+            ]}
+          />
+        )}
       </UiStateBoundary>
     </section>
   );

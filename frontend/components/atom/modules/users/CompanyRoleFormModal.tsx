@@ -13,9 +13,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Shield } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
+import { RoleEditorTabs, type RoleEditorTabId } from "@/components/shared/permissions/RoleEditorTabs";
 import {
   familyModuleName,
   findFamilyPair,
+  isServiceTypeModule,
   normalizeFamilyPairs,
   toggleRolePermission,
 } from "@/lib/permissions/familyPairs";
@@ -85,6 +87,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<RoleEditorTabId>("datos");
 
   useEffect(() => {
     let cancelled = false;
@@ -157,10 +160,12 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     if (readOnly) return;
     setError(null);
     if (creating && !CODE_PATTERN.test(code.trim())) {
+      setTab("datos");
       setError("El código admite de 2 a 50 caracteres: letras, números, punto, guion o guion bajo.");
       return;
     }
     if (!name.trim()) {
+      setTab("datos");
       setError("El nombre es obligatorio.");
       return;
     }
@@ -188,6 +193,89 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
       setBusy(false);
     }
   }
+
+  // HU #13653: «Datos del rol | Módulos | Tipos de servicio». Los tipos de servicio solo van aparte si hay de las dos clases.
+  const serviceModules = byModule.filter(([moduleCode, perms]) => isServiceTypeModule({ code: moduleCode, actions: perms }));
+  const regularModules = byModule.filter(([moduleCode, perms]) => !isServiceTypeModule({ code: moduleCode, actions: perms }));
+  const hasBoth = !readOnly && serviceModules.length > 0 && regularModules.length > 0;
+
+  const renderModuleEntry = ([moduleCode, perms]: [string, GrantablePermission[]]) => {
+    const ids = perms.map((p) => p.id);
+    const allOn = ids.every((id) => selected.has(id));
+    const pair = findFamilyPair(perms);
+    const moduleName = readableModuleName(moduleCode, perms);
+    const rest = pair ? perms.filter((p) => p.id !== pair.read.id && p.id !== pair.create.id) : perms;
+    return (
+      <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
+        <label
+          className="flex items-center gap-2 text-sm font-semibold text-[#162744] dark:text-white"
+        >
+          <input
+            type="checkbox"
+            checked={allOn}
+            onChange={(e) => toggleModule(ids, e.target.checked)}
+            aria-label={`Seleccionar todos los permisos de ${moduleName}`}
+            className="h-4 w-4 accent-[#557EFF]"
+          />
+          {moduleName}
+        </label>
+        {pair && (
+          <div className="mt-2 pl-6 text-[#162744] dark:text-white">
+            <FamilyPairCheckboxes
+              moduleName={moduleName}
+              read={pair.read}
+              create={pair.create}
+              selected={selected}
+              onToggle={toggle}
+            />
+          </div>
+        )}
+        {rest.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1.5 pl-6">
+            {rest.map((p) => (
+              <li key={p.id}>
+                <label className="flex items-start gap-2 text-sm text-[#162744] dark:text-white">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(p.id)}
+                    onChange={() => toggle(p.id)}
+                    className="mt-0.5 h-4 w-4 accent-[#557EFF]"
+                  />
+                  <span>{p.name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
+  const permissionsFieldset = (entries: [string, GrantablePermission[]][], legend: string) => (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-1 text-sm font-semibold text-[#162744] dark:text-white">
+        {legend}
+        {readOnly && detail ? ` (${detail.permissions.length})` : ""}
+      </legend>
+      {readOnly ? (
+        detail && detail.permissions.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-sm text-[#162744] dark:text-white">
+            {detail.permissions.map((p) => (
+              <li key={p.id}>{p.name}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-[#59677D] dark:text-white/70">Este rol no tiene permisos asignados.</p>
+        )
+      ) : entries.length === 0 ? (
+        <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-[#162744] dark:border-white/15 dark:bg-white/5 dark:text-white">
+          No tienes permisos para otorgar en este producto. El rol se puede crear sin permisos y completarlo después.
+        </p>
+      ) : (
+        entries.map(renderModuleEntry)
+      )}
+    </fieldset>
+  );
 
   const title = creating ? "Nuevo rol" : readOnly ? `Rol «${role?.name}»` : `Editar «${role?.name}»`;
   const description_ = creating
@@ -241,141 +329,78 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
         </p>
       ) : (
         <form id="company-role-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          {/* HU #13666: un rol de FLIT (solo lectura) no muestra su código interno; el del rol propio lo escribió la compañía. */}
-          {!readOnly && (
-          <label className={LABEL_CLS}>
-            Código
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={!creating}
-              maxLength={50}
-              autoComplete="off"
-              spellCheck={false}
-              className={`${INPUT_CLS} font-mono`}
-              aria-describedby="company-role-code-hint"
-            />
-            {creating && (
-              <span id="company-role-code-hint" className={HINT_CLS}>
-                Identificador interno, p. ej. contador_senior. No se puede cambiar después.
-              </span>
-            )}
-          </label>
-          )}
-          <label className={LABEL_CLS}>
-            Nombre
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={readOnly}
-              maxLength={100}
-              className={INPUT_CLS}
-            />
-          </label>
-          <label className={LABEL_CLS}>
-            Descripción
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={readOnly}
-              maxLength={500}
-              rows={2}
-              className={`${INPUT_CLS} h-auto py-2`}
-            />
-          </label>
-          {creating && products.length > 1 && (
-            <label className={LABEL_CLS}>
-              Producto
-              <select
-                value={productCode}
-                onChange={(e) => {
-                  setProductCode(e.target.value);
-                  setSelected(new Set());
-                }}
-                className={INPUT_CLS}
-              >
-                {products.map((p) => (
-                  <option key={p} value={p}>
-                    {PRODUCT_LABEL[p] ?? p}
-                  </option>
-                ))}
-              </select>
-              <span className={HINT_CLS}>Un rol solo incluye permisos de su producto.</span>
-            </label>
-          )}
-
-          <fieldset className="flex flex-col gap-3">
-            <legend className="mb-1 text-sm font-semibold text-[#162744] dark:text-white">
-              Permisos{readOnly && detail ? ` (${detail.permissions.length})` : ""}
-            </legend>
-            {readOnly ? (
-              detail && detail.permissions.length > 0 ? (
-                <ul className="flex flex-col gap-1 text-sm text-[#162744] dark:text-white">
-                  {detail.permissions.map((p) => (
-                    <li key={p.id}>{p.name}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-[#59677D] dark:text-white/70">Este rol no tiene permisos asignados.</p>
-              )
-            ) : byModule.length === 0 ? (
-              <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-[#162744] dark:border-white/15 dark:bg-white/5 dark:text-white">
-                No tienes permisos para otorgar en este producto. El rol se puede crear sin permisos y completarlo después.
-              </p>
-            ) : (
-              byModule.map(([moduleCode, perms]) => {
-                const ids = perms.map((p) => p.id);
-                const allOn = ids.every((id) => selected.has(id));
-                const pair = findFamilyPair(perms);
-                const moduleName = readableModuleName(moduleCode, perms);
-                const rest = pair ? perms.filter((p) => p.id !== pair.read.id && p.id !== pair.create.id) : perms;
-                return (
-                  <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
-                    <label
-                      className="flex items-center gap-2 text-sm font-semibold text-[#162744] dark:text-white"
+          <RoleEditorTabs
+            active={tab}
+            onChange={setTab}
+            data={
+              <div className="flex flex-col gap-4">
+                {/* HU #13666: un rol de FLIT (solo lectura) no muestra su código interno; el del rol propio lo escribió la compañía. */}
+                {!readOnly && (
+                <label className={LABEL_CLS}>
+                  Código
+                  <input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    disabled={!creating}
+                    maxLength={50}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={`${INPUT_CLS} font-mono`}
+                    aria-describedby="company-role-code-hint"
+                  />
+                  {creating && (
+                    <span id="company-role-code-hint" className={HINT_CLS}>
+                      Identificador interno, p. ej. contador_senior. No se puede cambiar después.
+                    </span>
+                  )}
+                </label>
+                )}
+                <label className={LABEL_CLS}>
+                  Nombre
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={readOnly}
+                    maxLength={100}
+                    className={INPUT_CLS}
+                  />
+                </label>
+                <label className={LABEL_CLS}>
+                  Descripción
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={readOnly}
+                    maxLength={500}
+                    rows={2}
+                    className={`${INPUT_CLS} h-auto py-2`}
+                  />
+                </label>
+                {creating && products.length > 1 && (
+                  <label className={LABEL_CLS}>
+                    Producto
+                    <select
+                      value={productCode}
+                      onChange={(e) => {
+                        setProductCode(e.target.value);
+                        setSelected(new Set());
+                      }}
+                      className={INPUT_CLS}
                     >
-                      <input
-                        type="checkbox"
-                        checked={allOn}
-                        onChange={(e) => toggleModule(ids, e.target.checked)}
-                        aria-label={`Seleccionar todos los permisos de ${moduleName}`}
-                        className="h-4 w-4 accent-[#557EFF]"
-                      />
-                      {moduleName}
-                    </label>
-                    {pair && (
-                      <div className="mt-2 pl-6 text-[#162744] dark:text-white">
-                        <FamilyPairCheckboxes
-                          moduleName={moduleName}
-                          read={pair.read}
-                          create={pair.create}
-                          selected={selected}
-                          onToggle={toggle}
-                        />
-                      </div>
-                    )}
-                    {rest.length > 0 && (
-                      <ul className="mt-2 flex flex-col gap-1.5 pl-6">
-                        {rest.map((p) => (
-                          <li key={p.id}>
-                            <label className="flex items-start gap-2 text-sm text-[#162744] dark:text-white">
-                              <input
-                                type="checkbox"
-                                checked={selected.has(p.id)}
-                                onChange={() => toggle(p.id)}
-                                className="mt-0.5 h-4 w-4 accent-[#557EFF]"
-                              />
-                              <span>{p.name}</span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </fieldset>
+                      {products.map((p) => (
+                        <option key={p} value={p}>
+                          {PRODUCT_LABEL[p] ?? p}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={HINT_CLS}>Un rol solo incluye permisos de su producto.</span>
+                  </label>
+                )}
+              </div>
+            }
+            modules={permissionsFieldset(readOnly || !hasBoth ? byModule : regularModules, "Permisos")}
+            services={hasBoth ? permissionsFieldset(serviceModules, "Permisos por tipo de servicio") : null}
+          />
 
           {dropped.length > 0 && (
             <p role="status" className="rounded-[10px] bg-[#FFF4E5] p-3 text-xs font-semibold text-[#C2410C]">

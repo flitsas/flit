@@ -35,10 +35,12 @@ vi.mock("@/lib/api/security", () => ({
   ]),
 }));
 
-async function openEditor(roleName: string) {
+async function openEditor(roleName: string, entity: "Compañía" | "Organismo de Tránsito" = "Compañía") {
   const user = userEvent.setup();
   render(<RbacAdmin />);
   for (const b of await screen.findAllByRole("button", { name: /roles del sistema/i })) await user.click(b);
+  // HU #13653: las tablas de roles viven en sub-pestañas por tipo de entidad.
+  await user.click(await screen.findByRole("tab", { name: entity }));
   await user.click(await screen.findByRole("button", { name: `Editar permisos de ${roleName}` }));
   await screen.findByText("Ver trámites");
   return user;
@@ -58,7 +60,7 @@ describe("RbacAdmin — módulos OT según el tipo de rol (HU #13644)", () => {
   });
 
   it("un rol OT sí ofrece los módulos OT", async () => {
-    await openEditor("Administrador OT");
+    await openEditor("Administrador OT", "Organismo de Tránsito");
     expect(screen.getByText("OT: Mandatos")).toBeInTheDocument();
   });
 

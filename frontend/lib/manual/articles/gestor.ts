@@ -899,10 +899,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario pulsa «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes).",
         ],
         bullets: [
-          "1. Pulsa «Permisos por módulo» en la fila de la persona.",
+          "1. Pulsa «Permisos por módulo» en la fila de la persona. La ficha tiene dos pestañas: «Módulos» y «Tipos de servicio».",
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
-          "4. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
+          "4. En la pestaña «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
         ],
         callouts: [
           {
@@ -931,10 +931,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "La columna «Código» muestra el código que escribiste para tus roles propios; los roles de FLIT no lo muestran. Al crear o editar un rol, cada módulo y cada permiso aparecen con su nombre, igual que en el resto de la plataforma.",
         ],
         bullets: [
-          "1. Pulsa «Nuevo rol».",
-          "2. Escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
-          "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
-          "4. Pulsa «Crear rol». Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera.",
+          "1. Pulsa «Nuevo rol». El editor tiene pestañas: «Datos del rol», «Módulos» y «Tipos de servicio».",
+          "2. En «Datos del rol» escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
+          "3. En «Módulos» y «Tipos de servicio» marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
+          "4. Pulsa «Crear rol» desde cualquier pestaña: guarda todo. Si falta el código o el nombre, vuelves a «Datos del rol» con el aviso. Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera.",
         ],
         callouts: [
           {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Pencil } from "lucide-react";
 import {
   superadminClient,
   RbacModule,
@@ -19,11 +19,14 @@ import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
+import { RoleEditorTabs, type RoleEditorTabId } from "@/components/shared/permissions/RoleEditorTabs";
+import { SectionTabs } from "@/components/atom/SectionTabs";
 import { modulesForRoleTarget } from "@/lib/permissions/otModules";
 import {
   FAMILY_CREATE_REQUIRES_READ_MESSAGE,
   findFamilyPair,
   isFamilyCreateRequiresReadError,
+  isServiceTypeModule,
   normalizeFamilyPairs,
   toggleRolePermission,
 } from "@/lib/permissions/familyPairs";
@@ -318,9 +321,10 @@ export function RbacAdmin() {
 
 // HU #10509 — el catálogo de roles es GLOBAL por tipo de entidad (HU #10505); ya no se filtra
 // por tenant. Se muestran SIEMPRE ambas tablas (AC2) y la creación/edición vive en modales.
-const ENTITY_TABLES: { type: RoleTargetEntityType; title: string; icon: typeof Building2 }[] = [
-  { type: "COMPANY", title: "Roles de Compañía", icon: Building2 },
-  { type: "TRANSIT_OFFICE", title: "Roles de Organismo de Tránsito", icon: Landmark },
+// HU #13653: cada tabla en su sub-pestaña «Compañía | Organismo de Tránsito» (SectionTabs, como Mandatos).
+const ENTITY_TABLES: { type: RoleTargetEntityType; title: string }[] = [
+  { type: "COMPANY", title: "Compañía" },
+  { type: "TRANSIT_OFFICE", title: "Organismo de Tránsito" },
 ];
 
 function RolesTab() {
@@ -343,6 +347,7 @@ function RolesTabContent() {
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
   const [showCreateRole, setShowCreateRole] = useState(false);
   const [editTarget, setEditTarget] = useState<{ role: RbacRole; targetEntityType: RoleTargetEntityType } | null>(null);
+  const [entityTab, setEntityTab] = useState<RoleTargetEntityType>("COMPANY");
 
   const loadRoles = useCallback((type: RoleTargetEntityType) => {
     const setStatus = type === "COMPANY" ? setCompanyStatus : setOtStatus;
@@ -418,7 +423,11 @@ function RolesTabContent() {
         </button>
       </div>
 
-      {ENTITY_TABLES.map(({ type, title, icon: Icon }) => {
+      <SectionTabs
+        ariaLabel="Roles del sistema por tipo de entidad"
+        active={entityTab}
+        onChange={setEntityTab}
+        tabs={ENTITY_TABLES.map(({ type, title }) => {
         const roles = type === "COMPANY" ? companyRoles : otRoles;
         const pgRoles = type === "COMPANY" ? pgCompany : pgOt;
         const status = type === "COMPANY" ? companyStatus : otStatus;
@@ -484,12 +493,10 @@ function RolesTabContent() {
             ),
           },
         ];
-        return (
-          <section key={type} className="flex flex-col gap-2">
-            <h3 className="flex items-center gap-2 text-sm font-bold">
-              <Icon className="h-4 w-4" style={{ color: "#557EFF" }} aria-hidden="true" />
-              {title}
-            </h3>
+        return {
+          id: type,
+          label: title,
+          content: (
             <DataTable
               columns={columns}
               rows={pgRoles.paginar(roles)}
@@ -504,10 +511,12 @@ function RolesTabContent() {
               status={status}
               emptyMessage={`No hay roles ${type === "COMPANY" ? "de compañía" : "de organismo de tránsito"}. Crea el primero.`}
               minWidth={640}
+              ariaLabel={`Roles de ${title}`}
             />
-          </section>
-        );
+          ),
+        };
       })}
+      />
 
       {showCreateRole && (
         <CreateRoleModal
@@ -598,6 +607,33 @@ function ModulePermissionsChecklist({
   );
 }
 
+/**
+ * HU #13653: reparte el catálogo en «Módulos» y «Tipos de servicio» para RoleEditorTabs. Mientras carga, o si no hay
+ * tipos de servicio, solo hay la lista de módulos (sin pestañas).
+ */
+function permissionTabs(
+  modules: AccessibleModule[],
+  modulesLoading: boolean,
+  selected: Set<string>,
+  onToggle: (id: string) => void,
+  onToggleModule: (m: AccessibleModule) => void,
+) {
+  const services = modules.filter(isServiceTypeModule);
+  const regular = modules.filter((m) => !isServiceTypeModule(m));
+  const checklist = (list: AccessibleModule[]) => (
+    <ModulePermissionsChecklist
+      modules={list}
+      modulesLoading={modulesLoading}
+      selected={selected}
+      onToggle={onToggle}
+      onToggleModule={onToggleModule}
+    />
+  );
+  // Una sola clase de módulos (o aún cargando): una sola lista, sin pestaña vacía.
+  if (modulesLoading || services.length === 0 || regular.length === 0) return { modules: checklist(modules), services: null };
+  return { modules: checklist(regular), services: checklist(services) };
+}
+
 /** HU #10664 — RBAC puro: los módulos son transversales (no dependen del tipo de entidad).
  * HU #12964: un rol solo puede tener permisos de módulos de su producto, así que el catálogo se
  * filtra por el producto del rol. Un rol nuevo es de Trámites. Un rol de compañía no ofrece los módulos OT. */
@@ -629,6 +665,8 @@ function CreateRoleModal({
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
   const { modules, loading: modulesLoading } = useModulesCatalog("tramites", targetEntityType);
+  // HU #13653: «Datos del rol | Módulos | Tipos de servicio». El botón «Crear rol» queda fuera y guarda todo.
+  const [tab, setTab] = useState<RoleEditorTabId>("datos");
   const catalogIds = useMemo(() => new Set(modules.flatMap((m) => m.actions.map((a) => a.id))), [modules]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -651,6 +689,12 @@ function CreateRoleModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Los campos viven en la pestaña «Datos del rol»: si falta alguno se vuelve a ella con el aviso.
+    if (!code.trim() || !name.trim()) {
+      setTab("datos");
+      setError("Escribe el código y el nombre del rol.");
+      return;
+    }
     // Si se cambió el tipo a Compañía tras marcar permisos OT, esos ya no se ven y no se envían.
     const ids = [...selected].filter((id) => catalogIds.has(id));
     // HU #10664 AC2 — un rol debe otorgar acceso a al menos un permiso (mínimo uno por módulo).
@@ -682,44 +726,43 @@ function CreateRoleModal({
 
   return (
     <Modal open onClose={onClose} busy={busy} size="md" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
-            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
-          </div>
-          <div>
-            <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
-            <select
-              id="role-target-type"
-              required
-              value={targetEntityType}
-              onChange={(e) => setTargetEntityType(e.target.value as RoleTargetEntityType)}
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-            >
-              <option value="COMPANY">Compañía</option>
-              <option value="TRANSIT_OFFICE">Organismo de Tránsito</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
-          <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
-        </div>
-        <div>
-          <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
-          <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe brevemente el propósito del rol" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
-        </div>
-        <div>
-          <span className="text-xs font-semibold block mb-1.5">Permisos por módulo</span>
-          <ModulePermissionsChecklist
-            modules={modules}
-            modulesLoading={modulesLoading}
-            selected={selected}
-            onToggle={toggle}
-            onToggleModule={toggleModule}
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+        <RoleEditorTabs
+          active={tab}
+          onChange={setTab}
+          data={
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
+                  <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+                </div>
+                <div>
+                  <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
+                  <select
+                    id="role-target-type"
+                    required
+                    value={targetEntityType}
+                    onChange={(e) => setTargetEntityType(e.target.value as RoleTargetEntityType)}
+                    className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                  >
+                    <option value="COMPANY">Compañía</option>
+                    <option value="TRANSIT_OFFICE">Organismo de Tránsito</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
+                <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+              </div>
+              <div>
+                <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
+                <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe brevemente el propósito del rol" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+              </div>
+            </div>
+          }
+          {...permissionTabs(modules, modulesLoading, selected, toggle, toggleModule)}
+        />
         {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
         <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
           {busy ? "Creando…" : "Crear rol"}
@@ -742,6 +785,8 @@ function EditRolePermissionsModal({
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // HU #13653: «Módulos | Tipos de servicio» (sin tipos de servicio, solo la lista).
+  const [tab, setTab] = useState<RoleEditorTabId>("modulos");
 
   useEffect(() => {
     let cancelled = false;
@@ -808,12 +853,11 @@ function EditRolePermissionsModal({
         {loadingCurrent ? (
           <div className="py-10 text-center text-sm opacity-60">Cargando permisos actuales…</div>
         ) : (
-          <ModulePermissionsChecklist
-            modules={modules}
-            modulesLoading={modulesLoading}
-            selected={selected}
-            onToggle={toggle}
-            onToggleModule={toggleModule}
+          <RoleEditorTabs
+            active={tab}
+            onChange={setTab}
+            ariaLabel="Permisos del rol"
+            {...permissionTabs(modules, modulesLoading, selected, toggle, toggleModule)}
           />
         )}
         {foreignCount > 0 && (

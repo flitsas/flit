@@ -66,11 +66,56 @@ beforeEach(() => {
   setRole(["mat-r", "mat-c"]);
 });
 
-const renderSection = () => render(<ModulePermissionsSection userId="u1" tenantId="t1" mode="superadmin" roleIds={["r1"]} />);
+// Solo hay tipos de servicio en este catálogo: la ficha los lista sin pestañas (HU #13653).
+async function renderSection() {
+  render(<ModulePermissionsSection userId="u1" tenantId="t1" mode="superadmin" roleIds={["r1"]} />);
+  await screen.findByTestId("module-tramites-matriculas");
+  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+}
+
+describe("ModulePermissionsSection — sub-pestañas «Módulos | Tipos de servicio» (HU #13653)", () => {
+  const inicio = { id: "m-ini", code: "dashboard", name: "Inicio", sortOrder: -1, actions: [{ id: "ini-r", slug: "dashboard.read", name: "Ver inicio" }] };
+
+  it("separa los módulos de los tipos de servicio; «Módulos» abre primero", async () => {
+    vi.mocked(getAccessibleModules).mockResolvedValue([inicio, ...modules]);
+    vi.mocked(listGrantablePermissions).mockResolvedValue([
+      { id: "ini-r", slug: "dashboard.read", name: "Ver inicio", moduleCode: "dashboard", productCode: "tramites" },
+      ...grantable,
+    ]);
+    render(<ModulePermissionsSection userId="u1" tenantId="t1" mode="superadmin" roleIds={["r1"]} />);
+
+    const modulos = await screen.findByRole("tab", { name: "Módulos" });
+    expect(modulos).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("switch", { name: "Ver inicio, módulo Inicio" })).toBeVisible();
+    expect(screen.getByTestId("module-tramites-matriculas")).not.toBeVisible();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Tipos de servicio" }));
+    expect(screen.getByTestId("module-tramites-matriculas")).toBeVisible();
+    expect(screen.getByTestId("module-dashboard")).not.toBeVisible();
+
+    // Teclado: flecha izquierda vuelve a «Módulos».
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("tab", { name: "Módulos" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("sin tipos de servicio (p. ej. la ficha del organismo) no hay pestañas, solo la lista", async () => {
+    vi.mocked(getAccessibleModules).mockResolvedValue([inicio, ...modules]);
+    vi.mocked(listGrantablePermissions).mockResolvedValue([
+      { id: "ini-r", slug: "dashboard.read", name: "Ver inicio", moduleCode: "dashboard", productCode: "tramites" },
+      ...grantable,
+    ]);
+    render(
+      <ModulePermissionsSection userId="u1" mode="admin" moduleFilter={(code) => code === "dashboard"} />,
+    );
+
+    expect(await screen.findByRole("switch", { name: "Ver inicio, módulo Inicio" })).toBeVisible();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  });
+});
 
 describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #13666)", () => {
   it("AC2: cada tipo de servicio tiene el par Ver / Crear con «Heredado del rol»", async () => {
-    renderSection();
+    await renderSection();
     for (const f of FAMILIES) {
       const li = await screen.findByTestId(`module-${f.code}`);
       expect(within(li).getByRole("switch", { name: `Ver, ${f.name}` })).toBeInTheDocument();
@@ -85,7 +130,7 @@ describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #136
   it("AC2: un permiso individual muestra el estado «Individual» en su fila", async () => {
     setRole([]);
     vi.mocked(listUserOverrides).mockResolvedValue([override("mat-r", "matriculas.read", "allow")]);
-    renderSection();
+    await renderSection();
     const mat = await screen.findByTestId("module-tramites-matriculas");
     expect(within(within(mat).getByTestId("family-read-matriculas.read")).getByText("Individual")).toBeInTheDocument();
     expect(within(within(mat).getByTestId("family-create-matriculas.create")).getByText("Heredado del rol")).toBeInTheDocument();
@@ -93,14 +138,14 @@ describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #136
 
   it("Crear está deshabilitado mientras el Ver efectivo (heredado) esté inactivo", async () => {
     setRole([]);
-    renderSection();
+    await renderSection();
     expect(await sw("Crear")).toBeDisabled();
     expect(await sw("Ver")).toBeEnabled();
   });
 
   it("Crear está deshabilitado si el Ver heredado está denegado individualmente", async () => {
     vi.mocked(listUserOverrides).mockResolvedValue([override("mat-r", "matriculas.read", "deny")]);
-    renderSection();
+    await renderSection();
     expect(await sw("Ver")).toHaveAttribute("aria-checked", "false");
     expect(await sw("Crear")).toBeDisabled();
   });
@@ -108,7 +153,7 @@ describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #136
   it("al habilitar Ver, Crear queda disponible", async () => {
     setRole([]);
     vi.mocked(setUserOverride).mockResolvedValue({ permissionId: "mat-r", effect: "allow", changed: true });
-    renderSection();
+    await renderSection();
     await userEvent.click(await sw("Ver"));
     await waitFor(() => expect(setUserOverride).toHaveBeenCalledWith("u1", "mat-r", "allow", "t1"));
     vi.mocked(listUserOverrides).mockResolvedValue([override("mat-r", "matriculas.read", "allow")]);
@@ -120,7 +165,7 @@ describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #136
       vi.mocked(listUserOverrides).mockResolvedValue([override("mat-r", "matriculas.read", "deny"), override("mat-c", "matriculas.create", "deny")]);
       return { permissionId: "mat-r", effect: "deny", changed: true };
     });
-    renderSection();
+    await renderSection();
     expect(await sw("Crear")).toHaveAttribute("aria-checked", "true");
 
     await userEvent.click(await sw("Ver"));
@@ -137,7 +182,7 @@ describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #136
     vi.mocked(removeUserOverride).mockImplementation(async () => {
       vi.mocked(listUserOverrides).mockResolvedValue([]);
     });
-    renderSection();
+    await renderSection();
     expect(await sw("Crear")).toBeEnabled();
 
     await userEvent.click(await screen.findByRole("button", { name: `Volver Ver (${MAT}) a lo que dicta el rol` }));
@@ -150,7 +195,7 @@ describe("ModulePermissionsSection — Ver / Crear por tipo de servicio (HU #136
   it("muestra el 400 FAMILY_CREATE_REQUIRES_READ con un mensaje claro", async () => {
     setRole(["mat-r"]);
     vi.mocked(setUserOverride).mockRejectedValue(new ApiError(400, "x", { code: "FAMILY_CREATE_REQUIRES_READ", message: "x" }));
-    renderSection();
+    await renderSection();
     await userEvent.click(await sw("Crear"));
     expect(await screen.findByText(/primero debe estar habilitado «Ver»/)).toBeInTheDocument();
   });

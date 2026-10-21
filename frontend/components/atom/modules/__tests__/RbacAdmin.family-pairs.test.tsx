@@ -5,6 +5,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RbacAdmin } from "../RbacAdmin";
 import { SuperadminApiError } from "@/lib/api/superadmin-client";
+import { getAccessibleModules } from "@/lib/api/security";
 
 const getRole = vi.fn();
 const setRolePermissions = vi.fn();
@@ -95,5 +96,33 @@ describe("RbacAdmin — Ver / Crear por tipo de servicio (HU #13666)", () => {
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText(/primero debe estar habilitado «Ver»/)).toBeInTheDocument();
+  });
+});
+
+describe("RbacAdmin — editor de permisos en sub-pestañas (HU #13653)", () => {
+  it("con módulos y tipos de servicio separa «Módulos | Tipos de servicio» y «Guardar permisos» guarda ambos", async () => {
+    const base = await vi.mocked(getAccessibleModules)("tramites");
+    vi.mocked(getAccessibleModules).mockResolvedValue([
+      { id: "md", code: "dashboard", name: "Inicio", sortOrder: 0, actions: [{ id: "ini-r", slug: "dashboard.read", name: "Ver inicio" }] },
+      ...base,
+    ]);
+    const user = userEvent.setup();
+    render(<RbacAdmin />);
+    await user.click(await screen.findByRole("button", { name: /roles del sistema/i }));
+    await user.click(await screen.findByRole("button", { name: /editar permisos de supervisor/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    const modulos = await within(dialog).findByRole("tab", { name: "Módulos" });
+    expect(modulos).toHaveAttribute("aria-selected", "true");
+    expect(within(dialog).queryByRole("tab", { name: "Datos del rol" })).not.toBeInTheDocument();
+    await user.click(await within(dialog).findByRole("checkbox", { name: "Ver inicio" }));
+
+    await user.click(within(dialog).getByRole("tab", { name: "Tipos de servicio" }));
+    await user.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Traspasos" }));
+    await user.click(within(dialog).getByRole("button", { name: /guardar permisos/i }));
+
+    await waitFor(() => expect(setRolePermissions).toHaveBeenCalled());
+    const ids = setRolePermissions.mock.calls.at(-1)?.[1] as string[];
+    expect(ids).toEqual(expect.arrayContaining(["ini-r", "tra-r"]));
   });
 });
