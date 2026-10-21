@@ -148,7 +148,7 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await user.click(within(dialog).getByRole("checkbox", { name: /leer trámites/i }));
     await user.click(within(dialog).getByRole("button", { name: /^crear rol$/i }));
 
-    expect(await within(dialog).findByText("Escribe el código y el nombre del rol.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Escribe un nombre para el rol.")).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/^nombre/i)).toHaveFocus();
     expect(createRole).not.toHaveBeenCalled();
   });

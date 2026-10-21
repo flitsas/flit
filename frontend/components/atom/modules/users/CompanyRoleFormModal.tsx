@@ -88,6 +88,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aviso de un campo de «Datos del rol»: va debajo del campo, visible aunque la lista de permisos sea larga.
+  const [fieldError, setFieldError] = useState<{ field: "code" | "name"; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,18 +161,21 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     e.preventDefault();
     if (readOnly) return;
     setError(null);
+    setFieldError(null);
     if (creating && !CODE_PATTERN.test(code.trim())) {
       document.getElementById("company-role-code")?.focus();
-      setError(
+      setFieldError({
+        field: "code",
+        message:
         code.trim()
           ? "Usa solo letras, números, punto, guion o guion bajo (de 2 a 50)."
           : "Escribe un código para el rol.",
-      );
+      });
       return;
     }
     if (!name.trim()) {
       document.getElementById("company-role-name")?.focus();
-      setError("El nombre es obligatorio.");
+      setFieldError({ field: "name", message: "Escribe un nombre para el rol." });
       return;
     }
     // Nunca se envía un «Crear» de tipo de servicio sin su «Ver» (la API lo rechazaría con FAMILY_CREATE_REQUIRES_READ).
@@ -349,7 +354,10 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                   <input
                     id="company-role-code"
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    onChange={(e) => {
+                      setCode(e.target.value);
+                      if (fieldError?.field === "code") setFieldError(null);
+                    }}
                     disabled={!creating}
                     maxLength={50}
                     autoComplete="off"
@@ -362,6 +370,11 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                       Identificador interno, p. ej. contador_senior. No se puede cambiar después.
                     </span>
                   )}
+                  {fieldError?.field === "code" && (
+                    <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">
+                      {fieldError.message}
+                    </span>
+                  )}
                 </label>
                 )}
                 <label className={LABEL_CLS}>
@@ -369,11 +382,19 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                   <input
                     id="company-role-name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (fieldError?.field === "name") setFieldError(null);
+                    }}
                     disabled={readOnly}
                     maxLength={100}
                     className={INPUT_CLS}
                   />
+                  {fieldError?.field === "name" && (
+                    <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">
+                      {fieldError.message}
+                    </span>
+                  )}
                 </label>
                 <label className={LABEL_CLS}>
                   Descripción

@@ -642,6 +642,8 @@ function CreateRoleModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aviso de un campo de «Datos del rol»: va debajo del campo, visible aunque la lista de permisos sea larga.
+  const [fieldError, setFieldError] = useState<{ field: "code" | "name"; message: string } | null>(null);
 
   // HU #13666: «crear exige ver» — apagar «Ver» apaga también «Crear» de ese tipo de servicio.
   function toggle(id: string) {
@@ -663,7 +665,9 @@ function CreateRoleModal({
     if (!code.trim() || !name.trim()) {
       // Lleva el foco al primer campo que falta (están arriba de la misma lista).
       document.getElementById(!code.trim() ? "role-code" : "role-name")?.focus();
-      setError("Escribe el código y el nombre del rol.");
+      setFieldError(!code.trim()
+        ? { field: "code", message: "Escribe un código para el rol." }
+        : { field: "name", message: "Escribe un nombre para el rol." });
       return;
     }
     // Si se cambió el tipo a Compañía tras marcar permisos OT, esos ya no se ven y no se envían.
@@ -705,7 +709,8 @@ function CreateRoleModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
-                  <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+                  <input id="role-code" value={code} onChange={(e) => { setCode(e.target.value); if (fieldError?.field === "code") setFieldError(null); }} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+                  {fieldError?.field === "code" && <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">{fieldError.message}</span>}
                 </div>
                 <div>
                   <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
@@ -723,7 +728,8 @@ function CreateRoleModal({
               </div>
               <div>
                 <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
-                <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+                <input id="role-name" value={name} onChange={(e) => { setName(e.target.value); if (fieldError?.field === "name") setFieldError(null); }} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+                {fieldError?.field === "name" && <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">{fieldError.message}</span>}
               </div>
               <div>
                 <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>

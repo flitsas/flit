@@ -191,7 +191,7 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
     await ue.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Matrículas" }));
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("El nombre es obligatorio.");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Escribe un nombre para el rol.");
     expect(within(dialog).getByLabelText(/^nombre/i)).toHaveFocus();
     expect(createTenantRole).not.toHaveBeenCalled();
 
