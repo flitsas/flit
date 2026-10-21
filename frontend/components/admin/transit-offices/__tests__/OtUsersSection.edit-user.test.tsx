@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import { fetchOtUsers, updateOtUser } from "@/lib/api/admin-ot-security";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -66,12 +67,14 @@ describe("OtUsersSection — botón Editar (#10622)", () => {
 
   it("AC4: no muestra el botón Editar para un usuario con estado Pendiente", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [pendingUser] });
+    const user = userEvent.setup();
     renderSection();
 
     await screen.findByText("Invitado Pendiente");
-    expect(
-      screen.queryByRole("button", { name: /editar usuario invitado pendiente/i }),
-    ).not.toBeInTheDocument();
+    // HU #13653: las acciones viven en el menú «Acciones» de la fila.
+    expect(await rowActionNames(user, "Invitado Pendiente")).not.toContainEqual(
+      expect.stringMatching(/editar usuario/i),
+    );
   });
 
   it("AC1: abre el modal prellenado con nombre y correo al hacer clic en Editar", async () => {
@@ -80,7 +83,7 @@ describe("OtUsersSection — botón Editar (#10622)", () => {
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /editar usuario laura garcía/i }));
+    await chooseRowAction(user, "Laura García", /editar usuario laura garcía/i);
 
     expect(await screen.findByLabelText(/nombre completo/i)).toHaveValue("Laura García");
     expect(screen.getByLabelText(/correo electrónico/i)).toHaveValue("laura@transito.gov.co");
@@ -93,7 +96,7 @@ describe("OtUsersSection — botón Editar (#10622)", () => {
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /editar usuario laura garcía/i }));
+    await chooseRowAction(user, "Laura García", /editar usuario laura garcía/i);
 
     const nameInput = await screen.findByLabelText(/nombre completo/i);
     await user.clear(nameInput);

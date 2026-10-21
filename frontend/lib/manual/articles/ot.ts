@@ -287,9 +287,9 @@ export const OT_ARTICLES: ManualArticle[] = [
         bullets: [
           "Dock → Usuarios (hub OT).",
           "Completa nombre, correo y rol. El rol es obligatorio, también para el administrador: hasta que lo eliges, «Enviar invitación» queda deshabilitado y ves «Elige el rol de la persona.». El invitado recibe un enlace para activar su cuenta.",
-          "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Editar usuario».",
+          "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Acciones» → «Editar usuario» en su fila.",
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
-          "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",
+          "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
           "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada.",
         ],
       },
@@ -297,10 +297,10 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "permisos-modulo",
         title: "3. Permisos por módulo de una persona",
         paragraphs: [
-          "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila pulsa «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial».",
+          "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila abre «Acciones» y elige «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial».",
         ],
         bullets: [
-          "1. Dock → Usuarios y pulsa «Permisos por módulo» en la fila de la persona.",
+          "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
           "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",

@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { getUsers } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
@@ -71,7 +72,7 @@ describe("Usuarios — Permisos por módulo (#13652)", () => {
     vi.mocked(getUsers).mockResolvedValue([base]);
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
+    await chooseRowAction(userEvent.setup(), "Ana Torres", "Permisos por módulo de Ana Torres");
     expect(await screen.findByText("Permisos por módulo — Ana Torres")).toBeInTheDocument();
   });
 
@@ -79,7 +80,7 @@ describe("Usuarios — Permisos por módulo (#13652)", () => {
     vi.mocked(getUsers).mockResolvedValue([superAdminUser]);
     render(<Usuarios />);
     await screen.findByText("Root FLIT");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Root FLIT" }));
+    await chooseRowAction(userEvent.setup(), "Root FLIT", "Permisos por módulo de Root FLIT");
     expect(await screen.findByText("Los Super Admin no tienen permisos individuales.")).toBeInTheDocument();
   });
 
@@ -87,7 +88,7 @@ describe("Usuarios — Permisos por módulo (#13652)", () => {
     vi.mocked(getUsers).mockResolvedValue([pending]);
     render(<Usuarios />);
     await screen.findByText("Invitado");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Invitado" }));
+    await chooseRowAction(userEvent.setup(), "Invitado", "Permisos por módulo de Invitado");
     expect(await screen.findByText(/cuando el usuario acepte la invitación/)).toBeInTheDocument();
   });
 
@@ -96,7 +97,7 @@ describe("Usuarios — Permisos por módulo (#13652)", () => {
     vi.mocked(getUsers).mockResolvedValue([base]);
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
-    expect(screen.queryByRole("button", { name: /Permisos por módulo de/ })).not.toBeInTheDocument();
+    expect(await rowActionNames(userEvent.setup(), "Ana Torres")).not.toContainEqual(expect.stringMatching(/Permisos por módulo de/));
   });
 });
 
@@ -132,7 +133,7 @@ describe("Usuarios — Admin de Compañía (#13655, #13656, #13658)", () => {
     vi.mocked(getUsers).mockResolvedValue([base]);
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
+    await chooseRowAction(userEvent.setup(), "Ana Torres", "Permisos por módulo de Ana Torres");
     expect(await screen.findByText("Permisos por módulo — Ana Torres")).toBeInTheDocument();
     // Modo admin: el tope sale de /grantable sin tenantId, y los usuarios sin rol admin quedan editables.
     expect(listGrantablePermissions).toHaveBeenCalledWith(undefined);
@@ -143,7 +144,7 @@ describe("Usuarios — Admin de Compañía (#13655, #13656, #13658)", () => {
     vi.mocked(getUsers).mockResolvedValue([admin]);
     render(<Usuarios />);
     await screen.findByText("Beto Admin");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Beto Admin" }));
+    await chooseRowAction(userEvent.setup(), "Beto Admin", "Permisos por módulo de Beto Admin");
     expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Habilitar el módulo/ })).not.toBeInTheDocument();
   });
@@ -152,7 +153,7 @@ describe("Usuarios — Admin de Compañía (#13655, #13656, #13658)", () => {
     vi.mocked(getUsers).mockResolvedValue([self]);
     render(<Usuarios />);
     await screen.findByText("Yo Mismo");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Yo Mismo" }));
+    await chooseRowAction(userEvent.setup(), "Yo Mismo", "Permisos por módulo de Yo Mismo");
     expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
   });
 
@@ -160,7 +161,7 @@ describe("Usuarios — Admin de Compañía (#13655, #13656, #13658)", () => {
     vi.mocked(getUsers).mockResolvedValue([base]);
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
+    await chooseRowAction(userEvent.setup(), "Ana Torres", "Permisos por módulo de Ana Torres");
     await screen.findByText("Permisos por módulo — Ana Torres");
     expect(screen.queryByText(ADMIN_READ_ONLY_MESSAGE)).not.toBeInTheDocument();
   });

@@ -6,6 +6,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { getUsers, blockUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
@@ -69,7 +70,7 @@ describe("Usuarios — bloquear usuario (ajuste QA: desactivación indefinida, H
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /suspender temporalmente a ana torres/i }));
+    await chooseRowAction(user, "Ana Torres", /suspender temporalmente a ana torres/i);
 
     expect(await screen.findByLabelText(/suspendido hasta/i)).toBeInTheDocument();
   });
@@ -81,7 +82,7 @@ describe("Usuarios — bloquear usuario (ajuste QA: desactivación indefinida, H
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /suspender temporalmente a ana torres/i }));
+    await chooseRowAction(user, "Ana Torres", /suspender temporalmente a ana torres/i);
     await user.type(
       await screen.findByLabelText(/motivo/i),
       "Desactivación indefinida de prueba",

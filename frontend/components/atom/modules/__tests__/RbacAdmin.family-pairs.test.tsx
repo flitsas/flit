@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RbacAdmin } from "../RbacAdmin";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { SuperadminApiError } from "@/lib/api/superadmin-client";
 import { getAccessibleModules } from "@/lib/api/security";
 
@@ -46,7 +47,7 @@ async function openEditor() {
   const user = userEvent.setup();
   render(<RbacAdmin />);
   await user.click(await screen.findByRole("button", { name: /roles del sistema/i }));
-  await user.click(await screen.findByRole("button", { name: /editar permisos de supervisor/i }));
+  await chooseRowAction(user, "Supervisor", /editar permisos de supervisor/i);
   await screen.findByRole("checkbox", { name: "Ver — Trámites: Matrículas" });
   return user;
 }
@@ -112,7 +113,7 @@ describe("RbacAdmin — editor de permisos en una sola lista (HU #13653)", () =>
     const user = userEvent.setup();
     render(<RbacAdmin />);
     await user.click(await screen.findByRole("button", { name: /roles del sistema/i }));
-    await user.click(await screen.findByRole("button", { name: /editar permisos de supervisor/i }));
+    await chooseRowAction(user, "Supervisor", /editar permisos de supervisor/i);
     const dialog = await screen.findByRole("dialog");
 
     await within(dialog).findByRole("checkbox", { name: "Ver inicio" });

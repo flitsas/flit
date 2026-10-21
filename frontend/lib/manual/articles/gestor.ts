@@ -881,7 +881,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "gestionar",
         title: "3. Gestionar usuarios existentes",
         paragraphs: [
-          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT.",
+          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas.",
         ],
         bullets: [
           "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
@@ -896,10 +896,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "permisos-modulo",
         title: "4. Permisos por módulo de una persona",
         paragraphs: [
-          "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario pulsa «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes).",
+          "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario abre «Acciones» y elige «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes).",
         ],
         bullets: [
-          "1. Pulsa «Permisos por módulo» en la fila de la persona. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
+          "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
           "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
@@ -934,7 +934,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "1. Pulsa «Nuevo rol». El editor es una sola lista: «Datos del rol», «Módulos» y «Tipos de servicio».",
           "2. En «Datos del rol» escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
           "3. En «Módulos» y «Tipos de servicio» marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
-          "4. Pulsa «Crear rol»: guarda todo. Si falta el código o el nombre, ves el aviso y el cursor queda en ese campo. Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera.",
+          "4. Pulsa «Crear rol»: guarda todo. Si falta el código o el nombre, ves el aviso y el cursor queda en ese campo. Para cambiarlo o quitarlo después, abre «Acciones» en su fila y elige «Editar» o «Eliminar»; en un rol de FLIT, «Ver permisos».",
         ],
         callouts: [
           {

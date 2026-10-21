@@ -38,11 +38,10 @@ import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAudi
 import { UserPermissionsModal } from "@/components/atom/modules/users/UserPermissionsModal";
 import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
 import { SectionTabs } from "@/components/atom/SectionTabs";
-// HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
-import { ICON_BUTTON_HIT_AREA, RowActions, type RowAction } from "@/components/atom/RowActions";
+import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { assignRole, getRoles, type TenantRole } from "@/lib/api/security";
 import { isAdministratorRoleCode, isOtModuleCode } from "@/lib/permissions/modulePermissions";
 import { superadminClient } from "@/lib/api/superadmin-client";
@@ -190,8 +189,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     };
   }, [editTarget, isSuperAdmin]);
 
-  // Acciones de la fila como datos: UsersTable las renderiza con RowActions, que ya trae el
-  // área de clic de 40x40 (HU19).
+  // Acciones de la fila como datos: UsersTable las muestra en un solo botón «Acciones» con menú
+  // (RowActionsMenu), con las destructivas al final.
   function actionsForUser(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
     if (!u) return [];
@@ -247,7 +246,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         actions.push({
           icon: Ban,
           label: `Desactivar indefinidamente a ${u.fullName}`,
-          tone: "primary",
+          tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
         });
       }

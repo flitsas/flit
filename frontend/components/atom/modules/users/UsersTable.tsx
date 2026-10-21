@@ -11,7 +11,8 @@ import {
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
-import { RowActions, type RowAction } from "@/components/atom/RowActions";
+import type { RowAction } from "@/components/atom/RowActions";
+import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { ProfileCell, RoleCell } from "./ProfileRoleCell";
 import {
@@ -123,7 +124,10 @@ export interface UsersTableProps {
   onRetry?: () => void;
   /** Columna "Empresa" — solo tiene sentido en listados cross-tenant. */
   showTenantColumn?: boolean;
-  /** Acciones de la fila. Se renderizan con RowActions, que ya trae el área de clic correcta. */
+  /**
+   * Acciones de la fila. Se muestran en UN botón «Acciones» con menú (RowActionsMenu, como en trámites y mandatos);
+   * las de tono `danger` van al final. Cada opción conserva su nombre accesible completo («Editar usuario Ana»).
+   */
   actionsFor: (row: UserRow) => RowAction[];
   /**
    * Acciones con UI propia que no encajan en un RowAction simple (p. ej. el botón de reenviar
@@ -390,7 +394,11 @@ export function UsersTable({
                     >
                       <div className="flex items-center justify-end gap-1">
                         {extraActionsFor?.(row)}
-                        <RowActions actions={actionsFor(row)} />
+                        <RowActionsMenu
+                          ariaLabel={`Acciones de ${row.fullName}`}
+                          subject={row.fullName}
+                          actions={destructivasAlFinal(actionsFor(row))}
+                        />
                       </div>
                     </td>
                   </tr>

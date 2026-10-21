@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CompanyRolesPanel } from "../CompanyRolesPanel";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { ApiError } from "@/lib/api/types";
 import {
   createTenantRole,
@@ -161,9 +162,10 @@ describe("CompanyRolesPanel — roles globales (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    expect(screen.queryByRole("button", { name: /editar radicador/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /eliminar radicador/i })).not.toBeInTheDocument();
-    await ue.click(screen.getByRole("button", { name: /ver permisos de radicador/i }));
+    // HU #13653: las acciones viven en el menú «Acciones» de la fila; el rol global solo ofrece «Ver permisos».
+    expect(await rowActionNames(ue, "Radicador")).toEqual(["Ver permisos de Radicador"]);
+    expect(await rowActionNames(ue, "Contador")).toEqual(["Editar Contador", "Eliminar Contador"]);
+    await chooseRowAction(ue, "Radicador", /ver permisos de radicador/i);
 
     const dialog = await screen.findByRole("dialog");
     // HU #13666: solo el nombre del permiso, sin el código interno; y sin el código del rol FLIT.
@@ -310,7 +312,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    await ue.click(screen.getByRole("button", { name: /editar contador/i }));
+    await chooseRowAction(ue, "Contador", /editar contador/i);
     const dialog = await screen.findByRole("dialog");
     const nombre = await within(dialog).findByLabelText(/^nombre/i);
     expect(within(dialog).getByLabelText(/^código/i)).toBeDisabled();
@@ -339,7 +341,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
 
-    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    await chooseRowAction(ue, "Contador", /eliminar contador/i);
     dialog = await screen.findByRole("dialog");
     await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
@@ -351,7 +353,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    await chooseRowAction(ue, "Contador", /eliminar contador/i);
     const dialog = await screen.findByRole("dialog");
     await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 
@@ -365,7 +367,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    await chooseRowAction(ue, "Contador", /eliminar contador/i);
     const dialog = await screen.findByRole("dialog");
     await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 

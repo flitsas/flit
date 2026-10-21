@@ -7,6 +7,7 @@ import { CompanyUsersPanel } from "../CompanyUsersPanel";
 import { assignRole, getUsers } from "@/lib/api/security";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { countUserOverrides } from "@/lib/api/permission-overrides";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
@@ -36,7 +37,7 @@ beforeEach(() => {
 
 async function pickRole() {
   render(<CompanyUsersPanel tenantId="tenant-1" />);
-  await userEvent.click(await screen.findByRole("button", { name: /editar usuario hugo vélez/i }));
+  await chooseRowAction(userEvent, "Hugo Vélez", /editar usuario hugo vélez/i);
   const dialog = await screen.findByRole("dialog");
   const select = await within(dialog).findByRole("combobox", { name: "Cambiar rol del usuario" });
   await waitFor(() => expect(select).toBeEnabled());

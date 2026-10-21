@@ -7,6 +7,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
+import { rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { getUsers, reactivateInvitation } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import type { TenantUser } from "@/lib/api/security";
@@ -78,22 +79,20 @@ describe("Usuarios — invitación cancelada, estado vivo y reversible (#11552, 
     render(<Usuarios />);
 
     await screen.findByText("Sofía Nieto");
-    expect(screen.queryByRole("button", { name: /editar usuario sofía nieto/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /eliminar usuario sofía nieto/i })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /suspender temporalmente a sofía nieto/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /desactivar indefinidamente a sofía nieto/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /restablecer contraseña de sofía nieto/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ver historial de sofía nieto/i })).not.toBeInTheDocument();
-    // Tampoco "Cancelar invitación" — ya está cancelada, la acción que aplica es Reactivar.
-    expect(
-      screen.queryByRole("button", { name: /cancelar invitación a sofía nieto/i }),
-    ).not.toBeInTheDocument();
+    // HU #13653: las acciones de la fila viven en su menú «Acciones».
+    const acciones = await rowActionNames(userEvent.setup(), "Sofía Nieto");
+    for (const prohibida of [
+      /editar usuario/i,
+      /eliminar usuario/i,
+      /suspender temporalmente/i,
+      /desactivar indefinidamente/i,
+      /restablecer contraseña/i,
+      /ver historial/i,
+      // Tampoco "Cancelar invitación" — ya está cancelada, la acción que aplica es Reactivar.
+      /cancelar invitación/i,
+    ]) {
+      expect(acciones).not.toContainEqual(expect.stringMatching(prohibida));
+    }
   });
 
   it("AC2/AC4: sí ofrece 'Reactivar invitación' y, al usarla, la fila vuelve a verse Pendiente sin recargar la página", async () => {

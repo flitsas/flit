@@ -1211,7 +1211,7 @@
           "id": "gestionar",
           "title": "3. Gestionar usuarios existentes",
           "paragraphs": [
-            "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT."
+            "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas."
           ],
           "bullets": [
             "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
@@ -1227,10 +1227,10 @@
           "id": "permisos-modulo",
           "title": "4. Permisos por módulo de una persona",
           "paragraphs": [
-            "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario pulsa «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes)."
+            "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario abre «Acciones» y elige «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes)."
           ],
           "bullets": [
-            "1. Pulsa «Permisos por módulo» en la fila de la persona. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
+            "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
             "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
             "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
             "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear»."
@@ -1269,7 +1269,7 @@
             "1. Pulsa «Nuevo rol». El editor es una sola lista: «Datos del rol», «Módulos» y «Tipos de servicio».",
             "2. En «Datos del rol» escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
             "3. En «Módulos» y «Tipos de servicio» marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
-            "4. Pulsa «Crear rol»: guarda todo. Si falta el código o el nombre, ves el aviso y el cursor queda en ese campo. Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera."
+            "4. Pulsa «Crear rol»: guarda todo. Si falta el código o el nombre, ves el aviso y el cursor queda en ese campo. Para cambiarlo o quitarlo después, abre «Acciones» en su fila y elige «Editar» o «Eliminar»; en un rol de FLIT, «Ver permisos»."
           ],
           "callouts": [
             {
@@ -1660,9 +1660,9 @@
           "bullets": [
             "Dock → Usuarios (hub OT).",
             "Completa nombre, correo y rol. El rol es obligatorio, también para el administrador: hasta que lo eliges, «Enviar invitación» queda deshabilitado y ves «Elige el rol de la persona.». El invitado recibe un enlace para activar su cuenta.",
-            "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Editar usuario».",
+            "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Acciones» → «Editar usuario» en su fila.",
             "Verifica que el correo sea institucional del OT cuando la política lo exija.",
-            "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",
+            "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
             "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada."
           ],
           "callouts": []
@@ -1671,10 +1671,10 @@
           "id": "permisos-modulo",
           "title": "3. Permisos por módulo de una persona",
           "paragraphs": [
-            "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila pulsa «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial»."
+            "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila abre «Acciones» y elige «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial»."
           ],
           "bullets": [
-            "1. Dock → Usuarios y pulsa «Permisos por módulo» en la fila de la persona.",
+            "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
             "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
             "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
             "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
@@ -2584,7 +2584,7 @@
           "id": "rbac",
           "title": "1. RBAC Admin",
           "paragraphs": [
-            "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos sub-pestañas: «Compañía» y «Organismo de Tránsito»). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso."
+            "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos sub-pestañas: «Compañía» y «Organismo de Tránsito»). En cada fila, el botón «Acciones» reúne lo que puedes hacer: en un módulo, «Agregar permiso», desactivarlo o activarlo y eliminarlo; en un rol, «Editar permisos», desactivarlo o activarlo y eliminarlo (un rol de sistema no se puede eliminar). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso."
           ],
           "bullets": [],
           "callouts": [
@@ -2611,7 +2611,8 @@
           "paragraphs": [
             "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Al invitar desde la pestaña Usuarios del hub de un organismo, el rol es obligatorio: no hay rol por defecto y, hasta que lo eliges, «Enviar invitación» queda deshabilitado (incluido el primer Administrador OT). Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
             "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
-            "Permisos por módulo: desde la fila del usuario, con «Permisos por módulo», ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, con el máximo de espera); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+            "Las acciones de cada usuario (historial, permisos por módulo, editar, restablecer contraseña, suspender, desactivar y eliminar) están en el botón «Acciones» de su fila; las que quitan acceso van al final. Reenviar o reactivar una invitación sigue siendo el ícono de la fila.",
+            "Permisos por módulo: en la fila del usuario abre «Acciones» y elige «Permisos por módulo»; ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, con el máximo de espera); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
             "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada."
           ],
           "bullets": [],

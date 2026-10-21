@@ -9,6 +9,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import { fetchOtUsers, suspendOtUser } from "@/lib/api/admin-ot-security";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -66,7 +67,7 @@ describe("OtUsersSection — suspender usuario (ajuste QA: desactivación indefi
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /suspender temporalmente a laura garcía/i }));
+    await chooseRowAction(user, "Laura García", /suspender temporalmente a laura garcía/i);
 
     expect(await screen.findByLabelText(/suspendido hasta/i)).toBeInTheDocument();
   });
@@ -78,7 +79,7 @@ describe("OtUsersSection — suspender usuario (ajuste QA: desactivación indefi
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /suspender temporalmente a laura garcía/i }));
+    await chooseRowAction(user, "Laura García", /suspender temporalmente a laura garcía/i);
     await user.type(await screen.findByLabelText(/motivo/i), "Desactivación indefinida de prueba");
     await user.click(screen.getByRole("checkbox", { name: /desactivar indefinidamente/i }));
 

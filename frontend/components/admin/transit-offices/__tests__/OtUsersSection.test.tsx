@@ -9,6 +9,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
+import { chooseRowAction, findRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -147,8 +148,9 @@ describe("OtUsersSection — refactor adminOT", () => {
     // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
     expect(within(fila).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
+    // HU #13653: las acciones de la fila viven en su menú «Acciones».
     expect(
-      within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),
+      await findRowAction(userEvent.setup(), "Laura García", /editar usuario laura garcía/i, within(fila)),
     ).toBeInTheDocument();
   });
 
@@ -213,7 +215,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Laura García/i }));
+    await chooseRowAction(user, "Laura García", /Suspender temporalmente a Laura García/i);
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
     await user.click(screen.getByRole("button", { name: /^Suspender usuario$/i }));
 
@@ -230,7 +232,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Desactivar indefinidamente a Laura García/i }));
+    await chooseRowAction(user, "Laura García", /Desactivar indefinidamente a Laura García/i);
     expect(screen.queryByLabelText(/Suspendido hasta/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento grave");
     await user.click(screen.getByRole("button", { name: /^Desactivar usuario$/i }));
@@ -252,7 +254,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Laura García/i }));
+    await chooseRowAction(user, "Laura García", /Suspender temporalmente a Laura García/i);
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
     await user.click(screen.getByRole("button", { name: /^Suspender usuario$/i }));
 
@@ -268,7 +270,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Carlos Pérez");
 
-    await user.click(screen.getByRole("button", { name: /Reactivar usuario Carlos Pérez/i }));
+    await chooseRowAction(user, "Carlos Pérez", /Reactivar usuario Carlos Pérez/i);
     await waitFor(() =>
       expect(unsuspendOtUser).toHaveBeenCalledWith("u-2", { transitOfficeId: "ot-1" }),
     );

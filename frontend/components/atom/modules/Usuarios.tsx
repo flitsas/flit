@@ -235,9 +235,8 @@ export function Usuarios() {
     };
   }, [editTarget, isSuperAdmin, roles, rolesLoading]);
 
-  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las
-  // renderice con el área de clic de 40x40 de RowActions — el tamaño anterior (28px) quedaba
-  // por debajo del desfase del cursor SVG de FLIT y muchos clics caían fuera del botón.
+  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las muestre
+  // en un solo botón «Acciones» con menú (RowActionsMenu), con las destructivas al final.
   function actionsForUser(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
     if (!u) return [];
@@ -304,7 +303,7 @@ export function Usuarios() {
         actions.push({
           icon: Ban,
           label: `Desactivar indefinidamente a ${u.fullName}`,
-          tone: "primary",
+          tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
         });
       }

@@ -2,14 +2,15 @@
 
 // HU #13443 (Feature #13437, Épica #12750) — pestaña «Roles y permisos» del módulo Usuarios para el Admin de
 // Compañía: crea, edita y elimina los roles propios de su compañía y ve los globales de FLIT en solo lectura.
-// Patrón de tabla de trámites (table-styles, RowActions, Pagination numerada con «Filas por página»), modal normal
+// Patrón de tabla de trámites (table-styles, botón «Acciones» con menú, Pagination numerada con «Filas por página»), modal normal
 // y los 4 estados (cargando, error, vacío, lleno). Backend: HU #13441 (/api/v1/security/roles).
 import { useCallback, useEffect, useState } from "react";
 import { Eye, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
-import { RowActions, type RowAction } from "@/components/atom/RowActions";
+import type { RowAction } from "@/components/atom/RowActions";
+import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
@@ -132,7 +133,12 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
                     {r.permissionCount}
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-center" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActions actions={actionsFor(r)} />
+                    {/* HU #13653: un solo botón «Acciones» con menú, como trámites y mandatos. */}
+                    <RowActionsMenu
+                      ariaLabel={`Acciones de ${r.name}`}
+                      subject={r.name}
+                      actions={destructivasAlFinal(actionsFor(r))}
+                    />
                   </td>
                 </tr>
               ))}

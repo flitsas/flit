@@ -11,6 +11,7 @@ import type { OtUserItem } from "@/lib/api/admin-ot-security";
 import { assignRole, getRoles } from "@/lib/api/security";
 import { countUserOverrides, listGrantablePermissions, listPermissionAudit } from "@/lib/api/permission-overrides";
 import { ADMIN_READ_ONLY_MESSAGE } from "@/lib/permissions/modulePermissions";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -80,7 +81,7 @@ describe("OtUsersSection — Admin OT (#13655, #13656)", () => {
   it("#13655 AC1: abre «Permisos por módulo» de un usuario del organismo en modo admin", async () => {
     renderSection();
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Ana Torres" }));
+    await chooseRowAction(userEvent, "Ana Torres", "Permisos por módulo de Ana Torres");
     expect(await screen.findByText("Permisos por módulo — Ana Torres")).toBeInTheDocument();
     expect(listGrantablePermissions).toHaveBeenCalledWith(undefined);
     expect(screen.queryByText(ADMIN_READ_ONLY_MESSAGE)).not.toBeInTheDocument();
@@ -89,14 +90,14 @@ describe("OtUsersSection — Admin OT (#13655, #13656)", () => {
   it("#13656 AC1: la ficha de otro administrador queda en solo lectura", async () => {
     renderSection();
     await screen.findByText("Beto Admin");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Beto Admin" }));
+    await chooseRowAction(userEvent, "Beto Admin", "Permisos por módulo de Beto Admin");
     expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
   });
 
   it("#13656 AC2: la propia ficha queda en solo lectura", async () => {
     renderSection();
     await screen.findByText("Yo Mismo");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Yo Mismo" }));
+    await chooseRowAction(userEvent, "Yo Mismo", "Permisos por módulo de Yo Mismo");
     expect(await screen.findByText(ADMIN_READ_ONLY_MESSAGE)).toBeInTheDocument();
   });
 });
@@ -145,7 +146,7 @@ describe("OtUsersSection — aviso al cambiar el rol (#13657)", () => {
   async function openEditAndPickRole() {
     renderSection();
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Editar usuario Ana Torres" }));
+    await chooseRowAction(userEvent, "Ana Torres", "Editar usuario Ana Torres");
     const dialog = await screen.findByRole("dialog");
     const select = await within(dialog).findByRole("combobox", { name: "Cambiar rol del usuario" });
     await waitFor(() => expect(select).toBeEnabled());

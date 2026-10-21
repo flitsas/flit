@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Pencil, Plus } from "lucide-react";
 import {
   superadminClient,
   RbacModule,
@@ -13,6 +13,7 @@ import {
 import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { activeTone } from "@/components/atom/statusTones";
@@ -153,42 +154,19 @@ export function RbacAdmin() {
       key: "actions",
       header: "Acciones",
       align: "right",
+      // HU #13653: un solo botón «Acciones» con menú (RowActionsMenu, como trámites y mandatos); destructivas al final.
       render: (mod) => (
-        <div className="flex justify-end gap-1">
-          {mod.isActive ? (
-            <button
-              onClick={() => handleDeactivateModule(mod.id)}
-              aria-label="Desactivar módulo"
-              className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-            >
-              <PowerOff className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <button
-              onClick={() => handleActivateModule(mod.id)}
-              aria-label="Activar módulo"
-              className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-              style={{ color: "#00DBD5" }}
-            >
-              <Power className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <button
-            onClick={() => handleDeleteModule(mod.id)}
-            aria-label="Eliminar módulo"
-            className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => setCreatePermissionForModule(mod)}
-            className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white"
-            style={{ background: "#557EFF" }}
-          >
-            + Permiso
-          </button>
-        </div>
+        <RowActionsMenu
+          ariaLabel={`Acciones de ${mod.name}`}
+          subject={mod.name}
+          actions={destructivasAlFinal([
+            { icon: Plus, label: `Agregar permiso a ${mod.name}`, tone: "primary", onClick: () => setCreatePermissionForModule(mod) },
+            mod.isActive
+              ? { icon: PowerOff, label: `Desactivar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeactivateModule(mod.id) }
+              : { icon: Power, label: `Activar módulo ${mod.name}`, onClick: () => void handleActivateModule(mod.id) },
+            { icon: Trash2, label: `Eliminar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeleteModule(mod.id) },
+          ])}
+        />
       ),
     },
   ];
@@ -199,7 +177,7 @@ export function RbacAdmin() {
     return (
       <div className="rounded-xl px-4 py-3 bg-[#F8FAFF] dark:bg-white/5">
         {perms.length === 0 ? (
-          <p className="text-xs opacity-60">Sin permisos. Haz click en &quot;+ Permiso&quot; para agregar.</p>
+          <p className="text-xs opacity-60">Sin permisos. Para agregar uno, abre «Acciones» y elige «Agregar permiso».</p>
         ) : (
           <div className="space-y-1">
             {perms.map((p) => (
@@ -460,37 +438,32 @@ function RolesTabContent() {
             key: "actions",
             header: "Acciones",
             align: "right",
+            // HU #13653: un solo botón «Acciones» con menú (RowActionsMenu, como trámites y mandatos); destructivas al final.
             render: (r) => (
-              <div className="flex justify-end gap-1">
-                <button
-                  onClick={() => setEditTarget({ role: r, targetEntityType: type })}
-                  aria-label={`Editar permisos de ${r.name}`}
-                  disabled={busyIds[r.id]}
-                  className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                  style={{ color: "#557EFF" }}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => handleToggleActive(r, type)}
-                  aria-label={r.isActive ? `Desactivar rol ${r.name}` : `Activar rol ${r.name}`}
-                  disabled={busyIds[r.id]}
-                  className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                  style={{ color: r.isActive ? undefined : "#00DBD5" }}
-                >
-                  {r.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
-                </button>
-                <button
-                  onClick={() => handleDelete(r, type)}
-                  aria-label={`Eliminar rol ${r.name}`}
-                  disabled={busyIds[r.id] || r.isSystem}
-                  title={r.isSystem ? "No se puede eliminar: es un rol de sistema" : undefined}
-                  className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                  style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              <RowActionsMenu
+                ariaLabel={`Acciones de ${r.name}`}
+                subject={r.name}
+                actions={destructivasAlFinal([
+                  {
+                    icon: Pencil,
+                    label: `Editar permisos de ${r.name}`,
+                    tone: "primary",
+                    disabled: busyIds[r.id],
+                    onClick: () => setEditTarget({ role: r, targetEntityType: type }),
+                  },
+                  r.isActive
+                    ? { icon: PowerOff, label: `Desactivar rol ${r.name}`, tone: "danger", disabled: busyIds[r.id], onClick: () => void handleToggleActive(r, type) }
+                    : { icon: Power, label: `Activar rol ${r.name}`, disabled: busyIds[r.id], onClick: () => void handleToggleActive(r, type) },
+                  {
+                    icon: Trash2,
+                    label: `Eliminar rol ${r.name}`,
+                    tone: "danger",
+                    disabled: busyIds[r.id] || r.isSystem,
+                    disabledTitle: r.isSystem ? "No se puede eliminar: es un rol de sistema" : undefined,
+                    onClick: () => void handleDelete(r, type),
+                  },
+                ])}
+              />
             ),
           },
         ];

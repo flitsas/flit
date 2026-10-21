@@ -11,6 +11,7 @@ import type { OtUserItem } from "@/lib/api/admin-ot-security";
 import { getAccessibleModules, getRoles } from "@/lib/api/security";
 import { listGrantablePermissions } from "@/lib/api/permission-overrides";
 import { ADMIN_READ_ONLY_MESSAGE } from "@/lib/permissions/modulePermissions";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -119,7 +120,7 @@ describe("OtUsersSection — Admin OT y el rol Gestor OT (#13655)", () => {
   it("la ficha de un Gestor OT es editable y solo muestra los módulos del organismo", async () => {
     renderSection();
     await screen.findByText("Gina Gestora");
-    await userEvent.click(screen.getByRole("button", { name: "Permisos por módulo de Gina Gestora" }));
+    await chooseRowAction(userEvent, "Gina Gestora", "Permisos por módulo de Gina Gestora");
 
     const toggle = await screen.findByRole("switch", { name: "Gestionar prelación documental, módulo OT: Documentos" });
     expect(toggle).toBeEnabled();
@@ -133,7 +134,7 @@ describe("OtUsersSection — Admin OT y el rol Gestor OT (#13655)", () => {
   it("puede cambiar el rol del Gestor OT (la ficha de edición ofrece el selector de rol)", async () => {
     renderSection();
     await screen.findByText("Gina Gestora");
-    await userEvent.click(screen.getByRole("button", { name: "Editar usuario Gina Gestora" }));
+    await chooseRowAction(userEvent, "Gina Gestora", "Editar usuario Gina Gestora");
     const dialog = await screen.findByRole("dialog");
     const select = await within(dialog).findByRole("combobox", { name: "Cambiar rol del usuario" });
     await waitFor(() => expect(select).toBeEnabled());
@@ -165,10 +166,13 @@ describe("OtUsersSection — Gestor OT con Usuarios delegado (#13655)", () => {
   it("no edita a un administrador, no cambia roles y no configura permisos", async () => {
     renderSection();
     await screen.findByText("Beto Admin");
-    expect(screen.queryByRole("button", { name: "Editar usuario Beto Admin" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Permisos por módulo de/ })).not.toBeInTheDocument();
+    // HU #13653: las acciones viven en el menú «Acciones» de cada fila.
+    const beto = await rowActionNames(userEvent, "Beto Admin");
+    expect(beto).not.toContain("Editar usuario Beto Admin");
+    expect(beto).not.toContainEqual(expect.stringMatching(/Permisos por módulo de/));
+    expect(await rowActionNames(userEvent, "Gina Gestora")).not.toContainEqual(expect.stringMatching(/Permisos por módulo de/));
 
-    await userEvent.click(screen.getByRole("button", { name: "Editar usuario Gina Gestora" }));
+    await chooseRowAction(userEvent, "Gina Gestora", "Editar usuario Gina Gestora");
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByLabelText(/nombre completo/i)).toHaveValue("Gina Gestora");
     expect(within(dialog).queryByRole("combobox", { name: "Cambiar rol del usuario" })).not.toBeInTheDocument();

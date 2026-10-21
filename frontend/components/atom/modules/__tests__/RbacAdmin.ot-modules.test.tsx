@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RbacAdmin } from "../RbacAdmin";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 const getRole = vi.fn();
 const setRolePermissions = vi.fn();
@@ -41,7 +42,7 @@ async function openEditor(roleName: string, entity: "Compañía" | "Organismo de
   for (const b of await screen.findAllByRole("button", { name: /roles del sistema/i })) await user.click(b);
   // HU #13653: las tablas de roles viven en sub-pestañas por tipo de entidad.
   await user.click(await screen.findByRole("tab", { name: entity }));
-  await user.click(await screen.findByRole("button", { name: `Editar permisos de ${roleName}` }));
+  await chooseRowAction(user, roleName, `Editar permisos de ${roleName}`);
   await screen.findByText("Ver trámites");
   return user;
 }
