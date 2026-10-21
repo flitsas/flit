@@ -402,7 +402,7 @@ La v1 no define la vuelta de `INCOMPLETO` o `COMPLETADO` a `EN_PROCESO`. Se agre
 
 **Flujo MOD03 final** (segunda tanda, 2026-10-20; ajustado el 2026-10-21):
 
-1. MOD02 normaliza y clasifica el identificador con el `PLATE_PATTERN` de Trámites (R-19). Un valor inválido no se encola. Si el cliente declaró el documento del locatario, se guarda cifrado con `origen=DECLARADO_CLIENTE` (R-3).
+1. MOD02 normaliza y clasifica el identificador con la regla de Trámites (R-19; normalización alineada por decisión del usuario el 2026-10-21): primero como VIN con `sanitizeVin` (mayúsculas, solo A-H, J-N, P, R-Z y 0-9, corte a 17) y `VIN_PATTERN`; si no casa, como placa con `sanitizePlate` (mayúsculas, solo A-Z y 0-9, corte a 8) y `PLATE_PATTERN`. Así `ABC-123` es la placa `ABC123`. El corte es la máscara de captura de Trámites: en el masivo, `AB1234567` queda como la maquinaria `AB123456` **[riesgo aceptado]**. Casos en `contracts/fixtures/validacion/identificadores-vehiculo.json`. Un valor inválido no se encola. Si el cliente declaró el documento del locatario, se guarda cifrado con `origen=DECLARADO_CLIENTE` (R-3).
 2. **Celda RUNT:** `ConsultarVehiculo` por placa sin documento (responde Intempo) o por VIN (cadena normal). Se guardan la placa, el VIN, el servicio, el organismo → departamento y el documento del propietario (cifrado, sin nombre). Si falla, el vehículo queda bloqueado y el resto de celdas pasa a `ERROR`.
 3. **Reglas N/A:** el impuesto queda N/A si el servicio es público o si core-consultas no soporta el departamento (`DEPARTAMENTO_NO_SOPORTADO`, R-9). `RUNT_LOCATARIO` y `SIMIT_LOCATARIO` quedan N/A con `SIN_DOCUMENTO_LOCATARIO` si no se declaró el documento.
 4. **En paralelo, según el alcance:** `RUNT_PROPIETARIO` y `RUNT_LOCATARIO` (`ConsultarConductor`), `SIMIT_VEHICULO`, `SIMIT_PROPIETARIO`, `SIMIT_LOCATARIO`, `AVALUO` e `IMPUESTO_DEPARTAMENTAL` (solo si la compañía lo tiene habilitado, lo que exige C3). Cada fallo queda en su celda.
@@ -679,7 +679,7 @@ CREATE TABLE diagnostico.vehiculos (
   tenant_id              uuid NOT NULL,
   diagnostico_id         uuid NOT NULL,
   identificador_original varchar(32) NOT NULL,
-  identificador_norm     varchar(17) NOT NULL          -- mayúsculas, sin espacios (ck_vehiculos_identificador_norm)
+  identificador_norm     varchar(17) NOT NULL          -- sanitizeVin / sanitizePlate de Trámites (ck_vehiculos_identificador_norm: mayúsculas, sin espacios)
                          CHECK (identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\s'),
   tipo_identificador     varchar(16) NOT NULL CHECK (tipo_identificador IN
                          ('PLACA_CARRO','PLACA_MOTO','PLACA_REMOLQUE','PLACA_MAQUINARIA','VIN')),  -- maquinaria: 2 letras + 6 dígitos (R-19)

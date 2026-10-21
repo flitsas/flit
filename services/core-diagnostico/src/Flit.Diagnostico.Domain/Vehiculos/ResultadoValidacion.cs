@@ -5,7 +5,7 @@ namespace Flit.Diagnostico.Domain.Vehiculos;
 /// alimenta <c>diagnostico.vehiculos.identificador_norm</c>; <see cref="Tipo"/> es la clase del identificador o
 /// <see langword="null"/> cuando no es placa ni VIN (código <see cref="CodigoInvalido"/> en la tabla de casos compartida).
 /// </summary>
-/// <param name="Normalizado">Identificador en mayúsculas y sin espacios en blanco.</param>
+/// <param name="Normalizado">Identificador normalizado con la regla de Trámites (sanitizeVin o sanitizePlate).</param>
 /// <param name="Tipo">Clase detectada; <see langword="null"/> si el identificador es inválido.</param>
 public sealed record ResultadoValidacion(string Normalizado, TipoIdentificador? Tipo)
 {

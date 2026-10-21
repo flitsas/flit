@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "descripcion": "Tabla única de casos de identificadores de vehículo (HU #13740, F02-H2). La consumen ValidadorIdentificadorTests (.NET, core-diagnostico) y los tests de frontend/lib/validation/fieldRules.ts (HU #13745, F02-H3). Normalización: mayúsculas y sin ningún espacio en blanco, antes de clasificar. Todos los valores son inventados.",
+  "descripcion": "Tabla única de casos de identificadores de vehículo (HU #13740, F02-H2). La consumen ValidadorIdentificadorTests (.NET, core-diagnostico) y los tests de frontend-diagnostico/lib/validation/fieldRules.ts (HU #13745, F02-H3). Regla: la de Trámites (frontend/lib/validation/fieldRules.ts), decisión del usuario 2026-10-21. Primero VIN: mayúsculas, se quita todo lo que no sea A-H, J-N, P, R-Z o 0-9 (también I, O y Q) y se corta a 17 (sanitizeVin); si da VIN_PATTERN es VIN. Si no, placa: mayúsculas, se quita todo lo que no sea A-Z o 0-9 (espacios, guiones, puntos) y se corta a 8 (sanitizePlate); se clasifica con las ramas de PLATE_PATTERN en orden carro, moto, remolque, maquinaria. Si nada casa es INVALIDO y el normalizado es el valor en mayúsculas con solo A-Z y 0-9, sin cortar. El corte a 8 y a 17 puede volver válida una entrada demasiado larga (filas marcadas «truncado»). Todos los valores son inventados.",
   "tipos": ["PLACA_CARRO", "PLACA_MOTO", "PLACA_REMOLQUE", "PLACA_MAQUINARIA", "VIN", "INVALIDO"],
   "casos": [
     { "entrada": "ABC123", "normalizado": "ABC123", "tipo": "PLACA_CARRO", "valido": true, "nota": "carro: tres letras y tres dígitos" },
@@ -18,17 +18,26 @@
     { "entrada": "zz000001", "normalizado": "ZZ000001", "tipo": "PLACA_MAQUINARIA", "valido": true, "nota": "maquinaria en minúsculas" },
     { "entrada": "9FBTEST1234567890", "normalizado": "9FBTEST1234567890", "tipo": "VIN", "valido": true, "nota": "VIN de 17 sin I, O ni Q" },
     { "entrada": " 3vwxyz12345678abc ", "normalizado": "3VWXYZ12345678ABC", "tipo": "VIN", "valido": true, "nota": "VIN en minúsculas con espacios alrededor" },
-    { "entrada": "9FBTEST123456789I", "normalizado": "9FBTEST123456789I", "tipo": "INVALIDO", "valido": false, "nota": "VIN con I" },
-    { "entrada": "9FBTEST12345678O9", "normalizado": "9FBTEST12345678O9", "tipo": "INVALIDO", "valido": false, "nota": "VIN con O" },
-    { "entrada": "Q9FBTEST123456789", "normalizado": "Q9FBTEST123456789", "tipo": "INVALIDO", "valido": false, "nota": "VIN con Q" },
+    { "entrada": "9FBTEST123456789I", "normalizado": "9FBTEST123456789I", "tipo": "INVALIDO", "valido": false, "nota": "VIN con I: la I se quita, quedan 16" },
+    { "entrada": "9FBTEST12345678O9", "normalizado": "9FBTEST12345678O9", "tipo": "INVALIDO", "valido": false, "nota": "VIN con O: la O se quita, quedan 16" },
+    { "entrada": "Q9FBTEST123456789", "normalizado": "Q9FBTEST123456789", "tipo": "INVALIDO", "valido": false, "nota": "VIN con Q: la Q se quita, quedan 16" },
     { "entrada": "9FBTEST123456789", "normalizado": "9FBTEST123456789", "tipo": "INVALIDO", "valido": false, "nota": "16 caracteres" },
-    { "entrada": "9FBTEST12345678901", "normalizado": "9FBTEST12345678901", "tipo": "INVALIDO", "valido": false, "nota": "18 caracteres" },
-    { "entrada": "ABC123456", "normalizado": "ABC123456", "tipo": "INVALIDO", "valido": false, "nota": "9 caracteres: ni placa ni VIN" },
+    { "entrada": "9FBTEST12345678901", "normalizado": "9FBTEST1234567890", "tipo": "VIN", "valido": true, "nota": "truncado: 18 caracteres se cortan a 17 (sanitizeVin) y queda un VIN válido" },
+    { "entrada": "ABC123456", "normalizado": "ABC123456", "tipo": "INVALIDO", "valido": false, "nota": "9 caracteres: ni placa ni VIN (el corte a 8 da ABC12345, que no casa)" },
     { "entrada": "", "normalizado": "", "tipo": "INVALIDO", "valido": false, "nota": "vacío" },
     { "entrada": "   ", "normalizado": "", "tipo": "INVALIDO", "valido": false, "nota": "solo espacios" },
-    { "entrada": "ABC-123", "normalizado": "ABC-123", "tipo": "INVALIDO", "valido": false, "nota": "el guion no se quita: solo se quitan espacios" },
+    { "entrada": "ABC-123", "normalizado": "ABC123", "tipo": "PLACA_CARRO", "valido": true, "nota": "el guion se quita, como en Trámites (sanitizePlate)" },
     { "entrada": "AB12345", "normalizado": "AB12345", "tipo": "INVALIDO", "valido": false, "nota": "dos letras y cinco dígitos" },
     { "entrada": "T12345", "normalizado": "T12345", "tipo": "INVALIDO", "valido": false, "nota": "remolque solo con R o S" },
-    { "entrada": "1BC123", "normalizado": "1BC123", "tipo": "INVALIDO", "valido": false, "nota": "dígito donde va letra" }
+    { "entrada": "1BC123", "normalizado": "1BC123", "tipo": "INVALIDO", "valido": false, "nota": "dígito donde va letra" },
+    { "entrada": "abc-12d", "normalizado": "ABC12D", "tipo": "PLACA_MOTO", "valido": true, "nota": "moto con guion y minúsculas" },
+    { "entrada": "MC.029.554", "normalizado": "MC029554", "tipo": "PLACA_MAQUINARIA", "valido": true, "nota": "maquinaria con puntos" },
+    { "entrada": "R 123 45", "normalizado": "R12345", "tipo": "PLACA_REMOLQUE", "valido": true, "nota": "remolque con espacios internos" },
+    { "entrada": "xyz_987", "normalizado": "XYZ987", "tipo": "PLACA_CARRO", "valido": true, "nota": "guion bajo: se quita todo lo que no sea letra o dígito" },
+    { "entrada": "9fb-test-1234567890", "normalizado": "9FBTEST1234567890", "tipo": "VIN", "valido": true, "nota": "VIN en minúsculas con guiones" },
+    { "entrada": "9fbtest123456789i", "normalizado": "9FBTEST123456789I", "tipo": "INVALIDO", "valido": false, "nota": "VIN en minúsculas con i: la I se quita y quedan 16" },
+    { "entrada": "9FBTEST12345678O90", "normalizado": "9FBTEST1234567890", "tipo": "VIN", "valido": true, "nota": "truncado/I-O-Q: 18 caracteres con una O; al quitar la O quedan 17 y es un VIN válido" },
+    { "entrada": "AB123456CDEFGHJKL", "normalizado": "AB123456CDEFGHJKL", "tipo": "VIN", "valido": true, "nota": "orden: VIN antes que placa; si fuera placa primero, el corte a 8 daría la maquinaria AB123456" },
+    { "entrada": "AB1234567", "normalizado": "AB123456", "tipo": "PLACA_MAQUINARIA", "valido": true, "nota": "truncado: 9 caracteres se cortan a 8 (sanitizePlate) y queda una maquinaria válida (riesgo en carga masiva)" }
   ]
 }
