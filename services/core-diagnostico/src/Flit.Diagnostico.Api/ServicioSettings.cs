@@ -20,6 +20,9 @@ internal static class ServicioSettings
         ("Platform:Auth:Issuers:0", "FLIT_HUB_URL"),
         ("Platform:Messaging:ConnectionString", "RABBITMQ_URL_DIAGNOSTICO"),
         (GrpcPortKey, "CORE_DIAGNOSTICO_GRPC_PORT"),
+        // HU #13751: certificado que protege las llaves de Data Protection (fuera de la base; sin él no hay documentos cifrados).
+        (Plataforma.ProteccionDocumentos.ClaveCertificadoRuta, "ruta del .pfx montado como secreto, DIAGNOSTICO_DP_CERTIFICADO_RUTA"),
+        (Plataforma.ProteccionDocumentos.ClaveCertificadoClave, "DIAGNOSTICO_DP_CERTIFICADO_CLAVE"),
     ];
 
     public static void Validate(IConfiguration configuration)

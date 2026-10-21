@@ -57,6 +57,11 @@ public static class Program
         Modulos.Catalogos.TiposTramiteEndpoints.AddCatalogoTiposTramite(builder.Services, builder.Configuration);
         // HU #13750: crear y editar la cabecera del diagnóstico.
         builder.Services.AddScoped<Modulos.Diagnosticos.ServicioCabecera>();
+        // HU #13751: Data Protection con el anillo en la base cifrado con el certificado de la configuración (fail-closed),
+        // confirmación de los vehículos del lote y el puerto al motor de consultas (en D1 no hace nada; #13719 lo reemplaza).
+        builder.Services.AddProteccionDocumentos(builder.Configuration);
+        builder.Services.AddScoped<Modulos.Vehiculos.ServicioConfirmacionVehiculos>();
+        builder.Services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Modulos.Consultas.EncoladorConsultasNulo>();
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();

@@ -201,7 +201,8 @@ public sealed class VehiculosSchemaTests
         }
 
         await using var conexion = await AbrirAsync(api, ct);
-        (await ListarAsync(conexion, "SELECT friendly_name FROM diagnostico.data_protection_keys", ct)).Should().Equal("llave-de-prueba");
+        // Desde HU #13751 el servicio conecta Data Protection: al arrancar ya dejó su propia llave en la misma tabla.
+        (await ListarAsync(conexion, "SELECT friendly_name FROM diagnostico.data_protection_keys", ct)).Should().Contain("llave-de-prueba");
     }
 
     private static async Task VerificarSchemaAsync(NpgsqlConnection conexion, CancellationToken ct)

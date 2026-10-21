@@ -68,8 +68,11 @@ internal static partial class CargaEndpoints
         return Results.Ok(resumen);
     }
 
-    /// <summary>Alcance de la cabecera y, de su copia de configuración, el límite por lote y si el estimado se muestra antes de lanzar.</summary>
-    private static ParametrosAnalisis Parametros(CabeceraDiagnostico cabecera)
+    /// <summary>
+    /// Alcance de la cabecera y, de su copia de configuración, el límite por lote y si el estimado se muestra antes de lanzar
+    /// (también lo usan validar-filas y la confirmación del lote, HU #13751).
+    /// </summary>
+    internal static ParametrosAnalisis Parametros(CabeceraDiagnostico cabecera)
     {
         using var copia = JsonDocument.Parse(cabecera.Configuracion);
         var raiz = copia.RootElement;

@@ -9,6 +9,7 @@ using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Catalogos;
 using Flit.Diagnostico.Tests.Catalogos;
 using Flit.Diagnostico.Tests.Plataforma;
+using Flit.Diagnostico.Tests.Seguridad;
 using Flit.Platform.Sdk.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -127,6 +128,9 @@ public sealed class ApiDePrueba : IAsyncDisposable
         ["Platform:Auth:Issuers:0"] = Issuer,
         ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
         [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        // HU #13751: llaves de Data Protection protegidas con un certificado efímero (sin él el servicio no arranca).
+        [CertificadoDePrueba.ClaveRuta] = CertificadoDePrueba.Ruta,
+        [CertificadoDePrueba.ClaveClave] = CertificadoDePrueba.Clave,
     };
 
     public HttpClient Anonimo() => App.GetTestClient();

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Estimacion;
@@ -12,7 +11,7 @@ internal sealed record ParametrosAnalisis(IReadOnlyList<Fuente> Alcance, int Lim
 
 /// <summary>
 /// Análisis local del archivo de carga (HU #13749, F02-H4, F02-C4/C7/C8/C10/C11/C13): sin estado, sin base y sin fuentes
-/// externas. Por fila: <see cref="ValidadorIdentificador"/> (la regla de Trámites, HU #13740) y, aparte, la regla de la
+/// externas. Por fila (<see cref="ValidadorFilaVehiculo"/>, extraída al dominio en HU #13751): <see cref="ValidadorIdentificador"/> (la regla de Trámites, HU #13740) y, aparte, la regla de la
 /// carga para entradas demasiado largas (decisión del usuario 2026-10-21): si el identificador limpio (mayúsculas, solo
 /// A-Z y 0-9, antes de recortar) pasa de 8 caracteres y el validador lo tomó como placa, o de 17 y lo tomó como VIN, la fila
 /// es errónea; nunca se acepta el valor recortado. Después, la forma del documento del locatario
@@ -27,17 +26,14 @@ internal sealed record ParametrosAnalisis(IReadOnlyList<Fuente> Alcance, int Lim
 /// // resumen.TotalFilas == resumen.Validos + resumen.Erroneos + resumen.Duplicados
 /// </code>
 /// </example>
-internal static partial class AnalizadorCarga
+internal static class AnalizadorCarga
 {
-    public const string CodigoIdentificadorRequerido = "IDENTIFICADOR_REQUERIDO";
-    public const string CodigoIdentificadorInvalido = "IDENTIFICADOR_INVALIDO";
-    public const string CodigoIdentificadorDemasiadoLargo = "IDENTIFICADOR_DEMASIADO_LARGO";
+    public const string CodigoIdentificadorRequerido = ValidadorFilaVehiculo.CodigoIdentificadorRequerido;
+    public const string CodigoIdentificadorInvalido = ValidadorFilaVehiculo.CodigoIdentificadorInvalido;
+    public const string CodigoIdentificadorDemasiadoLargo = ValidadorFilaVehiculo.CodigoIdentificadorDemasiadoLargo;
     public const string CodigoSinValidos = "SIN_VALIDOS";
     public const string CodigoLimiteSuperado = "LIMITE_SUPERADO";
     public const string CodigoColumnaRequerida = "COLUMNA_REQUERIDA";
-
-    private const int LargoPlaca = 8;
-    private const int LargoVin = 17;
 
     public static ResumenValidacionDto Analizar(TablaCarga tabla, ParametrosAnalisis parametros)
     {
@@ -104,47 +100,27 @@ internal static partial class AnalizadorCarga
         var original = Celda(leida, columnaIdentificador) ?? string.Empty;
         var tipoCrudo = columnaTipo is { } t ? Celda(leida, t) : null;
         var documentoCrudo = columnaDocumento is { } d ? Celda(leida, d) : null;
-        var errores = new List<ErrorFilaDto>();
 
-        var resultado = ValidadorIdentificador.Validar(original);
-        var limpio = FueraDePlaca().Replace(original.ToUpperInvariant(), string.Empty);
-        TipoIdentificador? tipo = resultado.Tipo;
-        var normalizado = resultado.Normalizado;
-        if (limpio.Length == 0)
-        {
-            errores.Add(ErrorIdentificador(CodigoIdentificadorRequerido, "Falta el identificador del vehículo (placa o VIN)."));
-        }
-        else if (tipo is { } detectado && limpio.Length > (detectado == TipoIdentificador.Vin ? LargoVin : LargoPlaca))
-        {
-            var esVin = detectado == TipoIdentificador.Vin;
-            errores.Add(ErrorIdentificador(CodigoIdentificadorDemasiadoLargo, esVin
-                ? $"El VIN tiene {limpio.Length} caracteres y el máximo es {LargoVin}: revise el valor (no se recorta)."
-                : $"La placa tiene {limpio.Length} caracteres y el máximo es {LargoPlaca}: revise el valor (no se recorta)."));
-            tipo = null;
-            normalizado = limpio;
-        }
-        else if (tipo is null)
-        {
-            errores.Add(ErrorIdentificador(CodigoIdentificadorInvalido, "El identificador no es una placa ni un VIN válido."));
-        }
-
-        var documento = ValidadorDocumentoPersona.Validar(tipoCrudo, documentoCrudo);
-        if (!documento.EsValido)
-        {
-            var campo = documento.Codigo == ValidadorDocumentoPersona.CodigoTipoInvalido ? PlantillaCarga.ColumnaTipoDocumento : PlantillaCarga.ColumnaDocumento;
-            errores.Add(new ErrorFilaDto(campo, documento.Codigo!, documento.Mensaje!));
-        }
-
+        // La regla de la fila es la del dominio (HU #13751): la misma de validar-filas, la confirmación y la captura Express.
+        var fila = ValidadorFilaVehiculo.Validar(original, tipoCrudo, documentoCrudo);
+        var documento = fila.Documento;
+        var errores = fila.Errores.Select(e => new ErrorFilaDto(Columna(e.Campo), e.Codigo, e.Mensaje)).ToList();
         var numeroVisible = documento.Numero ?? (string.IsNullOrWhiteSpace(documentoCrudo) ? null : documentoCrudo.Trim());
         var tipoVisible = documento.Tipo ?? (string.IsNullOrWhiteSpace(tipoCrudo) ? null : tipoCrudo.Trim().ToUpperInvariant());
-        var valida = errores.Count == 0;
+        var tipo = fila.Tipo;
         var dto = new FilaResumenDto(
-            leida.Numero, original, normalizado, tipo is { } c ? CodigosDeEnum.Codigo(c) : null, tipoVisible,
-            numeroVisible is null ? null : Enmascarar(numeroVisible), valida, [], errores);
-        return new FilaEnCurso(dto, tipo is null ? null : normalizado, documento.Presente);
+            leida.Numero, original, fila.Normalizado, tipo is { } c ? CodigosDeEnum.Codigo(c) : null, tipoVisible,
+            numeroVisible is null ? null : Enmascarar(numeroVisible), fila.EsValida, [], errores);
+        return new FilaEnCurso(dto, tipo is null ? null : fila.Normalizado, documento.Presente);
     }
 
-    private static ErrorFilaDto ErrorIdentificador(string codigo, string mensaje) => new(PlantillaCarga.ColumnaIdentificador, codigo, mensaje);
+    /// <summary>Columna de la plantilla de cada campo de la fila.</summary>
+    private static string Columna(CampoFilaVehiculo campo) => campo switch
+    {
+        CampoFilaVehiculo.TipoDocumento => PlantillaCarga.ColumnaTipoDocumento,
+        CampoFilaVehiculo.Documento => PlantillaCarga.ColumnaDocumento,
+        _ => PlantillaCarga.ColumnaIdentificador,
+    };
 
     private static string? Celda(FilaLeida fila, int columna) => columna < fila.Celdas.Count ? fila.Celdas[columna] : null;
 
@@ -159,10 +135,6 @@ internal static partial class AnalizadorCarga
 
         return null;
     }
-
-    // Limpieza de sanitizePlate antes del corte: mayúsculas y solo A-Z y 0-9.
-    [GeneratedRegex(@"[^A-Z0-9]", RegexOptions.CultureInvariant)]
-    private static partial Regex FueraDePlaca();
 
     /// <summary>Fila en análisis: <see cref="Valido"/> es el identificador normalizado si es placa o VIN (clave de duplicados).</summary>
     private sealed record FilaEnCurso(FilaResumenDto Dto, string? Valido, bool ConDocumento)

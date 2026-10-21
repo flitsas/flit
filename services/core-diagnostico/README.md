@@ -16,6 +16,7 @@ negocio pasa por el guard de suscripción (fail-closed) y exige un permiso del m
 | Configuracion | `GET/PUT /configuracion` | Configuración de la compañía en dos niveles (contractual y operativo). |
 | Backoffice | `/backoffice/...` | Lectura entre compañías del backoffice FLIT (empresa explícita y auditada) y edición del nivel contractual. |
 | Carga | `GET /plantilla`, `POST /diagnosticos/{id}/carga` | Plantilla .xlsx y análisis local del archivo (.xlsx o .csv) en un resumen de validación, sin guardar filas ni consultar fuentes; tope `Diagnostico:Carga:TamanoMaximoBytes` (5 MB). |
+| Vehiculos | `POST /diagnosticos/{id}/carga/validar-filas`, `POST /diagnosticos/{id}/vehiculos` | Revalida filas corregidas con el mismo análisis de la carga (sin guardar) y confirma el lote: el servidor revalida todo, guarda solo los válidos (documento del locatario cifrado), el estimado en la cabecera, y entrega la lista al motor de consultas en la misma transacción. |
 | Catalogos | `GET /tipos-tramite` | Tipos de trámite de la etapa, por el gRPC `ListarTiposTramite` de core-api (`Diagnostico:Tramites:Address`), con caché de 5 min y 503 + `Retry-After` si Trámites no responde. |
 
 ## Puertos
@@ -27,6 +28,30 @@ negocio pasa por el guard de suscripción (fail-closed) y exige un permiso del m
 | App web `frontend-diagnostico` | 4024 | 4024 / 5024 / 6024 |
 
 Configuración local: copiar `src/Flit.Diagnostico.Api/appsettings.Development.json.example` a `appsettings.Development.json`.
+
+### Certificado de Data Protection (obligatorio)
+
+Los documentos de propietario y locatario se cifran con ASP.NET Data Protection (HU #13751). El anillo de llaves vive en
+`diagnostico.data_protection_keys`, cifrado con un certificado que **no** está en la base ni en ningún `appsettings*.json`.
+Sin él el servicio no arranca, en cualquier ambiente. Se configura con dos variables de entorno:
+
+| Variable | Qué es |
+|---|---|
+| `Diagnostico__DataProtection__CertificadoRuta` | Ruta del `.pfx` (RSA, con llave privada), montado como secreto. |
+| `Diagnostico__DataProtection__CertificadoClave` | Clave del `.pfx`. |
+
+En local, genera uno fuera del repo y exporta las variables antes de `dotnet run`:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=flit-diagnostico-local" -keyout dp.key -out dp.crt
+openssl pkcs12 -export -inkey dp.key -in dp.crt -out ~/.flit/diagnostico-dp.pfx -passout pass:<clave-local>
+export Diagnostico__DataProtection__CertificadoRuta=~/.flit/diagnostico-dp.pfx
+export Diagnostico__DataProtection__CertificadoClave=<clave-local>
+```
+
+Perder o cambiar el certificado deja ilegibles los documentos ya cifrados: en los ambientes es un secreto con respaldo, y
+al rotarlo el certificado anterior debe seguir disponible para descifrar. Las pruebas generan uno efímero por proceso
+(`tests/Flit.Diagnostico.Tests/Seguridad/CertificadoDePrueba.cs`).
 
 ## Pruebas
 

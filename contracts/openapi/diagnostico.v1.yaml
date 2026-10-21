@@ -45,6 +45,10 @@ tags:
     description: >
       Carga masiva de vehículos (MOD02, HU #13749): plantilla .xlsx y análisis local del archivo (.xlsx o .csv) en un
       resumen de validación, sin guardar filas ni consultar fuentes. Campos en snake_case y códigos de la base.
+  - name: Vehiculos
+    description: >
+      Confirmación de los vehículos del lote (MOD02, HU #13751): revalidación en servidor, documento del locatario
+      cifrado y entrega de la lista limpia al motor de consultas. Campos en snake_case y códigos de la base.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -460,6 +464,130 @@ paths:
             admite: guarde el archivo como .xlsx y vuelva a subirlo»; ARCHIVO_REQUERIDO (sin el campo archivo o vacío);
             COLUMNA_REQUERIDA (sin la columna Identificador_Vehiculo, campo = Identificador_Vehiculo). No se analiza
             ninguna fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/carga/validar-filas:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id de la cabecera.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Carga]
+      operationId: validarFilasCargaDiagnostico
+      summary: Revalida filas corregidas con el mismo análisis de la carga, sin guardar nada
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13751, F02-H5, F02-C9). Solo con la cabecera en CREADO. Aplica a las
+        filas recibidas exactamente el análisis de POST /diagnosticos/{id}/carga (regla de Trámites, longitud después de
+        limpiar, documento del locatario, duplicados consolidados en la primera fila, límite y estimado de la copia de
+        configuración) y devuelve el mismo resumen. No escribe en la base ni consulta fuentes. Una fila sin `fila` toma su
+        posición (la primera es la 2, como en la hoja con encabezado). El documento del locatario vuelve enmascarado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilasAValidar"
+      responses:
+        "200":
+          description: Resumen de validación de las filas recibidas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumenValidacion"
+        "400":
+          description: Cuerpo que no es JSON válido.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: la cabecera no existe o es de otra compañía."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = DIAGNOSTICO_NO_EDITABLE: la cabecera ya no está en CREADO."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id de la cabecera.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Vehiculos]
+      operationId: confirmarVehiculosDiagnostico
+      summary: Confirma los vehículos del lote (solo los válidos) y los entrega al motor de consultas
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13751, F02-H5, F02-C4/C9/C10/C11/C13/C14). Solo con la cabecera en
+        CREADO y sin vehículos confirmados antes. El servidor revalida todo lo recibido con la regla de la carga (no confía
+        en el cliente): descarta los inválidos (también los identificadores de más de 8 caracteres de placa o 17 de VIN
+        después de limpiar, nunca recortados) y los duplicados (gana el primero). Sin ningún válido, o con más válidos que
+        limite_vehiculos_lote de la copia de configuración, responde 422 y no guarda nada. En una sola transacción guarda
+        los válidos en el orden recibido, cifra el documento del locatario declarado (origen DECLARADO_CLIENTE; nunca en
+        logs ni eventos), deja el estimado de consultas en la cabecera y entrega la lista limpia al motor de consultas
+        (en D1 la entrega no hace nada; #13719 crea las celdas y pasa el lote a EN_PROCESO). No cambia el estado de la
+        cabecera. La respuesta trae estimado_consultas solo con estimado_consultas = ANTES_DE_LANZAR.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmacionVehiculos"
+      responses:
+        "201":
+          description: Vehículos confirmados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoConfirmacion"
+        "400":
+          description: Cuerpo que no es JSON válido.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: la cabecera no existe o es de otra compañía (no se guarda nada)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `code` = DIAGNOSTICO_NO_EDITABLE (la cabecera ya no está en CREADO) o VEHICULOS_YA_CONFIRMADOS (el lote ya
+            tiene vehículos, también si otra confirmación ganó en paralelo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            `campo` = vehiculos. `code` = SIN_VALIDOS (ningún vehículo válido o lista vacía) o LIMITE_SUPERADO (los válidos
+            superan limite_vehiculos_lote; el mensaje trae ambos números). No se guarda nada.
           content:
             application/json:
               schema:
@@ -1095,6 +1223,93 @@ components:
           $ref: "#/components/schemas/Fuente"
         consultas:
           type: integer
+
+    FilaCapturada:
+      type: object
+      description: Una fila capturada (HU #13751). El documento del locatario es opcional; si viene, tipo y número juntos.
+      properties:
+        fila:
+          type: integer
+          description: Número de fila del archivo (solo para el resumen de validar-filas).
+        identificador:
+          type: string
+          nullable: true
+          description: Placa o VIN tal como lo escribió el cliente.
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          description: CC, CE, NIT, PAS o TI.
+        documento_locatario:
+          type: string
+          nullable: true
+          description: "@pii:high Número del documento; se guarda cifrado y nunca vuelve en claro."
+
+    FilasAValidar:
+      type: object
+      properties:
+        filas:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilaCapturada"
+
+    ConfirmacionVehiculos:
+      type: object
+      properties:
+        vehiculos:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilaCapturada"
+
+    ResultadoConfirmacion:
+      type: object
+      required: [diagnostico_id, confirmados, invalidos, duplicados, limite_vehiculos_lote, vehiculos]
+      properties:
+        diagnostico_id:
+          type: string
+          format: uuid
+        confirmados:
+          type: integer
+        invalidos:
+          type: integer
+          description: Vehículos descartados por identificador o documento inválido.
+        duplicados:
+          type: integer
+          description: Vehículos descartados por repetir un identificador válido anterior.
+        limite_vehiculos_lote:
+          type: integer
+        vehiculos:
+          type: array
+          items:
+            $ref: "#/components/schemas/VehiculoConfirmado"
+        estimado_consultas:
+          type: array
+          description: Solo con estimado_consultas = ANTES_DE_LANZAR en la copia de configuración.
+          items:
+            $ref: "#/components/schemas/EstimadoFuente"
+
+    VehiculoConfirmado:
+      type: object
+      required: [id, orden, identificador, identificador_norm, tipo_identificador]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orden:
+          type: integer
+        identificador:
+          type: string
+        identificador_norm:
+          type: string
+        tipo_identificador:
+          type: string
+          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, VIN]
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+        documento_locatario:
+          type: string
+          nullable: true
+          description: Enmascarado («****» y los 4 últimos).
 
     ErrorRegla:
       type: object
