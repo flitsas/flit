@@ -77,9 +77,9 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.allowed).toBe(true);
   });
 
-  it("permite a un rol no-ot_admin de un tenant OT en /admin/transit-offices", () => {
+  it("permite a un rol no-ot_admin de un tenant OT con ot.tramites.manage en la bandeja (HU #13655)", () => {
     const decision = evaluateAdminAccess(
-      makeToken({ sub: "u1", role: "gestor_ot", entity_type: "TRANSIT_OFFICE" }),
+      makeToken({ sub: "u1", role: "gestor_ot", entity_type: "TRANSIT_OFFICE", permissions: ["ot.tramites.manage"] }),
       "/admin/transit-offices/abc/client-procedures",
     );
     expect(decision.allowed).toBe(true);
@@ -228,12 +228,63 @@ describe("evaluateAdminAccess (AC6)", () => {
     },
   );
 
-  it("HU12860 — un Operador OT conserva acceso al resto de /admin/transit-offices/* (client-procedures)", () => {
+  // HU #13655 (Anexo A §1.4): la prelación documental se delega por permiso al Gestor OT.
+  it("HU13655 — un Gestor OT con ot.documentos.manage entra a /admin/transit-offices/{id}/documents", () => {
     const decision = evaluateAdminAccess(
-      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE" }),
+      makeToken({
+        sub: "u1",
+        role: "gestor_tramites_ot",
+        entity_type: "TRANSIT_OFFICE",
+        permissions: ["ot.tramites.manage", "ot.documentos.manage"],
+      }),
+      "/admin/transit-offices/abc/documents",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("HU13655 — el permiso de documentos no abre la ruta a quien no es de un organismo", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "Radicador", permissions: ["ot.documentos.manage"] }),
+      "/admin/transit-offices/abc/documents",
+    );
+    expect(decision.allowed).toBe(false);
+  });
+
+  it("HU12860 — un Operador OT con su permiso de trámites conserva acceso a la bandeja (client-procedures)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE", permissions: ["ot.tramites.manage"] }),
       "/admin/transit-offices/abc/client-procedures",
     );
     expect(decision.allowed).toBe(true);
+  });
+
+  // HU #13655 — cada pestaña del organismo abre a un rol OT no administrador solo con su permiso OT.
+  it.each([
+    ["client-procedures", "ot.tramites.manage"],
+    ["revocation-requests", "ot.tramites.manage"],
+    ["usuarios", "ot.usuarios.manage"],
+    ["reportes", "ot.reportes.manage"],
+    ["mandatos", "ot.mandatos.manage"],
+    ["imprint-validation", "ot.improntas.manage"],
+    ["webhooks", "ot.integracion.manage"],
+  ])("HU13655 — un Gestor OT entra a /admin/transit-offices/{id}/%s solo con %s", (segment: string, slug: string) => {
+    const token = (permissions: string[]) =>
+      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE", permissions });
+    const path = `/admin/transit-offices/abc/${segment}`;
+    expect(evaluateAdminAccess(token([slug]), path).allowed).toBe(true);
+    const denied = evaluateAdminAccess(token(["ot.documentos.manage"]), path);
+    expect(denied.allowed).toBe(false);
+    expect(denied.redirectTo).toMatch(ACCESO_DENEGADO);
+  });
+
+  it("HU13655 — el Inicio del organismo sigue abierto a cualquier rol OT y el ot_admin entra a todas las pestañas", () => {
+    const gestor = makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE" });
+    expect(evaluateAdminAccess(gestor, "/admin/transit-offices/abc").allowed).toBe(true);
+    expect(evaluateAdminAccess(gestor, "/admin/transit-offices").allowed).toBe(true);
+    const admin = makeToken({ sub: "u1", role: "ot_admin" });
+    for (const segment of ["client-procedures", "usuarios", "reportes", "mandatos", "imprint-validation", "webhooks"]) {
+      expect(evaluateAdminAccess(admin, `/admin/transit-offices/abc/${segment}`).allowed).toBe(true);
+    }
   });
 
   // Security review (Low) HU12856 — mismo blindaje case-insensitive/percent-encoding para el

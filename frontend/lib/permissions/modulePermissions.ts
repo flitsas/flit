@@ -133,6 +133,17 @@ export function outOfCapOverrideIds(
   return overrides.filter((o) => !grantableIds.has(o.permissionId)).map((o) => o.permissionId);
 }
 
+// ── HU #13655: ficha del Admin OT ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Módulos que el Admin OT configura en sus usuarios: los del organismo (`ot-*`) y la descarga masiva de consolidados, que
+ * se usa desde la bandeja del organismo. Los permisos de compañía y los Ver/Crear por familia de trámites no aplican al OT.
+ */
+export function isOtModuleCode(moduleCode: string | null | undefined): boolean {
+  const code = (moduleCode ?? "").trim().toLowerCase();
+  return code.startsWith("ot-") || code === "consolidado-masivo";
+}
+
 // ── HU #13656 (FD2-4): administradores en solo lectura ───────────────────────────────────────────────────
 
 export const ADMIN_READ_ONLY_MESSAGE = "Solo el Super Admin puede modificar los permisos de un administrador.";

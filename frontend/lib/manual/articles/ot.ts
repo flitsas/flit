@@ -260,6 +260,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       "usuarios ot",
       "invitar",
       "rol ot_admin",
+      "gestor ot",
       "gestionar usuarios organismo",
       "suspender",
       "acceso denegado",
@@ -269,13 +270,13 @@ export const OT_ARTICLES: ManualArticle[] = [
       "fuera de tu tope",
       "auditoria de permisos",
     ],
-    summary: "Invitar y administrar cuentas del perfil OT. Solo el administrador del organismo entra aquí.",
+    summary: "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT) y ajustar sus permisos.",
     blocks: [
       {
         id: "alcance",
         title: "1. Alcance",
         paragraphs: [
-          "Usuarios, en el dock del hub, es exclusivo del administrador del organismo (rol ot_admin): invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un operador que intente abrir esta pantalla recibe acceso denegado.",
+          "Usuarios, en el dock del hub, es del Administrador OT: invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un Gestor OT solo la ve si el administrador le habilita el módulo Usuarios, y aun así no invita administradores ni cambia roles.",
           "No administra usuarios de compañías cliente; eso corresponde al AdminCompany de cada tenant.",
         ],
       },
@@ -286,6 +287,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         bullets: [
           "Dock → Usuarios (hub OT).",
           "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
+          "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Editar usuario».",
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
           "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",
           "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada.",
@@ -302,6 +304,8 @@ export const OT_ARTICLES: ManualArticle[] = [
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
           "4. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
+          "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
+          "Aquí solo ves los módulos del organismo.",
         ],
         callouts: [
           {

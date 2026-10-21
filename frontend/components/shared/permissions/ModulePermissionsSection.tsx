@@ -67,6 +67,11 @@ export interface ModulePermissionsSectionProps {
   invitationPending?: boolean;
   /** Se llama tras cada cambio aplicado (p. ej. para refrescar chips o contadores del llamador). */
   onChanged?: (overrides: UserPermissionOverride[]) => void;
+  /**
+   * HU #13655: módulos que aplican a esta ficha (por código). La del Admin OT muestra solo los del organismo; sin filtro
+   * se ven todos los del tope.
+   */
+  moduleFilter?: (moduleCode: string) => boolean;
 }
 
 const ORIGIN_LABEL: Record<PermissionOrigin, string> = {
@@ -197,6 +202,7 @@ export function ModulePermissionsSection({
   targetIsSuperAdmin = false,
   invitationPending = false,
   onChanged,
+  moduleFilter,
 }: ModulePermissionsSectionProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [busy, setBusy] = useState(false);
@@ -251,8 +257,13 @@ export function ModulePermissionsSection({
   };
 
   const views = useMemo<ModuleView[]>(
-    () => (state.status === "ready" ? buildModuleViews(state.modules, state.grantable, state.roleIds, state.overrides, state.locked) : []),
-    [state],
+    () =>
+      state.status === "ready"
+        ? buildModuleViews(state.modules, state.grantable, state.roleIds, state.overrides, state.locked).filter(
+            (v) => !moduleFilter || moduleFilter(v.code),
+          )
+        : [],
+    [state, moduleFilter],
   );
 
   async function refreshOverrides() {

@@ -20,6 +20,8 @@ export interface UserPermissionsModalProps {
   targetRoleCodes?: Array<string | null | undefined>;
   /** HU #13656: la ficha es la del propio usuario en sesión (solo lectura). */
   isSelf?: boolean;
+  /** HU #13655: módulos que aplican a la ficha (p. ej. solo los del organismo en la del Admin OT). */
+  moduleFilter?: (moduleCode: string) => boolean;
   onClose: () => void;
 }
 
@@ -33,6 +35,7 @@ export function UserPermissionsModal({
   readOnlyReason,
   targetRoleCodes,
   isSelf,
+  moduleFilter,
   onClose,
 }: UserPermissionsModalProps) {
   const adminLocked = adminReadOnlyFor(mode, targetRoleCodes, isSelf);
@@ -55,6 +58,7 @@ export function UserPermissionsModal({
         invitationPending={invitationPending}
         readOnly={readOnly || adminLocked}
         readOnlyReason={adminLocked ? ADMIN_READ_ONLY_MESSAGE : readOnlyReason}
+        moduleFilter={moduleFilter}
       />
     </Modal>
   );

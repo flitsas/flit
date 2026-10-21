@@ -17,6 +17,13 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   deleteOtUser: vi.fn(),
   resendOtInvitation: vi.fn(),
 }));
+// Quien edita es el Admin OT del organismo (HU #13655: un no administrador no edita a un administrador).
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => ({
+    isSuperAdmin: false, isAdminCompany: false, isOtAdmin: true, permissions: [], tenantId: "ot-tenant-1",
+    userId: "u-self", roleId: "role-1", roleCode: "ot_admin",
+  }),
+}));
 
 function renderSection() {
   return render(

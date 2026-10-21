@@ -2,7 +2,8 @@
 //
 // La consumen tres puntos, sin ramas sueltas en Shell / page / guard:
 //   1. `resolveNavigableModuleIds` (`lib/nav/modules.ts`) → menú y `/?m=` (HU #13649, #13650).
-//   2. `tramitesNav` → los campos de visibilidad del dock salen de `navGatingFor` (mismo requisito, otra forma).
+//   2. `tramitesNav` → los campos de visibilidad del dock salen de `navGatingFor` (mismo requisito, otra forma); las
+//      pestañas del organismo, de `otHubNavGating` (`OT_HUB_TAB_PERMISSION`, la misma tabla que sus rutas, HU #13655).
 //   3. `lib/auth/guard.ts` / `middleware.ts` → `/admin/*` y `/empresa/*` (HU #13650), con `resolveRouteAccess`.
 //
 // Esto es defensa en profundidad de la NAVEGACIÓN: la autorización real la hace la API (ADR-0072 §6). Por eso cada
@@ -18,9 +19,49 @@ import { type JwtPayload, hasPermission, hasRoleCode, isOtUser, isSuperAdmin } f
 // como literales para que este módulo no dependa de constantes en tiempo de carga.
 const ADMIN_COMPANY_ROLE = "AdminCompany";
 const OT_ADMIN_ROLE = "ot_admin";
+/**
+ * Slugs de los módulos del organismo de tránsito (Anexo A, `OtPermissionMap.cs`). El `ot_admin` los tiene todos; los
+ * demás roles del organismo (p. ej. Gestor OT, HU #13655) los reciben por rol o como permiso individual del Admin OT.
+ */
+export const OT_PERMISSIONS = {
+  tramites: "ot.tramites.manage",
+  improntas: "ot.improntas.manage",
+  reportes: "ot.reportes.manage",
+  mandatos: "ot.mandatos.manage",
+  mandatarios: "ot.mandatarios.manage",
+  documentos: "ot.documentos.manage",
+  usuarios: "ot.usuarios.manage",
+  integracion: "ot.integracion.manage",
+} as const;
 /** Slugs OT que el Admin OT puede delegar por usuario (OtPermissionMap.cs). */
-export const OT_DOCUMENTOS_PERMISSION = "ot.documentos.manage";
-export const OT_MANDATARIOS_PERMISSION = "ot.mandatarios.manage";
+export const OT_DOCUMENTOS_PERMISSION = OT_PERMISSIONS.documentos;
+export const OT_MANDATARIOS_PERMISSION = OT_PERMISSIONS.mandatarios;
+
+/**
+ * HU #13655 — pestaña del hub del organismo (`/admin/transit-offices/{id}/<pestaña>`) → permiso OT que la abre a un rol
+ * del organismo que no es `ot_admin`. La misma tabla decide el dock (`otHubNavGating`) y la ruta (`ROUTE_ACCESS`).
+ * Las pestañas exclusivas del SuperAdmin (Reglas, Requisitos, Configuración) no están aquí.
+ */
+export const OT_HUB_TAB_PERMISSION = {
+  "client-procedures": OT_PERMISSIONS.tramites,
+  "revocation-requests": OT_PERMISSIONS.tramites,
+  documents: OT_PERMISSIONS.documentos,
+  usuarios: OT_PERMISSIONS.usuarios,
+  reportes: OT_PERMISSIONS.reportes,
+  mandatos: OT_PERMISSIONS.mandatos,
+  "imprint-validation": OT_PERMISSIONS.improntas,
+  webhooks: OT_PERMISSIONS.integracion,
+} as const;
+
+export type OtHubDelegableTab = keyof typeof OT_HUB_TAB_PERMISSION;
+
+/**
+ * Campos de visibilidad del dock para una pestaña del organismo: el `ot_admin` la ve siempre (como hasta ahora); otro rol
+ * del organismo, solo con el permiso OT de la pestaña en su token (HU #13655).
+ */
+export function otHubNavGating(tab: OtHubDelegableTab, isOtAdmin: boolean): { permission?: string[] } {
+  return isOtAdmin ? {} : { permission: [OT_HUB_TAB_PERMISSION[tab]] };
+}
 
 /** Lo que la API exige para el módulo. `authenticated` = solo sesión (el menú puede ser más estricto, nunca menos). */
 export type ApiGuard =
@@ -193,7 +234,9 @@ export interface RouteAccessRule {
   requirement: AccessRequirement;
 }
 
-const ROUTE_API_ADMIN = { kind: "policy", policy: "SuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminCompaniesEndpoints.cs" } as const;
+const OT_PERMISSION_MAP_SOURCE = "services/core-api/src/Flit.Api/Authorization/OtPermissionMap.cs";
+
+const ROUTE_API_ADMIN ={ kind: "policy", policy: "SuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminCompaniesEndpoints.cs" } as const;
 
 /**
  * Reglas por prefijo, de la más específica a la más general. Reproducen una a una las del guard de rol anterior
@@ -206,18 +249,24 @@ export const ROUTE_ACCESS: readonly RouteAccessRule[] = [
     pattern: /^\/admin\/transit-offices\/[^/]+\/(rules|requirements|configuracion)(\/|$)/,
     requirement: { superAdminOnly: true, api: ROUTE_API_ADMIN },
   },
-  // HU #12860 — Documentos del organismo: ot_admin o SuperAdmin; HU #13639 — o quien tenga ot.documentos.manage.
-  {
-    id: "admin-transit-offices-documents",
-    pattern: /^\/admin\/transit-offices\/[^/]+\/documents(\/|$)/,
-    requirement: {
-      transitOfficeUser: true,
-      rolesAny: [OT_ADMIN_ROLE],
-      delegatedBy: OT_DOCUMENTOS_PERMISSION,
-      api: { kind: "policy", policy: "OtAdminOrSuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminOtEndpoints.cs" },
-    },
-  },
-  // HU #10218 — el resto del hub del organismo: cualquier usuario de un organismo de tránsito.
+  // Pestañas del organismo (HU #13655): ot_admin o SuperAdmin; otro rol del organismo solo con el permiso OT de la
+  // pestaña. Documentos (HU #12860) ya era así desde HU #13639 con ot.documentos.manage.
+  ...(Object.keys(OT_HUB_TAB_PERMISSION) as OtHubDelegableTab[]).map(
+    (tab): RouteAccessRule => ({
+      id: `admin-transit-offices-${tab}`,
+      pattern: new RegExp(`^/admin/transit-offices/[^/]+/${tab}(/|$)`),
+      requirement: {
+        transitOfficeUser: true,
+        rolesAny: [OT_ADMIN_ROLE],
+        delegatedBy: OT_HUB_TAB_PERMISSION[tab],
+        api:
+          tab === "documents"
+            ? { kind: "policy", policy: "OtAdminOrSuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminOtEndpoints.cs" }
+            : { kind: "permission", slug: OT_HUB_TAB_PERMISSION[tab], source: OT_PERMISSION_MAP_SOURCE },
+      },
+    }),
+  ),
+  // HU #10218 — el resto del hub del organismo (listado e Inicio del organismo): cualquier usuario de un organismo.
   {
     id: "admin-transit-offices",
     pattern: /^\/admin\/transit-offices/,

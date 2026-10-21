@@ -12,7 +12,11 @@ import {
   canAccessModule,
   moduleRequirement,
   navGatingFor,
+  OT_HUB_TAB_PERMISSION,
+  OT_PERMISSIONS,
+  otHubNavGating,
   resolveRouteAccess,
+  type OtHubDelegableTab,
   type AccessRequirement,
   type ModuleAccessKey,
 } from "../module-access";
@@ -159,6 +163,14 @@ describe("navGatingFor — el dock lee el mismo requisito", () => {
   });
 });
 
+/** Etiquetas del dock de un usuario OT (organismo «ot-1») con los permisos dados. */
+const otDockLabels = (isOtAdmin: boolean, permissions: string[]) =>
+  buildDock(
+    tramitesNav({ isOtUser: true, isOtAdmin, isAdminCompany: false, isGroupParent: false, tenantId: null, otTransitOfficeId: "ot-1" }),
+    { permissions, isSuperAdmin: false },
+    "/",
+  ).flatMap((g) => g.items.flatMap((i) => [i.label, ...(i.children ?? []).map((c) => c.label)]));
+
 describe("HU #13639 (Anexo A §1.4) — Documentos del organismo se delega con ot.documentos.manage", () => {
   const otUser = (permissions: string[], roles: { code: string }[] = [{ code: "gestor_tramites_ot" }]) =>
     claims({ roles, permissions, entity_type: "TRANSIT_OFFICE" });
@@ -169,15 +181,63 @@ describe("HU #13639 (Anexo A §1.4) — Documentos del organismo se delega con o
     expect(resolveRouteAccess(otUser(["ot.tramites.manage"]), "/admin/transit-offices/x/documents").allowed).toBe(false);
   });
 
-  it("el dock muestra Documentos con el permiso delegado; Usuarios sigue siendo solo del ot_admin", () => {
-    const keys = (ctx: { isOtAdmin: boolean; hasOtDocumentos: boolean }) =>
-      buildDock(
-        tramitesNav({ isOtUser: true, isAdminCompany: false, isGroupParent: false, tenantId: null, otTransitOfficeId: "ot-1", ...ctx }),
-        { permissions: [], isSuperAdmin: false },
-        "/",
-      ).flatMap((g) => g.items.map((i) => i.label));
-    expect(keys({ isOtAdmin: false, hasOtDocumentos: true })).toContain("Documentos");
-    expect(keys({ isOtAdmin: false, hasOtDocumentos: true })).not.toContain(COPY.B21Usuarios);
-    expect(keys({ isOtAdmin: false, hasOtDocumentos: false })).not.toContain("Documentos");
+  it("el dock muestra Documentos con el permiso delegado; Usuarios no viene con él", () => {
+    expect(otDockLabels(false, ["ot.documentos.manage"])).toContain("Documentos");
+    expect(otDockLabels(false, ["ot.documentos.manage"])).not.toContain(COPY.B21Usuarios);
+    expect(otDockLabels(false, [])).not.toContain("Documentos");
+  });
+});
+
+describe("HU #13655 — las pestañas del organismo siguen el permiso OT de cada una (dock y ruta, misma tabla)", () => {
+  const otUser = (permissions: string[], roles: { code: string }[] = [{ code: "gestor_tramites_ot" }]) =>
+    claims({ roles, permissions, entity_type: "TRANSIT_OFFICE" });
+  const tabs = Object.entries(OT_HUB_TAB_PERMISSION) as [OtHubDelegableTab, string][];
+
+  it.each(tabs)("«%s»: el Gestor OT entra con %s y sin él recibe acceso denegado del módulo", (tab, slug) => {
+    const path = `/admin/transit-offices/x/${tab}`;
+    expect(resolveRouteAccess(otUser([slug]), path)).toEqual({ allowed: true, moduleId: `admin-transit-offices-${tab}` });
+    expect(resolveRouteAccess(otUser([]), path)).toEqual({ allowed: false, moduleId: `admin-transit-offices-${tab}` });
+    expect(resolveRouteAccess(otUser([], [{ code: "ot_admin" }]), path).allowed).toBe(true);
+    expect(resolveRouteAccess(superAdmin, path).allowed).toBe(true);
+    // El permiso OT no abre la ruta a quien no es de un organismo.
+    expect(resolveRouteAccess(claims({ roles: [{ code: "Radicador" }], permissions: [slug] }), path).allowed).toBe(false);
+  });
+
+  it("los slugs de la tabla existen en el mapa de permisos OT de la API", () => {
+    const text = readFileSync(resolve(__dirname, "../../../../services/core-api/src/Flit.Api/Authorization/OtPermissionMap.cs"), "utf8");
+    for (const slug of Object.values(OT_PERMISSIONS)) expect(text).toContain(`"${slug}"`);
+  });
+
+  it("Reglas, Requisitos y Configuración siguen siendo solo del SuperAdmin, aunque el rol OT tenga todos los permisos", () => {
+    for (const tab of ["rules", "requirements", "configuracion"]) {
+      expect(resolveRouteAccess(otUser(Object.values(OT_PERMISSIONS)), `/admin/transit-offices/x/${tab}`).allowed).toBe(false);
+    }
+  });
+
+  it("el Inicio y el listado del organismo siguen abiertos a cualquier rol OT", () => {
+    expect(resolveRouteAccess(otUser([]), "/admin/transit-offices/x").allowed).toBe(true);
+    expect(resolveRouteAccess(otUser([]), "/admin/transit-offices").allowed).toBe(true);
+  });
+
+  it("dock: el ot_admin ve todas las pestañas sin permisos OT en el token", () => {
+    const labels = otDockLabels(true, []);
+    for (const name of [COPY.B21Tramites, "Documentos", COPY.B21Usuarios, COPY.B21Reportes, "Mandatos", "Validar impronta"]) {
+      expect(labels).toContain(name);
+    }
+  });
+
+  it("dock: el Gestor OT ve solo las pestañas de sus permisos", () => {
+    const labels = otDockLabels(false, ["ot.tramites.manage", "ot.reportes.manage"]);
+    expect(labels).toEqual(expect.arrayContaining([COPY.B21Tramites, COPY.B21Reportes]));
+    for (const name of ["Documentos", COPY.B21Usuarios, "Mandatos", "Validar impronta"]) expect(labels).not.toContain(name);
+    expect(otDockLabels(false, ["ot.mandatos.manage", "ot.improntas.manage", "ot.usuarios.manage"])).toEqual(
+      expect.arrayContaining(["Mandatos", "Validar impronta", COPY.B21Usuarios]),
+    );
+  });
+
+  it("otHubNavGating: sin requisito para el ot_admin; el permiso de la pestaña para los demás", () => {
+    expect(otHubNavGating("documents", true)).toEqual({});
+    expect(otHubNavGating("documents", false)).toEqual({ permission: ["ot.documentos.manage"] });
+    expect(otHubNavGating("imprint-validation", false)).toEqual({ permission: ["ot.improntas.manage"] });
   });
 });

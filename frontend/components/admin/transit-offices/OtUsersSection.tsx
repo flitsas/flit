@@ -43,6 +43,7 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ICON_BUTTON_HIT_AREA, RowActions, type RowAction } from "@/components/atom/RowActions";
 import { assignRole, getRoles, type TenantRole } from "@/lib/api/security";
+import { isAdministratorRoleCode, isOtModuleCode } from "@/lib/permissions/modulePermissions";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { formatOtDate } from "./ot-utils";
 import {
@@ -66,6 +67,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // HU #13655/#13658: el Admin OT configura los permisos de los usuarios de su organismo (modo `admin`: tope y
   // ámbito de su sesión) y consulta su auditoría. El Super Admin lo hace desde el Panel SA.
   const canConfigurePermissions = isOtAdmin && !isSuperAdmin;
+  // HU #13655: un Gestor OT con Usuarios delegado lista, invita y edita a otros usuarios no administradores; cambiar
+  // roles, invitar o editar administradores sigue siendo del Admin OT y del Super Admin.
+  const isUserAdmin = isOtAdmin || isSuperAdmin;
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -212,8 +216,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     }
 
     // AC4 (HU #10622): sin "Editar" para pendientes ni canceladas (HU #11552 / ADR-0048) — no
-    // hay cuenta real que editar.
-    if (!isInvitationRow(u)) {
+    // hay cuenta real que editar. HU #13655: quien no es administrador no edita a un administrador.
+    if (!isInvitationRow(u) && (isUserAdmin || !isAdministratorRoleCode(u.roleCode))) {
       actions.push({
         icon: Pencil,
         label: `Editar usuario ${u.fullName}`,
@@ -478,6 +482,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onConfirm={handleInvite}
           onClose={() => setInviteOpen(false)}
           isSuperAdmin={isSuperAdmin}
+          canInviteAdmins={isUserAdmin}
         />
       )}
       {suspendTarget && (
@@ -505,17 +510,22 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onUpdate={handleUpdateUser}
           // Toda esta sección vive dentro de un organismo: el perfil no depende de la fila.
           profile="OT"
-          roleSection={{
-            currentRoleName: editTarget.role,
-            currentRoleId: editTarget.roleId,
-            roles: editRoles,
-            rolesLoading: editRolesLoading,
-            onAssignRole: async (roleId) => {
-              await assignRole(editTarget.id, roleId);
-              show("Rol actualizado correctamente.", "success");
-              await load();
-            },
-          }}
+          // HU #13655: cambiar el rol (p. ej. de Gestor OT a Administrador OT) es del Admin OT y del Super Admin.
+          roleSection={
+            isUserAdmin
+              ? {
+                  currentRoleName: editTarget.role,
+                  currentRoleId: editTarget.roleId,
+                  roles: editRoles,
+                  rolesLoading: editRolesLoading,
+                  onAssignRole: async (roleId) => {
+                    await assignRole(editTarget.id, roleId);
+                    show("Rol actualizado correctamente.", "success");
+                    await load();
+                  },
+                }
+              : undefined
+          }
         />
       )}
       {permissionsTarget && canConfigurePermissions && (
@@ -531,6 +541,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           invitationPending={isInvitationRow(permissionsTarget)}
           // HU #13656: otro administrador o la propia ficha se ven en solo lectura.
           targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}
+          // HU #13655: solo los módulos del organismo; los de compañía y Ver/Crear por familia no aplican al OT.
+          moduleFilter={isOtModuleCode}
           isSelf={permissionsTarget.id === currentUserId}
           onClose={() => setPermissionsTarget(null)}
         />
@@ -609,10 +621,13 @@ function OtInviteUserDialog({
   onConfirm,
   onClose,
   isSuperAdmin,
+  canInviteAdmins = true,
 }: {
   onConfirm: (email: string, fullName: string, roleIds: string[]) => Promise<void>;
   onClose: () => void;
   isSuperAdmin: boolean;
+  /** HU #13655: quien no es administrador no ofrece roles de administrador y debe elegir un rol. */
+  canInviteAdmins?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -643,7 +658,7 @@ function OtInviteUserDialog({
 
     void load
       .then((list) => {
-        if (!cancelled) setRoles(list);
+        if (!cancelled) setRoles(canInviteAdmins ? list : list.filter((r) => !isAdministratorRoleCode(r.code)));
       })
       .catch(() => {
         if (!cancelled) setRoles([]);
@@ -655,7 +670,9 @@ function OtInviteUserDialog({
     return () => {
       cancelled = true;
     };
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, canInviteAdmins]);
+
+  const missingRole = !canInviteAdmins && selectedRoleIds.length === 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -724,12 +741,16 @@ function OtInviteUserDialog({
                 ))}
               </div>
               <p className="mt-1 text-[10px] opacity-60">
-                Un usuario tiene un solo rol. Sin selección se asigna Administrador OT.
+                {canInviteAdmins
+                  ? "Un usuario tiene un solo rol. Sin selección se asigna Administrador OT."
+                  : "Un usuario tiene un solo rol. Elige uno."}
               </p>
             </fieldset>
           ) : (
             <p className="text-xs opacity-60">
-              No hay roles configurados para organismos de tránsito. Se asignará Administrador OT.
+              {canInviteAdmins
+                ? "No hay roles configurados para organismos de tránsito. Se asignará Administrador OT."
+                : "No hay roles disponibles para invitar."}
             </p>
           )}
           <div className="flex gap-3 pt-2">
@@ -743,7 +764,7 @@ function OtInviteUserDialog({
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || missingRole}
               className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
               style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
             >

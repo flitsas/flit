@@ -40,7 +40,7 @@ import { OT_ADM_DOCK, otHubListPath, otHubModulePath } from "@/components/admin/
 import { CONFIRMACION_RUNT_BASE_PATH } from "@/components/admin/plataforma/confirmacion-runt/confirmacion-runt-nav";
 import { GENERACION_DOCUMENTAL_BASE_PATH } from "@/components/admin/generacion-documental/generacion-documental-nav";
 import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
-import { navGatingFor } from "@/lib/nav/module-access";
+import { navGatingFor, otHubNavGating, type OtHubDelegableTab } from "@/lib/nav/module-access";
 import { COPY } from "@/lib/copy/copy-catalog";
 import {
   DOCK_GROUP_ICON,
@@ -55,10 +55,8 @@ import {
 export interface TramitesNavContext {
   /** Cualquier rol de un organismo de tránsito: opera la superficie del organismo. */
   isOtUser: boolean;
-  /** `ot_admin`: además ve Documentos y Usuarios del organismo. */
+  /** `ot_admin`: ve todas las pestañas del organismo; los demás roles OT, solo las de sus permisos OT (HU #13655). */
   isOtAdmin: boolean;
-  /** Usuario OT con `ot.documentos.manage` delegado por su Admin OT (HU #13639): ve Documentos. */
-  hasOtDocumentos?: boolean;
   isAdminCompany: boolean;
   isGroupParent: boolean;
   tenantId: string | null;
@@ -162,20 +160,23 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
     },
   );
 
-  // Usuario OT: pestañas del hub del organismo en el dock. Documentos y Usuarios solo para ot_admin (su API es de
-  // administradores). Reglas, Requisitos y Configuración son del SuperAdmin (HU #12856) y Preasignación ya no existe.
+  // Usuario OT: pestañas del hub del organismo en el dock. El ot_admin las ve todas. Cualquier otro rol del organismo
+  // (p. ej. Gestor OT, HU #13655) ve cada pestaña solo con su permiso OT, que el Admin OT le puede otorgar por usuario.
+  // Reglas, Requisitos y Configuración son del SuperAdmin (HU #12856) y Preasignación ya no existe.
   const officeId = ctx.otTransitOfficeId;
   if (ctx.isOtUser && officeId) {
-    const ot = (key: string, label: string, tab: Parameters<typeof otHubModulePath>[1], icon: NavIcon): Entry => ({
+    // La regla de cada pestaña vive en la tabla de acceso (`OT_HUB_TAB_PERMISSION`), la misma que gobierna la ruta.
+    const ot = (key: string, label: string, tab: OtHubDelegableTab, icon: NavIcon): Entry => ({
       key,
       label,
       href: otHubModulePath(officeId, tab),
       icon,
+      ...otHubNavGating(tab, ctx.isOtAdmin),
     });
     entries.push(
       ot(OT_ADM_DOCK.tramites, COPY.B21Tramites, "client-procedures", FileStack),
-      ...(ctx.isOtAdmin || ctx.hasOtDocumentos ? [ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText)] : []),
-      ...(ctx.isOtAdmin ? [ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users)] : []),
+      ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText),
+      ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users),
       ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", BarChart3),
       ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", FileSignature),
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),

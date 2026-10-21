@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminReadOnlyFor, buildModuleViews, outOfCapOverrideIds, withOverrideActions } from "../modulePermissions";
+import { adminReadOnlyFor, buildModuleViews, isOtModuleCode, outOfCapOverrideIds, withOverrideActions } from "../modulePermissions";
 import type { AccessibleModule } from "@/lib/api/security";
 import type { GrantablePermissionItem, UserPermissionOverride } from "@/lib/api/permission-overrides";
 
@@ -133,5 +133,23 @@ describe("HU #13655 (FD2-3) — withOverrideActions: lo que está fuera del tope
   it("el módulo creado lleva el nombre que trae la API, no su código", () => {
     const result = withOverrideActions(modules, [{ ...override("p1", "logqx"), moduleName: "LOG QX" }]);
     expect(result[1].name).toBe("LOG QX");
+  });
+});
+
+describe("HU #13655 — isOtModuleCode: módulos que el Admin OT configura en sus usuarios", () => {
+  it("acepta los módulos del organismo y la descarga masiva", () => {
+    for (const code of ["ot-tramites", "ot-documentos", "OT-Usuarios", "consolidado-masivo"]) {
+      expect(isOtModuleCode(code)).toBe(true);
+    }
+  });
+
+  it("descarta los de compañía y los Ver/Crear por familia de trámites", () => {
+    for (const code of ["tramites", "matriculas", "traspasos", "otros-tramites", "reportes", "dashboard", "", null, undefined]) {
+      expect(isOtModuleCode(code)).toBe(false);
+    }
+  });
+
+  it("el Gestor OT no es un rol de administrador (su ficha es editable para el Admin OT)", () => {
+    expect(adminReadOnlyFor("admin", ["gestor_tramites_ot"], false)).toBe(false);
   });
 });
