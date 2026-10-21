@@ -1,6 +1,7 @@
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -27,9 +28,10 @@ public sealed class EntidadesConTenantTests
                  {
                      (typeof(ConfiguracionEmpresa), "configuracion_empresa"), (typeof(CambioContrato), "cambios_contrato"),
                      (typeof(CabeceraDiagnostico), "diagnosticos"), (typeof(HistorialEstadoDiagnostico), "historial_estado_diagnostico"),
+                     (typeof(VehiculoDiagnostico), "vehiculos"),
                  })
         {
-            db.Model.FindEntityType(entidad).Should().NotBeNull($"diagnostico.{tabla} está mapeada (HU #13736, #13738)");
+            db.Model.FindEntityType(entidad).Should().NotBeNull($"diagnostico.{tabla} está mapeada (HU #13736, #13738, #13735)");
             db.Model.FindEntityType(entidad)!.GetTableName().Should().Be(tabla);
         }
     }
@@ -43,13 +45,20 @@ public sealed class EntidadesConTenantTests
             [$"{typeof(Huerfana).FullName} (no implementa IEntidadDeEmpresa)", $"{typeof(SinFiltro).FullName} (sin filtro por empresa)"]);
     }
 
-    /// <summary>Entidades de negocio (todas salvo las del SDK) sin <see cref="IEntidadDeEmpresa"/> o sin filtro global.</summary>
+    /// <summary>
+    /// Entidades de negocio sin <see cref="IEntidadDeEmpresa"/> o sin filtro global. Quedan fuera las del SDK (outbox, inbox) y
+    /// las llaves de Data Protection (HU #13735), que son del servicio y no de una empresa.
+    /// </summary>
     internal static IReadOnlyList<string> SinEmpresaOSinFiltro(IModel modelo)
     {
         ArgumentNullException.ThrowIfNull(modelo);
-        var sdk = typeof(Flit.Platform.Sdk.Messaging.OutboxMessage).Assembly;
+        var sinEmpresa = new[]
+        {
+            typeof(Flit.Platform.Sdk.Messaging.OutboxMessage).Assembly,
+            typeof(Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey).Assembly,
+        };
         return modelo.GetEntityTypes()
-            .Where(t => !t.IsOwned() && t.ClrType.Assembly != sdk)
+            .Where(t => !t.IsOwned() && !sinEmpresa.Contains(t.ClrType.Assembly))
             .Select(t => !typeof(IEntidadDeEmpresa).IsAssignableFrom(t.ClrType)
                 ? $"{t.ClrType.FullName} (no implementa IEntidadDeEmpresa)"
                 : t.GetDeclaredQueryFilters().Count == 0 ? $"{t.ClrType.FullName} (sin filtro por empresa)" : null)

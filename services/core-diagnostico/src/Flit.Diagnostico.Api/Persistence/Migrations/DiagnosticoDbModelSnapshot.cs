@@ -406,6 +406,156 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<string>("DatosConsolidados")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("datos_consolidados")
+                        .HasDefaultValueSql("'{}'::jsonb")
+                        .HasComment("@pii:low Datos consolidados de las fuentes (objeto JSON), sin documentos en claro.");
+
+                    b.Property<string>("DepartamentoCodigo")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("departamento_codigo")
+                        .HasComment("Departamento derivado de la réplica de organismos.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Cabecera del lote.");
+
+                    b.Property<string>("EstadoConsultas")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado_consultas")
+                        .HasDefaultValueSql("'PENDIENTE'")
+                        .HasComment("Estado derivado de las celdas del vehículo.");
+
+                    b.Property<string>("IdentificadorNorm")
+                        .IsRequired()
+                        .HasMaxLength(17)
+                        .HasColumnType("character varying(17)")
+                        .HasColumnName("identificador_norm")
+                        .HasComment("@pii:low Identificador en mayúsculas y sin espacios; único en el lote.");
+
+                    b.Property<string>("IdentificadorOriginal")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("identificador_original")
+                        .HasComment("@pii:low Identificador tal como lo escribió el cliente (placa o VIN).");
+
+                    b.Property<byte[]>("LocatarioDocCifrado")
+                        .HasColumnType("bytea")
+                        .HasColumnName("locatario_doc_cifrado")
+                        .HasComment("@pii:high Documento del locatario cifrado, como el del propietario (R-3).");
+
+                    b.Property<string>("LocatarioDocOrigen")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("locatario_doc_origen")
+                        .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (respaldo de la captura); null sin documento.");
+
+                    b.Property<string>("LocatarioDocTipo")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("locatario_doc_tipo")
+                        .HasComment("Tipo de documento del locatario.");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("integer")
+                        .HasColumnName("orden")
+                        .HasComment("Posición del vehículo en el lote.");
+
+                    b.Property<string>("OrganismoNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("organismo_nombre")
+                        .HasComment("Organismo de tránsito (transit_office_name del RUNT).");
+
+                    b.Property<string>("Placa")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("placa")
+                        .HasComment("@pii:low Placa del vehículo.");
+
+                    b.Property<byte[]>("PropietarioDocCifrado")
+                        .HasColumnType("bytea")
+                        .HasColumnName("propietario_doc_cifrado")
+                        .HasComment("@pii:high Documento del propietario cifrado (plan §9.3). El nombre no se guarda.");
+
+                    b.Property<string>("PropietarioDocTipo")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("propietario_doc_tipo")
+                        .HasComment("Tipo de documento del propietario, hidratado del RUNT (D-02).");
+
+                    b.Property<DateTimeOffset?>("RuntConsultadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("runt_consultado_en")
+                        .HasComment("Instante de la última consulta al RUNT; reutilización en Trámites (R-14).");
+
+                    b.Property<string>("Servicio")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("servicio")
+                        .HasComment("Servicio normalizado (vehicle_service del RUNT).");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote (la misma de la cabecera).");
+
+                    b.Property<string>("TipoIdentificador")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("tipo_identificador")
+                        .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA o VIN (R-19).");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Vin")
+                        .HasMaxLength(17)
+                        .HasColumnType("character varying(17)")
+                        .HasColumnName("vin")
+                        .HasComment("@pii:low VIN del vehículo.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_vehiculos");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "IdentificadorNorm")
+                        .IsUnique()
+                        .HasDatabaseName("ux_vehiculo_por_lote");
+
+                    b.ToTable("vehiculos", "diagnostico", t =>
+                        {
+                            t.HasComment("Vehículos del lote (MOD02, HU #13735): identificador normalizado único por lote y documentos cifrados.");
+
+                            t.HasCheckConstraint("ck_locatario_origen", "(locatario_doc_cifrado IS NULL) = (locatario_doc_origen IS NULL)");
+
+                            t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
+
+                            t.HasCheckConstraint("ck_vehiculos_identificador_norm", "identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\\s'");
+
+                            t.HasCheckConstraint("ck_vehiculos_locatario_doc_origen", "locatario_doc_origen IS NULL OR locatario_doc_origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
+
+                            t.HasCheckConstraint("ck_vehiculos_tipo_identificador", "tipo_identificador IN ('PLACA_CARRO', 'PLACA_MOTO', 'PLACA_REMOLQUE', 'PLACA_MAQUINARIA', 'VIN')");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Platform.Sdk.Messaging.InboxMessage", b =>
                 {
                     b.Property<Guid>("EventId")
@@ -483,6 +633,32 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.ToTable("outbox", "diagnostico");
                 });
 
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text")
+                        .HasColumnName("friendly_name");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text")
+                        .HasColumnName("xml");
+
+                    b.HasKey("Id")
+                        .HasName("pk_data_protection_keys");
+
+                    b.ToTable("data_protection_keys", "diagnostico", t =>
+                        {
+                            t.HasComment("Llaves de ASP.NET Data Protection del servicio (HU #13735). Sin tenant.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Configuracion.CambioContrato", b =>
                 {
                     b.HasOne("Flit.Diagnostico.Api.Modulos.Configuracion.ConfiguracionEmpresa", null)
@@ -502,6 +678,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_historial_estado_diagnostico_diagnosticos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_vehiculos_diagnosticos");
                 });
 #pragma warning restore 612, 618
         }
