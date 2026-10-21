@@ -47,6 +47,8 @@ public static class Program
         builder.Services.AddDbContext<DiagnosticoDb>(o => DiagnosticoDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
         builder.Services.AddAutorizacionDiagnostico();
+        // HU #13728: auditoría de cada lectura entre compañías del backoffice (diagnostico.lecturas_backoffice).
+        builder.Services.AddScoped<Modulos.Comun.AuditoriaLecturaBackoffice>();
         builder.Services.AddSuscripcionDiagnostico(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);

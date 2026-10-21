@@ -30,6 +30,10 @@ security:
 tags:
   - name: Sesion
     description: Lo que la app necesita al abrir.
+  - name: Backoffice
+    description: >
+      Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
+      tenant_type=FLIT a la vez, empresa explícita y auditoría de cada lectura.
 
 paths:
   /api/v1/diagnostico/sesion:
@@ -56,6 +60,53 @@ paths:
           description: >
             Token de servicio o usuario sin permisos de Diagnóstico; usuario sin compañía (`code` = SIN_EMPRESA);
             compañía sin Diagnóstico activo o suscripción no verificable (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/backoffice/resumen:
+    get:
+      tags: [Backoffice]
+      operationId: obtenerResumenEmpresaBackoffice
+      summary: Resumen de una compañía cliente para el backoffice FLIT
+      description: >
+        Ruta mínima de D0 (HU #13728): si la compañía indicada tiene configuración y cuántos diagnósticos y
+        vehículos tiene. Política diagnostico.backoffice: exige a la vez el permiso diagnostico.backoffice.ver
+        (o SuperAdmin) y el claim tenant_type=FLIT del token; con el rol backoffice_diagnostico en una compañía
+        que no es FLIT, o en la compañía FLIT sin el permiso, responde 403, igual que cualquier otra ruta
+        /backoffice/* (también una que no existe). La compañía nunca sale del token: se indica en ?empresa=
+        (o en el segmento {empresa} de las rutas que lo lleven; si llegan los dos deben coincidir). Cada
+        lectura queda en diagnostico.lecturas_backoffice con el usuario, la empresa consultada, la ruta y la
+        fecha, antes de leer. Sin empresa válida responde 400 y no se audita.
+      parameters:
+        - name: empresa
+          in: query
+          required: true
+          description: Id de la compañía a consultar (uuid distinto de cero, un solo valor).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resumen de la compañía indicada (solo sus datos).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumenEmpresaBackoffice"
+        "400":
+          description: Falta ?empresa=, no es un uuid, es cero, llega repetido o no coincide con la ruta (`code` = EMPRESA_REQUERIDA). No se audita.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            No es backoffice FLIT (falta el permiso o tenant_type no es FLIT; sin cuerpo); token sin compañía
+            (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
+            (`code` = PRODUCTO_NO_HABILITADO).
           content:
             application/json:
               schema:
@@ -164,6 +215,26 @@ components:
           type: boolean
         verVolumetria:
           type: boolean
+
+    ResumenEmpresaBackoffice:
+      type: object
+      required: [empresa, configuracion, diagnosticos, vehiculos]
+      properties:
+        empresa:
+          type: string
+          format: uuid
+          description: La compañía indicada en ?empresa=.
+        configuracion:
+          type: boolean
+          description: La compañía ya tiene fila en configuracion_empresa.
+        diagnosticos:
+          type: integer
+          format: int32
+          minimum: 0
+        vehiculos:
+          type: integer
+          format: int32
+          minimum: 0
 
     ErrorRegla:
       type: object

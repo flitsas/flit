@@ -46,7 +46,8 @@ public static class AutorizacionExtensions
         services.AddAuthorizationBuilder()
             .AddPolicy(PoliticaUsuario, p => p.RequireAuthenticatedUser().RequireAssertion(c =>
                 !PlatformPrincipal.IsService(c.User)
-                && (PlatformPrincipal.IsSuperAdmin(c.User) || c.User.FindAll("permissions").Any(claim => EsDelManifiesto(claim.Value)))));
+                && (PlatformPrincipal.IsSuperAdmin(c.User) || c.User.FindAll("permissions").Any(claim => EsDelManifiesto(claim.Value)))))
+            .AddPoliticaBackoffice();
         return services;
     }
 
