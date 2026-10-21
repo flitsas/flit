@@ -13,19 +13,25 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// guardado, y la subida de la versión (<c>ExecuteUpdate</c>) también lleva el filtro. Solo cierra si la celda sigue siendo
 /// de ESE lease (EN_CURSO con el mismo <c>lease_hasta</c>, y el <c>xmin</c> de la lectura): si venció y otro procesador la
 /// retomó, no pisa su trabajo y devuelve false. Los <see cref="ResultadoCelda.Efectos"/> (datos del vehículo, liberación o
-/// bloqueo de sus demás celdas, HU #13730) se aplican en esa misma transacción: o queda todo o no queda nada.
+/// bloqueo de sus demás celdas, HU #13730) y el intento auditable (HU #13737) se aplican en esa misma transacción: o queda todo o
+/// no queda nada. Un reintento (HU #13737) deja la celda en PENDIENTE con <c>disponible_desde</c> del backoff e
+/// <c>intentos_auto</c> + 1.
 /// </summary>
 internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
 {
-    /// <summary>Cierra la celda; false si el lease ya no es de quien la tomó.</summary>
-    public async Task<bool> CerrarAsync(CeldaTomada tomada, ResultadoCelda resultado, CancellationToken ct)
+    /// <summary>
+    /// Cierra la celda (o la devuelve a la cola si <see cref="ResultadoCelda.ReintentarDesde"/> viene, HU #13737) e inserta el
+    /// <paramref name="intento"/> en la misma transacción; false si el lease ya no es de quien la tomó (entonces no guarda nada).
+    /// </summary>
+    public async Task<bool> CerrarAsync(CeldaTomada tomada, ResultadoCelda resultado, CancellationToken ct, IntentoConsulta? intento = null)
     {
         ArgumentNullException.ThrowIfNull(tomada);
         ArgumentNullException.ThrowIfNull(resultado);
         if (db.EmpresaActual != tomada.TenantId)
             throw new InvalidOperationException("El escritor de celdas exige el contexto con la empresa de la celda.");
-        if (resultado.Estado is EstadoCelda.Pendiente or EstadoCelda.EnCurso)
-            throw new ArgumentException("Una celda se cierra en COMPLETADO, ERROR o NA.", nameof(resultado));
+        var reintento = resultado.ReintentarDesde is not null;
+        if (resultado.Estado == EstadoCelda.EnCurso || (resultado.Estado == EstadoCelda.Pendiente) != reintento)
+            throw new ArgumentException("Una celda se cierra en COMPLETADO, ERROR o NA, o vuelve a PENDIENTE solo con ReintentarDesde.", nameof(resultado));
 
         // El reintento de Npgsql exige que la transacción del usuario vaya dentro de la estrategia de ejecución.
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -46,6 +52,15 @@ internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
             celda.LeaseHasta = null;
             celda.ActualizadoEn = reloj.GetUtcNow();
             celda.VersionTablero = version;
+            if (reintento)
+            {
+                // Backoff de un transitorio (D-12): vuelve a la cola cuando venza la espera, con un reintento más.
+                celda.DisponibleDesde = resultado.ReintentarDesde!.Value;
+                celda.IntentosAuto++;
+            }
+
+            if (intento is not null)
+                db.Add(intento);
             if (resultado.Efectos is { } efectos)
                 await efectos(db, version, ct).ConfigureAwait(false);
             try

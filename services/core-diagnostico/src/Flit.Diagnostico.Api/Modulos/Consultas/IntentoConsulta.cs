@@ -6,6 +6,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// <summary>
 /// Un intento de consulta a una fuente (<c>diagnostico.intentos_consulta</c>, HU #13723, plan §5, R-1): auditoría y log de
 /// negocio de cada llamada, del reproceso y del llenado manual. Solo se inserta: no se edita ni se borra (ADR-0072, clase b).
+/// Desde HU #13737 el procesador inserta uno por cada ejecución de una celda (<see cref="RegistroIntentos"/>).
 /// </summary>
 public sealed class IntentoConsulta : IEntidadDeEmpresa
 {
@@ -22,6 +23,11 @@ public sealed class IntentoConsulta : IEntidadDeEmpresa
     public Guid ConsultaId { get; init; }
 
     public Fuente Fuente { get; init; }
+
+    /// <summary>
+    /// Identificador consultado (placa o VIN, HU #13737); null si la fuente se consulta por persona: nunca un documento en claro.
+    /// </summary>
+    public string? IdentificadorConsultado { get; init; }
 
     /// <summary>Proveedor que respondió; null si no llegó a ninguno o fue manual.</summary>
     public ServicioConsulta? Servicio { get; init; }

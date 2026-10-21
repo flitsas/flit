@@ -121,14 +121,22 @@ internal static class Motor
         await comando.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>Un procesador suelto sobre la API (el trabajador hospedado está apagado en las pruebas).</summary>
-    public static ProcesadorConsultas Procesador(ApiDePrueba api, int tamanoLote = 10, int vehiculosPorEmpresa = 5) =>
-        ActivatorUtilities.CreateInstance<ProcesadorConsultas>(api.App.Services, Options.Create(new OpcionesProcesador
+    /// <summary>
+    /// Un procesador suelto sobre la API (el trabajador hospedado está apagado en las pruebas). Sin
+    /// <paramref name="maxReintentos"/> usa la configuración del servicio (<c>Diagnostico:Consultas:MaxReintentos</c>, HU #13737).
+    /// </summary>
+    public static ProcesadorConsultas Procesador(ApiDePrueba api, int tamanoLote = 10, int vehiculosPorEmpresa = 5, int? maxReintentos = null)
+    {
+        var procesador = Options.Create(new OpcionesProcesador
         {
             TamanoLote = tamanoLote,
             VehiculosEnVueloPorEmpresa = vehiculosPorEmpresa,
             DuracionLease = TimeSpan.FromMinutes(2),
-        }));
+        });
+        return maxReintentos is { } max
+            ? ActivatorUtilities.CreateInstance<ProcesadorConsultas>(api.App.Services, procesador, Options.Create(new OpcionesConsultas { MaxReintentos = max }))
+            : ActivatorUtilities.CreateInstance<ProcesadorConsultas>(api.App.Services, procesador);
+    }
 
     /// <summary>Procesa hasta que no quede celda sin completar (o vence el plazo, que hace fallar la prueba).</summary>
     public static async Task DrenarAsync(ApiDePrueba api, ProcesadorConsultas procesador, CancellationToken ct)

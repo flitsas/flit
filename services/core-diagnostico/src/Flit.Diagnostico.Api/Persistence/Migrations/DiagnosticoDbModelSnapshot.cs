@@ -501,6 +501,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("fuente")
                         .HasComment("Fuente consultada.");
 
+                    b.Property<string>("IdentificadorConsultado")
+                        .HasMaxLength(17)
+                        .HasColumnType("character varying(17)")
+                        .HasColumnName("identificador_consultado")
+                        .HasComment("@pii:low Placa o VIN consultado (HU #13737); null si la fuente es por persona: nunca documentos en claro.");
+
                     b.Property<DateTimeOffset>("Inicio")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("inicio")
@@ -567,9 +573,13 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_intentos_consulta_estado", "estado IN ('SUCCESS', 'ERROR')");
 
+                            t.HasCheckConstraint("ck_intentos_consulta_fin", "fin >= inicio");
+
                             t.HasCheckConstraint("ck_intentos_consulta_fuente", "fuente IN ('RUNT', 'RUNT_PROPIETARIO', 'RUNT_LOCATARIO', 'SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'AVALUO', 'IMPUESTO_DEPARTAMENTAL')");
 
                             t.HasCheckConstraint("ck_intentos_consulta_servicio", "servicio IS NULL OR servicio IN ('VERIFIK', 'KYVERUM', 'INTEMPO', 'SMARTCLOUD', 'FASECOLDA', 'MERCADOLIBRE', 'BASEGRAVABLE', 'SCRAPING', 'FLITFINES', 'OTRO')");
+
+                            t.HasCheckConstraint("ck_intentos_consulta_tipo_error", "estado = 'ERROR' OR tipo_error IS NULL");
                         });
                 });
 

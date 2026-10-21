@@ -821,6 +821,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/backoffice/consultas/{consulta}/intentos:
+    get:
+      tags: [Backoffice]
+      operationId: listarIntentosConsultaBackoffice
+      summary: Intentos de una celda (auditoría del backoffice FLIT)
+      description: >
+        HU #13737 (F03-H6, F03-C11, plan §6.1 fila 03). Cada ejecución de una celda deja un intento de solo
+        inserción en diagnostico.intentos_consulta (disparador AUTO y usuario_id nulo cuando lo hace el
+        procesador; los reintentos de errores transitorios con backoff también dejan su intento). Política
+        diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.auditoria.ver:
+        un usuario de la compañía recibe 403. Empresa explícita en ?empresa=; la lectura queda en
+        diagnostico.lecturas_backoffice. Los intentos nunca llevan documentos: solo la placa o el VIN consultado.
+        Orden: inicio ascendente.
+      parameters:
+        - name: consulta
+          in: path
+          required: true
+          description: Id de la celda (diagnostico.consultas.id).
+          schema:
+            type: string
+            format: uuid
+        - name: empresa
+          in: query
+          required: true
+          description: Id de la compañía dueña de la celda (uuid distinto de cero, un solo valor).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Intentos de la celda, del más antiguo al más reciente (lista vacía si aún no se ejecutó).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentosConsulta"
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA). No se audita.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            No es backoffice FLIT o le falta diagnostico.auditoria.ver (sin cuerpo); token sin compañía
+            (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
+            (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: La celda no existe en la compañía indicada (`code` = CONSULTA_NO_ENCONTRADA).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/backoffice/resumen:
     get:
       tags: [Backoffice]
@@ -991,6 +1050,70 @@ components:
           type: integer
           format: int32
           minimum: 0
+
+    IntentosConsulta:
+      type: object
+      required: [consulta, intentos]
+      properties:
+        consulta:
+          type: string
+          format: uuid
+        intentos:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntentoConsulta"
+
+    IntentoConsulta:
+      type: object
+      required: [id, fuente, servicio, identificador, disparador, inicio, fin, estado, tipo_error, mensaje_error, transaccion_proveedor_id, desde_cache, usuario_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fuente:
+          $ref: "#/components/schemas/Fuente"
+        servicio:
+          type: string
+          nullable: true
+          enum: [VERIFIK, KYVERUM, INTEMPO, SMARTCLOUD, FASECOLDA, MERCADOLIBRE, BASEGRAVABLE, SCRAPING, FLITFINES, OTRO, null]
+          description: Proveedor que respondió; null si no llegó a ninguno.
+        identificador:
+          type: string
+          nullable: true
+          maxLength: 17
+          description: Placa o VIN consultado; null si la consulta es por persona (nunca un documento).
+        disparador:
+          type: string
+          enum: [AUTO, REPROCESO, MANUAL]
+        inicio:
+          type: string
+          format: date-time
+        fin:
+          type: string
+          format: date-time
+        estado:
+          type: string
+          enum: [SUCCESS, ERROR]
+        tipo_error:
+          type: string
+          nullable: true
+          description: >
+            Código del error (null si SUCCESS). Transitorios, que se reintentan con backoff 5 s × 2^(n−1) hasta
+            Diagnostico:Consultas:MaxReintentos ∈ [0, 3] (por defecto 1): TIMEOUT, RED, HTTP_5XX. Definitivos:
+            RESPUESTA_INVALIDA, AUTENTICACION, ESTADO_NO_OK, NO_CONECTADO y cualquier otro.
+        mensaje_error:
+          type: string
+          nullable: true
+        transaccion_proveedor_id:
+          type: string
+          nullable: true
+        desde_cache:
+          type: boolean
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario del reproceso o del llenado manual; null si fue el procesador.
 
     Fuente:
       type: string

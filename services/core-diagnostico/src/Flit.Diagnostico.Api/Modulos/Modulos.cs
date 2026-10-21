@@ -52,7 +52,8 @@ public static class Modulos
     /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
     /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza),
     /// el registro de adaptadores y el catálogo de fuentes disponibles que de él se deriva (HU #13733), el procesador
-    /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar. El trabajador en segundo
+    /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar, y la de reintentos
+    /// <see cref="Consultas.OpcionesConsultas"/> (HU #13737), también validada al arrancar. El trabajador en segundo
     /// plano solo se registra con <c>Diagnostico:Procesador:Habilitado=true</c>; no mira <c>IHostEnvironment</c>.
     /// </summary>
     public static IServiceCollection AddMotorConsultas(this IServiceCollection services, IConfiguration configuration)
@@ -65,6 +66,11 @@ public static class Modulos
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();
         services.AddTransient<Trabajos.ProcesadorConsultas>();
+        // HU #13737 (D-12): reintentos de transitorios, configuración global validada al arrancar en [0, 3].
+        services.AddOptions<Consultas.OpcionesConsultas>()
+            .Bind(configuration.GetSection(Consultas.OpcionesConsultas.Seccion))
+            .Validate(o => o.EsValida(), Consultas.OpcionesConsultas.MensajeFueraDeRango)
+            .ValidateOnStart();
         services.AddOptions<Trabajos.OpcionesProcesador>()
             .Bind(configuration.GetSection(Trabajos.OpcionesProcesador.Seccion))
             .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesProcesador.Seccion} tiene valores fuera de rango (Intervalo > 0, TamanoLote 1-500, DuracionLease >= 10 s, VehiculosEnVueloPorEmpresa >= 1).")

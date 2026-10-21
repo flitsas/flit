@@ -49,7 +49,7 @@ Las tomó el usuario una por una, a partir del contraste con las épicas de ADO 
 | R-1 | D-01 | **Se mantiene D-01 = c.** El admin de la compañía (`admin_diagnostico`) reprocesa celdas en `ERROR`. Llenar a mano y override: solo backoffice FLIT | El reproceso solo repite la consulta real (nunca escribe datos) y queda en el log con `disparador=REPROCESO` + usuario. §6.1, §6.2, §9.2, §12 (12637, 12638, 12669, 12881 CA 11) | PO, pendiente de ratificar |
 | R-2 | D-G | **Nombre comercial «Con Análisis IA» y LLM obligatorio como redactor.** D-G pasa de a + i a **a + b**: veredicto determinista (catálogo versionado) + redacción por LLM siempre | `dictamen_llm` sale del nivel contractual. Queda solo `redaccion_ia_suspendida` como interruptor de emergencia del backoffice, apagado por defecto y no visible al cliente. El costo del LLM entra al precio del plan. Al LLM no van documentos ni nombres. «Con análisis» se renombra «Con Análisis IA». §4 (g), §5, D6, §12 (12637, 12678) | LT (ADR) + PO, pendiente de ratificar |
 | R-2b | R-2 | **Si el LLM falla o no responde**, el dictamen sale con el veredicto y la redacción de plantilla, marcado «redacción IA pendiente». Un reintento en segundo plano la completa | Nunca bloquea al cliente. Estado de redacción por dictamen (`PENDIENTE`/`COMPLETADA`) con reintento y backoff en la cola durable. Si ya se generó un PDF con la plantilla, la redacción IA lo invalida y se regenera. §3.4, §5, D6, §9 | LT, pendiente de ratificar |
-| R-3 | D-02 / K-15 | **Documento del locatario opcional en la captura**: columna opcional en la plantilla masiva y campo opcional en express | Si viene: `RUNT_LOCATARIO` (`ConsultarConductor`) y `SIMIT_LOCATARIO` (`ConsultarMultas` por documento). Si no: N/A con motivo «sin documento de locatario». Se cifra igual que el del propietario, con `origen=DECLARADO_CLIENTE`. Cuando exista el endpoint placa → locatario, se autollena y el campo queda de respaldo. ≈3 SP en D2. §12 (12641, 12659) | PO, pendiente de ratificar |
+| R-3 | D-02 / K-15 | **Documento del locatario opcional en la captura**: columna opcional en la plantilla masiva y campo opcional en express | Si viene: `RUNT_LOCATARIO` (`ConsultarConductor`) y `SIMIT_LOCATARIO` (`ConsultarMultas` por documento). Si no: N/A con motivo «sin documento de locatario». Se cifra igual que el del propietario, con `origen=DECLARADO_CLIENTE`. Cuando exista el endpoint placa → locatario, se autollena y el campo queda de respaldo. **Respaldo materializado el 2026-10-21 (decisión del usuario «Guardar el respaldo», HU #13730b, migración `D2_LocatarioDeclaradoRespaldo`):** si el RUNT trae locatario, el del proveedor queda vigente en `locatario_doc_*` con `origen=PROVEEDOR` y el declarado se copia, tal como estaba cifrado, a `locatario_declarado_doc_tipo`/`locatario_declarado_doc_cifrado` en la misma transacción del cierre de la celda RUNT; si no lo trae, el declarado sigue vigente y el respaldo queda vacío. Una segunda consulta al RUNT no pisa el respaldo. ≈3 SP en D2. §12 (12641, 12659) | PO, pendiente de ratificar |
 | R-4 | K-1 | **Sin alta de compañías en Diagnóstico.** Se crean en el hub y se enciende el producto | Conversión y origen = primer producto encendido de la compañía por `platform.tenant_products.created_at` (DDL 119:69-77). El DDL 121 rellenó filas de compañías existentes: el dato es fiable solo para compañías nuevas. §12 (12881 CA 3 y §2) | PO, pendiente de ratificar |
 | R-5 | K-2 | **Sin login propio.** El subdominio redirige al login del hub (OIDC PKCE, `aud=diagnostico`, patrón Comparendos `@flit/auth`) | §12 (12881 CA 4: «sin sesión → login del hub → regresa a Diagnóstico») | PO + LT, pendiente de ratificar |
 | R-6 | K-3 | **El backoffice FLIT no crea diagnósticos en la v1.** Siempre los crea un usuario de la compañía que paga | Soporte y demos con una compañía FLIT de pruebas con el producto encendido. §6.2, §12 (12881 §8) | PO, pendiente de ratificar |
@@ -693,6 +693,8 @@ CREATE TABLE diagnostico.vehiculos (
   locatario_doc_tipo     varchar(8)  NULL,             -- declarado por el cliente en la captura (R-3)
   locatario_doc_cifrado  bytea       NULL,             -- PII, mismo cifrado que el del propietario
   locatario_doc_origen   varchar(20) NULL CHECK (locatario_doc_origen IN ('DECLARADO_CLIENTE','PROVEEDOR')),
+  locatario_declarado_doc_tipo    varchar(8) NULL,     -- respaldo del declarado cuando el proveedor trae el suyo (R-3, HU #13730b)
+  locatario_declarado_doc_cifrado bytea      NULL,     -- @pii:high, mismo cifrado; se copia el cifrado del declarado al reemplazarlo
   datos_consolidados     jsonb NOT NULL DEFAULT '{}'   -- sin documentos en claro
                          CHECK (jsonb_typeof(datos_consolidados) = 'object'),
   runt_consultado_en     timestamptz NULL,             -- edad del RUNT para la reutilización en Trámites (R-14)
@@ -701,13 +703,17 @@ CREATE TABLE diagnostico.vehiculos (
   -- FK compuesta: el vehículo y su lote son de la misma empresa, también por SQL directo (HU #13735, como el historial)
   CONSTRAINT fk_vehiculos_diagnosticos FOREIGN KEY (tenant_id, diagnostico_id)
     REFERENCES diagnostico.diagnosticos (tenant_id, id) ON DELETE RESTRICT,
-  CONSTRAINT ck_locatario_origen CHECK ((locatario_doc_cifrado IS NULL) = (locatario_doc_origen IS NULL))
+  CONSTRAINT ck_locatario_origen CHECK ((locatario_doc_cifrado IS NULL) = (locatario_doc_origen IS NULL)),
+  -- Respaldo del declarado (HU #13730b, migración D2_LocatarioDeclaradoRespaldo): tipo y documento juntos, y solo con el vigente del proveedor
+  CONSTRAINT ck_vehiculos_locatario_declarado CHECK ((locatario_declarado_doc_tipo IS NULL) = (locatario_declarado_doc_cifrado IS NULL)),
+  CONSTRAINT ck_vehiculos_locatario_declarado_con_proveedor CHECK (locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = 'PROVEEDOR')
 );
 -- Deduplicación por lote (12641 #2). Empieza por tenant_id para cubrir la FK compuesta; como el lote fija la empresa,
 -- la unicidad es la misma que (diagnostico_id, identificador_norm).
 CREATE UNIQUE INDEX ux_vehiculo_por_lote ON diagnostico.vehiculos (tenant_id, diagnostico_id, identificador_norm);
--- Intempo trae el locatario (H-INT): el autollenado guarda origen=PROVEEDOR y el documento declarado por el cliente
--- queda de respaldo con origen=DECLARADO_CLIENTE (R-3). Concurrencia optimista con xmin.
+-- Intempo trae el locatario (H-INT): el autollenado guarda origen=PROVEEDOR en locatario_doc_* y el documento declarado
+-- por el cliente pasa a locatario_declarado_doc_* (respaldo, R-3, HU #13730b); sin proveedor, el declarado sigue vigente
+-- con origen=DECLARADO_CLIENTE y el respaldo queda vacío. Concurrencia optimista con xmin.
 
 -- Llaves de ASP.NET Data Protection del servicio (HU #13735, patrón HU10233_DataProtectionKeys de core-api): sin ellas,
 -- un reinicio dejaría ilegibles los documentos cifrados. Del servicio, sin tenant_id
@@ -763,7 +769,8 @@ CREATE INDEX ix_consultas_reutilizacion ON diagnostico.consultas (tenant_id, fue
   WHERE estado = 'COMPLETADO';                         -- reutilización del mismo día (D-10)
 -- Del vehículo, en la misma migración: uq_vehiculos_tenant_id UNIQUE (tenant_id, id) e ix_vehiculos_tenant_placa (tenant_id, placa) (D-10)
 
--- Intento (auditoría, solo inserción). Clase (b) de ADR-0072: FK compuestas y RESTRICT a la celda, al vehículo y al lote
+-- Intento (auditoría, solo inserción). Clase (b) de ADR-0072: FK compuestas y RESTRICT a la celda, al vehículo y al lote.
+-- Lo escribe el procesador desde la HU #13737: uno por ejecución de celda, en la transacción que la cierra (disparador AUTO)
 CREATE TABLE diagnostico.intentos_consulta (
   id                       uuid PRIMARY KEY,
   tenant_id                uuid NOT NULL,
@@ -771,6 +778,7 @@ CREATE TABLE diagnostico.intentos_consulta (
   vehiculo_id              uuid NOT NULL,
   consulta_id              uuid NOT NULL,
   fuente                   varchar(32) NOT NULL,      -- CHECK con el enum Fuente
+  identificador_consultado varchar(17) NULL,          -- @pii:low placa o VIN consultado; null si la fuente es por persona (HU #13737, D2_IntentosConsultaRegistro)
   servicio                 varchar(16) NULL CHECK (servicio IN
                            ('VERIFIK','KYVERUM','INTEMPO','SMARTCLOUD','FASECOLDA','MERCADOLIBRE','BASEGRAVABLE','SCRAPING','FLITFINES','OTRO')),
   disparador               varchar(16) NOT NULL CHECK (disparador IN ('AUTO','REPROCESO','MANUAL')),
@@ -782,6 +790,8 @@ CREATE TABLE diagnostico.intentos_consulta (
   transaccion_proveedor_id varchar(128) NULL,
   desde_cache              boolean NOT NULL DEFAULT false,
   usuario_id               uuid NULL,
+  CONSTRAINT ck_intentos_consulta_tipo_error CHECK (estado = 'ERROR' OR tipo_error IS NULL),  -- HU #13737
+  CONSTRAINT ck_intentos_consulta_fin CHECK (fin >= inicio),                                    -- HU #13737
   CONSTRAINT fk_intentos_consulta_consultas FOREIGN KEY (tenant_id, consulta_id)
     REFERENCES diagnostico.consultas (tenant_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_intentos_consulta_vehiculos FOREIGN KEY (tenant_id, vehiculo_id)
@@ -886,7 +896,7 @@ CREATE TABLE diagnostico.departamentos_impuesto (
 **Decisiones del 2026-10-21 reflejadas:**
 - **R-2:** sale `dictamen_llm` del nivel contractual. Queda `redaccion_ia_suspendida`, solo backoffice.
 - **R-2b:** el dictamen lleva `estado_redaccion` y las columnas de reintento.
-- **R-3:** el documento del locatario declarado se cifra y lleva `locatario_doc_origen`.
+- **R-3:** el documento del locatario declarado se cifra y lleva `locatario_doc_origen`. Si el proveedor trae el suyo, el declarado se conserva cifrado en `locatario_declarado_doc_*` (HU #13730b), con CHECK de tipo y documento juntos y solo junto al vigente `PROVEEDOR`.
 - **R-8:** el historial de estados del lote se guarda en `historial_estado_diagnostico`.
 - **R-9 y R-3:** `motivo_na` queda cerrado a tres valores, con CHECK de coherencia contra `estado`.
 - **R-11:** `estimado_consultas` es nivel operativo.
@@ -924,7 +934,7 @@ CREATE TABLE diagnostico.departamentos_impuesto (
 | 04 | `POST /diagnosticos/{id}/cerrar-panel` | `diagnostico.diagnosticos.ver` | Pasa a `INCOMPLETO` si hay `ERROR`. Escribe el historial con `disparador=CIERRE_PANEL` |
 | 03 | `POST /consultas/{cid}/reprocesar` | `diagnostico.consultas.reprocesar` | Admin de la compañía o backoffice. Solo si la celda está en `ERROR`. Repite la consulta real y nunca escribe datos. El intento queda con `disparador=REPROCESO` y el usuario (R-1). Si el lote estaba cerrado, vuelve a `EN_PROCESO` (R-8). Devuelve 403 al usuario (12669 #1) |
 | 03 | `PUT /consultas/{cid}/manual` | `diagnostico.consultas.llenar` | Solo backoffice FLIT. El schema del cuerpo depende de la fuente. No aplica a `IMPUESTO_DEPARTAMENTAL` (R-9). Si el lote estaba cerrado, vuelve a `EN_PROCESO` (R-8) |
-| 03 | `GET /consultas/{cid}/intentos` | `diagnostico.auditoria.ver` | Solo backoffice FLIT |
+| 03 | `GET /backoffice/consultas/{cid}/intentos?empresa=` | `diagnostico.auditoria.ver` | Solo backoffice FLIT. Implementada en HU #13737 bajo `/backoffice/*` (política backoffice + empresa explícita + lectura auditada): la lectura entre empresas solo vive en el módulo Backoffice (ADR-0072/ADR-0073) |
 | 05 | `GET /vehiculos/{vid}/dictamen` | `diagnostico.diagnosticos.ver` | Sin campos de override para el cliente. Incluye `estado_redaccion`; en `PENDIENTE` la UI muestra «redacción IA pendiente» (R-2b) |
 | 05 | `PUT /vehiculos/{vid}/dictamen` | `diagnostico.dictamen.override` | Exige `confirmado=true` |
 | 06 | `POST /vehiculos/{vid}/derivaciones` | `diagnostico.derivacion.crear` | `{destino, tipo_tramite_codigo}` → `{url, expira_en}`. Devuelve 409 si el vehículo ya originó un trámite (R-16) |

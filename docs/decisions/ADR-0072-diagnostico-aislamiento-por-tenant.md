@@ -116,9 +116,9 @@ ya la tienen (HU #13723, ver excepciones por tabla).
 | `cambios_contrato` | #13736 · `D1_ConfiguracionEmpresa` | (b) | — | `usuario_id`, `fecha` | `tenant_id` → `configuracion_empresa(tenant_id)`, `RESTRICT` (simple, válida por (c)) | A13: `valor_anterior`/`valor_nuevo` en `jsonb` |
 | `diagnosticos` | #13738 · `D1_CabeceraDiagnostico` | (a) | `xmin` | `usuario_creador_id`, `creado_en`, `cerrado_en`; transiciones en el historial | — (expone `uq_diagnosticos_tenant_id`) | Ninguna |
 | `historial_estado_diagnostico` | #13738 · `D1_CabeceraDiagnostico` | (b) | — | `usuario_id` (nulo si fue el procesador), `en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT` | Ninguna |
-| `vehiculos` | #13735 · `D1_Vehiculos`; #13723 · `D2_MotorConsultas` | (a) | `xmin` | Del lote (`diagnosticos`); `runt_consultado_en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT`; expone `uq_vehiculos_tenant_id` (D2) | Ninguna |
+| `vehiculos` | #13735 · `D1_Vehiculos`; #13723 · `D2_MotorConsultas`; #13730b · `D2_LocatarioDeclaradoRespaldo` | (a) | `xmin` | Del lote (`diagnosticos`); `runt_consultado_en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT`; expone `uq_vehiculos_tenant_id` (D2) | Ninguna. PII `@pii:high`: `propietario_doc_cifrado`, `locatario_doc_cifrado` y, desde #13730b, `locatario_declarado_doc_cifrado` (respaldo del declarado cuando el proveedor trae el suyo; `ck_vehiculos_locatario_declarado` y `ck_vehiculos_locatario_declarado_con_proveedor`) |
 | `consultas` | #13723 · `D2_MotorConsultas` | (a) | `xmin` | `actualizado_en`, `usuario_manual_id`, `dato_obtenido_en`; intentos en `intentos_consulta` | `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, reutilizada_de_id)` → `consultas`; todas `RESTRICT`; expone `uq_consultas_tenant_id` | A11 en `ix_cola` (ver excepciones) |
-| `intentos_consulta` | #13723 · `D2_MotorConsultas` | (b) | — | `usuario_id` (nulo si fue el procesador), `inicio`/`fin` | `(tenant_id, consulta_id)` → `consultas`, `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`; todas `RESTRICT` | Ninguna |
+| `intentos_consulta` | #13723 · `D2_MotorConsultas`; #13737 · `D2_IntentosConsultaRegistro` | (b) | — | `usuario_id` (nulo si fue el procesador), `inicio`/`fin` | `(tenant_id, consulta_id)` → `consultas`, `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`; todas `RESTRICT` | Ninguna |
 | `organismos` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | — | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 | `departamentos_impuesto` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | `actualizado_en` | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 
@@ -154,7 +154,8 @@ ya la tienen (HU #13723, ver excepciones por tabla).
 ## Retención de datos personales
 
 **Decisión del usuario del 2026-10-21, sigue en Propuesto.** Los documentos de propietario y locatario
-(`vehiculos.propietario_doc_cifrado` y `vehiculos.locatario_doc_cifrado`, comentario `@pii:high`) y los demás datos del
+(`vehiculos.propietario_doc_cifrado`, `vehiculos.locatario_doc_cifrado` y el respaldo del declarado
+`vehiculos.locatario_declarado_doc_cifrado` de HU #13730b, comentario `@pii:high`) y los demás datos del
 diagnóstico se **conservan indefinidamente**. Es lo coherente con la Parte 2: sin borrado lógico, historiales de solo
 inserción y FK con `RESTRICT`. Y es lo que dice R-18 del plan («No se borra nada»; plan §1, §5, §9.3 y §10): no hay
 `retencion_dias`, `retencion_dias_max`, `ck_retencion` ni job de purga.

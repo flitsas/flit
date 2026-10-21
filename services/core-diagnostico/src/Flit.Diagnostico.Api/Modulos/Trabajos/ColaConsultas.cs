@@ -14,7 +14,8 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 /// <param name="VehiculoId">Vehículo.</param>
 /// <param name="Fuente">Fuente a consultar.</param>
 /// <param name="LeaseHasta">Vencimiento del lease, tal como quedó en la base (identifica esta toma).</param>
-public sealed record CeldaTomada(Guid Id, Guid TenantId, Guid DiagnosticoId, Guid VehiculoId, Fuente Fuente, DateTimeOffset LeaseHasta);
+/// <param name="IntentosAuto">Reintentos automáticos ya programados para la celda (HU #13737, D-12).</param>
+public sealed record CeldaTomada(Guid Id, Guid TenantId, Guid DiagnosticoId, Guid VehiculoId, Fuente Fuente, DateTimeOffset LeaseHasta, int IntentosAuto = 0);
 
 /// <summary>
 /// Toma de la cola durable (HU #13727, ADR a A2): la tabla <c>diagnostico.consultas</c> es la cola de TODAS las empresas
@@ -26,7 +27,7 @@ public sealed record CeldaTomada(Guid Id, Guid TenantId, Guid DiagnosticoId, Gui
 /// <para>
 /// Es la ÚNICA lectura y escritura del servicio que cruza empresas sin el filtro de EF, y por eso es SQL crudo parametrizado;
 /// solo toca columnas de la cola (estado, lease, actualizado_en), nunca datos de negocio, y lo que lee no sale de aquí salvo los
-/// ids. <c>TomaEntreEmpresasSoloEnColaTests</c> falla si aparece SQL crudo en otro archivo. Lo demás del trabajo se hace con
+/// ids y <c>intentos_auto</c> (la política de reintentos, HU #13737). <c>TomaEntreEmpresasSoloEnColaTests</c> falla si aparece SQL crudo en otro archivo. Lo demás del trabajo se hace con
 /// la empresa de cada celda fijada en el contexto.
 /// </para>
 /// </summary>
@@ -58,7 +59,7 @@ internal sealed class ColaConsultas(DiagnosticoDb db, TimeProvider reloj)
         UPDATE diagnostico.consultas
         SET estado = '{EnCurso}', lease_hasta = @lease, actualizado_en = @ahora
         WHERE id = ANY(@ids)
-        RETURNING id, tenant_id, diagnostico_id, vehiculo_id, fuente, lease_hasta
+        RETURNING id, tenant_id, diagnostico_id, vehiculo_id, fuente, lease_hasta, intentos_auto
         """;
 
     /// <summary>Toma hasta <paramref name="maximo"/> celdas de <paramref name="fuentes"/> y les pone el lease.</summary>
@@ -104,7 +105,8 @@ internal sealed class ColaConsultas(DiagnosticoDb db, TimeProvider reloj)
                 {
                     CodigosDeEnum.TryLeer<Fuente>(lector.GetString(4), out var fuente);
                     tomadas.Add(new CeldaTomada(
-                        lector.GetGuid(0), lector.GetGuid(1), lector.GetGuid(2), lector.GetGuid(3), fuente, lector.GetFieldValue<DateTimeOffset>(5)));
+                        lector.GetGuid(0), lector.GetGuid(1), lector.GetGuid(2), lector.GetGuid(3), fuente, lector.GetFieldValue<DateTimeOffset>(5),
+                        lector.GetInt32(6)));
                 }
             }
 

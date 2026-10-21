@@ -46,4 +46,23 @@ public sealed record ResultadoCelda(
 
     /// <summary>No aplica, con su motivo.</summary>
     public static ResultadoCelda Na(MotivoNa motivo) => new(EstadoCelda.Na, null, motivo, null, null);
+
+    /// <summary>
+    /// Lo que el ejecutor sabe de la llamada para el intento auditable (HU #13737): identificador consultado, servicio que
+    /// respondió, transacción del proveedor y mensaje de error. Null si el ejecutor no lo informa (el intento se registra igual).
+    /// </summary>
+    public DatosIntento? Intento { get; init; }
+
+    /// <summary>
+    /// Desde cuándo se reintenta (HU #13737): lo fija el procesador con <c>PoliticaReintentos</c> sobre un error transitorio; la
+    /// celda vuelve a PENDIENTE con ese <c>disponible_desde</c> en lugar de quedar en ERROR. Null en todo otro caso.
+    /// </summary>
+    public DateTimeOffset? ReintentarDesde { get; init; }
 }
+
+/// <summary>Datos de la llamada a la fuente para <c>intentos_consulta</c> (HU #13737); nunca un documento en claro.</summary>
+/// <param name="Identificador">Placa o VIN consultado; null si la consulta fue por persona.</param>
+/// <param name="Servicio">Proveedor que respondió; null si no llegó a ninguno.</param>
+/// <param name="TransaccionProveedorId">ID de transacción que devolvió el proveedor, si lo trae.</param>
+/// <param name="MensajeError">Mensaje técnico del error, sin documentos ni datos del vehículo.</param>
+public sealed record DatosIntento(string? Identificador, ServicioConsulta? Servicio, string? TransaccionProveedorId, string? MensajeError);

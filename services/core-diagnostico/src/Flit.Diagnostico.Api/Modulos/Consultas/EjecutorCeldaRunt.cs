@@ -15,8 +15,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// misma transacción, guarda en <c>vehiculos</c> la placa definitiva, el VIN, el servicio, el organismo,
 /// <c>runt_consultado_en</c>, <c>datos_consolidados</c> y los documentos cifrados (<see cref="DocumentosVehiculo"/>). La celda
 /// guarda el resultado normalizado SIN documentos ni nombres (<c>payload</c> es <c>@pii:medium</c>) y
-/// <c>dato_obtenido_en</c>. Un error de la fuente deja la celda en ERROR con el código de <see cref="TipoErrorFuente"/> (los
-/// reintentos de transitorios son de F03-H6). Lee y escribe solo con <see cref="ContextoCelda.Db"/>, que tiene la empresa
+/// <c>dato_obtenido_en</c>. Un error de la fuente devuelve ERROR con el código de <see cref="TipoErrorFuente"/>; el procesador
+/// reintenta los transitorios (HU #13737). Cada salida lleva los <see cref="DatosIntento"/> del intento auditable: placa o VIN
+/// consultado, servicio, transacción del proveedor y mensaje de error, nunca documentos. Lee y escribe solo con <see cref="ContextoCelda.Db"/>, que tiene la empresa
 /// de la celda. Los logs llevan ids, servicio y tipo de error; nunca documentos.
 /// </summary>
 /// <example>
@@ -45,7 +46,7 @@ internal sealed partial class EjecutorCeldaRunt(
         if (vehiculo is null)
         {
             RuntEnError(log, celda.Id, "VEHICULO_NO_ENCONTRADO");
-            return ResultadoCelda.Error();
+            return ResultadoCelda.Error() with { Intento = new DatosIntento(null, null, null, "El vehículo de la celda no existe.") };
         }
 
         var identificador = new IdentificadorVehiculo(vehiculo.TipoIdentificador, vehiculo.IdentificadorNorm);
@@ -54,8 +55,10 @@ internal sealed partial class EjecutorCeldaRunt(
         {
             var tipo = CodigosDeEnum.Codigo(respuesta.Error ?? TipoErrorFuente.RespuestaInvalida);
             RuntEnError(log, celda.Id, tipo);
-            return ResultadoCelda.Error(tipo);
+            return ResultadoCelda.Error(tipo) with { Intento = new DatosIntento(identificador.Valor, null, null, respuesta.Mensaje) };
         }
+
+        var servicio = Servicio(runt.ServicioQueResolvio);
 
         var placa = runt.Placa ?? (identificador.EsVin ? null : identificador.Valor);
         var vin = runt.Vin ?? (identificador.EsVin ? identificador.Valor : null);
@@ -64,7 +67,10 @@ internal sealed partial class EjecutorCeldaRunt(
         {
             var tipo = CodigosDeEnum.Codigo(TipoErrorFuente.RespuestaInvalida);
             RuntEnError(log, celda.Id, tipo);
-            return ResultadoCelda.Error(tipo);
+            return ResultadoCelda.Error(tipo) with
+            {
+                Intento = new DatosIntento(identificador.Valor, servicio, runt.IdTransaccion, "RUNT: un valor de la respuesta no cabe en su columna."),
+            };
         }
 
         var ahora = reloj.GetUtcNow();
@@ -79,7 +85,18 @@ internal sealed partial class EjecutorCeldaRunt(
             guardado.RuntConsultadoEn = ahora;
             guardado.DatosConsolidados = Consolidar(guardado.DatosConsolidados, runt, placa, vin);
             DocumentosVehiculo.Aplicar(guardado, runt, protector);
-        });
+        }) with
+        { Intento = new DatosIntento(identificador.Valor, servicio, runt.IdTransaccion, null) };
+    }
+
+    /// <summary>
+    /// Proveedor de <c>intentos_consulta.servicio</c> para el nombre que informa la fuente: <c>INTEMPO</c> o
+    /// <c>INTEMPO_SIMULADO</c> son <see cref="ServicioConsulta.Intempo"/>; un nombre desconocido es <see cref="ServicioConsulta.Otro"/>.
+    /// </summary>
+    internal static ServicioConsulta Servicio(string? servicioQueResolvio)
+    {
+        var raiz = servicioQueResolvio?.Trim().Split('_', 2)[0] ?? string.Empty;
+        return CodigosDeEnum.TryLeer<ServicioConsulta>(raiz.ToUpperInvariant(), out var servicio) ? servicio : ServicioConsulta.Otro;
     }
 
     private static bool Cabe(string? valor, int largo) => valor is null || valor.Length <= largo;
@@ -117,6 +134,6 @@ internal sealed partial class EjecutorCeldaRunt(
     [LoggerMessage(EventId = 137300, Level = LogLevel.Information, Message = "La celda RUNT {CeldaId} completó (servicio {Servicio})")]
     private static partial void RuntCompletado(ILogger logger, Guid celdaId, string servicio);
 
-    [LoggerMessage(EventId = 137301, Level = LogLevel.Warning, Message = "La celda RUNT {CeldaId} queda en ERROR ({TipoError}); las demás celdas del vehículo quedan bloqueadas")]
+    [LoggerMessage(EventId = 137301, Level = LogLevel.Warning, Message = "La celda RUNT {CeldaId} terminó en error ({TipoError}); el procesador decide si la reintenta o bloquea las demás celdas")]
     private static partial void RuntEnError(ILogger logger, Guid celdaId, string tipoError);
 }

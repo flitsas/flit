@@ -12,8 +12,9 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// <summary>
 /// HU #13730 (F03-H4), AC5 (F03-C7) — si la celda RUNT de un vehículo termina en ERROR, las demás celdas de ESE vehículo pasan
 /// a ERROR con <c>tipo_error=BLOQUEADA_POR_RUNT</c> sin llamar a ninguna fuente, y el resto del lote se procesa normal. Los
-/// errores de la fuente (Timeout, RespuestaInvalida, NoConectado) y un fallo inesperado del ejecutor dejan RUNT en ERROR (los
-/// reintentos con backoff son de F03-H6). PostgreSQL real (<see cref="ApiDePrueba"/>).
+/// errores de la fuente (Timeout, RespuestaInvalida, NoConectado) y un fallo inesperado del ejecutor dejan RUNT en ERROR. Desde
+/// HU #13737 un Timeout se reintenta antes de bloquear: aquí corre con <c>MaxReintentos=0</c> para ver el bloqueo directo (los
+/// reintentos se prueban en <see cref="ReintentosTests"/>). PostgreSQL real (<see cref="ApiDePrueba"/>).
 /// </summary>
 /// <example>
 /// <code>
@@ -49,7 +50,8 @@ public sealed class BloqueoPorRuntTests
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila(placa)], ct, Fuente.SimitVehiculo, Fuente.Avaluo);
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, placa, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        // HU #13737: sin reintentos el transitorio (Timeout) bloquea en la primera ejecución, como un definitivo.
+        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
 
         orden.Should().Equal([$"RUNT PLACA_CARRO {placa}"], "solo se llamó a RUNT");
         (await MotorRunt.CeldasDelVehiculoAsync(api, vehiculo.Id, ct)).Should().BeEquivalentTo(

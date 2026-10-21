@@ -11,7 +11,8 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// <c>diagnostico.intentos_consulta</c> (HU #13723, plan §5, R-1): auditoría de solo inserción de cada intento a una fuente,
 /// clase (b) de ADR-0072: sin columnas de edición, borrado lógico ni token de concurrencia. Las FK a la celda, al vehículo y
 /// al lote son compuestas por empresa y <c>RESTRICT</c> (un historial no se borra en cascada). Cada índice empieza por
-/// <c>tenant_id</c> y cubre su FK.
+/// <c>tenant_id</c> y cubre su FK. HU #13737 suma el identificador consultado y dos CHECK de coherencia (un SUCCESS sin tipo de
+/// error; fin no anterior al inicio).
 /// </summary>
 internal sealed class IntentoConsultaConfig : IEntityTypeConfiguration<IntentoConsulta>
 {
@@ -24,6 +25,9 @@ internal sealed class IntentoConsultaConfig : IEntityTypeConfiguration<IntentoCo
             t.HasCheckConstraint("ck_intentos_consulta_servicio", $"servicio IS NULL OR servicio IN ({CodigosDeEnum.ListaSql<ServicioConsulta>()})");
             t.HasCheckConstraint("ck_intentos_consulta_disparador", $"disparador IN ({CodigosDeEnum.ListaSql<DisparadorIntento>()})");
             t.HasCheckConstraint("ck_intentos_consulta_estado", $"estado IN ({CodigosDeEnum.ListaSql<ResultadoIntento>()})");
+            // HU #13737: un intento exitoso no lleva tipo de error y el fin no es anterior al inicio.
+            t.HasCheckConstraint("ck_intentos_consulta_tipo_error", $"estado = '{CodigosDeEnum.Codigo(ResultadoIntento.Error)}' OR tipo_error IS NULL");
+            t.HasCheckConstraint("ck_intentos_consulta_fin", "fin >= inicio");
         });
         builder.HasKey(x => x.Id).HasName("pk_intentos_consulta");
         builder.Property(x => x.Id).ValueGeneratedNever().HasComment("uuid v7 generado por la aplicación.");
@@ -32,6 +36,8 @@ internal sealed class IntentoConsultaConfig : IEntityTypeConfiguration<IntentoCo
         builder.Property(x => x.VehiculoId).HasComment("Vehículo de la celda.");
         builder.Property(x => x.ConsultaId).HasComment("Celda del intento.");
         builder.Property(x => x.Fuente).HasConversion(CodigosDeEnum.Convertidor<Fuente>()).HasMaxLength(32).HasComment("Fuente consultada.");
+        builder.Property(x => x.IdentificadorConsultado).HasMaxLength(17)
+            .HasComment("@pii:low Placa o VIN consultado (HU #13737); null si la fuente es por persona: nunca documentos en claro.");
         builder.Property(x => x.Servicio)
             .HasConversion(CodigosDeEnum.Convertidor<ServicioConsulta>()).HasMaxLength(16)
             .HasComment("Proveedor que respondió (12659 #2); null si no llegó a ninguno o fue manual.");
