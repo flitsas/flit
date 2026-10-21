@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 
 const permissionsState = vi.hoisted(() => ({ isSuperAdmin: false, isAdminCompany: true, isOtAdmin: false }));
@@ -78,12 +79,12 @@ describe("Usuarios — pestaña Roles y permisos", () => {
     expect(await screen.findByText("Supervisor")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /nuevo rol/i })).toBeInTheDocument();
     // Rol propio: editar y eliminar.
-    expect(screen.getByRole("button", { name: /editar contador/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /eliminar contador/i })).toBeInTheDocument();
+    expect(await rowActionNames(user, "Contador")).toContainEqual(expect.stringMatching(/editar contador/i));
+    expect(await rowActionNames(user, "Contador")).toContainEqual(expect.stringMatching(/eliminar contador/i));
     // Rol global de FLIT: solo ver permisos.
-    expect(screen.getByRole("button", { name: /ver permisos de supervisor/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /editar supervisor/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /eliminar supervisor/i })).not.toBeInTheDocument();
+    expect(await rowActionNames(user, "Supervisor")).toContainEqual(expect.stringMatching(/ver permisos de supervisor/i));
+    expect(await rowActionNames(user, "Supervisor")).not.toContainEqual(expect.stringMatching(/editar supervisor/i));
+    expect(await rowActionNames(user, "Supervisor")).not.toContainEqual(expect.stringMatching(/eliminar supervisor/i));
   });
 
   it("HU #13443 AC3: ot_admin no ve la pestaña ni las acciones de gestión de roles", async () => {

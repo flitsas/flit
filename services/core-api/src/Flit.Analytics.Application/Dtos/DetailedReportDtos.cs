@@ -50,4 +50,8 @@ public sealed record DetailedReportFilter(
     string? PersonDocument,
     string? PersonName,
     bool? HasTransformation,
-    bool? IsLeasing);
+    bool? IsLeasing)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}

@@ -1,10 +1,11 @@
 // Tabla de usuarios compartida (context/usuarios-contex.md): columna Perfil / Rol con filtros
-// y columna de acciones con el área de clic de RowActions.
+// y columna de acciones con un solo botón «Acciones» con menú (HU #13653).
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Pencil } from "lucide-react";
 import { UsersTable, toUserRow, type UserRow } from "../UsersTable";
+import { chooseRowAction, findRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 function row(over: Partial<UserRow> & Pick<UserRow, "id" | "fullName">): UserRow {
   return toUserRow({
@@ -154,16 +155,17 @@ describe("UsersTable — filtros", () => {
 });
 
 describe("UsersTable — acciones", () => {
-  // HU19: el cursor SVG de FLIT desplaza el punto de clic, así que los botones de solo icono
-  // necesitan 40x40 de área activa. Con el tamaño anterior (28px) muchos clics caían fuera.
-  it("los botones de icono conservan el área de clic mínima de RowActions", () => {
+  // HU #13653: un solo botón «Acciones» por fila (el patrón de trámites y mandatos), no iconos sueltos.
+  it("cada fila tiene un solo botón «Acciones»; las opciones muestran texto y conservan el nombre accesible completo", async () => {
+    const user = userEvent.setup();
     renderTable();
-    const boton = screen.getByRole("button", { name: "Editar usuario Ana Torres" });
-    expect(boton.className).toContain("min-h-[40px]");
-    expect(boton.className).toContain("min-w-[40px]");
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    expect(within(fila).queryByRole("button", { name: "Editar usuario Ana Torres" })).not.toBeInTheDocument();
+    const opcion = await findRowAction(user, "Ana Torres", "Editar usuario Ana Torres", within(fila));
+    expect(opcion).toHaveTextContent("Editar usuario");
   });
 
-  it("un solo clic dispara la acción", async () => {
+  it("elegir la opción dispara la acción una vez", async () => {
     const onClick = vi.fn();
     const user = userEvent.setup();
     render(
@@ -173,9 +175,37 @@ describe("UsersTable — acciones", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Editar usuario Ana Torres" }));
+    await chooseRowAction(user, "Ana Torres", "Editar usuario Ana Torres");
 
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("las destructivas van al final del menú y una fila sin acciones no muestra el botón", async () => {
+    const user = userEvent.setup();
+    render(
+      <UsersTable
+        rows={rows}
+        actionsFor={(r) =>
+          r.fullName === "Ana Torres"
+            ? [
+                { icon: Pencil, label: `Eliminar usuario ${r.fullName}`, tone: "danger", onClick: vi.fn() },
+                { icon: Pencil, label: `Editar usuario ${r.fullName}`, onClick: vi.fn() },
+                { icon: Pencil, label: `Suspender temporalmente a ${r.fullName}`, tone: "danger", onClick: vi.fn() },
+                { icon: Pencil, label: `Permisos por módulo de ${r.fullName}`, tone: "primary", onClick: vi.fn() },
+              ]
+            : []
+        }
+      />,
+    );
+
+    expect(await rowActionNames(user, "Ana Torres")).toEqual([
+      "Editar usuario Ana Torres",
+      "Permisos por módulo de Ana Torres",
+      "Eliminar usuario Ana Torres",
+      "Suspender temporalmente a Ana Torres",
+    ]);
+    const otra = rows.find((r) => r.fullName !== "Ana Torres")!.fullName;
+    expect(screen.queryByRole("button", { name: `Acciones de ${otra}` })).not.toBeInTheDocument();
   });
 });
 
@@ -202,14 +232,22 @@ describe("UsersTable — tabla semántica y paginación (Bug #13055)", () => {
       onClick: vi.fn(),
     }));
 
-  it("es una <table> con cabeceras de columna y las 4 acciones dentro de la celda de Acciones", () => {
+  it("es una <table> con cabeceras de columna y las 4 acciones en el menú de la celda de Acciones", async () => {
+    const user = userEvent.setup();
     renderTable({ actionsFor: cuatro });
     expect(screen.getByRole("table", { name: "Usuarios" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
     const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
-    expect(within(fila).getAllByRole("button")).toHaveLength(4);
-    const celda = within(fila).getByRole("button", { name: "Editar Ana Torres" }).closest("td");
+    // HU #13653: un solo botón en la celda; las 4 acciones viven en su menú.
+    expect(within(fila).getAllByRole("button")).toHaveLength(1);
+    const celda = within(fila).getByRole("button", { name: "Acciones de Ana Torres" }).closest("td");
     expect(celda?.className).toContain("whitespace-nowrap");
+    expect(await rowActionNames(user, "Ana Torres", within(fila))).toEqual([
+      "Editar Ana Torres",
+      "Restablecer Ana Torres",
+      "Suspender Ana Torres",
+      "Desactivar Ana Torres",
+    ]);
   });
 
   it("muestra la paginación estándar con «Filas por página»", () => {
@@ -241,10 +279,12 @@ describe("UsersTable — diseño", () => {
     expect(chip.className).toContain("text-xs");
   });
 
-  it("las acciones de fila son iconos con nombre accesible y tooltip", () => {
+  it("las opciones del menú llevan icono, nombre accesible y tooltip", async () => {
+    const user = userEvent.setup();
     renderTable();
     const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
-    const boton = within(fila).getByRole("button", { name: "Editar usuario Ana Torres" });
-    expect(boton).toHaveAttribute("title", "Editar usuario Ana Torres");
+    const opcion = await findRowAction(user, "Ana Torres", "Editar usuario Ana Torres", within(fila));
+    expect(opcion).toHaveAttribute("title", "Editar usuario Ana Torres");
+    expect(opcion.querySelector("svg")).not.toBeNull();
   });
 });

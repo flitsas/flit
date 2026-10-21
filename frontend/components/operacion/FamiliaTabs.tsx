@@ -16,12 +16,17 @@ interface Props {
   /** Familia seleccionada; cadena vacía = todas. */
   value: '' | ProcedureFamily;
   onChange: (v: '' | ProcedureFamily) => void;
+  /** HU #13665 — familias visibles (permiso Ver); sin la prop, todas. «Todos» se oculta si no hay ninguna. */
+  familias?: readonly ProcedureFamily[];
 }
 
-export function FamiliaTabs({ value, onChange }: Props) {
+export function FamiliaTabs({ value, onChange, familias }: Props) {
+  const tabs = familias
+    ? TABS.filter((t) => (t.value === '' ? familias.length > 0 : familias.includes(t.value)))
+    : TABS;
   return (
     <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Tipo de trámite">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = value === t.value;
         return (
           <button
@@ -30,7 +35,7 @@ export function FamiliaTabs({ value, onChange }: Props) {
             role="tab"
             aria-selected={active}
             onClick={() => onChange(t.value)}
-            // Clases y no `style`: el color fijo #162744 dejaba las pestañas inactivas invisibles en
+            // Clases y no `style`: el color fijo var(--color-flit-primary) dejaba las pestañas inactivas invisibles en
             // modo oscuro.
             className={`relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand ${
               active ? 'text-flit-brand' : 'text-flit-primary/65 dark:text-white/65'

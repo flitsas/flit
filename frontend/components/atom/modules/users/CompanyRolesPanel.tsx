@@ -2,14 +2,15 @@
 
 // HU #13443 (Feature #13437, Épica #12750) — pestaña «Roles y permisos» del módulo Usuarios para el Admin de
 // Compañía: crea, edita y elimina los roles propios de su compañía y ve los globales de FLIT en solo lectura.
-// Patrón de tabla de trámites (table-styles, RowActions, Pagination numerada con «Filas por página»), modal normal
+// Patrón de tabla de trámites (table-styles, botón «Acciones» con menú, Pagination numerada con «Filas por página»), modal normal
 // y los 4 estados (cargando, error, vacío, lleno). Backend: HU #13441 (/api/v1/security/roles).
 import { useCallback, useEffect, useState } from "react";
-import { Eye, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Loader2, Pencil, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
-import { RowActions, type RowAction } from "@/components/atom/RowActions";
+import type { RowAction } from "@/components/atom/RowActions";
+import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
@@ -22,7 +23,8 @@ import { deleteTenantRole, getRoles, type TenantRole } from "@/lib/api/security"
 import { CompanyRoleFormModal, type CompanyRoleFormMode } from "./CompanyRoleFormModal";
 import { companyRoleErrorMessage } from "./companyRoleErrors";
 
-const COLUMNS = ["Código", "Nombre", "Tipo", "Permisos", "Acciones"];
+// HU #13666: sin columna «Código»; el código del rol es un identificador interno que genera el servidor.
+const COLUMNS = ["Nombre", "Tipo", "Permisos", "Acciones"];
 
 /** Un rol es propio de la compañía si trae `tenantId`; sin él es del catálogo global de FLIT. */
 export function isOwnRole(role: TenantRole): boolean {
@@ -78,7 +80,6 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
           className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
           Nuevo rol
         </button>
       </div>
@@ -102,7 +103,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
                   <th
                     key={col}
                     scope="col"
-                    className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-center" : ""}`}
+                    className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-right" : ""}`}
                     style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     {col}
@@ -113,10 +114,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
             <tbody>
               {pg.paginar(roles).map((r) => (
                 <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono opacity-80" style={{ borderColor: "#DFE5ED" }}>
-                    {r.code}
-                  </td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                     <span className="block font-semibold">{r.name}</span>
                     {r.description && <span className="block opacity-70">{r.description}</span>}
                   </td>
@@ -130,8 +128,13 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
                   <td className="border-y px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "var(--color-flit-brand)" }}>
                     {r.permissionCount}
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-center" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActions actions={actionsFor(r)} />
+                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                    {/* HU #13653: un solo botón «Acciones» con menú, como trámites y mandatos. */}
+                    <RowActionsMenu
+                      ariaLabel={`Acciones de ${r.name}`}
+                      subject={r.name}
+                      actions={destructivasAlFinal(actionsFor(r))}
+                    />
                   </td>
                 </tr>
               ))}
@@ -211,7 +214,6 @@ function DeleteCompanyRoleDialog({
       icon={Trash2}
       iconBg="#FF4E00"
       title="Eliminar rol"
-      description={role.code}
     >
       <div className="space-y-3.5">
         <p className="text-sm">

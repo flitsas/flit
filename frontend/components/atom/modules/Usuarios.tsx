@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap } from "lucide-react";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList } from "lucide-react";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -13,6 +13,8 @@ import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { InviteUserModal } from "./users/InviteUserModal";
 import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
+import { UserPermissionsModal } from "./users/UserPermissionsModal";
+import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
 import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -35,7 +37,7 @@ import {
   SuspendOrDeactivateModal,
   type SuspendMode,
 } from "./users/SuspendOrDeactivateModal";
-import { resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles";
+import { isSuperAdminRole, resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles";
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 
@@ -49,6 +51,8 @@ const ALL_TABS = [
   { id: "clientes-ict", label: "Clientes ICT", icon: KeyRound },
   // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
   { id: "clientes-integracion", label: "Clientes de integración", icon: PlugZap },
+  // HU #13654 (Feature #13103): auditoría de permisos individuales, solo Super Admin en el Panel SA.
+  { id: "auditoria-permisos", label: "Auditoría de permisos", icon: ClipboardList },
   { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
@@ -76,6 +80,10 @@ export function Usuarios() {
   // Eliminar: SuperAdmin-only (AdminCompany ya no tiene este permiso).
   // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
   const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
+  // HU #13652/#13655: permisos por módulo y su auditoría — Super Admin (cualquier tenant) y Admin de Compañía
+  // (modo `admin`: tope y ámbito de su sesión; la API acota al tenant).
+  const canConfigurePermissions = isSuperAdmin || isAdminCompany;
+  const permissionsMode: "superadmin" | "admin" = isSuperAdmin ? "superadmin" : "admin";
   const [open, setOpen] = useState(false);
   const pgEliminados = usePaginacion();
   const [tab, setTab] = useState<TabId>("usuarios");
@@ -96,6 +104,8 @@ export function Usuarios() {
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<TenantUser | null>(null);
   const [auditTarget, setAuditTarget] = useState<TenantUser | null>(null);
+  // HU #13652 — ficha «Permisos por módulo» (solo Super Admin).
+  const [permissionsTarget, setPermissionsTarget] = useState<TenantUser | null>(null);
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
 
@@ -108,7 +118,8 @@ export function Usuarios() {
       // ot_admin y el resto de roles no ven la pestaña: asignan roles desde la edición del usuario.
       (t.id !== "roles" || isSuperAdmin || isAdminCompany) &&
       (t.id !== "clientes-ict" || canManageIctClients) &&
-      (t.id !== "clientes-integracion" || isSuperAdmin),
+      (t.id !== "clientes-integracion" || isSuperAdmin) &&
+      (t.id !== "auditoria-permisos" || isSuperAdmin || isAdminCompany),
   );
 
   async function loadUsers() {
@@ -209,6 +220,7 @@ export function Usuarios() {
               isSystem: r.isSystem,
               permissionCount: r.permissionCount,
               createdAt: r.createdAt,
+              productCode: r.productCode,
             })),
         );
       })
@@ -223,9 +235,8 @@ export function Usuarios() {
     };
   }, [editTarget, isSuperAdmin, roles, rolesLoading]);
 
-  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las
-  // renderice con el área de clic de 40x40 de RowActions — el tamaño anterior (28px) quedaba
-  // por debajo del desfase del cursor SVG de FLIT y muchos clics caían fuera del botón.
+  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las muestre
+  // en un solo botón «Acciones» con menú (RowActionsMenu), con las destructivas al final.
   function actionsForUser(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
     if (!u) return [];
@@ -238,6 +249,17 @@ export function Usuarios() {
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
+      });
+    }
+
+    // HU #13652: permisos individuales por módulo. Solo Super Admin aquí; las invitaciones pendientes la
+    // abren para ver el aviso deshabilitado (AC5), las canceladas no tienen cuenta ni invitación vigente.
+    if (canConfigurePermissions && u.status !== "cancelled") {
+      actions.push({
+        icon: ShieldCheck,
+        label: `Permisos por módulo de ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setPermissionsTarget(u),
       });
     }
 
@@ -281,7 +303,7 @@ export function Usuarios() {
         actions.push({
           icon: Ban,
           label: `Desactivar indefinidamente a ${u.fullName}`,
-          tone: "primary",
+          tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
         });
       }
@@ -528,6 +550,8 @@ export function Usuarios() {
         </div>
       )}
 
+      {tab === "auditoria-permisos" && canConfigurePermissions && <PermissionAuditView mode={permissionsMode} users={users} />}
+
       {tab === "roles" && isSuperAdmin && (
         // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);
         // no se duplica aquí. El SuperAdmin solo recibe un atajo directo al módulo RBAC.
@@ -595,6 +619,7 @@ export function Usuarios() {
               : {
                   currentRoleName: editTarget.role,
                   currentRoleId: editTarget.roleId,
+                  tenantId: isSuperAdmin ? editTarget.tenantId : undefined,
                   roles: editRoles,
                   rolesLoading: editRolesLoading,
                   onAssignRole: async (roleId) => {
@@ -620,6 +645,29 @@ export function Usuarios() {
           userId={auditTarget.id}
           userLabel={auditTarget.fullName}
           onClose={() => setAuditTarget(null)}
+        />
+      )}
+      {permissionsTarget && canConfigurePermissions && (
+        <UserPermissionsModal
+          user={{
+            id: permissionsTarget.id,
+            fullName: permissionsTarget.fullName,
+            email: permissionsTarget.email,
+            tenantId: permissionsTarget.tenantId,
+          }}
+          mode={permissionsMode}
+          // La fila trae todos los roles del usuario (roleIds); sin él, los de las filas con su id.
+          roleIds={
+            permissionsTarget.roleIds?.length
+              ? permissionsTarget.roleIds
+              : users.filter((x) => x.id === permissionsTarget.id && x.roleId).map((x) => x.roleId as string)
+          }
+          targetIsSuperAdmin={users.some((x) => x.id === permissionsTarget.id && isSuperAdminRole(x.roleCode))}
+          // HU #13656: en modo admin, otro administrador o la propia ficha se ven en solo lectura.
+          targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}
+          isSelf={permissionsTarget.id === currentUserId}
+          invitationPending={isInvitationRow(permissionsTarget)}
+          onClose={() => setPermissionsTarget(null)}
         />
       )}
       {resetPasswordTarget && (

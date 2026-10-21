@@ -108,7 +108,7 @@
           "title": "1. Perfil Gestor (empresa cliente)",
           "paragraphs": [
             "Corresponde a usuarios de una compañía que radica trámites vehiculares (concesionario, renting, gestoría). En el dock típico de un operador (rol Radicador) verás Inicio, Trámites y Ayuda.",
-            "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen si tu rol custom tiene los permisos RBAC correspondientes."
+            "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen en el menú si tienes el permiso correspondiente, ya sea por tu rol o porque el administrador te lo asignó a ti directamente. Mientras FLIT carga tus permisos, el menú solo muestra Inicio y Ayuda."
           ],
           "bullets": [
             "Ruta principal de trámites: /tramites",
@@ -250,7 +250,8 @@
           "title": "6. Sesión expirada y acceso denegado",
           "paragraphs": [
             "Si dejas la sesión inactiva por mucho tiempo, verás una ventana que dice «Tu sesión expiró. Por seguridad, tu sesión se cerró. Vuelve a iniciar sesión para continuar». Pulsa «Ir a iniciar sesión», escribe tus datos otra vez y FLIT te devuelve a donde estabas.",
-            "Si entras a una sección para la que no tienes permiso, verás la pantalla «Acceso restringido»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT."
+            "Si escribes o abres la dirección de un módulo para el que no tienes permiso, FLIT te devuelve al inicio y te avisa con el mensaje «No tienes acceso a este módulo.»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Puedes cerrar el aviso con la X. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT.",
+            "En otros casos (por ejemplo, si tu sesión ya no es válida) verás la pantalla «Acceso restringido»."
           ],
           "bullets": [],
           "callouts": [
@@ -543,7 +544,8 @@
           "title": "1. Antes de empezar",
           "paragraphs": [
             "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
-            "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes."
+            "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes.",
+            "Los permisos de ver y crear se otorgan por familia de trámite (Matrículas, Traspaso y Otros trámites). Solo verás las pestañas de las familias que puedes ver, y el asistente de «Nuevo trámite» solo ofrece las familias que puedes crear. Si tienes permiso para ver una familia pero no para crearla, puedes consultar sus trámites pero esa opción no aparece al crear. Si no puedes ver ninguna familia, al abrir Trámites volverás al inicio con el aviso «No tienes acceso a este módulo.»."
           ],
           "bullets": [
             "Ten a mano documentos de identidad de las partes (vendedor, comprador, mandante, etc.).",
@@ -1192,7 +1194,7 @@
           "bullets": [
             "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
             "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
-            "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4)."
+            "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7)."
           ],
           "callouts": []
         },
@@ -1209,10 +1211,10 @@
           "id": "gestionar",
           "title": "3. Gestionar usuarios existentes",
           "paragraphs": [
-            "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT."
+            "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas."
           ],
           "bullets": [
-            "Editar: cambia nombre, perfil o roles.",
+            "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
             "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
             "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
             "Desactivar: bloquea el acceso de forma indefinida.",
@@ -1222,16 +1224,52 @@
           "callouts": []
         },
         {
-          "id": "roles",
-          "title": "4. Roles y permisos",
+          "id": "permisos-modulo",
+          "title": "4. Permisos por módulo de una persona",
           "paragraphs": [
-            "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona."
+            "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario abre «Acciones» y elige «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes)."
           ],
           "bullets": [
-            "1. Pulsa «Nuevo rol».",
-            "2. Escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
-            "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar.",
-            "4. Pulsa «Crear rol». Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera."
+            "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
+            "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
+            "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+            "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear»."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Los permisos de otro administrador, y los tuyos, solo se pueden ver: la pantalla aparece en solo lectura con el aviso «Solo el Super Admin puede modificar los permisos de un administrador.». Si la persona no tiene rol de administrador, los controles están habilitados."
+            },
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones que sí están dentro de tu tope. Si una persona ya tiene un permiso que otro administrador le dio y que está fuera de tu tope, verás la etiqueta «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo."
+            }
+          ]
+        },
+        {
+          "id": "auditoria-permisos",
+          "title": "5. Auditoría de permisos",
+          "paragraphs": [
+            "La pestaña «Auditoría de permisos» del módulo Usuarios lista cada cambio de permisos individuales hecho en tu compañía: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. Los intentos rechazados quedan registrados con su motivo.",
+            "Solo ves los registros de las personas de tu compañía. Puedes filtrar por usuario y por administrador (no hay filtro de compañía, porque siempre es la tuya) y la lista se pagina con «Filas por página». Si ningún registro coincide con los filtros, la tabla te lo avisa. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "roles",
+          "title": "6. Roles y permisos",
+          "paragraphs": [
+            "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
+            "La tabla muestra el nombre, el tipo, la cantidad de permisos y las acciones de cada rol. Un rol se identifica por su nombre: no tienes que escribir ningún código, la plataforma asigna uno interno por debajo. Al crear o editar un rol, cada módulo y cada permiso aparecen con su nombre, igual que en el resto de la plataforma."
+          ],
+          "bullets": [
+            "1. Pulsa «Nuevo rol». El editor es una sola lista: «Datos del rol», «Módulos» y «Tipos de servicio».",
+            "2. En «Datos del rol» escribe el nombre y, si quieres, una descripción.",
+            "3. En «Módulos» y «Tipos de servicio» marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
+            "4. Pulsa «Crear rol»: guarda todo. Si falta el nombre, ves el aviso debajo del campo y el cursor queda allí. Para cambiarlo o quitarlo después, abre «Acciones» en su fila y elige «Editar» o «Eliminar»; en un rol de FLIT, «Ver permisos»."
           ],
           "callouts": [
             {
@@ -1243,7 +1281,7 @@
         },
         {
           "id": "ict",
-          "title": "5. Clientes ICT (si tu compañía integra con terceros)",
+          "title": "7. Clientes ICT (si tu compañía integra con terceros)",
           "paragraphs": [
             "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto»."
           ],
@@ -1602,14 +1640,14 @@
       "href": "/manual/2-ot/4-usuarios",
       "audience": "Organismo de Tránsito",
       "sectionId": "ot",
-      "summary": "Invitar y administrar cuentas del perfil OT. Solo el administrador del organismo entra aquí.",
+      "summary": "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT) y ajustar sus permisos.",
       "primarySource": false,
       "blocks": [
         {
           "id": "alcance",
           "title": "1. Alcance",
           "paragraphs": [
-            "Usuarios, en el dock del hub, es exclusivo del administrador del organismo (rol ot_admin): invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un operador que intente abrir esta pantalla recibe acceso denegado.",
+            "Usuarios, en el dock del hub, es del Administrador OT: invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un Gestor OT solo la ve si el administrador le habilita el módulo Usuarios, y aun así no invita administradores ni cambia roles.",
             "No administra usuarios de compañías cliente; eso corresponde al AdminCompany de cada tenant."
           ],
           "bullets": [],
@@ -1621,15 +1659,53 @@
           "paragraphs": [],
           "bullets": [
             "Dock → Usuarios (hub OT).",
-            "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
+            "Completa nombre, correo y rol. El rol es obligatorio, también para el administrador: hasta que lo eliges, «Enviar invitación» queda deshabilitado y ves «Elige el rol de la persona.». El invitado recibe un enlace para activar su cuenta.",
+            "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Acciones» → «Editar usuario» en su fila.",
             "Verifica que el correo sea institucional del OT cuando la política lo exija.",
-            "Una invitación pendiente se puede cancelar o reenviar desde la misma fila."
+            "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
+            "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada."
           ],
           "callouts": []
         },
         {
+          "id": "permisos-modulo",
+          "title": "3. Permisos por módulo de una persona",
+          "paragraphs": [
+            "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila abre «Acciones» y elige «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial»."
+          ],
+          "bullets": [
+            "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
+            "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
+            "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+            "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
+            "Aquí solo ves los módulos del organismo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Los permisos de otro administrador, y los tuyos, solo se pueden ver: la pantalla aparece en solo lectura con el aviso «Solo el Super Admin puede modificar los permisos de un administrador.». Si la persona no tiene rol de administrador, los controles están habilitados."
+            },
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones dentro de tu tope. Si la persona ya tiene un permiso fuera de tu tope que dio otro administrador, verás «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo."
+            }
+          ]
+        },
+        {
+          "id": "auditoria-permisos",
+          "title": "4. Auditoría de permisos",
+          "paragraphs": [
+            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+            "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
           "id": "seguridad",
-          "title": "3. Seguridad",
+          "title": "5. Seguridad",
           "paragraphs": [
             "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT."
           ],
@@ -2042,7 +2118,7 @@
             "Representantes legales: registra a quienes representan a tu compañía, sus escrituras y su firma del baúl. Ver «Representantes legales y mandatarios».",
             "Mandatarios: registra quién firma el contrato de mandato ante cada organismo por cuenta de tu compañía. Ver «Representantes legales y mandatarios».",
             "Usuarios de una hija de tu red (solo si la administras desde el panel de red): resetear contraseñas y suspender o desactivar sus usuarios.",
-            "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT)."
+            "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT). Desde allí también ajustas los «Permisos por módulo» de cada persona, dentro de tu tope, y consultas la pestaña «Auditoría de permisos» con los cambios de tu compañía."
           ],
           "callouts": []
         },
@@ -2508,7 +2584,7 @@
           "id": "rbac",
           "title": "1. RBAC Admin",
           "paragraphs": [
-            "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos tablas: Roles de Compañía y Roles de Organismo de Tránsito). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso."
+            "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos sub-pestañas: «Compañía» y «Organismo de Tránsito»). En cada fila, el botón «Acciones» reúne lo que puedes hacer: en un módulo, «Agregar permiso», desactivarlo o activarlo y eliminarlo; en un rol, «Editar permisos», desactivarlo o activarlo y eliminarlo (un rol de sistema no se puede eliminar). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso."
           ],
           "bullets": [],
           "callouts": [
@@ -2516,6 +2592,16 @@
               "variant": "warning",
               "title": null,
               "text": "Quitar un permiso a un rol afecta de inmediato a todos sus usuarios. El Super Admin no pasa por RBAC: tiene bypass total."
+            },
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El editor de un rol es una sola lista, en este orden: «Datos del rol» (solo al crear: tipo de entidad, nombre y descripción), «Módulos» y «Tipos de servicio». No se escribe ningún código: la plataforma asigna uno interno a partir del nombre. «Crear rol» y «Guardar permisos» guardan todo; si falta el nombre, ves el aviso debajo del campo y el cursor queda allí. Sin tipos de servicio en el catálogo solo ves la lista de módulos."
+            },
+            {
+              "variant": "info",
+              "title": null,
+              "text": "En «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» muestran cada uno el par «Ver» / «Crear». «Crear» aparece deshabilitado mientras «Ver» esté sin marcar y, si desmarcas «Ver», «Crear» se desmarca también. Si el sistema devuelve «Para habilitar «Crear» primero debe estar habilitado «Ver» en ese tipo de servicio.», marca «Ver» y guarda de nuevo."
             }
           ]
         },
@@ -2523,8 +2609,11 @@
           "id": "usuarios",
           "title": "2. Usuarios",
           "paragraphs": [
-            "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
-            "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo."
+            "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Al invitar desde la pestaña Usuarios del hub de un organismo, el rol es obligatorio: no hay rol por defecto y, hasta que lo eliges, «Enviar invitación» queda deshabilitado (incluido el primer Administrador OT). Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
+            "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
+            "Las acciones de cada usuario (historial, permisos por módulo, editar, restablecer contraseña, suspender, desactivar y eliminar) están en el botón «Acciones» de su fila; las que quitan acceso van al final. Reenviar o reactivar una invitación sigue siendo el ícono de la fila.",
+            "Permisos por módulo: en la fila del usuario abre «Acciones» y elige «Permisos por módulo»; ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, con el máximo de espera); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+            "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada."
           ],
           "bullets": [],
           "callouts": []
@@ -2533,7 +2622,8 @@
           "id": "auditoria",
           "title": "3. Auditoría",
           "paragraphs": [
-            "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only)."
+            "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only).",
+            "Auditoría de permisos individuales: en Usuarios, la pestaña «Auditoría de permisos» lista cada cambio de permisos por usuario con su fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, el usuario afectado, la compañía, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después; los intentos rechazados quedan registrados con su motivo. Filtra por usuario, compañía y administrador; si ningún registro coincide, la tabla te lo avisa. La lista se pagina con «Filas por página»."
           ],
           "bullets": [],
           "callouts": []

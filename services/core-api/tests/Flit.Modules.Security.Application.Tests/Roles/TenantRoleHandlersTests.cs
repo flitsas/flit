@@ -164,8 +164,8 @@ public sealed class TenantRoleHandlersTests
         await _repo.DidNotReceiveWithAnyArgs().CreateAsync(default!, Arg.Any<CancellationToken>());
     }
 
+    // HU #13666: un code explícito se sigue validando (compatibilidad con clientes que lo envían).
     [Theory]
-    [InlineData("")]
     [InlineData("a")]
     [InlineData("con espacio")]
     public async Task Crear_ConCodigoInvalido_LanzaInvalidRoleInput(string code)
@@ -173,6 +173,73 @@ public sealed class TenantRoleHandlersTests
         var act = () => new CreateTenantRoleHandler(_repo).HandleAsync(Create(code: code), CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidRoleInputException>();
+    }
+
+    [Fact]
+    public async Task Crear_SinNombre_LanzaInvalidRoleInput()
+    {
+        var cmd = Create(code: "") with { Name = "   " };
+
+        var act = () => new CreateTenantRoleHandler(_repo).HandleAsync(cmd, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidRoleInputException>();
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(default!, Arg.Any<CancellationToken>());
+    }
+
+    // HU #13666: sin code (vacío o ausente), el servidor lo genera a partir del nombre.
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task Crear_SinCodigo_GeneraElCodigoDesdeElNombre(string? code)
+    {
+        _repo.FindTakenCodesAsync(TenantId, "COMPANY", "contador", Arg.Any<CancellationToken>()).Returns([]);
+
+        var id = await new CreateTenantRoleHandler(_repo).HandleAsync(Create(code: code!), CancellationToken.None);
+
+        id.Should().Be(RoleId);
+        await _repo.Received(1).CreateAsync(
+            Arg.Is<CreateRoleData>(d => d.Code == "contador" && d.TenantId == TenantId && d.Name == "Contador"),
+            Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().CodeTakenForTenantAsync(default, default!, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Crear_SinCodigo_ConCodigoTomado_AgregaSufijo()
+    {
+        _repo.FindTakenCodesAsync(TenantId, "COMPANY", "contador", Arg.Any<CancellationToken>())
+            .Returns(["contador", "contador_2"]);
+
+        await new CreateTenantRoleHandler(_repo).HandleAsync(Create(code: ""), CancellationToken.None);
+
+        await _repo.Received(1).CreateAsync(Arg.Is<CreateRoleData>(d => d.Code == "contador_3"), Arg.Any<CancellationToken>());
+    }
+
+    // admin_<producto> está reservado aunque no exista la fila: el generado salta al sufijo.
+    [Fact]
+    public async Task Crear_SinCodigo_ConNombreDeAdminDeProducto_NoTomaElCodeReservado()
+    {
+        _repo.FindTakenCodesAsync(TenantId, "COMPANY", Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
+        var cmd = Create(code: "") with { Name = "Admin Trámites" };
+
+        await new CreateTenantRoleHandler(_repo).HandleAsync(cmd, CancellationToken.None);
+
+        await _repo.Received(1).CreateAsync(Arg.Is<CreateRoleData>(d => d.Code == "admin_tramites_2"), Arg.Any<CancellationToken>());
+    }
+
+    // Concurrencia: otra creación ganó el code entre la lectura y el INSERT (23505) → se relee y se toma el siguiente.
+    [Fact]
+    public async Task Crear_SinCodigo_SiOtraPeticionGanaElCodigo_Reintenta()
+    {
+        _repo.FindTakenCodesAsync(TenantId, "COMPANY", "contador", Arg.Any<CancellationToken>())
+            .Returns(new List<string>(), new List<string> { "contador" });
+        _repo.CreateAsync(Arg.Is<CreateRoleData>(d => d.Code == "contador"), Arg.Any<CancellationToken>())
+            .Returns<Guid>(_ => throw new RoleCodeDuplicateException());
+
+        var id = await new CreateTenantRoleHandler(_repo).HandleAsync(Create(code: ""), CancellationToken.None);
+
+        id.Should().Be(RoleId);
+        await _repo.Received(1).CreateAsync(Arg.Is<CreateRoleData>(d => d.Code == "contador_2"), Arg.Any<CancellationToken>());
     }
 
     // HU #13440 AC2 — code repetido en el tenant o contra un rol global

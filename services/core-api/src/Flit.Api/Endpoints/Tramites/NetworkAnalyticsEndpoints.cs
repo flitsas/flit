@@ -5,6 +5,7 @@ using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Auditing;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -53,13 +54,18 @@ internal static class NetworkAnalyticsEndpoints
         group.MapGet("/stats/overview", async (
             HttpContext http,
             GetNetworkAnalyticsOverviewHandler handler,
+            IProcedureFamilyPermissionGate familyGate,
             CancellationToken ct,
             [FromQuery] DateOnly? from = null,
             [FromQuery] DateOnly? to = null,
             [FromQuery] Guid? childTenantId = null) =>
         {
             var (result, error) = await handler.HandleAsync(
-                new GetNetworkAnalyticsOverviewQuery(RequestTenantResolver.ScopeFromItems(http), childTenantId, from, to), ct);
+                new GetNetworkAnalyticsOverviewQuery(RequestTenantResolver.ScopeFromItems(http), childTenantId, from, to)
+                {
+                    AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+                },
+                ct);
             PublishOutcome(http, NetworkAccessVocabulary.Resources.StatsOverview, childTenantId, from, to, null, result?.ReachedTenantIds, error);
             return error is not null ? MapError(error) : Results.Ok(result!.Response);
         })
@@ -75,13 +81,17 @@ internal static class NetworkAnalyticsEndpoints
             DateOnly from,
             DateOnly to,
             GetNetworkTopProducersHandler handler,
+            IProcedureFamilyPermissionGate familyGate,
             CancellationToken ct,
             [FromQuery] int? limit = null,
             [FromQuery] Guid? childTenantId = null) =>
         {
             var (result, error) = await handler.HandleAsync(
                 new GetNetworkTopProducersQuery(
-                    RequestTenantResolver.ScopeFromItems(http), childTenantId, from, to, limit ?? GetTopProducersHandler.DefaultLimit),
+                    RequestTenantResolver.ScopeFromItems(http), childTenantId, from, to, limit ?? GetTopProducersHandler.DefaultLimit)
+                {
+                    AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+                },
                 ct);
             PublishOutcome(http, NetworkAccessVocabulary.Resources.StatsProductivityTop, childTenantId, from, to, limit, result?.ReachedTenantIds, error);
             return error is not null ? MapError(error) : Results.Ok(result!.Response);
@@ -98,11 +108,16 @@ internal static class NetworkAnalyticsEndpoints
             DateOnly from,
             DateOnly to,
             GetNetworkMonthlyTrendHandler handler,
+            IProcedureFamilyPermissionGate familyGate,
             CancellationToken ct,
             [FromQuery] Guid? childTenantId = null) =>
         {
             var (result, error) = await handler.HandleAsync(
-                new GetNetworkMonthlyTrendQuery(RequestTenantResolver.ScopeFromItems(http), childTenantId, from, to), ct);
+                new GetNetworkMonthlyTrendQuery(RequestTenantResolver.ScopeFromItems(http), childTenantId, from, to)
+                {
+                    AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+                },
+                ct);
             PublishOutcome(http, NetworkAccessVocabulary.Resources.StatsMonthlyTrend, childTenantId, from, to, null, result?.ReachedTenantIds, error);
             return error is not null ? MapError(error) : Results.Ok(result!.Response);
         })

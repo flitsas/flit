@@ -88,9 +88,17 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.NotFound();
             }
+            catch (FamilyCreateRequiresReadException ex) // HU #13664 AC1
+            {
+                return Results.BadRequest(new { code = "FAMILY_CREATE_REQUIRES_READ", permissions = ex.Slugs });
+            }
             catch (RolePermissionProductMismatchException)
             {
                 return Results.BadRequest(new { code = "ROLE_PERMISSION_PRODUCT_MISMATCH" });
+            }
+            catch (OtPermissionNotApplicableToRoleException) // HU #13644
+            {
+                return Results.BadRequest(new { code = "OT_NOT_APPLICABLE" });
             }
         }).WithName("SetRolePermissions")
           .AddEndpointFilter(new AdminAuditFilter(
@@ -167,7 +175,8 @@ internal static class SecurityRolesEndpoints
               AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Delete, "role", "ROLE", "id"));
     }
 
-    private sealed record CreateRoleRequest(string TargetEntityType, string Code, string Name, string? Description, string? ProductCode = null);
+    /// <summary>HU #13653: <c>Code</c> es opcional; sin él, el servidor lo genera a partir de <c>Name</c>.</summary>
+    private sealed record CreateRoleRequest(string TargetEntityType, string? Code, string Name, string? Description, string? ProductCode = null);
 
     private sealed record SetPermissionsRequest(List<Guid> PermissionIds);
 }

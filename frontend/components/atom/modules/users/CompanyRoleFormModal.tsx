@@ -1,15 +1,27 @@
 "use client";
 
 // HU #13443 (Feature #13437, Épica #12750) — Alta, edición y consulta de un rol propio de la compañía.
-// - create: código (no editable después), nombre, descripción, producto y permisos.
+// - create: nombre, descripción, producto y permisos (HU #13666: el código interno lo genera el servidor).
 // - edit: nombre, descripción y permisos de un rol propio.
 // - view: rol global de FLIT, solo lectura (la compañía puede asignarlo, no cambiarlo).
 // El selector solo ofrece los permisos que el caller puede otorgar (GET /roles/grantable-permissions) y, dentro
 // del producto del rol, porque un rol solo lleva permisos de su producto. Los permisos que el rol ya tiene pero
 // que el caller ya no puede otorgar se avisan y se quitan al guardar.
+// HU #13666 (Feature #13636 F-F): los tipos de servicio (Matrículas, Traspasos, Otros trámites) se muestran como el par
+// Ver / Crear del Panel SA: «Crear» deshabilitado sin «Ver», y quitar «Ver» quita «Crear» (regla «crear exige ver»).
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Shield } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
+import { RoleEditorSections } from "@/components/shared/permissions/RoleEditorSections";
+import {
+  familyModuleName,
+  findFamilyPair,
+  isServiceTypeModule,
+  normalizeFamilyPairs,
+  sortServiceTypeModules,
+  toggleRolePermission,
+} from "@/lib/permissions/familyPairs";
 import {
   createTenantRole,
   getGrantablePermissions,
@@ -25,7 +37,7 @@ import { companyRoleErrorMessage } from "./companyRoleErrors";
 const INPUT_CLS =
   "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
-  "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-[#162744] dark:text-white";
+  "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-flit-primary dark:text-white";
 const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
 const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
 const PRODUCT_LABEL: Record<string, string> = {
@@ -33,7 +45,19 @@ const PRODUCT_LABEL: Record<string, string> = {
   comparendos: "Comparendos",
   diagnostico: "Diagnóstico",
 };
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{1,49}$/;
+
+/**
+ * HU #13666: nombre del módulo tal como en el Panel SA (lo trae la API). Si una API anterior no lo envía, se usa el
+ * nombre conocido del tipo de servicio y, en último caso, el código con espacios y mayúscula inicial.
+ */
+function readableModuleName(moduleCode: string, perms: readonly GrantablePermission[]): string {
+  const fromApi = perms.find((p) => p.moduleName?.trim())?.moduleName?.trim();
+  if (fromApi) return fromApi;
+  const family = familyModuleName(moduleCode);
+  if (family) return family;
+  const text = moduleCode.replace(/[-_.]+/g, " ").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 export type CompanyRoleFormMode =
   | { kind: "create" }
@@ -56,13 +80,14 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const [loadError, setLoadError] = useState<string | null>(null);
   const [grantable, setGrantable] = useState<GrantablePermission[]>([]);
   const [detail, setDetail] = useState<TenantRoleDetail | null>(null);
-  const [code, setCode] = useState(role?.code ?? "");
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
   const [productCode, setProductCode] = useState(role?.productCode ?? "tramites");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aviso de un campo de «Datos del rol»: va debajo del campo, visible aunque la lista de permisos sea larga.
+  const [fieldError, setFieldError] = useState<{ field: "name"; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,18 +132,16 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     for (const p of offered) map.set(p.moduleCode, [...(map.get(p.moduleCode) ?? []), p]);
     return [...map.entries()];
   }, [offered]);
+  // Forma que espera la regla «crear exige ver» (un módulo con sus acciones).
+  const pairModules = useMemo(() => byModule.map(([, perms]) => ({ actions: perms })), [byModule]);
 
   const offeredIds = useMemo(() => new Set(offered.map((p) => p.id)), [offered]);
   // Permisos que el rol tiene y el caller ya no puede otorgar: se avisan y se quitan al guardar.
   const dropped = !readOnly && detail ? detail.permissions.filter((p) => !offeredIds.has(p.id)) : [];
 
+  // HU #13666: apagar «Ver» de un tipo de servicio apaga también su «Crear»; «Crear» sin «Ver» no se enciende.
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((prev) => toggleRolePermission(prev, id, pairModules));
   }
 
   function toggleModule(ids: string[], on: boolean) {
@@ -128,7 +151,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
         if (on) next.add(id);
         else next.delete(id);
       }
-      return next;
+      return normalizeFamilyPairs(next, pairModules);
     });
   }
 
@@ -136,20 +159,19 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     e.preventDefault();
     if (readOnly) return;
     setError(null);
-    if (creating && !CODE_PATTERN.test(code.trim())) {
-      setError("El código admite de 2 a 50 caracteres: letras, números, punto, guion o guion bajo.");
-      return;
-    }
+    setFieldError(null);
     if (!name.trim()) {
-      setError("El nombre es obligatorio.");
+      document.getElementById("company-role-name")?.focus();
+      setFieldError({ field: "name", message: "Escribe un nombre para el rol." });
       return;
     }
-    const permissionIds = [...selected].filter((id) => offeredIds.has(id));
+    // Nunca se envía un «Crear» de tipo de servicio sin su «Ver» (la API lo rechazaría con FAMILY_CREATE_REQUIRES_READ).
+    const permissionIds = [...normalizeFamilyPairs(selected, pairModules)].filter((id) => offeredIds.has(id));
     setBusy(true);
     try {
       if (creating) {
+        // HU #13666: sin `code`; el servidor lo genera a partir del nombre.
         await createTenantRole({
-          code: code.trim(),
           name: name.trim(),
           description: description.trim() || null,
           productCode,
@@ -168,12 +190,101 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     }
   }
 
+  // HU #13653: una sola lista «Datos del rol» → «Módulos» → «Tipos de servicio». Los tipos de servicio solo van aparte
+  // si hay de las dos clases, y siempre en el orden Matrículas, Traspasos, Otros trámites.
+  const serviceModules = sortServiceTypeModules(
+    byModule
+      .map(([moduleCode, perms]) => ({ code: moduleCode, actions: perms }))
+      .filter(isServiceTypeModule),
+  ).map((m): [string, GrantablePermission[]] => [m.code, m.actions]);
+  const regularModules = byModule.filter(([moduleCode, perms]) => !isServiceTypeModule({ code: moduleCode, actions: perms }));
+  const hasBoth = !readOnly && serviceModules.length > 0 && regularModules.length > 0;
+
+  const renderModuleEntry = ([moduleCode, perms]: [string, GrantablePermission[]]) => {
+    const ids = perms.map((p) => p.id);
+    const allOn = ids.every((id) => selected.has(id));
+    const pair = findFamilyPair(perms);
+    const moduleName = readableModuleName(moduleCode, perms);
+    const rest = pair ? perms.filter((p) => p.id !== pair.read.id && p.id !== pair.create.id) : perms;
+    return (
+      <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
+        <label
+          className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white"
+        >
+          <input
+            type="checkbox"
+            checked={allOn}
+            onChange={(e) => toggleModule(ids, e.target.checked)}
+            aria-label={`Seleccionar todos los permisos de ${moduleName}`}
+            className="h-4 w-4 accent-flit-brand"
+          />
+          {moduleName}
+        </label>
+        {pair && (
+          <div className="mt-2 pl-6 text-flit-primary dark:text-white">
+            <FamilyPairCheckboxes
+              moduleName={moduleName}
+              read={pair.read}
+              create={pair.create}
+              selected={selected}
+              onToggle={toggle}
+            />
+          </div>
+        )}
+        {rest.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1.5 pl-6">
+            {rest.map((p) => (
+              <li key={p.id}>
+                <label className="flex items-start gap-2 text-sm text-flit-primary dark:text-white">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(p.id)}
+                    onChange={() => toggle(p.id)}
+                    className="mt-0.5 h-4 w-4 accent-flit-brand"
+                  />
+                  <span>{p.name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
+  const permissionsFieldset = (entries: [string, GrantablePermission[]][], legend: string) => (
+    <fieldset className="flex flex-col gap-3">
+      {/* Con los títulos de sección, la leyenda solo se ve en el rol de solo lectura (lleva el total). */}
+      <legend className={readOnly ? "mb-1 text-sm font-semibold text-flit-primary dark:text-white" : "sr-only"}>
+        {legend}
+        {readOnly && detail ? ` (${detail.permissions.length})` : ""}
+      </legend>
+      {readOnly ? (
+        detail && detail.permissions.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-sm text-flit-primary dark:text-white">
+            {detail.permissions.map((p) => (
+              <li key={p.id}>{p.name}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-[#59677D] dark:text-white/70">Este rol no tiene permisos asignados.</p>
+        )
+      ) : entries.length === 0 ? (
+        <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
+          No tienes permisos para otorgar en este producto. El rol se puede crear sin permisos y completarlo después.
+        </p>
+      ) : (
+        entries.map(renderModuleEntry)
+      )}
+    </fieldset>
+  );
+
   const title = creating ? "Nuevo rol" : readOnly ? `Rol «${role?.name}»` : `Editar «${role?.name}»`;
   const description_ = creating
     ? "Rol propio de tu compañía. Solo puedes darle permisos que tú tienes."
     : readOnly
       ? "Rol global de FLIT: lo puedes asignar a tus usuarios, pero no cambiarlo."
-      : "El código no se puede cambiar.";
+      : "Cambia el nombre, la descripción o los permisos del rol.";
 
   return (
     <Modal
@@ -220,129 +331,70 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
         </p>
       ) : (
         <form id="company-role-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <label className={LABEL_CLS}>
-            Código
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={!creating}
-              maxLength={50}
-              autoComplete="off"
-              spellCheck={false}
-              className={`${INPUT_CLS} font-mono`}
-              aria-describedby="company-role-code-hint"
-            />
-            {creating && (
-              <span id="company-role-code-hint" className={HINT_CLS}>
-                Identificador interno, p. ej. contador_senior. No se puede cambiar después.
-              </span>
-            )}
-          </label>
-          <label className={LABEL_CLS}>
-            Nombre
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={readOnly}
-              maxLength={100}
-              className={INPUT_CLS}
-            />
-          </label>
-          <label className={LABEL_CLS}>
-            Descripción
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={readOnly}
-              maxLength={500}
-              rows={2}
-              className={`${INPUT_CLS} h-auto py-2`}
-            />
-          </label>
-          {creating && products.length > 1 && (
-            <label className={LABEL_CLS}>
-              Producto
-              <select
-                value={productCode}
-                onChange={(e) => {
-                  setProductCode(e.target.value);
-                  setSelected(new Set());
-                }}
-                className={INPUT_CLS}
-              >
-                {products.map((p) => (
-                  <option key={p} value={p}>
-                    {PRODUCT_LABEL[p] ?? p}
-                  </option>
-                ))}
-              </select>
-              <span className={HINT_CLS}>Un rol solo incluye permisos de su producto.</span>
-            </label>
-          )}
-
-          <fieldset className="flex flex-col gap-3">
-            <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">
-              Permisos{readOnly && detail ? ` (${detail.permissions.length})` : ""}
-            </legend>
-            {readOnly ? (
-              detail && detail.permissions.length > 0 ? (
-                <ul className="flex flex-col gap-1 text-sm text-flit-primary dark:text-white">
-                  {detail.permissions.map((p) => (
-                    <li key={p.id}>
-                      {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-[#59677D] dark:text-white/70">Este rol no tiene permisos asignados.</p>
-              )
-            ) : byModule.length === 0 ? (
-              <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
-                No tienes permisos para otorgar en este producto. El rol se puede crear sin permisos y completarlo después.
-              </p>
-            ) : (
-              byModule.map(([moduleCode, perms]) => {
-                const ids = perms.map((p) => p.id);
-                const allOn = ids.every((id) => selected.has(id));
-                return (
-                  <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
-                    <label className="flex items-center gap-2 text-sm font-semibold capitalize text-flit-primary dark:text-white">
-                      <input
-                        type="checkbox"
-                        checked={allOn}
-                        onChange={(e) => toggleModule(ids, e.target.checked)}
-                        aria-label={`Seleccionar todos los permisos de ${moduleCode}`}
-                        className="h-4 w-4 accent-flit-brand"
-                      />
-                      {moduleCode}
-                    </label>
-                    <ul className="mt-2 flex flex-col gap-1.5 pl-6">
-                      {perms.map((p) => (
-                        <li key={p.id}>
-                          <label className="flex items-start gap-2 text-sm text-flit-primary dark:text-white">
-                            <input
-                              type="checkbox"
-                              checked={selected.has(p.id)}
-                              onChange={() => toggle(p.id)}
-                              className="mt-0.5 h-4 w-4 accent-flit-brand"
-                            />
-                            <span>
-                              {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
-                            </span>
-                          </label>
-                        </li>
+          <RoleEditorSections
+            data={
+              <div className="flex flex-col gap-4">
+                {/* HU #13666: sin campo «Código» al crear, editar ni consultar; el servidor lo genera del nombre. */}
+                <label className={LABEL_CLS}>
+                  Nombre
+                  <input
+                    id="company-role-name"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (fieldError?.field === "name") setFieldError(null);
+                    }}
+                    disabled={readOnly}
+                    maxLength={100}
+                    className={INPUT_CLS}
+                  />
+                  {fieldError?.field === "name" && (
+                    <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">
+                      {fieldError.message}
+                    </span>
+                  )}
+                </label>
+                <label className={LABEL_CLS}>
+                  Descripción
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={readOnly}
+                    maxLength={500}
+                    rows={2}
+                    className={`${INPUT_CLS} h-auto py-2`}
+                  />
+                </label>
+                {creating && products.length > 1 && (
+                  <label className={LABEL_CLS}>
+                    Producto
+                    <select
+                      value={productCode}
+                      onChange={(e) => {
+                        setProductCode(e.target.value);
+                        setSelected(new Set());
+                      }}
+                      className={INPUT_CLS}
+                    >
+                      {products.map((p) => (
+                        <option key={p} value={p}>
+                          {PRODUCT_LABEL[p] ?? p}
+                        </option>
                       ))}
-                    </ul>
-                  </div>
-                );
-              })
-            )}
-          </fieldset>
+                    </select>
+                    <span className={HINT_CLS}>Un rol solo incluye permisos de su producto.</span>
+                  </label>
+                )}
+              </div>
+            }
+            modules={permissionsFieldset(readOnly || !hasBoth ? [...regularModules, ...serviceModules] : regularModules, "Permisos")}
+            services={hasBoth ? permissionsFieldset(serviceModules, "Permisos por tipo de servicio") : null}
+          />
 
           {dropped.length > 0 && (
             <p role="status" className="rounded-[10px] bg-[#FFF4E5] p-3 text-xs font-semibold text-[#C2410C]">
               {dropped.length === 1 ? "1 permiso de este rol" : `${dropped.length} permisos de este rol`} ya no se pueden
-              otorgar desde tu cuenta y se quitarán al guardar: {dropped.map((p) => p.slug).join(", ")}.
+              otorgar desde tu cuenta y se quitarán al guardar: {dropped.map((p) => p.name).join(", ")}.
             </p>
           )}
 

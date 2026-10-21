@@ -14,6 +14,8 @@ import { TRAMITES_CONTROL_CLS } from './tramites-control-styles';
 interface Props {
   /** Familia seleccionada; cadena vacía = todas. */
   modalidad: '' | ProcedureFamily;
+  /** HU #13665 — familias con permiso Ver; sin la prop, todas. */
+  familias?: readonly ProcedureFamily[];
   onModalidadChange: (v: '' | ProcedureFamily) => void;
   onRefresh: () => void;
   loading?: boolean;
@@ -28,6 +30,7 @@ interface Props {
 
 export function TramitesListToolbar({
   modalidad,
+  familias,
   onModalidadChange,
   onRefresh,
   loading = false,
@@ -46,7 +49,7 @@ export function TramitesListToolbar({
   return (
     <div className="flex min-w-0 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
-        <FamiliaTabs value={modalidad} onChange={onModalidadChange} />
+        <FamiliaTabs value={modalidad} onChange={onModalidadChange} familias={familias} />
 
         <div className="flex flex-wrap items-center gap-2">
           {actions}

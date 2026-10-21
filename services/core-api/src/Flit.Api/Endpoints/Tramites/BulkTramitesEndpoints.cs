@@ -3,6 +3,8 @@ using Flit.Api.Authorization;
 using Flit.Tramites.Application.BulkTramites;
 using Flit.Tramites.Application.BulkTramites.Query;
 using Flit.Tramites.Application.BulkTramites.SubmitBatch;
+using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints.Tramites;
@@ -26,7 +28,9 @@ public static class BulkTramitesEndpoints
         group.MapGet("/plantilla", DescargarPlantillaAsync).WithName("BulkTramitesDescargarPlantilla");
 
         // POST /lotes?tipo=... — HU #12522 AC1/AC2/AC3 → 201 / 400 (template_invalid, too_many_rows, invalid_file).
+        // HU #13662: el lote crea trámites, así que exige tramites.create (el PO: quien radica, ve la carga masiva).
         group.MapPost("/lotes", SubirLoteAsync)
+            .RequireModulePermission("tramites.create")
             .WithName("BulkTramitesSubirLote")
             .DisableAntiforgery();
 
@@ -81,6 +85,7 @@ public static class BulkTramitesEndpoints
         IFormFile? archivo,
         HttpContext httpContext,
         [FromServices] SubmitBulkTramitesBatchHandler handler,
+        [FromServices] IProcedureFamilyPermissionGate familyGate,
         CancellationToken cancellationToken)
     {
         var tipoResuelto = BulkTramitesTemplateTypeParser.Parse(tipo);
@@ -91,6 +96,20 @@ public static class BulkTramitesEndpoints
                     $"El tipo de plantilla '{tipo}' no está disponible para carga masiva. "
                     + "Usa 'matricula', 'traspaso' u 'otros'."),
                 statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        // HU #13664 — Crear por familia: la plantilla (matricula / traspaso / otros) fija la familia del lote.
+        var familiaLote = tipoResuelto.Value switch
+        {
+            BulkTramitesTemplateType.Matricula => ProcedureFamily.Matriculas,
+            BulkTramitesTemplateType.Traspaso => ProcedureFamily.Traspaso,
+            _ => ProcedureFamily.Otros,
+        };
+        if (!familyGate.CanCreate(familiaLote))
+        {
+            return Results.Json(
+                new ErrorResponse("No tienes permiso para crear trámites de esta familia."),
+                statusCode: StatusCodes.Status403Forbidden);
         }
 
         if (archivo is null || archivo.Length == 0)

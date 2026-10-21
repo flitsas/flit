@@ -5,7 +5,10 @@
 // Uso de ejemplo:
 //   evaluateAdminAccess(token, "/admin/generacion-documental") → { allowed: true }
 import { describe, expect, it } from "vitest";
-import { evaluateAdminAccess, FORBIDDEN_PATH } from "../guard";
+import { evaluateAdminAccess } from "../guard";
+
+// HU #13650: sesión válida sin el permiso → inicio con el aviso (no /403, que queda para fallos de sesión).
+const ACCESO_DENEGADO = /^\/\?acceso=denegado/;
 
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
@@ -29,13 +32,13 @@ describe("evaluateAdminAccess — /admin/generacion-documental", () => {
     expect(evaluateAdminAccess(makeToken({ sub: "u1", role: "SuperAdmin" }), PATH).allowed).toBe(true);
   });
 
-  it("redirige a /403 a un AdminCompany SIN el permiso del módulo", () => {
+  it("redirige al inicio con aviso a un AdminCompany SIN el permiso del módulo", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "AdminCompany", permissions: ["security.users.read"] }),
       PATH,
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("no abre otras rutas admin por tener el permiso del módulo", () => {
