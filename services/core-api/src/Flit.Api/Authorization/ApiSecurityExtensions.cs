@@ -137,6 +137,8 @@ public static class ApiSecurityExtensions
             // Ict:ServiceToken:AcceptIdentity, el token de servicio de Identidad de svc-ict (HU #13335).
             .AddPolicy(IctServicePolicy, policy => IctServiceAuthorization.Configure(policy, configuration, svcIssuer))
             .AddPolicy(CatalogosServicioPolicy, CatalogosServicioAuthorization.Configure)
+            // HU #13731 — ListarTiposTramite: además del scope, solo los clientes de la lista (svc-diagnostico).
+            .AddPolicy(CatalogoTiposTramiteAuthorization.Policy, policy => CatalogoTiposTramiteAuthorization.Configure(policy, configuration))
             // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.
             .AddPolicy(ExternalClientAuthorization.TramitesReadPolicy, policy => policy
                 .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)
