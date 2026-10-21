@@ -191,16 +191,17 @@ public sealed class Hu13655GestorOtPermisosHttpTests(PostgresDatabaseFixture fix
     public async Task FB9_AdminOt_EditaAlGestorOtDeSuOrganismo_PeroNoAOtroAdministrador()
     {
         await SeedAsync();
+        // Los permisos OT solo se otorgan con su exigencia encendida (NOT_ENFORCED si no, regla de F-B).
         var documentos = await PermissionIdAsync("ot.documentos.manage");
 
         using (var gestor = await SendAsync(AdminEmail, HttpMethod.Put,
-                   $"/api/v1/security/users/{GestorId}/permission-overrides/{documentos}", new { effect = "allow" }))
+                   $"/api/v1/security/users/{GestorId}/permission-overrides/{documentos}", new { effect = "allow" }, otFlag: true))
         {
             gestor.StatusCode.Should().Be(HttpStatusCode.OK, await BodyAsync(gestor));
         }
 
         using var admin = await SendAsync(AdminEmail, HttpMethod.Put,
-            $"/api/v1/security/users/{OtroAdminId}/permission-overrides/{documentos}", new { effect = "allow" });
+            $"/api/v1/security/users/{OtroAdminId}/permission-overrides/{documentos}", new { effect = "allow" }, otFlag: true);
         admin.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await BodyAsync(admin)).Should().Contain("TARGET_IS_ADMIN");
 
