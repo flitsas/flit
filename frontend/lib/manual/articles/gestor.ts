@@ -932,7 +932,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         bullets: [
           "1. Pulsa «Nuevo rol».",
           "2. Escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
-          "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar.",
+          "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
           "4. Pulsa «Crear rol». Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera.",
         ],
         callouts: [

@@ -1,9 +1,12 @@
 "use client";
 
-import type { AccessibleAction } from "@/lib/api/security";
-
 // HU #13666 (Feature #13636 F-F) — par Ver / Crear de un tipo de servicio en la configuración de permisos por ROL
-// (RbacAdmin). «Crear» queda deshabilitado mientras «Ver» esté inactivo (regla «crear exige ver»).
+// (RbacAdmin del Panel SA y roles propios de la compañía en Usuarios › «Roles y permisos»). «Crear» queda deshabilitado
+// mientras «Ver» esté inactivo (regla «crear exige ver»).
+
+interface PairAction {
+  id: string;
+}
 
 export const CREATE_NEEDS_READ_HINT = "Habilita «Ver» para poder habilitar «Crear».";
 
@@ -15,8 +18,8 @@ export function FamilyPairCheckboxes({
   onToggle,
 }: {
   moduleName: string;
-  read: AccessibleAction;
-  create: AccessibleAction;
+  read: PairAction;
+  create: PairAction;
   selected: ReadonlySet<string>;
   onToggle: (id: string) => void;
 }) {

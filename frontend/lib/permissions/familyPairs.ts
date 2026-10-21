@@ -22,6 +22,21 @@ export interface FamilyPairActions<A extends SlugAction> {
 
 const FAMILY_SLUG_PAIRS = PROCEDURE_FAMILIES.map((f) => FAMILY_PERMISSION_SLUGS[f]);
 
+/**
+ * Nombre de pantalla de los módulos por familia (DDL 145). Lo usan los selectores que solo reciben el código del módulo
+ * (roles propios de la compañía, que leen `grantable-permissions`) para mostrar los mismos textos que el Panel SA.
+ */
+const FAMILY_MODULE_NAMES: Record<string, string> = {
+  "tramites-matriculas": "Trámites: Matrículas",
+  "tramites-traspasos": "Trámites: Traspasos",
+  "tramites-otros": "Trámites: Otros trámites",
+};
+
+/** Nombre de pantalla del módulo por familia, o `null` si el código no es de un módulo por familia. */
+export function familyModuleName(moduleCode: string): string | null {
+  return FAMILY_MODULE_NAMES[moduleCode] ?? null;
+}
+
 /** El par Ver / Crear de una familia dentro de las acciones de un módulo, o `null` si el módulo no es de familia. */
 export function findFamilyPair<A extends SlugAction>(actions: readonly A[]): FamilyPairActions<A> | null {
   for (const { read, create } of FAMILY_SLUG_PAIRS) {

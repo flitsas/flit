@@ -7,9 +7,18 @@
 // El selector solo ofrece los permisos que el caller puede otorgar (GET /roles/grantable-permissions) y, dentro
 // del producto del rol, porque un rol solo lleva permisos de su producto. Los permisos que el rol ya tiene pero
 // que el caller ya no puede otorgar se avisan y se quitan al guardar.
+// HU #13666 (Feature #13636 F-F): los tipos de servicio (Matrículas, Traspasos, Otros trámites) se muestran como el par
+// Ver / Crear del Panel SA: «Crear» deshabilitado sin «Ver», y quitar «Ver» quita «Crear» (regla «crear exige ver»).
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Shield } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
+import {
+  familyModuleName,
+  findFamilyPair,
+  normalizeFamilyPairs,
+  toggleRolePermission,
+} from "@/lib/permissions/familyPairs";
 import {
   createTenantRole,
   getGrantablePermissions,
@@ -107,18 +116,16 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     for (const p of offered) map.set(p.moduleCode, [...(map.get(p.moduleCode) ?? []), p]);
     return [...map.entries()];
   }, [offered]);
+  // Forma que espera la regla «crear exige ver» (un módulo con sus acciones).
+  const pairModules = useMemo(() => byModule.map(([, perms]) => ({ actions: perms })), [byModule]);
 
   const offeredIds = useMemo(() => new Set(offered.map((p) => p.id)), [offered]);
   // Permisos que el rol tiene y el caller ya no puede otorgar: se avisan y se quitan al guardar.
   const dropped = !readOnly && detail ? detail.permissions.filter((p) => !offeredIds.has(p.id)) : [];
 
+  // HU #13666: apagar «Ver» de un tipo de servicio apaga también su «Crear»; «Crear» sin «Ver» no se enciende.
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((prev) => toggleRolePermission(prev, id, pairModules));
   }
 
   function toggleModule(ids: string[], on: boolean) {
@@ -128,7 +135,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
         if (on) next.add(id);
         else next.delete(id);
       }
-      return next;
+      return normalizeFamilyPairs(next, pairModules);
     });
   }
 
@@ -144,7 +151,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
       setError("El nombre es obligatorio.");
       return;
     }
-    const permissionIds = [...selected].filter((id) => offeredIds.has(id));
+    // Nunca se envía un «Crear» de tipo de servicio sin su «Ver» (la API lo rechazaría con FAMILY_CREATE_REQUIRES_READ).
+    const permissionIds = [...normalizeFamilyPairs(selected, pairModules)].filter((id) => offeredIds.has(id));
     setBusy(true);
     try {
       if (creating) {
@@ -304,35 +312,54 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
               byModule.map(([moduleCode, perms]) => {
                 const ids = perms.map((p) => p.id);
                 const allOn = ids.every((id) => selected.has(id));
+                const pair = findFamilyPair(perms);
+                const familyName = familyModuleName(moduleCode);
+                const moduleName = familyName ?? moduleCode;
+                const rest = pair ? perms.filter((p) => p.id !== pair.read.id && p.id !== pair.create.id) : perms;
                 return (
                   <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
-                    <label className="flex items-center gap-2 text-sm font-semibold capitalize text-[#162744] dark:text-white">
+                    <label
+                      className={`flex items-center gap-2 text-sm font-semibold text-[#162744] dark:text-white ${familyName ? "" : "capitalize"}`}
+                    >
                       <input
                         type="checkbox"
                         checked={allOn}
                         onChange={(e) => toggleModule(ids, e.target.checked)}
-                        aria-label={`Seleccionar todos los permisos de ${moduleCode}`}
+                        aria-label={`Seleccionar todos los permisos de ${moduleName}`}
                         className="h-4 w-4 accent-[#557EFF]"
                       />
-                      {moduleCode}
+                      {moduleName}
                     </label>
-                    <ul className="mt-2 flex flex-col gap-1.5 pl-6">
-                      {perms.map((p) => (
-                        <li key={p.id}>
-                          <label className="flex items-start gap-2 text-sm text-[#162744] dark:text-white">
-                            <input
-                              type="checkbox"
-                              checked={selected.has(p.id)}
-                              onChange={() => toggle(p.id)}
-                              className="mt-0.5 h-4 w-4 accent-[#557EFF]"
-                            />
-                            <span>
-                              {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
-                            </span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
+                    {pair && (
+                      <div className="mt-2 pl-6 text-[#162744] dark:text-white">
+                        <FamilyPairCheckboxes
+                          moduleName={moduleName}
+                          read={pair.read}
+                          create={pair.create}
+                          selected={selected}
+                          onToggle={toggle}
+                        />
+                      </div>
+                    )}
+                    {rest.length > 0 && (
+                      <ul className="mt-2 flex flex-col gap-1.5 pl-6">
+                        {rest.map((p) => (
+                          <li key={p.id}>
+                            <label className="flex items-start gap-2 text-sm text-[#162744] dark:text-white">
+                              <input
+                                type="checkbox"
+                                checked={selected.has(p.id)}
+                                onChange={() => toggle(p.id)}
+                                className="mt-0.5 h-4 w-4 accent-[#557EFF]"
+                              />
+                              <span>
+                                {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 );
               })
