@@ -26,4 +26,9 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
+  <!-- Tabla única de casos de identificadores (HU #13740); la comparte el frontend (HU #13745). -->
+  <ItemGroup>
+    <None Include="..\..\..\..\contracts\fixtures\validacion\identificadores-vehiculo.json" Link="Fixtures\identificadores-vehiculo.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
