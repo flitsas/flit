@@ -244,4 +244,15 @@ public sealed class FurNumeral3MarksTests
         Marks("TRASPASO_STANDARD", "TRASPASO", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
             .Should().Equal(2);
     }
+
+    // HU #13777 — riesgo aceptado: en prenda base la casilla del propio tipo la pone la tabla 1,
+    // no la decisión, así que con «omitir» se conserva (sin sumar la contraria).
+    [Theory]
+    [InlineData("PRENDA_INSCRIPCION", 11)]
+    [InlineData("LEVANTAMIENTO_PRENDA", 12)]
+    public void PrendaBase_ConOmitir_ConservaSoloLaCasillaDeLaTabla1(string code, int casilla)
+    {
+        Marks(code, "OTROS", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
+            .Should().Equal(casilla);
+    }
 }

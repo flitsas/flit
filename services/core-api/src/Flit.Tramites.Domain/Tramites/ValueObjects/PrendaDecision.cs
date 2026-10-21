@@ -1,4 +1,3 @@
-
 namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 
 /// <summary>
