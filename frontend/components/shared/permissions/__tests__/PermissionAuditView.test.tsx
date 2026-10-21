@@ -135,6 +135,25 @@ describe("PermissionAuditView", () => {
     expect(table).not.toHaveTextContent(/traspasos\.read|tramites-traspasos|MODULE_SNAPSHOT|OT_NOT_APPLICABLE|ALGO_NUEVO|MOTIVO_DESCONOCIDO/);
   });
 
+  it("un intento rechazado de consultar los permisos se muestra como consulta, sin flechas ni guiones", async () => {
+    vi.mocked(listPermissionAudit).mockResolvedValue(
+      page([
+        record({
+          action: "READ", outcome: "REJECTED", reasonCode: "OUT_OF_SCOPE", productCode: null, moduleCode: null,
+          permissionSlug: null, valueBefore: null, valueAfter: null,
+        }),
+      ]),
+    );
+    render(<PermissionAuditView mode="superadmin" users={users} />);
+    const table = await screen.findByRole("table");
+    const row = within(table).getAllByRole("row")[1];
+    expect(within(row).getByText("Consultó los permisos")).toBeInTheDocument();
+    expect(within(row).getByText("Todos los permisos del usuario")).toBeInTheDocument();
+    expect(within(row).getByText("Rechazado: El usuario no pertenece a la compañía sobre la que operas.")).toBeInTheDocument();
+    expect(within(row).getByText("Sin cambios")).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/Cambió un permiso|→|—|READ/);
+  });
+
   it("modo admin: sin filtro ni columna de compañía y sin tenantId en la consulta", async () => {
     render(<PermissionAuditView mode="admin" users={users} />);
     await screen.findByRole("table");

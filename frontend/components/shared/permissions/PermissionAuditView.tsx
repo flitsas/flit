@@ -36,7 +36,11 @@ export interface PermissionAuditViewProps {
   initialUserId?: string;
 }
 
+/** Consulta de los permisos de un usuario: la API solo la audita cuando la rechaza. */
+const READ_ACTION = "READ";
+
 const ACTION_LABEL: Record<string, string> = {
+  [READ_ACTION]: "Consultó los permisos",
   GRANT: "Otorgó",
   DENY: "Denegó",
   REVOKE: "Volvió al rol",
@@ -66,6 +70,7 @@ function person(name: string | null, email: string | null): { main: string; sub:
 
 /** Lo que se cambió, con el nombre del catálogo; el código solo si el permiso ya no existe. */
 function permissionText(r: PermissionAuditRecord): string {
+  if (r.action === READ_ACTION) return "Todos los permisos del usuario";
   if (r.permissionSlug) return r.permissionName ?? r.permissionSlug;
   if (r.moduleCode) return `Módulo completo: ${r.moduleName ?? r.moduleCode}`;
   return "—";
@@ -292,7 +297,9 @@ export function PermissionAuditView({ mode, users, initialUserId }: PermissionAu
                         </p>
                       </Cell>
                       <Cell last>
-                        {r.valueBefore || r.valueAfter ? (
+                        {r.action === READ_ACTION ? (
+                          <span className="opacity-50">Sin cambios</span>
+                        ) : r.valueBefore || r.valueAfter ? (
                           <span className="opacity-80">
                             {valueLabel(r.valueBefore)} → {valueLabel(r.valueAfter)}
                           </span>
