@@ -1,0 +1,171 @@
+openapi: 3.0.3
+info:
+  title: FLIT Suite — API de Diagnóstico Vehicular
+  version: "1.0.0"
+  description: >
+    Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
+    docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
+    gateway con el token del producto (aud=diagnostico). Una sesión = una compañía (D-03): la compañía
+    sale siempre del token y ningún parámetro la cambia. Los permisos tienen el formato
+    diagnostico.<modulo>.<accion> (§6.2) y se registran con el manifiesto del producto
+    (PUT /api/v1/platform/products/diagnostico/manifest, ver platform.v1.yaml). Diagnóstico no publica
+    rutas para crear o modificar compañías, usuarios, roles ni suscripciones (R-4). Los errores de
+    regla responden { code, error } con un code estable.
+  license:
+    name: Propietario FLIT
+    url: https://flitsas.com
+
+servers:
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4029
+    description: Local (core-diagnostico)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Sesion
+    description: Lo que la app necesita al abrir.
+
+paths:
+  /api/v1/diagnostico/sesion:
+    get:
+      tags: [Sesion]
+      operationId: obtenerSesionDiagnostico
+      summary: Sesión del usuario en Diagnóstico
+      description: >
+        Usuario, compañía, roles, permisos de Diagnóstico y capacidades, todo leído del token (HU #13724).
+        Cualquier usuario autenticado del producto (política diagnostico.usuario); un token de servicio
+        recibe 403. No acepta parámetros: si llega un parámetro o la cabecera X-Flit-Tenant-Id con otra
+        compañía, se ignora. `permisos` solo trae slugs diagnostico.* (el token también lleva los de
+        plataforma). Las capacidades del backoffice FLIT exigen además tenant_type=FLIT (D-16).
+      responses:
+        "200":
+          description: Sesión de la compañía del token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sesion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Token de servicio, o usuario sin compañía (`code` = SIN_EMPRESA).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Sin sesión, token inválido o de otro producto.
+
+  schemas:
+    Sesion:
+      type: object
+      required: [usuario, empresa, roles, permisos, capacidades]
+      properties:
+        usuario:
+          type: object
+          required: [id, email, esSuperAdmin]
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            esSuperAdmin:
+              type: boolean
+        empresa:
+          type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Claim tenant_id del token.
+            nombre:
+              type: string
+              nullable: true
+            tipo:
+              type: string
+              nullable: true
+              description: Claim tenant_type (FLIT para la compañía FLIT).
+        roles:
+          type: array
+          description: Códigos de rol del token (claim role_code).
+          items:
+            type: string
+          example: [usuario_diagnostico]
+        permisos:
+          type: array
+          description: Slugs diagnostico.* que tiene el usuario.
+          items:
+            type: string
+          example: [diagnostico.diagnosticos.crear, diagnostico.diagnosticos.ver]
+        capacidades:
+          $ref: "#/components/schemas/Capacidades"
+
+    Capacidades:
+      type: object
+      description: >
+        Ayuda para armar el menú; cada endpoint vuelve a exigir su permiso. Las seis últimas son del
+        backoffice FLIT y exigen además tenant_type=FLIT.
+      required:
+        - crearDiagnosticos
+        - verDiagnosticos
+        - descargarReportes
+        - derivar
+        - verConfiguracion
+        - editarConfiguracion
+        - reprocesarConsultas
+        - backoffice
+        - editarContrato
+        - llenarConsultas
+        - corregirDictamen
+        - verAuditoria
+        - verVolumetria
+      properties:
+        crearDiagnosticos:
+          type: boolean
+        verDiagnosticos:
+          type: boolean
+        descargarReportes:
+          type: boolean
+        derivar:
+          type: boolean
+        verConfiguracion:
+          type: boolean
+        editarConfiguracion:
+          type: boolean
+        reprocesarConsultas:
+          type: boolean
+        backoffice:
+          type: boolean
+        editarContrato:
+          type: boolean
+        llenarConsultas:
+          type: boolean
+        corregirDictamen:
+          type: boolean
+        verAuditoria:
+          type: boolean
+        verVolumetria:
+          type: boolean
+
+    ErrorRegla:
+      type: object
+      required: [code, error]
+      properties:
+        code:
+          type: string
+          example: SIN_EMPRESA
+        error:
+          type: string

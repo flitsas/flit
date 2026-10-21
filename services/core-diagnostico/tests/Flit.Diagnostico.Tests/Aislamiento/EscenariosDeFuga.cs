@@ -50,9 +50,17 @@ public static class EscenariosDeFuga
     /// <summary>Sonda del arnés: un GET de prueba que lee por el contexto de datos, para que la suite nunca quede vacía.</summary>
     public const string RutaSonda = Program.Prefijo + "/__sonda-fuga/lecturas-backoffice";
 
+    /// <summary>
+    /// Sesión (HU #13724): no lee la base, todo sale del token. La URL de cada empresa lleva <c>?empresa=</c> con su id,
+    /// así que con el token de A la URL de B pide la compañía B por parámetro y no debe devolver nada de ella.
+    /// </summary>
+    public const string RutaSesion = Program.Prefijo + "/sesion";
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
+        new EscenarioDeFuga(RutaSesion, (empresa, _) =>
+            Task.FromResult(new Sembrado($"{RutaSesion}?empresa={empresa.Id}", [empresa.Id.ToString()]))),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

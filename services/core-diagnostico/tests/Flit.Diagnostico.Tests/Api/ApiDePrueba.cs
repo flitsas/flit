@@ -116,8 +116,17 @@ public sealed class ApiDePrueba : IAsyncDisposable
         return client;
     }
 
-    /// <summary>Token de producto firmado con la llave del JWKS de prueba (usuario ficticio; empresa ficticia si no se da).</summary>
-    public string Token(string audiencia = ServicioSettings.Codigo, Guid? empresa = null)
+    /// <summary>
+    /// Token de producto firmado con la llave del JWKS de prueba (usuario ficticio; empresa ficticia si no se da). Como el
+    /// de Identidad: un <c>role_code</c> por rol, <c>permissions</c> como arreglo JSON y <c>tenant_type</c> si se da
+    /// (HU #13724).
+    /// </summary>
+    public string Token(
+        string audiencia = ServicioSettings.Codigo,
+        Guid? empresa = null,
+        IReadOnlyList<string>? permisos = null,
+        IReadOnlyList<string>? roles = null,
+        string? tipoEmpresa = null)
     {
         var claims = new List<Claim>
         {
@@ -125,9 +134,11 @@ public sealed class ApiDePrueba : IAsyncDisposable
             new("email", "operador@empresa.test"),
             new("tenant_id", (empresa ?? Guid.NewGuid()).ToString()),
             new("company_name", "Empresa de prueba"),
-            new("role_code", "admin_diagnostico"),
-            new("permissions", "[]", JsonClaimValueTypes.JsonArray),
+            new("permissions", JsonSerializer.Serialize(permisos ?? []), JsonClaimValueTypes.JsonArray),
         };
+        claims.AddRange((roles ?? ["admin_diagnostico"]).Select(r => new Claim("role_code", r)));
+        if (tipoEmpresa is not null)
+            claims.Add(new Claim("tenant_type", tipoEmpresa));
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = Issuer,
