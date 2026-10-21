@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Comun;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,11 @@ public sealed class EntidadesConTenantTests
         SinEmpresaOSinFiltro(db.Model).Should().BeEmpty("toda entidad de negocio va por empresa");
         db.Model.FindEntityType(typeof(LecturaBackoffice)).Should().NotBeNull("diagnostico.lecturas_backoffice está mapeada");
         db.Model.FindEntityType(typeof(LecturaBackoffice))!.GetTableName().Should().Be("lecturas_backoffice");
+        foreach (var (entidad, tabla) in new[] { (typeof(ConfiguracionEmpresa), "configuracion_empresa"), (typeof(CambioContrato), "cambios_contrato") })
+        {
+            db.Model.FindEntityType(entidad).Should().NotBeNull($"diagnostico.{tabla} está mapeada (HU #13736)");
+            db.Model.FindEntityType(entidad)!.GetTableName().Should().Be(tabla);
+        }
     }
 
     [Fact]
