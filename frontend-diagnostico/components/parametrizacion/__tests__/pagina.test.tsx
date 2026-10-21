@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import NuevoDiagnostico from "@/app/(app)/diagnosticos/nuevo/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
-import { configuracion, sesion, simularApi, tiposOk } from "./datos";
+import { ID, configuracion, diagnostico, sesion, simularApi, tiposOk } from "./datos";
 
 // Uso de ejemplo: dentro del shell, /diagnosticos/nuevo pide GET /configuracion y pinta el formulario en tres secciones.
 
@@ -55,5 +55,22 @@ describe("/diagnosticos/nuevo — los cuatro estados", () => {
     expect(await screen.findByText(/no tienes permiso para crear diagnósticos/i)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(api.mock.calls.some(([url]) => url === "/api/v1/diagnostico/configuracion")).toBe(false);
+  });
+});
+
+describe("/diagnosticos/nuevo — paso de carga (HU #13754)", () => {
+  it("al crear la cabecera ofrece ir a la carga de vehículos de ese diagnóstico", async () => {
+    const api = montar(CREADOR);
+    api.mockImplementation(async (url: string, init?: RequestInit) => {
+      const metodo = init?.method ?? "GET";
+      if (url.endsWith("/sesion")) return Response.json(sesion(CREADOR));
+      if (url.endsWith("/configuracion")) return Response.json(configuracion());
+      if (url.endsWith("/tipos-tramite")) return tiposOk();
+      if (metodo === "POST" && url.endsWith("/diagnosticos")) return Response.json(diagnostico(), { status: 201 });
+      return Response.json({}, { status: 404 });
+    });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Nombre del diagnóstico" }), { target: { value: "Flota norte" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear diagnóstico" }));
+    expect(await screen.findByRole("link", { name: /cargar vehículos/i })).toHaveAttribute("href", `/diagnosticos/${ID}/carga`);
   });
 });

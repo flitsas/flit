@@ -29,10 +29,12 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const { method = "GET", body, signal } = options;
   if (isReauthenticating()) return waitForReload<T>();
 
+  // Un FormData (multipart de la carga masiva) viaja tal cual: el navegador pone el Content-Type con su boundary.
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData;
   const response = await fetch(`${API_PREFIX}${path}`, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined || multipart ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
     signal,
   });
   if (response.status === 204) return undefined as T;

@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FilePlus2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, FilePlus2 } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { FormularioParametrizacion } from "@/components/parametrizacion/FormularioParametrizacion";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
 
@@ -21,6 +22,8 @@ export default function NuevoDiagnostico() {
   const puedeCrear = sesion?.capacidades.crearDiagnosticos ?? false;
   const [intento, setIntento] = useState(0);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
+  // Id de la cabecera creada: habilita el paso de carga de vehículos (HU #13754).
+  const [creadoId, setCreadoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!puedeCrear) return;
@@ -67,7 +70,19 @@ export default function NuevoDiagnostico() {
       </InlineAlert>
     );
   } else {
-    contenido = <FormularioParametrizacion configuracion={carga.configuracion} />;
+    contenido = (
+      <>
+        <FormularioParametrizacion configuracion={carga.configuracion} onGuardado={(d) => setCreadoId(d.id)} />
+        {creadoId && (
+          <div className="flex justify-end">
+            <Link href={`/diagnosticos/${encodeURIComponent(creadoId)}/carga`} className={BOTON_PRIMARIO_CLS}>
+              Cargar vehículos
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+        )}
+      </>
+    );
   }
 
   return (

@@ -47,8 +47,9 @@ describe("sin formulario propio", () => {
       const codigo = readFileSync(archivo, "utf8");
       expect(codigo, archivo).not.toMatch(/type=["']password["']/);
       // Los campos de la pantalla 10 (HU #13744) y del formulario de parametrización (HU #13752) son de configuración y de
-      // la cabecera del diagnóstico, no de credenciales: el resto de la app sigue sin ningún <input>.
-      const conCampos = [join("components", "configuracion"), join("components", "parametrizacion")];
+      // la cabecera del diagnóstico, y los de la carga masiva (HU #13754) son el archivo y las filas de vehículos, no de
+      // credenciales: el resto de la app sigue sin ningún <input>.
+      const conCampos = [join("components", "configuracion"), join("components", "parametrizacion"), join("components", "carga")];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);
     }
