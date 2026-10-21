@@ -115,6 +115,45 @@ describe("CompanyRolesPanel — estados (AC4)", () => {
   });
 });
 
+describe("CompanyRolesPanel — sin códigos internos (HU #13666)", () => {
+  it("la columna Código muestra el código del rol propio y no el interno de un rol FLIT", async () => {
+    vi.mocked(getRoles).mockResolvedValue([{ ...global_, code: "AdminCompany", name: "Administrador de compañía" }, own]);
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    expect(screen.getByText("contador")).toBeInTheDocument();
+    expect(screen.getByText("Administrador de compañía")).toBeInTheDocument();
+    expect(screen.queryByText("AdminCompany")).not.toBeInTheDocument();
+  });
+
+  it("el editor muestra el nombre del módulo y del permiso, nunca el código", async () => {
+    vi.mocked(getGrantablePermissions).mockResolvedValue([
+      { id: "p1", slug: "dashboard.read", name: "Ver inicio", moduleCode: "dashboard", productCode: "tramites", moduleName: "Inicio" },
+      {
+        id: "p2",
+        slug: "consolidado-masivo.download",
+        name: "Descargar consolidados",
+        moduleCode: "consolidado-masivo",
+        productCode: "tramites",
+        moduleName: "Descarga masiva de consolidados",
+      },
+    ]);
+    const ue = userEvent.setup();
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(await within(dialog).findByText("Descarga masiva de consolidados")).toBeInTheDocument();
+    expect(within(dialog).getByText("Inicio")).toBeInTheDocument();
+    expect(within(dialog).getByText("Descargar consolidados")).toBeInTheDocument();
+    for (const raw of ["dashboard.read", "consolidado-masivo.download", "Consolidado-Masivo", "consolidado-masivo"]) {
+      expect(within(dialog).queryByText(raw)).not.toBeInTheDocument();
+    }
+  });
+});
+
 describe("CompanyRolesPanel — roles globales (AC1)", () => {
   it("el rol global solo se puede ver: sin editar ni eliminar, y el modal es de solo lectura", async () => {
     vi.mocked(getTenantRole).mockResolvedValue({ ...detail, id: "g1", code: "Radicador", name: "Radicador", tenantId: null });
@@ -127,7 +166,10 @@ describe("CompanyRolesPanel — roles globales (AC1)", () => {
     await ue.click(screen.getByRole("button", { name: /ver permisos de radicador/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText("tramites.read")).toBeInTheDocument();
+    // HU #13666: solo el nombre del permiso, sin el código interno; y sin el código del rol FLIT.
+    expect(await within(dialog).findByText("Ver trámites")).toBeInTheDocument();
+    expect(within(dialog).queryByText("tramites.read")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/^código/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /guardar/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(getGrantablePermissions).not.toHaveBeenCalled();

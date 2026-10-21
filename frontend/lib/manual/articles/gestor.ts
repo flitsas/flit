@@ -928,6 +928,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "6. Roles y permisos",
         paragraphs: [
           "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
+          "La columna «Código» muestra el código que escribiste para tus roles propios; los roles de FLIT no lo muestran. Al crear o editar un rol, cada módulo y cada permiso aparecen con su nombre, igual que en el resto de la plataforma.",
         ],
         bullets: [
           "1. Pulsa «Nuevo rol».",

@@ -44,6 +44,19 @@ const PRODUCT_LABEL: Record<string, string> = {
 };
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{1,49}$/;
 
+/**
+ * HU #13666: nombre del módulo tal como en el Panel SA (lo trae la API). Si una API anterior no lo envía, se usa el
+ * nombre conocido del tipo de servicio y, en último caso, el código con espacios y mayúscula inicial.
+ */
+function readableModuleName(moduleCode: string, perms: readonly GrantablePermission[]): string {
+  const fromApi = perms.find((p) => p.moduleName?.trim())?.moduleName?.trim();
+  if (fromApi) return fromApi;
+  const family = familyModuleName(moduleCode);
+  if (family) return family;
+  const text = moduleCode.replace(/[-_.]+/g, " ").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export type CompanyRoleFormMode =
   | { kind: "create" }
   | { kind: "edit"; role: TenantRole }
@@ -228,6 +241,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
         </p>
       ) : (
         <form id="company-role-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          {/* HU #13666: un rol de FLIT (solo lectura) no muestra su código interno; el del rol propio lo escribió la compañía. */}
+          {!readOnly && (
           <label className={LABEL_CLS}>
             Código
             <input
@@ -246,6 +261,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
               </span>
             )}
           </label>
+          )}
           <label className={LABEL_CLS}>
             Nombre
             <input
@@ -296,9 +312,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
               detail && detail.permissions.length > 0 ? (
                 <ul className="flex flex-col gap-1 text-sm text-[#162744] dark:text-white">
                   {detail.permissions.map((p) => (
-                    <li key={p.id}>
-                      {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
-                    </li>
+                    <li key={p.id}>{p.name}</li>
                   ))}
                 </ul>
               ) : (
@@ -313,13 +327,12 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                 const ids = perms.map((p) => p.id);
                 const allOn = ids.every((id) => selected.has(id));
                 const pair = findFamilyPair(perms);
-                const familyName = familyModuleName(moduleCode);
-                const moduleName = familyName ?? moduleCode;
+                const moduleName = readableModuleName(moduleCode, perms);
                 const rest = pair ? perms.filter((p) => p.id !== pair.read.id && p.id !== pair.create.id) : perms;
                 return (
                   <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
                     <label
-                      className={`flex items-center gap-2 text-sm font-semibold text-[#162744] dark:text-white ${familyName ? "" : "capitalize"}`}
+                      className="flex items-center gap-2 text-sm font-semibold text-[#162744] dark:text-white"
                     >
                       <input
                         type="checkbox"
@@ -352,9 +365,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                                 onChange={() => toggle(p.id)}
                                 className="mt-0.5 h-4 w-4 accent-[#557EFF]"
                               />
-                              <span>
-                                {p.name} <span className="font-mono text-xs text-[#59677D] dark:text-white/70">{p.slug}</span>
-                              </span>
+                              <span>{p.name}</span>
                             </label>
                           </li>
                         ))}
@@ -369,7 +380,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
           {dropped.length > 0 && (
             <p role="status" className="rounded-[10px] bg-[#FFF4E5] p-3 text-xs font-semibold text-[#C2410C]">
               {dropped.length === 1 ? "1 permiso de este rol" : `${dropped.length} permisos de este rol`} ya no se pueden
-              otorgar desde tu cuenta y se quitarán al guardar: {dropped.map((p) => p.slug).join(", ")}.
+              otorgar desde tu cuenta y se quitarán al guardar: {dropped.map((p) => p.name).join(", ")}.
             </p>
           )}
 

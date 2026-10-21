@@ -64,6 +64,8 @@ export interface GrantablePermission {
   name: string;
   moduleCode: string;
   productCode: string;
+  /** HU #13666: nombre legible del módulo (el mismo del Panel SA). */
+  moduleName?: string;
 }
 
 /** HU #13441: detalle de un rol visible para la compañía (permisos asignados incluidos). */

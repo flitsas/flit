@@ -181,7 +181,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             from p in db.RbacActions.AsNoTracking()
             join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
             where permissionIds.Contains(p.Id) && p.IsActive && p.DeletedAt == null && m.DeletedAt == null
-            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
+            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode, m.Name)
         ).ToListAsync(ct);
     }
 
@@ -202,7 +202,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
             where p.IsActive && p.DeletedAt == null && m.DeletedAt == null && productCodes.Contains(m.ProductCode)
             orderby m.Code, p.Slug
-            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode)
+            select new PermissionInfo(p.Id, p.Slug, p.Name, m.Code, m.ProductCode, m.Name)
         ).ToListAsync(ct);
     }
 

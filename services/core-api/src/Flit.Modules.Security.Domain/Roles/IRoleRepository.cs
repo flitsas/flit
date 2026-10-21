@@ -52,8 +52,11 @@ public interface IRoleRepository
     Task<IReadOnlyList<PermissionInfo>> ListGrantablePermissionsAsync(IReadOnlyCollection<string> productCodes, CancellationToken ct);
 }
 
-/// <summary>Un permiso con el producto de su módulo (HU #13441).</summary>
-public sealed record PermissionInfo(Guid Id, string Slug, string Name, string ModuleCode, string ProductCode);
+/// <summary>
+/// Un permiso con el producto de su módulo (HU #13441). HU #13666: <paramref name="ModuleName"/> es el nombre legible del
+/// módulo (el mismo del Panel SA), para que la compañía no vea códigos internos al armar un rol.
+/// </summary>
+public sealed record PermissionInfo(Guid Id, string Slug, string Name, string ModuleCode, string ProductCode, string ModuleName = "");
 
 public sealed record CreateRoleData(
     string TargetEntityType,

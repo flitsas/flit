@@ -114,7 +114,8 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
               {pg.paginar(roles).map((r) => (
                 <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                   <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono opacity-80" style={{ borderColor: "#DFE5ED" }}>
-                    {r.code}
+                    {/* HU #13666: el código del rol propio lo escribió la compañía; el de un rol FLIT es interno y no se muestra. */}
+                    {isOwnRole(r) ? r.code : <span aria-label="Sin código">—</span>}
                   </td>
                   <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                     <span className="block font-semibold">{r.name}</span>
