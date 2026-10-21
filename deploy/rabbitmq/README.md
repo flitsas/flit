@@ -24,7 +24,7 @@ contenedor por ambiente (hasta k3s), virtual host `flit`, un usuario por servici
    ```
 
    Servicios y su exchange: `tramites` (core-api, `flit.tramites`), `plataforma` (core-identity, `flit.plataforma`),
-   `consultas` (core-consultas), `notificaciones` (core-notificaciones).
+   `consultas` (core-consultas), `notificaciones` (core-notificaciones), `diagnostico` (core-diagnostico, HU #13734).
 
 ## Permisos
 

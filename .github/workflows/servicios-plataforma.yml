@@ -19,6 +19,8 @@ on:
       - 'services/core-api/src/Flit.Queries.Domain/**'
       - 'services/core-api/src/Flit.Tramites.Grpc.Contracts/**'
       - 'services/core-identity/src/Flit.Platform.Grpc.Contracts/**'
+      # HU #13734: core-diagnostico y core-comparendos compilan también el contrato gRPC de Identidad.
+      - 'services/core-identity/src/Flit.Identidad.Grpc.Contracts/**'
       - 'contracts/proto/**'
       - '.github/workflows/servicios-plataforma.yml'
       - '.github/scripts/servicios-plataforma.sh'
@@ -36,6 +38,8 @@ on:
       - 'services/core-api/src/Flit.Queries.Domain/**'
       - 'services/core-api/src/Flit.Tramites.Grpc.Contracts/**'
       - 'services/core-identity/src/Flit.Platform.Grpc.Contracts/**'
+      # HU #13734: core-diagnostico y core-comparendos compilan también el contrato gRPC de Identidad.
+      - 'services/core-identity/src/Flit.Identidad.Grpc.Contracts/**'
       - 'contracts/proto/**'
       - '.github/workflows/servicios-plataforma.yml'
       - '.github/scripts/servicios-plataforma.sh'

@@ -152,6 +152,7 @@ no se reutilizan.
 | Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
 | API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
 | Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
+| API de Diagnóstico (`core-diagnostico`, sin publicar) | `4029` | `5029` | `6029` |
 | `core-identity` | `4025` | `5025` | `6025` |
 
 - Bloque `x022`–`x025` (2026-10-06): un puerto por producto, el de su app web, que es a donde apunta nginx. Si un
@@ -159,7 +160,8 @@ no se reutilizan.
 - En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
 - `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
   `CORE_IDENTITY_PORT`); Comparendos ya los tiene (`COMPARENDOS_PORT`, `CORE_COMPARENDOS_PORT`;
-  perfil `comparendos`, ver `docs/suite/handoff-vps-comparendos.md`); Diagnóstico se agrega cuando se despliegue (L-10). El producto `demo` se retiró (DDL 125).
+  perfil `comparendos`, ver `docs/suite/handoff-vps-comparendos.md`); Diagnóstico también (`DIAGNOSTICO_PORT`,
+  `CORE_DIAGNOSTICO_PORT`; perfil `diagnostico`, HU #13734, ver `docs/suite/handoff-vps-diagnostico.md`). El producto `demo` se retiró (DDL 125).
 - Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
 
 #### Puertos gRPC internos (contrato v1.3 §11, Epic #13316)
@@ -173,6 +175,7 @@ su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto apart
 | `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
 | `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
 | `core-comparendos` (`flit.comparendos.v1`) | `8086` (propuesto) | `CORE_COMPARENDOS_GRPC_PORT` | Perfil `comparendos`; encendido en [handoff-vps-comparendos.md](suite/handoff-vps-comparendos.md) |
+| `core-diagnostico` (`flit.diagnostico.v1`) | `8087` | `CORE_DIAGNOSTICO_GRPC_PORT` | Decidido (RD-4, 2026-10-21). Perfil `diagnostico`; REST interno `CORE_DIAGNOSTICO_PORT` 4029; encendido en [handoff-vps-diagnostico.md](suite/handoff-vps-diagnostico.md) |
 
 ---
 

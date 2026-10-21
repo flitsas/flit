@@ -1,0 +1,68 @@
+name: Configuración de despliegue
+
+# HU #13734 (F00.1-H8): valida la configuración de despliegue sin desplegar nada. El compose de producción resuelve con
+# el perfil de cada producto, ningún puerto queda asignado a dos servicios y Diagnóstico trae sus jobs de CD, su CI,
+# sus puertos y su cliente de servicio sin secretos (.github/scripts/test_despliegue_diagnostico.py).
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'docker-compose.prod.yml'
+      - '.env.prod.example'
+      - 'docs/despliegue-y-puertos.md'
+      - '.github/workflows/cd.yml'
+      - '.github/workflows/servicios-plataforma.yml'
+      - '.github/workflows/despliegue-config.yml'
+      - '.github/scripts/**'
+      - 'services/core-api/src/Flit.Api/appsettings.json'
+      - 'services/core-diagnostico/Dockerfile'
+      - 'services/core-diagnostico/src/Flit.Diagnostico.Api/ServicioSettings.cs'
+      - 'frontend-diagnostico/Dockerfile'
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'docker-compose.prod.yml'
+      - '.env.prod.example'
+      - 'docs/despliegue-y-puertos.md'
+      - '.github/workflows/cd.yml'
+      - '.github/workflows/servicios-plataforma.yml'
+      - '.github/workflows/despliegue-config.yml'
+      - '.github/scripts/**'
+      - 'services/core-api/src/Flit.Api/appsettings.json'
+      - 'services/core-diagnostico/Dockerfile'
+      - 'services/core-diagnostico/src/Flit.Diagnostico.Api/ServicioSettings.cs'
+      - 'frontend-diagnostico/Dockerfile'
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Puertos, CD, CI y cliente de servicio
+        run: |
+          python -m pip install --quiet pyyaml==6.0.3
+          python -m unittest discover -s .github/scripts -p "test_despliegue_*.py" -v
+
+      # Valores de relleno solo para que resuelvan las variables obligatorias (${VAR:?...}); no son secretos.
+      - name: docker compose config por perfil
+        env:
+          FLIT_SUITE_ENV: dev
+          CORS_ORIGIN: https://dev.flitsas.online
+          RABBITMQ_URL_PLATAFORMA: amqp://ci:ci@rabbitmq:5672/flit
+          RABBITMQ_URL_TRAMITES: amqp://ci:ci@rabbitmq:5672/flit
+          SVC_TRAMITES_CLIENT_SECRET: ci-relleno
+        run: |
+          docker compose -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.prod.yml --profile diagnostico config --quiet
+          servicios=$(docker compose -f docker-compose.prod.yml --profile diagnostico config --services)
+          for svc in core-diagnostico frontend-diagnostico; do
+            echo "$servicios" | grep -qx "$svc" || { echo "::error::el perfil diagnostico no resuelve $svc"; exit 1; }
+          done

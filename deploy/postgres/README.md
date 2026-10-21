@@ -9,6 +9,7 @@ sus datos, en su esquema y con su usuario. Ningún servicio lee el esquema de ot
 |---|---|---|---|
 | core-consultas | `flit_consultas` | `consultas` | Con este script, antes de su primer despliegue |
 | core-notificaciones | `flit_notificaciones` | `notificaciones` | Con este script, antes de su primer despliegue |
+| core-diagnostico | `flit_diagnostico` | `diagnostico` | Con este script (`-v servicio=diagnostico`), antes de su primer despliegue (HU #13734) |
 | core-api, core-identity, core-ict | el actual de `CONNECTION_STRING_CORE` | varios | **Sin cambios por ahora**: Trámites todavía lee las tablas de Identidad y los tres comparten el usuario dueño. Se separan cuando se pague esa deuda (ver la Epic #13316, «después») |
 
 La regla estricta aplica desde los servicios nuevos: nacen aislados y no hay que separarlos después.

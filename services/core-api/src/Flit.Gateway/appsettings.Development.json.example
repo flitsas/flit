@@ -38,6 +38,11 @@
         "Destinations": {
           "core-comparendos-1": { "Address": "http://127.0.0.1:4028/" }
         }
+      },
+      "core-diagnostico-cluster": {
+        "Destinations": {
+          "core-diagnostico-1": { "Address": "http://127.0.0.1:4029/" }
+        }
       }
     }
   }

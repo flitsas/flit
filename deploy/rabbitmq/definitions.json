@@ -5,7 +5,8 @@
     { "name": "flit.plataforma", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
     { "name": "flit.tramites", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
     { "name": "flit.consultas", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
-    { "name": "flit.notificaciones", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
+    { "name": "flit.notificaciones", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "flit.diagnostico", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
   ],
   "queues": [],
   "bindings": [],
