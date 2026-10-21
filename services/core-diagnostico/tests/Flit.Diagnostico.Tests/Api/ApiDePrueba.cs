@@ -199,8 +199,17 @@ public sealed class ApiDePrueba : IAsyncDisposable
         b.Services.AddSingleton<IProductosHabilitados>(Productos);
         b.Services.AddSingleton<Flit.Tramites.Grpc.V1.CatalogosService.CatalogosServiceClient>(Catalogos);
         b.Services.AddScoped<ICatalogoTiposTramite, CatalogoTiposTramiteGrpc>();
+        // HU #13733: las pruebas anteriores a la guardia de fuentes sin adaptador habilitan y piden fuentes que en D2 no
+        // tienen adaptador; aquí todas cuentan como con adaptador. FuentesSinAdaptadorTests quita este doble y prueba el real.
+        b.Services.AddSingleton<Flit.Diagnostico.Api.Modulos.Consultas.IRegistroAdaptadores>(new TodasConAdaptador());
         _configurar?.Invoke(b);
     });
+
+    /// <summary>Doble del registro de adaptadores: toda fuente cuenta como con adaptador (HU #13733).</summary>
+    private sealed class TodasConAdaptador : Flit.Diagnostico.Api.Modulos.Consultas.IRegistroAdaptadores
+    {
+        public bool TieneAdaptador(Flit.Diagnostico.Domain.Consultas.Fuente fuente) => true;
+    }
 
     private sealed class Jwks(RsaSecurityKey key) : HttpMessageHandler
     {

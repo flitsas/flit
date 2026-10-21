@@ -19,7 +19,7 @@ namespace Flit.Diagnostico.Api.Modulos.Diagnosticos;
 /// campo); el catálogo caído responde 503 como F01-H2.
 /// </summary>
 public sealed class ServicioCabecera(
-    DiagnosticoDb db, UsuarioActual usuario, ICatalogoTiposTramite catalogo, DisponibilidadFuentes disponibilidad, TimeProvider reloj)
+    DiagnosticoDb db, UsuarioActual usuario, ICatalogoTiposTramite catalogo, Consultas.FuentesDisponibles disponibilidad, TimeProvider reloj)
 {
     public const string CodigoNoEditable = "DIAGNOSTICO_NO_EDITABLE";
     public const string CampoModo = "modo";

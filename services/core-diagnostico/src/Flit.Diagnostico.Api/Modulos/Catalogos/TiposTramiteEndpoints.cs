@@ -19,7 +19,10 @@ internal static class TiposTramiteEndpoints
     /// <summary>Dirección del gRPC de core-api (en el compose, <c>http://core-api:8082</c>).</summary>
     public const string ClaveDireccion = "Diagnostico:Tramites:Address";
 
-    /// <summary>Registra el cliente gRPC con el token de svc-diagnostico; sin dirección, el catálogo queda no conectado.</summary>
+    /// <summary>
+    /// Registra el cliente gRPC con el token de svc-diagnostico para los tipos de trámite y la réplica de organismos (HU
+    /// #13733); sin dirección, los dos catálogos quedan no conectados y la réplica no se sincroniza.
+    /// </summary>
     public static IServiceCollection AddCatalogoTiposTramite(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -29,12 +32,17 @@ internal static class TiposTramiteEndpoints
             services.AddFlitGrpcClient<Flit.Tramites.Grpc.V1.CatalogosService.CatalogosServiceClient>(
                 configuration, new Uri(tramites), "platform.tramites.catalogos", o => o.Deadline = CatalogoTiposTramiteGrpc.PlazoPorLlamada);
             services.TryAddScoped<ICatalogoTiposTramite, CatalogoTiposTramiteGrpc>();
+            // HU #13733: réplica de organismos por el mismo cliente gRPC, al arrancar y cada día.
+            services.TryAddScoped<ICatalogoOrganismosPlataforma, CatalogoOrganismosGrpc>();
+            services.AddHostedService<TrabajadorSincronizacionOrganismos>();
         }
         else
         {
             services.TryAddSingleton<ICatalogoTiposTramite, CatalogoTiposTramiteNoConectado>();
+            services.TryAddSingleton<ICatalogoOrganismosPlataforma, CatalogoOrganismosNoConectado>();
         }
 
+        services.AddScoped<SincronizacionOrganismos>();
         return services;
     }
 

@@ -220,8 +220,9 @@ paths:
         disparador AUTO), en la misma transacción. Validación (422 con code y campo, sin guardar nada), en este orden:
         nombre vacío o de más de 150 caracteres (NOMBRE_INVALIDO); fuente en un grupo que no es el suyo
         (FUENTE_EN_GRUPO_AJENO); alcance sin RUNT (ALCANCE_SIN_RUNT); fuente fuera de fuentes_habilitadas
-        (FUENTE_NO_HABILITADA); fuente habilitada sin adaptador disponible, como IMPUESTO_DEPARTAMENTAL mientras
-        Diagnostico:Fuentes:ImpuestoDisponible sea false (FUENTE_NO_DISPONIBLE); CON_ANALISIS sin tipo
+        (FUENTE_NO_HABILITADA); fuente habilitada sin adaptador registrado (en D2 solo RUNT lo tiene, HU #13733) o
+        IMPUESTO_DEPARTAMENTAL mientras Diagnostico:Fuentes:ImpuestoDisponible sea false (FUENTE_NO_DISPONIBLE);
+        CON_ANALISIS sin tipo
         (TIPO_TRAMITE_REQUERIDO). Solo si todo eso se cumple y el modo es CON_ANALISIS se consulta el catálogo de
         GET /tipos-tramite: tipo fuera del catálogo de la etapa (TIPO_TRAMITE_NO_DISPONIBLE) o faltan las fuentes
         obligatorias del tipo (FUENTES_OBLIGATORIAS_FALTANTES, R-17; la lista llega vacía en D1). Un modo o una fuente
@@ -780,8 +781,9 @@ paths:
         recorte) queda en diagnostico.cambios_contrato con el usuario, la compañía, el valor anterior y el nuevo;
         el PUT no se registra en lecturas_backoffice. Orden de validación: un campo que no es del contrato da
         403 CAMPO_NO_EDITABLE; un valor fuera de conjunto, 422 VALOR_FUERA_DE_CONJUNTO; un límite que no es un
-        entero positivo, 422 LIMITE_INVALIDO; habilitar IMPUESTO_DEPARTAMENTAL mientras
-        Diagnostico:Fuentes:ImpuestoDisponible sea false (C3, R-9), 422 FUENTE_NO_DISPONIBLE. Con un error no
+        entero positivo, 422 LIMITE_INVALIDO; habilitar una fuente sin adaptador registrado (en D2 solo RUNT lo
+        tiene, HU #13733) o IMPUESTO_DEPARTAMENTAL mientras Diagnostico:Fuentes:ImpuestoDisponible sea false
+        (C3, R-9), 422 FUENTE_NO_DISPONIBLE. Con un error no
         se guarda ningún campo.
       requestBody:
         required: true

@@ -16,7 +16,7 @@ namespace Flit.Diagnostico.Api.Modulos.Configuracion;
 /// conjunto, el límite no es positivo, una fuente por defecto no está habilitada o se habilita una fuente no disponible. Un
 /// CHECK de la base que aun así falle (23514) lo traduce <see cref="ManejadorReglas"/> a 422 <c>VALOR_INVALIDO</c>.
 /// </summary>
-public sealed class ServicioConfiguracion(DiagnosticoDb db, UsuarioActual usuario, DisponibilidadFuentes disponibilidad, TimeProvider reloj)
+public sealed class ServicioConfiguracion(DiagnosticoDb db, UsuarioActual usuario, Consultas.FuentesDisponibles disponibilidad, TimeProvider reloj)
 {
     public const string CampoFuentesHabilitadas = "fuentes_habilitadas";
     public const string CampoLimiteVehiculosLote = "limite_vehiculos_lote";

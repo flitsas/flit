@@ -1,3 +1,5 @@
+using Flit.Diagnostico.Api.Modulos.Catalogos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +12,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// vehículo (<see cref="LiberarCeldasDelVehiculoAsync"/>); si quedó en ERROR, pasan a ERROR con
 /// <see cref="BloqueadaPorRunt"/> sin que se llame ninguna otra fuente (<see cref="BloquearCeldasDelVehiculoAsync"/>). Solo
 /// toca las celdas de ESE vehículo: el resto del lote sigue. Escribe con el contexto de la celda (filtro y validación de su
-/// empresa); las reglas N/A que se evalúan antes de liberar son de F03-H5.
+/// empresa). Antes de liberar (HU #13733, F03-H5) deriva el departamento del organismo y aplica
+/// <see cref="ReglasAplicabilidad"/>: las celdas que no aplican quedan en NA con su motivo, sin llamar a ninguna fuente ni
+/// consumir. Solo RUNT bloquea al vehículo: el ERROR de otra celda (las de persona, R-24) no toca las demás.
 /// </summary>
 /// <example>
 /// <code>
@@ -54,9 +58,11 @@ internal static class OrquestadorVehiculo
     /// <summary>
     /// Deja tomables ya (<c>disponible_desde = ahora</c>) las demás celdas del vehículo que esperaban a RUNT: las PENDIENTE
     /// diferidas y las ERROR con <see cref="BloqueadaPorRunt"/> (estas vuelven a PENDIENTE con <c>intentos_auto=0</c>, para el
-    /// reproceso de F03-H8). No toca COMPLETADO, NA ni ERROR por otra causa. No guarda: lo hace quien cierra la celda.
+    /// reproceso de F03-H8). Antes deriva <c>vehiculos.departamento_codigo</c> del organismo (<see cref="DerivacionDepartamento"/>)
+    /// y evalúa <see cref="ReglasAplicabilidad"/>: la celda que no aplica pasa a NA con su motivo en lugar de liberarse (HU
+    /// #13733). No toca COMPLETADO, NA ni ERROR por otra causa. No guarda: lo hace quien cierra la celda.
     /// </summary>
-    /// <returns>Cuántas celdas liberó.</returns>
+    /// <returns>Cuántas celdas liberó (sin contar las que quedaron en NA).</returns>
     public static async Task<int> LiberarCeldasDelVehiculoAsync(DiagnosticoDb db, Guid vehiculoId, DateTimeOffset ahora, long versionTablero, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -65,17 +71,34 @@ internal static class OrquestadorVehiculo
                 && ((c.Estado == EstadoCelda.Pendiente && c.DisponibleDesde > ahora)
                     || (c.Estado == EstadoCelda.Error && c.TipoError == BloqueadaPorRunt)))
             .ToListAsync(ct).ConfigureAwait(false);
+        var hechos = await HechosAsync(db, vehiculoId, ct).ConfigureAwait(false);
+        var liberadas = 0;
         foreach (var c in celdas)
         {
-            c.Estado = EstadoCelda.Pendiente;
+            var motivo = ReglasAplicabilidad.Evaluar(c.Fuente, hechos);
+            c.Estado = motivo is null ? EstadoCelda.Pendiente : EstadoCelda.Na;
+            c.MotivoNa = motivo;
             c.TipoError = null;
             c.IntentosAuto = 0;
             c.DisponibleDesde = ahora;
             c.ActualizadoEn = ahora;
             c.VersionTablero = versionTablero;
+            liberadas += motivo is null ? 1 : 0;
         }
 
-        return celdas.Count;
+        return liberadas;
+    }
+
+    /// <summary>
+    /// Los hechos del vehículo para las reglas de no aplica, con lo que acaba de dejar la RUNT (la entidad seguida por el
+    /// contexto conserva los cambios del ejecutor aún sin guardar). Fija el departamento derivado en el vehículo.
+    /// </summary>
+    private static async Task<HechosAplicabilidad> HechosAsync(DiagnosticoDb db, Guid vehiculoId, CancellationToken ct)
+    {
+        var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == vehiculoId, ct).ConfigureAwait(false);
+        vehiculo.DepartamentoCodigo = await DerivacionDepartamento.DerivarAsync(db, vehiculo.OrganismoNombre, ct).ConfigureAwait(false);
+        var soportado = await DerivacionDepartamento.SoportadoAsync(db, vehiculo.DepartamentoCodigo, ct).ConfigureAwait(false);
+        return new HechosAplicabilidad(vehiculo.Servicio, vehiculo.DepartamentoCodigo, soportado, vehiculo.LocatarioDocOrigen);
     }
 
     /// <summary>

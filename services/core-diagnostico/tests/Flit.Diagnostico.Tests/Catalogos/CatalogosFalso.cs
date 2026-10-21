@@ -30,6 +30,9 @@ public sealed class CatalogosFalso : CatalogosService.CatalogosServiceClient
         new() { Codigo = "TRASPASO_UNILATERAL", Nombre = "TRASPASO UNILATERAL", Familia = "TRASPASO", Activo = true, WizardEnabled = true },
     ];
 
+    /// <summary>Organismos de tránsito de prueba que responde <c>ListarOrganismosTransito</c> (HU #13733); vacío por defecto.</summary>
+    public List<OrganismoTransito> Organismos { get; } = [];
+
     /// <summary>Si tiene valor, toda llamada falla con ese código.</summary>
     public StatusCode? FallaSiempre { get; set; }
 
@@ -49,6 +52,13 @@ public sealed class CatalogosFalso : CatalogosService.CatalogosServiceClient
             ? Task.FromException<ListarTiposTramiteResponse>(new RpcException(new Status(codigo, "falla de prueba")))
             : Task.FromResult(Respuesta());
         return new AsyncUnaryCall<ListarTiposTramiteResponse>(respuesta, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => [], () => { });
+    }
+
+    public override AsyncUnaryCall<ListarOrganismosTransitoResponse> ListarOrganismosTransitoAsync(ListarOrganismosTransitoRequest request, CallOptions options)
+    {
+        var r = new ListarOrganismosTransitoResponse();
+        r.Organismos.AddRange(Organismos);
+        return new AsyncUnaryCall<ListarOrganismosTransitoResponse>(Task.FromResult(r), Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => [], () => { });
     }
 
     private ListarTiposTramiteResponse Respuesta()

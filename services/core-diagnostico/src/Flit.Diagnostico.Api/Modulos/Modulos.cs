@@ -50,7 +50,8 @@ public static class Modulos
 
     /// <summary>
     /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
-    /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza), el procesador
+    /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza),
+    /// el registro de adaptadores y el catálogo de fuentes disponibles que de él se deriva (HU #13733), el procesador
     /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar. El trabajador en segundo
     /// plano solo se registra con <c>Diagnostico:Procesador:Habilitado=true</c>; no mira <c>IHostEnvironment</c>.
     /// </summary>
@@ -60,6 +61,9 @@ public static class Modulos
         services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Consultas.EncoladorConsultas>();
         services.AddScoped<Trabajos.ColaConsultas>();
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaRunt>();
+        // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
+        services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
+        services.AddSingleton<Consultas.FuentesDisponibles>();
         services.AddTransient<Trabajos.ProcesadorConsultas>();
         services.AddOptions<Trabajos.OpcionesProcesador>()
             .Bind(configuration.GetSection(Trabajos.OpcionesProcesador.Seccion))
