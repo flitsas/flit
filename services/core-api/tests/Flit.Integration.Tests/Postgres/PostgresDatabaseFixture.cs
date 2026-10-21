@@ -112,6 +112,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // tablas RBAC (security.roles, role_permissions): la prueba que los necesite reaplica el DDL 137.
         "security.modules",
         "security.permissions",
+        // HU #13655 (DDL 147): permisos base del rol «Gestor OT» que crea la migración. Se trunca con roles y permisos;
+        // la prueba que los necesite reaplica los DDL 137 y 147.
+        "security.role_permissions",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

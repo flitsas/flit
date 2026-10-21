@@ -24,6 +24,13 @@ public static class DevelopmentAuthSeeder
     public const string OtSabanetaEmail = "otsabaneta@flit.local";
     public const string OtSabanetaPassword = "OtSabaneta1!";
 
+    /// <summary>Gestor OT de Sabaneta (DEV, HU #13655): operador no administrador del organismo.</summary>
+    public const string GestorOtSabanetaEmail = "gestorot@flit.local";
+    public const string GestorOtSabanetaPassword = "GestorOt1!";
+
+    /// <summary>Código del rol de sistema «Gestor OT» (lo crea la migración HU13655_RolGestorOt, DDL 147).</summary>
+    public const string GestorOtRoleCode = "gestor_tramites_ot";
+
     /// <summary>Admin OT Envigado (DEV) — tenant vinculado al catálogo RUNT 5266000.</summary>
     public const string OtEnvigadoEmail = "otenvigado@flit.local";
     public const string OtEnvigadoPassword = "OtEnvigado1!";
@@ -68,6 +75,9 @@ public static class DevelopmentAuthSeeder
 
     public static readonly Guid OtSabanetaProfileId =
         Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76d");
+
+    public static readonly Guid GestorOtSabanetaUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d3");
 
     /// <summary>Tenant OT Envigado (DEV) — perfil → catálogo <c>5266000</c>.</summary>
     public static readonly Guid OtEnvigadoTenantId =
@@ -121,6 +131,7 @@ public static class DevelopmentAuthSeeder
             await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
             await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
             await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
+            await SeedSabanetaGestorOtAsync(db, passwordHasher, cancellationToken);
             await SeedEnvigadoOtAdminAsync(db, passwordHasher, cancellationToken);
         }
 
@@ -658,6 +669,78 @@ public static class DevelopmentAuthSeeder
 
         await db.SaveChangesAsync(cancellationToken);
         await EnsureOtAdminAssignmentAsync(db, OtSabanetaUserId, tenantId, cancellationToken);
+    }
+
+    /// <summary>
+    /// HU #13655 — usuario <see cref="GestorOtSabanetaEmail"/> con el rol «Gestor OT» en el organismo de Sabaneta, para
+    /// probar en pantalla que el Admin OT le ajusta permisos individuales. Solo datos demo (Development). Idempotente:
+    /// si el usuario ya tiene un rol en Sabaneta no se toca (un cambio de rol hecho por la UI se conserva). Si el rol
+    /// todavía no existe (migración sin aplicar) no se crea aquí: es de la migración.
+    /// </summary>
+    private static async Task SeedSabanetaGestorOtAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var profile = await db.TransitOfficeProfiles.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == OtSabanetaCatalogOfficeId, cancellationToken);
+        var role = await db.Roles.AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.Code == GestorOtRoleCode && r.TargetEntityType == "TRANSIT_OFFICE" && r.TenantId == null
+                    && r.DeletedAt == null,
+                cancellationToken);
+        if (profile is null || role is null)
+            return;
+
+        var tenantId = profile.TenantId;
+        var now = DateTimeOffset.UtcNow;
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == GestorOtSabanetaEmail, cancellationToken);
+        if (user is null)
+        {
+            user = new User
+            {
+                Id = GestorOtSabanetaUserId,
+                Email = GestorOtSabanetaEmail,
+                DisplayName = "Gestor OT Sabaneta",
+                Status = "active",
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Users.Add(user);
+            db.UserCredentials.Add(new UserCredential
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = user.Id,
+                PasswordHash = passwordHasher.Hash(GestorOtSabanetaPassword),
+                MustChangePassword = false,
+                FailedLoginAttempts = 0,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            await EnsureUserCredentialsAsync(db, user.Id, GestorOtSabanetaPassword, passwordHasher, cancellationToken);
+        }
+
+        var hasRoleInTenant = await db.UserRoleAssignments
+            .AnyAsync(a => a.UserId == user.Id && a.TenantId == tenantId && a.DeletedAt == null, cancellationToken);
+        if (hasRoleInTenant)
+            return;
+
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            UserId = user.Id,
+            RoleId = role.Id,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
