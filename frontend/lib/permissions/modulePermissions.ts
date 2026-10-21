@@ -114,12 +114,12 @@ export function withOverrideActions(modules: AccessibleModule[], overrides: User
   if (extra.length === 0) return modules;
   const result = modules.map((m) => ({ ...m, actions: [...m.actions] }));
   for (const o of extra) {
-    let module = result.find((m) => m.code === o.moduleCode);
-    if (!module) {
-      module = { id: o.moduleCode!, code: o.moduleCode!, name: o.moduleName ?? o.moduleCode!, sortOrder: Number.MAX_SAFE_INTEGER, actions: [], productCode: o.productCode };
-      result.push(module);
+    let target = result.find((m) => m.code === o.moduleCode);
+    if (!target) {
+      target = { id: o.moduleCode!, code: o.moduleCode!, name: o.moduleName ?? o.moduleCode!, sortOrder: Number.MAX_SAFE_INTEGER, actions: [], productCode: o.productCode };
+      result.push(target);
     }
-    module.actions.push({ id: o.permissionId, slug: o.slug, name: o.name ?? o.slug });
+    target.actions.push({ id: o.permissionId, slug: o.slug, name: o.name ?? o.slug });
   }
   return result;
 }
