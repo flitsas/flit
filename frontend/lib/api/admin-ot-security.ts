@@ -34,10 +34,10 @@ export interface InviteOtUserRequest {
   email: string;
   fullName?: string;
   /**
-   * Roles del catálogo TRANSIT_OFFICE con los que entra el usuario. Si se omite, el backend
-   * conserva el comportamiento histórico y asigna el rol de sistema `ot_admin`.
+   * Rol del catálogo TRANSIT_OFFICE con el que entra el usuario (exactamente uno). HU #13655: es obligatorio;
+   * sin él el backend responde 400 `ROLE_REQUIRED`.
    */
-  roleIds?: string[];
+  roleIds: string[];
 }
 
 export interface InviteOtUserResponse {

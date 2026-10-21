@@ -252,21 +252,22 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
     }
 
     [Fact]
-    public async Task InviteOtUser_WithoutRoleIds_StillForcesOtAdmin()
+    public async Task InviteOtUser_WithoutRoleIds_Returns400RoleRequired()
     {
+        // HU #13655: el rol es obligatorio; ya no se fuerza Administrador OT cuando no llega.
         var email = $"ot-rol-forzado-{Guid.NewGuid():N}@flit.local";
 
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/admin/ot/users/invite?transitOfficeId={_transitOfficeId}",
-            new { email, fullName = "Admin OT por defecto" },
+            new { email, fullName = "Sin rol" },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("ROLE_REQUIRED");
 
         await using var db = CreateDbContext();
-        var invitation = await db.UserInvitations.AsNoTracking()
-            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
-        invitation.RoleId.Should().Be(_otAdminRoleId);
+        (await db.UserInvitations.AsNoTracking()
+            .AnyAsync(i => i.Email == email, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]

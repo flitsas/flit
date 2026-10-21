@@ -495,12 +495,11 @@ public static partial class AdminOtEndpoints
         // que SuperAdmin invite al primer adminOT de un tenant recién creado
         // (?transitOfficeId=, resuelto contra admin.transit_office_profiles) como para
         // que un ot_admin autogestione sus propios colaboradores (siempre su tenant del
-        // JWT, ignora el query param). No se crean roles personalizados: todo invitado
-        // recibe el único rol ot_admin del tenant.
+        // JWT, ignora el query param). HU #13655: el rol es obligatorio (400 ROLE_REQUIRED sin él).
         group.MapPost("/users/invite", InviteUserAsync)
             .WithName("AdminOtInviteUser")
             .WithSummary("Invita un usuario al tenant OT")
-            .WithDescription("Crea una invitación por email con el rol ot_admin del tenant resuelto (propio "
+            .WithDescription("Crea una invitación por email con el rol elegido (obligatorio; 400 ROLE_REQUIRED sin él) en el tenant resuelto (propio "
                 + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). 409 si ya hay una "
                 + "invitación pendiente o si el correo ya tiene cuenta.")
             .Produces(StatusCodes.Status201Created)
@@ -2642,13 +2641,9 @@ public static partial class AdminOtEndpoints
             return Results.Unauthorized();
         }
 
-        // El alta OT ya no fuerza siempre ot_admin: acepta los roles que el administrador
-        // seleccione del catálogo TRANSIT_OFFICE. Sin selección explícita se conserva el
-        // comportamiento histórico (ot_admin), para no romper a los clientes existentes.
-        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así que
-        // se resuelve por Code únicamente (una sola fila ot_admin en todo el sistema).
+        // El alta OT recibe el rol que elige quien invita, del catálogo TRANSIT_OFFICE.
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id).
         var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
-        List<Guid> roleIds;
 
         // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese rol.
         if (requestedRoleIds.Count > 1)
@@ -2658,70 +2653,51 @@ public static partial class AdminOtEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        // HU #13655: quien invita sin ser Admin OT ni SuperAdmin (un Gestor OT al que el Admin OT le delegó Usuarios)
-        // elige el rol y no puede repartir el de administrador: sin esto invitaría Admin OT (el rol por defecto).
-        var invitaAdministrador = IsSuperAdmin(httpContext.User)
-            || RequestTenantResolver.HasRole(httpContext.User, AdminAuthorization.OtAdminRole);
-        if (!invitaAdministrador && requestedRoleIds.Count == 0)
+        // HU #13655: el rol es obligatorio para todos (Admin OT, Super Admin y Gestor OT con Usuarios delegado). Antes,
+        // sin rol se asignaba Administrador OT en silencio; ahora quien invita lo elige siempre.
+        if (requestedRoleIds.Count == 0)
         {
             return Results.Json(
-                new { error = "ROLE_REQUIRED", message = "Elige el rol del usuario." },
+                new { error = "ROLE_REQUIRED", message = "Elige el rol de la persona." },
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        if (requestedRoleIds.Count == 0)
+        // Solo el Admin OT y el Super Admin reparten el rol de administrador.
+        var invitaAdministrador = IsSuperAdmin(httpContext.User)
+            || RequestTenantResolver.HasRole(httpContext.User, AdminAuthorization.OtAdminRole);
+
+        var selectedRoles = await db.Roles.AsNoTracking()
+            .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null
+                && (r.TenantId == null || r.TenantId == tenantId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (selectedRoles.Count != requestedRoleIds.Count)
         {
-            var role = await db.Roles.AsNoTracking()
-                .FirstOrDefaultAsync(
-                    r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null
-                        && (r.TenantId == null || r.TenantId == tenantId),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            if (role is null)
-            {
-                return Results.Json(
-                    new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
-                    statusCode: StatusCodes.Status409Conflict);
-            }
-
-            roleIds = [role.Id];
+            return Results.Json(
+                new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles seleccionados no existe o está inactivo." },
+                statusCode: StatusCodes.Status404NotFound);
         }
-        else
+
+        if (selectedRoles.Exists(r => r.TargetEntityType != TenantTypes.TransitOffice))
         {
-            var selectedRoles = await db.Roles.AsNoTracking()
-                .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null
-                    && (r.TenantId == null || r.TenantId == tenantId))
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            if (selectedRoles.Count != requestedRoleIds.Count)
-            {
-                return Results.Json(
-                    new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles seleccionados no existe o está inactivo." },
-                    statusCode: StatusCodes.Status404NotFound);
-            }
-
-            if (selectedRoles.Exists(r => r.TargetEntityType != TenantTypes.TransitOffice))
-            {
-                return Results.Json(
-                    new
-                    {
-                        error = "ROLE_TARGET_ENTITY_TYPE_MISMATCH",
-                        message = "Alguno de los roles seleccionados no aplica a un organismo de tránsito.",
-                    },
-                    statusCode: StatusCodes.Status409Conflict);
-            }
-
-            if (!invitaAdministrador && AdministratorRoles.Any(selectedRoles.Select(r => r.Code)))
-            {
-                return Results.Json(
-                    new { error = "ADMIN_ROLE_NOT_ASSIGNABLE", message = "Solo un administrador puede invitar a otro administrador." },
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
-
-            roleIds = requestedRoleIds;
+            return Results.Json(
+                new
+                {
+                    error = "ROLE_TARGET_ENTITY_TYPE_MISMATCH",
+                    message = "Alguno de los roles seleccionados no aplica a un organismo de tránsito.",
+                },
+                statusCode: StatusCodes.Status409Conflict);
         }
+
+        if (!invitaAdministrador && AdministratorRoles.Any(selectedRoles.Select(r => r.Code)))
+        {
+            return Results.Json(
+                new { error = "ADMIN_ROLE_NOT_ASSIGNABLE", message = "Solo un administrador puede invitar a otro administrador." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var roleIds = requestedRoleIds;
 
         try
         {
@@ -3306,9 +3282,6 @@ public static partial class AdminOtEndpoints
         }
     }
 
-    /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
-    private const string TransitOfficeTenantWriteRepositoryRoleCode = "ot_admin";
-
     /// <summary>
     /// Resuelve el tenant OT destino del self-service de usuarios: <c>ot_admin</c>
     /// siempre usa su propio tenant (claim JWT, ignora <paramref name="transitOfficeId"/>);
@@ -3366,8 +3339,7 @@ public static partial class AdminOtEndpoints
 
     private sealed record ValidateImprintSignatureRequest(string Signature);
 
-    // RoleIds opcional: si viene vacío se conserva el comportamiento histórico (ot_admin
-    // forzado); si trae roles, deben pertenecer al catálogo TRANSIT_OFFICE.
+    // HU #13655: RoleIds es obligatorio (400 ROLE_REQUIRED si llega vacío); un solo rol del catálogo TRANSIT_OFFICE.
     private sealed record InviteOtUserRequest(string Email, string? FullName, Guid[]? RoleIds = null);
 
     // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio

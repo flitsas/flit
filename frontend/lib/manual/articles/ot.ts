@@ -286,7 +286,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Dock → Usuarios (hub OT).",
-          "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
+          "Completa nombre, correo y rol. El rol es obligatorio, también para el administrador: hasta que lo eliges, «Enviar invitación» queda deshabilitado y ves «Elige el rol de la persona.». El invitado recibe un enlace para activar su cuenta.",
           "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Editar usuario».",
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
           "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",

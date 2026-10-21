@@ -276,14 +276,16 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   async function handleInvite(email: string, fullName: string, roleIds: string[]) {
     try {
       await inviteOtUser(
-        { email, fullName: fullName || undefined, roleIds: roleIds.length > 0 ? roleIds : undefined },
+        { email, fullName: fullName || undefined, roleIds },
         { transitOfficeId },
       );
       show(`Invitación enviada a ${email}.`, "success");
       setInviteOpen(false);
       void load();
     } catch (err) {
-      if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
+      if (err instanceof ApiError && err.status === 400 && errorCodeOf(err.body) === "ROLE_REQUIRED") {
+        show(ROLE_REQUIRED_MESSAGE, "error");
+      } else if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
         // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
         // (InviteUserModal) para el único código EMAIL_ALREADY_IN_USE (HU #11580).
         show(EMAIL_ALREADY_ASSOCIATED_MESSAGE, "error");
@@ -612,10 +614,20 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
 }
 
 
+/** HU #13655: mensaje cuando falta el rol al invitar (el rol es obligatorio para todos). */
+const ROLE_REQUIRED_MESSAGE = "Elige el rol de la persona.";
+
+function errorCodeOf(body: unknown): string | undefined {
+  if (body && typeof body === "object" && "error" in body) {
+    const code = (body as { error?: unknown }).error;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
 /**
- * Alta de usuario del organismo. Ya no fuerza `ot_admin` a ciegas: ofrece los roles del
- * catálogo TRANSIT_OFFICE y, si no se marca ninguno, el backend asigna el rol de sistema
- * (comportamiento previo).
+ * Alta de usuario del organismo: ofrece los roles del catálogo TRANSIT_OFFICE. HU #13655: el rol es obligatorio
+ * para todos (Admin OT, Super Admin y Gestor OT); no hay rol por defecto.
  */
 function OtInviteUserDialog({
   onConfirm,
@@ -626,7 +638,7 @@ function OtInviteUserDialog({
   onConfirm: (email: string, fullName: string, roleIds: string[]) => Promise<void>;
   onClose: () => void;
   isSuperAdmin: boolean;
-  /** HU #13655: quien no es administrador no ofrece roles de administrador y debe elegir un rol. */
+  /** HU #13655: quien no es administrador no ofrece roles de administrador. */
   canInviteAdmins?: boolean;
 }) {
   const [email, setEmail] = useState("");
@@ -672,10 +684,11 @@ function OtInviteUserDialog({
     };
   }, [isSuperAdmin, canInviteAdmins]);
 
-  const missingRole = !canInviteAdmins && selectedRoleIds.length === 0;
+  const missingRole = selectedRoleIds.length === 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (missingRole) return;
     setBusy(true);
     await onConfirm(email.trim(), fullName.trim(), selectedRoleIds);
     setBusy(false);
@@ -732,6 +745,8 @@ function OtInviteUserDialog({
                     <input
                       type="radio"
                       name="ot-invite-role"
+                      required
+                      aria-describedby="ot-invite-role-hint"
                       checked={selectedRoleIds[0] === r.id}
                       onChange={() => setSelectedRoleIds([r.id])}
                       className="h-3.5 w-3.5 accent-[#557EFF]"
@@ -740,18 +755,12 @@ function OtInviteUserDialog({
                   </label>
                 ))}
               </div>
-              <p className="mt-1 text-[10px] opacity-60">
-                {canInviteAdmins
-                  ? "Un usuario tiene un solo rol. Sin selección se asigna Administrador OT."
-                  : "Un usuario tiene un solo rol. Elige uno."}
+              <p id="ot-invite-role-hint" className="mt-1 text-[10px] opacity-60">
+                {missingRole ? ROLE_REQUIRED_MESSAGE : "Un usuario tiene un solo rol."}
               </p>
             </fieldset>
           ) : (
-            <p className="text-xs opacity-60">
-              {canInviteAdmins
-                ? "No hay roles configurados para organismos de tránsito. Se asignará Administrador OT."
-                : "No hay roles disponibles para invitar."}
-            </p>
+            <p className="text-xs opacity-60">No hay roles disponibles para invitar.</p>
           )}
           <div className="flex gap-3 pt-2">
             <button

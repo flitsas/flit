@@ -3246,12 +3246,12 @@ paths:
       operationId: adminOtInviteUser
       summary: Invita un usuario al tenant OT (self-service, refactor adminOT)
       description: >
-        Crea una invitación por email con el rol ot_admin del tenant resuelto.
+        Crea una invitación por email con el rol elegido del catálogo TRANSIT_OFFICE.
         ot_admin invita colaboradores de su propio tenant (JWT); SuperAdmin debe
         indicar `?transitOfficeId=` (oficina del catálogo) para invitar al primer
-        adminOT de un tenant recién creado. El rol se resuelve automáticamente:
-        un tenant OT solo tiene el rol de sistema ot_admin (sin roles
-        personalizados). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        adminOT de un tenant recién creado. HU #13655: el rol es obligatorio para
+        todos (sin rol responde 400 ROLE_REQUIRED; ya no se asigna ot_admin por
+        defecto). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
       security:
         - bearerAuth: []
       parameters:
@@ -3276,7 +3276,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InviteOtUserResponse"
         "400":
-          description: SuperAdmin no indicó transitOfficeId.
+          description: SuperAdmin no indicó transitOfficeId, falta el rol (ROLE_REQUIRED) o llegó más de uno (SINGLE_ROLE_ONLY).
           content:
             application/json:
               schema:
@@ -16384,7 +16384,13 @@ components:
       properties:
         email: { type: string, format: email }
         fullName: { type: string, nullable: true }
-      required: [email]
+        roleIds:
+          type: array
+          description: Rol del invitado (exactamente uno, del catálogo TRANSIT_OFFICE).
+          minItems: 1
+          maxItems: 1
+          items: { type: string, format: uuid }
+      required: [email, roleIds]
 
     InviteOtUserResponse:
       type: object

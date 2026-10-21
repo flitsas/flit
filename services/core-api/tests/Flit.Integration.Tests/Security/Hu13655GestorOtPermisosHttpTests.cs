@@ -247,6 +247,33 @@ public sealed class Hu13655GestorOtPermisosHttpTests(PostgresDatabaseFixture fix
     }
 
     [PostgresFact]
+    public async Task AdminOt_InvitarSinRol_Responde400RoleRequired_YNoCreaLaInvitacion()
+    {
+        await SeedAsync();
+        const string email = "sin-rol-admin-it13655@ot.test";
+
+        // El rol es obligatorio también para el Admin OT: ya no se asigna Administrador OT por defecto.
+        using (var sinRol = await SendAsync(AdminEmail, HttpMethod.Post, "/api/v1/admin/ot/users/invite",
+                   new { email, fullName = "Sin rol" }))
+        {
+            sinRol.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            var body = await BodyAsync(sinRol);
+            body.Should().Contain("ROLE_REQUIRED");
+            body.Should().Contain("Elige el rol de la persona.");
+        }
+
+        using (var vacio = await SendAsync(AdminEmail, HttpMethod.Post, "/api/v1/admin/ot/users/invite",
+                   new { email, fullName = "Sin rol", roleIds = Array.Empty<Guid>() }))
+        {
+            vacio.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            (await BodyAsync(vacio)).Should().Contain("ROLE_REQUIRED");
+        }
+
+        await using var ctx = NewContext();
+        (await ctx.UserInvitations.AsNoTracking().AnyAsync(i => i.Email == email, Ct)).Should().BeFalse();
+    }
+
+    [PostgresFact]
     public async Task FlagApagado_GestorOtSinUsuarios_NoEntraAUsuarios_NiIntegracion()
     {
         await SeedAsync();
