@@ -31,6 +31,8 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
         });
         builder.HasKey(x => x.Id).HasName("pk_vehiculos");
+        // Sostiene las FK compuestas de las celdas y los intentos (HU #13723, ADR-0072 (c)).
+        builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_vehiculos_tenant_id");
         builder.Property(x => x.Id).ValueGeneratedNever().HasComment("uuid v7 generado por la aplicación.");
         builder.Property(x => x.TenantId).HasComment("Empresa dueña del lote (la misma de la cabecera).");
         builder.Property(x => x.DiagnosticoId).HasComment("Cabecera del lote.");
@@ -69,6 +71,8 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
 
         // Deduplicación por lote (12641 #2). Empieza por tenant_id y cubre la FK compuesta.
         builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId, x.IdentificadorNorm }).IsUnique().HasDatabaseName("ux_vehiculo_por_lote");
+        // Reutilización del mismo día por compañía y placa (D-10, HU #13723).
+        builder.HasIndex(x => new { x.TenantId, x.Placa }).HasDatabaseName("ix_vehiculos_tenant_placa");
 
         // Concurrencia optimista con la columna de sistema xmin: no agrega columnas a la tabla.
         builder.Property(x => x.Version).IsRowVersion();

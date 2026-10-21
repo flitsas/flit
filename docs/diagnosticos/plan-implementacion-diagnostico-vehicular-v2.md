@@ -718,11 +718,13 @@ CREATE TABLE diagnostico.data_protection_keys (
 );
 
 -- Celda del semáforo (MOD03/MOD04). También es la unidad de trabajo de la cola (decisión a).
+-- Materializada en la HU #13723 (migración D2_MotorConsultas). Clase (a) de ADR-0072: xmin, sin borrado lógico.
+-- FK compuestas por empresa y RESTRICT (ADR-0072 (c)); los códigos salen de los enums del dominio (Fuente, EstadoCelda, MotivoNa, OrigenCelda)
 CREATE TABLE diagnostico.consultas (
   id                 uuid PRIMARY KEY,
   tenant_id          uuid NOT NULL,
   diagnostico_id     uuid NOT NULL,
-  vehiculo_id        uuid NOT NULL REFERENCES diagnostico.vehiculos(id),
+  vehiculo_id        uuid NOT NULL,
   fuente             varchar(32) NOT NULL CHECK (fuente IN
                      ('RUNT','RUNT_PROPIETARIO','RUNT_LOCATARIO','SIMIT_VEHICULO','SIMIT_PROPIETARIO','SIMIT_LOCATARIO',
                       'AVALUO','IMPUESTO_DEPARTAMENTAL')),
@@ -730,41 +732,65 @@ CREATE TABLE diagnostico.consultas (
   motivo_na          varchar(32) NULL CHECK (motivo_na IN
                      ('SERVICIO_PUBLICO','DEPARTAMENTO_NO_SOPORTADO','SIN_DOCUMENTO_LOCATARIO')),  -- R-9, R-3
   origen             varchar(8) NULL CHECK (origen IN ('API','MANUAL')),
-  payload            jsonb NULL,                        -- resultado normalizado, nunca el crudo del proveedor (R-13)
+  payload            jsonb NULL CHECK (payload IS NULL OR jsonb_typeof(payload) = 'object'),  -- normalizado, nunca el crudo (R-13); @pii:medium
   usuario_manual_id  uuid NULL,                         -- nunca en DTO de cliente
+  dato_obtenido_en   timestamptz NULL,                  -- fecha y hora del dato que muestra la celda (D-10)
+  reutilizada_de_id  uuid NULL,                         -- celda de la misma empresa y del mismo día reutilizada sin consumo (D-10)
   -- cola durable
   disponible_desde   timestamptz NOT NULL DEFAULT now(),
   lease_hasta        timestamptz NULL,
-  intentos_auto      int NOT NULL DEFAULT 0,
+  intentos_auto      int NOT NULL DEFAULT 0 CHECK (intentos_auto >= 0),
   actualizado_en     timestamptz NOT NULL,
   version_tablero    bigint NOT NULL,
-  CONSTRAINT ux_consulta_vehiculo_fuente UNIQUE (vehiculo_id, fuente),  -- idempotencia (12659 #5)
+  CONSTRAINT uq_consultas_tenant_id UNIQUE (tenant_id, id),  -- sostiene las FK compuestas de intentos y reutilización
+  CONSTRAINT fk_consultas_vehiculos FOREIGN KEY (tenant_id, vehiculo_id)
+    REFERENCES diagnostico.vehiculos (tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_consultas_diagnosticos FOREIGN KEY (tenant_id, diagnostico_id)
+    REFERENCES diagnostico.diagnosticos (tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_consultas_consultas_reutilizada_de FOREIGN KEY (tenant_id, reutilizada_de_id)
+    REFERENCES diagnostico.consultas (tenant_id, id) ON DELETE RESTRICT,  -- solo se reutiliza un dato de la misma empresa
   CONSTRAINT ck_motivo_na CHECK ((estado = 'NA') = (motivo_na IS NOT NULL))
 );
+-- Idempotencia (12659 #5): una celda por vehículo y fuente. Empieza por tenant_id para cubrir la FK al vehículo; como el
+-- vehículo fija la empresa, la unicidad es la misma que (vehiculo_id, fuente).
+CREATE UNIQUE INDEX ux_consulta_vehiculo_fuente ON diagnostico.consultas (tenant_id, vehiculo_id, fuente);
 CREATE INDEX ix_cola ON diagnostico.consultas (disponible_desde)
-  WHERE estado IN ('PENDIENTE','EN_CURSO');           -- toma con FOR UPDATE SKIP LOCKED
-CREATE INDEX ix_consultas_tablero ON diagnostico.consultas (diagnostico_id, version_tablero);
+  WHERE estado IN ('PENDIENTE','EN_CURSO');           -- cola de todas las empresas; toma con FOR UPDATE SKIP LOCKED
+CREATE INDEX ix_consultas_tablero ON diagnostico.consultas (tenant_id, diagnostico_id, version_tablero);  -- cubre la FK al lote
+CREATE INDEX ix_consultas_reutilizada_de ON diagnostico.consultas (tenant_id, reutilizada_de_id);
+CREATE INDEX ix_consultas_reutilizacion ON diagnostico.consultas (tenant_id, fuente, dato_obtenido_en)
+  WHERE estado = 'COMPLETADO';                         -- reutilización del mismo día (D-10)
+-- Del vehículo, en la misma migración: uq_vehiculos_tenant_id UNIQUE (tenant_id, id) e ix_vehiculos_tenant_placa (tenant_id, placa) (D-10)
 
--- Intento (auditoría, solo inserción)
+-- Intento (auditoría, solo inserción). Clase (b) de ADR-0072: FK compuestas y RESTRICT a la celda, al vehículo y al lote
 CREATE TABLE diagnostico.intentos_consulta (
   id                       uuid PRIMARY KEY,
   tenant_id                uuid NOT NULL,
   diagnostico_id           uuid NOT NULL,
   vehiculo_id              uuid NOT NULL,
-  consulta_id              uuid NOT NULL REFERENCES diagnostico.consultas(id),
-  fuente                   varchar(32) NOT NULL,
+  consulta_id              uuid NOT NULL,
+  fuente                   varchar(32) NOT NULL,      -- CHECK con el enum Fuente
   servicio                 varchar(16) NULL CHECK (servicio IN
                            ('VERIFIK','KYVERUM','INTEMPO','SMARTCLOUD','FASECOLDA','MERCADOLIBRE','BASEGRAVABLE','SCRAPING','FLITFINES','OTRO')),
   disparador               varchar(16) NOT NULL CHECK (disparador IN ('AUTO','REPROCESO','MANUAL')),
   inicio                   timestamptz NOT NULL,
   fin                      timestamptz NOT NULL,
-  estado                   varchar(8) NOT NULL CHECK (estado IN ('Success','Error')),
+  estado                   varchar(8) NOT NULL CHECK (estado IN ('SUCCESS','ERROR')),  -- en mayúsculas como el resto del schema (HU #13723)
   tipo_error               varchar(32) NULL,          -- TipoErrorFuente (patrón Comparendos)
   mensaje_error            text NULL,
   transaccion_proveedor_id varchar(128) NULL,
   desde_cache              boolean NOT NULL DEFAULT false,
-  usuario_id               uuid NULL
+  usuario_id               uuid NULL,
+  CONSTRAINT fk_intentos_consulta_consultas FOREIGN KEY (tenant_id, consulta_id)
+    REFERENCES diagnostico.consultas (tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_intentos_consulta_vehiculos FOREIGN KEY (tenant_id, vehiculo_id)
+    REFERENCES diagnostico.vehiculos (tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_intentos_consulta_diagnosticos FOREIGN KEY (tenant_id, diagnostico_id)
+    REFERENCES diagnostico.diagnosticos (tenant_id, id) ON DELETE RESTRICT
 );
+CREATE INDEX ix_intentos_consulta_celda ON diagnostico.intentos_consulta (tenant_id, consulta_id, inicio);
+CREATE INDEX ix_intentos_consulta_vehiculo ON diagnostico.intentos_consulta (tenant_id, vehiculo_id);
+CREATE INDEX ix_intentos_consulta_diagnostico ON diagnostico.intentos_consulta (tenant_id, diagnostico_id);
 CREATE INDEX ix_intentos_metricas ON diagnostico.intentos_consulta (tenant_id, fuente, servicio, inicio);
 
 -- Catálogo de reglas del dictamen (decisión g)
@@ -784,7 +810,7 @@ CREATE TABLE diagnostico.reglas_dictamen (
 CREATE TABLE diagnostico.dictamenes (
   id                   uuid PRIMARY KEY,
   tenant_id            uuid NOT NULL,
-  vehiculo_id          uuid NOT NULL REFERENCES diagnostico.vehiculos(id),
+  vehiculo_id          uuid NOT NULL,                  -- FK compuesta (tenant_id, vehiculo_id) a vehiculos (tenant_id, id), RESTRICT (ADR-0072 (c))
   version              int NOT NULL,
   vigente              boolean NOT NULL,
   veredicto            varchar(16) NOT NULL CHECK (veredicto IN ('VIABLE','BLOQUEADO')),
@@ -810,7 +836,7 @@ CREATE INDEX ix_redaccion_pendiente ON diagnostico.dictamenes (redaccion_disponi
 CREATE TABLE diagnostico.derivaciones (
   id                  uuid PRIMARY KEY,
   tenant_id           uuid NOT NULL,
-  vehiculo_id         uuid NOT NULL REFERENCES diagnostico.vehiculos(id),
+  vehiculo_id         uuid NOT NULL,                 -- FK compuesta (tenant_id, vehiculo_id) a vehiculos (tenant_id, id), RESTRICT (ADR-0072 (c))
   destino             varchar(16) NOT NULL CHECK (destino IN ('WIZARD','SANEAMIENTO')),
   tipo_tramite_codigo varchar(64) NOT NULL,
   token_hash          bytea NOT NULL UNIQUE,         -- SHA-256 del token opaco
@@ -838,7 +864,8 @@ CREATE TABLE diagnostico.evidencias (
 );
 CREATE UNIQUE INDEX ux_evidencia_vigente ON diagnostico.evidencias (diagnostico_id, vehiculo_id, tipo) WHERE vigente;
 
--- Réplica de organismos con bandera de impuesto (patrón Comparendos, HU13459)
+-- Réplica de organismos con bandera de impuesto (patrón Comparendos, HU13459). Materializadas en la HU #13723
+-- (D2_MotorConsultas): catálogos globales sin tenant_id (excepción por tabla de ADR-0072); ix_organismos_nombre_norm (nombre_norm)
 CREATE TABLE diagnostico.organismos (
   codigo               varchar(16) PRIMARY KEY,
   nombre               varchar(200) NOT NULL,

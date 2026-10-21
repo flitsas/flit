@@ -104,7 +104,8 @@ si cumple todos; si falla uno, la migración no se mergea sin una excepción esc
 
 **Fuera de la regla:** las tablas sin `tenant_id` (catálogos globales del plan §5: `reglas_dictamen`, `organismos`,
 `departamentos_impuesto`) y las del SDK (outbox, inbox, historial de migraciones). Las primeras necesitan su propia
-justificación al materializarse, porque `EntidadesConTenantTests` las rechazaría.
+justificación al materializarse, porque `EntidadesConTenantTests` las rechazaría: `organismos` y `departamentos_impuesto`
+ya la tienen (HU #13723, ver excepciones por tabla).
 
 ### Aplicabilidad a las tablas existentes
 
@@ -115,6 +116,11 @@ justificación al materializarse, porque `EntidadesConTenantTests` las rechazar�
 | `cambios_contrato` | #13736 · `D1_ConfiguracionEmpresa` | (b) | — | `usuario_id`, `fecha` | `tenant_id` → `configuracion_empresa(tenant_id)`, `RESTRICT` (simple, válida por (c)) | A13: `valor_anterior`/`valor_nuevo` en `jsonb` |
 | `diagnosticos` | #13738 · `D1_CabeceraDiagnostico` | (a) | `xmin` | `usuario_creador_id`, `creado_en`, `cerrado_en`; transiciones en el historial | — (expone `uq_diagnosticos_tenant_id`) | Ninguna |
 | `historial_estado_diagnostico` | #13738 · `D1_CabeceraDiagnostico` | (b) | — | `usuario_id` (nulo si fue el procesador), `en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT` | Ninguna |
+| `vehiculos` | #13735 · `D1_Vehiculos`; #13723 · `D2_MotorConsultas` | (a) | `xmin` | Del lote (`diagnosticos`); `runt_consultado_en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT`; expone `uq_vehiculos_tenant_id` (D2) | Ninguna |
+| `consultas` | #13723 · `D2_MotorConsultas` | (a) | `xmin` | `actualizado_en`, `usuario_manual_id`, `dato_obtenido_en`; intentos en `intentos_consulta` | `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, reutilizada_de_id)` → `consultas`; todas `RESTRICT`; expone `uq_consultas_tenant_id` | A11 en `ix_cola` (ver excepciones) |
+| `intentos_consulta` | #13723 · `D2_MotorConsultas` | (b) | — | `usuario_id` (nulo si fue el procesador), `inicio`/`fin` | `(tenant_id, consulta_id)` → `consultas`, `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`; todas `RESTRICT` | Ninguna |
+| `organismos` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | — | Ninguna | A3, A4, A5, A20 (ver excepciones) |
+| `departamentos_impuesto` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | `actualizado_en` | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 
 ### Excepciones por tabla
 
@@ -130,6 +136,20 @@ justificación al materializarse, porque `EntidadesConTenantTests` las rechazar�
   garantiza lo que sí puede: no se audita un cambio de una configuración que no existe.
 - **`cambios_contrato`, A13 (`jsonb`).** Los campos auditados tienen tipos distintos (arreglo de fuentes, entero,
   booleano); `jsonb` guarda cada valor con su tipo. `valor_anterior` es nulo solo cuando no había valor.
+- **`organismos` y `departamentos_impuesto`, catálogos globales (HU #13723).** Son datos de FLIT, iguales para todas las
+  empresas: la réplica de organismos de tránsito con su departamento (patrón Comparendos HU13459) y la caché del rpc de
+  capacidad de impuesto de core-consultas (R-9, R-23). No llevan `tenant_id` ni filtro global, y `EntidadesConTenantTests`
+  las excluye por una **lista cerrada** (`CatalogosGlobales`): sumar otro catálogo exige ampliar esta excepción. A3: la
+  clave es la natural del catálogo (código del organismo, código DIVIPOLA del departamento), que es la que usa quien busca.
+  A5/A20: no tienen `created_*`, `is_active` ni `external_refs`; la réplica se reemplaza desde su origen y
+  `departamentos_impuesto.actualizado_en` marca el último refresco. No se editan a mano.
+- **`consultas`, A11 en `ix_cola` (HU #13723).** El índice parcial de la cola `(disponible_desde) WHERE estado IN
+  ('PENDIENTE','EN_CURSO')` no empieza por `tenant_id`: el procesador (#13727) toma celdas de todas las empresas en orden
+  de disponibilidad con `FOR UPDATE SKIP LOCKED`, y luego fija la empresa de cada celda en su scope (Tradeoff aceptado,
+  «jobs sin usuario»). Los demás índices de la tabla empiezan por `tenant_id`.
+- **`consultas`, unicidad `(vehiculo_id, fuente)`.** Se materializa como `ux_consulta_vehiculo_fuente (tenant_id,
+  vehiculo_id, fuente)`: como el vehículo fija la empresa, la unicidad es la misma, y el índice cubre la FK compuesta
+  al vehículo (igual que `ux_vehiculo_por_lote`).
 
 ## Retención de datos personales
 
@@ -177,9 +197,11 @@ inserción y FK con `RESTRICT`. Y es lo que dice R-18 del plan («No se borra na
   La otra vía, un plazo fijo con job de purga, choca con los historiales de solo inserción y con las FK `RESTRICT`.
 
 **Estado en el código (2026-10-21).** Las columnas y la tabla `data_protection_keys` existen (`D1_Vehiculos`,
-`DataProtectionKeyConfig.cs`), pero `services/core-diagnostico/src` todavía no registra `AddDataProtection` ni
-`ProtectKeysWithCertificate`, y nada cifra todavía con un `IDataProtector`. Hasta que una HU lo cablee, el control de
-cifrado con certificado fuera de la base es una exigencia de este ADR, no un hecho.
+`DataProtectionKeyConfig.cs`). Desde la HU #13751 (commit 7180d4dfa) Data Protection está conectado
+(`Plataforma/ProteccionDocumentos.cs`): `PersistKeysToDbContext<DiagnosticoDb>()` guarda el anillo en la base y
+`ProtectKeysWithCertificate` lo protege con un certificado `.pfx` montado como secreto, fuera de la base
+(`Diagnostico:DataProtection:CertificadoRuta` y `CertificadoClave`). Es fail-closed: sin certificado válido el servicio no
+arranca. El documento del locatario ya se cifra con un `IDataProtector`.
 
 ## Alternativas consideradas
 

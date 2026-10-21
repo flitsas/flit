@@ -23,6 +23,81 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.DepartamentoImpuesto", b =>
+                {
+                    b.Property<string>("DepartamentoCodigo")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("departamento_codigo")
+                        .HasComment("Código del departamento (DIVIPOLA).");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en")
+                        .HasComment("Último refresco desde core-consultas (timestamptz).");
+
+                    b.Property<bool>("Soportado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("soportado")
+                        .HasComment("core-consultas soporta el impuesto del departamento (caché del rpc, R-23).");
+
+                    b.HasKey("DepartamentoCodigo")
+                        .HasName("pk_departamentos_impuesto");
+
+                    b.ToTable("departamentos_impuesto", "diagnostico", t =>
+                        {
+                            t.HasComment("Departamentos con impuesto vehicular soportado por core-consultas (R-9, HU #13723). Sin tenant.");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.Organismo", b =>
+                {
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("codigo")
+                        .HasComment("Código del organismo de tránsito.");
+
+                    b.Property<string>("DepartamentoCodigo")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("departamento_codigo")
+                        .HasComment("Código del departamento (DIVIPOLA).");
+
+                    b.Property<string>("DepartamentoNombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("departamento_nombre")
+                        .HasComment("Nombre del departamento.");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre")
+                        .HasComment("Nombre del organismo.");
+
+                    b.Property<string>("NombreNorm")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre_norm")
+                        .HasComment("Nombre normalizado para buscar por el transit_office_name del RUNT.");
+
+                    b.HasKey("Codigo")
+                        .HasName("pk_organismos");
+
+                    b.HasIndex("NombreNorm")
+                        .HasDatabaseName("ix_organismos_nombre_norm");
+
+                    b.ToTable("organismos", "diagnostico", t =>
+                        {
+                            t.HasComment("Réplica global de organismos de tránsito con su departamento (HU #13723). Sin tenant.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Comun.LecturaBackoffice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -221,6 +296,272 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_configuracion_empresa_visibilidad_usuario", "visibilidad_usuario IN ('PROPIOS', 'EMPRESA')");
 
                             t.HasCheckConstraint("ck_por_defecto_subconjunto", "fuentes_habilitadas @> fuentes_por_defecto");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Consultas.CeldaConsulta", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en")
+                        .HasComment("Último cambio de la celda (timestamptz).");
+
+                    b.Property<DateTimeOffset?>("DatoObtenidoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dato_obtenido_en")
+                        .HasComment("Fecha y hora del dato que muestra la celda (D-10); la de la celda origen si se reutilizó.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Cabecera del lote.");
+
+                    b.Property<DateTimeOffset>("DisponibleDesde")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("disponible_desde")
+                        .HasDefaultValueSql("now()")
+                        .HasComment("Cola: desde cuándo el procesador la puede tomar (backoff, D-12).");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado")
+                        .HasComment("PENDIENTE, EN_CURSO, COMPLETADO, ERROR o NA (plan §3.5).");
+
+                    b.Property<string>("Fuente")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("fuente")
+                        .HasComment("Fuente de la celda (enum Fuente del dominio; sin FASECOLDA, 12659 #1).");
+
+                    b.Property<int>("IntentosAuto")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("intentos_auto")
+                        .HasComment("Cola: intentos automáticos hechos (reintentos de errores transitorios, D-12).");
+
+                    b.Property<DateTimeOffset?>("LeaseHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_hasta")
+                        .HasComment("Cola: vencimiento del lease del procesador; null si nadie la tiene.");
+
+                    b.Property<string>("MotivoNa")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("motivo_na")
+                        .HasComment("SERVICIO_PUBLICO, DEPARTAMENTO_NO_SOPORTADO o SIN_DOCUMENTO_LOCATARIO; solo con estado NA (R-9, R-3).");
+
+                    b.Property<string>("Origen")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("origen")
+                        .HasComment("API o MANUAL; null mientras no hay dato.");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload")
+                        .HasComment("@pii:medium Resultado normalizado de la fuente (objeto JSON), nunca el crudo del proveedor (R-13); sin documentos en claro.");
+
+                    b.Property<Guid?>("ReutilizadaDeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reutilizada_de_id")
+                        .HasComment("Celda de la misma empresa y del mismo día cuyo dato se reutilizó sin consumo (D-10).");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote (la misma del vehículo).");
+
+                    b.Property<Guid?>("UsuarioManualId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_manual_id")
+                        .HasComment("@pii:low Usuario del backoffice que la llenó a mano (claim sub); nunca en DTO de cliente.");
+
+                    b.Property<Guid>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo de la celda.");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<long>("VersionTablero")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version_tablero")
+                        .HasComment("Versión del tablero del lote en el último cambio (polling ?desde=).");
+
+                    b.HasKey("Id")
+                        .HasName("pk_consultas");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_consultas_tenant_id");
+
+                    b.HasIndex("DisponibleDesde")
+                        .HasDatabaseName("ix_cola")
+                        .HasFilter("estado IN ('PENDIENTE', 'EN_CURSO')");
+
+                    b.HasIndex("TenantId", "ReutilizadaDeId")
+                        .HasDatabaseName("ix_consultas_reutilizada_de");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "VersionTablero")
+                        .HasDatabaseName("ix_consultas_tablero");
+
+                    b.HasIndex("TenantId", "Fuente", "DatoObtenidoEn")
+                        .HasDatabaseName("ix_consultas_reutilizacion")
+                        .HasFilter("estado = 'COMPLETADO'");
+
+                    b.HasIndex("TenantId", "VehiculoId", "Fuente")
+                        .IsUnique()
+                        .HasDatabaseName("ux_consulta_vehiculo_fuente");
+
+                    b.ToTable("consultas", "diagnostico", t =>
+                        {
+                            t.HasComment("Celdas del semáforo por vehículo y fuente (MOD03/MOD04, HU #13723); unidad de trabajo de la cola durable.");
+
+                            t.HasCheckConstraint("ck_consultas_estado", "estado IN ('PENDIENTE', 'EN_CURSO', 'COMPLETADO', 'ERROR', 'NA')");
+
+                            t.HasCheckConstraint("ck_consultas_fuente", "fuente IN ('RUNT', 'RUNT_PROPIETARIO', 'RUNT_LOCATARIO', 'SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'AVALUO', 'IMPUESTO_DEPARTAMENTAL')");
+
+                            t.HasCheckConstraint("ck_consultas_intentos_auto", "intentos_auto >= 0");
+
+                            t.HasCheckConstraint("ck_consultas_motivo_na", "motivo_na IS NULL OR motivo_na IN ('SERVICIO_PUBLICO', 'DEPARTAMENTO_NO_SOPORTADO', 'SIN_DOCUMENTO_LOCATARIO')");
+
+                            t.HasCheckConstraint("ck_consultas_origen", "origen IS NULL OR origen IN ('API', 'MANUAL')");
+
+                            t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
+
+                            t.HasCheckConstraint("ck_motivo_na", "(estado = 'NA') = (motivo_na IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Consultas.IntentoConsulta", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<Guid>("ConsultaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("consulta_id")
+                        .HasComment("Celda del intento.");
+
+                    b.Property<bool>("DesdeCache")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("desde_cache")
+                        .HasComment("El dato salió de la reutilización del mismo día (D-10), sin consumo.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Cabecera del lote.");
+
+                    b.Property<string>("Disparador")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("disparador")
+                        .HasComment("AUTO, REPROCESO o MANUAL (R-1).");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("estado")
+                        .HasComment("SUCCESS o ERROR.");
+
+                    b.Property<DateTimeOffset>("Fin")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fin")
+                        .HasComment("Fin del intento (timestamptz).");
+
+                    b.Property<string>("Fuente")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("fuente")
+                        .HasComment("Fuente consultada.");
+
+                    b.Property<DateTimeOffset>("Inicio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inicio")
+                        .HasComment("Inicio del intento (timestamptz).");
+
+                    b.Property<string>("MensajeError")
+                        .HasColumnType("text")
+                        .HasColumnName("mensaje_error")
+                        .HasComment("@pii:low Mensaje de error de la fuente; sin documentos en claro.");
+
+                    b.Property<string>("Servicio")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("servicio")
+                        .HasComment("Proveedor que respondió (12659 #2); null si no llegó a ninguno o fue manual.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña de la celda.");
+
+                    b.Property<string>("TipoError")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tipo_error")
+                        .HasComment("Tipo de error de la fuente (patrón Comparendos); null si fue exitoso.");
+
+                    b.Property<string>("TransaccionProveedorId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("transaccion_proveedor_id")
+                        .HasComment("Transacción del proveedor; null en el manual (12659 #6).");
+
+                    b.Property<Guid?>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Usuario del reproceso o del manual (claim sub); null si fue el procesador.");
+
+                    b.Property<Guid>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo de la celda.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_intentos_consulta");
+
+                    b.HasIndex("TenantId", "DiagnosticoId")
+                        .HasDatabaseName("ix_intentos_consulta_diagnostico");
+
+                    b.HasIndex("TenantId", "VehiculoId")
+                        .HasDatabaseName("ix_intentos_consulta_vehiculo");
+
+                    b.HasIndex("TenantId", "ConsultaId", "Inicio")
+                        .HasDatabaseName("ix_intentos_consulta_celda");
+
+                    b.HasIndex("TenantId", "Fuente", "Servicio", "Inicio")
+                        .HasDatabaseName("ix_intentos_metricas");
+
+                    b.ToTable("intentos_consulta", "diagnostico", t =>
+                        {
+                            t.HasComment("Intentos de consulta por celda: auditoría y log de negocio (R-1, HU #13723). Solo inserción.");
+
+                            t.HasCheckConstraint("ck_intentos_consulta_disparador", "disparador IN ('AUTO', 'REPROCESO', 'MANUAL')");
+
+                            t.HasCheckConstraint("ck_intentos_consulta_estado", "estado IN ('SUCCESS', 'ERROR')");
+
+                            t.HasCheckConstraint("ck_intentos_consulta_fuente", "fuente IN ('RUNT', 'RUNT_PROPIETARIO', 'RUNT_LOCATARIO', 'SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'AVALUO', 'IMPUESTO_DEPARTAMENTAL')");
+
+                            t.HasCheckConstraint("ck_intentos_consulta_servicio", "servicio IS NULL OR servicio IN ('VERIFIK', 'KYVERUM', 'INTEMPO', 'SMARTCLOUD', 'FASECOLDA', 'MERCADOLIBRE', 'BASEGRAVABLE', 'SCRAPING', 'FLITFINES', 'OTRO')");
                         });
                 });
 
@@ -536,6 +877,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_vehiculos");
 
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_vehiculos_tenant_id");
+
+                    b.HasIndex("TenantId", "Placa")
+                        .HasDatabaseName("ix_vehiculos_tenant_placa");
+
                     b.HasIndex("TenantId", "DiagnosticoId", "IdentificadorNorm")
                         .IsUnique()
                         .HasDatabaseName("ux_vehiculo_por_lote");
@@ -667,6 +1014,59 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_cambios_contrato_configuracion_empresa");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Consultas.CeldaConsulta", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_consultas_diagnosticos");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Consultas.CeldaConsulta", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ReutilizadaDeId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_consultas_consultas_reutilizada_de");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_consultas_vehiculos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Consultas.IntentoConsulta", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Consultas.CeldaConsulta", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ConsultaId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_intentos_consulta_consultas");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_intentos_consulta_diagnosticos");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_intentos_consulta_vehiculos");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.HistorialEstadoDiagnostico", b =>
