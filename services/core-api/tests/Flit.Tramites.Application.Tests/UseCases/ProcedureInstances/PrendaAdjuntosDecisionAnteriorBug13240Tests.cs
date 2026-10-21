@@ -15,7 +15,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// (<c>prenda_registro</c>/<c>prenda_levantamiento</c>/<c>prenda_solicitud</c>) seguía en los documentos
 /// del trámite y dentro del consolidado, mientras el FUR (que lee las vigentes) ya no lo declaraba.
 /// <para>Uso de ejemplo:
-/// <c>new RegistrarPrendaHandler(instances, prendas, policy, storage, imprintAudit, maestroRadicado)
+/// <c>new RegistrarPrendaHandler(instances, prendas, storage, imprintAudit, maestroRadicado)
 /// .HandleAsync(id, tenant, new RegistrarPrendaInput("omitir"))</c> ⇒ retira los adjuntos
 /// <c>prenda_*</c> que ninguna decisión vigente exige (mismas reglas que <see cref="DeleteAttachmentHandler"/>).</para>
 /// </summary>
@@ -115,15 +115,7 @@ public sealed class PrendaAdjuntosDecisionAnteriorBug13240Tests
         });
 
     private RegistrarPrendaHandler Handler(IVehicleSignatureImprintRepository? imprint = null) =>
-        new(_instances, _prendas, PolicyNoExige(), _storage, imprint, _maestro);
-
-    private static IPrendaDocumentRequirementPolicy PolicyNoExige()
-    {
-        var policy = Substitute.For<IPrendaDocumentRequirementPolicy>();
-        policy.IsRequiredAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-        return policy;
-    }
+        new(_instances, _prendas, _storage, imprint, _maestro);
 
     private static List<string> Tipos(ProcedureInstance i) => i.Attachments.Select(a => a.Tipo).OrderBy(t => t).ToList();
 
@@ -337,7 +329,7 @@ public sealed class PrendaAdjuntosDecisionAnteriorBug13240Tests
         Adjunto(instance, PrendaDocTipos.Registro);
         Vigente(PrendaDecision.Registrar);
 
-        var (result, error) = await new RegistrarPrendaHandler(_instances, _prendas, PolicyNoExige())
+        var (result, error) = await new RegistrarPrendaHandler(_instances, _prendas)
             .HandleAsync(_id, _tenant, new RegistrarPrendaInput(PrendaDecision.SinPrenda), ct: Ct);
 
         error.Should().BeNull();

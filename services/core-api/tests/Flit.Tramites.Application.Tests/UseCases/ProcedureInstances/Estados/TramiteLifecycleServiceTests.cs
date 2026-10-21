@@ -1093,6 +1093,45 @@ public sealed class TramiteLifecycleServiceTests
         }
     }
 
+    /// <summary>
+    /// HU #13777 (AC5) — Traspaso con <c>omitir</c>, gravámenes en <c>warn</c> y OT que EXIGE el
+    /// certificado de prenda, sin documento de prenda adjunto: ni el override del OT ni el gate R10
+    /// bloquean Preparar. El control (<c>decision = null</c>) prueba que el override está activo.
+    /// <para>Uso de ejemplo: <c>TransitionAsync(new TramiteTransitionCommand(id, tenant, "preparado", …))</c>
+    /// devuelve <c>Success = true</c> con la decisión <c>omitir</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Omitir, true)]
+    [InlineData(null, false)]
+    public async Task Preparar_TraspasoOmitirConGravamenWarnYOtQueExige_NoBloquea(string? decision, bool avanza)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        ConGravamenesEnWarn(i);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        if (avanza)
+        {
+            outcome.Success.Should().BeTrue(outcome.ErrorCode);
+            i.Status.Should().Be(TramiteEstado.Preparado);
+        }
+        else
+        {
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        }
+    }
+
     // ── HU #10872 — re-radicar re-evaluando SOLO los gates de lo corregido ────────────────
 
     private static string BaselineMetadata(Dictionary<string, string?> fieldSnapshot, string? motivo = null) =>
