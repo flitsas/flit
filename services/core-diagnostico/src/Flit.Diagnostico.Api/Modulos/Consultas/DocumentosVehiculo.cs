@@ -10,7 +10,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// respuesta trae locatario, el del locatario, cifrados con <see cref="IProtectorDocumentoPersona"/> antes de tocar la entidad.
 /// Solo se guardan tipo y número cifrado: el RUNT normalizado ya no trae nombres (<see cref="MapperIntempo"/>). La precedencia
 /// del locatario es la de <see cref="ResolucionLocatario"/>: el del proveedor reemplaza al declarado con origen
-/// <c>PROVEEDOR</c>; si no viene, se conserva el que había. Con varios propietarios o locatarios se toma el primero que
+/// <c>PROVEEDOR</c> y el declarado pasa, tal como estaba cifrado, a <c>locatario_declarado_doc_*</c> (respaldo, HU #13730b);
+/// si no viene, se conserva el que había y el respaldo queda vacío. Con varios propietarios o locatarios se toma el primero que
 /// informa el proveedor. Nada de esto se loguea ni sale en excepciones.
 /// </summary>
 /// <example>
@@ -39,6 +40,13 @@ internal static class DocumentosVehiculo
         var decision = ResolucionLocatario.Resolver(vehiculo.LocatarioDocOrigen, proveedorLoTrae: locatario is not null);
         if (decision.Reemplazar && locatario is not null)
         {
+            // El declarado no se pierde (HU #13730b): sus bytes ya cifrados pasan al respaldo antes de reemplazarlo.
+            if (ResolucionLocatario.RespaldarDeclarado(vehiculo.LocatarioDocOrigen, proveedorLoTrae: true))
+            {
+                vehiculo.LocatarioDeclaradoDocTipo = vehiculo.LocatarioDocTipo;
+                vehiculo.LocatarioDeclaradoDocCifrado = vehiculo.LocatarioDocCifrado;
+            }
+
             vehiculo.LocatarioDocTipo = locatario.TipoDocumento;
             vehiculo.LocatarioDocCifrado = protector.Proteger(locatario.NumeroDocumento);
             vehiculo.LocatarioDocOrigen = decision.Origen;

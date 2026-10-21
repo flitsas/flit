@@ -11,7 +11,8 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// <c>diagnostico.vehiculos</c> (HU #13735, plan §5, MOD02): vehículos del lote. La base garantiza que el identificador
 /// normalizado no se repite en el lote (<c>ux_vehiculo_por_lote</c>), que va en mayúsculas y sin espacios, que su clase es
 /// conocida (incluida <c>PLACA_MAQUINARIA</c>, R-19) y que el documento del locatario cifrado siempre trae su origen
-/// (<c>ck_locatario_origen</c>, R-3). La FK es compuesta <c>(tenant_id, diagnostico_id)</c> contra el alterno de la cabecera:
+/// (<c>ck_locatario_origen</c>, R-3). El declarado que el proveedor reemplaza queda de respaldo en
+/// <c>locatario_declarado_doc_*</c>, con tipo y documento juntos y solo junto al vigente del proveedor (HU #13730b). La FK es compuesta <c>(tenant_id, diagnostico_id)</c> contra el alterno de la cabecera:
 /// un vehículo no cuelga de un lote de otra empresa ni por SQL directo. El índice único empieza por <c>tenant_id</c> y
 /// cubre la FK. Desviaciones del checklist de datos: ADR-0072.
 /// </summary>
@@ -27,6 +28,11 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
                 "ck_vehiculos_locatario_doc_origen",
                 $"locatario_doc_origen IS NULL OR locatario_doc_origen IN ({CodigosDeEnum.ListaSql<OrigenDocumento>()})");
             t.HasCheckConstraint("ck_locatario_origen", "(locatario_doc_cifrado IS NULL) = (locatario_doc_origen IS NULL)");
+            // Respaldo del declarado (HU #13730b, R-3): tipo y documento juntos, y solo cuando el vigente es del proveedor.
+            t.HasCheckConstraint("ck_vehiculos_locatario_declarado", "(locatario_declarado_doc_tipo IS NULL) = (locatario_declarado_doc_cifrado IS NULL)");
+            t.HasCheckConstraint(
+                "ck_vehiculos_locatario_declarado_con_proveedor",
+                $"locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = '{CodigosDeEnum.Codigo(OrigenDocumento.Proveedor)}'");
             t.HasCheckConstraint("ck_vehiculos_identificador_norm", @"identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\s'");
             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
         });
@@ -52,7 +58,11 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
         builder.Property(x => x.LocatarioDocCifrado).HasComment("@pii:high Documento del locatario cifrado, como el del propietario (R-3).");
         builder.Property(x => x.LocatarioDocOrigen)
             .HasConversion(CodigosDeEnum.Convertidor<OrigenDocumento>()).HasMaxLength(20)
-            .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (respaldo de la captura); null sin documento.");
+            .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (lo declaró el cliente y sigue vigente); null sin documento.");
+        builder.Property(x => x.LocatarioDeclaradoDocTipo).HasMaxLength(8)
+            .HasComment("Tipo del documento del locatario declarado por el cliente que el del proveedor reemplazó (respaldo, R-3).");
+        builder.Property(x => x.LocatarioDeclaradoDocCifrado)
+            .HasComment("@pii:high Documento del locatario declarado por el cliente, cifrado; respaldo cuando el proveedor trae el suyo (R-3).");
         builder.Property(x => x.DatosConsolidados)
             .HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb").ValueGeneratedNever()
             .HasComment("@pii:low Datos consolidados de las fuentes (objeto JSON), sin documentos en claro.");

@@ -43,4 +43,15 @@ public sealed class ResolucionLocatarioTests
         ResolucionLocatario.Resolver(null, proveedorLoTrae: false)
             .Should().Be(new DecisionLocatario(Reemplazar: false, null));
     }
+    // HU #13730b (decisión «Guardar el respaldo») — el declarado se respalda solo cuando el proveedor lo reemplaza.
+    [Fact]
+    public void Declarado_se_respalda_solo_cuando_el_proveedor_lo_reemplaza()
+    {
+        ResolucionLocatario.RespaldarDeclarado(OrigenDocumento.DeclaradoCliente, proveedorLoTrae: true).Should().BeTrue();
+        ResolucionLocatario.RespaldarDeclarado(OrigenDocumento.DeclaradoCliente, proveedorLoTrae: false)
+            .Should().BeFalse("sin proveedor el declarado sigue vigente: no hay nada que respaldar");
+        ResolucionLocatario.RespaldarDeclarado(null, proveedorLoTrae: true).Should().BeFalse("sin declarado no hay respaldo");
+        ResolucionLocatario.RespaldarDeclarado(OrigenDocumento.Proveedor, proveedorLoTrae: true)
+            .Should().BeFalse("una segunda consulta al RUNT no pisa el respaldo con el documento del proveedor");
+    }
 }

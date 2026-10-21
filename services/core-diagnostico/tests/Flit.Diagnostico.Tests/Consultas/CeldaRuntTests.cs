@@ -214,6 +214,132 @@ public sealed class CeldaRuntTests
         string[] prohibidos = [PropietarioLeasing, LocatarioLeasing, LocatarioDeclarado, "999990004", "999990014", .. Nombres, "EMPRESA LOCATARIA FICTICIA SAS"];
         logs.Mensajes.Should().NotContain(m => prohibidos.Any(p => m.Contains(p, StringComparison.Ordinal)));
     }
+
+    // HU #13730b (decisión «Guardar el respaldo», R-3) — con declarado y proveedor: el vigente es el del proveedor y el
+    // declarado queda de respaldo, con su tipo, cifrado (bytea distinto del texto plano) y descifrable al valor declarado.
+    [Fact]
+    public async Task Con_declarado_y_proveedor_el_declarado_queda_de_respaldo_cifrado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorRunt.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CE", LocatarioDeclarado)], ct);
+
+        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
+        vehiculo.LocatarioDocOrigen.Should().Be(OrigenDocumento.Proveedor, "el proveedor manda en el vigente");
+        protector.Desproteger(vehiculo.LocatarioDocCifrado!).Should().Be(LocatarioLeasing);
+        var respaldo = await RespaldoAsync(api, vehiculo.Id, ct);
+        respaldo.Tipo.Should().Be("CE", "el respaldo conserva el tipo declarado, no el del proveedor");
+        respaldo.Cifrado.Should().NotBeNull().And.NotBeEmpty();
+        Encoding.UTF8.GetString(respaldo.Cifrado!).Should().NotContain(LocatarioDeclarado);
+        Encoding.Latin1.GetString(respaldo.Cifrado!).Should().NotContain(LocatarioDeclarado);
+        respaldo.Cifrado.Should().NotEqual(Encoding.UTF8.GetBytes(LocatarioDeclarado));
+        protector.Desproteger(respaldo.Cifrado!).Should().Be(LocatarioDeclarado);
+    }
+
+    // HU #13730b — sin locatario del proveedor el declarado sigue vigente y el respaldo queda vacío; sin declarado y con
+    // proveedor, tampoco hay respaldo.
+    [Fact]
+    public async Task Sin_proveedor_el_declarado_sigue_vigente_y_el_respaldo_queda_vacio()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorRunt.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001", "CC", LocatarioDeclarado), Lotes.Fila("TST004")], ct);
+
+        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        var conDeclarado = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
+        conDeclarado.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
+        protector.Desproteger(conDeclarado.LocatarioDocCifrado!).Should().Be(LocatarioDeclarado);
+        (await RespaldoAsync(api, conDeclarado.Id, ct)).Should().Be(((string?)null, (byte[]?)null), "el declarado vigente no se duplica en el respaldo");
+        var soloProveedor = await MotorRunt.VehiculoAsync(api, empresa, id, "TST004", ct);
+        soloProveedor.LocatarioDocOrigen.Should().Be(OrigenDocumento.Proveedor);
+        (await RespaldoAsync(api, soloProveedor.Id, ct)).Should().Be(((string?)null, (byte[]?)null), "no había declarado que respaldar");
+    }
+
+    // HU #13730b — la base exige tipo y documento del respaldo juntos, y solo con el vigente del proveedor.
+    [Fact]
+    public async Task Check_exige_tipo_y_documento_del_respaldo_juntos_y_solo_con_proveedor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorRunt.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado), Lotes.Fila("TST001", "CC", LocatarioDeclarado)], ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        var conRespaldo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST003", ct);
+        var declarado = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
+
+        await DebeViolarAsync(api, $"UPDATE diagnostico.vehiculos SET locatario_declarado_doc_tipo = NULL WHERE id = '{conRespaldo.Id}'",
+            "ck_vehiculos_locatario_declarado", ct);
+        await DebeViolarAsync(api, $"UPDATE diagnostico.vehiculos SET locatario_declarado_doc_cifrado = NULL WHERE id = '{conRespaldo.Id}'",
+            "ck_vehiculos_locatario_declarado", ct);
+        await DebeViolarAsync(
+            api,
+            $"UPDATE diagnostico.vehiculos SET locatario_declarado_doc_tipo = 'CC', locatario_declarado_doc_cifrado = decode('0102', 'hex') WHERE id = '{declarado.Id}'",
+            "ck_vehiculos_locatario_declarado_con_proveedor", ct);
+    }
+
+    // HU #13730b — el documento declarado (vigente o de respaldo) nunca aparece en los logs, en consultas.payload ni en la fila.
+    [Fact]
+    public async Task Respaldo_del_declarado_no_aparece_en_logs_ni_en_payload()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var logs = new LogsEnMemoria();
+        await using var api = await MotorRunt.ArrancarAsync(b =>
+        {
+            b.Logging.AddProvider(logs);
+            b.Logging.AddFilter<LogsEnMemoria>(null, LogLevel.Trace);
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado)], ct);
+
+        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+
+        var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
+        (await RespaldoAsync(api, vehiculo.Id, ct)).Cifrado.Should().NotBeNull("hay respaldo que proteger");
+        await using var conexion = new NpgsqlConnection(api.BaseDeDatos);
+        await conexion.OpenAsync(ct);
+        await using var consulta = new NpgsqlCommand(
+            "SELECT row_to_json(v)::text, coalesce(c.payload::text, '') FROM diagnostico.vehiculos v " +
+            "JOIN diagnostico.consultas c ON c.vehiculo_id = v.id AND c.fuente = 'RUNT' WHERE v.id = @id",
+            conexion);
+        consulta.Parameters.AddWithValue("id", vehiculo.Id);
+        await using var lector = await consulta.ExecuteReaderAsync(ct);
+        (await lector.ReadAsync(ct)).Should().BeTrue();
+        foreach (var texto in new[] { lector.GetString(0), lector.GetString(1) })
+            texto.Should().NotContain(LocatarioDeclarado).And.NotContain(LocatarioLeasing);
+        logs.Mensajes.Should().NotBeEmpty();
+        logs.Mensajes.Should().NotContain(m => m.Contains(LocatarioDeclarado, StringComparison.Ordinal) || m.Contains(LocatarioLeasing, StringComparison.Ordinal));
+    }
+
+    /// <summary>Tipo y documento cifrado del respaldo del locatario declarado, leídos por SQL directo.</summary>
+    private static async Task<(string? Tipo, byte[]? Cifrado)> RespaldoAsync(ApiDePrueba api, Guid vehiculo, CancellationToken ct)
+    {
+        await using var conexion = new NpgsqlConnection(api.BaseDeDatos);
+        await conexion.OpenAsync(ct);
+        await using var consulta = new NpgsqlCommand(
+            "SELECT locatario_declarado_doc_tipo, locatario_declarado_doc_cifrado FROM diagnostico.vehiculos WHERE id = @id", conexion);
+        consulta.Parameters.AddWithValue("id", vehiculo);
+        await using var lector = await consulta.ExecuteReaderAsync(ct);
+        (await lector.ReadAsync(ct)).Should().BeTrue();
+        return (lector.IsDBNull(0) ? null : lector.GetString(0), lector.IsDBNull(1) ? null : (byte[])lector[1]);
+    }
+
+    private static async Task DebeViolarAsync(ApiDePrueba api, string sql, string restriccion, CancellationToken ct)
+    {
+        var error = (await FluentActions.Awaiting(() => Motor.EjecutarAsync(api, sql, ct)).Should().ThrowAsync<PostgresException>()).Which;
+        error.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
+        error.ConstraintName.Should().Be(restriccion);
+    }
 }
 
 /// <summary>

@@ -802,6 +802,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("identificador_original")
                         .HasComment("@pii:low Identificador tal como lo escribió el cliente (placa o VIN).");
 
+                    b.Property<byte[]>("LocatarioDeclaradoDocCifrado")
+                        .HasColumnType("bytea")
+                        .HasColumnName("locatario_declarado_doc_cifrado")
+                        .HasComment("@pii:high Documento del locatario declarado por el cliente, cifrado; respaldo cuando el proveedor trae el suyo (R-3).");
+
+                    b.Property<string>("LocatarioDeclaradoDocTipo")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("locatario_declarado_doc_tipo")
+                        .HasComment("Tipo del documento del locatario declarado por el cliente que el del proveedor reemplazó (respaldo, R-3).");
+
                     b.Property<byte[]>("LocatarioDocCifrado")
                         .HasColumnType("bytea")
                         .HasColumnName("locatario_doc_cifrado")
@@ -811,7 +822,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("locatario_doc_origen")
-                        .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (respaldo de la captura); null sin documento.");
+                        .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (lo declaró el cliente y sigue vigente); null sin documento.");
 
                     b.Property<string>("LocatarioDocTipo")
                         .HasMaxLength(8)
@@ -904,6 +915,10 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
 
                             t.HasCheckConstraint("ck_vehiculos_identificador_norm", "identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\\s'");
+
+                            t.HasCheckConstraint("ck_vehiculos_locatario_declarado", "(locatario_declarado_doc_tipo IS NULL) = (locatario_declarado_doc_cifrado IS NULL)");
+
+                            t.HasCheckConstraint("ck_vehiculos_locatario_declarado_con_proveedor", "locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = 'PROVEEDOR'");
 
                             t.HasCheckConstraint("ck_vehiculos_locatario_doc_origen", "locatario_doc_origen IS NULL OR locatario_doc_origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
 

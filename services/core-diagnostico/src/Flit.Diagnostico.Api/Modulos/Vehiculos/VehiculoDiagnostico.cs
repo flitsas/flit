@@ -54,6 +54,15 @@ public sealed class VehiculoDiagnostico : IEntidadDeEmpresa
     /// <summary>Origen del documento del locatario; null si no hay documento.</summary>
     public OrigenDocumento? LocatarioDocOrigen { get; set; }
 
+    /// <summary>
+    /// Tipo del documento del locatario que declaró el cliente y que el del proveedor reemplazó (respaldo, R-3, HU #13730b);
+    /// null si el declarado sigue vigente o si no hubo declarado. Va siempre junto con <see cref="LocatarioDeclaradoDocCifrado"/>.
+    /// </summary>
+    public string? LocatarioDeclaradoDocTipo { get; set; }
+
+    /// <summary>Documento declarado por el cliente, cifrado, que quedó de respaldo al llegar el del proveedor (R-3).</summary>
+    public byte[]? LocatarioDeclaradoDocCifrado { get; set; }
+
     /// <summary>Datos del vehículo consolidados de las fuentes (objeto JSON), sin documentos en claro.</summary>
     public string DatosConsolidados { get; set; } = "{}";
 
