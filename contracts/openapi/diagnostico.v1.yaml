@@ -37,6 +37,10 @@ tags:
       NO_MOSTRAR...) y los campos van en snake_case.
   - name: Catalogos
     description: Catálogos de la plataforma que Diagnóstico ofrece (tipos de trámite de Trámites).
+  - name: Diagnosticos
+    description: >
+      Cabecera del diagnóstico (MOD01, HU #13750): nombre, modo, tipo de trámite y alcance sobre una copia fija de la
+      configuración de la compañía. Campos en snake_case y códigos de la base.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -181,6 +185,144 @@ paths:
           description: >
             `code` = CATALOGO_NO_DISPONIBLE: Trámites no respondió tras los reintentos (o rechazó al cliente de
             servicio) y no hay copia vigente. No se devuelve ninguna lista fija ni una copia vencida.
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar.
+              schema:
+                type: integer
+                example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos:
+    post:
+      tags: [Diagnosticos]
+      operationId: crearDiagnostico
+      summary: Crea la cabecera de un diagnóstico en CREADO
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13750, F01-H4). El backoffice FLIT no lo tiene (R-6): 403. Guarda la
+        cabecera en CREADO con la copia inmutable del alcance y de la configuración vigente de la compañía del token (un
+        cambio posterior de la configuración no la altera) y la fila inicial del historial (estado_anterior nulo,
+        disparador AUTO), en la misma transacción. Validación (422 con code y campo, sin guardar nada), en este orden:
+        nombre vacío o de más de 150 caracteres (NOMBRE_INVALIDO); fuente en un grupo que no es el suyo
+        (FUENTE_EN_GRUPO_AJENO); alcance sin RUNT (ALCANCE_SIN_RUNT); fuente fuera de fuentes_habilitadas
+        (FUENTE_NO_HABILITADA); fuente habilitada sin adaptador disponible, como IMPUESTO_DEPARTAMENTAL mientras
+        Diagnostico:Fuentes:ImpuestoDisponible sea false (FUENTE_NO_DISPONIBLE); CON_ANALISIS sin tipo
+        (TIPO_TRAMITE_REQUERIDO). Solo si todo eso se cumple y el modo es CON_ANALISIS se consulta el catálogo de
+        GET /tipos-tramite: tipo fuera del catálogo de la etapa (TIPO_TRAMITE_NO_DISPONIBLE) o faltan las fuentes
+        obligatorias del tipo (FUENTES_OBLIGATORIAS_FALTANTES, R-17; la lista llega vacía en D1). Un modo o una fuente
+        con un código desconocido responde 422 VALOR_FUERA_DE_CONJUNTO con su campo. En modo SIMPLE el tipo de trámite
+        se descarta. El nombre se guarda sin los espacios de los extremos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CabeceraEntrada"
+      responses:
+        "201":
+          description: Cabecera creada en CREADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostico"
+        "400":
+          description: El cuerpo no es un JSON con la forma de CabeceraEntrada.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.diagnosticos.crear (sin cuerpo; el backoffice FLIT, R-6); sin usuario (`code` = SIN_USUARIO),
+            sin compañía (`code` = SIN_EMPRESA) o compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: Regla de la cabecera incumplida (ver la descripción); `campo` nombra el campo del cuerpo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: >
+            `code` = CATALOGO_NO_DISPONIBLE: CON_ANALISIS y el catálogo de tipos de trámite no está disponible (misma
+            conducta degradada de GET /tipos-tramite). No se guarda nada.
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar.
+              schema:
+                type: integer
+                example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id de la cabecera.
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Diagnosticos]
+      operationId: editarDiagnostico
+      summary: Edita nombre, modo, tipo y alcance de la cabecera mientras está en CREADO
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13750, F01-H4, F01-C9). Mismo cuerpo y mismas reglas que la creación,
+        validadas contra la copia de configuración guardada en la cabecera (no contra la configuración de hoy). La copia,
+        el creador y la fecha de creación no cambian. Solo en CREADO: en cualquier otro estado responde 409
+        DIAGNOSTICO_NO_EDITABLE y no cambia nada. Una cabecera de otra compañía, o que no existe, responde 404.
+        Este endpoint no está en la tabla §6.1 del plan (se agrega aquí y se informa al architecture-agent).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CabeceraEntrada"
+      responses:
+        "200":
+          description: Cabecera editada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostico"
+        "400":
+          description: El cuerpo no es un JSON con la forma de CabeceraEntrada.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: no existe o es de otra compañía."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = DIAGNOSTICO_NO_EDITABLE: la cabecera ya no está en CREADO."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: Regla de la cabecera incumplida (mismos códigos que la creación).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: "`code` = CATALOGO_NO_DISPONIBLE (CON_ANALISIS con el catálogo caído)."
           headers:
             Retry-After:
               description: Segundos antes de reintentar.
@@ -616,6 +758,107 @@ components:
           items:
             type: string
 
+    ModoDiagnostico:
+      type: string
+      enum: [SIMPLE, CON_ANALISIS]
+
+    EstadoDiagnostico:
+      type: string
+      enum: [CREADO, EN_PROCESO, COMPLETADO, INCOMPLETO]
+
+    Alcance:
+      type: object
+      description: >
+        Fuentes en sus tres grupos (R-24). por_vehiculo: RUNT, SIMIT_VEHICULO, AVALUO, IMPUESTO_DEPARTAMENTAL;
+        por_propietario: RUNT_PROPIETARIO, SIMIT_PROPIETARIO; por_locatario: RUNT_LOCATARIO, SIMIT_LOCATARIO. Una fuente
+        en un grupo que no es el suyo responde 422 FUENTE_EN_GRUPO_AJENO. RUNT siempre. Un grupo ausente equivale a vacío.
+      properties:
+        por_vehiculo:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fuente"
+        por_propietario:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fuente"
+        por_locatario:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fuente"
+
+    CabeceraEntrada:
+      type: object
+      required: [nombre, modo, alcance]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 150
+        modo:
+          $ref: "#/components/schemas/ModoDiagnostico"
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          description: Obligatorio con CON_ANALISIS (código de GET /tipos-tramite); se descarta con SIMPLE.
+          example: TRASPASO_STANDARD
+        alcance:
+          $ref: "#/components/schemas/Alcance"
+      example:
+        nombre: Flota norte
+        modo: SIMPLE
+        alcance:
+          por_vehiculo: [RUNT, SIMIT_VEHICULO]
+          por_propietario: [RUNT_PROPIETARIO]
+          por_locatario: []
+
+    Diagnostico:
+      type: object
+      required: [id, nombre, modo, tipo_tramite_codigo, es_express, estado, alcance, configuracion, usuario_creador_id, creado_en]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        modo:
+          $ref: "#/components/schemas/ModoDiagnostico"
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+        es_express:
+          type: boolean
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        alcance:
+          $ref: "#/components/schemas/Alcance"
+        configuracion:
+          type: object
+          description: Copia inmutable de la configuración de la compañía al crear (sin redaccion_ia_suspendida).
+          required: [fuentes_habilitadas, limite_vehiculos_lote, visibilidad_usuario, fuentes_por_defecto, estimado_consultas]
+          properties:
+            fuentes_habilitadas:
+              type: array
+              items:
+                $ref: "#/components/schemas/Fuente"
+            limite_vehiculos_lote:
+              type: integer
+              format: int32
+              minimum: 1
+            visibilidad_usuario:
+              $ref: "#/components/schemas/VisibilidadUsuario"
+            fuentes_por_defecto:
+              type: array
+              items:
+                $ref: "#/components/schemas/Fuente"
+            estimado_consultas:
+              $ref: "#/components/schemas/EstimadoConsultas"
+        usuario_creador_id:
+          type: string
+          format: uuid
+        creado_en:
+          type: string
+          format: date-time
+
     ErrorRegla:
       type: object
       required: [code, error]
@@ -625,3 +868,7 @@ components:
           example: SIN_EMPRESA
         error:
           type: string
+        campo:
+          type: string
+          description: Campo del cuerpo que incumple la regla (solo en las reglas de un campo, HU #13750).
+          example: alcance.por_vehiculo

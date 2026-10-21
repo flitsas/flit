@@ -48,6 +48,9 @@ public sealed class ReglaException : Exception
 
     public int Status { get; } = StatusCodes.Status422UnprocessableEntity;
 
+    /// <summary>Campo del cuerpo que incumple la regla (snake_case, HU #13750); null si la regla no es de un campo.</summary>
+    public string? Campo { get; init; }
+
     /// <summary>Segundos de la cabecera <c>Retry-After</c> (solo en un 503 de una dependencia caída); null si no aplica.</summary>
     public int? RetryAfterSegundos { get; init; }
 
@@ -70,7 +73,7 @@ public sealed class ReglaException : Exception
 /// (SQLSTATE 23514) que se escape a la validación de la aplicación también es una regla de dominio: 422
 /// <c>VALOR_INVALIDO</c>, sin el nombre del CHECK ni el detalle de la base (HU #13741). Si la regla trae
 /// <see cref="ReglaException.RetryAfterSegundos"/>, la respuesta lleva <c>Retry-After</c> (HU #13742). Cualquier otro error
-/// sigue su curso.
+/// sigue su curso. Si la regla nombra el campo (<see cref="ReglaException.Campo"/>), el cuerpo lo trae en <c>campo</c>.
 /// </summary>
 internal sealed class ManejadorReglas : IExceptionHandler
 {
@@ -92,7 +95,10 @@ internal sealed class ManejadorReglas : IExceptionHandler
         httpContext.Response.StatusCode = regla.Status;
         if (regla.RetryAfterSegundos is { } segundos)
             httpContext.Response.Headers.RetryAfter = segundos.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        await httpContext.Response.WriteAsJsonAsync(new { code = regla.Codigo, error = regla.Message }, cancellationToken).ConfigureAwait(false);
+        object cuerpo = regla.Campo is null
+            ? new { code = regla.Codigo, error = regla.Message }
+            : new { code = regla.Codigo, error = regla.Message, campo = regla.Campo };
+        await httpContext.Response.WriteAsJsonAsync(cuerpo, cancellationToken).ConfigureAwait(false);
         return true;
     }
 }

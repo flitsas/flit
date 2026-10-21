@@ -15,6 +15,7 @@ public static class Modulos
         Configuracion.ConfiguracionEndpoints.Map(api);
         Backoffice.BackofficeEndpoints.Map(api);
         Catalogos.TiposTramiteEndpoints.Map(api);
+        Diagnosticos.DiagnosticosEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }
