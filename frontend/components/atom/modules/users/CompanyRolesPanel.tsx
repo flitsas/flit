@@ -5,7 +5,7 @@
 // Patrón de tabla de trámites (table-styles, botón «Acciones» con menú, Pagination numerada con «Filas por página»), modal normal
 // y los 4 estados (cargando, error, vacío, lleno). Backend: HU #13441 (/api/v1/security/roles).
 import { useCallback, useEffect, useState } from "react";
-import { Eye, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Loader2, Pencil, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
@@ -80,7 +80,6 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
           className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
           style={{ background: "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)" }}
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
           Nuevo rol
         </button>
       </div>

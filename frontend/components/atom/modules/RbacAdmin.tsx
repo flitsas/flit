@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Pencil, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, KeyRound, Trash2, PowerOff, Power, Pencil } from "lucide-react";
 import {
   superadminClient,
   RbacModule,
@@ -160,7 +160,7 @@ export function RbacAdmin() {
           ariaLabel={`Acciones de ${mod.name}`}
           subject={mod.name}
           actions={destructivasAlFinal([
-            { icon: Plus, label: `Agregar permiso a ${mod.name}`, tone: "primary", onClick: () => setCreatePermissionForModule(mod) },
+            { icon: KeyRound, label: `Agregar permiso a ${mod.name}`, tone: "primary", onClick: () => setCreatePermissionForModule(mod) },
             mod.isActive
               ? { icon: PowerOff, label: `Desactivar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeactivateModule(mod.id) }
               : { icon: Power, label: `Activar módulo ${mod.name}`, onClick: () => void handleActivateModule(mod.id) },
