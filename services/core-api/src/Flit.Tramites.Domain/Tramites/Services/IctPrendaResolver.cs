@@ -157,9 +157,14 @@ public static class IctPrendaResolver
     private enum SenalRunt { Positiva, Negativa, Desconocida }
 
     /// <summary>
-    /// Positiva = <see cref="RuntGravamenSignal.Reporta(string?, string?, string?)"/>. Negativa = al menos
-    /// una bandera dice explícitamente «no», ninguna dice «sí» y no hay garantías. Lo demás —claves
-    /// ausentes, vacías o con texto que no es ni sí ni no— es desconocida: no se inventa que no hay prenda.
+    /// Positiva = la bandera de prendas o la de gravámenes dice «sí», o el detalle trae al menos una
+    /// garantía. Solo usa las tres claves de <see cref="RuntGravamenSignal.Leer"/> (prendas, gravámenes,
+    /// garantías), no la señal ampliada de
+    /// <see cref="RuntGravamenSignal.Reporta(string?, string?, string?, string?, string?)"/> con dato
+    /// prendario y limitaciones a la propiedad (HU #13776, CF-10): el ICT sigue distinguiendo prenda de
+    /// gravamen no prendario. Negativa = al menos una bandera dice explícitamente «no», ninguna dice «sí»
+    /// y no hay garantías. Lo demás —claves ausentes, vacías o con texto que no es ni sí ni no— es
+    /// desconocida: no se inventa que no hay prenda.
     /// </summary>
     private static SenalRunt Senal(string? prendas, string? gravamenes, int garantias)
     {
