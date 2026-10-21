@@ -13,6 +13,15 @@ public static class RuntGravamenDatos
     public const string GravamenesKey = "runt_tiene_gravamenes";
     public const string DetalleKey = "runt_gravamenes";
 
+    /// <summary>HU #13776 — dato prendario del RUNT («SI»/«NO»); hoy solo lo hidrata Intempo.</summary>
+    public const string PrendarioKey = "runt_prendario";
+
+    /// <summary>
+    /// HU #13776 — limitaciones a la propiedad («a favor de») tal como las trae el proveedor, en
+    /// <c>ValueJson</c> (array JSON; <c>"[]"</c> si no hay). Puede contener PII del beneficiario: no loguear.
+    /// </summary>
+    public const string LimitacionesKey = "runt_limitaciones_propiedad";
+
     /// <summary>
     /// Formas afirmativas de las banderas, ya en mayúscula. Enumerables (Bug #13445) porque el filtro
     /// «Con prenda» del listado repite esta comparación en SQL: <see cref="EsAfirmativo"/> se deriva de
@@ -111,6 +120,54 @@ public static class RuntGravamenDatos
                 _ => false,
             });
 
-    public static bool Reporta(string? prendas, string? gravamenes, string? detalleJson) =>
-        EsAfirmativo(prendas) || EsAfirmativo(gravamenes) || ContarGarantias(detalleJson) > 0;
+    /// <summary>
+    /// HU #13776 — limitaciones a la propiedad con dato en el array JSON: cuenta los elementos que traen
+    /// algún valor (texto no vacío, número, <c>true</c>, u objeto/array con algún valor dentro). null,
+    /// <c>""</c>, <c>{}</c>, <c>[]</c> y objetos con todo vacío no cuentan. 0 si el JSON es null, vacío,
+    /// no es array o no parsea: un dato ilegible no inventa gravamen.
+    /// </summary>
+    public static int ContarLimitaciones(string? limitacionesJson)
+    {
+        if (string.IsNullOrWhiteSpace(limitacionesJson))
+            return 0;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(limitacionesJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Array
+                ? doc.RootElement.EnumerateArray().Count(TieneValor)
+                : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
+    private static bool TieneValor(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.String => !string.IsNullOrWhiteSpace(e.GetString()),
+        JsonValueKind.Number or JsonValueKind.True => true,
+        JsonValueKind.Object => e.EnumerateObject().Any(p => TieneValor(p.Value)),
+        JsonValueKind.Array => e.EnumerateArray().Any(TieneValor),
+        _ => false,
+    };
+
+    /// <summary>
+    /// Señal ÚNICA de gravamen (Bug #13203, HU #13776): banderas <c>prendas</c>/<c>gravámenes</c>
+    /// afirmativas, al menos una garantía con datos (RNGM), dato prendario afirmativo o al menos una
+    /// limitación a la propiedad. La comparten el semáforo de los tres proveedores, el gate de prenda y
+    /// (con su espejo SQL) el filtro del listado.
+    /// </summary>
+    public static bool Reporta(
+        string? prendas,
+        string? gravamenes,
+        string? detalleJson,
+        string? prendario = null,
+        string? limitacionesJson = null) =>
+        EsAfirmativo(prendas)
+        || EsAfirmativo(gravamenes)
+        || ContarGarantias(detalleJson) > 0
+        || EsAfirmativo(prendario)
+        || ContarLimitaciones(limitacionesJson) > 0;
 }

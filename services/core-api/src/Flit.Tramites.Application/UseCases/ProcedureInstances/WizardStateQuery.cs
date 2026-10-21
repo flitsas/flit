@@ -116,6 +116,15 @@ public sealed record WizardStateDto(
     public bool PrendaOmitAllowed { get; init; }
 
     /// <summary>
+    /// HU #13776 — el RUNT reporta prenda o gravamen sobre el vehículo, según la señal ÚNICA
+    /// (<see cref="RuntGravamenSignal.Reporta(IEnumerable{ProcedureInstanceFieldValue})"/>: banderas, garantías
+    /// RNGM, dato prendario o limitaciones a la propiedad). Es el mismo valor con el que se evalúa la
+    /// exigencia de decisión de prenda: el asistente pinta el aviso con él en vez de releer los
+    /// <c>field_values</c> por su cuenta.
+    /// </summary>
+    public bool RuntReportaGravamen { get; init; }
+
+    /// <summary>
     /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
     /// titule el trámite que se está haciendo. Sin esto, el frontend solo tenía la familia y
     /// rotulaba «Matrícula Inicial» cualquier cosa que no fuera un traspaso.
@@ -805,6 +814,7 @@ public sealed class GetWizardStateHandler(
             AllowedTransitions = allowed,
             Status = instance.Status,
             EsMigrado = instance.IsMigrated,
+            RuntReportaGravamen = RuntReportaGravamen(instance),
         };
     }
 

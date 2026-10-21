@@ -183,6 +183,12 @@ public static class RuntGarantiasMobiliarias
     /// <summary>Valor de <c>runt_gravamenes</c> cuando el proveedor respondió sin garantías.</summary>
     public const string SinGarantiasJson = "[]";
 
+    /// <summary>HU #13776 — valor de <c>runt_limitaciones_propiedad</c> cuando el proveedor no trae limitaciones.</summary>
+    public const string SinLimitacionesJson = "[]";
+
+    /// <summary>HU #13776 / Bug #13768 — prefijo del mensaje del check cuando el RUNT reporta prenda o gravamen.</summary>
+    public const string MensajeReportaPrefijo = "El RUNT reporta prenda o gravamen: ";
+
     private static readonly JsonSerializerOptions GravamenJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -219,10 +225,12 @@ public static class RuntGarantiasMobiliarias
     }
 
     /// <summary>
-    /// Hidrata las CUATRO claves de la señal de gravamen, siempre que el proveedor respondió
+    /// Hidrata las claves de la señal de gravamen, siempre que el proveedor respondió
     /// (revisión PR #504, B1): <c>runt_tiene_gravamenes</c>/<c>runt_tiene_prendas</c> con su valor o
     /// null, <c>runt_nombre_acreedor</c> con el primer acreedor o null, y <c>runt_gravamenes</c> con el
-    /// JSON normalizado o <c>"[]"</c>. El upsert de la consulta solo inserta o actualiza: sin escribir la
+    /// JSON normalizado o <c>"[]"</c>. HU #13776: también <c>runt_prendario</c> (null) y
+    /// <c>runt_limitaciones_propiedad</c> (<c>"[]"</c>), que Kyverum y Verifik no traen: si un trámite
+    /// se consultó antes por Intempo, la re-consulta no deja vivo el dato viejo en la señal. El upsert de la consulta solo inserta o actualiza: sin escribir la
     /// clave, el detalle de una consulta anterior sobrevivía y <see cref="RuntGravamenSignal"/> lo seguía
     /// contando aunque el RUNT ya no reportara nada.
     /// </summary>
@@ -245,29 +253,30 @@ public static class RuntGarantiasMobiliarias
             RuntGravamenDatos.DetalleKey,
             null,
             garantias.Count == 0 ? SinGarantiasJson : JsonSerializer.Serialize(garantias, GravamenJsonOptions)));
+
+        fields.Add(new HydratedField(RuntGravamenDatos.PrendarioKey, null, null));
+        fields.Add(new HydratedField(RuntGravamenDatos.LimitacionesKey, null, SinLimitacionesJson));
     }
 
     /// <summary>
-    /// Semáforo <c>gravamenes</c>. Nunca bloquea: <c>warn</c> si alguna bandera es afirmativa o hay al
-    /// menos una garantía; <c>unknown</c> solo si no hay banderas ni garantías; <c>ok</c> en el resto.
+    /// Semáforo <c>gravamenes</c> de los TRES proveedores (Kyverum, Verifik, Intempo). Nunca bloquea:
+    /// <c>warn</c> si y solo si la señal única reporta gravamen (<see cref="RuntGravamenDatos.Reporta"/>:
+    /// banderas afirmativas, garantías, dato prendario o limitaciones a la propiedad); <c>unknown</c> si no
+    /// reporta y no hay ninguna bandera informada; <c>ok</c> en el resto.
     /// </summary>
-    public static ConsultationCheck BuildCheck(string provider, string? gravamenes, string? prendas, int garantias)
+    public static ConsultationCheck BuildCheck(
+        string provider,
+        string? gravamenes,
+        string? prendas,
+        int garantias,
+        string? prendario = null,
+        int limitaciones = 0)
     {
-        if (RuntGravamenDatos.EsAfirmativo(gravamenes) || RuntGravamenDatos.EsAfirmativo(prendas))
-        {
-            return new ConsultationCheck(
-                CheckKey, CheckLabel, Warn, provider,
-                $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(gravamenes)} · prendas: {NormSiNo(prendas)})");
-        }
+        var mensaje = MensajeReporta(gravamenes, prendas, garantias, prendario, limitaciones);
+        if (mensaje is not null)
+            return new ConsultationCheck(CheckKey, CheckLabel, Warn, provider, mensaje);
 
-        if (garantias > 0)
-        {
-            return new ConsultationCheck(
-                CheckKey, CheckLabel, Warn, provider,
-                $"El RUNT registra {garantias} garantía(s) mobiliaria(s) (gravámenes: {NormSiNo(gravamenes)} · prendas: {NormSiNo(prendas)})");
-        }
-
-        if (string.IsNullOrWhiteSpace(gravamenes) && string.IsNullOrWhiteSpace(prendas))
+        if (string.IsNullOrWhiteSpace(gravamenes) && string.IsNullOrWhiteSpace(prendas) && string.IsNullOrWhiteSpace(prendario))
             return new ConsultationCheck(CheckKey, CheckLabel, Unknown, provider, "Sin información de gravámenes");
 
         return new ConsultationCheck(
@@ -275,12 +284,33 @@ public static class RuntGarantiasMobiliarias
             "Sin gravámenes ni prendas registradas en el RUNT");
     }
 
+    /// <summary>
+    /// HU #13776 / Bug #13768 (punto 2) — ÚNICO armador del mensaje del check cuando el RUNT reporta prenda
+    /// o gravamen: <see cref="MensajeReportaPrefijo"/> + SOLO las fuentes afirmativas unidas por « · », en
+    /// este orden: <c>prendas: SI</c>, <c>gravámenes: SI</c>, <c>{n} garantía(s) mobiliaria(s)</c>,
+    /// <c>dato prendario</c>, <c>limitaciones a la propiedad</c>. Nunca muestra una bandera en NO (el
+    /// gestor leía «prendas: NO» con el vehículo pignorado). null si ninguna fuente es afirmativa.
+    /// </summary>
+    public static string? MensajeReporta(string? gravamenes, string? prendas, int garantias, string? prendario, int limitaciones)
+    {
+        var fuentes = new List<string>(5);
+        if (RuntGravamenDatos.EsAfirmativo(prendas))
+            fuentes.Add("prendas: SI");
+        if (RuntGravamenDatos.EsAfirmativo(gravamenes))
+            fuentes.Add("gravámenes: SI");
+        if (garantias > 0)
+            fuentes.Add($"{garantias} garantía(s) mobiliaria(s)");
+        if (RuntGravamenDatos.EsAfirmativo(prendario))
+            fuentes.Add("dato prendario");
+        if (limitaciones > 0)
+            fuentes.Add("limitaciones a la propiedad");
+
+        return fuentes.Count == 0 ? null : MensajeReportaPrefijo + string.Join(" · ", fuentes);
+    }
+
     /// <summary>Texto recortado, o null si viene vacío.</summary>
     public static string? Blank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string NormSiNo(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();

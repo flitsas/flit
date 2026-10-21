@@ -56,4 +56,17 @@ public sealed class ProcedureInstanceFiltroSqlTraduccionTests
 
         act.Should().NotThrow();
     }
+
+    // HU #13776 AC6 — el espejo SQL de la señal única también lee el dato prendario y las
+    // limitaciones a la propiedad, y sigue traduciéndose en el servidor.
+    [Fact]
+    public void HU13776_TienePrenda_IncluyePrendarioYLimitacionesEnElSql()
+    {
+        using var db = NewContext();
+
+        var sql = db.ProcedureInstances.Where(ProcedureInstanceFiltroSql.TienePrenda(db)).ToQueryString();
+
+        sql.Should().Contain("runt_prendario");
+        sql.Should().Contain("runt_limitaciones_propiedad");
+    }
 }

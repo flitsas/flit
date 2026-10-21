@@ -7538,6 +7538,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/wizard:
+    get:
+      operationId: getProcedureInstanceWizardState
+      tags: [Tramites]
+      summary: Estado del asistente (wizard) del trámite
+      description: >
+        Pasos, capacidades y banderas con las que el asistente pinta el trámite. Este contrato documenta
+        de forma PARCIAL el objeto `WizardStateDto` (camelCase): solo las banderas de prenda/gravamen que
+        consume el aviso del paso de prenda (HU #13776, Feature #13110). El resto de propiedades existe y se
+        acepta sin declarar (`additionalProperties`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador de la instancia (procedure_instance_id).
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado del asistente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WizardState"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La instancia no existe para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/finalize-draft:
     post:
       operationId: finalizeDraftProcedureInstance
@@ -17191,6 +17233,29 @@ components:
             - $ref: "#/components/schemas/ConsolidadoVigencia"
           nullable: true
       required: [id, referenceNumber, modalidad, estado, createdAt, tenantId]
+
+    WizardState:
+      type: object
+      description: >
+        Estado del asistente del trámite (`WizardStateDto`). Contrato PARCIAL: declara las banderas de
+        prenda/gravamen; el resto de propiedades viaja sin declarar.
+      additionalProperties: true
+      properties:
+        prendaDocumentRequired:
+          type: boolean
+          description: El OT exige el certificado de prenda (false si el opt-out `document_optional` estaba vigente al crear el trámite).
+        prendaOmitAllowed:
+          type: boolean
+          description: >
+            Feature #13110 — el asistente puede ofrecer «Omitir prenda» (`omitir`). Misma regla que aplica el
+            PUT de prenda.
+        runtReportaGravamen:
+          type: boolean
+          description: >
+            HU #13776 — el RUNT reporta prenda o gravamen según la señal única: banderas prendas/gravámenes
+            afirmativas, garantías mobiliarias (RNGM) con datos, dato prendario afirmativo o al menos una
+            limitación a la propiedad («a favor de»), sea cual sea el proveedor (Kyverum, Verifik o Intempo).
+            Es el mismo valor con el que se evalúa la exigencia de decisión de prenda.
 
     ConsolidadoVigencia:
       type: object

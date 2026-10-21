@@ -9,8 +9,9 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// el semáforo <c>gravamenes</c> de los mappers de consulta, para que pantalla y gate no discrepen.
 ///
 /// <para>Hay gravamen si alguna bandera es afirmativa (<c>runt_tiene_prendas</c> /
-/// <c>runt_tiene_gravamenes</c>) O si el detalle <c>runt_gravamenes</c> es un array JSON con al menos
-/// un elemento con datos. Lo segundo cubre el caso real del bug: el RUNT contesta «NO»/«NO» y aun así trae una
+/// <c>runt_tiene_gravamenes</c> / <c>runt_prendario</c>, HU #13776) O si el detalle <c>runt_gravamenes</c>
+/// es un array JSON con al menos un elemento con datos O si <c>runt_limitaciones_propiedad</c> trae al
+/// menos una limitación a la propiedad (HU #13776). Lo segundo cubre el caso real del bug: el RUNT contesta «NO»/«NO» y aun así trae una
 /// garantía mobiliaria registrada en el RNGM. Un dato ausente, vacío o ilegible NO inventa gravamen —
 /// eso convertiría cada consulta fallida en un bloqueo—, pero tampoco se oculta cuando sí vino.</para>
 /// </summary>
@@ -21,6 +22,8 @@ public static class RuntGravamenSignal
     public const string PrendasKey = RuntGravamenDatos.PrendasKey;
     public const string GravamenesKey = RuntGravamenDatos.GravamenesKey;
     public const string DetalleKey = RuntGravamenDatos.DetalleKey;
+    public const string PrendarioKey = RuntGravamenDatos.PrendarioKey;
+    public const string LimitacionesKey = RuntGravamenDatos.LimitacionesKey;
 
     /// <summary>
     /// Formas afirmativas de las banderas, ya en mayúscula (Bug #13445): el filtro «Con prenda» del listado repite
@@ -48,22 +51,44 @@ public static class RuntGravamenSignal
     public static IReadOnlyList<RuntGarantia> Garantias(string? detalleJson) =>
         [.. RuntGravamenDatos.Garantias(detalleJson).Select(g => new RuntGarantia(g.AcreedorNombre, g.AcreedorDocumento))];
 
-    public static bool Reporta(string? prendas, string? gravamenes, string? detalleJson) =>
-        RuntGravamenDatos.Reporta(prendas, gravamenes, detalleJson);
+    /// <summary>Limitaciones a la propiedad con dato (ver <see cref="RuntGravamenDatos.ContarLimitaciones"/>).</summary>
+    public static int ContarLimitaciones(string? limitacionesJson) => RuntGravamenDatos.ContarLimitaciones(limitacionesJson);
+
+    public static bool Reporta(
+        string? prendas,
+        string? gravamenes,
+        string? detalleJson,
+        string? prendario = null,
+        string? limitacionesJson = null) =>
+        RuntGravamenDatos.Reporta(prendas, gravamenes, detalleJson, prendario, limitacionesJson);
 
     /// <summary>
-    /// Evalúa sobre los <c>field_values</c> de la instancia. El detalle se lee de <c>ValueJson</c> (así
-    /// lo hidratan los mappers) y, si viene vacío, de <c>ValueText</c>.
+    /// Evalúa sobre los <c>field_values</c> de la instancia. El detalle y las limitaciones se leen de
+    /// <c>ValueJson</c> (así los hidratan los mappers) y, si viene vacío, de <c>ValueText</c>.
     /// </summary>
     public static bool Reporta(IEnumerable<ProcedureInstanceFieldValue> fieldValues)
     {
-        var (prendas, gravamenes, detalle) = Leer(fieldValues);
-        return Reporta(prendas, gravamenes, detalle);
+        ArgumentNullException.ThrowIfNull(fieldValues);
+        var lista = fieldValues as IReadOnlyCollection<ProcedureInstanceFieldValue> ?? [.. fieldValues];
+        var (prendas, gravamenes, detalle) = Leer(lista);
+
+        string? prendario = null, limitaciones = null;
+        foreach (var f in lista)
+        {
+            if (string.Equals(f.FieldKey, PrendarioKey, StringComparison.OrdinalIgnoreCase))
+                prendario = f.ValueText;
+            else if (string.Equals(f.FieldKey, LimitacionesKey, StringComparison.OrdinalIgnoreCase))
+                limitaciones = string.IsNullOrWhiteSpace(f.ValueJson) ? f.ValueText : f.ValueJson;
+        }
+
+        return Reporta(prendas, gravamenes, detalle, prendario, limitaciones);
     }
 
     /// <summary>
-    /// Las tres claves de la señal tal como están en los <c>field_values</c> (Bug #13445: las comparte el
-    /// resolvedor de prenda ICT). El detalle se lee de <c>ValueJson</c> y, si viene vacío, de <c>ValueText</c>.
+    /// Las tres claves de prenda/gravamen/garantías tal como están en los <c>field_values</c> (Bug #13445: las
+    /// comparte el resolvedor de prenda ICT). El detalle se lee de <c>ValueJson</c> y, si viene vacío, de
+    /// <c>ValueText</c>. HU #13776 (CF-10): NO incluye dato prendario ni limitaciones a la propiedad, a
+    /// propósito: el ICT sigue distinguiendo prenda de gravamen no prendario.
     /// </summary>
     public static (string? Prendas, string? Gravamenes, string? Detalle) Leer(
         IEnumerable<ProcedureInstanceFieldValue> fieldValues)
