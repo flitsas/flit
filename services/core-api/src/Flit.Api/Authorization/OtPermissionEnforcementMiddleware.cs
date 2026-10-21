@@ -21,16 +21,24 @@ public sealed class OtPermissionEnforcementOptions
 /// Exige el slug OT de <see cref="OtPermissionMap"/> en AND con la policy del grupo (patrón de
 /// <c>consolidado-masivo.download</c>). Va después de <c>UseAuthorization</c>: el 401 y el 403 de rol ganan; este
 /// responde 403 <c>OT_PERMISSION_REQUIRED</c>. Reutiliza <see cref="PermissionAuthorizationHandler"/> (bypass SuperAdmin).
+/// <para>
+/// HU #13655: con el flag apagado, Usuarios (<c>ot.usuarios.manage</c>) e Integración (<c>ot.integracion.manage</c>)
+/// se exigen igual a quien no es <c>ot_admin</c> ni SuperAdmin. Son del Admin OT (decisión P1 del Anexo A) y, desde que
+/// existe el rol «Gestor OT», un usuario del organismo que no es administrador ya no debe poder invitar usuarios (ni
+/// administradores) ni crear webhooks solo por pertenecer al organismo. El Admin OT se los delega por usuario.
+/// </para>
 /// </summary>
 public sealed class OtPermissionEnforcementMiddleware(RequestDelegate next, IOptionsMonitor<OtPermissionEnforcementOptions> options)
 {
     public async Task InvokeAsync(HttpContext context, IAuthorizationService authorization)
     {
-        if (options.CurrentValue.Enabled
-            && context.User.Identity?.IsAuthenticated == true
+        var enabled = options.CurrentValue.Enabled;
+        if (context.User.Identity?.IsAuthenticated == true
+            && (enabled || !EsAdministradorOt(context.User))
             && context.GetEndpoint() is RouteEndpoint endpoint
             && endpoint.Metadata.GetMetadata<IHttpMethodMetadata>() is { } methods
-            && TryGetSlug(endpoint, methods, out var slug))
+            && TryGetSlug(endpoint, methods, out var slug)
+            && (enabled || slug is OtPermissionMap.Usuarios or OtPermissionMap.Integracion))
         {
             var result = await authorization.AuthorizeAsync(context.User, null, [new PermissionRequirement(slug)]).ConfigureAwait(false);
             if (!result.Succeeded)
@@ -48,6 +56,11 @@ public sealed class OtPermissionEnforcementMiddleware(RequestDelegate next, IOpt
 
         await next(context).ConfigureAwait(false);
     }
+
+    /// <summary>SuperAdmin u ot_admin: con el flag apagado no se les exige ningún slug (HU #13655).</summary>
+    private static bool EsAdministradorOt(System.Security.Claims.ClaimsPrincipal user) =>
+        user.Claims.Any(c => c.Type == AdminAuthorization.RoleClaimType
+            && (c.Value == AdminAuthorization.SuperAdminRole || c.Value == AdminAuthorization.OtAdminRole));
 
     private static bool TryGetSlug(RouteEndpoint endpoint, IHttpMethodMetadata methods, out string slug)
     {

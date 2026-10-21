@@ -196,6 +196,18 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
         await AssertNoBloqueada(admin);
     }
 
+    // HU #13655: Usuarios e Integración se exigen al Gestor OT aunque el flag esté apagado (no hay que tocar la base:
+    // el 403 sale antes del handler). El ot_admin sin slugs con el flag apagado lo cubre AC5.
+    [Theory]
+    [MemberData(nameof(RutasUsuariosEIntegracion))]
+    public async Task HU13655_FlagApagado_GestorOtSinElSlug_403PorPermiso(string firma)
+    {
+        var response = await Llamar(_apagado, firma, Token("gestor_tramites_ot", [OtPermissionMap.Tramites, OtPermissionMap.Reportes]));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden, firma);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("OT_PERMISSION_REQUIRED");
+    }
+
     // ── Anexo A §1.4: mandatarios, baúl y prelación se delegan por slug, no por rol ──────────────
 
     [Theory]

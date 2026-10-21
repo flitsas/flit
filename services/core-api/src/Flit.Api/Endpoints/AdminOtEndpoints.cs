@@ -48,6 +48,7 @@ using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
+using Flit.Modules.Security.Application.PermissionOverrides;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
@@ -2657,6 +2658,17 @@ public static partial class AdminOtEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
+        // HU #13655: quien invita sin ser Admin OT ni SuperAdmin (un Gestor OT al que el Admin OT le delegó Usuarios)
+        // elige el rol y no puede repartir el de administrador: sin esto invitaría Admin OT (el rol por defecto).
+        var invitaAdministrador = IsSuperAdmin(httpContext.User)
+            || RequestTenantResolver.HasRole(httpContext.User, AdminAuthorization.OtAdminRole);
+        if (!invitaAdministrador && requestedRoleIds.Count == 0)
+        {
+            return Results.Json(
+                new { error = "ROLE_REQUIRED", message = "Elige el rol del usuario." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         if (requestedRoleIds.Count == 0)
         {
             var role = await db.Roles.AsNoTracking()
@@ -2699,6 +2711,13 @@ public static partial class AdminOtEndpoints
                         message = "Alguno de los roles seleccionados no aplica a un organismo de tránsito.",
                     },
                     statusCode: StatusCodes.Status409Conflict);
+            }
+
+            if (!invitaAdministrador && AdministratorRoles.Any(selectedRoles.Select(r => r.Code)))
+            {
+                return Results.Json(
+                    new { error = "ADMIN_ROLE_NOT_ASSIGNABLE", message = "Solo un administrador puede invitar a otro administrador." },
+                    statusCode: StatusCodes.Status403Forbidden);
             }
 
             roleIds = requestedRoleIds;
@@ -2897,6 +2916,23 @@ public static partial class AdminOtEndpoints
         if (callerId is null)
         {
             return Results.Unauthorized();
+        }
+
+        // HU #13655: un Gestor OT con Usuarios delegado no edita a un administrador (cambiarle el correo le daría su
+        // cuenta). Misma regla que FB-9 en los permisos individuales.
+        if (!IsSuperAdmin(httpContext.User) && !RequestTenantResolver.HasRole(httpContext.User, AdminAuthorization.OtAdminRole))
+        {
+            var targetRoleCodes = await (
+                from a in db.UserRoleAssignments.AsNoTracking()
+                join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                where a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null
+                select r.Code).ToListAsync(cancellationToken).ConfigureAwait(false);
+            if (AdministratorRoles.Any(targetRoleCodes))
+            {
+                return Results.Json(
+                    new { error = "TARGET_IS_ADMIN", message = "Solo un administrador puede editar a otro administrador." },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
         }
 
         try

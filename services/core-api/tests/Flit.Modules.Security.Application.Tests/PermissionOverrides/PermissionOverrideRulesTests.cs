@@ -42,6 +42,15 @@ public sealed class PermissionOverrideRulesTests
         (await new TargetIsAdminRule(Lookup()).CheckAsync(Req(), Ct)).Should().Be("TARGET_IS_ADMIN");
     }
 
+    // HU #13655: el Gestor OT no es administrador, así que el Admin OT de su organismo sí lo configura.
+    [Fact]
+    public async Task HU13655_el_Gestor_OT_no_es_administrador_y_el_Admin_OT_lo_puede_editar()
+    {
+        Target(Info(roles: "gestor_tramites_ot"));
+        (await new TargetIsAdminRule(Lookup()).CheckAsync(Req(), Ct)).Should().BeNull();
+        AdministratorRoles.Any(["gestor_tramites_ot"]).Should().BeFalse();
+    }
+
     [Fact]
     public async Task AC1_el_super_admin_si_puede_y_un_usuario_normal_pasa()
     {
