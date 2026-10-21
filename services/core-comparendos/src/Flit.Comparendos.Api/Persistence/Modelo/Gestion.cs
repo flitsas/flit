@@ -7,8 +7,12 @@ public sealed class Contraventor : Auditada
 {
     public Guid ComparendoId { get; set; }
     public Guid TenantId { get; set; }
-    public TipoDocumento TipoDocumento { get; set; } = TipoDocumento.CC;
-    public string NumeroDocumento { get; set; } = string.Empty;
+    /// <summary>
+    /// Sin documento solo cuando lo trae la API de contratos, que no lo devuelve (HU #13712, hallazgo con Renting real):
+    /// queda «documento pendiente» hasta que el operador lo complete, y sin él no se solicita el cambio de contraventor.
+    /// </summary>
+    public TipoDocumento? TipoDocumento { get; set; }
+    public string? NumeroDocumento { get; set; }
     public string Nombres { get; set; } = string.Empty;
     public string? Correo { get; set; }
     public string? Telefono { get; set; }

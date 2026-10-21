@@ -78,6 +78,7 @@ public static partial class EmpresasEndpoints
         admin.MapPut("/{id:guid}/capacidades", GuardarCapacidades);
         admin.MapPut("/{id:guid}/correo", GuardarCorreoDeEmpresa);
         admin.MapGet("/{id:guid}/auditoria", Historial);
+        admin.MapPut("/{id:guid}/nits/{nitId:guid}/consulta-contrato", GuardarConsultaContratoNit);
     }
 
     public static ConfiguracionDto Dto(ConfiguracionEmpresa c)
@@ -257,8 +258,7 @@ public static partial class EmpresasEndpoints
             return Results.Ok(Dto(c));
 
         var activaCambio = !c.AllowsContravenerChange && pedido.AllowsContravenerChange;
-        var activaConsulta = (!c.AllowsContravenerConsultation || c.TipoIntegracionConductor != TipoIntegracionConductor.ApiRenting)
-            && pedido.AllowsContravenerConsultation && integracion == TipoIntegracionConductor.ApiRenting;
+        var cambiaConsulta = c.AllowsContravenerConsultation != pedido.AllowsContravenerConsultation || c.TipoIntegracionConductor != integracion;
         (c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess, c.HasReportesModule) =
             (pedido.HasRightPetitionModule, pedido.AllowsContravenerConsultation, pedido.AllowsContravenerChange, pedido.HasOcrAccess, pedido.HasReportesModule);
         (c.TipoIntegracionConductor, c.ConjuntoPlantillas, c.RequiereRepresentanteLegal) = (integracion, conjunto, pedido.RequiereRepresentanteLegal);
@@ -267,20 +267,38 @@ public static partial class EmpresasEndpoints
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // Al activar el cambio de contraventor, los comparendos activos sin solicitud pasan a «sin solicitar» (S-34);
-        // al activar la consulta por API, los que no tienen conductor quedan pendientes de consulta.
+        // al encender o apagar la consulta por API, los que no tienen conductor se recalculan con las casillas de cada NIT
+        // (HU #13712): pendientes de consulta si su NIT la usa, asignación manual si no.
         if (activaCambio)
         {
             await db.Comparendos.Where(x => x.TenantId == id && x.Activo && x.EstadoCambioContraventor == EstadoCambioContraventor.NoAplica)
                 .ExecuteUpdateAsync(u => u.SetProperty(x => x.EstadoCambioContraventor, EstadoCambioContraventor.SinSolicitar), ct).ConfigureAwait(false);
         }
 
-        if (activaConsulta)
-        {
-            await db.Comparendos.Where(x => x.TenantId == id && x.Activo && x.Contraventor == null && x.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica)
-                .ExecuteUpdateAsync(u => u.SetProperty(x => x.EstadoConsultaContraventor, EstadoConsultaContraventor.Pendiente), ct).ConfigureAwait(false);
-        }
+        if (cambiaConsulta)
+            await Contraventor.ConsultaPorApi.RecalcularAsync(db, id, ct).ConfigureAwait(false);
 
         return Results.Ok(Dto(c));
+    }
+
+    /// <summary>Casilla de un NIT para consultar el conductor en la API de contratos (HU #13712). Solo el SuperAdmin.</summary>
+    public sealed record CambioConsultaContrato(bool Activo);
+
+    private static async Task<IResult> GuardarConsultaContratoNit(Guid id, Guid nitId, CambioConsultaContrato pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario,
+        Reloj reloj, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        var nit = await db.IdentificacionesMonitoreadas.FirstOrDefaultAsync(n => n.Id == nitId && n.TenantId == id, ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("El NIT");
+        if (nit.ConsultaContratoApi != pedido.Activo)
+        {
+            auditoria.Registrar(id, "identificacion_monitoreada", nit.Id, "ACTUALIZAR", new CambioCampo("consulta_contrato_api", nit.ConsultaContratoApi, pedido.Activo));
+            (nit.ConsultaContratoApi, nit.ActualizadoEn, nit.ActualizadoPor) = (pedido.Activo, reloj.Ahora, usuario.Id);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await Contraventor.ConsultaPorApi.RecalcularAsync(db, id, ct).ConfigureAwait(false);
+        }
+
+        return Results.Ok(Monitoreo.MonitoreoEndpoints.ANit(nit));
     }
 
     private static async Task<IResult> GuardarCorreoDeEmpresa(Guid id, CambioCorreo pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)

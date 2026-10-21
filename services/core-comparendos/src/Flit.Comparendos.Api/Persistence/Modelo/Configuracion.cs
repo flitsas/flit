@@ -40,6 +40,12 @@ public sealed class IdentificacionMonitoreada : Auditada
     public short? DigitoVerificacion { get; set; }
     public string? NombreTitular { get; set; }
     public bool Activo { get; set; } = true;
+
+    /// <summary>
+    /// HU #13712: el conductor de los comparendos de este NIT se consulta en la API de contratos de la gestora. Solo lo
+    /// cambia el SuperAdmin y solo cuenta si la empresa tiene la integración por API encendida (el interruptor general).
+    /// </summary>
+    public bool ConsultaContratoApi { get; set; }
 }
 
 /// <summary>Placa que vigila la gestora, independiente de sus NITs (§3.4).</summary>

@@ -106,14 +106,13 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
             IdentificacionMonitoreadaId = clave.IdentificacionId,
             PlacaMonitoreadaId = clave.PlacaId,
             EstadoCambioContraventor = config.AllowsContravenerChange ? EstadoCambioContraventor.SinSolicitar : EstadoCambioContraventor.NoAplica,
-            EstadoConsultaContraventor = config.TipoIntegracionConductor == TipoIntegracionConductor.ApiRenting && config.AllowsContravenerConsultation
-                ? EstadoConsultaContraventor.Pendiente
-                : EstadoConsultaContraventor.NoAplica,
             CreadoEn = ahora,
             UltimoEventoEn = ahora,
         };
         AplicarCampos(c, item);
         c.NitConsultado = clave.Documento;
+        // HU #13712: la API de contratos solo para los NIT que el SuperAdmin marcó (y la empresa con la integración encendida).
+        c.EstadoConsultaContraventor = await Contraventor.ConsultaPorApi.EstadoInicialAsync(db, config, c, ct).ConfigureAwait(false);
         c.EnCobroCoactivo = EsCobroCoactivo(c.EstadoFuente);
         if (c.NombreInfractor is null && clave.IdentificacionId is { } idNit)
         {
