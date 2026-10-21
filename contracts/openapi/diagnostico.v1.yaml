@@ -41,6 +41,10 @@ tags:
     description: >
       Cabecera del diagnóstico (MOD01, HU #13750): nombre, modo, tipo de trámite y alcance sobre una copia fija de la
       configuración de la compañía. Campos en snake_case y códigos de la base.
+  - name: Carga
+    description: >
+      Carga masiva de vehículos (MOD02, HU #13749): plantilla .xlsx y análisis local del archivo (.xlsx o .csv) en un
+      resumen de validación, sin guardar filas ni consultar fuentes. Campos en snake_case y códigos de la base.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -329,6 +333,133 @@ paths:
               schema:
                 type: integer
                 example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/plantilla:
+    get:
+      tags: [Carga]
+      operationId: descargarPlantillaDiagnostico
+      summary: Plantilla .xlsx de carga masiva
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13749, F02-C5). Libro con una hoja «Vehiculos» y el encabezado
+        Identificador_Vehiculo (obligatoria), Tipo_Documento_Locatario y Documento_Locatario (opcionales, R-3), con
+        formato de texto en las tres columnas. El documento del propietario no se pide: sale del RUNT por placa (D-02).
+        Archivo fijo, igual para toda compañía.
+      responses:
+        "200":
+          description: La plantilla.
+          headers:
+            Content-Disposition:
+              description: attachment; filename=plantilla-diagnostico.xlsx
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/carga:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id de la cabecera.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Carga]
+      operationId: analizarCargaDiagnostico
+      summary: Analiza el archivo de carga y devuelve el resumen de validación
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13749, F02-H4). Solo con la cabecera en CREADO. Sin estado en el
+        servidor: no guarda filas ni consulta fuentes externas (el lote se confirma después). Formatos (por extensión y
+        por firma del contenido): .xlsx (primera hoja) y .csv (UTF-8, con o sin BOM, separador coma o punto y coma
+        detectado en el encabezado). La fila 1 es el encabezado; los nombres de columna no distinguen mayúsculas y las
+        opcionales pueden faltar. Por fila: el identificador se normaliza y clasifica con la regla de Trámites
+        (ValidadorIdentificador, HU #13740); si el valor limpio (mayúsculas, solo A-Z y 0-9, antes de recortar) pasa de 8
+        caracteres en una placa o de 17 en un VIN, la fila es errónea (IDENTIFICADOR_DEMASIADO_LARGO): nunca se acepta
+        recortado. El documento del locatario es opcional; si viene, tipo CC, CE, NIT, PAS o TI y número de hasta 20
+        caracteres, solo dígitos salvo PAS (TIPO_DOCUMENTO_INVALIDO, DOCUMENTO_INVALIDO, DOCUMENTO_INCOMPLETO si falta
+        uno de los dos). Los identificadores válidos repetidos se consolidan en la primera fila (filas_duplicadas) y se
+        cuentan como duplicados: total_filas = validos + erroneos + duplicados. El límite por lote y el estimado salen
+        de la copia de configuración de la cabecera: con estimado_consultas = ANTES_DE_LANZAR el resumen trae
+        estimado_consultas (por cada fuente del alcance, los válidos menos los N/A previsibles de locatario, HU #13747);
+        con otro valor no trae la propiedad. Sin válidos (aviso SIN_VALIDOS) o con más válidos que el límite (aviso
+        LIMITE_SUPERADO), puede_continuar es false. El documento del locatario vuelve siempre enmascarado («****» y los
+        4 últimos). El contenido de las filas no se escribe en logs.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+                  description: El archivo .xlsx o .csv.
+      responses:
+        "200":
+          description: Resumen de validación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumenValidacion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: la cabecera no existe o es de otra compañía."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = DIAGNOSTICO_NO_EDITABLE: la cabecera ya no está en CREADO."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "413":
+          description: >
+            `code` = ARCHIVO_DEMASIADO_GRANDE: el archivo supera Diagnostico:Carga:TamanoMaximoBytes (5 MB por defecto).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "415":
+          description: >
+            `code` = FORMATO_NO_ADMITIDO (otra extensión, o un .csv que no es texto) o ARCHIVO_ILEGIBLE (.xlsx dañado o
+            que no es un libro, .csv que no está en UTF-8). No se analiza ninguna fila.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            `code` = FORMATO_XLS_NO_ADMITIDO (.xls, por extensión o por firma), con el mensaje «El formato .xls no se
+            admite: guarde el archivo como .xlsx y vuelva a subirlo»; ARCHIVO_REQUERIDO (sin el campo archivo o vacío);
+            COLUMNA_REQUERIDA (sin la columna Identificador_Vehiculo, campo = Identificador_Vehiculo). No se analiza
+            ninguna fila.
           content:
             application/json:
               schema:
@@ -858,6 +989,112 @@ components:
         creado_en:
           type: string
           format: date-time
+
+    ResumenValidacion:
+      type: object
+      required: [total_filas, validos, erroneos, duplicados, puede_continuar, limite_vehiculos_lote, supera_limite, avisos, filas]
+      properties:
+        total_filas:
+          type: integer
+          description: Filas de datos no vacías del archivo.
+        validos:
+          type: integer
+        erroneos:
+          type: integer
+        duplicados:
+          type: integer
+          description: Repeticiones de un identificador válido ya presente (consolidadas en su primera fila).
+        puede_continuar:
+          type: boolean
+          description: false sin válidos o con más válidos que el límite por lote.
+        limite_vehiculos_lote:
+          type: integer
+          description: Límite de la copia de configuración de la cabecera.
+        supera_limite:
+          type: boolean
+        avisos:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvisoCarga"
+        filas:
+          type: array
+          description: Una por fila leída, salvo los duplicados consolidados, en el orden del archivo.
+          items:
+            $ref: "#/components/schemas/FilaResumen"
+        estimado_consultas:
+          type: array
+          description: Solo con estimado_consultas = ANTES_DE_LANZAR en la copia de configuración; en otro caso no viene.
+          items:
+            $ref: "#/components/schemas/EstimadoFuente"
+
+    AvisoCarga:
+      type: object
+      required: [code, mensaje]
+      properties:
+        code:
+          type: string
+          enum: [SIN_VALIDOS, LIMITE_SUPERADO]
+        mensaje:
+          type: string
+
+    FilaResumen:
+      type: object
+      required: [fila, identificador, identificador_norm, tipo_identificador, tipo_documento_locatario, documento_locatario, valida, filas_duplicadas, errores]
+      properties:
+        fila:
+          type: integer
+          description: Número de fila de la hoja o del CSV (el encabezado es la 1).
+        identificador:
+          type: string
+          description: Tal como vino en el archivo.
+        identificador_norm:
+          type: string
+          description: Normalizado con la regla de Trámites; si es demasiado largo, el valor limpio sin recortar.
+        tipo_identificador:
+          type: string
+          nullable: true
+          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, VIN, null]
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          example: CC
+        documento_locatario:
+          type: string
+          nullable: true
+          description: Siempre enmascarado.
+          example: "****4050"
+        valida:
+          type: boolean
+        filas_duplicadas:
+          type: array
+          items:
+            type: integer
+        errores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorFila"
+
+    ErrorFila:
+      type: object
+      required: [campo, code, mensaje]
+      properties:
+        campo:
+          type: string
+          enum: [Identificador_Vehiculo, Tipo_Documento_Locatario, Documento_Locatario]
+        code:
+          type: string
+          enum: [IDENTIFICADOR_REQUERIDO, IDENTIFICADOR_INVALIDO, IDENTIFICADOR_DEMASIADO_LARGO, TIPO_DOCUMENTO_INVALIDO, DOCUMENTO_INVALIDO, DOCUMENTO_INCOMPLETO]
+        mensaje:
+          type: string
+
+    EstimadoFuente:
+      type: object
+      required: [fuente, consultas]
+      properties:
+        fuente:
+          $ref: "#/components/schemas/Fuente"
+        consultas:
+          type: integer
 
     ErrorRegla:
       type: object

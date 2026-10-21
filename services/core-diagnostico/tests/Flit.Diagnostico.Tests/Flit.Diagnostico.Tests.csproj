@@ -31,4 +31,9 @@
     <None Include="..\..\..\..\contracts\fixtures\validacion\identificadores-vehiculo.json" Link="Fixtures\identificadores-vehiculo.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Archivos de carga inventados (HU #13749): .xlsx, .csv, .xls, .pdf y un .xlsx dañado. -->
+  <ItemGroup>
+    <None Include="Api\Fixtures\carga*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Carga;
 using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
@@ -77,6 +78,12 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaTiposTramite = Program.Prefijo + TiposTramiteEndpoints.Ruta;
 
+    /// <summary>
+    /// Plantilla de carga masiva (HU #13749): un .xlsx fijo, igual para toda compañía. A debe recibir el libro (las rutas
+    /// de sus partes van sin comprimir en el zip) y ninguna respuesta lleva el id de B (ni de ninguna compañía).
+    /// </summary>
+    public const string RutaPlantilla = Program.Prefijo + CargaEndpoints.RutaPlantilla;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -85,6 +92,8 @@ public static class EscenariosDeFuga
         EscenarioDeFuga.Con(RutaConfiguracion, _ => new ConfiguracionEmpresa { OperativaActualizadaPor = Guid.NewGuid() }, c => c.OperativaActualizadaPor!.Value),
         new EscenarioDeFuga(RutaTiposTramite, (empresa, _) =>
             Task.FromResult(new Sembrado(RutaTiposTramite, ["TRASPASO_STANDARD"], Exclusivos: [empresa.Id.ToString()]))),
+        new EscenarioDeFuga(RutaPlantilla, (empresa, _) =>
+            Task.FromResult(new Sembrado(RutaPlantilla, ["[Content_Types].xml", "xl/worksheets/sheet1.xml"], Exclusivos: [empresa.Id.ToString()]))),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

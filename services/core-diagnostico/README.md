@@ -15,6 +15,7 @@ negocio pasa por el guard de suscripción (fail-closed) y exige un permiso del m
 | Sesion | `GET /sesion` | Usuario, compañía, roles, permisos y capacidades, leídos del token. |
 | Configuracion | `GET/PUT /configuracion` | Configuración de la compañía en dos niveles (contractual y operativo). |
 | Backoffice | `/backoffice/...` | Lectura entre compañías del backoffice FLIT (empresa explícita y auditada) y edición del nivel contractual. |
+| Carga | `GET /plantilla`, `POST /diagnosticos/{id}/carga` | Plantilla .xlsx y análisis local del archivo (.xlsx o .csv) en un resumen de validación, sin guardar filas ni consultar fuentes; tope `Diagnostico:Carga:TamanoMaximoBytes` (5 MB). |
 | Catalogos | `GET /tipos-tramite` | Tipos de trámite de la etapa, por el gRPC `ListarTiposTramite` de core-api (`Diagnostico:Tramites:Address`), con caché de 5 min y 503 + `Retry-After` si Trámites no responde. |
 
 ## Puertos
