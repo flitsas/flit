@@ -1,4 +1,3 @@
-using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 
@@ -21,8 +20,8 @@ public static class PrendaDecision
 
     /// <summary>
     /// «Omitir prenda»: existe gravamen pero no se solicita ningún trámite de prenda (no se inscribe ni se
-    /// levanta). Admisión: <see cref="OmitirAdmitido"/> (siempre en la familia Matrículas; en el resto,
-    /// solo con el certificado de prenda opcional en el OT).
+    /// levanta). HU #13777 — se admite en todo tipo con dimensión de prenda, sin depender de la familia ni
+    /// de la política del OT sobre el certificado de prenda.
     /// </summary>
     public const string Omitir = "omitir";
 
@@ -45,17 +44,6 @@ public static class PrendaDecision
 
     public static bool RequiereDocumento(string? decision) =>
         !string.IsNullOrWhiteSpace(decision) && RequierenDocumento.Contains(decision);
-
-    /// <summary>
-    /// Feature #13110 (CF-06 / HU #10881) — ¿se puede elegir <see cref="Omitir"/>? En la familia Matrículas
-    /// (Matrícula Inicial, Matrícula Leasing, Rematrícula) siempre: la prenda es un trámite propio (art. 5.3.13.1) y no inscribirla no depende de la política
-    /// del organismo. En Traspaso y en el resto de familias, solo si el organismo NO exige el certificado
-    /// de prenda (<paramref name="otExigeDocumento"/> = <c>false</c>). Es la única fuente de la regla: la
-    /// consumen el PUT de prenda (rechazo <c>prenda_omitir_no_admitido</c>) y el estado del wizard
-    /// (<c>PrendaOmitAllowed</c>).
-    /// </summary>
-    public static bool OmitirAdmitido(ProcedureFamily family, bool otExigeDocumento) =>
-        family == ProcedureFamily.Matriculas || !otExigeDocumento;
 
     /// <summary>
     /// Feature #13110 (CF-6) — ¿la decisión guarda los datos del acreedor y la entidad de levantamiento?
