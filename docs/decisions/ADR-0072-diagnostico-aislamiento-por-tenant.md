@@ -131,6 +131,56 @@ justificación al materializarse, porque `EntidadesConTenantTests` las rechazar�
 - **`cambios_contrato`, A13 (`jsonb`).** Los campos auditados tienen tipos distintos (arreglo de fuentes, entero,
   booleano); `jsonb` guarda cada valor con su tipo. `valor_anterior` es nulo solo cuando no había valor.
 
+## Retención de datos personales
+
+**Decisión del usuario del 2026-10-21, sigue en Propuesto.** Los documentos de propietario y locatario
+(`vehiculos.propietario_doc_cifrado` y `vehiculos.locatario_doc_cifrado`, comentario `@pii:high`) y los demás datos del
+diagnóstico se **conservan indefinidamente**. Es lo coherente con la Parte 2: sin borrado lógico, historiales de solo
+inserción y FK con `RESTRICT`. Y es lo que dice R-18 del plan («No se borra nada»; plan §1, §5, §9.3 y §10): no hay
+`retencion_dias`, `retencion_dias_max`, `ck_retencion` ni job de purga.
+
+**Justificación.**
+
+- **Trazabilidad del dictamen.** El veredicto, las reglas disparadas y un override se explican con los datos con los que
+  se dictaminó, incluido a quién se consultó.
+- **Consultas pagadas.** Cada consulta a un proveedor tiene costo y alimenta la volumetría y la conversión del
+  backoffice. Borrar el documento rompería la conciliación de lo consumido.
+- **Auditoría.** `historial_estado_diagnostico`, `lecturas_backoffice`, `cambios_contrato` y, en D2, `intentos_consulta`
+  son de solo inserción. Un historial que apunta a filas purgadas deja de ser auditoría.
+- **Reproducibilidad del PDF.** Un PDF de evidencia (D7) se tiene que poder regenerar igual, también cuando la redacción
+  IA lo invalida y lo vuelve a generar (R-2b).
+
+**Controles compensatorios** (plan §9.3).
+
+- **Cifrado en aplicación** con ASP.NET DataProtection. El anillo de llaves vive en `diagnostico.data_protection_keys`
+  (HU #13735) y se protege con un certificado que está **fuera de la base**: quien lea la base no lee los documentos.
+- **Fuera de logs y eventos.** El documento nunca va en logs, eventos del outbox, DTO de listado ni prompt del LLM (R-2).
+  El contenido de las filas de carga no se escribe en logs.
+- **Enmascarado en las respuestas** («****» y los 4 últimos), también en el detalle de celda (R-13).
+- **Acceso por permiso y aislamiento por empresa.** Las lecturas pasan por el permiso de la ruta y por el filtro global
+  de la Parte 1.
+- **Lecturas del backoffice auditadas** en `lecturas_backoffice`, antes de leer (ADR-0073).
+
+**Consecuencias y riesgos frente a la Ley 1581.**
+
+- Choca con el **principio de finalidad y temporalidad**: el dato se conserva sin un plazo atado a la finalidad (plan
+  §11.1, riesgo «Conservación indefinida de documentos cifrados»).
+- El **derecho de supresión** del titular no tiene vía hoy. Ningún endpoint ni proceso suprime un documento, y las FK con
+  `RESTRICT` y los historiales impiden borrar la fila del vehículo.
+- **Requiere el aval del Líder Técnico y la revisión de Legal** antes de liberar a clientes. R-18 figura como «PO + Legal,
+  pendiente de ratificar».
+- **Si Legal exige supresión** (fuera del alcance de D0–D2, entraría como decisión nueva que modifique R-18): la vía
+  compatible con esta regla es el **borrado criptográfico**. Cada documento se cifra con una llave propia, por titular o
+  por empresa, y suprimir es destruir esa llave. La fila, los historiales y las FK quedan intactos y el documento queda
+  ilegible. Hace falta un modelo de llaves por titular o empresa (hoy el anillo es único del servicio), un registro de
+  solicitudes de supresión con su propia auditoría, y definir qué muestran el detalle y el PDF de un documento suprimido.
+  La otra vía, un plazo fijo con job de purga, choca con los historiales de solo inserción y con las FK `RESTRICT`.
+
+**Estado en el código (2026-10-21).** Las columnas y la tabla `data_protection_keys` existen (`D1_Vehiculos`,
+`DataProtectionKeyConfig.cs`), pero `services/core-diagnostico/src` todavía no registra `AddDataProtection` ni
+`ProtectKeysWithCertificate`, y nada cifra todavía con un `IDataProtector`. Hasta que una HU lo cablee, el control de
+cifrado con certificado fuera de la base es una exigencia de este ADR, no un hecho.
+
 ## Alternativas consideradas
 
 ### Para el aislamiento

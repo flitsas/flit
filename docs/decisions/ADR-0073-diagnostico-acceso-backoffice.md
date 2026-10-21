@@ -51,6 +51,15 @@ cliente que se asignara `backoffice_diagnostico` leería a las demás.
    compañía. Sus garantías las cubren `PoliticaBackofficeTests` (403 fuera de FLIT o sin permiso) y
    `BackofficeEmpresaExplicitaTests` (400 sin empresa; con `?empresa=B`, solo datos de B y una fila auditada).
 
+**Nota: suscripción en las rutas del backoffice.** `/backoffice/*` cuelga del prefijo `/api/v1/diagnostico`, así que pasa
+por `GuardSuscripcion` (`Plataforma/GuardSuscripcion.cs`, HU #13726), que es fail-closed. El guard valida la suscripción
+de la compañía **del usuario**, la compañía FLIT con `tenant_type=FLIT`, porque toma `IPlatformTenantAccessor.Current`,
+que sale del token. **No** valida la de la empresa consultada: es un middleware, corre antes del filtro de
+`EmpresaExplicita` y no lee `?empresa=` ni `{empresa}`. Si la compañía FLIT no tiene Diagnóstico activo, o no se puede
+saber, todo el backoffice responde 403 `PRODUCTO_NO_HABILITADO`. La empresa objetivo va explícita (punto 2) y la lectura
+queda auditada (punto 3). Una empresa consultada con la suscripción suspendida se puede leer desde el backoffice: el
+guard solo niega y no borra datos.
+
 ## Condición que este diseño pone a la vía de escritura del backoffice (#13741)
 
 ADR-0072 deja pendiente cómo escribe el backoffice sobre otra compañía. Este ADR no lo decide, pero la condiciona:
