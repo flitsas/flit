@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Comparendos.Api.Modulos.Contraventor;
 
 /// <summary>Datos del conductor que se asignan.</summary>
-public sealed record DatosConductor(string TipoDocumento, string NumeroDocumento, string Nombres, string? Correo, string? Telefono, string? Direccion,
+public sealed record DatosConductor(string? TipoDocumento, string? NumeroDocumento, string Nombres, string? Correo, string? Telefono, string? Direccion,
     string? Ciudad, string? Sucursal, string? TipoContrato);
 
 /// <summary>
@@ -27,10 +27,11 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         ArgumentNullException.ThrowIfNull(c);
         ArgumentNullException.ThrowIfNull(d);
         ArgumentNullException.ThrowIfNull(actor);
-        if (!Enum.TryParse<TipoDocumento>(d.TipoDocumento, true, out var tipo) || !Enum.IsDefined(tipo))
-            throw new ReglaException("TIPO_DOCUMENTO_INVALIDO", "Tipo de documento del conductor inválido.");
-        var numero = (d.NumeroDocumento ?? string.Empty).Trim();
-        if (numero.Length is 0 or > 20 || string.IsNullOrWhiteSpace(d.Nombres))
+        // La API de contratos de Renting no devuelve el documento (HU #13712): solo con origen API puede faltar, y entonces
+        // faltan los dos. A mano siempre es obligatorio.
+        var sinDocumento = origen == OrigenContraventor.Api && string.IsNullOrWhiteSpace(d.TipoDocumento) && string.IsNullOrWhiteSpace(d.NumeroDocumento);
+        var (tipo, numero) = sinDocumento ? ((TipoDocumento?)null, (string?)null) : Documento(d.TipoDocumento, d.NumeroDocumento);
+        if (string.IsNullOrWhiteSpace(d.Nombres))
             throw new ReglaException("CONDUCTOR_INCOMPLETO", "El documento (hasta 20 caracteres) y el nombre del conductor son obligatorios.");
         var correo = string.IsNullOrWhiteSpace(d.Correo) ? null : Catalogos.CatalogosEndpoints.NormalizarCorreos([d.Correo]).Single();
         if (origen == OrigenContraventor.Manual && !declaracion)
@@ -78,7 +79,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             db.Contraventores.Add(nuevo);
             c.Contraventor = nuevo;
             timeline.Agregar(c, TipoEventoTimeline.ContraventorAsignado,
-                $"Conductor asignado ({(origen == OrigenContraventor.Api ? "API" : "manual")}): {nuevo.Nombres}, {tipo} {Comun.HtmlCorreo.Enmascarar(numero)}.", actor);
+                $"Conductor asignado ({(origen == OrigenContraventor.Api ? "API" : "manual")}): {nuevo.Nombres}, {(numero is null ? "documento pendiente" : $"{tipo} {Comun.HtmlCorreo.Enmascarar(numero)}")}.", actor);
         }
         else
         {
@@ -101,6 +102,47 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         c.Gestionado = true;
     }
 
+    private static (TipoDocumento? Tipo, string? Numero) Documento(string? tipoTexto, string? numeroTexto)
+    {
+        if (!Enum.TryParse<TipoDocumento>(tipoTexto, true, out var tipo) || !Enum.IsDefined(tipo))
+            throw new ReglaException("TIPO_DOCUMENTO_INVALIDO", "Tipo de documento del conductor inválido.");
+        var numero = (numeroTexto ?? string.Empty).Trim();
+        if (numero.Length is 0 or > 20)
+            throw new ReglaException("CONDUCTOR_INCOMPLETO", "El documento (hasta 20 caracteres) y el nombre del conductor son obligatorios.");
+        return (tipo, numero);
+    }
+
+    /// <summary>
+    /// Completa el documento del conductor que trajo la API de contratos sin él (HU #13712). No es un reemplazo: el
+    /// conductor, sus enlaces del portal y sus avisos siguen igual; queda en el historial y en la línea de tiempo.
+    /// </summary>
+    public void CompletarDocumento(Comparendo c, string? tipoDocumento, string? numeroDocumento, Actor actor)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        ArgumentNullException.ThrowIfNull(actor);
+        var k = c.Contraventor ?? throw new ReglaException("SIN_CONDUCTOR", "El comparendo no tiene conductor asignado.");
+        if (k.NumeroDocumento is not null)
+            throw new ReglaException("DOCUMENTO_YA_REGISTRADO", "El conductor ya tiene documento: para cambiarlo, reemplaza el conductor con un motivo.");
+        var anterior = JsonSerializer.Serialize(Foto(k), Json);
+        (k.TipoDocumento, k.NumeroDocumento) = Documento(tipoDocumento, numeroDocumento);
+        (k.ActualizadoEn, k.ActualizadoPor) = (reloj.Ahora, actor.UsuarioId);
+        db.ContraventorHistorial.Add(new ContraventorHistorial
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = c.TenantId,
+            ComparendoId = c.Id,
+            DatosAnteriores = anterior,
+            DatosNuevos = JsonSerializer.Serialize(Foto(k), Json),
+            Origen = k.Origen,
+            Motivo = "Documento completado: la API de contratos no lo trae.",
+            UsuarioId = actor.UsuarioId,
+            ActorNombre = actor.Nombre,
+            RegistradoEn = reloj.Ahora,
+        });
+        timeline.Agregar(c, TipoEventoTimeline.ContraventorReemplazado,
+            $"Se completó el documento del conductor {k.Nombres}: {k.TipoDocumento} {Comun.HtmlCorreo.Enmascarar(k.NumeroDocumento!)}.", actor);
+    }
+
     /// <summary>
     /// Consulta la API de contratos (§4.7). Si encuentra conductor lo asigna con origen API; si ya había uno, solo lo
     /// reemplaza con <paramref name="confirmarReemplazo"/>. Cuenta los intentos fallidos (máximo 3 automáticos, S-35).
@@ -111,6 +153,8 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         var config = await capacidades.ExigirAsync(c.TenantId, Capacidad.ConsultaContraventor, ct).ConfigureAwait(false);
         if (config.TipoIntegracionConductor != TipoIntegracionConductor.ApiRenting)
             throw new ReglaException("SIN_INTEGRACION", "Tu empresa asigna el conductor a mano: no tiene una API de contratos configurada.");
+        if (!ConsultaPorApi.DeNitMarcado(c, await ConsultaPorApi.MarcadosAsync(db, c.TenantId, ct).ConfigureAwait(false)))
+            throw new ReglaException("NIT_SIN_API", "La API de contratos no aplica para el propietario de este comparendo: asigna el conductor a mano.");
         if (c.OrganismoTransitoId is { } ot && !(await permisos.DeAsync(c.TenantId, ot, null, ct).ConfigureAwait(false)).Consulta)
             throw new ReglaException("OT_BLOQUEADO", "La consulta de contraventor está bloqueada para este organismo de tránsito.");
         if (c.Placa is null || (c.FechaImposicion ?? c.FechaNotificacion) is not { } fecha)
@@ -122,7 +166,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             case ResultadoContrato.Encontrado when r.Conductor is { } k:
                 if (c.Contraventor is not null && !confirmarReemplazo)
                     return r;
-                Asignar(c, new DatosConductor(k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato),
+                Asignar(c, new DatosConductor(k.TipoDocumento?.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato),
                     OrigenContraventor.Api, actor, c.Contraventor is null ? null : "Reemplazo confirmado con la consulta a la API de contratos.", declaracion: false);
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.Encontrado;
                 c.ErrorConsultaContraventor = null;
@@ -150,6 +194,6 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
 
     private static object Foto(Persistence.Modelo.Contraventor k) => new
     {
-        tipoDocumento = k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato, origen = k.Origen.ToString(),
+        tipoDocumento = k.TipoDocumento?.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato, origen = k.Origen.ToString(),
     };
 }

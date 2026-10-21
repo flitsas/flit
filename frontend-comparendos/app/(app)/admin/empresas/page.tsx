@@ -22,6 +22,7 @@ import type {
   ConfiguracionEmpresa,
   EmpresaAdmin,
   EmpresaPlataforma,
+  Nit,
   Tipologia,
 } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -159,6 +160,81 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
         ))}
       </ol>
     </Modal>
+  );
+}
+
+/**
+ * NIT que consultan el conductor en la API de contratos (HU #13712). La API de Renting solo conoce su propia flota: se
+ * marca NIT por NIT. El interruptor general sigue siendo la integración de la empresa; apagarla no borra estas casillas.
+ */
+function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string; integracionApi: boolean }) {
+  const toast = useToast();
+  const nits = useCarga(`nits-contrato:${empresaId}`, (signal) =>
+    apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa: empresaId } }),
+  );
+
+  const cambiar = async (n: Nit, activo: boolean) => {
+    try {
+      await apiFetch(`/admin/empresas/${empresaId}/nits/${n.id}/consulta-contrato`, { method: "PUT", body: { activo } });
+      nits.recargar();
+      toast.show(`${n.numero}: ${activo ? "consulta por API" : "asignación manual"}.`, "success");
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "No se pudo cambiar el NIT.", "error");
+    }
+  };
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-sm font-semibold">NIT que consultan el conductor en la API de contratos</h2>
+      <p className="text-xs opacity-70">
+        La API de Renting solo sabe quién tenía un vehículo de su propia flota. Marca únicamente esos NIT: los demás se
+        asignan a mano.
+      </p>
+      {!integracionApi && (
+        <InlineAlert tone="info" compact>
+          La integración del contraventor está en Manual o la consulta de contraventor está apagada: no sale ninguna
+          consulta. Las casillas se conservan para cuando se vuelva a encender.
+        </InlineAlert>
+      )}
+      <DataTable
+        ariaLabel="NIT que consultan la API de contratos"
+        rows={nits.datos ?? []}
+        getRowKey={(n) => n.id}
+        status={nits.estado}
+        errorMessage={nits.error ?? undefined}
+        onRetry={nits.recargar}
+        emptyMessage="La empresa no tiene NIT monitoreados."
+        columns={[
+          {
+            key: "numero",
+            header: "NIT",
+            render: (n) => (
+              <span className="font-mono">
+                {n.tipoDocumento} {n.numero}
+              </span>
+            ),
+          },
+          { key: "titular", header: "Titular", render: (n) => n.nombreTitular ?? "—" },
+          {
+            key: "estado",
+            header: "Monitoreo",
+            render: (n) => <StatusBadge label={n.activo ? "Activo" : "Inactivo"} tone={n.activo ? "info" : "neutral"} />,
+          },
+          {
+            key: "api",
+            header: "Consulta por API",
+            align: "right",
+            render: (n) => (
+              <Interruptor
+                activo={n.consultaContratoApi}
+                onCambio={(v) => cambiar(n, v)}
+                etiqueta="Consultar por API"
+              />
+            ),
+          },
+        ]}
+      />
+    </section>
   );
 }
 
@@ -326,6 +402,11 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
           Guardar cambios
         </button>
       </div>
+
+      <NitsConsultaContrato
+        empresaId={empresaId}
+        integracionApi={base.tipoIntegracionConductor === "ApiRenting" && base.allowsContravenerConsultation}
+      />
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Tipologías de derecho de petición habilitadas</h2>
