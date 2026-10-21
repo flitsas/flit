@@ -228,7 +228,7 @@ function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string
               <Interruptor
                 activo={n.consultaContratoApi}
                 onCambio={(v) => cambiar(n, v)}
-                etiqueta={`Consultar el conductor de ${n.numero} en la API de contratos`}
+                etiqueta="Consultar por API"
               />
             ),
           },

@@ -36,6 +36,15 @@ contraventor por placa y fecha). Que `firstSurname` venga vacío puede indicar q
 algún día resulta ser la empresa arrendataria y no la persona, los avisos le llegarían a ella: hay que revisarlo con
 Renting.
 
+### Prueba de punta a punta desde la app (2026-10-21)
+
+En local, con core-consultas configurado con las credenciales reales y el contacto desviado, el operador presionó
+«Consultar API» en el detalle de dos comparendos de Renting (uno de la fuente municipal y otro de SIMIT, 13-oct):
+Comparendos → core-consultas → Renting respondió en ~3,7 s y el conductor quedó asignado con origen API, nombre real,
+correo desviado al buzón de pruebas, sin teléfono, «documento pendiente» y tipo de contrato «Usuario Contrato»
+(`contractType`). El error previo del comparendo se limpió y el consumo quedó medido (fuente `contratos`, proveedor
+`renting`). Ni el nombre ni ningún correo real quedaron en los logs de core-consultas ni de core-comparendos.
+
 ### Decisión
 
 El conductor se asigna con nombre y correo, origen API, y queda **«documento pendiente»**:
