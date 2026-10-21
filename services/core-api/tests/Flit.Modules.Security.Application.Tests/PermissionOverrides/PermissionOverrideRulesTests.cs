@@ -149,7 +149,7 @@ public sealed class PermissionOverrideRulesTests
 
     // --- integracion con el handler -------------------------------------------------------------
 
-    private ManageUserPermissionOverridesHandler Sut()
+    private ManageUserPermissionOverridesHandler Sut(bool withDirectory = false)
     {
         _repo.ListActiveAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         _repo.ListExcludedPermissionIdsAsync(Arg.Any<CancellationToken>()).Returns(new HashSet<Guid>());
@@ -159,7 +159,8 @@ public sealed class PermissionOverrideRulesTests
             new UserExistsRule(lookup), new SelfEditRule(), new TargetSuperAdminRule(lookup), new TenantScopeRule(lookup),
             new TargetIsAdminRule(lookup), new ExcludedPermissionRule(), new InvitationPendingRule(lookup),
         ];
-        return new ManageUserPermissionOverridesHandler(_repo, new PermissionCapCalculator(_repo), new GrantModuleOverridesHandler(_repo), rules);
+        return new ManageUserPermissionOverridesHandler(
+            _repo, new PermissionCapCalculator(_repo), new GrantModuleOverridesHandler(_repo), rules, targets: withDirectory ? _dir : null);
     }
 
     [Fact]
@@ -176,6 +177,68 @@ public sealed class PermissionOverrideRulesTests
             Arg.Is<IReadOnlyList<UserPermissionAuditEntry>>(l => l[0].Action == "READ" && l[0].Outcome == "REJECTED" && l[0].ReasonCode == "OUT_OF_SCOPE"),
             Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().ListActiveAsync(Tenant, TargetId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU13647_el_rechazo_OUT_OF_SCOPE_se_audita_en_el_tenant_del_usuario_afectado_no_en_el_del_admin()
+    {
+        // Admin OT de Sabaneta (Tenant) lee y modifica al Radicador de otra compania (su casa es otro tenant).
+        var targetHome = Guid.NewGuid();
+        var permission = new PermissionCatalogEntry(Guid.NewGuid(), "tramites.create", "Crear", "tramites", "tramites", "true");
+        _repo.GetPermissionAsync(permission.Id, Arg.Any<CancellationToken>()).Returns(permission);
+        Actor(Info());
+        Target(Info(member: false, home: targetHome));
+        var actor = new OverrideActor(ActorId, false);
+
+        await FluentActions.Awaiting(() => Sut(withDirectory: true).ListAsync(Tenant, actor, TargetId, Ct))
+            .Should().ThrowAsync<PermissionOverrideRejectedException>();
+        await FluentActions.Awaiting(() => Sut(withDirectory: true).SetAsync(Tenant, actor, TargetId, permission.Id, "allow", Ct))
+            .Should().ThrowAsync<PermissionOverrideRejectedException>();
+
+        await _repo.Received(1).ApplyAsync(targetHome, ActorId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<IReadOnlyList<UserPermissionOverride>>(),
+            Arg.Is<IReadOnlyList<UserPermissionAuditEntry>>(l =>
+                l[0].TenantId == targetHome && l[0].Action == "READ" && l[0].ReasonCode == "OUT_OF_SCOPE"),
+            Arg.Any<CancellationToken>());
+        await _repo.Received(1).ApplyAsync(targetHome, ActorId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<IReadOnlyList<UserPermissionOverride>>(),
+            Arg.Is<IReadOnlyList<UserPermissionAuditEntry>>(l =>
+                l[0].TenantId == targetHome && l[0].Action == "GRANT" && l[0].ReasonCode == "OUT_OF_SCOPE"
+                && l[0].PermissionSlug == "tramites.create"),
+            Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().ApplyAsync(Tenant, Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(),
+            Arg.Any<IReadOnlyList<UserPermissionOverride>>(), Arg.Any<IReadOnlyList<UserPermissionAuditEntry>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU13647_sin_home_conocido_el_OUT_OF_SCOPE_queda_en_el_tenant_en_el_que_se_opero()
+    {
+        Actor(Info());
+        Target(Info(member: false));
+
+        await FluentActions.Awaiting(() => Sut(withDirectory: true).ListAsync(Tenant, new OverrideActor(ActorId, false), TargetId, Ct))
+            .Should().ThrowAsync<PermissionOverrideRejectedException>();
+
+        await _repo.Received(1).ApplyAsync(Tenant, ActorId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<IReadOnlyList<UserPermissionOverride>>(),
+            Arg.Is<IReadOnlyList<UserPermissionAuditEntry>>(l => l[0].TenantId == Tenant && l[0].ReasonCode == "OUT_OF_SCOPE"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU13647_los_demas_rechazos_siguen_en_el_tenant_en_el_que_se_opero()
+    {
+        // Destino del tenant (home = Tenant) que es administrador: TARGET_IS_ADMIN se audita donde se opero.
+        var permission = new PermissionCatalogEntry(Guid.NewGuid(), "tramites.create", "Crear", "tramites", "tramites", "true");
+        _repo.GetPermissionAsync(permission.Id, Arg.Any<CancellationToken>()).Returns(permission);
+        Actor(Info());
+        Target(Info(home: Tenant, roles: "AdminCompany"));
+
+        var ex = await FluentActions.Awaiting(() =>
+                Sut(withDirectory: true).SetAsync(Tenant, new OverrideActor(ActorId, false), TargetId, permission.Id, "deny", Ct))
+            .Should().ThrowAsync<PermissionOverrideRejectedException>();
+
+        ex.Which.ReasonCode.Should().Be("TARGET_IS_ADMIN");
+        await _repo.Received(1).ApplyAsync(Tenant, ActorId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<IReadOnlyList<UserPermissionOverride>>(),
+            Arg.Is<IReadOnlyList<UserPermissionAuditEntry>>(l => l[0].TenantId == Tenant && l[0].ReasonCode == "TARGET_IS_ADMIN"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

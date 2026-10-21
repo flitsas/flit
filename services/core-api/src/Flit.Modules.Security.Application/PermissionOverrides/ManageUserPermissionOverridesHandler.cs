@@ -425,11 +425,29 @@ public sealed class ManageUserPermissionOverridesHandler(
         Guid tenantId, OverrideActor actor, Guid targetUserId, PermissionCatalogEntry? permission, string action,
         string reason, string? before, string? after, CancellationToken ct, string? moduleCode = null)
     {
+        var auditTenant = await RejectionAuditTenantAsync(tenantId, targetUserId, reason, ct).ConfigureAwait(false);
         var entry = permission is null
-            ? new UserPermissionAuditEntry(tenantId, actor.UserId, targetUserId, null, moduleCode, null, action, "REJECTED", reason, before, after, null)
-            : Audit(tenantId, actor, targetUserId, permission, action, "REJECTED", reason, before, after);
-        await repository.ApplyAsync(tenantId, actor.UserId, [], [], [entry], ct).ConfigureAwait(false);
+            ? new UserPermissionAuditEntry(auditTenant, actor.UserId, targetUserId, null, moduleCode, null, action, "REJECTED", reason, before, after, null)
+            : Audit(auditTenant, actor, targetUserId, permission, action, "REJECTED", reason, before, after);
+        await repository.ApplyAsync(auditTenant, actor.UserId, [], [], [entry], ct).ConfigureAwait(false);
         throw new PermissionOverrideRejectedException(reason, permission?.Slug ?? moduleCode ?? string.Empty);
+    }
+
+    /// <summary>
+    /// HU #13647 (FB-17/FB-18): el rechazo por ámbito (<c>OUT_OF_SCOPE</c>) se registra en el tenant del usuario afectado
+    /// (su <c>home_tenant_id</c>), no en el del administrador que lo intentó: así la columna Compañía muestra la del usuario y
+    /// el admin de ese tenant ve el intento. Sin home conocido (o sin directorio) queda el tenant en el que se operó; el resto
+    /// de rechazos no cambia.
+    /// </summary>
+    private async Task<Guid> RejectionAuditTenantAsync(Guid tenantId, Guid targetUserId, string reason, CancellationToken ct)
+    {
+        if (reason != PermissionOverrideReasons.OutOfScope || targets is null)
+        {
+            return tenantId;
+        }
+
+        var target = await targets.GetAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
+        return target.UserExists && target.HomeTenantId is { } home ? home : tenantId;
     }
 
     private static UserPermissionAuditEntry Audit(
