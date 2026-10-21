@@ -53,6 +53,22 @@ Perder o cambiar el certificado deja ilegibles los documentos ya cifrados: en lo
 al rotarlo el certificado anterior debe seguir disponible para descifrar. Las pruebas generan uno efímero por proceso
 (`tests/Flit.Diagnostico.Tests/Seguridad/CertificadoDePrueba.cs`).
 
+### Fuente RUNT del vehículo (simulada o no conectada)
+
+La fuente RUNT (`IFuenteRunt`, HU #13725) se elige **solo por configuración**; no se mira `ASPNETCORE_ENVIRONMENT`, porque los
+tres ambientes corren como `Development`.
+
+| Variable | Por defecto | Qué hace |
+|---|---|---|
+| `Diagnostico__Simulacion__Habilitada` | `false` | `true` usa la fuente simulada de Intempo (fixtures inventados en `Modulos/Consultas/Fuentes/Fixtures/`). Con `false` responde la fuente **no conectada**: error definitivo `NoConectado`, sin datos ni llamadas a proveedores. |
+| `Diagnostico__Ambiente` | vacío | `LOCAL`, `DEV`, `QA` o `PDN`. La simulación solo se admite con `LOCAL` o `DEV`; con otro valor, o vacío, el servicio **no arranca**. |
+
+En QA y PDN no se define `Diagnostico__Simulacion__Habilitada` hasta que llegue el adaptador real sobre core-consultas (C-PER).
+La simulación es determinista por el último carácter de la placa o del VIN: 1 persona natural, 2 NIT, 3 leasing con
+locatario C, 4 leasing con locatario N, 5 servicio público, 6 organismo sin departamento soportado, 7 error transitorio
+(Timeout), 8 error definitivo (RespuestaInvalida); cualquier otro, persona natural. Los fixtures solo usan placas `TST###`,
+VIN `9ZZPRUEBA########`, documentos `99999` + 4 o 5 dígitos y nombres de una lista ficticia (`FixturesSinPiiTests`).
+
 ## Pruebas
 
 Corren `Program.Build` real sobre una base efímera de PostgreSQL que crean y borran. Necesitan `ConnectionStrings__Core`

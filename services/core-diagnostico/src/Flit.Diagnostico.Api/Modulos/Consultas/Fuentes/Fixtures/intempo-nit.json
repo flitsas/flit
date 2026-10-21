@@ -1,0 +1,29 @@
+{
+  "codigoResultado": "Exitoso",
+  "codigoUUID": "00000000-0000-4000-8000-000000000002",
+  "fecha": "2026-01-15T10:00:00",
+  "informacionGeneral": {
+    "noPlaca": "TST002",
+    "noVin": "9ZZPRUEBA00000002",
+    "estadoDelVehiculo": "ACTIVO",
+    "tipoServicio": "PARTICULAR",
+    "claseVehiculo": "CAMIONETA",
+    "marca": "MARCA PRUEBA",
+    "linea": "LINEA PRUEBA",
+    "modelo": "2020",
+    "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
+  },
+  "propietariosActuales": [
+    {
+      "noDocumento": "999990002",
+      "tipoDocumento": "N",
+      "idTipoDocumento": 2,
+      "nombreCompleto": "EMPRESA FICTICIA SAS",
+      "tipoPropiedad": 1,
+      "detallePropiedad": "PROPIO",
+      "locatarios": []
+    }
+  ],
+  "lessee": [],
+  "infracciones": []
+}

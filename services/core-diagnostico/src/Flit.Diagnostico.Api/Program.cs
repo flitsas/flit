@@ -64,6 +64,8 @@ public static class Program
         builder.Services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Modulos.Consultas.EncoladorConsultasNulo>();
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
+        // HU #13725: fuente RUNT del vehículo (no conectada por defecto; simulada de Intempo solo con configuración explícita en LOCAL o DEV).
+        builder.Services.AddFuentesConsultas(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();

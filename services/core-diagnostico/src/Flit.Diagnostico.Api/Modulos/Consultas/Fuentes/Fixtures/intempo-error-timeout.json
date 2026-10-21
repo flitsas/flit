@@ -1,0 +1,6 @@
+{
+  "simulacion": {
+    "error": "Timeout",
+    "mensaje": "Intempo no respondió a tiempo (simulado)."
+  }
+}

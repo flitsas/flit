@@ -35,6 +35,11 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- HU #13725: respuestas inventadas de Intempo para la fuente RUNT simulada (sin PII; rango ficticio en FixturesSinPiiTests). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Modulos\Consultas\Fuentes\Fixtures\intempo-*.json" LogicalName="$(RootNamespace).Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Flit.Diagnostico.Tests" />
   </ItemGroup>
