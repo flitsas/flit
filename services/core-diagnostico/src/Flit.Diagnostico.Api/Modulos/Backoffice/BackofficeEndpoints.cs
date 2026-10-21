@@ -12,8 +12,9 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// Rutas <c>/backoffice/*</c> del backoffice FLIT (HU #13728, D-16, ADR-0073). Todo el grupo exige
 /// <see cref="PoliticaBackoffice"/> (permiso <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>) y la empresa
 /// explícita (<see cref="EmpresaExplicita"/>, que además audita cada lectura). Una ruta inexistente bajo
-/// <c>/backoffice/</c> también pasa por la política: 403 a quien no es backoffice FLIT, 404 a quien sí. En D0 solo existe
-/// <c>GET /backoffice/resumen?empresa=</c>; F00.2 y D3 suman aquí las suyas.
+/// <c>/backoffice/</c> también pasa por la política: 403 a quien no es backoffice FLIT, 404 a quien sí. Existen
+/// <c>GET /backoffice/resumen?empresa=</c> (D0) y <c>GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato</c>
+/// (<see cref="ContratoBackofficeEndpoints"/>, HU #13741); D3 suma aquí las suyas.
 /// </summary>
 public static class BackofficeEndpoints
 {
@@ -24,6 +25,7 @@ public static class BackofficeEndpoints
     {
         var backoffice = api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).ConEmpresaExplicita();
         backoffice.MapGet(RutaResumen, Resumen).WithName("ObtenerResumenEmpresaBackoffice");
+        ContratoBackofficeEndpoints.Map(backoffice);
 
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }

@@ -40,8 +40,11 @@ public sealed class EmpresaDePrueba(ApiDePrueba api, Guid id)
 
     public Guid Id { get; } = id;
 
-    /// <summary>Token de un usuario del producto: con un permiso de Diagnóstico, sin el cual no hay sesión (HU #13726).</summary>
-    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer]);
+    /// <summary>
+    /// Token de un usuario del producto con los permisos de lectura de Diagnóstico (sin ellos no hay sesión, HU #13726); cada
+    /// GET exige el suyo (<c>diagnosticos.ver</c>, <c>configuracion.ver</c> desde la HU #13741).
+    /// </summary>
+    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionVer]);
 
     public HttpClient Cliente() => api.Cliente(Token);
 

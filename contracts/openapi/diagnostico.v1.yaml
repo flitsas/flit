@@ -30,6 +30,11 @@ security:
 tags:
   - name: Sesion
     description: Lo que la app necesita al abrir.
+  - name: Configuracion
+    description: >
+      Configuración de Diagnóstico en dos niveles (D-04, HU #13741): el contractual lo edita solo el backoffice
+      FLIT y el operativo el admin de la compañía. Los valores son los códigos de la base (RUNT, EMPRESA,
+      NO_MOSTRAR...) y los campos van en snake_case.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -60,6 +65,174 @@ paths:
           description: >
             Token de servicio o usuario sin permisos de Diagnóstico; usuario sin compañía (`code` = SIN_EMPRESA);
             compañía sin Diagnóstico activo o suscripción no verificable (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/configuracion:
+    get:
+      tags: [Configuracion]
+      operationId: obtenerConfiguracionDiagnostico
+      summary: Configuración de la compañía del token (dos niveles)
+      description: >
+        Permiso diagnostico.configuracion.ver. Devuelve el nivel contractual marcado de solo lectura y el
+        operativo de la compañía del token (HU #13741). Nunca trae redaccion_ia_suspendida ni el autor de los
+        cambios contractuales. Sin fila guardada devuelve los valores por defecto (RUNT, 500, EMPRESA, RUNT,
+        NO_MOSTRAR) sin escribir.
+      responses:
+        "200":
+          description: Configuración de la compañía del token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Configuracion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.configuracion.ver; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+    put:
+      tags: [Configuracion]
+      operationId: editarConfiguracionOperativa
+      summary: Edita el nivel operativo de la compañía del token
+      description: >
+        Permiso diagnostico.configuracion.editar. Solo visibilidad_usuario, fuentes_por_defecto y
+        estimado_consultas; se guardan los campos que llegan, con el usuario y la fecha (sin fila, la crea con
+        los valores contractuales por defecto). Orden de validación: un campo que no es operativo (los
+        contractuales, redaccion_ia_suspendida, usuarios, roles, suscripción o cualquier otro) responde 403
+        CAMPO_NO_EDITABLE y no guarda ningún campo; un valor fuera de su conjunto responde 422
+        VALOR_FUERA_DE_CONJUNTO; una fuente por defecto que no está habilitada, 422
+        POR_DEFECTO_FUERA_DE_HABILITADAS. Una regla de la base que aun así falle (CHECK, SQLSTATE 23514)
+        responde 422 VALOR_INVALIDO.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EdicionOperativa"
+      responses:
+        "200":
+          description: Configuración guardada (misma forma que el GET).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Configuracion"
+        "400":
+          description: El cuerpo no es un objeto JSON o repite un campo (`code` = CUERPO_INVALIDO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.configuracion.editar (sin cuerpo); campo no operativo (`code` = CAMPO_NO_EDITABLE);
+            sin usuario (`code` = SIN_USUARIO), sin compañía (`code` = SIN_EMPRESA) o compañía sin Diagnóstico
+            activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: VALOR_FUERA_DE_CONJUNTO, POR_DEFECTO_FUERA_DE_HABILITADAS o VALOR_INVALIDO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/backoffice/empresas/{empresa}/configuracion/contrato:
+    parameters:
+      - name: empresa
+        in: path
+        required: true
+        description: >
+          Compañía cuyo contrato se lee o edita (uuid distinto de cero). Si además llega ?empresa=, debe
+          coincidir (si no, 400 EMPRESA_REQUERIDA).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Backoffice, Configuracion]
+      operationId: obtenerContratoEmpresaBackoffice
+      summary: Contrato de una compañía para el backoffice FLIT
+      description: >
+        Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además
+        diagnostico.configuracion.contrato.editar (HU #13741). La lectura queda en diagnostico.lecturas_backoffice
+        antes de leer. Sin fila guardada devuelve los valores por defecto.
+      responses:
+        "200":
+          description: Contrato de la compañía indicada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContratoBackoffice"
+        "400":
+          description: Empresa inválida o distinta en la ruta y en la consulta (`code` = EMPRESA_REQUERIDA).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); token sin
+            compañía (SIN_EMPRESA) o sin usuario (SIN_USUARIO); PRODUCTO_NO_HABILITADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+    put:
+      tags: [Backoffice, Configuracion]
+      operationId: editarContratoEmpresaBackoffice
+      summary: Edita el contrato de una compañía (backoffice FLIT)
+      description: >
+        Mismos permisos que el GET. Edita fuentes_habilitadas, limite_vehiculos_lote (mayor que cero) y el
+        interruptor de emergencia redaccion_ia_suspendida (R-2) de la compañía de la ruta, por la vía de
+        escritura entre compañías del módulo Backoffice (ADR-0073). Se guardan los campos que llegan. Reducir
+        las habilitadas recorta fuentes_por_defecto en el mismo comando. Cada campo que cambia (también el
+        recorte) queda en diagnostico.cambios_contrato con el usuario, la compañía, el valor anterior y el nuevo;
+        el PUT no se registra en lecturas_backoffice. Orden de validación: un campo que no es del contrato da
+        403 CAMPO_NO_EDITABLE; un valor fuera de conjunto, 422 VALOR_FUERA_DE_CONJUNTO; un límite que no es un
+        entero positivo, 422 LIMITE_INVALIDO; habilitar IMPUESTO_DEPARTAMENTAL mientras
+        Diagnostico:Fuentes:ImpuestoDisponible sea false (C3, R-9), 422 FUENTE_NO_DISPONIBLE. Con un error no
+        se guarda ningún campo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EdicionContrato"
+      responses:
+        "200":
+          description: Contrato guardado (misma forma que el GET).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContratoBackoffice"
+        "400":
+          description: Empresa inválida (EMPRESA_REQUERIDA) o cuerpo que no es un objeto o repite un campo (CUERPO_INVALIDO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); campo que no
+            es del contrato (CAMPO_NO_EDITABLE); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: VALOR_FUERA_DE_CONJUNTO, LIMITE_INVALIDO, FUENTE_NO_DISPONIBLE o VALOR_INVALIDO.
           content:
             application/json:
               schema:
@@ -235,6 +408,136 @@ components:
           type: integer
           format: int32
           minimum: 0
+
+    Fuente:
+      type: string
+      enum: [RUNT, RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO, IMPUESTO_DEPARTAMENTAL]
+
+    VisibilidadUsuario:
+      type: string
+      enum: [PROPIOS, EMPRESA]
+
+    EstimadoConsultas:
+      type: string
+      enum: [NO_MOSTRAR, ANTES_DE_LANZAR, AL_FINALIZAR]
+
+    Configuracion:
+      type: object
+      required: [empresa, contrato, operacion]
+      properties:
+        empresa:
+          type: string
+          format: uuid
+          description: La compañía del token.
+        contrato:
+          type: object
+          required: [solo_lectura, fuentes_habilitadas, limite_vehiculos_lote, actualizado_en]
+          properties:
+            solo_lectura:
+              type: boolean
+              description: Siempre true para la compañía; el contrato lo edita el backoffice FLIT.
+            fuentes_habilitadas:
+              type: array
+              items:
+                $ref: "#/components/schemas/Fuente"
+            limite_vehiculos_lote:
+              type: integer
+              format: int32
+              minimum: 1
+            actualizado_en:
+              type: string
+              format: date-time
+              nullable: true
+        operacion:
+          type: object
+          required: [visibilidad_usuario, fuentes_por_defecto, estimado_consultas, actualizado_por, actualizado_en]
+          properties:
+            visibilidad_usuario:
+              $ref: "#/components/schemas/VisibilidadUsuario"
+            fuentes_por_defecto:
+              type: array
+              description: Subconjunto de contrato.fuentes_habilitadas.
+              items:
+                $ref: "#/components/schemas/Fuente"
+            estimado_consultas:
+              $ref: "#/components/schemas/EstimadoConsultas"
+            actualizado_por:
+              type: string
+              format: uuid
+              nullable: true
+            actualizado_en:
+              type: string
+              format: date-time
+              nullable: true
+
+    EdicionOperativa:
+      type: object
+      description: Solo estos campos; cualquier otro responde 403 CAMPO_NO_EDITABLE.
+      additionalProperties: false
+      properties:
+        visibilidad_usuario:
+          $ref: "#/components/schemas/VisibilidadUsuario"
+        fuentes_por_defecto:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fuente"
+        estimado_consultas:
+          $ref: "#/components/schemas/EstimadoConsultas"
+      example:
+        visibilidad_usuario: PROPIOS
+        estimado_consultas: ANTES_DE_LANZAR
+
+    ContratoBackoffice:
+      type: object
+      required: [empresa, fuentes_habilitadas, limite_vehiculos_lote, redaccion_ia_suspendida, fuentes_por_defecto, actualizado_por, actualizado_en]
+      properties:
+        empresa:
+          type: string
+          format: uuid
+          description: La compañía de la ruta.
+        fuentes_habilitadas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fuente"
+        limite_vehiculos_lote:
+          type: integer
+          format: int32
+          minimum: 1
+        redaccion_ia_suspendida:
+          type: boolean
+          description: Interruptor de emergencia de la redacción IA (R-2). Solo lo ve el backoffice.
+        fuentes_por_defecto:
+          type: array
+          description: Solo lectura aquí (las edita el admin de la compañía); se recortan al reducir las habilitadas.
+          items:
+            $ref: "#/components/schemas/Fuente"
+        actualizado_por:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario del backoffice del último cambio contractual.
+        actualizado_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    EdicionContrato:
+      type: object
+      description: Solo estos campos; cualquier otro responde 403 CAMPO_NO_EDITABLE.
+      additionalProperties: false
+      properties:
+        fuentes_habilitadas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fuente"
+        limite_vehiculos_lote:
+          type: integer
+          format: int32
+          minimum: 1
+        redaccion_ia_suspendida:
+          type: boolean
+      example:
+        limite_vehiculos_lote: 200
 
     ErrorRegla:
       type: object

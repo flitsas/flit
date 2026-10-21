@@ -55,8 +55,12 @@ public sealed partial class IgnoreQueryFiltersSoloEnBackofficeTests
     }
 
     /// <summary>Llamadas a <c>IgnoreQueryFilters(</c> en los <c>.cs</c> bajo <paramref name="raiz"/>, sin comentarios de línea.</summary>
-    internal static IReadOnlyList<(string Archivo, int Linea)> Usos(string raiz)
+    internal static IReadOnlyList<(string Archivo, int Linea)> Usos(string raiz) => Usos(raiz, Llamada());
+
+    /// <summary>Líneas de los <c>.cs</c> bajo <paramref name="raiz"/> donde aparece <paramref name="patron"/>, sin comentarios de línea.</summary>
+    internal static IReadOnlyList<(string Archivo, int Linea)> Usos(string raiz, Regex patron)
     {
+        ArgumentNullException.ThrowIfNull(patron);
         var usos = new List<(string, int)>();
         foreach (var archivo in Directory.EnumerateFiles(raiz, "*.cs", SearchOption.AllDirectories))
         {
@@ -72,7 +76,7 @@ public sealed partial class IgnoreQueryFiltersSoloEnBackofficeTests
                 var comentario = codigo.IndexOf("//", StringComparison.Ordinal);
                 if (comentario >= 0)
                     codigo = codigo[..comentario];
-                if (Llamada().IsMatch(codigo))
+                if (patron.IsMatch(codigo))
                     usos.Add((relativo, i + 1));
             }
         }
@@ -80,7 +84,7 @@ public sealed partial class IgnoreQueryFiltersSoloEnBackofficeTests
         return usos;
     }
 
-    private static string RaizDelServicio()
+    internal static string RaizDelServicio()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
@@ -91,7 +95,7 @@ public sealed partial class IgnoreQueryFiltersSoloEnBackofficeTests
         throw new InvalidOperationException("No se encontró Flit.Diagnostico.slnx subiendo desde " + AppContext.BaseDirectory);
     }
 
-    private static void Escribir(string raiz, string relativo, string contenido)
+    internal static void Escribir(string raiz, string relativo, string contenido)
     {
         var ruta = Path.Combine(raiz, relativo);
         Directory.CreateDirectory(Path.GetDirectoryName(ruta)!);

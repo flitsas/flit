@@ -38,9 +38,12 @@ public static class TenantFilter
 
     /// <summary>
     /// Antes de guardar: sin empresa en el token no se escribe ninguna entidad de empresa; una nueva sin <c>TenantId</c>
-    /// toma la del token; cualquier fila (nueva, modificada o borrada) de otra empresa hace fallar todo el guardado.
+    /// toma la del token; cualquier fila (nueva, modificada o borrada) de otra empresa hace fallar todo el guardado. La única
+    /// excepción es <paramref name="autorizada"/> (HU #13741, ADR-0073): el ámbito que abre el módulo Backoffice con
+    /// <c>DiagnosticoDb.AutorizarEscrituraDe</c> acepta filas nuevas o modificadas de UNA empresa y solo de los tipos
+    /// indicados, que ya eran de esa empresa y siguen siéndolo. Nunca un borrado.
     /// </summary>
-    public static void ValidarEscritura(ChangeTracker cambios, Guid? empresa)
+    public static void ValidarEscritura(ChangeTracker cambios, Guid? empresa, EscrituraAutorizada? autorizada = null)
     {
         ArgumentNullException.ThrowIfNull(cambios);
         foreach (var entrada in cambios.Entries<IEntidadDeEmpresa>()
@@ -57,11 +60,25 @@ public static class TenantFilter
                 ? entrada.Entity.TenantId
                 : entrada.Property(e => e.TenantId).OriginalValue;
             var ajena = entrada.Entity.TenantId != propia ? entrada.Entity.TenantId : original;
-            if (ajena != propia)
+            if (ajena != propia && !EstaAutorizada(entrada, original, autorizada))
                 throw new EscrituraEntreEmpresasException($"{tipo} de la empresa {ajena} no se puede guardar con el token de la empresa {propia}.");
         }
     }
+
+    private static bool EstaAutorizada(EntityEntry<IEntidadDeEmpresa> entrada, Guid original, EscrituraAutorizada? autorizada) =>
+        autorizada is not null
+        && entrada.State is EntityState.Added or EntityState.Modified
+        && autorizada.Tipos.Contains(entrada.Metadata.ClrType)
+        && entrada.Entity.TenantId == autorizada.Empresa
+        && original == autorizada.Empresa;
 }
+
+/// <summary>
+/// Ámbito de escritura sobre las filas de otra empresa (HU #13741, ADR-0073): una sola empresa y solo los tipos indicados.
+/// Lo abre <c>DiagnosticoDb.AutorizarEscrituraDe</c>, que solo se llama desde el módulo Backoffice
+/// (<c>EscrituraEntreEmpresasSoloEnBackofficeTests</c>).
+/// </summary>
+public sealed record EscrituraAutorizada(Guid Empresa, IReadOnlySet<Type> Tipos);
 
 /// <summary>Se intentó escribir una fila de otra empresa, o sin empresa en el token.</summary>
 public sealed class EscrituraEntreEmpresasException : InvalidOperationException

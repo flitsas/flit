@@ -4,7 +4,7 @@
 **Status**: Propuesto
 **Deciders**: Líder Técnico FLIT (aceptación exclusiva humana, regla FLIT 15). Redactado durante la implementación de la HU #13728.
 **Tags**: arquitectura, backend, seguridad, multi-tenant, auditoría
-**Épica / Feature / HU**: #12881 / #13715 / #13728 (F00.1-H5) · **Plan**: `docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` D-16, D-01, §6.2, RD-3 · **Relacionados**: ADR-0069, ADR-0072
+**Épica / Feature / HU**: #12881 / #13715 / #13728 (F00.1-H5); vía de escritura: #13716 / #13741 (F00.2-H2) · **Plan**: `docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` D-16, D-01, §6.2, RD-3 · **Relacionados**: ADR-0069, ADR-0072
 
 ## Contexto
 
@@ -62,6 +62,54 @@ ADR-0072 deja pendiente cómo escribe el backoffice sobre otra compañía. Este 
 - `TenantFilter.ValidarEscritura` sigue rechazando filas de otra compañía. La vía de #13741 tiene que ser un ámbito
   explícito y acotado al módulo Backoffice, verificable con una prueba de arquitectura como la de `IgnoreQueryFilters()`.
   Abrir la validación para todo el servicio queda descartado.
+
+## Vía de escritura del backoffice (HU #13741, F00.2-H2) — sigue en Propuesto
+
+`PUT /backoffice/empresas/{empresa}/configuracion/contrato` escribe en la fila de la compañía de la ruta. Cumple las tres
+condiciones así:
+
+1. **Empresa, política y filtro.** La ruta está en el grupo `/backoffice`
+   (`Modulos/Backoffice/ContratoBackofficeEndpoints.cs`, mapeada desde `BackofficeEndpoints`). Hereda la política
+   `diagnostico.backoffice` y además exige `diagnostico.configuracion.contrato.editar` con `RequirePermiso`. La empresa
+   sale de `EmpresaExplicita.De(http)`: el segmento `{empresa}` y, si llega, `?empresa=` deben coincidir. Si no, la
+   respuesta es 400 y no se escribe nada.
+2. **Rastro propio.** El PUT no se registra en `lecturas_backoffice`, porque el filtro solo audita GET/HEAD. Cada campo
+   que cambia queda en `cambios_contrato`, en el mismo guardado, con el usuario (`sub`), la compañía de la ruta, el valor
+   anterior y el nuevo. Se registran `fuentes_habilitadas`, `limite_vehiculos_lote` y `redaccion_ia_suspendida`, y
+   también el recorte de `fuentes_por_defecto` cuando se reducen las habilitadas. El GET del contrato sí se audita como
+   lectura.
+3. **Un ámbito explícito y acotado al módulo Backoffice.**
+   - `DiagnosticoDb.AutorizarEscrituraDe(empresa, tipos)` abre un ámbito (`EscrituraAutorizada`) que se cierra con el
+     `using`. No se anida y no acepta la empresa cero, una lista vacía ni tipos que no sean de empresa.
+   - Mientras está abierto, `TenantFilter.ValidarEscritura` acepta además las filas **nuevas o modificadas** de **esa**
+     empresa, solo de los tipos indicados, y solo si ya eran de esa empresa y lo siguen siendo. Nunca acepta un borrado.
+   - Todo lo demás se sigue rechazando como antes, en todo el servicio. Sin ámbito, la validación no cambia.
+   - Solo lo usa `Modulos/Backoffice/EscrituraEntreEmpresas.cs` (`internal`). Su `GuardarDeLaEmpresaAsync` guarda con el
+     ámbito abierto y su `ParaEditarDeLaEmpresa<T>` lee con seguimiento. El contrato abre el ámbito solo para
+     `ConfiguracionEmpresa` y `CambioContrato`.
+   - `IgnoreQueryFilters()` sigue apareciendo únicamente en `Modulos/Backoffice/`, así que
+     `IgnoreQueryFiltersSoloEnBackofficeTests` no cambia de regla.
+   - **Prueba de arquitectura nueva:** `EscrituraEntreEmpresasSoloEnBackofficeTests` hace el mismo grep auditable sobre
+     las llamadas `.AutorizarEscrituraDe(`, sin contar la declaración ni los comentarios. Falla si aparece una llamada
+     fuera de `Modulos/Backoffice/` y también si no aparece ninguna. Además prueba que el ámbito rechaza otra empresa,
+     otro tipo, un borrado y el paso de una fila de una compañía a otra.
+
+**Reglas de la aplicación antes que la base.**
+
+- Orden de validación de los PUT: 400 si el cuerpo no es un objeto. Después, 403 `CAMPO_NO_EDITABLE` si llega un campo
+  que la ruta no edita; en la ruta operativa eso incluye los contractuales y `redaccion_ia_suspendida`. Por último, 422
+  si un valor está fuera de su conjunto, si el límite no es un entero positivo o si se habilita
+  `IMPUESTO_DEPARTAMENTAL` sin C3.
+- Con un error no se guarda ningún campo.
+- Un CHECK de la base que aun así falle (SQLSTATE 23514, por ejemplo una carrera con otra edición) se traduce a 422
+  `VALOR_INVALIDO`. Lo hace el manejador global de reglas, sin exponer el nombre del CHECK.
+
+**Tradeoffs.**
+
+- `AutorizarEscrituraDe` es `internal` al ensamblado: el compilador no impide llamarlo desde otro módulo. El control lo
+  da la prueba de arquitectura, igual que con `IgnoreQueryFilters()`.
+- El ámbito vale para todo lo que se guarde mientras está abierto. Por eso se abre solo alrededor de un
+  `SaveChangesAsync` y con la lista mínima de tipos.
 
 ## Alternativas consideradas
 

@@ -24,6 +24,28 @@ public sealed class DiagnosticoDb(DbContextOptions<DiagnosticoDb> options, IPlat
     /// <summary>Empresa del token de la petición en curso; null si no hay (entonces el filtro no deja ver nada).</summary>
     public Guid? EmpresaActual => empresa.Current.TenantId;
 
+    /// <summary>Ámbito abierto de escritura sobre otra empresa (HU #13741); null fuera de él.</summary>
+    internal EscrituraAutorizada? EscrituraAutorizada { get; private set; }
+
+    /// <summary>
+    /// Abre, hasta que se libere el resultado, la escritura de filas de <paramref name="empresa"/> de los tipos dados (HU #13741,
+    /// ADR-0073). Solo la llama el módulo Backoffice: <c>EscrituraEntreEmpresasSoloEnBackofficeTests</c> falla si aparece en
+    /// otro lado. No se anida y no admite la empresa cero, una lista vacía ni un tipo que no sea de empresa.
+    /// </summary>
+    internal IDisposable AutorizarEscrituraDe(Guid empresa, params Type[] tipos)
+    {
+        ArgumentNullException.ThrowIfNull(tipos);
+        if (empresa == Guid.Empty)
+            throw new ArgumentException("La escritura entre empresas exige una empresa.", nameof(empresa));
+        if (tipos.Length == 0 || tipos.Any(t => !typeof(IEntidadDeEmpresa).IsAssignableFrom(t)))
+            throw new ArgumentException("La escritura entre empresas exige uno o más tipos de entidad de empresa.", nameof(tipos));
+        if (EscrituraAutorizada is not null)
+            throw new InvalidOperationException("Ya hay una escritura entre empresas abierta en este contexto.");
+
+        EscrituraAutorizada = new EscrituraAutorizada(empresa, tipos.ToHashSet());
+        return new Cierre(this);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -36,14 +58,19 @@ public sealed class DiagnosticoDb(DbContextOptions<DiagnosticoDb> options, IPlat
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        TenantFilter.ValidarEscritura(ChangeTracker, EmpresaActual);
+        TenantFilter.ValidarEscritura(ChangeTracker, EmpresaActual, EscrituraAutorizada);
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        TenantFilter.ValidarEscritura(ChangeTracker, EmpresaActual);
+        TenantFilter.ValidarEscritura(ChangeTracker, EmpresaActual, EscrituraAutorizada);
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private sealed class Cierre(DiagnosticoDb db) : IDisposable
+    {
+        public void Dispose() => db.EscrituraAutorizada = null;
     }
 
     /// <summary>Opciones comunes: Npgsql con la tabla de migraciones dentro del propio esquema.</summary>

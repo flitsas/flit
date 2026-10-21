@@ -49,6 +49,9 @@ public static class Program
         builder.Services.AddAutorizacionDiagnostico();
         // HU #13728: auditoría de cada lectura entre compañías del backoffice (diagnostico.lecturas_backoffice).
         builder.Services.AddScoped<Modulos.Comun.AuditoriaLecturaBackoffice>();
+        // HU #13741: configuración en dos niveles (operativa de la compañía y contrato del backoffice).
+        builder.Services.AddSingleton<Modulos.Configuracion.DisponibilidadFuentes>();
+        builder.Services.AddScoped<Modulos.Configuracion.ServicioConfiguracion>();
         builder.Services.AddSuscripcionDiagnostico(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);

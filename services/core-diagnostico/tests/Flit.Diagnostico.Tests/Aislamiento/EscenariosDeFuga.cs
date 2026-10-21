@@ -1,5 +1,6 @@
 using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Comun;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -56,11 +57,18 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaSesion = Program.Prefijo + "/sesion";
 
+    /// <summary>
+    /// Configuración de la compañía (HU #13741): cada empresa siembra su fila con un autor operativo propio, que la lectura
+    /// devuelve junto con el id de la empresa; con el token de A no debe aparecer nada de B.
+    /// </summary>
+    public const string RutaConfiguracion = Program.Prefijo + ConfiguracionEndpoints.Ruta;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
         new EscenarioDeFuga(RutaSesion, (empresa, _) =>
             Task.FromResult(new Sembrado($"{RutaSesion}?empresa={empresa.Id}", [empresa.Id.ToString()]))),
+        EscenarioDeFuga.Con(RutaConfiguracion, _ => new ConfiguracionEmpresa { OperativaActualizadaPor = Guid.NewGuid() }, c => c.OperativaActualizadaPor!.Value),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

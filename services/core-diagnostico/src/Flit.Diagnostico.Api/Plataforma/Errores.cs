@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Diagnostico.Api.Plataforma;
 
@@ -43,12 +45,26 @@ public sealed class ReglaException : Exception
     public static ReglaException Prohibido(string codigo, string mensaje) => new(codigo, mensaje, StatusCodes.Status403Forbidden);
 }
 
-/// <summary>Convierte <see cref="ReglaException"/> en la respuesta JSON <c>{ code, error }</c>.</summary>
+/// <summary>
+/// Convierte <see cref="ReglaException"/> en la respuesta JSON <c>{ code, error }</c>. Una violación de CHECK de la base
+/// (SQLSTATE 23514) que se escape a la validación de la aplicación también es una regla de dominio: 422
+/// <c>VALOR_INVALIDO</c>, sin el nombre del CHECK ni el detalle de la base (HU #13741). Cualquier otro error sigue su curso.
+/// </summary>
 internal sealed class ManejadorReglas : IExceptionHandler
 {
+    public const string CodigoValorInvalido = "VALOR_INVALIDO";
+
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        if (exception is not ReglaException regla)
+        ArgumentNullException.ThrowIfNull(httpContext);
+        var regla = exception switch
+        {
+            ReglaException r => r,
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.CheckViolation } } =>
+                new ReglaException(CodigoValorInvalido, "Los datos no cumplen una regla de validación del servicio."),
+            _ => null,
+        };
+        if (regla is null)
             return false;
 
         httpContext.Response.StatusCode = regla.Status;

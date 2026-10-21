@@ -42,6 +42,23 @@ internal static class CodigosDeEnum
     public static string ArregloJsonbSql<T>()
         where T : struct, Enum => $"'{JsonSerializer.Serialize(Enum.GetValues<T>().Select(Codigo).ToList())}'::jsonb";
 
+    /// <summary>Valor del enum cuyo código es <paramref name="codigo"/> (exacto, en mayúsculas); false si no hay ninguno.</summary>
+    public static bool TryLeer<T>(string? codigo, out T valor)
+        where T : struct, Enum
+    {
+        foreach (var v in Enum.GetValues<T>())
+        {
+            if (string.Equals(Codigo(v), codigo, StringComparison.Ordinal))
+            {
+                valor = v;
+                return true;
+            }
+        }
+
+        valor = default;
+        return false;
+    }
+
     private static T Leer<T>(string codigo)
         where T : struct, Enum => Enum.GetValues<T>().First(v => Codigo(v) == codigo);
 }

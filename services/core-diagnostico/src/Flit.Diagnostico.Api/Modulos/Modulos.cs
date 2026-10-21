@@ -12,6 +12,7 @@ public static class Modulos
         ArgumentNullException.ThrowIfNull(app);
         var api = app.MapGroup(prefijo).RequireAuthorization();
         Sesion.SesionEndpoints.Map(api);
+        Configuracion.ConfiguracionEndpoints.Map(api);
         Backoffice.BackofficeEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
