@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Api.Authorization;
 using Flit.Queries.Domain;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
@@ -104,6 +105,7 @@ public static class CompanyQueriesEndpoints
     private static async Task<IResult> RunAsync(
         HttpContext httpContext,
         [FromServices] ExecuteCompanyQueryHandler handler,
+        [FromServices] IProcedureFamilyPermissionGate familyGate,
         [FromBody] RunRequest body,
         CancellationToken cancellationToken,
         [FromQuery] Guid? tenantId = null)
@@ -113,7 +115,9 @@ public static class CompanyQueriesEndpoints
             return error!;
         }
 
-        var request = ExecuteCompanyQueryHandler.BuildRequest(body?.Definition, body?.Page, body?.PageSize);
+        // HU #13664 — Ver por familia: los trámites de familias sin Ver no entran al universo de la consulta.
+        var request = ExecuteCompanyQueryHandler.BuildRequest(body?.Definition, body?.Page, body?.PageSize)
+            with { AllowedFamilies = familyGate.ReadableFamilyCodes() };
         var result = await handler.HandleAsync(tenant, request, cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(result);

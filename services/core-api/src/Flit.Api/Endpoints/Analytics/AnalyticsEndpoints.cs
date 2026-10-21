@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Queries;
 using Flit.Api.Authorization;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
@@ -20,6 +21,8 @@ namespace Flit.Api.Endpoints.Analytics;
 /// aplicada explícitamente en cada endpoint de exportación — no la reintroduzcas a nivel
 /// de grupo sin confirmar con negocio, ya que eso reproduce el bug de "dashboard en 0
 /// para roles personalizados".
+/// HU #13664 — todas las lecturas excluyen las familias sin Ver
+/// (<see cref="IProcedureFamilyPermissionGate.ReadableFamilyCodes"/>), igual que el listado de trámites.
 /// </summary>
 public static class AnalyticsEndpoints
 {
@@ -100,6 +103,7 @@ public static class AnalyticsEndpoints
     private static async Task<IResult> GetOverviewAsync(
         HttpContext httpContext,
         GetAnalyticsOverviewHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
@@ -111,7 +115,7 @@ public static class AnalyticsEndpoints
         // Guid.Empty es el centinela de "vista global" (SuperAdmin sin tenant) → null para el handler.
         Guid? effectiveTenant = (tenant == Guid.Empty) ? null : tenant;
         var (result, err) = await handler.HandleAsync(
-            new GetAnalyticsOverviewQuery(effectiveTenant, from, to), ct);
+            new GetAnalyticsOverviewQuery(effectiveTenant, from, to) { AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(result);
     }
@@ -121,6 +125,7 @@ public static class AnalyticsEndpoints
         DateOnly from,
         DateOnly to,
         GetTopProducersHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] int? limit = null,
         [FromQuery] Guid? tenantId = null)
@@ -131,7 +136,11 @@ public static class AnalyticsEndpoints
         // Guid.Empty es el centinela de "vista global" (SuperAdmin sin tenant) → null para el handler.
         Guid? effectiveTenant = (tenant == Guid.Empty) ? null : tenant;
         var (items, err) = await handler.HandleAsync(
-            new GetTopProducersQuery(effectiveTenant, from, to, limit ?? GetTopProducersHandler.DefaultLimit), ct);
+            new GetTopProducersQuery(effectiveTenant, from, to, limit ?? GetTopProducersHandler.DefaultLimit)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(),
+            },
+            ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(new { items });
     }
@@ -143,6 +152,7 @@ public static class AnalyticsEndpoints
         HttpContext httpContext,
         ExecutivePdfRequest request,
         ExportExecutivePdfHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct)
     {
         // AC3: from (o to) ausente en el cuerpo → 400 antes de resolver tenant o consultar.
@@ -158,7 +168,7 @@ public static class AnalyticsEndpoints
                 detail: "Este endpoint requiere especificar un tenantId: el SuperAdmin debe indicar la compañía.");
 
         var (pdf, err) = await handler.HandleAsync(
-            new ExportExecutivePdfQuery(tenant, request.From.Value, request.To.Value), ct);
+            new ExportExecutivePdfQuery(tenant, request.From.Value, request.To.Value) { AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct);
 
         if (err is "invalid_range")
             return InvalidRange();
@@ -172,6 +182,7 @@ public static class AnalyticsEndpoints
         DateOnly from,
         DateOnly to,
         IProcedureExcelExporter exporter,
+        IProcedureFamilyPermissionGate familyGate,
         [FromQuery] string? category = null,
         [FromQuery] string? status = null,
         [FromQuery] Guid? tenantId = null)
@@ -184,7 +195,7 @@ public static class AnalyticsEndpoints
                 detail: "Este endpoint requiere especificar un tenantId: el SuperAdmin debe indicar la compañía.");
 
         var (filter, err) = ExportProceduresExcelHandler.Validate(
-            new ExportProceduresExcelQuery(tenant, from, to, category, status));
+            new ExportProceduresExcelQuery(tenant, from, to, category, status) { AllowedFamilies = familyGate.ReadableFamilyCodes() });
         if (err is "invalid_range")
             return InvalidRange();
 
@@ -200,6 +211,7 @@ public static class AnalyticsEndpoints
         DateOnly from,
         DateOnly to,
         GetProcedureDetailsHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] string? category = null,
         [FromQuery] string? status = null,
@@ -217,7 +229,10 @@ public static class AnalyticsEndpoints
         var (result, err) = await handler.HandleAsync(
             new GetProcedureDetailsQuery(
                 tenant, from, to, category, status,
-                page ?? 1, pageSize ?? GetProcedureDetailsHandler.DefaultPageSize),
+                page ?? 1, pageSize ?? GetProcedureDetailsHandler.DefaultPageSize)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(),
+            },
             ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(result);
@@ -228,6 +243,7 @@ public static class AnalyticsEndpoints
         DateOnly from,
         DateOnly to,
         GetMonthlyTrendHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null)
     {
@@ -259,7 +275,8 @@ public static class AnalyticsEndpoints
             effectiveTenant = claimTenant;
         }
 
-        var (items, err) = await handler.HandleAsync(new GetMonthlyTrendQuery(effectiveTenant, from, to), ct);
+        var (items, err) = await handler.HandleAsync(
+            new GetMonthlyTrendQuery(effectiveTenant, from, to) { AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct);
         return err is "invalid_range" ? InvalidRange() : Results.Ok(new { items });
     }
 
