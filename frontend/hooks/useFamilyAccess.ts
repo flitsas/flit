@@ -6,6 +6,7 @@ import { decodeJwtPayload } from "@/lib/auth/jwt";
 import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
 import {
   PROCEDURE_FAMILIES,
+  aggregateFamilies,
   creatableFamilies,
   readableFamilies,
 } from "@/lib/tramites/familyPermissions";
@@ -15,6 +16,8 @@ export interface FamilyAccess {
   creatable: readonly ProcedureFamily[];
   canRead: (family: ProcedureFamily) => boolean;
   canCreate: (family: ProcedureFamily) => boolean;
+  /** ¿Se pinta la familia en las tarjetas KPI / series del inicio y de Reportes? (ver `aggregateFamilies`). */
+  showsInAggregates: (family: ProcedureFamily) => boolean;
 }
 
 /**
@@ -27,11 +30,13 @@ export function useFamilyAccess(): FamilyAccess {
     const claims = decodeJwtPayload(getToken());
     const readable = claims ? readableFamilies(claims) : PROCEDURE_FAMILIES;
     const creatable = claims ? creatableFamilies(claims) : PROCEDURE_FAMILIES;
+    const aggregate = aggregateFamilies(claims);
     return {
       readable,
       creatable,
       canRead: (f) => readable.includes(f),
       canCreate: (f) => creatable.includes(f),
+      showsInAggregates: (f) => aggregate.includes(f),
     };
   }, []);
 }

@@ -55,3 +55,13 @@ export function readableFamilies(claims: JwtPayload | null): ProcedureFamily[] {
 export function creatableFamilies(claims: JwtPayload | null): ProcedureFamily[] {
   return PROCEDURE_FAMILIES.filter((f) => canCreateFamily(claims, f));
 }
+
+/**
+ * Familias que se pintan en los agregados por familia (tarjetas KPI y series del inicio y de Reportes, criterio FF-4).
+ * Solo se ocultan cuando el token trae permisos por familia (modo estricto): en modo compatibilidad decide la API según
+ * su flag, y ocultar las tres dejaría sin tarjetas a un rol que entra al inicio o a Reportes sin `tramites.read`.
+ */
+export function aggregateFamilies(claims: JwtPayload | null): ProcedureFamily[] {
+  if (!claims || !hasFamilyPermissions(claims)) return [...PROCEDURE_FAMILIES];
+  return readableFamilies(claims);
+}

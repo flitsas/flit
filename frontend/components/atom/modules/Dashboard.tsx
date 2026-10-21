@@ -38,6 +38,7 @@ import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { useFamilyAccess } from "@/hooks/useFamilyAccess";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
@@ -78,6 +79,13 @@ function lastNMonthsRange(n: number): { from: string; to: string } {
 // ── Helpers de datos ──────────────────────────────────────────────────────────
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+/** Series de «Seguimiento operativo» (barra + leyenda) y la familia que cada una representa (HU #13665). */
+const SERIES = [
+  { label: "Matrículas", color: "#557EFF", family: "MATRICULAS" },
+  { label: "Traspasos", color: "#00DBD5", family: "TRASPASO" },
+  { label: "Otros", color: "#F9AC00", family: "OTROS" },
+] as const;
 
 function buildChartData(items: MonthlyTrendPoint[]) {
   const map = new Map<string, { m: string; Matrículas: number; Traspasos: number; Otros: number }>();
@@ -448,6 +456,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
   const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
   const completados = countCompleted(categories);
+  // HU #13665 (FF-4) — sin Ver de una familia, su tarjeta y su serie no se pintan (la API ya no la cuenta).
+  const { showsInAggregates } = useFamilyAccess();
 
   // Distribución consolidada por estado de TODAS las categorías (no solo traspasos).
   const globalFunnel = useMemo(() => {
@@ -663,12 +673,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             // queda incompleta y alineada a la izquierda.
             <div className="grid grid-cols-3 gap-3 flex-1" data-testid="dashboard-kpi-grid">
               {[
-                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF" },
-                { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
-                { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
-                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
-                { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
-              ].map((k) => {
+                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF", family: null },
+                { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5", family: "MATRICULAS" as const },
+                { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00", family: "TRASPASO" as const },
+                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744", family: "OTROS" as const },
+                { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F", family: null },
+              ].filter((k) => k.family === null || showsInAggregates(k.family)).map((k) => {
                 const Icon = k.icon;
                 const isError = status === "error";
                 return (
@@ -912,20 +922,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       }}
                       labelStyle={{ color: "#00DBD5", fontWeight: 600 }}
                     />
-                    <Bar dataKey="Matrículas" fill="#557EFF" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Traspasos" fill="#00DBD5" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Otros" fill="#F9AC00" radius={[4, 4, 0, 0]} />
+                    {SERIES.filter((s) => showsInAggregates(s.family)).map((s) => (
+                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[4, 4, 0, 0]} />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex items-center justify-center gap-3 mt-1 text-[9px]">
-                {(
-                  [
-                    { color: "#557EFF", label: "Matrículas" },
-                    { color: "#00DBD5", label: "Traspasos" },
-                    { color: "#F9AC00", label: "Otros" },
-                  ] as const
-                ).map(({ color, label }) => (
+                {SERIES.filter((s) => showsInAggregates(s.family)).map(({ color, label }) => (
                   <span key={label} className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full" style={{ background: color }} />
                     {label}

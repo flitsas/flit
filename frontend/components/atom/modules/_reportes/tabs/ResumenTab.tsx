@@ -14,6 +14,7 @@ import {
   fetchNetworkMonthlyTrend,
 } from "@/lib/api/analytics";
 import type { NetworkChildOption } from "@/hooks/useNetworkScope";
+import { useFamilyAccess } from "@/hooks/useFamilyAccess";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import type { NetworkScopePreference } from "@/lib/tramites/network-scope";
 import { variationPct } from "@/lib/api/analytics-v2";
@@ -24,7 +25,7 @@ import type {
   MonthlyTrendResponse,
 } from "@/lib/api/types";
 import { CategoryDonut } from "../CategoryDonut";
-import { CATEGORY_META, CATEGORY_ORDER } from "../categories";
+import { CATEGORY_FAMILY, CATEGORY_META, CATEGORY_ORDER } from "../categories";
 import { compareRange, type ReportFilters } from "../filters";
 import { formatInt } from "../format";
 import { KpiCard } from "../KpiCard";
@@ -85,6 +86,9 @@ export function ResumenTab({
   const params = { from: range.from, to: range.to, tenantId: tenantId || undefined };
   const networkActive = networkScope?.mode === "network";
   const childTenantId = networkActive ? networkScope?.childTenantId : undefined;
+  // HU #13665 (FF-4) — sin Ver de una familia, su KPI, su donut y su línea no se pintan (la API ya no la cuenta).
+  const { showsInAggregates } = useFamilyAccess();
+  const visibleCategories = CATEGORY_ORDER.filter((cat) => showsInAggregates(CATEGORY_FAMILY[cat]));
 
   // Overview (endpoint legado): admite SuperAdmin sin tenant (vista global). Con la red activa,
   // la misma consulta contra `network/stats/overview` (+ `childTenantId`).
@@ -154,7 +158,7 @@ export function ResumenTab({
               color="#162744"
               testId="kpi-total-tramites"
             />
-            {CATEGORY_ORDER.map((cat) => (
+            {visibleCategories.map((cat) => (
               <KpiCard
                 key={cat}
                 label={CATEGORY_META[cat].label}
@@ -168,7 +172,7 @@ export function ResumenTab({
 
           {/* Donuts por categoría (drill-down al detalle) */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {CATEGORY_ORDER.map((cat) => (
+            {visibleCategories.map((cat) => (
               <CategoryDonut
                 key={cat}
                 metrics={byCategory[cat]}
@@ -209,7 +213,7 @@ export function ResumenTab({
                   contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                {CATEGORY_ORDER.map((cat) => (
+                {visibleCategories.map((cat) => (
                   <Line
                     key={cat}
                     type="monotone"
