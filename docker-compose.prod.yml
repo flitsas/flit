@@ -56,7 +56,8 @@
 #   COMPOSE_PROJECT_NAME    nombre del proyecto Compose (default: flitdev)
 # Variables opcionales:
 #   CORE_API_TAG / FRONTEND_TAG / PYTHON_ML_TAG   tag de imagen (default: latest)
-#   VERIFIK_BASE_URL / VERIFIK_TIMEOUT_SECONDS
+#   VERIFIK_BASE_URL / VERIFIK_TIMEOUT_SECONDS (=120, HU #13762)
+#   KYVERUM_RUNT_TIMEOUT_SECONDS / KYVERUM_TIMEOUT_SECONDS / KYVERUM_FINES_TIMEOUT_SECONDS (=120)
 #
 # NOTA: login deshabilitado temporalmente -> NO se requieren llaves JWT.
 # NOTA: la imagen python-ml debe construirse/publicarse en el pipeline CD
@@ -179,7 +180,8 @@ services:
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
       VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
       VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
-      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
+      # HU #13762: timeouts HTTP de proveedores (segundos). ArgoCD/flit-gitops usa el mismo valor (120).
+      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-120}
       # Modos real|mock por proveedor (explícitos para un deploy determinista).
       VERIFIK_VEHICLE_MODE: ${VERIFIK_VEHICLE_MODE:-real}
       VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
@@ -238,7 +240,9 @@ services:
       KYVERUM_API_KEY: ${KYVERUM_API_KEY:-}
       KYVERUM_BASE_URL: ${KYVERUM_BASE_URL:-https://verify.kyverum.com}
       KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
-      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
+      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-120}
+      # FEATURE 05 / HU #13762 — timeout HTTP de Kyverum comparendos (persona jurídica).
+      KYVERUM_FINES_TIMEOUT_SECONDS: ${KYVERUM_FINES_TIMEOUT_SECONDS:-120}
       KYVERUM_WEBHOOK_CALLBACK_URL: ${KYVERUM_WEBHOOK_CALLBACK_URL:-}
       # Kyverum RUNT — dominio DISTINTO de Kyverum Verify (runt.kyverum.com vs
       # verify.kyverum.com): mismo proveedor, otro producto y otra API key/scope.
@@ -251,7 +255,7 @@ services:
       KYVERUM_RUNT_BASE_URL: ${KYVERUM_RUNT_BASE_URL:-https://runt.kyverum.com}
       KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
       KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
-      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
+      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-120}
       # OCR de trámites (Anthropic). Mismo patrón: el código lee env vars CRUDAS
       # (OCR_PROVIDER / ANTHROPIC_*), no `Anthropic__*`. Default mock ⇒ no rompe si el .env no lo define.
       OCR_PROVIDER: ${OCR_PROVIDER:-mock}
