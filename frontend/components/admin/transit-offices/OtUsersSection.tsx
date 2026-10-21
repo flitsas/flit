@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, ClipboardList, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -37,6 +37,7 @@ import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 import { UserPermissionsModal } from "@/components/atom/modules/users/UserPermissionsModal";
 import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
+import { SectionTabs } from "@/components/atom/SectionTabs";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -87,7 +88,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [cancelTarget, setCancelTarget] = useState<OtUserItem | null>(null);
   const [auditTarget, setAuditTarget] = useState<OtUserItem | null>(null);
   const [permissionsTarget, setPermissionsTarget] = useState<OtUserItem | null>(null);
-  const [showPermissionAudit, setShowPermissionAudit] = useState(false);
+  // HU #13655: sub-pestañas «Usuarios | Auditoría de permisos» (mismo componente que Mandatos), solo para el Admin OT.
+  const [subTab, setSubTab] = useState<"usuarios" | "auditoria">("usuarios");
+  const showingUsers = !canConfigurePermissions || subTab === "usuarios";
   // Roles asignables al editar: catálogo TRANSIT_OFFICE (SuperAdmin) o los del propio tenant.
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
@@ -360,6 +363,64 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return reactivateOtInvitation(invitationId, { transitOfficeId });
   }
 
+  // Misma tabla, mismos filtros y mismas acciones que el módulo Usuarios y que la ficha
+  // de compañía: antes esta sección tenía su propia <table>, sin filtros y con chips de
+  // estado distintos, y por eso "no se parecía a las otras".
+  const usersTable = (
+      <UsersTable
+        rows={users.map((u) =>
+          toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
+        )}
+        loading={status === "loading"}
+        error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
+        onRetry={() => void load()}
+        emptyMessage="No hay usuarios en este organismo de tránsito todavía."
+        actionsFor={(row) => actionsForUser(row.id)}
+        extraActionsFor={(row) => {
+          // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el invitationId.
+          if (row.status === "pending") {
+            return (
+              <ResendInvitationButton
+                invitationId={row.id}
+                fullName={row.fullName}
+                resend={handleResendInvitation}
+                onResent={(outcome) =>
+                  show(
+                    outcome.emailSent
+                      ? `Invitación reenviada a ${outcome.email}.`
+                      : "Invitación reenviada, pero el correo no pudo entregarse.",
+                    "success",
+                  )
+                }
+              />
+            );
+          }
+          // HU #11552 / ADR-0048: SOLO en filas "Cancelada" — el id de la fila ya es el
+          // invitationId. Tras reactivar, la fila vuelve a verse como "Pendiente" recargando
+          // el listado, sin recargar la página.
+          if (row.status === "cancelled") {
+            return (
+              <ReactivateInvitationButton
+                invitationId={row.id}
+                fullName={row.fullName}
+                reactivate={handleReactivateInvitation}
+                onReactivated={(outcome) => {
+                  show(
+                    outcome.emailSent
+                      ? `Invitación reactivada y reenviada a ${outcome.email}.`
+                      : "Invitación reactivada, pero el correo no pudo entregarse.",
+                    "success",
+                  );
+                  void load();
+                }}
+              />
+            );
+          }
+          return null;
+        }}
+      />
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -373,7 +434,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         </div>
         <div className="flex items-center gap-2">
           {/* AC4 (HU #10623): "Ver eliminados" es exclusivo de SuperAdmin — ot_admin nunca lo ve. */}
-          {isSuperAdmin && (
+          {isSuperAdmin && showingUsers && (
             <button
               type="button"
               onClick={() => setShowDeleted((v) => !v)}
@@ -385,98 +446,44 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
             </button>
           )}
-          {canConfigurePermissions && (
+          {/* «Invitar usuario» solo en la pestaña Usuarios. */}
+          {showingUsers && (
             <button
               type="button"
-              onClick={() => setShowPermissionAudit((v) => !v)}
-              aria-pressed={showPermissionAudit}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
-              style={{ color: "#557EFF" }}
+              onClick={() => setInviteOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
             >
-              <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
-              {showPermissionAudit ? "Ver usuarios" : "Auditoría de permisos"}
+              Invitar usuario
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            Invitar usuario
-          </button>
         </div>
       </div>
 
-      {showDeleted && isSuperAdmin && (
+      {canConfigurePermissions ? (
+        <SectionTabs
+          ariaLabel="Secciones de usuarios del organismo"
+          active={subTab}
+          onChange={setSubTab}
+          tabs={[
+            { id: "usuarios", label: "Usuarios", content: usersTable },
+            {
+              id: "auditoria",
+              label: "Auditoría de permisos",
+              // Se monta al abrir la pestaña: no consulta la auditoría mientras no se mira.
+              content: subTab === "auditoria" ? <PermissionAuditView mode="admin" users={users} /> : null,
+            },
+          ]}
+        />
+      ) : showDeleted && isSuperAdmin ? (
         <DeletedUsersTable
           status={deletedStatus}
           users={deletedUsers}
           onRetry={() => void loadDeleted()}
           onRestore={setRestoreTarget}
         />
-      )}
-
-      {showPermissionAudit && canConfigurePermissions && !showDeleted && (
-        <PermissionAuditView mode="admin" users={users} />
-      )}
-
-      {!showDeleted && !(showPermissionAudit && canConfigurePermissions) && (
-        // Misma tabla, mismos filtros y mismas acciones que el módulo Usuarios y que la ficha
-        // de compañía: antes esta sección tenía su propia <table>, sin filtros y con chips de
-        // estado distintos, y por eso "no se parecía a las otras".
-        <UsersTable
-          rows={users.map((u) =>
-            toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
-          )}
-          loading={status === "loading"}
-          error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
-          onRetry={() => void load()}
-          emptyMessage="No hay usuarios en este organismo de tránsito todavía."
-          actionsFor={(row) => actionsForUser(row.id)}
-          extraActionsFor={(row) => {
-            // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el invitationId.
-            if (row.status === "pending") {
-              return (
-                <ResendInvitationButton
-                  invitationId={row.id}
-                  fullName={row.fullName}
-                  resend={handleResendInvitation}
-                  onResent={(outcome) =>
-                    show(
-                      outcome.emailSent
-                        ? `Invitación reenviada a ${outcome.email}.`
-                        : "Invitación reenviada, pero el correo no pudo entregarse.",
-                      "success",
-                    )
-                  }
-                />
-              );
-            }
-            // HU #11552 / ADR-0048: SOLO en filas "Cancelada" — el id de la fila ya es el
-            // invitationId. Tras reactivar, la fila vuelve a verse como "Pendiente" recargando
-            // el listado, sin recargar la página.
-            if (row.status === "cancelled") {
-              return (
-                <ReactivateInvitationButton
-                  invitationId={row.id}
-                  fullName={row.fullName}
-                  reactivate={handleReactivateInvitation}
-                  onReactivated={(outcome) => {
-                    show(
-                      outcome.emailSent
-                        ? `Invitación reactivada y reenviada a ${outcome.email}.`
-                        : "Invitación reactivada, pero el correo no pudo entregarse.",
-                      "success",
-                    );
-                    void load();
-                  }}
-                />
-              );
-            }
-            return null;
-          }}
-        />
+      ) : (
+        usersTable
       )}
 
       {inviteOpen && (

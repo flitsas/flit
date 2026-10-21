@@ -105,16 +105,24 @@ describe("OtUsersSection — auditoría del ámbito (#13658)", () => {
   it("AC2: el Admin OT alterna a la auditoría; filtros de usuario y administrador, sin compañía", async () => {
     renderSection();
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Auditoría de permisos" }));
+    // Sub-pestañas «Usuarios | Auditoría de permisos», con «Usuarios» activa al entrar.
+    expect(screen.getByRole("tablist", { name: "Secciones de usuarios del organismo" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Usuarios" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Invitar usuario" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Auditoría de permisos" }));
+    expect(screen.getByRole("tab", { name: "Auditoría de permisos" })).toHaveAttribute("aria-selected", "true");
+    // «Invitar usuario» solo vive en la pestaña Usuarios.
+    expect(screen.queryByRole("button", { name: "Invitar usuario" })).not.toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "Auditoría de permisos individuales" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Compañía" })).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Usuario" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Administrador" })).toBeInTheDocument();
     expect(listPermissionAudit).toHaveBeenCalledWith(expect.objectContaining({ tenantId: undefined }));
     // La tabla de usuarios se oculta mientras se ve la auditoría y se puede volver.
-    expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Ver usuarios" }));
-    expect(await screen.findByText("Ana Torres")).toBeInTheDocument();
+    expect(screen.getByText("Ana Torres")).not.toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "Usuarios" }));
+    expect(screen.getByText("Ana Torres")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Invitar usuario" })).toBeInTheDocument();
   });
 
   it("AC3: si la API de auditoría falla muestra el error con reintento", async () => {
@@ -123,7 +131,7 @@ describe("OtUsersSection — auditoría del ámbito (#13658)", () => {
       .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
     renderSection();
     await screen.findByText("Ana Torres");
-    await userEvent.click(screen.getByRole("button", { name: "Auditoría de permisos" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Auditoría de permisos" }));
     expect(await screen.findByText("No se pudo cargar la auditoría de permisos.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(listPermissionAudit).toHaveBeenCalledTimes(2));

@@ -321,7 +321,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "auditoria-permisos",
         title: "4. Auditoría de permisos",
         paragraphs: [
-          "En Usuarios, el botón «Auditoría de permisos» cambia la tabla por el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. «Ver usuarios» te devuelve a la tabla de usuarios.",
+          "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
           "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
         ],
       },
