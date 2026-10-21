@@ -1,7 +1,7 @@
 import { apiFetch } from "./client";
 import { ApiError } from "./types";
 
-// Permisos individuales por usuario (Épica #12753, ADR-0071). Contrato: core-api.v1.yaml
+// Permisos individuales por usuario (Épica #12753, ADR-0073). Contrato: core-api.v1.yaml
 // (`/api/v1/security/users/{userId}/permission-overrides…`, `/permission-overrides/grantable`,
 // `/permission-audit`). Solo administradores; el Super Admin puede declarar el tenant con `tenantId`.
 

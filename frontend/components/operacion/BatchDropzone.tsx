@@ -74,13 +74,13 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
       onDragLeave={handleDragLeave}
       className="rounded-xl border-2 border-dashed bg-white p-10 text-center shadow-sm transition-all duration-200 hover:shadow-md dark:bg-[#162744]"
       style={{
-        borderColor: dragging ? '#557EFF' : '#E2E8F0',
+        borderColor: dragging ? 'var(--color-flit-brand)' : '#E2E8F0',
         background: dragging ? '#F0F5FF' : undefined,
         opacity: disabled ? 0.6 : 1,
       }}
       aria-label="Carga masiva de documentos"
     >
-      <p className="text-[13px] font-semibold" style={{ color: '#162744' }}>
+      <p className="text-[13px] font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
         {busy
           ? 'Analizando los documentos…'
           : 'Arrastra aquí tus archivos, carpeta o archivo .zip.'}
@@ -129,7 +129,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           onClick={() => filesRef.current?.click()}
           disabled={inactivo}
           className="inline-flex h-11 items-center justify-center rounded-xl px-6 text-[13px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ background: '#557EFF' }}
+          style={{ background: 'var(--color-flit-brand)' }}
         >
           Seleccionar archivos
         </button>
@@ -139,7 +139,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           onClick={() => folderRef.current?.click()}
           disabled={inactivo}
           className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-6 text-[13px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         >
           <FolderOpen className="h-4 w-4" aria-hidden="true" />
           Seleccionar carpeta

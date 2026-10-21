@@ -25,12 +25,12 @@ export function AvisoMaestroRadicado({
   return (
     <div
       className={`flex items-start gap-2 rounded-xl px-3 py-2 ${className ?? ''}`}
-      style={{ background: '#557EFF1F', border: '1px solid #557EFF55' }}
+      style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12.16%, transparent)', border: '1px solid color-mix(in srgb, var(--color-flit-brand) 33.33%, transparent)' }}
       role="status"
       data-testid="aviso-maestro-radicado"
     >
-      <Landmark className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />
-      <p className="text-xs text-[#162744] dark:text-white/80">
+      <Landmark className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
+      <p className="text-xs text-flit-primary dark:text-white/80">
         <span className="font-bold">{COPY_MAESTRO_RADICADO_TITULO}.</span>{' '}
         <span>{textoMaestroRadicado(radicadoEn)}</span>
       </p>

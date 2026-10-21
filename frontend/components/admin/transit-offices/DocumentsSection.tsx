@@ -244,7 +244,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               ancho disponible y no quede en una columna angosta con un hueco al lado. */}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-[#162744] dark:text-white">
+              <h2 className="text-sm font-semibold text-flit-primary dark:text-white">
                 Orden de documentos del expediente
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
@@ -273,7 +273,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               ni siquiera se monta (evita la llamada a la API de políticas de prenda). */}
           {superAdmin && (
             <section className="space-y-3 rounded-2xl border bg-card p-4">
-              <h3 className="text-sm font-semibold text-[#162744] dark:text-white">
+              <h3 className="text-sm font-semibold text-flit-primary dark:text-white">
                 Documento de prenda por compañía
               </h3>
               <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />

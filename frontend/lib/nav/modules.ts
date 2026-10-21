@@ -68,7 +68,7 @@ export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda"];
 export type NavigableModulesContext = {
   /** Códigos de `GET /api/v1/security/modules`; `null`/vacío = catálogo sin cargar (deny-by-default). */
   accessibleCodes: readonly string[] | null;
-  /** Claims del token (permisos efectivos, ADR-0071). `null` = ilegibles ⇒ solo inicio y ayuda. */
+  /** Claims del token (permisos efectivos, ADR-0073). `null` = ilegibles ⇒ solo inicio y ayuda. */
   claims: JwtPayload | null;
 };
 
@@ -86,7 +86,7 @@ const NAVIGABLE_ORDER: readonly ModuleId[] = [
 
 /**
  * Fuente única: ids navegables por `?m=` = exactamente lo que el dock mostraría para el mismo contexto. Cada id se
- * decide con su requisito en `MODULE_ACCESS` (ADR-0072, `module-access.ts`); aquí no hay reglas propias, solo la
+ * decide con su requisito en `MODULE_ACCESS` (ADR-0074, `module-access.ts`); aquí no hay reglas propias, solo la
  * excepción de Admin OT (sus pestañas del hub reemplazan a las SPA homónimas).
  * Deny-by-default: sin claims o con el catálogo sin cargar NO se abre nada protegido; solo Inicio y Ayuda.
  * `/admin/*` no entra en este catálogo.

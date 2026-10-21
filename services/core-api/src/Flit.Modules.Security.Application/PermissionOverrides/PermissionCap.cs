@@ -6,7 +6,7 @@ namespace Flit.Modules.Security.Application.PermissionOverrides;
 public sealed record OverrideActor(Guid UserId, bool IsSuperAdmin);
 
 /// <summary>
-/// Tope de un administrador (ADR-0071, FB-5): unión de los permisos de sus roles en el tenant MENOS los que tenga
+/// Tope de un administrador (ADR-0073, FB-5): unión de los permisos de sus roles en el tenant MENOS los que tenga
 /// denegados individualmente. Sus <c>allow</c> individuales NO lo amplían. Se calcula en el momento de otorgar.
 /// </summary>
 public sealed class PermissionCap

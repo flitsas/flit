@@ -31,7 +31,7 @@ export function AvisoDocumentoFinal({ className }: { className?: string }) {
         <span className="font-bold" style={{ color: 'var(--flit-success-ink)' }}>
           {COPY_DOCUMENTO_FINAL_TITULO}.
         </span>{' '}
-        <span className="text-[#162744] dark:text-white/80">{COPY_DOCUMENTO_FINAL_DETALLE}</span>
+        <span className="text-flit-primary dark:text-white/80">{COPY_DOCUMENTO_FINAL_DETALLE}</span>
       </p>
     </div>
   );

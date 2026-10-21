@@ -148,7 +148,7 @@ export function ValidacionesManuales({
     {
       key: 'nombre',
       header: 'Nombre',
-      render: (r) => <span className="font-semibold text-[#162744] dark:text-white">{r.fullName}</span>,
+      render: (r) => <span className="font-semibold text-flit-primary dark:text-white">{r.fullName}</span>,
     },
     { key: 'documento', header: 'Documento', render: (r) => <span className="font-mono">{r.documentNumber}</span> },
     { key: 'compania', header: 'Compañía', render: (r) => r.tenantName },
@@ -253,7 +253,7 @@ export function ValidacionesManuales({
           <button
             type="button"
             onClick={() => setNoEncontrado(false)}
-            className="rounded-full px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="rounded-full px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cerrar aviso
           </button>

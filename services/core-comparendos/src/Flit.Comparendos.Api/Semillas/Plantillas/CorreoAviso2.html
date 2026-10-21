@@ -1,0 +1,7 @@
+<!-- nombre: Aviso 2 al conductor (25%) -->
+<!-- asunto: Aún tienes descuento: comparendo {{comparendo.numero}} -->
+<p>Hola, {{conductor.nombres}}:</p>
+<p>El descuento del 50% del comparendo <b>{{comparendo.numero}}</b> (placa {{comparendo.placa}}) ya terminó, pero todavía puedes pagar con <b>25% de descuento hasta el {{descuento.fecha_fin_25}}</b> haciendo el curso de seguridad vial en un CIA autorizado.</p>
+<p>Valor sin descuento: {{comparendo.valor_total}}.</p>
+<p><a href="{{portal.enlace}}">Ver el comparendo</a></p>
+{{#si empresa.correo_respuesta}}<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>{{/si}}

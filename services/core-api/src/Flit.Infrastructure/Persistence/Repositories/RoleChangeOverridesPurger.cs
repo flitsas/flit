@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// HU #13646 (ADR-0071, FB-15): purga de permisos individuales al cambiar de rol. Una fila de bitácora
+/// HU #13646 (ADR-0073, FB-15): purga de permisos individuales al cambiar de rol. Una fila de bitácora
 /// <c>ROLE_CHANGE_PURGE</c> por permiso (porque la bitácora guarda slug y <c>value_before</c> por fila), todas con el
 /// mismo <c>batch_id</c> para reconstruir el lote. Se une a la transacción del cambio de rol: si este falla, no se purga.
 /// </summary>

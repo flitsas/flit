@@ -103,7 +103,7 @@ export function MandatarioBajaDialog({
       icon={AlertTriangle}
       iconBg={conImpacto || eliminar ? "#FF4E00" : "#F9AC00"}
       title={titulo}
-      titleClassName="text-base font-bold text-[#162744] dark:text-white"
+      titleClassName="text-base font-bold text-flit-primary dark:text-white"
       size="md"
       zClassName="z-[110]"
     >
@@ -151,7 +151,7 @@ export function MandatarioBajaDialog({
             role="note"
             data-testid="mandatario-baja-impacto"
           >
-            <p className="font-semibold text-[#162744] dark:text-white">
+            <p className="font-semibold text-flit-primary dark:text-white">
               {eliminar ? "Eliminar" : "Desactivar"} a {signer.fullName} tiene estos efectos:
             </p>
             {impact.onlyActiveFor.length > 0 && (
@@ -215,7 +215,7 @@ export function MandatarioBajaDialog({
             onClick={() => void confirmar()}
             disabled={busy || carga.fase !== "listo"}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: eliminar || conImpacto ? "#FF4E00" : "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: eliminar || conImpacto ? "#FF4E00" : "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {conImpacto ? `Sí, ${verbo.toLowerCase()}` : verbo}
           </button>

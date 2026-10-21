@@ -273,7 +273,7 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
       <span
         tabIndex={0}
         aria-describedby={tipOpen ? tipId : undefined}
-        className="inline-flex rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+        className="inline-flex rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
         onMouseEnter={() => setTipOpen(true)}
         onMouseLeave={() => setTipOpen(false)}
         onFocus={() => setTipOpen(true)}
@@ -285,7 +285,7 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         <span
           id={tipId}
           role="tooltip"
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-[#162744] shadow-lg dark:bg-[#162744] dark:text-white/90"
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-flit-primary dark:text-white/90"
           style={{ borderColor: '#DFE5ED' }}
         >
           {ayuda}
@@ -1447,12 +1447,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 fieldsError ? (
                   // Un catálogo que no carga NO deja la pantalla inservible: la tabla ya se pintó
                   // con su listado y aquí solo se dice qué falta y cómo reintentarlo.
-                  <div className="px-1 py-2 text-xs text-[#162744]/70 dark:text-white/60">
+                  <div className="px-1 py-2 text-xs text-flit-primary/70 dark:text-white/60">
                     <p>No se pudieron cargar los filtros.</p>
                     <button
                       type="button"
                       onClick={() => setFieldsKey((k) => k + 1)}
-                      className="mt-1 font-semibold text-[#557EFF] hover:underline"
+                      className="mt-1 font-semibold text-flit-brand hover:underline"
                       data-testid="tramites-filtros-reintentar"
                     >
                       Reintentar
@@ -1530,7 +1530,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         {exportNotice ? (
           <p
             role="status"
-            className="text-xs text-[#162744]/70 dark:text-white/60"
+            className="text-xs text-flit-primary/70 dark:text-white/60"
             data-testid="tramites-export-aviso"
           >
             {exportNotice}
@@ -1559,7 +1559,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 ? 'La compañía tiene bloqueada la creación de trámites.'
                 : undefined
             }
-            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: WIZARD_CTA_GRADIENT }}
           >
             <span>
@@ -1778,11 +1778,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#162744]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-flit-primary"
             style={{ border: '1px solid #DFE5ED' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: '#162744' }}>
+            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
               Enviar al organismo de tránsito
             </h2>
             <p className="mt-1 text-sm opacity-80">
@@ -1797,7 +1797,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 accent-[#557EFF]"
+                  className="h-4 w-4 accent-flit-brand"
                   checked={soatPagado}
                   onChange={(e) => setSoatPagado(e.target.checked)}
                   disabled={processActing || !!processWarning}
@@ -1979,7 +1979,7 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-flit-primary"
         >
           <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
             Ordenar por
@@ -1990,7 +1990,7 @@ function SortableHeaderCell({
                 key={opcion.id}
                 className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
               >
-                <p className="mb-1.5 text-xs font-medium text-[#162744] dark:text-white">
+                <p className="mb-1.5 text-xs font-medium text-flit-primary dark:text-white">
                   {opcion.label}
                 </p>
                 <span className="flex items-center gap-1.5">
@@ -2163,7 +2163,7 @@ function TableBody({
         <button
           onClick={onRetry}
           className="px-5 py-2.5 rounded-xl text-xs font-semibold border"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
           aria-label="Reintentar cargar trámites"
         >
           Reintentar
@@ -2201,7 +2201,7 @@ function TableBody({
           <button
             onClick={onClearFilters}
             className="px-5 py-2.5 rounded-xl text-xs font-semibold border"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
             aria-label="Limpiar filtros"
           >
             Limpiar filtros
@@ -2408,7 +2408,7 @@ function ActorCell({
       {FIRMA_TEXTO[estado].label}
     </span>
   ) : (
-    <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+    <span className="whitespace-nowrap text-xs text-flit-primary/70 dark:text-white/70">
       Sin registrar
     </span>
   );
@@ -2416,7 +2416,7 @@ function ActorCell({
   return (
     <span className="flex min-w-0 flex-col items-start gap-0.5">
       <span
-        className="block w-full break-words leading-snug text-[#162744] dark:text-white/90"
+        className="block w-full break-words leading-snug text-flit-primary dark:text-white/90"
         title={texto || undefined}
       >
         {texto || '—'}
@@ -2431,7 +2431,7 @@ function ActorCell({
             }}
             aria-label={`Ver tracking de identidad de ${rotulo}`}
             title={`Ver tracking de identidad · ${rotulo}`}
-            className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+            className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
           >
             {valor}
           </button>
@@ -2743,14 +2743,14 @@ function TramiteRow({
                 : `Marcar como prioritario el trámite ${item.referenceNumber}`
             }
             title={item.prioritario ? 'Prioritario — clic para quitar' : 'Marcar como prioritario'}
-            className="shrink-0 rounded-md p-0.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="shrink-0 rounded-md p-0.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <Star
               className="h-4 w-4"
               style={
                 item.prioritario
                   ? { color: '#F59E0B', fill: '#F59E0B' }
-                  : { color: '#162744', opacity: 0.3 }
+                  : { color: 'var(--color-flit-primary)', opacity: 0.3 }
               }
               aria-hidden="true"
             />
@@ -2767,7 +2767,7 @@ function TramiteRow({
               handleOpen();
             }}
             aria-label={`Abrir trámite ${item.referenceNumber}`}
-            className="min-w-0 truncate font-mono font-semibold text-[#162744] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:text-white"
+            className="min-w-0 truncate font-mono font-semibold text-flit-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white"
           >
             {item.referenceNumber}
           </button>
@@ -2811,13 +2811,13 @@ function TramiteRow({
     // muda allí en vez de salir dos veces.
     placa: (
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="block truncate font-mono font-semibold tracking-wider text-[#162744] dark:text-white">
+        <span className="block truncate font-mono font-semibold tracking-wider text-flit-primary dark:text-white">
           {item.placa ?? '—'}
         </span>
         {/* El VIN no envuelve: es un token de 17 caracteres sin espacios y partirlo en dos líneas
             no ayuda a compararlo de un vistazo. El piso de la columna cabe los 17 enteros. */}
         {!shows('vin') ? (
-          <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
+          <span className="block truncate font-mono text-xs text-flit-primary/80 dark:text-white/70">
             {item.vin ?? '—'}
           </span>
         ) : null}
@@ -2849,7 +2849,7 @@ function TramiteRow({
     // disponible como columna propia («Paso», grupo Desglose adicional) para quien la active.
     tramite: (
       <span
-        className="block min-w-0 break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+        className="block min-w-0 break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
         // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
         // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
         // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
@@ -2879,13 +2879,13 @@ function TramiteRow({
       />
     ),
     vin: (
-      <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
+      <span className="block truncate font-mono text-xs text-flit-primary/80 dark:text-white/70">
         {item.vin ?? '—'}
       </span>
     ),
     vehiculo: (
       <span
-        className="block break-words leading-snug text-[#162744]/90 dark:text-white/80"
+        className="block break-words leading-snug text-flit-primary/90 dark:text-white/80"
         title={vehiculo(item)}
       >
         {vehiculo(item)}
@@ -2893,7 +2893,7 @@ function TramiteRow({
     ),
     paso: (
       <span className="block min-w-0">
-        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+        <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
           {item.pasoActual}/{item.totalPasos}
         </span>
         <span className="block truncate text-[10px] opacity-55">
@@ -2912,7 +2912,7 @@ function TramiteRow({
             }}
             aria-label={`Ver línea de tiempo de ${item.referenceNumber}`}
             title={`Ver línea de tiempo de ${item.referenceNumber}`}
-            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
           >
             {ayudaIdentidad ? (
               <IdentidadChip
@@ -2964,7 +2964,7 @@ function TramiteRow({
               <div
                 role="dialog"
                 aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-flit-primary"
                 style={{ borderColor: 'rgba(255,78,0,0.28)' }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -2973,7 +2973,7 @@ function TramiteRow({
                     <p className="text-xs font-semibold uppercase tracking-wide text-[#c2410c]">
                       Motivo del OT
                     </p>
-                    <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
+                    <p className="mt-1 text-sm text-flit-primary dark:text-white/90 whitespace-pre-wrap">
                       {motivoRechazo}
                     </p>
                   </div>
@@ -3022,7 +3022,7 @@ function TramiteRow({
             Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
         {muestraPausado ? (
           <span
-            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-xs font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-flit-primary/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
             title={item.pausedObservation ?? 'Trámite pausado'}
             aria-label={
               item.pausedObservation
@@ -3055,13 +3055,13 @@ function TramiteRow({
       </span>
     ),
     fechaCreacion: (
-      <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+      <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
         {shortDate(item.createdAt)}
       </span>
     ),
     // Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar.
     fechaActualizacion: (
-      <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+      <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
         {item.updatedAt ? shortDate(item.updatedAt) : '—'}
       </span>
     ),
@@ -3069,7 +3069,7 @@ function TramiteRow({
     // "SECRETARIA DISTRITAL DE…" no distingue una secretaría de otra, que es justo para lo que
     // está la columna. Envuelve en varias líneas; la fila crece lo que haga falta.
     secretaria: (
-      <span className="block text-xs leading-snug text-balance break-words text-[#162744]/90 dark:text-white/80">
+      <span className="block text-xs leading-snug text-balance break-words text-flit-primary/90 dark:text-white/80">
         {item.organismoTransito ?? '—'}
       </span>
     ),
@@ -3082,7 +3082,7 @@ function TramiteRow({
     gestor: (
       <span className="block min-w-0">
         <span
-          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
           title={item.companiaNombre ?? undefined}
         >
           {item.companiaNombre ?? '—'}
@@ -3096,7 +3096,7 @@ function TramiteRow({
       </span>
     ),
     fuente: (
-      <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
+      <span className="block truncate text-xs text-flit-primary/90 dark:text-white/80">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
       </span>
     ),
@@ -3106,7 +3106,7 @@ function TramiteRow({
     cliente: (
       <span className="block min-w-0" data-testid={`tramite-cliente-${item.id}`}>
         <span
-          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
           title={tenantNameRed ?? undefined}
         >
           {tenantNameRed ?? '—'}
@@ -3134,21 +3134,21 @@ function TramiteRow({
             data-testid="tramite-confirmado-runt"
             className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
               item.runtConfirmed === 'yes'
-                ? 'bg-[#00DBD5]/20 text-[#0B6F6C] dark:text-[#00DBD5]'
+                ? 'bg-flit-tech/20 text-[#0B6F6C] dark:text-flit-tech'
                 : 'bg-[#FF4E00]/10 text-[#B33600] dark:text-[#FF8A5B]'
             }`}
           >
             {item.runtConfirmed === 'yes' ? 'SÍ' : 'NO'}
           </span>
         ) : (
-          <span className="text-xs text-[#162744]/45 dark:text-white/40">—</span>
+          <span className="text-xs text-flit-primary/45 dark:text-white/40">—</span>
         )}
       </span>
     ),
     marcas: (
       <span className="flex items-center gap-1.5">
         {marcasDe(item).length === 0 ? (
-          <span className="text-xs text-[#162744]/45 dark:text-white/40">—</span>
+          <span className="text-xs text-flit-primary/45 dark:text-white/40">—</span>
         ) : (
           marcasDe(item).map((marca) => (
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -3186,7 +3186,7 @@ function TramiteRow({
   return (
     <tr
       onClick={handleOpen}
-      className={`group cursor-pointer bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}
+      className={`group cursor-pointer bg-white text-xs dark:bg-flit-primary ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
@@ -3240,7 +3240,7 @@ function TramiteRow({
         <ActionsMenu
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
-          className="bg-white dark:bg-[#162744]"
+          className="bg-white dark:bg-flit-primary"
           attention={puedeEnviarAlOt}
           attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
@@ -3253,11 +3253,11 @@ function TramiteRow({
         onClose={() => setConfirmPauseOpen(false)}
         title="Trámite pausado"
         icon={Pause}
-        iconBg="#162744"
+        iconBg="var(--color-flit-primary)"
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
       >
-        <p className="text-sm text-[#162744]/80 dark:text-white/80">
+        <p className="text-sm text-flit-primary/80 dark:text-white/80">
           Este trámite está <strong>pausado</strong>. Recuerda reanudarlo (despausarlo) para poder
           radicarlo. ¿Deseas continuar de todos modos?
         </p>
@@ -3265,7 +3265,7 @@ function TramiteRow({
           <button
             type="button"
             onClick={() => setConfirmPauseOpen(false)}
-            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-[#162744] transition hover:bg-[#162744]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-flit-primary/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
           >
             Cancelar
           </button>
@@ -3275,8 +3275,8 @@ function TramiteRow({
               setConfirmPauseOpen(false);
               onOpen(item.id, item.tenantId);
             }}
-            className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
           >
             Continuar de todos modos
           </button>

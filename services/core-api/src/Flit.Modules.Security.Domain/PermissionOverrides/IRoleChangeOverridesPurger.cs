@@ -1,7 +1,7 @@
 namespace Flit.Modules.Security.Domain.PermissionOverrides;
 
 /// <summary>
-/// HU #13646 (ADR-0071, FB-15): al cambiar el rol de un usuario se eliminan (soft delete) sus permisos individuales del
+/// HU #13646 (ADR-0073, FB-15): al cambiar el rol de un usuario se eliminan (soft delete) sus permisos individuales del
 /// tenant y del producto del rol nuevo. Un cambio de rol y su purga son atómicos: si el cambio falla, no se purga.
 /// </summary>
 public interface IRoleChangeOverridesPurger

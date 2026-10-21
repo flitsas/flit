@@ -9,7 +9,7 @@ import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-p
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20";
+  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
   const [current, setCurrent] = useState("");
@@ -65,7 +65,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" aria-label="Cambiar contraseña" noValidate>
       <div>
-        <label htmlFor="cp-current" className="block text-sm font-medium text-[#162744] mb-1">
+        <label htmlFor="cp-current" className="block text-sm font-medium text-flit-primary mb-1">
           Contraseña actual
         </label>
         <input
@@ -78,7 +78,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
         />
       </div>
       <div>
-        <label htmlFor="cp-next" className="block text-sm font-medium text-[#162744] mb-1">
+        <label htmlFor="cp-next" className="block text-sm font-medium text-flit-primary mb-1">
           Nueva contraseña
         </label>
         <input
@@ -92,7 +92,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
         <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
-        <label htmlFor="cp-confirm" className="block text-sm font-medium text-[#162744] mb-1">
+        <label htmlFor="cp-confirm" className="block text-sm font-medium text-flit-primary mb-1">
           Confirmar nueva contraseña
         </label>
         <input
@@ -113,7 +113,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
         type="submit"
         disabled={loading}
         className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "#557eff" }}
+        style={{ background: "var(--color-flit-brand)" }}
       >
         {loading ? "Guardando…" : "Cambiar contraseña"}
       </button>

@@ -66,6 +66,42 @@ public sealed class SetOtBlockingPolicyHandlerTests
         await AssertNoSet(repository);
     }
 
+    [Fact]
+    public async Task MarcaBlanca_SinGrantPeroEnSuListaEfectiva_PermiteConfigurar()
+    {
+        // Una cabeza Marca Blanca no tiene grants: opera en «operables menos bloqueados».
+        var (catalog, grants, repository) = Mocks();
+        catalog.Exists(TransitOfficeId).Returns(true);
+        grants.ListEnabledOfficeIdsAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Guid>>([]));
+        var effective = Substitute.For<IEffectiveTransitOfficeListResolver>();
+        effective.ListEffectiveOfficeIdsAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Guid>>([TransitOfficeId]));
+        var handler = new SetOtBlockingPolicyHandler(catalog, grants, repository, effective);
+
+        var result = await handler.HandleAsync(Command(), TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MarcaBlanca_OtBloqueado_FueraDeSuListaEfectiva_SigueRechazando()
+    {
+        var (catalog, grants, repository) = Mocks();
+        catalog.Exists(TransitOfficeId).Returns(true);
+        grants.ListEnabledOfficeIdsAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Guid>>([]));
+        var effective = Substitute.For<IEffectiveTransitOfficeListResolver>();
+        effective.ListEffectiveOfficeIdsAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Guid>>([]));
+        var handler = new SetOtBlockingPolicyHandler(catalog, grants, repository, effective);
+
+        var result = await handler.HandleAsync(Command(), TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        await AssertNoSet(repository);
+    }
+
     [Theory]
     [InlineData("vehicle")] // no configurable (rompería field_values/FUR).
     [InlineData("gravamenes")] // fuera del vocabulario.

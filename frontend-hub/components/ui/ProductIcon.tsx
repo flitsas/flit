@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { appIcon } from "@flit/shell/apps";
 
 /** Degradado de marca de Trámites (cian → azul). */
-export const BRAND_GRADIENT = "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)";
+export const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
 
 /** Ícono de un producto sobre el degradado de marca; apagado (gris) si todavía no está disponible. */
 export function ProductIcon({ icon, size = "md", muted = false }: { icon: string; size?: "md" | "lg"; muted?: boolean }) {

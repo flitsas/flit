@@ -421,7 +421,7 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
 
 const INPUT_BASE = WIZARD_INPUT;
 
-const GRADIENT = 'linear-gradient(135deg,#557EFF,#00DBD5)';
+const GRADIENT = 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))';
 
 /**
  * Marco de las tarjetas de resultado de consulta (precarga del directorio, RUES, RUNT, comparendos).
@@ -2433,7 +2433,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       <button
         type="submit"
         disabled={state.saving}
-        className={`${WIZARD_BTN} text-white disabled:opacity-50 focus-visible:ring-[#557EFF]`}
+        className={`${WIZARD_BTN} text-white disabled:opacity-50 focus-visible:ring-flit-brand`}
         style={{ background: WIZARD_CTA_GRADIENT }}
       >
         {state.saving ? 'Guardando…' : 'Guardar actores'}
@@ -2528,19 +2528,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               <div className="col-span-2">
                 <span className="opacity-60 font-normal">Razón social: </span>
-                <span className="font-semibold" style={{ color: '#162744' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                   {razonSocial}
                 </span>
               </div>
               <div>
                 <span className="opacity-60 font-normal">NIT: </span>
-                <span className="font-semibold font-mono" style={{ color: '#162744' }}>
+                <span className="font-semibold font-mono" style={{ color: 'var(--color-flit-primary)' }}>
                   {company.nit}
                 </span>
               </div>
               <div>
                 <span className="opacity-60 font-normal">Representante: </span>
-                <span className="font-semibold" style={{ color: '#162744' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                   {rep ? repFullName(rep) || rep.documento : '—'}
                 </span>
               </div>
@@ -2630,13 +2630,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               <div className="col-span-2">
                 <span className="opacity-60 font-normal">Razón social: </span>
-                <span className="font-semibold" style={{ color: '#162744' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                   {shortRuesRazonSocial(r.razonSocial) || '—'}
                 </span>
               </div>
               <div>
                 <span className="opacity-60 font-normal">NIT: </span>
-                <span className="font-semibold font-mono" style={{ color: '#162744' }}>
+                <span className="font-semibold font-mono" style={{ color: 'var(--color-flit-primary)' }}>
                   {r.documentNumber}
                 </span>
               </div>
@@ -2652,7 +2652,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               {r.camaraComercio && (
                 <div className="col-span-2">
                   <span className="opacity-60 font-normal">Cámara de comercio: </span>
-                  <span className="font-semibold" style={{ color: '#162744' }}>
+                  <span className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                     {r.camaraComercio}
                   </span>
                 </div>
@@ -2679,7 +2679,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                       <div className="col-span-2">
                         <span className="opacity-60 font-normal">Representante: </span>
-                        <span className="font-semibold" style={{ color: '#162744' }}>
+                        <span className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                           {rep ? repFullName(rep) || rep.documento : '—'}
                         </span>
                       </div>
@@ -2935,7 +2935,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       return (
         <div
           className="rounded-xl p-3 text-xs border opacity-90"
-          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+          style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--color-flit-primary)' }}
           role="status"
           aria-live="polite"
         >
@@ -3095,7 +3095,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               type="button"
               onClick={() => void startRlLookup(index)}
               disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
-              className="h-[42px] shrink-0 rounded-xl bg-[#557EFF] px-3 text-xs font-semibold text-white disabled:opacity-50"
+              className="h-[42px] shrink-0 rounded-xl bg-flit-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
             >
               {rlState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
@@ -3110,7 +3110,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               // (no atenuar el texto al 60%: ya hubo una corrección de contraste por eso en este
               // mismo archivo — ver comentario histórico más abajo).
               className="h-[42px] shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: '#162744', color: '#162744' }}
+              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
             >
               Actualizar RUNT
             </button>
@@ -3474,7 +3474,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="button"
                     onClick={() => conVelo(handleIdentityLookup(activeIndex))}
                     disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                    className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-[#557EFF] px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-flit-brand px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                     aria-label="Consultar RUNT"
                   >
@@ -3528,7 +3528,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="button"
                     onClick={() => conVelo(handleIdentityLookup(activeIndex))}
                     disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                    className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-[#557EFF] px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-flit-brand px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                     aria-label="Consultar RUES"
                   >
@@ -3715,7 +3715,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                           updateActor(activeIndex, { ciudad: c });
                           setCiudadOpen((p) => ({ ...p, [activeIndex]: false }));
                         }}
-                        className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[rgba(85,126,255,0.06)]"
+                        className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)]"
                       >
                         {c}
                       </button>
@@ -4059,7 +4059,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         type="button"
                         onClick={() => conVelo(handleIdentityLookup(index))}
                         disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                        className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-[#557EFF] px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-flit-brand px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                         style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                       >
                         {runtState.status === 'loading'
@@ -4141,7 +4141,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         type="button"
                         onClick={() => conVelo(handleIdentityLookup(index))}
                         disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                        className="mt-2 rounded-xl bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                        className="mt-2 rounded-xl bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                         style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                       >
                         {runtState.status === 'loading'
@@ -4211,7 +4211,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     con `autoConsultRunt`). En persona jurídica, además, falta el representante
                     legal — capturado aparte en `rlSection` más abajo. */}
                 <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: '#DFE5ED' }}>
-                  <p className="text-[13px] font-semibold" style={{ color: '#162744' }}>Datos de contacto</p>
+                  <p className="text-[13px] font-semibold" style={{ color: 'var(--color-flit-primary)' }}>Datos de contacto</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Email */}
                     <div>
@@ -4317,7 +4317,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                                   updateActor(index, { ciudad: c });
                                   setCiudadOpen((p) => ({ ...p, [index]: false }));
                                 }}
-                                className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[rgba(85,126,255,0.06)]"
+                                className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)]"
                               >
                                 {c}
                               </button>

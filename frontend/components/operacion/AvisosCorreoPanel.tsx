@@ -80,7 +80,7 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
           {items.map((item) => (
             <li
               key={item.id}
-              className="rounded-xl border px-3 py-2.5 text-xs text-[#162744] dark:text-white/85"
+              className="rounded-xl border px-3 py-2.5 text-xs text-flit-primary dark:text-white/85"
             >
               <div className="flex flex-wrap justify-between gap-2">
                 <strong>

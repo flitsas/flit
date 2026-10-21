@@ -103,7 +103,7 @@ export function CategoryDonut({ metrics, onSelect, activeKey }: CategoryDonutPro
                       type="button"
                       onClick={() => onSelect(metrics.category, s.status)}
                       aria-pressed={activeKey === key}
-                      className={`flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 outline-none hover:bg-[#557EFF1A] focus:bg-[#557EFF1A] ${activeKey === key ? "bg-[#557EFF1A] font-semibold" : ""}`}
+                      className={`flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 outline-none hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)] focus:bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)] ${activeKey === key ? "bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)] font-semibold" : ""}`}
                       aria-label={`Ver ${statusLabel(s.status)} de ${meta.label}: ${s.count} trámites`}
                     >
                       {dot}

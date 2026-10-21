@@ -90,7 +90,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<GetUserUiPreferenceHandler>();
         services.AddScoped<UpsertUserUiPreferenceHandler>();
 
-        // HU #13642 (ADR-0071) - permisos individuales por usuario: foto de módulo completo.
+        // HU #13642 (ADR-0073) - permisos individuales por usuario: foto de módulo completo.
         services.AddScoped<GrantModuleOverridesHandler>();
         services.AddScoped<PermissionCapCalculator>(); // HU #13644 - tope del administrador
         services.AddScoped<ManageUserPermissionOverridesHandler>(); // HU #13644

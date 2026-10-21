@@ -15,7 +15,8 @@ namespace Flit.Api.Identity;
 /// <summary>
 /// HU #12992 (FLIT Suite A-07) — core-api acepta, además de su JWT de siempre, los tokens del servidor OIDC del hub:
 /// firmados con la llave OIDC, de un emisor de <c>/platform/issuers</c> (hub del ambiente o dominio de red activo,
-/// caché de 5 minutos, contrato §2) y con <c>aud</c> de un producto que core-api sirve (plataforma o Trámites).
+/// caché de 5 minutos, contrato §2) y con <c>aud</c> de un producto que core-api sirve (plataforma o Trámites); el de
+/// otro producto de la suite, solo en las rutas comunes de la barra (HU #13700).
 /// Solo aplica cuando la API valida tokens (llave pública o <c>Jwt:ValidateIssuedTokens</c>); en el modo permisivo
 /// anterior a A-03 no hay nada que ampliar.
 /// </summary>
@@ -23,6 +24,24 @@ internal static class OidcTokenAcceptance
 {
     /// <summary>Productos cuyas rutas atiende core-api.</summary>
     private static readonly string[] ServedAudiences = [ProductCodes.Plataforma, ProductCodes.Tramites];
+
+    /// <summary>
+    /// HU #13700 — productos que viven en su propio servicio (Comparendos, Diagnóstico). Su token llega aquí solo por la
+    /// barra de la suite, así que se acepta únicamente en <see cref="CommonPlatformRoutes"/>.
+    /// </summary>
+    private static readonly string[] OtherProductAudiences = [.. ProductCodes.All.Except(ServedAudiences, StringComparer.Ordinal)];
+
+    /// <summary>Rutas de plataforma que la barra de la suite llama desde cualquier producto (contrato §6).</summary>
+    private static readonly PathString[] CommonPlatformRoutes = [new("/api/v1/platform/me/apps")];
+
+    /// <summary>
+    /// Un token cuyos destinatarios son todos productos de otro servicio solo entra a las rutas comunes; los demás
+    /// tokens (plataforma, Trámites, el JWT de siempre, los de servicio) no cambian.
+    /// </summary>
+    internal static bool AllowsRoute(IReadOnlyCollection<string> audiences, PathString path) =>
+        audiences.Count == 0
+        || !audiences.All(a => OtherProductAudiences.Contains(a, StringComparer.Ordinal))
+        || CommonPlatformRoutes.Any(r => path.Equals(r, StringComparison.OrdinalIgnoreCase));
 
     public static void Register(IServiceCollection services)
     {
@@ -48,7 +67,8 @@ internal static class OidcTokenAcceptance
                         ? issuer
                         : throw new SecurityTokenInvalidIssuerException($"Emisor no aceptado: {issuer}") { InvalidIssuer = issuer };
 
-                tvp.ValidAudiences = [.. tvp.ValidAudiences ?? [], .. tvp.ValidAudience is { } aud ? [aud] : Array.Empty<string>(), .. ServedAudiences];
+                // Los productos de otro servicio solo pasan en las rutas comunes: lo exige OidcSessionCheck al validar.
+                tvp.ValidAudiences = [.. tvp.ValidAudiences ?? [], .. tvp.ValidAudience is { } aud ? [aud] : Array.Empty<string>(), .. ServedAudiences, .. OtherProductAudiences];
             });
     }
 }
@@ -92,6 +112,8 @@ internal sealed class OidcIssuerRegistry(IServiceProvider services, IMemoryCache
 /// de la sesión del hub (<c>oi_au_id</c>). Al cerrar sesión (A-13) esa autorización se revoca; desde entonces sus
 /// tokens de acceso se rechazan aunque no hayan vencido, así los productos y el hub abiertos en este navegador pierden
 /// la sesión en su siguiente llamada y no hasta 15 minutos después. La consulta se guarda 15 segundos por autorización.
+/// Antes, HU #13700: el token de un producto de otro servicio solo vale en las rutas comunes. Va aquí y no en un evento
+/// aparte para que aceptar esos destinatarios y restringirlos no puedan registrarse por separado.
 /// </summary>
 internal static class OidcSessionCheck
 {
@@ -100,6 +122,13 @@ internal static class OidcSessionCheck
 
     public static async Task ValidateAsync(TokenValidatedContext context)
     {
+        var audiences = context.Principal?.FindAll("aud").Select(c => c.Value).ToArray() ?? [];
+        if (!OidcTokenAcceptance.AllowsRoute(audiences, context.HttpContext.Request.Path))
+        {
+            context.Fail(new SecurityTokenInvalidAudienceException("Este producto no se atiende en este servicio."));
+            return;
+        }
+
         var id = context.Principal?.FindFirst(AuthorizationIdClaim)?.Value;
         if (string.IsNullOrEmpty(id))
             return; // JWT de siempre, token de servicio o servidor OIDC apagado.

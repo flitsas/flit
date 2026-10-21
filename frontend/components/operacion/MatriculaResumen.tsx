@@ -1,6 +1,6 @@
 'use client';
 
-import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
 import type {
   BiometricParte,
@@ -176,7 +176,7 @@ interface Props {
 }
 
 const BORDER = '#DFE5ED';
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 
 // `ResumenDisclosure` desapareció: transformaciones y prenda eran las últimas que lo usaban y ahora
 // son `ResumenCard`, como el resto de la fila. Un acordeón con chevrón entre tarjetas planas se leía
@@ -282,20 +282,20 @@ function IdentidadStatusBanner({
     return (
       <div
         className="flex items-center gap-3 rounded-xl p-3"
-        style={{ background: 'rgba(85,126,255,0.10)', border: '1px solid rgba(85,126,255,0.35)' }}
+        style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--color-flit-brand) 35%, transparent)' }}
         role="status"
         aria-live="polite"
         data-testid="identidad-firma-baul"
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-          style={{ background: '#557EFF', color: 'white' }}
+          style={{ background: 'var(--color-flit-brand)', color: 'white' }}
           aria-hidden
         >
           <FileSignature className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
-          <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
             Firma electrónica (baúl)
           </p>
           <p className="text-xs opacity-70">
@@ -521,7 +521,7 @@ function ActorBlock({
         // gestor necesita saber de esta parte: que no le toca firmar, y que aun así se le notifica.
         <div className="space-y-2 border-t pt-3" style={{ borderColor: BORDER }}>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">Firma</p>
-          <p className="text-xs font-semibold" style={{ color: '#162744' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
             No requiere firma
           </p>
           <p className="text-xs opacity-70">
@@ -969,7 +969,7 @@ export default function MatriculaResumen({
                       disabled
                       aria-readonly="true"
                       className="cursor-default rounded-lg border bg-transparent px-2.5 py-1 text-xs font-medium opacity-100 disabled:opacity-100"
-                      style={{ borderColor: BORDER, color: '#162744' }}
+                      style={{ borderColor: BORDER, color: 'var(--color-flit-primary)' }}
                     />
                   </div>
                 ) : null}
@@ -1152,7 +1152,7 @@ export default function MatriculaResumen({
                       <div
                         key={t}
                         className="rounded-xl border px-3 py-2.5"
-                        style={{ borderColor: BORDER, background: 'rgba(85,126,255,0.04)' }}
+                        style={{ borderColor: BORDER, background: 'color-mix(in srgb, var(--color-flit-brand) 4%, transparent)' }}
                       >
                         <p
                           className="text-xs font-semibold uppercase tracking-[0.2em]"
@@ -1160,7 +1160,7 @@ export default function MatriculaResumen({
                         >
                           {label}
                         </p>
-                        <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: '#162744' }}>
+                        <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: 'var(--color-flit-primary)' }}>
                           {value || '—'}
                         </p>
                       </div>
@@ -1204,9 +1204,21 @@ export default function MatriculaResumen({
             );
           });
           if (extrasSlot) {
-            Children.forEach(extrasSlot, (child) => {
-              if (child) cells.push(child);
-            });
+            // `Children.forEach` no entra a los Fragment, y `FirmaFurStep` manda organismo + placa
+            // en `<>…</>`: sin desenvolverlo quedaban en una sola celda, la tarjeta del organismo
+            // (`h-full`) tomaba toda su altura y la de placa se desbordaba encima de «Documentos
+            // cargados».
+            const pushCells = (node: ReactNode) => {
+              Children.forEach(node, (child) => {
+                if (!child) return;
+                if (isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment) {
+                  pushCells(child.props.children);
+                } else {
+                  cells.push(child);
+                }
+              });
+            };
+            pushCells(extrasSlot);
           }
           const total = cells.length;
           return (

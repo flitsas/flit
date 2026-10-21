@@ -98,7 +98,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                   {n.label}
                 </p>
                 {n.isActive ? (
-                  <span className="rounded-full bg-[rgba(0,219,213,0.15)] px-2 py-0.5 text-xs font-semibold text-[#0F766E] dark:bg-[rgba(0,219,213,0.18)] dark:text-[#5EEAD4]">
+                  <span className="rounded-full bg-[color-mix(in_srgb,var(--color-flit-tech)_15%,transparent)] px-2 py-0.5 text-xs font-semibold text-[#0F766E] dark:bg-[color-mix(in_srgb,var(--color-flit-tech)_18%,transparent)] dark:text-[#5EEAD4]">
                     Vigente
                   </span>
                 ) : null}

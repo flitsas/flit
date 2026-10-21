@@ -182,7 +182,7 @@ export function MensajesMuertosPanel() {
               type="button"
               disabled={ocupado !== null}
               onClick={() => void reintentar(m)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF] px-2.5 py-1 text-xs font-semibold text-[#557EFF] disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-flit-brand px-2.5 py-1 text-xs font-semibold text-flit-brand disabled:opacity-50"
               aria-label={`Reintentar el mensaje ${m.id}`}
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -218,7 +218,7 @@ export function MensajesMuertosPanel() {
               role="tab"
               aria-selected={cola === c}
               onClick={() => cambiarCola(c)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${cola === c ? "bg-white text-[#162744] shadow-sm" : "text-[#557089]"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${cola === c ? "bg-white text-flit-primary shadow-sm" : "text-[#557089]"}`}
             >
               {etiqueta}
             </button>
@@ -227,7 +227,7 @@ export function MensajesMuertosPanel() {
         <button
           type="button"
           onClick={recargar}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#557EFF]"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-flit-brand"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
           Actualizar
@@ -262,7 +262,7 @@ export function MensajesMuertosPanel() {
           icon={AlertTriangle}
           iconBg="#F9AC00"
           title="Descartar mensaje"
-          titleClassName="text-base font-bold text-[#162744]"
+          titleClassName="text-base font-bold text-flit-primary"
           size="md"
         >
           <div className="space-y-3 text-xs" data-testid="mensajes-muertos-descartar">

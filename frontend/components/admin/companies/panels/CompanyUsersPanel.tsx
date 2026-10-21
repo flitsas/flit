@@ -189,8 +189,8 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
         <button
           type="button"
           onClick={() => setInviteOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40 focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40 focus-visible:ring-offset-2"
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           <UserPlus className="h-3.5 w-3.5" aria-hidden />
           Invitar usuario

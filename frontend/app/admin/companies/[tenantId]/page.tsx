@@ -15,11 +15,7 @@ import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
 import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
-import { TransitBlocksPanel } from "@/components/admin/companies/panels/TransitBlocksPanel";
-import {
-  resolveOtConfigPanelMode,
-  showSuperAdminTransitBlocksPanel,
-} from "@/lib/companies/ot-config-mode";
+import { resolveOtConfigPanelMode } from "@/lib/companies/ot-config-mode";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
@@ -79,14 +75,15 @@ function CompanyDetail() {
     isAdminCompany,
   });
 
-  const showTransitBlocksPanel = showSuperAdminTransitBlocksPanel(company, isSuperAdmin);
-
   const blocksTenantId =
     company?.parentTenantId && parentCompany?.tenantType === "MARCA_BLANCA"
       ? parentCompany.id
       : tenantId;
 
   const showChildrenSection = isSuperAdmin && company && isHeadTenantType(company.tenantType);
+  // Cabeza Marca Blanca (SuperAdmin): clientes hijos e identidad de marca + dominio van en pestañas
+  // propias de la ficha, no apilados debajo. La Concesión conserva su tabla de hijos como antes.
+  const marcaBlancaHeadTabs = Boolean(isSuperAdmin && company?.tenantType === "MARCA_BLANCA");
 
   const showNetworkLink =
     (isGroupParent && callerTenantId === tenantId && isAdminCompany && !isSuperAdmin) ||
@@ -273,27 +270,21 @@ function CompanyDetail() {
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 otSlot={
-                  <>
-                    {showTransitBlocksPanel && (
-                      <div className="mb-4 rounded-2xl border p-4">
-                        <TransitBlocksPanel
-                          tenantId={tenantId}
-                          activeChildrenCount={activeChildrenCount}
-                        />
-                      </div>
-                    )}
-                    <OTConfigTablePanel
-                      tenantId={tenantId}
-                      mode={otPanelMode}
-                      grantScopeWarningCount={
-                        otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
-                      }
-                      blocksTenantId={blocksTenantId}
-                      grantsTenantId={
-                        managingChild && networkHeadId ? networkHeadId : tenantId
-                      }
-                    />
-                  </>
+                  // SuperAdmin sobre una cabeza MB: la misma tabla que una compañía normal
+                  // (modo superadmin-marca-blanca: habilitar = desbloquear para la red).
+                  <OTConfigTablePanel
+                    tenantId={tenantId}
+                    mode={otPanelMode}
+                    grantScopeWarningCount={
+                      otPanelMode === "superadmin-concession" || otPanelMode === "superadmin-marca-blanca"
+                        ? activeChildrenCount
+                        : 0
+                    }
+                    blocksTenantId={blocksTenantId}
+                    grantsTenantId={
+                      managingChild && networkHeadId ? networkHeadId : tenantId
+                    }
+                  />
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 documentosSlot={
@@ -314,6 +305,17 @@ function CompanyDetail() {
                     networkHeadId={managingChild ? networkHeadId : null}
                   />
                 }
+                childrenSlot={
+                  marcaBlancaHeadTabs && company ? <CompanyChildrenSection company={company} /> : undefined
+                }
+                brandingSlot={
+                  marcaBlancaHeadTabs ? (
+                    <div className="flex flex-col gap-6">
+                      <BrandingConfigurator source="admin" tenantId={tenantId} />
+                      <DomainAdminSection tenantId={tenantId} />
+                    </div>
+                  ) : undefined
+                }
                 usuariosSlot={
                   isSuperAdmin || managingChild ? (
                     <CompanyUsersPanel
@@ -328,24 +330,8 @@ function CompanyDetail() {
         </UiStateBoundary>
       </div>
 
-      {showChildrenSection && company && <CompanyChildrenSection company={company} />}
+      {showChildrenSection && company && !marcaBlancaHeadTabs && <CompanyChildrenSection company={company} />}
 
-      {/* HU #12414 AC1/AC6 — configurador de marca embebido en la ficha SuperAdmin, solo para
-          cabezas de clase MARCA_BLANCA. La cabeza autogestiona la misma identidad desde su
-          propio panel de red (app/admin/companies/[tenantId]/children/page.tsx). */}
-      {isSuperAdmin && company?.tenantType === "MARCA_BLANCA" && (
-        <div className="mt-6">
-          <BrandingConfigurator source="admin" tenantId={tenantId} />
-        </div>
-      )}
-
-      {/* HU #12427 AC3 — estado del dominio + registro/cambio/retiro, solo cabezas MARCA_BLANCA.
-          En otro tipo de compañía, o en una sin red, esta sección no se renderiza (AC4). */}
-      {isSuperAdmin && company?.tenantType === "MARCA_BLANCA" && (
-        <div className="mt-6">
-          <DomainAdminSection tenantId={tenantId} />
-        </div>
-      )}
     </main>
   );
 }
@@ -358,7 +344,7 @@ function DomainAdminSection({ tenantId }: { tenantId: string }) {
   return (
     <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
       <div className="mb-3">
-        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
           Dominio de la red
         </h2>
         <p className="text-[11px] opacity-60">

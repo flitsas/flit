@@ -58,7 +58,7 @@ Se elige Opción 1 porque cumple el invariante de producto con menor costo y sin
 
 ## ADRs relacionados
 
-- Extendido por ADR-0072 (Propuesto, Épica #12753 / F-C #13102): tabla única de requisitos de acceso y corte en middleware para `/admin/*` y `/empresa/*`.
+- Extendido por ADR-0074 (Propuesto, Épica #12753 / F-C #13102): tabla única de requisitos de acceso y corte en middleware para `/admin/*` y `/empresa/*`.
 - Ninguno supersedido. Complementa políticas SuperAdmin / Log QX / ICT ya gateadas por claim en dock y render.
 
 ## Notas para agentes

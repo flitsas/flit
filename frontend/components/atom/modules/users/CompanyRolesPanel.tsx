@@ -77,8 +77,8 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
         <button
           type="button"
           onClick={() => setForm({ kind: "create" })}
-          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)" }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
         >
           Nuevo rol
         </button>
@@ -125,7 +125,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
                       <StatusBadge label="FLIT · solo lectura" tone="neutral" ariaLabel="Rol global de FLIT, solo lectura" />
                     )}
                   </td>
-                  <td className="border-y px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "#557EFF" }}>
+                  <td className="border-y px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "var(--color-flit-brand)" }}>
                     {r.permissionCount}
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>

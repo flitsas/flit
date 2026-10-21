@@ -80,7 +80,7 @@ export function JobsCatalog() {
         <a
           href="/admin/plataforma/confirmacion-runt"
           className="font-semibold underline"
-          style={{ color: "#557EFF" }}
+          style={{ color: "var(--color-flit-brand)" }}
         >
           Confirmación RUNT
         </a>{" "}
@@ -159,7 +159,7 @@ function JobsTable({ rows }: { rows: UnifiedJobRow[] }) {
                 className="rounded-l-xl border-y border-l px-4 py-3 align-middle"
                 style={{ borderColor: BORDER }}
               >
-                <span className="block font-semibold text-[#162744] dark:text-white">{row.displayName}</span>
+                <span className="block font-semibold text-flit-primary dark:text-white">{row.displayName}</span>
                 <span className={`mt-0.5 block ${TABLA_CELDA_SECUNDARIA_CLS}`}>{row.technicalName}</span>
               </td>
               <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>

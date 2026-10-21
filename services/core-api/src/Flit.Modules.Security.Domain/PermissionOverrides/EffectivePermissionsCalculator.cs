@@ -4,7 +4,7 @@ namespace Flit.Modules.Security.Domain.PermissionOverrides;
 public sealed record EffectivePermissionOverride(string Slug, string ProductCode, string Effect);
 
 /// <summary>
-/// Calculador ÚNICO de los permisos efectivos del token (HU #13643, ADR-0071, FB-3: producto &gt; usuario &gt; rol).
+/// Calculador ÚNICO de los permisos efectivos del token (HU #13643, ADR-0073, FB-3: producto &gt; usuario &gt; rol).
 /// Lo usan el JWT heredado (<c>AuthUserRepository</c> → <c>RsaJwtTokenIssuer</c>) y el token OIDC
 /// (<c>OidcPrincipalFactory</c>), así el claim <c>permissions</c> es el mismo por las dos rutas.
 /// </summary>

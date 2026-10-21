@@ -162,8 +162,8 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
                 onClick={() => selectTab(item.id)}
                 className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold transition ${
                   active
-                    ? "border-[#557EFF] text-[#557EFF]"
-                    : "border-transparent text-[#6B7280] hover:text-[#162744] dark:text-white/50 dark:hover:text-white"
+                    ? "border-flit-brand text-flit-brand"
+                    : "border-transparent text-[#6B7280] hover:text-flit-primary dark:text-white/50 dark:hover:text-white"
                 }`}
               >
                 {item.label}

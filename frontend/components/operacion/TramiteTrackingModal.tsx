@@ -113,7 +113,7 @@ export function TramiteTrackingModal({
           >
             {estadoLabelConOrigen(item.estado, item.rejectedFrom)}
           </span>
-          <span className="text-xs text-[#162744]/60 dark:text-white/50">
+          <span className="text-xs text-flit-primary/60 dark:text-white/50">
             {[item.placa?.trim(), tramiteLabel(item)].filter(Boolean).join(' · ')}
           </span>
         </span>
@@ -125,7 +125,7 @@ export function TramiteTrackingModal({
         {/* El historial también en tarjeta: suelto sobre el fondo del modal, y con líneas cortas,
             quedaba flotando contra el borde izquierdo mientras la mitad derecha se veía vacía. */}
         <section className="rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3.5 dark:border-white/10 dark:bg-white/[0.03]">
-          <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-[#557EFF]">
+          <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-flit-brand">
             Historial
           </h4>
 
@@ -157,15 +157,15 @@ function Dato({ etiqueta, valor, mono = false }: { etiqueta: string; valor?: str
   const texto = valor?.trim();
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] uppercase leading-4 tracking-wide text-[#162744]/45 dark:text-white/40">
+      <dt className="text-[10px] uppercase leading-4 tracking-wide text-flit-primary/45 dark:text-white/40">
         {etiqueta}
       </dt>
       <dd
-        className={`min-w-0 break-words text-xs leading-5 text-[#162744]/90 dark:text-white/80 ${
+        className={`min-w-0 break-words text-xs leading-5 text-flit-primary/90 dark:text-white/80 ${
           mono && texto ? 'font-mono' : ''
         }`}
       >
-        {texto || <span className="text-[#162744]/45 dark:text-white/40">Sin asignar</span>}
+        {texto || <span className="text-flit-primary/45 dark:text-white/40">Sin asignar</span>}
       </dd>
     </div>
   );
@@ -191,7 +191,7 @@ function Bloque({
 }) {
   return (
     <div className="flex h-full min-w-0 flex-col rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3.5 dark:border-white/10 dark:bg-white/[0.03]">
-      <p className="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#557EFF]">
+      <p className="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-flit-brand">
         <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden />
         {titulo}
       </p>
@@ -379,7 +379,7 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
 function Historial({ movimientos }: { movimientos: ItemLinea[] }) {
   if (movimientos.length === 0) {
     return (
-      <p className="text-xs text-[#162744]/60 dark:text-white/50">
+      <p className="text-xs text-flit-primary/60 dark:text-white/50">
         Todavía no hay movimientos registrados.
       </p>
     );
@@ -403,12 +403,12 @@ function Historial({ movimientos }: { movimientos: ItemLinea[] }) {
               está» de «por dónde pasó» (o qué se hizo administrativamente). */}
           <span
             className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full"
-            style={{ background: i === idxVigente ? '#8CC63F' : '#557EFF' }}
+            style={{ background: i === idxVigente ? '#8CC63F' : 'var(--color-flit-brand)' }}
             aria-hidden="true"
           />
-          <p className="text-xs font-semibold text-[#162744] dark:text-white">{m.titulo}</p>
+          <p className="text-xs font-semibold text-flit-primary dark:text-white">{m.titulo}</p>
           {m.quien ? (
-            <p className="mt-0.5 text-xs text-[#162744]/70 dark:text-white/60">{m.quien}</p>
+            <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{m.quien}</p>
           ) : null}
           {/* El motivo va DEBAJO y en tono secundario, no dentro del titular.
               Muchos motivos los escribe el propio sistema al radicar («Radicación: entregado;
@@ -416,11 +416,11 @@ function Historial({ movimientos }: { movimientos: ItemLinea[] }) {
               y técnicos: en negrita, junto al estado, se comían dos renglones de titular y
               tapaban lo único que el gestor busca en esta lista, que es POR DÓNDE VA. */}
           {m.motivo ? (
-            <p className="mt-0.5 text-[11px] leading-4 text-[#162744]/55 dark:text-white/45">
+            <p className="mt-0.5 text-[11px] leading-4 text-flit-primary/55 dark:text-white/45">
               {m.motivo}
             </p>
           ) : null}
-          <p className="mt-1 font-mono text-[11px] text-[#162744]/50 dark:text-white/40">
+          <p className="mt-1 font-mono text-[11px] text-flit-primary/50 dark:text-white/40">
             {fecha(m.fecha)}
           </p>
         </li>

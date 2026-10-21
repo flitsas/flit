@@ -28,7 +28,7 @@ export default function NuevoTramitePage() {
       <h1 className="sr-only">Nuevo trámite</h1>
 
       <div
-        className="rounded-2xl border bg-white p-7 dark:bg-[#162744]"
+        className="rounded-2xl border bg-white p-7 dark:bg-flit-primary"
         style={{ borderColor: '#DFE5ED' }}
       >
         <NuevoTramiteSelector

@@ -15,6 +15,7 @@ using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -271,6 +272,60 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         var me = await api.GetAsync("/api/v1/auth/me", ct);
 
         me.StatusCode.Should().Be(HttpStatusCode.OK, await me.Content.ReadAsStringAsync(ct));
+    }
+
+    [Fact]
+    public async Task TokenDeComparendos_ListaLosProductos_DesdeLaBarraDeLaSuite()
+    {
+        // HU #13700: en DEV (con ValidateIssuedTokens) el menú de productos de Comparendos daba 401 y cerraba su sesión.
+        var ct = TestContext.Current.CancellationToken;
+        await MakeSuperAdminAsync();
+        var accessToken = await ComparendosTokenAsync(ct);
+
+        var apps = await GetWithTokenAsync("/api/v1/platform/me/apps", accessToken, ct);
+
+        apps.StatusCode.Should().Be(HttpStatusCode.OK, await apps.Content.ReadAsStringAsync(ct));
+    }
+
+    [Fact]
+    public async Task TokenDeComparendos_NoEntraAlRestoDeLaApi()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await MakeSuperAdminAsync();
+        var accessToken = await ComparendosTokenAsync(ct);
+
+        var me = await GetWithTokenAsync("/api/v1/auth/me", accessToken, ct);
+
+        me.StatusCode.Should().Be(HttpStatusCode.Unauthorized, "core-api no atiende a Comparendos: su token solo vale en las rutas comunes");
+    }
+
+    [Theory]
+    [InlineData(new[] { "comparendos" }, "/api/v1/platform/me/apps", true)]
+    [InlineData(new[] { "diagnostico" }, "/API/V1/PLATFORM/ME/APPS", true)]
+    [InlineData(new[] { "comparendos" }, "/api/v1/auth/me", false)]
+    [InlineData(new[] { "comparendos" }, "/api/v1/platform/me/apps/otra", false)]
+    [InlineData(new[] { "diagnostico" }, "/api/v1/tramites", false)]
+    [InlineData(new[] { "tramites" }, "/api/v1/auth/me", true)]
+    [InlineData(new[] { "comparendos", "plataforma" }, "/api/v1/auth/me", true)]
+    [InlineData(new string[0], "/api/v1/auth/me", true)]
+    public void SoloLasRutasComunes_AceptanElTokenDeUnProductoQueSeAtiendeEnOtroServicio(string[] audiences, string path, bool allowed) =>
+        OidcTokenAcceptance.AllowsRoute(audiences, new PathString(path)).Should().Be(allowed);
+
+    private async Task<string> ComparendosTokenAsync(CancellationToken ct)
+    {
+        var callback = _factory.Services.GetRequiredService<IProductHosts>().UrlFor(ProductCodes.Comparendos).TrimEnd('/') + "/auth/callback";
+        var tokens = await CodeFlowAsync(await LoggedInAsync(ct), ProductCodes.Comparendos, ct, callback);
+        var accessToken = tokens.GetProperty("access_token").GetString()!;
+        JsonDocument.Parse(Base64UrlDecode(new JsonWebToken(accessToken).EncodedPayload)).RootElement
+            .GetProperty("aud").GetString().Should().Be("comparendos");
+        return accessToken;
+    }
+
+    private async Task<HttpResponseMessage> GetWithTokenAsync(string path, string accessToken, CancellationToken ct)
+    {
+        var api = NewClient();
+        api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return await api.GetAsync(path, ct);
     }
 
     [Fact]

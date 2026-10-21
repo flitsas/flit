@@ -9,6 +9,10 @@ import { BrandingConfigurator } from "../BrandingConfigurator";
 import { ApiError } from "@/lib/api/types";
 import type { TenantBrandingResponse } from "@/lib/api/branding";
 
+const routerRefresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
+vi.mock("@/app/actions/brand", () => ({ refreshBrand: vi.fn().mockResolvedValue(undefined) }));
+
 vi.mock("@/lib/api/branding", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/branding")>("@/lib/api/branding");
   return {
@@ -44,7 +48,7 @@ function branding(overrides: Partial<TenantBrandingResponse> = {}): TenantBrandi
     tenantId: "tenant-1",
     draft: {
       platformName: "Movilidad Andina",
-      colors: { primary: "#0B3D91", secondary: "#1FA2FF", onPrimary: "#FFFFFF" },
+      colors: { primary: "#0B3D91", secondary: "#0F766E", onPrimary: "#FFFFFF" },
       logoId: "logo-1",
     },
     published: null,
@@ -101,7 +105,7 @@ describe("BrandingConfigurator — estados de UI", () => {
 describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar", () => {
   it("deshabilita Publicar cuando falta el logotipo", async () => {
     vi.mocked(getBranding).mockResolvedValue(
-      branding({ draft: { platformName: "X", colors: { primary: "#0B3D91", secondary: "#1FA2FF", onPrimary: "#FFFFFF" }, logoId: null }, logoUrl: null }),
+      branding({ draft: { platformName: "X", colors: { primary: "#0B3D91", secondary: "#0F766E", onPrimary: "#FFFFFF" }, logoId: null }, logoUrl: null }),
     );
     render(<BrandingConfigurator source="company" />);
 
@@ -117,7 +121,8 @@ describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar
 
     await screen.findByLabelText(/nombre de la plataforma/i);
     expect(screen.getByRole("button", { name: /^publicar$/i })).toBeDisabled();
-    expect(screen.getByText(/no cumple el mínimo/i)).toBeInTheDocument();
+    expect(screen.getByText(/no se leería bien/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ajustar automáticamente/i })).toBeInTheDocument();
   });
 
   it("habilita Publicar cuando el borrador está completo y el contraste cumple", async () => {
@@ -126,6 +131,66 @@ describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar
 
     await screen.findByLabelText(/nombre de la plataforma/i);
     expect(screen.getByRole("button", { name: /^publicar$/i })).toBeEnabled();
+  });
+});
+
+describe("BrandingConfigurator — rechazos con mensaje claro y sin guardar", () => {
+  it("los colores por defecto de una marca nueva cumplen el contraste y el borrador se envía", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockRejectedValue(new ApiError(404, "BRANDING_NOT_FOUND"));
+    vi.mocked(upsertBrandingDraft).mockResolvedValue(branding());
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    await waitFor(() => expect(upsertBrandingDraft).toHaveBeenCalled());
+    expect(screen.queryByText(/no se leería bien/i)).not.toBeInTheDocument();
+  });
+
+  it("contraste < 4.5:1 en el secundario: avisa y no envía el borrador", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockResolvedValue(
+      branding({ draft: { platformName: "X Red", colors: { primary: "#0B3D91", secondary: "#1FA2FF", onPrimary: "#FFFFFF" }, logoId: "logo-1" } }),
+    );
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    expect(await screen.findByText(/no se guardó ningún cambio/i)).toBeInTheDocument();
+    expect(upsertBrandingDraft).not.toHaveBeenCalled();
+  });
+
+  it("un 422 de validación del servidor muestra el motivo, no el mensaje genérico", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockResolvedValue(branding());
+    vi.mocked(upsertBrandingDraft).mockRejectedValue(
+      new ApiError(422, "x", { errors: [{ code: "BRANDING_NAME_MARKUP", field: "platformName" }] }),
+    );
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    expect(await screen.findByText(/no puede contener etiquetas/i)).toBeInTheDocument();
+  });
+
+  it("un logotipo rechazado por el servidor muestra el motivo", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockResolvedValue(branding());
+    vi.mocked(uploadBrandLogo).mockRejectedValue(
+      new ApiError(422, "x", { errors: [{ code: "BRANDING_LOGO_TOO_LARGE", field: "logo" }] }),
+    );
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.upload(
+      screen.getByLabelText(/cargar logotipo de marca/i),
+      new File(["x"], "logo.png", { type: "image/png" }),
+    );
+
+    expect(await screen.findByText(/pesa más de 512 KB/i)).toBeInTheDocument();
   });
 });
 
@@ -150,6 +215,8 @@ describe("BrandingConfigurator — AC5 publicar pide confirmación", () => {
 
     await waitFor(() => expect(publishBranding).toHaveBeenCalled());
     expect(await screen.findByText(/publicada el/i)).toBeInTheDocument();
+    // La marca aplicada se refresca al instante, sin esperar los 60 s de caché.
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalled());
   });
 });
 

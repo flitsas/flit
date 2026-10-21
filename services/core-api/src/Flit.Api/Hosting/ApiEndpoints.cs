@@ -20,6 +20,9 @@ internal static class ApiEndpoints
         app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>()
             .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
         // HU #13348: la consulta de fuentes de ICT va directo a core-consultas (ya no hay IctConsultation aquí).
+        // HU #13459: catálogo de organismos de tránsito para la réplica de Comparendos (token de servicio, aud=tramites).
+        app.MapGrpcService<Flit.Api.Grpc.CatalogosGrpcService>()
+            .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.CatalogosServicioPolicy);
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)

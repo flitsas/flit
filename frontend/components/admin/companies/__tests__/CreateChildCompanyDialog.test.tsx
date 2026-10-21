@@ -40,7 +40,7 @@ describe("CreateChildCompanyDialog — tipo de compañía", () => {
     const select = screen.getByLabelText(/tipo de compañía/i) as HTMLSelectElement;
     expect(select).toBeDisabled();
     expect(select.value).toBe("RENTING");
-    expect(select).toHaveTextContent("Renting");
+    expect(select).toHaveTextContent("Radicadora");
   });
 
   it("HU #13607: no muestra el campo Código y crea el cliente sin enviarlo", async () => {

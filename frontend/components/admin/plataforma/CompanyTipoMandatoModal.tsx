@@ -94,7 +94,7 @@ export function CompanyTipoMandatoModal({
         icon={AlertTriangle}
         iconBg="#F9AC00"
         title="Confirmar mandato Abierto (sin mandatario)"
-        titleClassName="text-base font-bold text-[#162744]"
+        titleClassName="text-base font-bold text-flit-primary"
         size="md"
       >
         <div className="space-y-3 text-xs" data-testid="mandato-abierto-confirm">
@@ -125,7 +125,7 @@ export function CompanyTipoMandatoModal({
               onClick={() => onSave(values)}
               disabled={busy}
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               Confirmar cambio
             </button>
@@ -141,9 +141,9 @@ export function CompanyTipoMandatoModal({
       onClose={onCancel}
       busy={busy}
       icon={FileSignature}
-      iconBg="#557EFF"
+      iconBg="var(--color-flit-brand)"
       title="Tipo de mandato"
-      titleClassName="text-base font-bold text-[#162744]"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
     >
       <div className="space-y-3 text-xs" data-testid="mandato-tipo-editor">
@@ -260,7 +260,7 @@ export function CompanyTipoMandatoModal({
             onClick={handleSave}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             Guardar
           </button>
@@ -294,7 +294,7 @@ export function CompanyVolverDefaultModal({
       icon={AlertTriangle}
       iconBg="#F9AC00"
       title="Volver al default"
-      titleClassName="text-base font-bold text-[#162744]"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
     >
       <div className="space-y-3 text-xs" data-testid="mandato-volver-default">
@@ -321,7 +321,7 @@ export function CompanyVolverDefaultModal({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             Volver al default
           </button>

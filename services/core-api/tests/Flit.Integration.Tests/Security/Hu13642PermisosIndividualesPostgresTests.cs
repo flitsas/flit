@@ -11,7 +11,7 @@ using Xunit;
 namespace Flit.Integration.Tests.Security;
 
 /// <summary>
-/// HU #13642 (Feature #13101 F-B, Épica #12753, ADR-0071) contra PostgreSQL real: DDL 144 aplicado por la migración
+/// HU #13642 (Feature #13101 F-B, Épica #12753, ADR-0073) contra PostgreSQL real: DDL 144 aplicado por la migración
 /// <c>20261019140000_HU13642_PermisosIndividuales</c>. AC1 unicidad, AC2 foto del módulo, AC3 RLS (con un rol sin
 /// BYPASSRLS, como en <c>RolesPorTenantPostgresTests</c>) y AC4 bitácora append-only.
 /// <para>Uso de ejemplo: <c>await SeedAsync(cn); await new UserPermissionOverrideRepository(NewContext()).AddAsync(...)</c></para>

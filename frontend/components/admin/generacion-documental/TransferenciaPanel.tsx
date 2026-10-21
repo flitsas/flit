@@ -22,9 +22,9 @@ export function TransferenciaPanel({ status = "empty", onRetry, children }: Tran
   return (
     <section aria-labelledby="gd-transferencia-title" className="flex flex-1 flex-col gap-3">
       <header className="flex items-start gap-2">
-        <FileSignature className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#557EFF" }} aria-hidden="true" />
+        <FileSignature className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
         <div>
-          <h2 id="gd-transferencia-title" className="text-sm font-semibold" style={{ color: "#162744" }}>
+          <h2 id="gd-transferencia-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Transferencia de dominio
           </h2>
           <p className="mt-1 text-xs opacity-70">

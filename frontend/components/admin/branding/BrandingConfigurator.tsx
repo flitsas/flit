@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Eye, Rocket, Save, Undo2 } from "lucide-react";
+import { refreshBrand } from "@/app/actions/brand";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { contrastRatio, isValidHexColor, meetsMinimumContrast } from "@/lib/brand/contrast";
+import { brandContrastPairs, isValidHexColor } from "@/lib/brand/contrast";
 import {
   brandLogoUrl,
   brandingErrorCode,
@@ -19,6 +21,8 @@ import {
 } from "@/lib/api/branding";
 import { brandingErrorMessage } from "@/lib/brand/error-messages";
 import { BrandingColorPicker } from "./BrandingColorPicker";
+import { BrandingLivePreview } from "./BrandingLivePreview";
+import { BRAND_COLOR_PRESETS } from "./brand-color-presets";
 import { BrandingLogoUploader } from "./BrandingLogoUploader";
 import { BrandingPreview } from "./BrandingPreview";
 import { BrandingPublishDialog } from "./BrandingPublishDialog";
@@ -30,7 +34,13 @@ export interface BrandingConfiguratorProps {
   tenantId?: string;
 }
 
-const DEFAULT_COLORS: BrandColors = { primary: "#557EFF", secondary: "#00DBD5", onPrimary: "#FFFFFF" };
+// La primera combinación sugerida: cumple los dos pares de contraste que exige el backend. Con los
+// anteriores (#557EFF/#00DBD5) el primer "Guardar borrador" de toda marca nueva quedaba bloqueado.
+const DEFAULT_COLORS: BrandColors = {
+  primary: BRAND_COLOR_PRESETS[0].primary,
+  secondary: BRAND_COLOR_PRESETS[0].secondary,
+  onPrimary: "#FFFFFF",
+};
 
 /**
  * HU #12414 — Configurador de marca (AC6: un único componente para la cabeza de red y para el
@@ -38,6 +48,19 @@ const DEFAULT_COLORS: BrandColors = { primary: "#557EFF", secondary: "#00DBD5", 
  * retirar solo existe del lado `admin`, AC1/AC7).
  */
 export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorProps) {
+  const router = useRouter();
+
+  // La marca aplicada (logo, colores, nombre) sale del layout en servidor: tras publicar o retirar
+  // se expira su caché y se vuelve a renderizar para que el cambio se vea sin esperar 60 s.
+  async function applyBrandNow() {
+    try {
+      await refreshBrand();
+    } catch {
+      // Sin la acción, la marca se actualiza sola cuando venza la caché (60 s).
+    }
+    router.refresh();
+  }
+
   const [status, setStatus] = useState<UiStatus>("loading");
   const [branding, setBranding] = useState<TenantBrandingResponse | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -99,27 +122,25 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
     return () => controller.abort();
   }, [load]);
 
-  const contrastResult = useMemo(() => {
-    if (!isValidHexColor(draftColors.primary) || !isValidHexColor(draftColors.onPrimary)) {
-      return { ratio: null, ok: false };
-    }
-    const ratio = contrastRatio(draftColors.primary, draftColors.onPrimary);
-    return { ratio, ok: meetsMinimumContrast(ratio) };
-  }, [draftColors.primary, draftColors.onPrimary]);
+  // Los mismos dos pares que valida el backend al guardar: texto/principal y texto/secundario.
+  const contrastResult = useMemo(
+    () => ({ ok: brandContrastPairs(draftColors).every((p) => p.ok) }),
+    [draftColors],
+  );
+  const colorsValid =
+    isValidHexColor(draftColors.primary) &&
+    isValidHexColor(draftColors.secondary) &&
+    isValidHexColor(draftColors.onPrimary);
 
   const missing = useMemo(() => {
     const list: string[] = [];
     if (!draftName.trim()) list.push("nombre de la plataforma");
     if (!draftLogoId) list.push("logotipo");
-    if (
-      !isValidHexColor(draftColors.primary) ||
-      !isValidHexColor(draftColors.secondary) ||
-      !isValidHexColor(draftColors.onPrimary)
-    ) {
+    if (!colorsValid) {
       list.push("colores");
     }
     return list;
-  }, [draftName, draftLogoId, draftColors]);
+  }, [draftName, draftLogoId, colorsValid]);
 
   const canPublish = missing.length === 0 && contrastResult.ok;
 
@@ -144,9 +165,24 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
     return updated;
   }
 
+  /**
+   * Mismas reglas que el backend al guardar: si un color no es #RRGGBB o el contraste no llega a
+   * 4.5:1, se avisa con el motivo y no se envía nada.
+   */
+  function draftBlockedReason(): string | null {
+    if (!colorsValid) return brandingErrorMessage("BRANDING_COLOR_FORMAT");
+    if (!contrastResult.ok) return brandingErrorMessage("BRANDING_CONTRAST_TOO_LOW");
+    return null;
+  }
+
   async function handleSaveDraft() {
-    setSaving(true);
     setSuccessMessage(null);
+    const blocked = draftBlockedReason();
+    if (blocked) {
+      setFormError(blocked);
+      return;
+    }
+    setSaving(true);
     try {
       await persistDraft();
       setSuccessMessage("Borrador guardado.");
@@ -170,6 +206,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
       setDraftLogoUrl(brandLogoUrl(published.logoUrl));
       setPublishOpen(false);
       setSuccessMessage("Identidad de marca publicada.");
+      await applyBrandNow();
     } catch (err) {
       setFormError(brandingErrorMessage(brandingErrorCode(err)) || "No se pudo publicar la marca.");
     } finally {
@@ -186,6 +223,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
       setBranding(updated);
       setConfirmingRetire(false);
       setSuccessMessage("Marca retirada. La red vuelve a la identidad FLIT.");
+      await applyBrandNow();
     } catch (err) {
       setFormError(brandingErrorMessage(brandingErrorCode(err)) || "No se pudo retirar la marca.");
     } finally {
@@ -206,12 +244,12 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="branding-configurator-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+          <h2 id="branding-configurator-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
             Identidad de marca
           </h2>
           <p className="text-[11px] opacity-60">
-            Logotipo, colores y nombre de la plataforma para tu red. Los cambios quedan en borrador
-            hasta que publicas.
+            Elige el nombre, el logotipo y los colores con los que tu red verá la plataforma y sus
+            correos. Puedes guardar un borrador y publicarlo cuando esté listo.
           </p>
         </div>
         <button
@@ -219,7 +257,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
           onClick={() => setPreviewOpen(true)}
           disabled={status !== "ready"}
           className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ borderColor: "#557EFF", color: "#557EFF" }}
+          style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
         >
           <Eye className="h-3.5 w-3.5" aria-hidden /> Previsualizar
         </button>
@@ -239,7 +277,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1">
-            <label htmlFor="branding-platform-name" className="text-xs font-semibold" style={{ color: "#162744" }}>
+            <label htmlFor="branding-platform-name" className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
               Nombre de la plataforma
             </label>
             <input
@@ -262,12 +300,17 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
             onUploaded={handleLogoUploaded}
           />
 
-          <BrandingColorPicker colors={draftColors} onChange={setDraftColors} />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:items-start">
+            <BrandingColorPicker colors={draftColors} onChange={setDraftColors} />
+            <div className="lg:sticky lg:top-4">
+              <BrandingLivePreview colors={draftColors} platformName={draftName} logoUrl={draftLogoUrl} />
+            </div>
+          </div>
 
           {branding && (
             <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "#DFE5ED" }}>
               {branding.publishedAt ? (
-                <p style={{ color: "#162744" }}>
+                <p style={{ color: "var(--color-flit-primary)" }}>
                   Publicada el {formatDate(branding.publishedAt)}
                   {branding.publishedBy?.userId ? ` por ${branding.publishedBy.userId}` : ""}.
                 </p>
@@ -305,7 +348,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               onClick={() => void handleSaveDraft()}
               disabled={saving || publishing}
               className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ borderColor: "#557EFF", color: "#557EFF" }}
+              style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
             >
               <Save className="h-3.5 w-3.5" aria-hidden /> {saving ? "Guardando…" : "Guardar borrador"}
             </button>
@@ -315,7 +358,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               disabled={!canPublish || saving || publishing}
               aria-disabled={!canPublish}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
             </button>
@@ -335,7 +378,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
 
           {confirmingRetire && (
             <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "#FF4E00" }} role="alertdialog" aria-label="Confirmar retiro de marca">
-              <p style={{ color: "#162744" }}>
+              <p style={{ color: "var(--color-flit-primary)" }}>
                 ¿Retirar la marca publicada? La red volverá a mostrar la identidad FLIT hasta que
                 publiques de nuevo. El dato queda conservado en el historial.
               </p>

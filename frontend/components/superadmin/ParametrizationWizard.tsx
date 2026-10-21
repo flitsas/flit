@@ -127,7 +127,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                   <span
                     className="h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0"
                     style={{
-                      background: isDone ? '#00DBD5' : isActive ? '#557EFF' : '#DFE5ED',
+                      background: isDone ? 'var(--color-flit-tech)' : isActive ? 'var(--color-flit-brand)' : '#DFE5ED',
                       color: isDone || isActive ? '#fff' : '#162744',
                     }}
                     aria-current={isActive ? 'step' : undefined}
@@ -207,7 +207,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
               onClick={handleBack}
               disabled={step === 0 || loading}
               className="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-medium border disabled:opacity-30"
-              style={{ borderColor: '#162744', color: '#162744' }}
+              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
               aria-label="Ir al paso anterior"
             >
               <ChevronLeft className="h-3 w-3" aria-hidden="true" />
@@ -219,7 +219,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 onClick={handleFinish}
                 disabled={loading}
                 className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
                 aria-label="Guardar borrador y volver al listado"
               >
                 Guardar borrador
@@ -229,7 +229,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 onClick={() => setStep(step + 1)}
                 disabled={loading}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold disabled:opacity-50"
-                style={{ background: '#557EFF', color: '#fff' }}
+                style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
                 aria-label="Continuar al siguiente paso"
               >
                 Continuar
@@ -240,7 +240,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 onClick={handleContinue}
                 disabled={!canContinue() || loading}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: '#557EFF' }}
+                style={{ background: 'var(--color-flit-brand)' }}
                 aria-label="Continuar al siguiente paso"
               >
                 {loading ? 'Guardando…' : 'Continuar'}

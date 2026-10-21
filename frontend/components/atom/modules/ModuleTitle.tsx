@@ -23,7 +23,7 @@ export function ModuleTitle({
   const card = (
     <div className="rounded-2xl px-5 py-3 border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <h1 className="text-2xl font-bold leading-tight" style={{ color: "#557eff" }}>
+        <h1 className="text-2xl font-bold leading-tight" style={{ color: "var(--color-flit-brand)" }}>
           {title}
         </h1>
         {subtitle && <p className="text-xs opacity-70 mt-0.5">{subtitle}</p>}

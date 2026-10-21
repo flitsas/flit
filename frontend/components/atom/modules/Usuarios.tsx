@@ -367,7 +367,7 @@ export function Usuarios() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
@@ -377,7 +377,7 @@ export function Usuarios() {
           // concedido veria el boton y recibiria un 403 opaco: se gatea con el mismo criterio
           // que el resto de acciones de ciclo de vida.
           tab === "usuarios" && canManageUserLifecycle ? (
-            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
+            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
               Invitar usuario
             </button>
           ) : undefined
@@ -556,8 +556,8 @@ export function Usuarios() {
         // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);
         // no se duplica aquí. El SuperAdmin solo recibe un atajo directo al módulo RBAC.
         <div className="flex flex-col items-center gap-3 py-14 text-center">
-          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(85,126,255,0.10)" }}>
-            <Shield className="h-5 w-5" style={{ color: "#557EFF" }} aria-hidden="true" />
+          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)" }}>
+            <Shield className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
           </div>
           <div>
             <p className="text-sm font-semibold">La gestión de roles del sistema vive en el módulo RBAC</p>
@@ -568,7 +568,7 @@ export function Usuarios() {
           <Link
             href="/?m=rbac"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             Ir a Roles y permisos (RBAC)
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

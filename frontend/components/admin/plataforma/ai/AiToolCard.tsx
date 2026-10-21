@@ -165,7 +165,7 @@ export function AiToolCard({
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id={`ai-tool-${tool.toolCode}`} className="text-sm font-bold text-[#162744] dark:text-white">
+          <h2 id={`ai-tool-${tool.toolCode}`} className="text-sm font-bold text-flit-primary dark:text-white">
             {label}
           </h2>
           <StatusBadge tone="info" label={`Activo: ${etiquetaProveedor(tool.activeProvider)}`} />
@@ -202,7 +202,7 @@ export function AiToolCard({
             >
               <span
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 aria-label={`Prioridad ${slot.priorityRank}`}
               >
                 {slot.priorityRank}
@@ -210,7 +210,7 @@ export function AiToolCard({
 
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-[#162744] dark:text-white">
+                  <span className="text-xs font-semibold text-flit-primary dark:text-white">
                     {etiquetaProveedor(slot.providerCode)}
                   </span>
                   <StatusBadge
@@ -238,7 +238,7 @@ export function AiToolCard({
                   onClick={() => move(index, -1)}
                   disabled={saving || activating || index === 0}
                   aria-label={`Subir prioridad de ${etiquetaProveedor(slot.providerCode)}`}
-                  className="rounded-lg border border-[#DFE5ED] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-30 dark:border-white/10"
+                  className="rounded-lg border border-[#DFE5ED] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30 dark:border-white/10"
                 >
                   <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -247,7 +247,7 @@ export function AiToolCard({
                   onClick={() => move(index, 1)}
                   disabled={saving || activating || index === draft.providers.length - 1}
                   aria-label={`Bajar prioridad de ${etiquetaProveedor(slot.providerCode)}`}
-                  className="rounded-lg border border-[#DFE5ED] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-30 dark:border-white/10"
+                  className="rounded-lg border border-[#DFE5ED] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30 dark:border-white/10"
                 >
                   <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -268,7 +268,7 @@ export function AiToolCard({
                   !capable
                 }
                 aria-label={`Activar ${etiquetaProveedor(slot.providerCode)} en ${label}`}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Activar
@@ -296,7 +296,7 @@ export function AiToolCard({
           type="button"
           onClick={() => void guardar()}
           disabled={!dirty || saving || activating}
-          className="ml-auto rounded-xl bg-[#162744] px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+          className="ml-auto rounded-xl bg-[#162744] px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
         >
           {saving ? "Guardando…" : "Guardar prioridad y opciones"}
         </button>
@@ -318,7 +318,7 @@ export function AiToolCard({
           icon={AlertTriangle}
           iconBg="#F9AC00"
           title="Cambiar proveedor activo"
-          titleClassName="text-base font-bold text-[#162744]"
+          titleClassName="text-base font-bold text-flit-primary"
           size="md"
         >
           <div className="space-y-3 text-xs" data-testid="ai-activate-confirm">
@@ -340,7 +340,7 @@ export function AiToolCard({
                 type="button"
                 onClick={() => void confirmarActivacion()}
                 disabled={activating}
-                className="rounded-xl bg-[#557EFF] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                className="rounded-xl bg-flit-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
               >
                 {activating ? "Activando…" : "Confirmar activación"}
               </button>

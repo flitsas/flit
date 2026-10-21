@@ -134,7 +134,7 @@ export function RejectionReasonsConsole() {
             value={form.code}
             onChange={(e) => setForm({ ...form, code: e.target.value })}
             placeholder="soat_no_vigente"
-            className="w-48 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+            className="w-48 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
           />
         </label>
 
@@ -144,7 +144,7 @@ export function RejectionReasonsConsole() {
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="SOAT no vigente"
-            className="w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+            className="w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
           />
         </label>
 
@@ -153,7 +153,7 @@ export function RejectionReasonsConsole() {
           <select
             value={form.modalidad}
             onChange={(e) => setForm({ ...form, modalidad: e.target.value })}
-            className="rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+            className="rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
           >
             {MODALIDADES.map((m) => (
               <option key={m.value} value={m.value}>
@@ -170,7 +170,7 @@ export function RejectionReasonsConsole() {
             onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
             inputMode="numeric"
             placeholder="auto"
-            className="w-20 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+            className="w-20 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
           />
         </label>
 
@@ -179,7 +179,7 @@ export function RejectionReasonsConsole() {
           onClick={() => void submit()}
           disabled={busy}
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           {form.id ? "Guardar cambios" : "Crear causal"}
         </button>

@@ -6,14 +6,13 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 
 /// <summary>
 /// HU #13377 (Épica #13216, diseño §3 «Nombres», CF-13) — nombres de los archivos del lote. Se calculan al
-/// empaquetar (PDF y CSV) y al descargar (ZIP): el ZIP almacenado no conoce el total de partes.
+/// empaquetar (PDF) y al descargar (ZIP): el ZIP almacenado no conoce el total de partes.
 /// <list type="bullet">
 ///   <item>ZIP: <c>consolidados_{yyyyMMdd_HHmm}.zip</c> con una parte; <c>consolidados_{yyyyMMdd_HHmm}_parte-{kk}-de-{tt}.zip</c>
 ///   con varias. Hora de Colombia (<see cref="ColombiaTime"/>) del <c>created_at</c> del lote.</item>
 ///   <item>PDF: <c>{radicado}_{PLACA}.pdf</c> o <c>{radicado}_SIN-PLACA.pdf</c>; la placa se sanea a <c>[A-Z0-9]</c>
 ///   (mayúsculas). El radicado se sanea a <c>[A-Z0-9-]</c> para que el nombre no pueda salir del ZIP
 ///   (<c>/</c>, <c>\</c>, <c>..</c>).</item>
-///   <item>CSV: <see cref="OmitidosCsv"/> en cada parte.</item>
 /// </list>
 /// </summary>
 /// <remarks>
@@ -25,9 +24,6 @@ namespace Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 /// </remarks>
 public static class ConsolidadoLoteNombres
 {
-    /// <summary>Nombre del CSV de omitidos dentro de cada parte.</summary>
-    public const string OmitidosCsv = "omitidos.csv";
-
     /// <summary>Sufijo del PDF cuando el trámite no tiene placa (o no le queda ningún carácter válido).</summary>
     public const string SinPlaca = "SIN-PLACA";
 

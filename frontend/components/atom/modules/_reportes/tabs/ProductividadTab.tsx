@@ -107,7 +107,7 @@ export function ProductividadTab({ filters, networkScope, networkChildren = [] }
                     contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Enviados" fill="#557EFF" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  <Bar dataKey="Enviados" fill="var(--color-flit-brand)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   <Bar dataKey="Aprobados" fill="#8CC63F" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   <Bar dataKey="Rechazados" fill="#FF4E00" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </BarChart>

@@ -38,7 +38,7 @@ export function OtDetalleAcordeon({
           onClick={onToggle}
           aria-expanded={abierto}
           aria-controls={panelId}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
         >
           <span className="text-sm font-semibold" style={{ color: OT_BLUE }}>
             {titulo}

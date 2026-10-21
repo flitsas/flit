@@ -258,7 +258,7 @@ export function EditUserModal({
             onChange={(e) => setDisplayName(sanitizeName(e.target.value))}
             maxLength={255}
             required
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             style={{ borderColor: nameError ? "#FF4E00" : "#DFE5ED" }}
           />
         </Field>
@@ -285,7 +285,7 @@ export function EditUserModal({
               value={currentRoleMissing ? "" : roleSection.currentRoleId ?? ""}
               onChange={handleRoleChange}
               disabled={roleBusy || pendingRole !== null || roleSection.rolesLoading || selectableRoles.length === 0}
-              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-60"
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-60"
               style={{ borderColor: "#DFE5ED" }}
             >
               {roleSection.rolesLoading ? (
@@ -343,7 +343,7 @@ export function EditUserModal({
               </div>
             )}
             {roleNotice && (
-              <p className="mt-1 text-[10px] font-medium" style={{ color: "#00DBD5" }}>
+              <p className="mt-1 text-[10px] font-medium" style={{ color: "var(--color-flit-tech)" }}>
                 {roleNotice}
               </p>
             )}
@@ -376,7 +376,7 @@ export function EditUserModal({
             type="submit"
             disabled={busy || roleBusy}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {busy ? "Guardando…" : "Guardar cambios"}

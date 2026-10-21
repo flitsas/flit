@@ -85,7 +85,7 @@ function PairRow({
         {action.enabled ? "Habilitado" : "Deshabilitado"}
       </span>
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-[#162744] dark:border-white/20 dark:text-white"
+        className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
         data-origin={action.origin}
       >
         <Icon className="h-3 w-3" aria-hidden="true" />

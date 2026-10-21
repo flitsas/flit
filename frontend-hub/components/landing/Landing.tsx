@@ -5,6 +5,7 @@ import { PRODUCTS, type ProductInfo } from "@/lib/products";
 import { COMPANY, CONTACT, PILLARS, STEPS, demoMailto } from "@/lib/site";
 import { LandingNav } from "./LandingNav";
 import { BRAND_GRADIENT as GRADIENT, ProductIcon } from "@/components/ui/ProductIcon";
+import { FLIT_PRIVACY_POLICY_URL } from "@flit/brand/types";
 import { StatusChip } from "@/components/ui/StatusChip";
 
 // Landing de FLIT en la raíz del hub, sin sesión (B-11): qué es FLIT, sus productos, cómo empezar y contacto. Sigue
@@ -56,7 +57,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
         className="pointer-events-none absolute inset-0 opacity-90 dark:opacity-60"
         style={{
           backgroundImage:
-            "radial-gradient(at 15% 0%, rgba(85,126,255,0.22), transparent 55%), radial-gradient(at 95% 60%, rgba(0,219,213,0.18), transparent 50%)",
+            "radial-gradient(at 15% 0%, color-mix(in srgb, var(--color-flit-brand) 22%, transparent), transparent 55%), radial-gradient(at 95% 60%, color-mix(in srgb, var(--color-flit-tech) 18%, transparent), transparent 50%)",
         }}
       />
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 pb-20 [&>*]:min-w-0 pt-16 md:px-6 lg:grid-cols-[1.1fr_1fr] lg:pb-28 lg:pt-24">
@@ -354,7 +355,10 @@ function Footer({ loginUrl }: { loginUrl: string }) {
         </nav>
       </div>
       <p className="border-t border-[var(--color-flit-gray)] px-4 py-5 text-center text-[11px] text-[#59677d] dark:border-white/10 dark:text-white/50">
-        Políticas de Privacidad y Términos de Uso · © {new Date().getFullYear()} FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua
+        <a href={FLIT_PRIVACY_POLICY_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+          Políticas de Privacidad y Términos de Uso
+        </a>{" "}
+        · © {new Date().getFullYear()} FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua
       </p>
     </footer>
   );

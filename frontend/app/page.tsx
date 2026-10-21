@@ -66,7 +66,7 @@ function HomeContent() {
     [accessibleModules],
   );
 
-  // Fuente única dock ≡ URL (HU #11507 / #11508): la decide la tabla de acceso (ADR-0072, HU #13649).
+  // Fuente única dock ≡ URL (HU #11507 / #11508): la decide la tabla de acceso (ADR-0074, HU #13649).
   // Hasta que el catálogo de módulos resuelve no se abre nada protegido (deny-by-default).
   const navigableIds = useMemo(
     () => resolveNavigableModuleIds({ accessibleCodes: modulesReady ? accessibleCodes : null, claims }),
@@ -172,7 +172,7 @@ function HomeContent() {
           style={{
             borderColor: "#FF4E00",
             background: "rgba(255, 78, 0, 0.08)",
-            color: "#162744",
+            color: "var(--color-flit-primary)",
           }}
         >
           No se pudieron cargar los permisos de módulos. Acceso restringido hasta

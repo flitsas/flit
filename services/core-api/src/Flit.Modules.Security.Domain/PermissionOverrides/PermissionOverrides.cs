@@ -1,6 +1,6 @@
 namespace Flit.Modules.Security.Domain.PermissionOverrides;
 
-/// <summary>Efecto de un permiso individual (ADR-0071): <c>allow</c> suma al rol, <c>deny</c> le resta.</summary>
+/// <summary>Efecto de un permiso individual (ADR-0073): <c>allow</c> suma al rol, <c>deny</c> le resta.</summary>
 public static class PermissionEffects
 {
     public const string Allow = "allow";

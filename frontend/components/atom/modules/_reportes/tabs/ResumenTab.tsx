@@ -155,7 +155,7 @@ export function ResumenTab({
               value={formatInt(totals.total)}
               tooltip="Suma de trámites de todas las categorías creados en el rango de fechas."
               variation={variation("total")}
-              color="#162744"
+              color="var(--color-flit-primary)"
               testId="kpi-total-tramites"
             />
             {visibleCategories.map((cat) => (

@@ -118,7 +118,7 @@ function OriginBadge({ origin }: { origin: PermissionOrigin }) {
   const Icon = ORIGIN_ICON[origin];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-[#162744] dark:border-white/20 dark:text-white"
+      className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
       data-origin={origin}
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
@@ -370,7 +370,7 @@ export function ModulePermissionsSection({
   const renderModule = (m: ModuleView) => (
     <li key={m.id} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold text-[#162744] dark:text-white">{m.name}</h3>
+        <h3 className="text-sm font-semibold text-flit-primary dark:text-white">{m.name}</h3>
         <OriginBadge origin={m.origin} />
         <span className="text-[10px] opacity-60">
           {m.enabledCount} de {m.actions.length} habilitadas

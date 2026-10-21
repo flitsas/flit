@@ -117,7 +117,7 @@ export function isAdminCompany(payload: JwtPayload | null): boolean {
 
 /**
  * Indica si el payload tiene el rol `code` (comparación case-insensitive sobre `role`, `role_code` o el
- * arreglo `roles`). Base de los requisitos de rol de la tabla de acceso (`lib/nav/module-access.ts`, ADR-0072).
+ * arreglo `roles`). Base de los requisitos de rol de la tabla de acceso (`lib/nav/module-access.ts`, ADR-0074).
  */
 export function hasRoleCode(payload: JwtPayload | null, code: string): boolean {
   if (!payload) {

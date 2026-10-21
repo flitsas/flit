@@ -101,7 +101,7 @@ export function ConfiguracionIaPanel() {
         <button
           type="button"
           onClick={reintentar}
-          className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
           Actualizar
@@ -120,7 +120,7 @@ export function ConfiguracionIaPanel() {
         <button
           type="button"
           onClick={reintentar}
-          className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
           Actualizar

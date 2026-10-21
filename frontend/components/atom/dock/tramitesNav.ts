@@ -82,7 +82,7 @@ const spa = (id: keyof typeof SPA_DOCK_ITEM_LABEL, icon: NavIcon, href = `/?m=${
   label: SPA_DOCK_ITEM_LABEL[id],
   href,
   icon,
-  // Quién lo ve sale de la tabla de acceso (ADR-0072), no de una regla propia del dock.
+  // Quién lo ve sale de la tabla de acceso (ADR-0074), no de una regla propia del dock.
   ...navGatingFor(id),
 });
 

@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// HU #13644 (Feature #13101 F-B, Épica #12753, ADR-0071) — permisos individuales por usuario bajo
+/// HU #13644 (Feature #13101 F-B, Épica #12753, ADR-0073) — permisos individuales por usuario bajo
 /// <c>/api/v1/security</c>. Solo administradores (<see cref="AdminAuthorization.PermissionOverridesAdminPolicy"/>).
 /// El tenant destino es el del JWT; el Super Admin puede declararlo con <c>?tenantId=</c>. El tope, la bitácora y los
 /// rechazos viven en <see cref="ManageUserPermissionOverridesHandler"/>; las reglas de ámbito (#13645) se enchufan allí

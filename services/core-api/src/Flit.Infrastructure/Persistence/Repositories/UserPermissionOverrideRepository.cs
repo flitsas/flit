@@ -6,7 +6,7 @@ using Npgsql;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Permisos individuales por usuario (HU #13642, ADR-0071). Escribe overrides y bitácora en la misma transacción
+/// Permisos individuales por usuario (HU #13642, ADR-0073). Escribe overrides y bitácora en la misma transacción
 /// bajo el contexto RLS del tenant; la unicidad la garantiza el índice parcial <c>uq_user_permission_overrides_active</c>.
 /// </summary>
 internal sealed class UserPermissionOverrideRepository(FlitDbContext db) : IUserPermissionOverrideRepository

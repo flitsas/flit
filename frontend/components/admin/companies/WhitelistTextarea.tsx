@@ -70,7 +70,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
   return (
     <section aria-label="Lista blanca de correos" className="space-y-3">
       <div className="flex items-center gap-2">
-        <Mail className="h-4 w-4" style={{ color: "#557EFF" }} />
+        <Mail className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
         <h4 className="text-sm font-semibold">Lista Blanca</h4>
       </div>
       <p className="text-xs opacity-70">
@@ -87,7 +87,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         rows={5}
         placeholder={"comprador@dominio.com\nradicador@dominio.com"}
         aria-invalid={errors.length > 0}
-        className="w-full rounded-xl border bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#557EFF]"
+        className="w-full rounded-xl border bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
         style={{ borderColor: errors.length > 0 ? "#FF4E00" : "#DFE5ED" }}
       />
 
@@ -103,7 +103,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
       )}
 
       {savedMessage && (
-        <p className="text-xs font-medium" style={{ color: "#00DBD5" }} role="status">
+        <p className="text-xs font-medium" style={{ color: "var(--color-flit-tech)" }} role="status">
           {savedMessage}
         </p>
       )}
@@ -113,7 +113,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         onClick={handleSave}
         disabled={saving}
         className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-        style={{ background: "#557EFF" }}
+        style={{ background: "var(--color-flit-brand)" }}
       >
         <Save className="h-3.5 w-3.5" /> {saving ? "Guardando…" : "Guardar lista blanca"}
       </button>

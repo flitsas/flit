@@ -24,20 +24,30 @@ internal sealed class MemoryPublicBrandingCache : IPublicBrandingCache, IBrandin
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
     }
 
-    public bool TryGet(Guid headTenantId, out BrandIdentity identity)
+    public bool TryGet(Guid headTenantId, out BrandIdentity identity) =>
+        TryGet(headTenantId, out identity, out _);
+
+    public bool TryGet(Guid headTenantId, out BrandIdentity identity, out long? stamp)
     {
-        if (_cache.TryGetValue<BrandIdentity>(KeyFor(headTenantId), out var cached) && cached is not null)
+        if (_cache.TryGetValue<Entry>(KeyFor(headTenantId), out var cached) && cached is not null)
         {
-            identity = cached;
+            identity = cached.Identity;
+            stamp = cached.Stamp;
             return true;
         }
 
         identity = BrandIdentity.Flit;
+        stamp = null;
         return false;
     }
 
     public void Store(Guid headTenantId, BrandIdentity identity, TimeSpan ttl) =>
-        _cache.Set(KeyFor(headTenantId), identity, ttl);
+        Store(headTenantId, identity, null, ttl);
+
+    public void Store(Guid headTenantId, BrandIdentity identity, long? stamp, TimeSpan ttl) =>
+        _cache.Set(KeyFor(headTenantId), new Entry(identity, stamp), ttl);
+
+    private sealed record Entry(BrandIdentity Identity, long? Stamp);
 
     public void InvalidateTenant(Guid tenantId)
     {

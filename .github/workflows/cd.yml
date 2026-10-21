@@ -28,6 +28,9 @@ env:
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
   # FLIT Suite (B-09): hub en flitsas.online. Una sola imagen por ambiente, sin build-args (config en runtime).
   FRONTEND_HUB_IMAGE: ghcr.io/flitsas/flitdev/frontend-hub
+  # Epic #12878 (GDC): Comparendos, API y app web (perfil «comparendos» del compose).
+  CORE_COMPARENDOS_IMAGE: ghcr.io/flitsas/flitdev/core-comparendos
+  FRONTEND_COMPARENDOS_IMAGE: ghcr.io/flitsas/flitdev/frontend-comparendos
 
 jobs:
   # ── Resolver ambiente segun la rama ─────────────────────────────────────────
@@ -50,6 +53,8 @@ jobs:
       migracion_port: ${{ steps.env.outputs.migracion_port }}
       hub_port: ${{ steps.env.outputs.hub_port }}
       identity_port: ${{ steps.env.outputs.identity_port }}
+      comparendos_port: ${{ steps.env.outputs.comparendos_port }}
+      core_comparendos_port: ${{ steps.env.outputs.core_comparendos_port }}
       suite_env: ${{ steps.env.outputs.suite_env }}
       tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       internal_subnet: ${{ steps.env.outputs.internal_subnet }}
@@ -75,6 +80,7 @@ jobs:
               api_domain=api.flitsas.online
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6022; identity_port=6025
+              comparendos_port=6023; core_comparendos_port=6028
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
               tramites_domain=tramites.flitsas.online
@@ -87,6 +93,7 @@ jobs:
               api_domain=api.qa.flitsas.online
               image_tag=qa
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5022; identity_port=5025
+              comparendos_port=5023; core_comparendos_port=5028
               suite_env=qa
               tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
@@ -98,6 +105,7 @@ jobs:
               api_domain=api.dev.flitsas.online
               image_tag=dev
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4022; identity_port=4025
+              comparendos_port=4023; core_comparendos_port=4028
               suite_env=dev
               tramites_domain=dev.tramites.flitsas.online
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
@@ -131,6 +139,8 @@ jobs:
             echo "migracion_port=$migracion_port"
             echo "hub_port=$hub_port"
             echo "identity_port=$identity_port"
+            echo "comparendos_port=$comparendos_port"
+            echo "core_comparendos_port=$core_comparendos_port"
             echo "suite_env=$suite_env"
             echo "tramites_domain=$tramites_domain"
             echo "internal_subnet=$internal_subnet"
@@ -414,6 +424,94 @@ jobs:
           cache-to: type=gha,mode=max,scope=core-consultas
 
 
+  # Epic #12878 (GDC): core-comparendos (perfil «comparendos»; ver docs/suite/servicio-nuevo.md).
+  build-core-comparendos:
+    name: Build & push core-comparendos (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_COMPARENDOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-comparendos
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Tramites.Grpc.Contracts
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            services/core-notificaciones/Directory.Build.props
+            services/core-notificaciones/Directory.Packages.props
+            services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-comparendos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_COMPARENDOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-comparendos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK de plataforma y sus contratos (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-comparendos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-comparendos
+          cache-to: type=gha,mode=max,scope=core-comparendos
+
+
   # Epic #13316 (HU #13353): core-notificaciones (perfil «notificaciones»; ver docs/suite/servicio-nuevo.md).
   build-core-notificaciones:
     name: Build & push core-notificaciones (.NET) image
@@ -596,7 +694,7 @@ jobs:
             # solo sirve su propio host: las negaciones de los otros dos son inertes.
             # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
             # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
-            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online
+            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online,!tramites.marcablancadag1.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -682,6 +780,88 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend-hub
           cache-to: type=gha,mode=max,scope=frontend-hub
+
+  # Epic #12878 (GDC): app web de Comparendos (misma receta que el hub: config en runtime, sin build-args).
+  build-frontend-comparendos:
+    name: Build & push frontend-comparendos image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_COMPARENDOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-comparendos
+            packages/ui
+            packages/brand
+            packages/auth
+            packages/shell
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
+      - name: Extract metadata — frontend-comparendos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_COMPARENDOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-comparendos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-comparendos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-comparendos
+          cache-to: type=gha,mode=max,scope=frontend-comparendos
 
   build-python-ml:
     name: Build & push python-ml image
@@ -834,16 +1014,18 @@ jobs:
           cache-from: type=gha,scope=core-ict
           cache-to: type=gha,mode=max,scope=core-ict
 
-  # DEV ya NO se despliega aqui: desde el 2026-10-17 vive en el k3s de la 177 y lo despliega
-  # deploy-dev-gitops (abajo). Si este job corriera en develop, levantaria otra vez el stack
-  # docker de /opt/flitdev junto al de k3s: dos copias de DEV sobre la misma base, con jobs,
-  # correos y consumidores duplicados. QA (staging) sigue por aqui.
+  # DEV y QA ya NO se despliegan aqui: viven en el k3s de la 177 (DEV desde el 2026-10-17, QA
+  # desde el 2026-10-18) y los despliega deploy-gitops (abajo). Si este job corriera en develop o
+  # staging, levantaria otra vez el stack docker de /opt/flitdev o /opt/flitqa junto al de k3s:
+  # dos copias del ambiente sobre la misma base, con jobs, correos y consumidores duplicados.
+  # OJO PDN: la rama release tiene su propio deploy-pdn-gitops (PR #587) que este archivo aun no
+  # trae; al nivelar release con staging hay que conservarlo.
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
     # HU #13329: corre aunque falle el build de algún servicio. En despliegue por servicio (FLIT_DEPLOY_ROLLING) se
     # despliegan los demás y el que falló conserva su versión; sin él, se detiene sin tocar nada, como antes.
-    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name != 'develop' }}
+    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name == 'release' }}
     runs-on: ubuntu-latest
     # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
     timeout-minutes: 15
@@ -940,6 +1122,8 @@ jobs:
             export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_HUB_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export CORE_COMPARENDOS_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export FRONTEND_COMPARENDOS_TAG=${{ needs.setup.outputs.deploy_tag }}
             export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
             export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
@@ -947,6 +1131,8 @@ jobs:
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
             export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
             export HUB_PORT=${{ needs.setup.outputs.hub_port }}
+            export COMPARENDOS_PORT=${{ needs.setup.outputs.comparendos_port }}
+            export CORE_COMPARENDOS_PORT=${{ needs.setup.outputs.core_comparendos_port }}
             # HU #13226 (Epic #13217): core-identity (perfil "identity"); sin el perfil no se levanta.
             export CORE_IDENTITY_PORT=${{ needs.setup.outputs.identity_port }}
             # FLIT Suite: hosts de los productos en este ambiente (Suite:Hosts:Environment de core-api).
@@ -967,13 +1153,15 @@ jobs:
             # HU #13329 (Epic #13316): resultado y digest del build de cada imagen (sin arreglos asociativos, para
             # que el script corra igual en cualquier bash).
             IMAGE_TAG="${{ needs.setup.outputs.image_tag }}"
-            SERVICES="core-api core-identity core-consultas core-notificaciones core-ict frontend frontend-hub python-ml"
+            SERVICES="core-api core-identity core-consultas core-notificaciones core-comparendos core-ict frontend frontend-hub frontend-comparendos python-ml"
             build_result() {
               case "$1" in
                 core-api) echo "${{ needs.build-core-api.result }}" ;;
                 core-identity) echo "${{ needs.build-core-identity.result }}" ;;
                 core-consultas) echo "${{ needs.build-core-consultas.result }}" ;;
                 core-notificaciones) echo "${{ needs.build-core-notificaciones.result }}" ;;
+                core-comparendos) echo "${{ needs.build-core-comparendos.result }}" ;;
+                frontend-comparendos) echo "${{ needs.build-frontend-comparendos.result }}" ;;
                 core-ict) echo "${{ needs.build-core-ict.result }}" ;;
                 frontend) echo "${{ needs.build-frontend.result }}" ;;
                 frontend-hub) echo "${{ needs.build-frontend-hub.result }}" ;;
@@ -986,6 +1174,8 @@ jobs:
                 core-identity) echo "${{ needs.build-core-identity.outputs.digest }}" ;;
                 core-consultas) echo "${{ needs.build-core-consultas.outputs.digest }}" ;;
                 core-notificaciones) echo "${{ needs.build-core-notificaciones.outputs.digest }}" ;;
+                core-comparendos) echo "${{ needs.build-core-comparendos.outputs.digest }}" ;;
+                frontend-comparendos) echo "${{ needs.build-frontend-comparendos.outputs.digest }}" ;;
                 core-ict) echo "${{ needs.build-core-ict.outputs.digest }}" ;;
                 frontend) echo "${{ needs.build-frontend.outputs.digest }}" ;;
                 frontend-hub) echo "${{ needs.build-frontend-hub.outputs.digest }}" ;;
@@ -994,7 +1184,7 @@ jobs:
             }
             tag_var() {
               case "$1" in
-                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-notificaciones) echo CORE_NOTIFICACIONES_TAG ;; core-ict) echo CORE_ICT_TAG ;;
+                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-notificaciones) echo CORE_NOTIFICACIONES_TAG ;; core-comparendos) echo CORE_COMPARENDOS_TAG ;; frontend-comparendos) echo FRONTEND_COMPARENDOS_TAG ;; core-ict) echo CORE_ICT_TAG ;;
                 frontend) echo FRONTEND_TAG ;; frontend-hub) echo FRONTEND_HUB_TAG ;; python-ml) echo PYTHON_ML_TAG ;;
               esac
             }
@@ -1146,31 +1336,36 @@ jobs:
           echo "Rollback manual: ssh al VPS y ejecuta:"
           echo "  cd <deploy-path> && docker compose down && docker compose up -d"
 
-  # ── DEV: GitOps (k3s de la 177 + Argo CD) ────────────────────────────────────
+  # ── DEV y QA: GitOps (k3s de la 177 + Argo CD) ───────────────────────────────
   # Mismo patron que deploy-pdn-gitops en release (PR #587): este job NO toca ningun
   # servidor. Escribe los digests recien publicados en
-  # flit-gitops/services/flit2-dev/kustomization.yaml y Argo CD los aplica en la 177
-  # (Application flit2-dev, leida por root-vps-177).
+  # flit-gitops/services/flit2-<dev|qa>/kustomization.yaml y Argo CD los aplica en la 177
+  # (Applications flit2-dev y flit2-qa, leidas por root-vps-177). develop -> flit2-dev,
+  # staging -> flit2-qa (sale de setup.env_name).
   #
-  # Por digest y no por tag: el tag `dev` se mueve, el digest no, y asi git dice que corre en
-  # DEV. Rollback = revertir ese commit en flit-gitops.
+  # Por digest y no por tag: el tag `dev`/`qa` se mueve, el digest no, y asi git dice que corre
+  # en el ambiente. Rollback = revertir ese commit en flit-gitops.
   #
   # Si el build de una imagen falla, su digest no se toca (ese servicio conserva su version)
   # y el job termina en rojo, igual que el despliegue por servicio de deploy-to-vps.
   #
-  # OJO: la CONFIGURACION de DEV ya no sale de docker-compose.prod.yml ni del .env de la 177.
-  # Vive en flit-gitops/services/flit2-dev/ (configmaps.yaml + sealed-secrets.yaml). Una
-  # variable nueva en el compose NO llega a DEV sola: hay que agregarla alla.
-  deploy-dev-gitops:
-    name: Deploy DEV (GitOps → k3s 177)
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-ict, build-frontend, build-frontend-hub, build-python-ml]
-    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name == 'develop' }}
+  # OJO: la CONFIGURACION de DEV/QA ya no sale de docker-compose.prod.yml ni del .env de la
+  # 177. Vive en flit-gitops/services/flit2-<ambiente>/ (configmaps.yaml + sealed-secrets.yaml).
+  # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
+  deploy-gitops:
+    name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → k3s 177)
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: develop
-      url: https://dev.flitsas.online
+      # develop / staging: cada Environment tiene su GITOPS_TOKEN.
+      name: ${{ needs.setup.outputs.gh_env }}
+      url: https://${{ needs.setup.outputs.front_domain }}
     env:
+      AMBIENTE: ${{ needs.setup.outputs.env_name }}
+      FRONT_DOMAIN: ${{ needs.setup.outputs.front_domain }}
+      API_DOMAIN: ${{ needs.setup.outputs.api_domain }}
       R_CORE_API: ${{ needs.build-core-api.result }}
       D_CORE_API: ${{ needs.build-core-api.outputs.digest }}
       R_CORE_IDENTITY: ${{ needs.build-core-identity.result }}
@@ -1179,12 +1374,16 @@ jobs:
       D_CORE_CONSULTAS: ${{ needs.build-core-consultas.outputs.digest }}
       R_CORE_NOTIFICACIONES: ${{ needs.build-core-notificaciones.result }}
       D_CORE_NOTIFICACIONES: ${{ needs.build-core-notificaciones.outputs.digest }}
+      R_CORE_COMPARENDOS: ${{ needs.build-core-comparendos.result }}
+      D_CORE_COMPARENDOS: ${{ needs.build-core-comparendos.outputs.digest }}
       R_CORE_ICT: ${{ needs.build-core-ict.result }}
       D_CORE_ICT: ${{ needs.build-core-ict.outputs.digest }}
       R_FRONTEND: ${{ needs.build-frontend.result }}
       D_FRONTEND: ${{ needs.build-frontend.outputs.digest }}
       R_FRONTEND_HUB: ${{ needs.build-frontend-hub.result }}
       D_FRONTEND_HUB: ${{ needs.build-frontend-hub.outputs.digest }}
+      R_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.result }}
+      D_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.outputs.digest }}
       R_PYTHON_ML: ${{ needs.build-python-ml.result }}
       D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
@@ -1194,7 +1393,7 @@ jobs:
           fetch-depth: 0
 
       # Aviso, no bloqueo: si este push cambio docker-compose.prod.yml, lo mas probable es que
-      # traiga una variable de entorno nueva que en DEV hay que replicar a mano en flit-gitops.
+      # traiga una variable de entorno nueva que hay que replicar a mano en flit-gitops.
       - name: Avisar si cambio docker-compose.prod.yml
         env:
           BEFORE: ${{ github.event.before }}
@@ -1205,7 +1404,7 @@ jobs:
             exit 0
           fi
           if ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml; then
-            echo "::warning title=Revisar config de DEV::docker-compose.prod.yml cambio en este despliegue. DEV ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-dev/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
+            echo "::warning title=Revisar config de ${AMBIENTE^^}::docker-compose.prod.yml cambio en este despliegue. ${AMBIENTE^^} ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-${AMBIENTE}/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
             git diff "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml | grep -E '^[+-][^+-]' | head -60 || true
           fi
 
@@ -1216,7 +1415,7 @@ jobs:
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${GITOPS_TOKEN}@github.com/${{ github.repository_owner }}/flit-gitops.git" gitops
           cd gitops
-          K=services/flit2-dev/kustomization.yaml
+          K="services/flit2-${AMBIENTE}/kustomization.yaml"
           FAILED=""
           MSG=""
           # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
@@ -1225,9 +1424,11 @@ jobs:
               "core-identity:${{ env.CORE_IDENTITY_IMAGE }}:CORE_IDENTITY" \
               "core-consultas:${{ env.CORE_CONSULTAS_IMAGE }}:CORE_CONSULTAS" \
               "core-notificaciones:${{ env.CORE_NOTIFICACIONES_IMAGE }}:CORE_NOTIFICACIONES" \
+              "core-comparendos:${{ env.CORE_COMPARENDOS_IMAGE }}:CORE_COMPARENDOS" \
               "core-ict:${{ env.CORE_ICT_IMAGE }}:CORE_ICT" \
               "frontend:${{ env.FRONTEND_IMAGE }}:FRONTEND" \
               "frontend-hub:${{ env.FRONTEND_HUB_IMAGE }}:FRONTEND_HUB" \
+              "frontend-comparendos:${{ env.FRONTEND_COMPARENDOS_IMAGE }}:FRONTEND_COMPARENDOS" \
               "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
             svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
             r="R_$var"; d="D_$var"
@@ -1249,7 +1450,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Los digests ya eran estos: nada que desplegar."
           else
-            git commit -m "flit2-dev: despliegue ${GITHUB_SHA::7} (flitsas/flit develop)" -m "${MSG#$'\n'}"
+            git commit -m "flit2-${AMBIENTE}: despliegue ${GITHUB_SHA::7} (flitsas/flit ${GITHUB_REF_NAME})" -m "${MSG#$'\n'}"
             pushed=0
             for i in 1 2 3; do
               if git push; then pushed=1; break; fi
@@ -1266,19 +1467,19 @@ jobs:
             exit 1
           fi
 
-      # Argo CD sondea el repo cada ~3 min. Esto comprueba que DEV SIGUE SANO tras el
-      # despliegue; la revision que corre se ve en Argo CD (Application flit2-dev de la 177).
-      - name: Comprobar que DEV responde
+      # Argo CD sondea el repo cada ~3 min. Esto comprueba que el ambiente SIGUE SANO tras el
+      # despliegue; la revision que corre se ve en Argo CD (Application flit2-<ambiente> de la 177).
+      - name: Comprobar que el ambiente responde
         run: |
           sleep 180
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 10 -o /dev/null https://api.dev.flitsas.online/health \
-               && curl -fsS --max-time 10 -o /dev/null https://dev.flitsas.online/; then
-              echo "DEV responde (intento $i)."
+            if curl -fsS --max-time 10 -o /dev/null "https://${API_DOMAIN}/health" \
+               && curl -fsS --max-time 10 -o /dev/null "https://${FRONT_DOMAIN}/"; then
+              echo "${AMBIENTE^^} responde (intento $i)."
               exit 0
             fi
             echo "Intento $i: aun no responde; reintento en 15 s"
             sleep 15
           done
-          echo "::error::DEV no responde 10 min despues del despliegue. Revisar Argo CD (flit2-dev) en la 177; rollback = revertir el commit de flit-gitops."
+          echo "::error::${AMBIENTE^^} no responde 10 min despues del despliegue. Revisar Argo CD (flit2-${AMBIENTE}) en la 177; rollback = revertir el commit de flit-gitops."
           exit 1

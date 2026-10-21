@@ -1,7 +1,7 @@
 /** Clases de inputs del módulo Improntas — mismos tokens FLIT que ot-form-styles.ts
  * (CompanyFiltersPanel / flit-boilerplate): borde `#DFE5ED`, foco `#557EFF`. */
 export const IMPRONTA_INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] border-[#DFE5ED]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-[#DFE5ED]";
 
 export const IMPRONTA_LABEL_CLS = "block text-xs font-semibold";
 

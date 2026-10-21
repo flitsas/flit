@@ -25,7 +25,7 @@ export interface BarListProps {
   testId?: string;
 }
 
-export function BarList({ items, color = "#557EFF", max, onSelect, emptyMessage, testId }: BarListProps) {
+export function BarList({ items, color = "var(--color-flit-brand)", max, onSelect, emptyMessage, testId }: BarListProps) {
   if (items.length === 0) {
     return (
       <p className="text-xs opacity-60 py-2" data-testid={testId ? `${testId}-empty` : undefined}>
@@ -62,7 +62,7 @@ export function BarList({ items, color = "#557EFF", max, onSelect, emptyMessage,
               <button
                 type="button"
                 onClick={() => onSelect(item)}
-                className="w-full text-left rounded-lg px-1.5 py-1 outline-none hover:bg-[#557EFF14] focus:bg-[#557EFF14]"
+                className="w-full text-left rounded-lg px-1.5 py-1 outline-none hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)] focus:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)]"
                 aria-label={`Ver detalle de ${item.label}`}
               >
                 {row}

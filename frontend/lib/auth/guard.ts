@@ -1,7 +1,7 @@
 // Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
 //
-// HU #13650 (Feature #13102, ADR-0072): QUIÉN entra a cada ruta ya no vive aquí sino en la tabla única
+// HU #13650 (Feature #13102, ADR-0074): QUIÉN entra a cada ruta ya no vive aquí sino en la tabla única
 // `lib/nav/module-access.ts` (`ROUTE_ACCESS`), la misma que decide el menú. Este archivo solo valida la sesión y
 // traduce la decisión a una redirección.
 import { decodeJwtPayload, isAdminCompany, isOtUser, isSuperAdmin } from "./jwt";
@@ -15,7 +15,7 @@ export const RUNT_CONFIRMATION_BASE_PATH = "/admin/plataforma/confirmacion-runt"
 
 export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
 
-/** Parámetros con los que se vuelve al inicio cuando la persona tiene sesión pero no el permiso (ADR-0072 §4). */
+/** Parámetros con los que se vuelve al inicio cuando la persona tiene sesión pero no el permiso (ADR-0074 §4). */
 export const ACCESS_DENIED_PARAM = "acceso";
 export const ACCESS_DENIED_VALUE = "denegado";
 export const ACCESS_DENIED_MODULE_PARAM = "modulo";

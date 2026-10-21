@@ -207,7 +207,7 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
     public DbSet<UserUiPreferenceEntity> UserUiPreferences => Set<UserUiPreferenceEntity>();
 
-    // Permisos individuales por usuario y su bitácora append-only (HU #13642, ADR-0071).
+    // Permisos individuales por usuario y su bitácora append-only (HU #13642, ADR-0073).
     public DbSet<UserPermissionOverrideEntity> UserPermissionOverrides => Set<UserPermissionOverrideEntity>();
 
     public DbSet<UserPermissionAuditEntity> UserPermissionAudits => Set<UserPermissionAuditEntity>();

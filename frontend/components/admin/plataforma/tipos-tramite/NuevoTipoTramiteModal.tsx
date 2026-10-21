@@ -10,7 +10,7 @@ import type {
 } from '@/lib/api/types/procedure-parametrization';
 
 const CAMPO =
-  'w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]';
+  'w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
 
 /**
  * Alta de un tipo de trámite.
@@ -68,7 +68,7 @@ export function NuevoTipoTramiteModal({
       aria-label="Nuevo tipo de trámite"
     >
       <div className="w-full max-w-lg rounded-2xl border bg-white p-5 border-[#DFE5ED] dark:border-white/10 dark:bg-[#0B0F14]">
-        <h2 className="text-base font-semibold text-[#162744] dark:text-white">
+        <h2 className="text-base font-semibold text-flit-primary dark:text-white">
           Nuevo tipo de trámite
         </h2>
         <p className="mt-1 text-xs opacity-70">
@@ -78,7 +78,7 @@ export function NuevoTipoTramiteModal({
 
         <div className="mt-4 flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-[#162744] dark:text-white">Código</span>
+            <span className="text-xs font-semibold text-flit-primary dark:text-white">Código</span>
             <input
               className={`${CAMPO} font-mono`}
               value={code}
@@ -103,7 +103,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-[#162744] dark:text-white">Nombre</span>
+            <span className="text-xs font-semibold text-flit-primary dark:text-white">Nombre</span>
             <input
               className={CAMPO}
               value={name}
@@ -117,7 +117,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-[#162744] dark:text-white">Familia</span>
+            <span className="text-xs font-semibold text-flit-primary dark:text-white">Familia</span>
             <select
               className={CAMPO}
               value={family}
@@ -133,7 +133,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-[#162744] dark:text-white">
+            <span className="text-xs font-semibold text-flit-primary dark:text-white">
               Descripción <span className="font-normal opacity-60">(opcional)</span>
             </span>
             <input
@@ -165,7 +165,7 @@ export function NuevoTipoTramiteModal({
           <button
             type="button"
             onClick={onCerrar}
-            className="rounded-xl border px-4 py-2 text-xs font-medium border-[#DFE5ED] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="rounded-xl border px-4 py-2 text-xs font-medium border-[#DFE5ED] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cancelar
           </button>
@@ -173,8 +173,8 @@ export function NuevoTipoTramiteModal({
             type="button"
             onClick={() => void crear()}
             disabled={!puedeGuardar}
-            className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
           >
             {guardando ? (
               <span className="inline-flex items-center gap-1.5">

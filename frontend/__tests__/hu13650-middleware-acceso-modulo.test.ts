@@ -4,7 +4,7 @@ import { middleware } from "@/middleware";
 import { accessDeniedPath } from "@/lib/auth/guard";
 import { matchRouteRule, resolveRouteAccess } from "@/lib/nav/module-access";
 
-// HU #13650 (Feature #13102, ADR-0072) — el corte de /admin/* y /empresa/* en el borde, con la tabla única de acceso:
+// HU #13650 (Feature #13102, ADR-0074) — el corte de /admin/* y /empresa/* en el borde, con la tabla única de acceso:
 // sin el permiso, al inicio con la marca de acceso denegado; con él, pasa sin aviso; sin sesión, /403.
 
 afterEach(() => vi.unstubAllEnvs());

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import { BrandProvider } from "@flit/brand/BrandProvider";
 import { BrandStyle } from "@flit/brand/BrandStyle";
-import { resolveBrand } from "@flit/brand/resolve-brand.server";
+import { resolveFreshBrand } from "@flit/brand/resolve-brand.server";
 import { THEME_INIT_SCRIPT } from "@flit/shell/theme-script";
 import "./globals.css";
 
@@ -15,7 +15,7 @@ const poppins = Poppins({
 // La marca sale del host de la petición (Marca Blanca, ADR-0060 §D5): en un host FLIT no se llama a nadie; en el
 // dominio de una red, título, favicon y colores son los de la red. Se resuelve en el servidor, sin destello.
 export async function generateMetadata(): Promise<Metadata> {
-  const brand = await resolveBrand();
+  const brand = await resolveFreshBrand();
   return {
     title: brand.platformName,
     description: "Productos de la plataforma en un solo lugar",
@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const brand = await resolveBrand();
+  const brand = await resolveFreshBrand();
 
   return (
     <html lang="es" suppressHydrationWarning className={`${poppins.variable} h-full scroll-smooth`}>

@@ -93,7 +93,7 @@ export function OtRequirementsList({
               value={selection}
               disabled={busy}
               onChange={(e) => onChange(d.id, e.target.value as DocumentRequirementSelection)}
-              className="rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-50"
+              className="rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-50"
             >
               {SELECTION_ORDER.map((value) => (
                 <option key={value} value={value}>

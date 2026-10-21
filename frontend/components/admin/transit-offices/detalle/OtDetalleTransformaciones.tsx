@@ -40,9 +40,9 @@ export function transformacionesDelTramite(
 /** Un valor ausente se nombra; nunca se deja el hueco mudo ni se rellena con el de la otra cara. */
 function Valor({ texto, ausente }: { texto: string | null; ausente: string }) {
   if (!texto) {
-    return <span className="text-xs italic text-[#162744]/60 dark:text-white/60">{ausente}</span>;
+    return <span className="text-xs italic text-flit-primary/60 dark:text-white/60">{ausente}</span>;
   }
-  return <span className="text-xs font-semibold text-[#162744] dark:text-white">{texto}</span>;
+  return <span className="text-xs font-semibold text-flit-primary dark:text-white">{texto}</span>;
 }
 
 /**
@@ -70,12 +70,12 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
             key={t.tipo}
             className="rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
           >
-            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#162744]/70 dark:text-white/70">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-flit-primary/70 dark:text-white/70">
               {t.label}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wide text-[#162744]/60 dark:text-white/60">
+                <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-white/60">
                   En el RUNT
                 </span>
                 <Valor texto={t.valorRunt} ausente="Sin dato del RUNT" />
@@ -86,7 +86,7 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
                 aria-label="cambia a"
               />
               <span className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wide text-[#162744]/60 dark:text-white/60">
+                <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-white/60">
                   Nuevo en el trámite
                 </span>
                 <Valor texto={t.valorNuevo} ausente="Sin valor nuevo capturado" />

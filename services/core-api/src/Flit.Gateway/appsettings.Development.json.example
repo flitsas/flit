@@ -28,6 +28,16 @@
         "Destinations": {
           "migracion-api-1": { "Address": "http://localhost:4030/" }
         }
+      },
+      "core-consultas-cluster": {
+        "Destinations": {
+          "core-consultas-1": { "Address": "http://127.0.0.1:4026/" }
+        }
+      },
+      "core-comparendos-cluster": {
+        "Destinations": {
+          "core-comparendos-1": { "Address": "http://127.0.0.1:4028/" }
+        }
       }
     }
   }

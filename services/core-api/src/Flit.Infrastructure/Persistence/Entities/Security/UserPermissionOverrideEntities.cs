@@ -2,7 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Common;
 
 namespace Flit.Infrastructure.Persistence.Entities.Security;
 
-/// <summary><c>security.user_permission_overrides</c> (HU #13642, ADR-0071).</summary>
+/// <summary><c>security.user_permission_overrides</c> (HU #13642, ADR-0073).</summary>
 public sealed class UserPermissionOverrideEntity : TenantAuditableEntity
 {
     public Guid UserId { get; set; }

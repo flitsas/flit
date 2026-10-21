@@ -79,7 +79,7 @@ export interface HistorialFiltersProps {
 }
 
 const FIELD_CLASS =
-  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]";
+  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 
 /**
  * Filtros del historial (CF-18, HU-03).
@@ -254,7 +254,7 @@ export function HistorialFilters({
           <button
             type="button"
             onClick={() => onChange(HISTORIAL_FILTERS_EMPTY)}
-            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Limpiar filtros
           </button>

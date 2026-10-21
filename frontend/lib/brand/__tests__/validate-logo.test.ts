@@ -58,8 +58,13 @@ describe("validateLogoFile", () => {
     expect(result).toEqual({ ok: true, width: 300, height: 100 });
   });
 
-  it("rechaza un formato fuera de PNG/JPEG/WebP con BRANDING_LOGO_FORMAT", async () => {
+  it("rechaza un formato fuera de PNG/JPEG con BRANDING_LOGO_FORMAT", async () => {
     const result = await validateLogoFile(pngFile(1024, "image/svg+xml"));
+    expect(result).toEqual({ ok: false, code: "BRANDING_LOGO_FORMAT" });
+  });
+
+  it("rechaza un WebP con BRANDING_LOGO_FORMAT (solo PNG y JPEG)", async () => {
+    const result = await validateLogoFile(pngFile(1024, "image/webp"));
     expect(result).toEqual({ ok: false, code: "BRANDING_LOGO_FORMAT" });
   });
 

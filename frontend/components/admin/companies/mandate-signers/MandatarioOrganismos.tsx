@@ -54,7 +54,7 @@ export function MandatarioOrganismos({
         aria-label={`Ver organismos de ${signerName}: ${etiqueta}`}
         aria-haspopup="dialog"
         data-aviso={conAviso ? "true" : undefined}
-        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
         style={{
           background: `var(--badge-${tone}-bg)`,
           color: `var(--badge-${tone}-fg)`,
@@ -74,9 +74,9 @@ export function MandatarioOrganismos({
           open
           onClose={() => setOpen(false)}
           icon={Building2}
-          iconBg="#557EFF"
+          iconBg="var(--color-flit-brand)"
           title={`Organismos de ${signerName}`}
-          titleClassName="text-base font-bold text-[#162744] dark:text-white"
+          titleClassName="text-base font-bold text-flit-primary dark:text-white"
           size="md"
         >
           <div className="space-y-3 text-xs" data-testid="mandatario-organismos-detalle">
@@ -91,7 +91,7 @@ export function MandatarioOrganismos({
                   className="flex flex-col gap-0.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                   data-bloqueado={o.bloqueado ? "true" : undefined}
                 >
-                  <span className="font-medium text-[#162744] dark:text-white">{o.nombre}</span>
+                  <span className="font-medium text-flit-primary dark:text-white">{o.nombre}</span>
                   <span
                     className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
                     style={{

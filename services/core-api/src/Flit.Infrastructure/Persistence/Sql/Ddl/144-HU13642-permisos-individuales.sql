@@ -1,4 +1,4 @@
--- HU #13642 (Feature #13101 F-B, Épica #12753) — permisos individuales por usuario (ADR-0071, opción A).
+-- HU #13642 (Feature #13101 F-B, Épica #12753) — permisos individuales por usuario (ADR-0073, opción A).
 -- Migración: 20261019140000_HU13642_PermisosIndividuales
 --
 --  * security.user_permission_overrides: un hecho por (tenant, usuario, producto, permiso) con efecto allow|deny.
@@ -105,14 +105,14 @@ CREATE POLICY tenant_isolation ON security.user_permission_audit
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
 COMMENT ON TABLE security.user_permission_overrides IS
-    'HU #13642 / ADR-0071 — permiso individual de un usuario en un tenant y producto: efecto allow|deny sobre un permiso del catálogo. Unicidad parcial por usuario+tenant+producto+permiso (activos). Módulo completo = una fila por acción al otorgar (source MODULE_SNAPSHOT).';
+    'HU #13642 / ADR-0073 — permiso individual de un usuario en un tenant y producto: efecto allow|deny sobre un permiso del catálogo. Unicidad parcial por usuario+tenant+producto+permiso (activos). Módulo completo = una fila por acción al otorgar (source MODULE_SNAPSHOT).';
 COMMENT ON COLUMN security.user_permission_overrides.product_code IS 'Producto del módulo del permiso (platform.products.code).';
 COMMENT ON COLUMN security.user_permission_overrides.effect IS 'allow | deny. deny gana sobre el rol; no pueden coexistir allow y deny del mismo permiso.';
 COMMENT ON COLUMN security.user_permission_overrides.source IS 'INDIVIDUAL | MODULE_SNAPSHOT (foto de las acciones del módulo al otorgar).';
 COMMENT ON COLUMN security.user_permission_overrides.batch_id IS 'Agrupa las filas de una misma foto de módulo completo.';
 COMMENT ON COLUMN security.user_permission_overrides.granted_by IS 'Usuario actor que otorgó el permiso (identity.users.id).';
 COMMENT ON TABLE security.user_permission_audit IS
-    'HU #13642 / ADR-0071 — bitácora append-only de permisos individuales: éxitos, rechazos con motivo, purgas por cambio de rol y confirmación de ict.pii.reveal. UPDATE/DELETE rechazados por tr_user_permission_audit_immutable. Solo identificadores, sin PII.';
+    'HU #13642 / ADR-0073 — bitácora append-only de permisos individuales: éxitos, rechazos con motivo, purgas por cambio de rol y confirmación de ict.pii.reveal. UPDATE/DELETE rechazados por tr_user_permission_audit_immutable. Solo identificadores, sin PII.';
 COMMENT ON COLUMN security.user_permission_audit.action IS 'GRANT | DENY | REVOKE | MODULE_SNAPSHOT | ROLE_CHANGE_PURGE | PII_REVEAL_CONFIRMED (vocabulario abierto, sin CHECK).';
 COMMENT ON COLUMN security.user_permission_audit.outcome IS 'OK | REJECTED.';
 COMMENT ON COLUMN security.user_permission_audit.reason_code IS 'Motivo del rechazo (OUT_OF_CAP, SELF_EDIT, ADMIN_TARGET, INVITATION_PENDING, NOT_ENFORCED, EXCLUDED, TOKEN_BUDGET, OUT_OF_SCOPE); NULL si OK.';

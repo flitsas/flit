@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Flit.Infrastructure.Migrations;
 
 /// <summary>
-/// HU #13642 (Feature #13101 F-B, Épica #12753, ADR-0071) — <c>security.user_permission_overrides</c> y la bitácora
+/// HU #13642 (Feature #13101 F-B, Épica #12753, ADR-0073) — <c>security.user_permission_overrides</c> y la bitácora
 /// append-only <c>security.user_permission_audit</c>. DDL: <c>144-HU13642-permisos-individuales.sql</c>.
 /// </summary>
 [DbContext(typeof(FlitDbContext))]

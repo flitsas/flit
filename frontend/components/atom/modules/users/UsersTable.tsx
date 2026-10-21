@@ -234,7 +234,7 @@ export function UsersTable({
             value={profileFilter}
             onChange={(e) => { setProfileFilter(e.target.value as "" | UserProfileKind); setPage(1); }}
             aria-label="Filtrar por perfil"
-            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
+            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
           >
             <option value="">Todos</option>
             {USER_PROFILE_ORDER.map((p) => (
@@ -251,7 +251,7 @@ export function UsersTable({
             value={roleFilter}
             onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
             aria-label="Filtrar por rol"
-            className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
+            className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
           >
             <option value="">Todos</option>
             {roleOptions.map((r) => (
@@ -268,7 +268,7 @@ export function UsersTable({
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value as UserStatusFilter); setPage(1); }}
             aria-label="Filtrar por estado"
-            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
+            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
           >
             <option value="">Todos</option>
             {STATUS_OPTIONS.map((s) => (
@@ -283,8 +283,8 @@ export function UsersTable({
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
-            style={{ color: "#557EFF" }}
+            className="rounded text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
+            style={{ color: "var(--color-flit-brand)" }}
           >
             Limpiar filtros
           </button>
@@ -308,7 +308,7 @@ export function UsersTable({
               type="button"
               onClick={onRetry}
               className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               Reintentar
             </button>

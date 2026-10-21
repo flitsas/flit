@@ -378,7 +378,7 @@ public sealed class GetWizardStateHandler(
             ? null
             : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
 
-        var otId = TransitOfficeIdFromFieldValues(instance);
+        var otId = OtEfectivaResolver.FromFieldValues(instance.FieldValues);
 
         // FEATURE 05 — ¿los comparendos bloquean el paso 4 (comprador con multas) para el OT destino?
         // El gate simit_multas bloqueaba SIEMPRE antes de esta feature: sin override explícito se
@@ -476,7 +476,7 @@ public sealed class GetWizardStateHandler(
     private Task<bool> ResolvePrendaDocumentRequiredAsync(ProcedureInstance instance, CancellationToken ct) =>
         _prendaDocumentRequirementPolicy.IsRequiredAsync(
             instance.TenantId,
-            instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+            OtEfectivaResolver.Resolve(instance),
             instance.CreatedAt,
             ct);
 
@@ -826,7 +826,7 @@ public sealed class GetWizardStateHandler(
         var matriz = await _checklistMatrixProvider
             .GetForAsync(
                 instance.ProcedureTypeId,
-                instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+                OtEfectivaResolver.Resolve(instance),
                 ct)
             .ConfigureAwait(false);
 
@@ -933,14 +933,6 @@ public sealed class GetWizardStateHandler(
         _ => "Datos",
     };
 
-    /// <summary>Id del OT elegido en el FUR (field_value <c>transit_office_id</c>), o null.</summary>
-    private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
-    {
-        var raw = instance.FieldValues.FirstOrDefault(f =>
-            string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
-        return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
-    }
-
     /// <summary>
     /// Compañía+OT: ¿el documento de prenda es obligatorio y el trámite no lo tiene adjunto?
     /// Aplica a cualquier modalidad (matrícula, traspaso, etc.). Usa <c>TransitOfficeId</c> de la
@@ -971,7 +963,7 @@ public sealed class GetWizardStateHandler(
         var otRequiere = await _prendaDocumentRequirementPolicy
             .IsRequiredAsync(
                 instance.TenantId,
-                instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+                OtEfectivaResolver.Resolve(instance),
                 instance.CreatedAt,
                 ct)
             .ConfigureAwait(false);

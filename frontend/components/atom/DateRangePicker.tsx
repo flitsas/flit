@@ -26,7 +26,7 @@ export interface DateRangePickerProps {
 }
 
 const FIELD_CLS =
-  "inline-flex h-10 w-full min-w-[220px] items-center gap-2 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-[#162744] outline-none transition hover:bg-[#F4F7FC] focus-visible:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF]/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white dark:hover:bg-white/5";
+  "inline-flex h-10 w-full min-w-[220px] items-center gap-2 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-flit-primary outline-none transition hover:bg-[#F4F7FC] focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white dark:hover:bg-white/5";
 
 const POPOVER_CLS =
   "absolute left-0 top-full z-40 mt-2 rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
@@ -221,7 +221,7 @@ export function DateRangePicker({
         aria-label={`${label}: ${hasValue ? displayText : placeholder}`}
         aria-invalid={invalidMessage ? true : undefined}
         aria-describedby={invalidMessage ? errorId : undefined}
-        className={`${FIELD_CLS} ${hasValue ? "border-[#557EFF] text-[#3B4FD6] dark:text-[#8FA8FF]" : ""}`}
+        className={`${FIELD_CLS} ${hasValue ? "border-flit-brand text-[#3B4FD6] dark:text-[#8FA8FF]" : ""}`}
         onClick={toggleOpen}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -258,15 +258,15 @@ export function DateRangePicker({
             defaultMonth={isoToDate(draft.from) ?? isoToDate(draft.to) ?? new Date()}
             components={{ DayButton: FlitDayButton }}
             classNames={{
-              root: "rdp-root text-[#162744] dark:text-white",
-              chevron: "fill-[#557EFF]",
+              root: "rdp-root text-flit-primary dark:text-white",
+              chevron: "fill-flit-brand",
               day_button:
-                "rounded-lg text-xs font-medium hover:bg-[#557EFF]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]",
-              selected: "bg-[#557EFF] text-white hover:bg-[#557EFF] hover:text-white",
-              range_start: "rounded-l-lg bg-[#557EFF] text-white",
-              range_end: "rounded-r-lg bg-[#557EFF] text-white",
-              range_middle: "bg-[#557EFF]/15 text-[#162744] dark:text-white",
-              today: "font-bold text-[#557EFF]",
+                "rounded-lg text-xs font-medium hover:bg-flit-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand",
+              selected: "bg-flit-brand text-white hover:bg-flit-brand hover:text-white",
+              range_start: "rounded-l-lg bg-flit-brand text-white",
+              range_end: "rounded-r-lg bg-flit-brand text-white",
+              range_middle: "bg-flit-brand/15 text-flit-primary dark:text-white",
+              today: "font-bold text-flit-brand",
               outside: "text-[#667085] opacity-50 dark:text-white/40",
               disabled: "opacity-40",
             }}
@@ -290,7 +290,7 @@ export function DateRangePicker({
             <button
               type="button"
               data-testid="date-range-apply"
-              className="rounded-lg bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0B0F14]"
+              className="rounded-lg bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0B0F14]"
               onClick={handleApply}
             >
               Aplicar

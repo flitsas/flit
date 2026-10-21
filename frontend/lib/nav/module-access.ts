@@ -1,4 +1,4 @@
-// Tabla declarativa ÚNICA de requisitos de acceso por módulo y por ruta (ADR-0072, Feature #13102).
+// Tabla declarativa ÚNICA de requisitos de acceso por módulo y por ruta (ADR-0074, Feature #13102).
 //
 // La consumen tres puntos, sin ramas sueltas en Shell / page / guard:
 //   1. `resolveNavigableModuleIds` (`lib/nav/modules.ts`) → menú y `/?m=` (HU #13649, #13650).
@@ -6,7 +6,7 @@
 //      pestañas del organismo, de `otHubNavGating` (`OT_HUB_TAB_PERMISSION`, la misma tabla que sus rutas, HU #13655).
 //   3. `lib/auth/guard.ts` / `middleware.ts` → `/admin/*` y `/empresa/*` (HU #13650), con `resolveRouteAccess`.
 //
-// Esto es defensa en profundidad de la NAVEGACIÓN: la autorización real la hace la API (ADR-0072 §6). Por eso cada
+// Esto es defensa en profundidad de la NAVEGACIÓN: la autorización real la hace la API (ADR-0074 §6). Por eso cada
 // requisito lleva `api`: qué exige la API para ese módulo (permiso, política de rol o solo sesión) y en qué archivo
 // vive. `__tests__/module-access.test.ts` verifica (a) que el requisito del menú es al menos tan estricto como el de
 // la API y (b) que el archivo del backend sigue declarando esa política: si la API cambia y la tabla no, falla.

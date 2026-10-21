@@ -176,6 +176,64 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
         (await call.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
     }
 
+    // ── EmpresasService (global, GDC B2-1/B2-4) ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ListarEmpresasConProducto_SinEmpresaEnLaMetadata_ConLaReglaDeLaJerarquia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Guid encendida = Guid.NewGuid(), apagada = Guid.NewGuid(), hijaDeApagada = Guid.NewGuid(), inactiva = Guid.NewGuid();
+        Guid[] ids = [encendida, apagada, hijaDeApagada, inactiva];
+        using (var scope = _host.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            void Empresa(Guid id, string code, string nit, Guid? padre = null, bool activa = true, bool cabeza = false, string tipo = "RENTING") => db.Tenants.Add(new Tenant
+            {
+                Id = id, Code = $"IT-EMP-{code}-{_suffix}", LegalName = $"Empresa {code} {_suffix}", TaxId = nit, TenantType = tipo,
+                IsActive = activa, ParentTenantId = padre, IsGroupParent = cabeza, CreatedAt = now,
+            });
+            Empresa(encendida, "ON", "811011779");
+            Empresa(apagada, "OFF", "900000001", cabeza: true, tipo: "CONCESION");
+            Empresa(inactiva, "INACTIVA", "900000003", activa: false);
+            await db.SaveChangesAsync(ct);
+            Empresa(hijaDeApagada, "HIJA", "900000002", apagada);
+            await db.SaveChangesAsync(ct);
+            await SetProductAsync(db, encendida, "comparendos", true, now);
+            await SetProductAsync(db, apagada, "comparendos", false, now);
+            await SetProductAsync(db, hijaDeApagada, "comparendos", true, now);
+            await SetProductAsync(db, inactiva, "comparendos", true, now);
+        }
+
+        try
+        {
+            var token = await ServiceTokenAsync(ct, "svc-empresas-grpc", "platform.identidad.empresas");
+            var r = await EmpresasClient(token).ListarEmpresasConProductoAsync(new ListarEmpresasConProductoRequest { Producto = "comparendos" }, cancellationToken: ct);
+            var nuestras = r.Empresas.Where(e => ids.Contains(Guid.Parse(e.Id))).ToList();
+            nuestras.Select(e => (e.Id, e.Nombre, e.Nit)).Should().Equal((encendida.ToString(), $"Empresa ON {_suffix}", "811011779"));
+
+            var plataforma = async () => await EmpresasClient(token).ListarEmpresasConProductoAsync(new ListarEmpresasConProductoRequest { Producto = "plataforma" }, cancellationToken: ct);
+            (await plataforma.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        }
+        finally
+        {
+            using var scope = _host.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            db.Set<TenantProductEntity>().Where(r => ids.Contains(r.TenantId)).ExecuteDelete();
+            db.Tenants.Where(t => t.Id == hijaDeApagada).ExecuteDelete();
+            db.Tenants.Where(t => ids.Contains(t.Id)).ExecuteDelete();
+        }
+    }
+
+    [Fact]
+    public async Task ListarEmpresasConProducto_ConElScopeDeIdentidadRead_PermissionDenied()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var call = async () => await EmpresasClient(await ServiceTokenAsync(ct)).ListarEmpresasConProductoAsync(
+            new ListarEmpresasConProductoRequest { Producto = "comparendos" }, Metadata(_empresa), cancellationToken: ct);
+        (await call.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied, "el listado global tiene su propio scope");
+    }
+
     // ── Solo en el puerto gRPC ───────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -219,6 +277,16 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
                 return metadata;
             });
         return new IdentidadService.IdentidadServiceClient(invoker);
+    }
+
+    private EmpresasService.EmpresasServiceClient EmpresasClient(string token)
+    {
+        var channel = GrpcChannel.ForAddress($"http://localhost:{GrpcPort}", new GrpcChannelOptions { HttpHandler = _host.Server.CreateHandler() });
+        return new EmpresasService.EmpresasServiceClient(channel.CreateCallInvoker().Intercept(metadata =>
+        {
+            metadata.Add("authorization", $"Bearer {token}");
+            return metadata;
+        }));
     }
 
     private static Metadata Metadata(Guid tenant) => new() { { "x-flit-tenant-id", tenant.ToString() } };
@@ -317,6 +385,8 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
             builder.UseSetting("Suite:Oidc:ServiceClients:svc-consultas-grpc:Scopes:0", "platform.identidad.read");
             builder.UseSetting("Suite:Oidc:ServiceClients:svc-manifiesto-grpc:Secret", Secret);
             builder.UseSetting("Suite:Oidc:ServiceClients:svc-manifiesto-grpc:Scopes:0", "platform.manifest");
+            builder.UseSetting("Suite:Oidc:ServiceClients:svc-empresas-grpc:Secret", Secret);
+            builder.UseSetting("Suite:Oidc:ServiceClients:svc-empresas-grpc:Scopes:0", "platform.identidad.empresas");
         }
     }
 }

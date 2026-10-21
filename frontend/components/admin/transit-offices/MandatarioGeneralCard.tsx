@@ -48,28 +48,28 @@ export function MandatarioGeneralCard({
       <span
         aria-hidden="true"
         className="absolute inset-y-0 left-0 w-1.5"
-        style={{ background: "linear-gradient(180deg,#557EFF 0%,#00DBD5 100%)" }}
+        style={{ background: "linear-gradient(180deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
       />
       <div className="flex flex-col gap-4 pl-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <span
             aria-hidden="true"
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-white"
-            style={{ background: hay ? "linear-gradient(135deg,#557EFF,#00DBD5)" : "#B7C2D3" }}
+            style={{ background: hay ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "#B7C2D3" }}
           >
             {hay ? <UserCheck className="h-6 w-6" /> : <UserPlus className="h-6 w-6" />}
           </span>
           <div className="min-w-0">
             <p
               id="mandatario-general-titulo"
-              className="text-[11px] font-semibold uppercase tracking-wider text-[#557EFF]"
+              className="text-[11px] font-semibold uppercase tracking-wider text-flit-brand"
             >
               Mandatario general del organismo
             </p>
             {hay ? (
               <>
                 <p
-                  className="mt-0.5 truncate text-lg font-bold text-[#162744] dark:text-white"
+                  className="mt-0.5 truncate text-lg font-bold text-flit-primary dark:text-white"
                   data-testid="ot-mandatos-general-signer"
                 >
                   {nombre}
@@ -82,7 +82,7 @@ export function MandatarioGeneralCard({
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {signer ? (
                     <>
-                      <span className="rounded-full border border-[#DFE5ED] px-2.5 py-0.5 text-[11px] font-semibold text-[#162744] dark:border-white/15 dark:text-white">
+                      <span className="rounded-full border border-[#DFE5ED] px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary dark:border-white/15 dark:text-white">
                         {etiquetaModelo(signer)}
                       </span>
                       <MandatarioVigenciaBadge signer={signer} />
@@ -94,8 +94,8 @@ export function MandatarioGeneralCard({
                         />
                       ) : null}
                       {natural ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-0.5 text-[11px] font-semibold text-[#162744] dark:border-white/15 dark:text-white">
-                          <ShieldCheck className="h-3.5 w-3.5 text-[#557EFF]" aria-hidden="true" />
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary dark:border-white/15 dark:text-white">
+                          <ShieldCheck className="h-3.5 w-3.5 text-flit-brand" aria-hidden="true" />
                           {etiquetaTipoFirma(tipoDeFirmaMandatario(signer))}
                         </span>
                       ) : null}
@@ -129,7 +129,7 @@ export function MandatarioGeneralCard({
             onClick={onEditar}
             aria-label="Editar mandatario general del organismo"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+            style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
           >
             <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
             {hay ? "Cambiar mandatario" : "Elegir mandatario"}

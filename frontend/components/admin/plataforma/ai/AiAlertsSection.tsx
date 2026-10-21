@@ -74,13 +74,13 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
   return (
     <section aria-labelledby="ai-alerts-heading" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="ai-alerts-heading" className="text-sm font-bold text-[#162744] dark:text-white">
+        <h2 id="ai-alerts-heading" className="text-sm font-bold text-flit-primary dark:text-white">
           Alertas de failover
         </h2>
         <button
           type="button"
           onClick={reintentar}
-          className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-[#557EFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
           Actualizar
@@ -136,7 +136,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
                     tone={a.acked ? "neutral" : "warning"}
                     label={a.acked ? "Leída" : "Pendiente"}
                   />
-                  <span className="text-xs font-semibold text-[#162744] dark:text-white">
+                  <span className="text-xs font-semibold text-flit-primary dark:text-white">
                     {etiquetaHerramienta(a.toolCode)}
                   </span>
                 </div>
@@ -150,7 +150,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
                   type="button"
                   onClick={() => void reconocer(a)}
                   disabled={ackId === a.id}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#162744] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-60 dark:border-white/10 dark:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-60 dark:border-white/10 dark:text-white"
                 >
                   <Check className="h-3.5 w-3.5" aria-hidden="true" />
                   {ackId === a.id ? "Marcando…" : "Marcar leída"}

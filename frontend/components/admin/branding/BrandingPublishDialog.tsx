@@ -36,7 +36,7 @@ export function BrandingPublishDialog({ open, busy, onClose, onConfirm }: Brandi
           onClick={onConfirm}
           disabled={busy}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           {busy ? "Publicando…" : "Publicar"}
         </button>

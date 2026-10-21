@@ -219,7 +219,7 @@ export function PermissionAuditView({ mode, users, initialUserId }: PermissionAu
               type="button"
               onClick={() => setAttempt((n) => n + 1)}
               className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "#557EFF" }}
+              style={{ background: "var(--color-flit-brand)" }}
             >
               Reintentar
             </button>

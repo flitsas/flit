@@ -1,4 +1,4 @@
-// HU #13649 (Feature #13102, ADR-0072): la tabla única de requisitos de acceso decide el menú, y el menú no ofrece lo
+// HU #13649 (Feature #13102, ADR-0074): la tabla única de requisitos de acceso decide el menú, y el menú no ofrece lo
 // que la API rechazaría.
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/admin-banners";
 
 const INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2.5 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60";
+  "w-full rounded-xl border bg-transparent px-3 py-2.5 text-xs outline-none focus:border-flit-brand disabled:opacity-60";
 
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -141,7 +141,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
       open={open}
       onClose={onClose}
       title={editing ? "Editar banner" : "Nuevo banner"}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
       busy={submitting}
       size="lg"
     >
@@ -253,7 +253,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
                 missingFile || invalidImageType || invalidImageSize
                   ? "#FF4E00"
                   : form.file
-                    ? "#557EFF"
+                    ? "var(--color-flit-brand)"
                     : "#DFE5ED",
             }}
           >
@@ -317,7 +317,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           disabled={submitting}
           onClick={() => void handleSubmit()}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
           {editing ? "Guardar cambios" : "Crear banner"}

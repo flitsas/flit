@@ -6,14 +6,14 @@ const styles: Record<
   { border: string; bg: string; icon: typeof Info; label: string }
 > = {
   info: {
-    border: "rgba(85, 126, 255, 0.35)",
-    bg: "rgba(85, 126, 255, 0.08)",
+    border: "color-mix(in srgb, var(--color-flit-brand) 35%, transparent)",
+    bg: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)",
     icon: Info,
     label: "Información",
   },
   tip: {
-    border: "rgba(0, 219, 213, 0.45)",
-    bg: "rgba(0, 219, 213, 0.1)",
+    border: "color-mix(in srgb, var(--color-flit-tech) 45%, transparent)",
+    bg: "color-mix(in srgb, var(--color-flit-tech) 10%, transparent)",
     icon: Lightbulb,
     label: "Consejo",
   },

@@ -23,10 +23,19 @@ export interface Brand {
 }
 
 /**
+ * Etiqueta de la caché de `/public/branding` en el servidor de Next. Publicar o retirar la marca la
+ * expira (`updateTag`) para que el cambio se vea al instante y no tras los 60 s de `revalidate`.
+ */
+export const BRAND_CACHE_TAG = "flit-brand";
+
+/**
  * Identidad FLIT — IDÉNTICA a `BrandIdentity.Flit` del backend (contratos-api.md §1). `version: 0`
  * es la señal canónica de "no hay marca de red": el backend NUNCA emite `version: 0` para una
  * marca publicada (empieza en 1 en el primer `publish`).
  */
+/** Política de privacidad oficial de FLIT: la enlazan la plataforma (acceso, pie) y los correos (FLIT y Marca Blanca). */
+export const FLIT_PRIVACY_POLICY_URL = "https://flitsas.com.co/privacy-policy/";
+
 export const FLIT_BRAND: Brand = {
   platformName: "FLIT 2.0",
   logoUrl: null,

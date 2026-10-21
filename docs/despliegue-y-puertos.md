@@ -150,6 +150,7 @@ no se reutilizan.
 |----------|-------------|----|-----|
 | `frontend-hub` | `4022` | `5022` | `6022` |
 | Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
+| API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
 | Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
 | `core-identity` | `4025` | `5025` | `6025` |
 
@@ -157,8 +158,8 @@ no se reutilizan.
   producto tiene API propia, va por la red interna detrás del gateway, sin puerto publicado.
 - En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
 - `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
-  `CORE_IDENTITY_PORT`); los de Comparendos y Diagnóstico se agregan cuando cada uno se
-  despliegue por primera vez (L-10). El producto `demo` se retiró (DDL 125).
+  `CORE_IDENTITY_PORT`); Comparendos ya los tiene (`COMPARENDOS_PORT`, `CORE_COMPARENDOS_PORT`;
+  perfil `comparendos`, ver `docs/suite/handoff-vps-comparendos.md`); Diagnóstico se agrega cuando se despliegue (L-10). El producto `demo` se retiró (DDL 125).
 - Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
 
 #### Puertos gRPC internos (contrato v1.3 §11, Epic #13316)
@@ -171,6 +172,7 @@ su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto apart
 | `core-api` (ICT) | `8082` | `CORE_API_GRPC_PORT` | En uso |
 | `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
 | `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
+| `core-comparendos` (`flit.comparendos.v1`) | `8086` (propuesto) | `CORE_COMPARENDOS_GRPC_PORT` | Perfil `comparendos`; encendido en [handoff-vps-comparendos.md](suite/handoff-vps-comparendos.md) |
 
 ---
 
@@ -498,7 +500,11 @@ Basado en la plantilla [.env.prod.example](../.env.prod.example). Variables a te
 | `CORS_ORIGIN` | ✅ | URL pública **exacta** del frontend (esquema + host, **sin** barra final), p. ej. `https://dev.flitsas.online`. Si no coincide con el origen real, el navegador bloquea las respuestas. |
 | `VERIFIK_API_TOKEN` | ✅ | Token Verifik (RUNT). Secreto. |
 | `VERIFIK_BASE_URL` | ⛔ opc. | Default `https://api.verifik.co`. |
-| `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default `30`. |
+| `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Verifik en core-consultas. |
+| `KYVERUM_RUNT_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum RUNT. |
+| `KYVERUM_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum Verify. |
+| `KYVERUM_FINES_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum comparendos. |
+| `CONSULTAS_REMOTO_DEADLINE_SEGUNDOS` | ⛔ opc. | Default operativo `180` (HU #13762). Deadline gRPC core-api/ICT → core-consultas (`Consultas__Remoto__DeadlineSegundos` / `CoreConsultas__DeadlineSegundos`). |
 | `FRONTEND_PORT` / `GATEWAY_PORT` / `CORE_API_PORT` / `PYTHON_ML_PORT` / `MIGRACION_API_PORT` | ⛔ opc.* | Puertos del ambiente (DEV 40xx / QA 50xx / PDN 60xx). *El **CD los inyecta** automáticamente; defínelos en el `.env` solo para operación manual. Defaults DEV. `MIGRACION_API_PORT` (4030/5030/6030) no se publica en el host, pero lo leen **dos** servicios (migracion-api y el destino del gateway): si falta o diverge, `/admin/migracion` responde 502 sin cuerpo. |
 | `CORE_API_TAG` / `FRONTEND_TAG` / `PYTHON_ML_TAG` | ⛔ opc.* | Default `latest`. El **CD los inyecta**: tag móvil (`dev`/`qa`) en DEV/QA y `sha-<commit>` inmutable en PDN. **Para rollback manual**, fija el `sha-<commit>` deseado. |
 | `COMPOSE_PROJECT_NAME` | ⛔ opc. | El compose ya fija `name: flitdev`. Solo defínela si necesitas aislar varias instancias en el mismo VPS (evita que `up --remove-orphans` borre contenedores de otro stack). |

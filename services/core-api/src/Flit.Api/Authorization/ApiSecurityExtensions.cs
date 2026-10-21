@@ -24,6 +24,9 @@ public static class ApiSecurityExtensions
     public const string IctServiceScheme = "IctService";
     public const string IctServicePolicy = "IctService";
 
+    /// <summary>Policy del gRPC de catálogos (HU #13459): token de servicio de Identidad con el scope de catálogos.</summary>
+    public const string CatalogosServicioPolicy = "CatalogosServicio";
+
     public static IServiceCollection AddApiSecurity(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -140,6 +143,7 @@ public static class ApiSecurityExtensions
             // gRPC ICT: el service-token HMAC de siempre (esquema IctService, scope ict.orchestration) y, con
             // Ict:ServiceToken:AcceptIdentity, el token de servicio de Identidad de svc-ict (HU #13335).
             .AddPolicy(IctServicePolicy, policy => IctServiceAuthorization.Configure(policy, configuration, svcIssuer))
+            .AddPolicy(CatalogosServicioPolicy, CatalogosServicioAuthorization.Configure)
             // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.
             .AddPolicy(ExternalClientAuthorization.TramitesReadPolicy, policy => policy
                 .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)

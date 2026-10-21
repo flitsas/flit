@@ -33,7 +33,7 @@ export function FamilyPairCheckboxes({
           checked={readOn}
           onChange={() => onToggle(read.id)}
           aria-label={`Ver — ${moduleName}`}
-          className="h-3.5 w-3.5 accent-[#557EFF]"
+          className="h-3.5 w-3.5 accent-flit-brand"
         />
         <span className="text-xs">Ver</span>
       </label>
@@ -47,7 +47,7 @@ export function FamilyPairCheckboxes({
           disabled={createBlocked}
           onChange={() => onToggle(create.id)}
           aria-label={`Crear — ${moduleName}`}
-          className="h-3.5 w-3.5 accent-[#557EFF]"
+          className="h-3.5 w-3.5 accent-flit-brand"
         />
         <span className="text-xs">Crear</span>
       </label>

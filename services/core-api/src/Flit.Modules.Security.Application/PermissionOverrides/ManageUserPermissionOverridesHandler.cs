@@ -15,7 +15,7 @@ public sealed record UserOverrideItem(
     Guid PermissionId, string Slug, string ProductCode, string Effect, string Source, Guid GrantedBy, string? Name = null, string? ModuleCode = null, string? ModuleName = null);
 
 /// <summary>
-/// HU #13644 (ADR-0071, FB-5 a FB-8): otorgar, denegar y quitar permisos individuales dentro del tope del administrador.
+/// HU #13644 (ADR-0073, FB-5 a FB-8): otorgar, denegar y quitar permisos individuales dentro del tope del administrador.
 /// Habilitar (allow) o "volver al rol" cuando el resultado queda fuera del tope se rechaza; quitar o denegar siempre se puede.
 /// Cada operación escribe la bitácora; cada rechazo queda como <c>REJECTED</c> con su <c>reason_code</c> y lanza
 /// <see cref="PermissionOverrideRejectedException"/>. No hay cascada: perder el tope después no toca lo ya otorgado.

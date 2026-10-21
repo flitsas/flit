@@ -3,7 +3,7 @@
  * Fuente: `flit-2.0/.cursor/skills/flit-detalle-tramite/spec.md`
  */
 
-export const DETALLE_BLUE = '#557EFF';
+export const DETALLE_BLUE = 'var(--color-flit-brand)';
 export const DETALLE_NAVY = '#162744';
 export const DETALLE_GREEN = '#8CC63F';
 export const DETALLE_GOLD = '#F9AC00';
@@ -18,7 +18,7 @@ export const DETALLE_CANVAS = '#EEF5FF';
  * cambian el estado del trámite desde este modal (hoy: activar/continuar la subsanación) no
  * repitan el degradado como literal suelto, que es como se coló en otras pantallas.
  */
-export const DETALLE_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)';
+export const DETALLE_CTA_GRADIENT = 'linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)';
 
 /** Card interior: radius 12px, sombra mockup, dark #0B0F14 */
 export const DETALLE_CARD =

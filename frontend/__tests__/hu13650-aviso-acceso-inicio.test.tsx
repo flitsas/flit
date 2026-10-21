@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
 /**
- * HU #13650 (Feature #13102, ADR-0072) — el acceso por URL a un módulo sin permiso vuelve al inicio con el aviso
+ * HU #13650 (Feature #13102, ADR-0074) — el acceso por URL a un módulo sin permiso vuelve al inicio con el aviso
  * «No tienes acceso a este módulo.»; con el permiso se ve el módulo sin aviso.
  */
 

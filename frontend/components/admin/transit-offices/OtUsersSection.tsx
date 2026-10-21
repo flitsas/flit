@@ -427,7 +427,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           <h2 className="text-sm font-bold text-foreground">
             Usuarios
           </h2>
-          <p className="text-xs mt-0.5" style={{ color: "#557EFF" }}>
+          <p className="text-xs mt-0.5" style={{ color: "var(--color-flit-brand)" }}>
             Invita colaboradores a este organismo de tránsito y gestiona su acceso.
           </p>
         </div>
@@ -439,7 +439,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               onClick={() => setShowDeleted((v) => !v)}
               aria-pressed={showDeleted}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
-              style={{ color: "#557EFF" }}
+              style={{ color: "var(--color-flit-brand)" }}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
@@ -451,7 +451,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               type="button"
               onClick={() => setInviteOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               Invitar usuario
             </button>
@@ -755,7 +755,7 @@ function OtInviteUserDialog({
                       aria-describedby="ot-invite-role-hint"
                       checked={selectedRoleIds[0] === r.id}
                       onChange={() => setSelectedRoleIds([r.id])}
-                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                      className="h-3.5 w-3.5 accent-flit-brand"
                     />
                     <span>{r.name}</span>
                   </label>
@@ -781,7 +781,7 @@ function OtInviteUserDialog({
               type="submit"
               disabled={busy || missingRole}
               className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {busy ? "Enviando…" : "Enviar invitación"}
             </button>

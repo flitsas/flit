@@ -117,8 +117,8 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
             const n = i + 1;
             const done = n < step; const active = n === step;
             return (
-              <li key={n} className={`flex items-start gap-3 p-2.5 rounded-xl transition ${active ? "bg-white/80 scale-[1.02]" : done ? "" : "opacity-40"}`} style={active ? { boxShadow: "inset 0 0 0 2px #557eff" } : {}}>
-                <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0" style={{ background: done ? "#00dbd5" : active ? "#557eff" : "rgba(100,116,139,0.15)", color: done || active ? "white" : "#475569" }}>
+              <li key={n} className={`flex items-start gap-3 p-2.5 rounded-xl transition ${active ? "bg-white/80 scale-[1.02]" : done ? "" : "opacity-40"}`} style={active ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
+                <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0" style={{ background: done ? "var(--color-flit-tech)" : active ? "var(--color-flit-brand)" : "rgba(100,116,139,0.15)", color: done || active ? "white" : "#475569" }}>
                   {done ? <Check className="h-4 w-4" /> : n}
                 </div>
                 <div className="min-w-0">
@@ -135,7 +135,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
       <div className="space-y-4">
         <div className="glass rounded-2xl p-6 sm:p-8 min-h-[500px]">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "rgba(85,126,255,0.1)", color: "#557eff" }}>PASO {step}/10</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "var(--color-flit-brand)" }}>PASO {step}/10</span>
             <span className="text-[10px] font-mono text-slate-400">TRASP-02_FLIT-DRAFT</span>
           </div>
           <h2 className="text-2xl font-bold text-slate-800 mt-2">{STEPS[step - 1]}</h2>
@@ -148,7 +148,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   value={placa}
                   onChange={(e) => setPlaca(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
                   placeholder="ABC123"
-                  className="w-full font-mono text-4xl tracking-[0.3em] text-center bg-white/70 border-2 border-slate-200 rounded-2xl py-6 outline-none focus:border-[#557eff] transition"
+                  className="w-full font-mono text-4xl tracking-[0.3em] text-center bg-white/70 border-2 border-slate-200 rounded-2xl py-6 outline-none focus:border-flit-brand transition"
                 />
                 {collision && (
                   <div className="rounded-xl p-4" style={{ background: "rgba(255,78,0,0.08)", border: "1px solid #ff4e00" }}>
@@ -185,13 +185,13 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                       </div>
                     </>
                   ) : (
-                    <div className="sm:col-span-2 rounded-xl p-4" style={{ background: "rgba(0,219,213,0.1)", border: "1px solid #00dbd5" }}>
-                      <Check className="inline h-5 w-5 mr-2" style={{ color: "#00dbd5" }} />
+                    <div className="sm:col-span-2 rounded-xl p-4" style={{ background: "color-mix(in srgb, var(--color-flit-tech) 10%, transparent)", border: "1px solid var(--color-flit-tech)" }}>
+                      <Check className="inline h-5 w-5 mr-2" style={{ color: "var(--color-flit-tech)" }} />
                       <span className="font-semibold" style={{ color: "#00a39f" }}>Paz y Salvo Corporativo adjunto · Validación RUNT/RNMC superada</span>
                     </div>
                   )}
                 </div>
-                <button onClick={() => setPazSalvo(true)} className="w-full rounded-xl border-2 border-dashed border-[#557eff] py-8 text-sm text-[#557eff] hover:bg-[#557eff]/5 transition flex flex-col items-center gap-2">
+                <button onClick={() => setPazSalvo(true)} className="w-full rounded-xl border-2 border-dashed border-flit-brand py-8 text-sm text-flit-brand hover:bg-flit-brand/5 transition flex flex-col items-center gap-2">
                   <Upload className="h-6 w-6" />
                   Adjuntar Paz y Salvo Corporativo (Drag &amp; Drop)
                 </button>
@@ -222,10 +222,10 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 ] as const).map((m) => {
                   const sel = modalidad === m.id;
                   return (
-                    <button key={m.id} onClick={() => setModalidad(m.id)} className={`text-left rounded-2xl p-5 glass ${sel ? "" : "opacity-80"}`} style={sel ? { boxShadow: "inset 0 0 0 2px #557eff" } : {}}>
+                    <button key={m.id} onClick={() => setModalidad(m.id)} className={`text-left rounded-2xl p-5 glass ${sel ? "" : "opacity-80"}`} style={sel ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-slate-800">{m.title}</p>
-                        {sel && <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: "#557eff" }}><Check className="h-4 w-4 text-white" /></div>}
+                        {sel && <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-brand)" }}><Check className="h-4 w-4 text-white" /></div>}
                       </div>
                       <p className="text-xs text-slate-500 mt-2">{m.desc}</p>
                     </button>
@@ -240,13 +240,13 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   <p className="text-xs font-mono text-slate-400 uppercase">Vendedor</p>
                   <div className="flex gap-2">
                     {(["PN", "PJ"] as const).map((t) => (
-                      <button key={t} onClick={() => setVendedorTipo(t)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${vendedorTipo === t ? "text-white" : "text-slate-600 bg-white/60"}`} style={vendedorTipo === t ? { background: "#557eff" } : {}}>
+                      <button key={t} onClick={() => setVendedorTipo(t)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${vendedorTipo === t ? "text-white" : "text-slate-600 bg-white/60"}`} style={vendedorTipo === t ? { background: "var(--color-flit-brand)" } : {}}>
                         {t === "PN" ? "Persona Natural" : "Persona Jurídica (NIT)"}
                       </button>
                     ))}
                   </div>
-                  <input placeholder={vendedorTipo === "PN" ? "Nombres y apellidos" : "Razón social"} className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#557eff]" />
-                  <input placeholder={vendedorTipo === "PN" ? "Cédula" : "NIT"} className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-[#557eff]" />
+                  <input placeholder={vendedorTipo === "PN" ? "Nombres y apellidos" : "Razón social"} className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand" />
+                  <input placeholder={vendedorTipo === "PN" ? "Cédula" : "NIT"} className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-flit-brand" />
                   {vendedorTipo === "PJ" && (
                     <select className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm">
                       <option>Representante Legal: María Restrepo</option>
@@ -256,14 +256,14 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 </div>
                 <div className="space-y-3">
                   <p className="text-xs font-mono text-slate-400 uppercase">Comprador {modalidad === "leasing" && "(Locatario)"}</p>
-                  <input placeholder="Nombre completo" className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#557eff]" />
-                  <input placeholder="Identificación" className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-[#557eff]" />
+                  <input placeholder="Nombre completo" className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand" />
+                  <input placeholder="Identificación" className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-flit-brand" />
                   <div>
                     <input
                       placeholder="Correo electrónico"
                       onPaste={(e) => !allowCopyEmail && e.preventDefault()}
                       onCopy={(e) => !allowCopyEmail && e.preventDefault()}
-                      className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#557eff]"
+                      className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
                     />
                     {!allowCopyEmail && <p className="text-[10px] font-mono text-slate-400 mt-1">transferAllowsCopyEmail = false · copy/paste deshabilitado</p>}
                   </div>
@@ -286,12 +286,12 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   <div className="relative h-24 w-24 shrink-0">
                     <svg className="-rotate-90" viewBox="0 0 100 100">
                       <circle cx="50" cy="50" r="42" stroke="rgba(100,116,139,0.15)" strokeWidth="8" fill="none" />
-                      <circle cx="50" cy="50" r="42" stroke="#00dbd5" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${(ocrPct / 100) * 264} 264`} />
+                      <circle cx="50" cy="50" r="42" stroke="var(--color-flit-tech)" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${(ocrPct / 100) * 264} 264`} />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center font-mono font-bold text-slate-800">{ocrPct}%</div>
                   </div>
                   <div className="flex-1">
-                    <button onClick={() => { setOcrPct(0); setOcrRunning(true); }} disabled={ocrRunning} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center gap-2" style={{ background: "#557eff" }}>
+                    <button onClick={() => { setOcrPct(0); setOcrRunning(true); }} disabled={ocrRunning} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center gap-2" style={{ background: "var(--color-flit-brand)" }}>
                       {ocrRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Simular Procesamiento OCR (IA)
                     </button>
                     {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "#00a39f" }}>✓ Coincidencia ≥90% · Aprobación automática</p>}
@@ -306,7 +306,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {["UNICUS Digital", "Firma en Pantalla", "Baúl Corporativo"].map((m, i) => (
-                    <span key={m} className={`text-xs px-3 py-1.5 rounded-full ${i === 1 ? "text-white" : "bg-white/70 text-slate-600"}`} style={i === 1 ? { background: "#557eff" } : {}}>{m}</span>
+                    <span key={m} className={`text-xs px-3 py-1.5 rounded-full ${i === 1 ? "text-white" : "bg-white/70 text-slate-600"}`} style={i === 1 ? { background: "var(--color-flit-brand)" } : {}}>{m}</span>
                   ))}
                 </div>
                 <div className="rounded-xl bg-white border-2 border-slate-200 overflow-hidden">
@@ -345,7 +345,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   </div>
                 </label>
                 {isPaused && (
-                  <textarea value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} placeholder="Justificación obligatoria de la pausa (mín. 6 caracteres)..." className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#557eff] min-h-[120px]" />
+                  <textarea value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} placeholder="Justificación obligatoria de la pausa (mín. 6 caracteres)..." className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand min-h-[120px]" />
                 )}
               </div>
             )}
@@ -353,8 +353,8 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
             {step === 10 && (
               <div className="text-center py-6 space-y-5">
                 <div className="relative mx-auto h-24 w-24">
-                  <div className="absolute inset-0 rounded-full animate-pulse" style={{ background: "#557eff", filter: "blur(30px)", opacity: 0.5 }} />
-                  <div className="relative h-24 w-24 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg,#557eff,#00dbd5)" }}>
+                  <div className="absolute inset-0 rounded-full animate-pulse" style={{ background: "var(--color-flit-brand)", filter: "blur(30px)", opacity: 0.5 }} />
+                  <div className="relative h-24 w-24 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
                     <Check className="h-12 w-12 text-white" strokeWidth={3} />
                   </div>
                 </div>
@@ -362,14 +362,14 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   <h3 className="text-2xl font-bold text-slate-800">Transacción Emitida</h3>
                   <p className="text-sm text-slate-500 mt-1">Expediente blindado e inmutable en el holding.</p>
                 </div>
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono text-xs" style={{ background: "rgba(85,126,255,0.1)", color: "#557eff" }}>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono text-xs" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "var(--color-flit-brand)" }}>
                   <ShieldCheck className="h-4 w-4" /> Estado: 4 (Submitted) · Bus QX OK
                 </div>
                 <div className="glass rounded-xl p-4 text-left mx-auto max-w-xl">
                   <p className="text-[10px] font-mono text-slate-400 uppercase">SHA-256 Inmutable</p>
                   <p className="font-mono text-[11px] break-all text-slate-700 mt-1">{hash}</p>
                 </div>
-                <button onClick={onExit} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: "#557eff" }}>Volver a la Grilla Maestra</button>
+                <button onClick={onExit} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: "var(--color-flit-brand)" }}>Volver a la Grilla Maestra</button>
               </div>
             )}
           </div>
@@ -380,7 +380,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
           <div className="flex justify-between items-center">
             <button onClick={prev} disabled={step === 1} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm text-slate-700 disabled:opacity-40"><ArrowLeft className="h-4 w-4" /> Anterior</button>
             <p className="text-xs font-mono text-slate-400 hidden sm:block">Paso {step} de 10</p>
-            <button onClick={next} disabled={!canAdvance()} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed" style={{ background: "#557eff" }}>
+            <button onClick={next} disabled={!canAdvance()} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed" style={{ background: "var(--color-flit-brand)" }}>
               Continuar <ArrowRight className="h-4 w-4" />
             </button>
           </div>

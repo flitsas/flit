@@ -1,0 +1,180 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Fuentes de comparendos para Gestión de Comparendos (HU #13520, Feature #13464). Separado a propósito de
+// ConsultasService.ConsultarMultas, que es el chequeo (semáforo) de Trámites: aquí se devuelve el registro completo de
+// cada comparendo, sin caché, y un error nunca se convierte en «sin comparendos».
+//
+// Autenticación (contrato §3): token de servicio con aud=consultas y scope platform.consultas; empresa en la metadata
+// x-flit-tenant-id. Quien llama elige el canal y el proveedor (la configuración por empresa vive en el producto); este
+// servicio ejecuta, devuelve la respuesta cruda y mide el consumo. Los proveedores son información interna de FLIT: el
+// producto no se los muestra a sus clientes.
+service FuentesComparendosService {
+  // Comparendos de una identificación o de una placa por el canal y el proveedor indicados. FAILED_PRECONDITION si el
+  // proveedor no está conectado en el ambiente o no atiende el canal; INVALID_ARGUMENT si falta la clave.
+  rpc ConsultarComparendos(ConsultarComparendosRequest) returns (ConsultarComparendosResponse);
+
+  // Proveedores conocidos, los canales que atienden y si están conectados en este ambiente.
+  rpc ListarProveedoresComparendos(ListarProveedoresComparendosRequest) returns (ListarProveedoresComparendosResponse);
+
+  // Conductor que tenía el vehículo en una fecha según la API de contratos de la gestora (HU #13712; hoy solo Renting).
+  // FAILED_PRECONDITION si el proveedor no está conectado en el ambiente; INVALID_ARGUMENT si falta la placa o la fecha.
+  rpc ConsultarContratoConductor(ConsultarContratoConductorRequest) returns (ConsultarContratoConductorResponse);
+}
+
+enum CanalComparendos {
+  CANAL_COMPARENDOS_UNSPECIFIED = 0;
+  // SIMIT (SmartCloud o un proveedor alterno) por documento del propietario.
+  CANAL_COMPARENDOS_SIMIT_IDENTIFICACION = 1;
+  CANAL_COMPARENDOS_SIMIT_PLACA = 2;
+  // Fuente municipal (organismos que no reportan a SIMIT), con una respuesta por municipio.
+  CANAL_COMPARENDOS_MUNICIPAL_IDENTIFICACION = 3;
+  CANAL_COMPARENDOS_MUNICIPAL_PLACA = 4;
+}
+
+message ConsultarComparendosRequest {
+  CanalComparendos canal = 1;
+  // Clave del proveedor (ListarProveedoresComparendos). Obligatoria: el producto decide, no hay cadena de respaldo.
+  string proveedor = 2;
+  // Canales por identificación: tipo (CC, CE, NIT, TI, PA, CD, RC, CV) y número tal como se consulta (con o sin DV).
+  string tipo_documento = 3;
+  string numero_documento = 4;
+  // Canales por placa.
+  string placa = 5;
+  // Solo canales municipales: códigos de municipio a consultar; vacío = todos los que atienda el proveedor.
+  repeated string municipios = 6;
+  // Referencia opaca de quien consulta (por ejemplo el id del ciclo de ingesta). Solo trazabilidad.
+  string referencia = 7;
+}
+
+enum ResultadoFuente {
+  RESULTADO_FUENTE_UNSPECIFIED = 0;
+  RESULTADO_FUENTE_EXITOSA_CON_DATOS = 1;
+  // Respuesta bien formada que dice explícitamente que no hay comparendos. Solo esto autoriza a reconciliar ausencias.
+  RESULTADO_FUENTE_EXITOSA_VACIA = 2;
+  // Todo lo demás: no se debe tocar nada de esa clave.
+  RESULTADO_FUENTE_ERROR = 3;
+}
+
+enum TipoErrorFuente {
+  TIPO_ERROR_FUENTE_UNSPECIFIED = 0;
+  TIPO_ERROR_FUENTE_TIMEOUT = 1;
+  TIPO_ERROR_FUENTE_HTTP_NO_EXITOSO = 2;
+  TIPO_ERROR_FUENTE_SOAP_FAULT = 3;
+  TIPO_ERROR_FUENTE_RESPUESTA_INVALIDA = 4;
+  TIPO_ERROR_FUENTE_RED = 5;
+  TIPO_ERROR_FUENTE_AUTENTICACION = 6;
+  TIPO_ERROR_FUENTE_ESTADO_NO_OK = 7;
+  TIPO_ERROR_FUENTE_EXCEPCION = 8;
+}
+
+// Un comparendo como lo trae la fuente, ya normalizado. Fechas AAAA-MM-DD, hora HH:mm, valores en pesos como texto
+// decimal ("604100.00"). Lo que la fuente no trae va ausente (no vacío): el producto no debe borrar lo que ya tenía.
+message ComparendoDeFuente {
+  string numero = 1;
+  optional string placa = 2;
+  optional string tipo_documento_infractor = 3;
+  optional string numero_documento_infractor = 4;
+  optional string nombre_infractor = 5;
+  optional string codigo_infraccion = 6;
+  optional string descripcion_infraccion = 7;
+  optional string direccion_infraccion = 8;
+  optional string fecha_imposicion = 9;
+  optional string hora_imposicion = 10;
+  optional string fecha_notificacion = 11;
+  optional bool es_fotomulta = 12;
+  // Texto del organismo de tránsito tal como lo trae la fuente.
+  optional string secretaria = 13;
+  optional string tipo_vehiculo = 14;
+  optional string servicio_vehiculo = 15;
+  optional string valor_capital = 16;
+  optional string valor_adicional = 17;
+  optional string valor_total = 18;
+  optional string estado_fuente = 19;
+  optional string foto_evidencia_url = 20;
+}
+
+message ResultadoParcialFuente {
+  // Código del municipio (solo canales municipales).
+  optional string municipio = 1;
+  ResultadoFuente resultado = 2;
+  repeated ComparendoDeFuente comparendos = 3;
+  TipoErrorFuente tipo_error = 4;
+  optional string mensaje_error = 5;
+}
+
+message ConsultarComparendosResponse {
+  string proveedor = 1;
+  repeated ResultadoParcialFuente parciales = 2;
+  optional int32 http_status = 3;
+  int32 duracion_ms = 4;
+  // Respuesta del proveedor sin credenciales, para guardarla como evidencia (Habeas Data: el producto la cifra o la
+  // guarda con acceso restringido).
+  optional string respuesta_cruda = 5;
+  optional string content_type = 6;
+}
+
+message ListarProveedoresComparendosRequest {}
+
+message ListarProveedoresComparendosResponse {
+  repeated ProveedorComparendos proveedores = 1;
+}
+
+message ProveedorComparendos {
+  // Clave estable: smartcloud, verifik_simit, municipal, simulado.
+  string clave = 1;
+  string nombre = 2;
+  repeated CanalComparendos canales = 3;
+  // Tiene credenciales y contrato en este ambiente.
+  bool conectado = 4;
+  // Por qué no está conectado (por ejemplo «falta el contrato de SmartCloud»).
+  optional string motivo = 5;
+}
+
+message ConsultarContratoConductorRequest {
+  // Clave del proveedor de contratos: renting.
+  string proveedor = 1;
+  string placa = 2;
+  // Fecha de la infracción, AAAA-MM-DD.
+  string fecha = 3;
+  // Referencia opaca de quien consulta (por ejemplo el id del comparendo). Solo trazabilidad.
+  string referencia = 4;
+}
+
+enum ResultadoContratoConductor {
+  RESULTADO_CONTRATO_CONDUCTOR_UNSPECIFIED = 0;
+  RESULTADO_CONTRATO_CONDUCTOR_ENCONTRADO = 1;
+  // La API respondió bien y no hay contrato para la placa en esa fecha: se asigna a mano.
+  RESULTADO_CONTRATO_CONDUCTOR_NO_ENCONTRADO = 2;
+  // Todo lo demás: se reintenta, nunca se lee como «no encontrado».
+  RESULTADO_CONTRATO_CONDUCTOR_ERROR = 3;
+}
+
+// Lo que no trae la API va ausente. Tipo de documento como sigla (CC, CE, NIT, ...).
+message ConductorDeContrato {
+  optional string tipo_documento = 1;
+  optional string numero_documento = 2;
+  optional string nombres = 3;
+  optional string correo = 4;
+  optional string telefono = 5;
+  optional string direccion = 6;
+  optional string ciudad = 7;
+  optional string sucursal = 8;
+  optional string tipo_contrato = 9;
+}
+
+// Sin respuesta cruda a propósito: el contrato trae datos personales de clientes reales.
+message ConsultarContratoConductorResponse {
+  string proveedor = 1;
+  ResultadoContratoConductor resultado = 2;
+  ConductorDeContrato conductor = 3;
+  TipoErrorFuente tipo_error = 4;
+  optional string mensaje_error = 5;
+  optional int32 http_status = 6;
+  int32 duracion_ms = 7;
+  // El correo es el buzón de pruebas y no hay teléfono: el ambiente no tiene permitido el contacto real.
+  bool contacto_desviado = 8;
+}

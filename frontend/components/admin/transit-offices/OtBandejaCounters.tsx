@@ -151,8 +151,8 @@ export function OtBandejaCountersStrip({
       count: valor,
       ariaLabel: `${t.label}: ${valor ?? "sin dato"}. ${t.hint}`,
       title: t.hint,
-      activeBg: "rgba(85,126,255,0.08)",
-      activeColor: "#557EFF",
+      activeBg: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)",
+      activeColor: "var(--color-flit-brand)",
     };
   });
 

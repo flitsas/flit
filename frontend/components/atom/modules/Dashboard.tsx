@@ -82,8 +82,8 @@ const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Se
 
 /** Series de «Seguimiento operativo» (barra + leyenda) y la familia que cada una representa (HU #13665). */
 const SERIES = [
-  { label: "Matrículas", color: "#557EFF", family: "MATRICULAS" },
-  { label: "Traspasos", color: "#00DBD5", family: "TRASPASO" },
+  { label: "Matrículas", color: "var(--color-flit-brand)", family: "MATRICULAS" },
+  { label: "Traspasos", color: "var(--color-flit-tech)", family: "TRASPASO" },
   { label: "Otros", color: "#F9AC00", family: "OTROS" },
 ] as const;
 
@@ -167,7 +167,7 @@ function buildWelcomeBody(
 // activos el carrusel solo muestra el slide fijo (AC3).
 
 /** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
-const BRAND_GRADIENT = "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)";
+const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
 
 type WelcomeSlide = {
   type: "welcome";
@@ -513,7 +513,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const bannerColor = useDominantColor(s.type === "banner" ? s.imageUrl : undefined);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       {/* Fila superior: Banner + KPIs — la columna derecha fija el alto; el banner se estira (HU #12725 B.1). */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
@@ -579,7 +579,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             >
               <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
               <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#162744] shadow-lg">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
                   <ExternalLink className="h-5 w-5" aria-hidden="true" />
                 </span>
               </span>
@@ -673,10 +673,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             // queda incompleta y alineada a la izquierda.
             <div className="grid grid-cols-3 gap-3 flex-1" data-testid="dashboard-kpi-grid">
               {[
-                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF", family: null },
-                { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5", family: "MATRICULAS" as const },
+                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "var(--color-flit-brand)", family: null },
+                { label: "Matrículas", value: matriculas, icon: Car, color: "var(--color-flit-tech)", family: "MATRICULAS" as const },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00", family: "TRASPASO" as const },
-                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744", family: "OTROS" as const },
+                { label: "Otros Trámites", value: otros, icon: Layers, color: "var(--color-flit-primary)", family: "OTROS" as const },
                 { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F", family: null },
               ].filter((k) => k.family === null || showsInAggregates(k.family)).map((k) => {
                 const Icon = k.icon;
@@ -804,7 +804,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       return (
                         <li
                           key={f.status}
-                          className="flex items-center gap-3 p-2 rounded-xl bg-[rgba(85,126,255,0.06)] dark:bg-white/5"
+                          className="flex items-center gap-3 p-2 rounded-xl bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:bg-white/5"
                         >
                           <span
                             className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
@@ -849,7 +849,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               </h2>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: "Total", value: biometricStats?.total ?? 0, color: "#557EFF" },
+                  { label: "Total", value: biometricStats?.total ?? 0, color: "var(--color-flit-brand)" },
                   { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, color: "#8CC63F" },
                   { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "#F9AC00" },
                   { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "#FF4E00" },
@@ -912,7 +912,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       tickLine={false}
                     />
                     <Tooltip
-                      cursor={{ fill: "rgba(85,126,255,0.08)" }}
+                      cursor={{ fill: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)" }}
                       contentStyle={{
                         background: "rgba(22,39,68,0.95)",
                         border: "none",
@@ -920,7 +920,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                         color: "#fff",
                         fontSize: 11,
                       }}
-                      labelStyle={{ color: "#00DBD5", fontWeight: 600 }}
+                      labelStyle={{ color: "var(--color-flit-tech)", fontWeight: 600 }}
                     />
                     {SERIES.filter((s) => showsInAggregates(s.family)).map((s) => (
                       <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[4, 4, 0, 0]} />

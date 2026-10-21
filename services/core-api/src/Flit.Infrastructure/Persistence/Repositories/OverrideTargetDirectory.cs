@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// HU #13645 (ADR-0071, FB-9 a FB-16): pertenencia usuario-tenant, roles, estado de invitación y condición de Super Admin.
+/// HU #13645 (ADR-0073, FB-9 a FB-16): pertenencia usuario-tenant, roles, estado de invitación y condición de Super Admin.
 /// La app conecta como owner de la BD y la RLS no aplica al owner: el aislamiento por tenant sale de los filtros
 /// explícitos (<c>TenantId == tenantId</c>) de estas consultas, no de la RLS.
 /// <list type="bullet">

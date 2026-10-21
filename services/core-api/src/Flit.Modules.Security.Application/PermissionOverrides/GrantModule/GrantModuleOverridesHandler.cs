@@ -14,7 +14,7 @@ public sealed record GrantModuleOverridesCommand(
 public sealed record GrantModuleOverridesResult(string ProductCode, Guid BatchId, int Created, int Skipped, int OutOfCap = 0, int Excluded = 0, int NotEnforced = 0);
 
 /// <summary>
-/// "Módulo completo" es una FOTO (ADR-0071): crea un override por cada acción activa del módulo en este momento.
+/// "Módulo completo" es una FOTO (ADR-0073): crea un override por cada acción activa del módulo en este momento.
 /// Una acción agregada después NO queda otorgada.
 /// </summary>
 public sealed class GrantModuleOverridesHandler(IUserPermissionOverrideRepository repository)

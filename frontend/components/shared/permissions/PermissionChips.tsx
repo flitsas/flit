@@ -19,7 +19,7 @@ export function OutOfCapChip({ tooltip, id }: { tooltip: string; id: string }) {
       title={tooltip}
       aria-describedby={id}
       data-testid="out-of-cap-chip"
-      className="inline-flex items-center gap-1 rounded-full border border-current px-2 py-0.5 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]/40"
+      className="inline-flex items-center gap-1 rounded-full border border-current px-2 py-0.5 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
       style={{ color: "var(--badge-danger-fg)" }}
     >
       <Lock className="h-3 w-3" aria-hidden="true" />

@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 
-/** Texto único del aviso: lo muestran tanto `/?m=` sin permiso como la redirección del middleware (ADR-0072 §4). */
+/** Texto único del aviso: lo muestran tanto `/?m=` sin permiso como la redirección del middleware (ADR-0074 §4). */
 export const ACCESO_DENEGADO_MENSAJE = "No tienes acceso a este módulo.";
 
 /**
@@ -22,7 +22,7 @@ export function AccesoDenegadoAlert({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={onClose}
           aria-label="Cerrar aviso de acceso denegado"
-          className="rounded-md p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="rounded-md p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ color: "var(--badge-warning-fg)" }}
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />

@@ -79,7 +79,7 @@ function Rail({
   // esta pantalla: el mismo verde/naranja/azul que usan los chips del resto de la consola.
   const color =
     tipo === "sondeo"
-      ? "text-[#557EFF] border-[#557EFF]"
+      ? "text-flit-brand border-flit-brand"
       : esError
         ? "text-[#C2410C] border-[#C2410C]"
         : "text-[#15803D] border-[#15803D]";
@@ -184,7 +184,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
         aria-expanded={abierto}
         aria-controls={detalleId}
         onClick={() => setAbierto((v) => !v)}
-        className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#557EFF] hover:underline"
+        className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-flit-brand hover:underline"
       >
         {abierto ? "▾" : "▸"} Qué hay dentro de este bloque
       </button>

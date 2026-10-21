@@ -146,7 +146,7 @@ export function SignatureVaultFormPanel({
       disabled={!canSubmit}
       onClick={() => void handleSubmit()}
       className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-      style={{ background: "#557EFF" }}
+      style={{ background: "var(--color-flit-brand)" }}
     >
       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
       Registrar firma

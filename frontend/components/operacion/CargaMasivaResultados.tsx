@@ -85,7 +85,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
   if (cargando) {
     return (
-      <p className="flex items-center gap-2 text-xs text-[#162744]/70 dark:text-white/60">
+      <p className="flex items-center gap-2 text-xs text-flit-primary/70 dark:text-white/60">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         Cargando lotes…
       </p>
@@ -98,7 +98,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
   if (lotes.length === 0) {
     return (
-      <p className="text-xs text-[#162744]/70 dark:text-white/60" data-testid="carga-masiva-sin-lotes">
+      <p className="text-xs text-flit-primary/70 dark:text-white/60" data-testid="carga-masiva-sin-lotes">
         Todavía no has cargado ningún archivo. Cuando lo hagas, aquí verás en qué quedó cada fila.
       </p>
     );
@@ -109,7 +109,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   return (
     <div className="flex flex-col gap-4" data-testid="carga-masiva-resultados">
       <div className="flex items-center justify-between gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[#162744] dark:text-white">
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-flit-primary dark:text-white">
           <span className="shrink-0 font-semibold">Lote</span>
           <select
             value={detalle?.batch.id ?? ''}
@@ -149,7 +149,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
               </span>
             </InlineAlert>
           ) : (
-            <p className="text-xs text-[#162744] dark:text-white" data-testid="carga-masiva-contadores">
+            <p className="text-xs text-flit-primary dark:text-white" data-testid="carga-masiva-contadores">
               {`${detalle.batch.counts.created} creados · ${detalle.batch.counts.createdPending} por retomar · ${detalle.batch.counts.notCreated} no creados`}
             </p>
           )}
@@ -183,12 +183,12 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                     data-testid={`carga-masiva-fila-${fila.rowNumber}`}
                   >
                     <td
-                      className="rounded-l-xl border-y border-l px-4 py-3 text-[#162744] dark:text-white"
+                      className="rounded-l-xl border-y border-l px-4 py-3 text-flit-primary dark:text-white"
                       style={{ borderColor: '#DFE5ED' }}
                     >
                       {fila.rowNumber}
                     </td>
-                    <td className="border-y px-4 py-3 text-[#162744] dark:text-white" style={{ borderColor: '#DFE5ED' }}>
+                    <td className="border-y px-4 py-3 text-flit-primary dark:text-white" style={{ borderColor: '#DFE5ED' }}>
                       {fila.identificador ?? '—'}
                     </td>
                     <td className="border-y px-4 py-3" style={{ borderColor: '#DFE5ED' }}>
@@ -202,13 +202,13 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                           {etiquetaOutcome(fila.outcome)}
                         </button>
                       ) : (
-                        <span className="text-[#162744] dark:text-white">
+                        <span className="text-flit-primary dark:text-white">
                           {etiquetaOutcome(fila.outcome)}
                         </span>
                       )}
                     </td>
                     <td
-                      className="rounded-r-xl border-y border-r px-4 py-3 text-[#162744]/70 dark:text-white/60"
+                      className="rounded-r-xl border-y border-r px-4 py-3 text-flit-primary/70 dark:text-white/60"
                       style={{ borderColor: '#DFE5ED' }}
                     >
                       {fila.motivo ? mensajeMotivo(fila.motivo) : '—'}

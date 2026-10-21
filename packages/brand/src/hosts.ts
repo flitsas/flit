@@ -38,10 +38,13 @@ const DEFAULT_FLIT_HOSTS = [
   "!marcablancadev.flitsas.online",
   "!marcablancaqa.flitsas.online",
   "!marcablancapdn.flitsas.online",
+  // Red de prueba DAG1 en QA (PR #608): mismo trato que las tres de arriba.
+  "!marcablancadag1.flitsas.online",
   // Dominio de Trámites de la red de prueba con la suite (handoff-vps-suite.md §6.4): la red usa dos dominios.
   "!tramites.marcablancadev.flitsas.online",
   "!tramites.marcablancaqa.flitsas.online",
   "!tramites.marcablancapdn.flitsas.online",
+  "!tramites.marcablancadag1.flitsas.online",
 ];
 
 function parseHostList(raw: string | undefined): string[] {

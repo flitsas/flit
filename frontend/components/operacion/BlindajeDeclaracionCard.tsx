@@ -215,7 +215,7 @@ export function BlindajeDeclaracionCard({
       <div
         className={cn(
           'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md sm:max-w-sm dark:bg-[#162744]',
-          listo ? 'border' : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]',
+          listo ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]',
         )}
         style={{ borderColor: '#E2E8F0' }}
       >
@@ -229,7 +229,7 @@ export function BlindajeDeclaracionCard({
           {listo ? 'Validado' : '* Obligatorio'}
         </span>
 
-        <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: '#162744' }}>
+        <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: 'var(--color-flit-primary)' }}>
           Certificado de blindaje
         </p>
         <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB</p>
@@ -276,7 +276,7 @@ export function BlindajeDeclaracionCard({
             className="mt-3 rounded-lg px-2.5 py-2 text-[11px] leading-snug"
             style={{ background: '#F8FAFC' }}
           >
-            <p className="font-semibold" style={{ color: '#162744' }}>
+            <p className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
               <span className="font-normal opacity-70">Debes adjuntar: </span>
               {notaBlindaje(opcion).titulo}
             </p>
@@ -305,8 +305,8 @@ export function BlindajeDeclaracionCard({
                 disabled={busy || disabled}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
                 style={{
-                  borderColor: certificado ? '#557EFF' : '#FF4E00',
-                  color: certificado ? '#557EFF' : '#FF4E00',
+                  borderColor: certificado ? 'var(--color-flit-brand)' : '#FF4E00',
+                  color: certificado ? 'var(--color-flit-brand)' : '#FF4E00',
                   borderWidth: certificado ? 1 : 2,
                 }}
               >
@@ -340,7 +340,7 @@ export function BlindajeDeclaracionCard({
         aria-live="polite"
         className={cn('rounded-xl px-3 py-2 text-xs', opcion ? 'font-medium' : 'opacity-70')}
         style={
-          opcion ? { background: 'rgba(85,126,255,0.08)', color: '#557EFF' } : undefined
+          opcion ? { background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)', color: 'var(--color-flit-brand)' } : undefined
         }
       >
         {opcion

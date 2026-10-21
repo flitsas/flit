@@ -40,7 +40,7 @@ export interface DomainStatusPanelProps {
 
 const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: typeof Clock; color: string }> = {
   pending: { label: "Pendiente de comprobación", Icon: Clock, color: "#F9AC00" },
-  verified: { label: "Comprobado", Icon: ShieldCheck, color: "#557EFF" },
+  verified: { label: "Comprobado", Icon: ShieldCheck, color: "var(--color-flit-brand)" },
   active: { label: "Activo", Icon: CheckCircle2, color: "#8CC63F" },
   failed: { label: "Comprobación fallida", Icon: ShieldAlert, color: "#FF4E00" },
 };
@@ -177,7 +177,7 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
               onClick={() => void handleVerify()}
               disabled={verifying || (cooldownSeconds !== null && cooldownSeconds > 0)}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               <RefreshCw className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden />
               {verifying
@@ -216,7 +216,7 @@ function DomainStatusBody({ domain }: { domain: TenantDomainResponse }) {
   return (
     <div className="rounded-xl border p-4" style={{ borderColor: "#DFE5ED" }}>
       <p className="text-xs font-semibold opacity-70">Dominio</p>
-      <p data-testid="domain-host" className="mb-2 font-mono text-sm font-semibold" style={{ color: "#162744" }}>
+      <p data-testid="domain-host" className="mb-2 font-mono text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         {domain.host}
       </p>
 
@@ -254,7 +254,7 @@ function DnsInstructions({
 }) {
   return (
     <div className="mt-4">
-      <h3 className="mb-2 text-xs font-semibold" style={{ color: "#162744" }}>
+      <h3 className="mb-2 text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Registros DNS que debes crear
       </h3>
       {/* Bug #13055 — tabla homologada con el modelo de trámites (fija: registros DNS, sin paginar) */}

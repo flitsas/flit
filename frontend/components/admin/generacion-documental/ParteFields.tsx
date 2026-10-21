@@ -101,7 +101,7 @@ export function ParteFields({
           disabled={!documento || consultando}
           aria-describedby={`tf-${parte}-prefill-estado`}
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ backgroundColor: "#557EFF" }}
+          style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
           <Search className="h-3.5 w-3.5" aria-hidden="true" />
           {consultando
@@ -142,7 +142,7 @@ export function ParteFields({
           <button
             type="button"
             onClick={() => void prefill.ejecutar()}
-            className="flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             Reintentar la consulta
