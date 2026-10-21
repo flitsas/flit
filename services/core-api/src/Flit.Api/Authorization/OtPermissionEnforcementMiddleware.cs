@@ -10,11 +10,11 @@ public sealed class OtPermissionEnforcementOptions
     public const string Section = "Security:OtPermissionEnforcement";
 
     /// <summary>
-    /// Apagado por defecto: las rutas OT solo exigen su policy de rol, como hoy. Encendido, cada ruta de
-    /// <see cref="OtPermissionMap"/> exige además su slug OT en el claim <c>permissions</c>. Encender al menos 12 h
-    /// después del despliegue que asigna los slugs (los permisos viajan en el JWT).
+    /// Encendido por defecto (decisión del usuario, 2026-10-21): cada ruta de <see cref="OtPermissionMap"/> exige además
+    /// su slug OT en el claim <c>permissions</c>. Apagarlo es el freno de emergencia: las rutas OT vuelven a exigir solo su
+    /// policy de rol. En el primer despliegue hay que cerrar las sesiones abiertas (los permisos viajan en el JWT).
     /// </summary>
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>

@@ -11,11 +11,12 @@ public sealed class ModulePermissionEnforcementOptions
     public const string Section = "Security:ModulePermissionEnforcement";
 
     /// <summary>
-    /// Apagado por defecto: las rutas con <see cref="ModulePermissionRequirement"/> se comportan como antes (solo su policy
-    /// de rol). Encendido, exigen el slug en el claim <c>permissions</c>. Encender al menos 12 h después del despliegue que
-    /// asigna los slugs (los permisos viajan en el JWT), igual que <see cref="OtPermissionEnforcementOptions"/>.
+    /// Encendido por defecto (decisión del usuario, 2026-10-21): las rutas con <see cref="ModulePermissionRequirement"/>
+    /// exigen el slug en el claim <c>permissions</c>. Apagarlo es el freno de emergencia: vuelven a exigir solo su policy de
+    /// rol. Los permisos viajan en el JWT: en el primer despliegue hay que cerrar las sesiones abiertas para que todos
+    /// reciban los slugs nuevos.
     /// </summary>
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>Slug que un módulo instrumentado por el Feature #13105 exige solo con el flag encendido.</summary>
