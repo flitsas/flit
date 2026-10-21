@@ -49,7 +49,7 @@ public static class IntempoVehicleResultMapper
         {
             MapEstadoVehiculo(response.EstadoDelVehiculo),
             MapSoat(response.SoatNacionales),
-            MapGravamenes(response.TieneGravamenes, response.Prendas, response.LimitacionesPropiedad, response.Gravamenes),
+            MapGravamenes(response),
         };
 
         var hydrated = MapHydratedFields(response);
@@ -121,37 +121,31 @@ public static class IntempoVehicleResultMapper
             Datos: soatDatos);
     }
 
-    private static ConsultationCheck MapGravamenes(
-        string? tieneGravamenes,
-        string? prendas,
-        List<object>? limitaciones,
-        List<IntempoGravamen>? gravamenesDetalle)
-    {
-        var sinGravamenes = IsNo(tieneGravamenes);
-        var sinPrendas = IsNo(prendas);
-        var sinLimitaciones = limitaciones is null || limitaciones.Count == 0;
-        var sinDetalle = gravamenesDetalle is null || gravamenesDetalle.Count == 0;
-
-        if (sinGravamenes && sinPrendas && sinLimitaciones && sinDetalle)
-        {
-            return new ConsultationCheck(
-                "gravamenes", "Gravámenes y limitaciones", Ok, Provider,
-                "Sin gravámenes ni prendas registradas en el RUNT");
-        }
-
-        return new ConsultationCheck(
-            "gravamenes",
-            "Gravámenes y limitaciones",
-            Warn,
+    /// <summary>
+    /// HU #13776 — mismo semáforo y mismo armador de mensaje que Kyverum y Verifik
+    /// (<see cref="RuntGarantiasMobiliarias.BuildCheck"/>), alimentados con lo MISMO que se hidrata: las
+    /// garantías y limitaciones se cuentan sobre el JSON que se guarda, así el check queda en <c>warn</c> si y
+    /// solo si <see cref="RuntGravamenSignal"/> reporta gravamen sobre el trámite.
+    /// </summary>
+    private static ConsultationCheck MapGravamenes(IntempoVehicleResponse r) =>
+        RuntGarantiasMobiliarias.BuildCheck(
             Provider,
-            $"El vehículo tiene gravámenes, prendas o limitaciones (gravámenes: {NormSiNo(tieneGravamenes)} · prendas: {NormSiNo(prendas)})");
-    }
+            r.TieneGravamenes,
+            r.Prendas,
+            RuntGravamenDatos.ContarGarantias(DetalleJson(r)),
+            r.Prendario,
+            RuntGravamenDatos.ContarLimitaciones(LimitacionesJson(r)));
 
-    private static string NormSiNo(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
+    private static string DetalleJson(IntempoVehicleResponse r) =>
+        r.Gravamenes is { Count: > 0 } detalle
+            ? System.Text.Json.JsonSerializer.Serialize(detalle)
+            : RuntGarantiasMobiliarias.SinGarantiasJson;
 
-    private static bool IsNo(string? value) =>
-        string.Equals(value, "NO", StringComparison.OrdinalIgnoreCase);
+    // HU #13776 — antes se descartaban. Se guardan tal como llegan (List<object> = JsonElement crudos).
+    private static string LimitacionesJson(IntempoVehicleResponse r) =>
+        r.LimitacionesPropiedad is { Count: > 0 } limitaciones
+            ? System.Text.Json.JsonSerializer.Serialize(limitaciones)
+            : RuntGarantiasMobiliarias.SinLimitacionesJson;
 
     private static List<HydratedField> MapHydratedFields(IntempoVehicleResponse r)
     {
@@ -207,17 +201,14 @@ public static class IntempoVehicleResultMapper
 
         // Señal RUNT de prenda/gravamen (+ detalle de acreedores cuando Intempo lo trae). Bug #13203
         // (revisión PR #504): las claves de la señal se escriben SIEMPRE, vacías si no hay dato, para
-        // que una re-consulta pise lo que dejó la anterior (el upsert no borra). El check no cambia.
+        // que una re-consulta pise lo que dejó la anterior (el upsert no borra). HU #13776: el dato
+        // prendario y las limitaciones a la propiedad también son señal y siguen la misma regla.
         fields.Add(new HydratedField(RuntGravamenDatos.GravamenesKey, RuntGarantiasMobiliarias.Blank(r.TieneGravamenes), null));
         fields.Add(new HydratedField(RuntGravamenDatos.PrendasKey, RuntGarantiasMobiliarias.Blank(r.Prendas), null));
-        Add(fields, "runt_prendario", r.Prendario);
+        fields.Add(new HydratedField(RuntGravamenDatos.PrendarioKey, RuntGarantiasMobiliarias.Blank(r.Prendario), null));
         fields.Add(new HydratedField(RuntGarantiasMobiliarias.NombreAcreedorKey, RuntGarantiasMobiliarias.Blank(r.NombreAcreedor), null));
-        fields.Add(new HydratedField(
-            RuntGravamenDatos.DetalleKey,
-            null,
-            r.Gravamenes is { Count: > 0 } detalle
-                ? System.Text.Json.JsonSerializer.Serialize(detalle)
-                : RuntGarantiasMobiliarias.SinGarantiasJson));
+        fields.Add(new HydratedField(RuntGravamenDatos.DetalleKey, null, DetalleJson(r)));
+        fields.Add(new HydratedField(RuntGravamenDatos.LimitacionesKey, null, LimitacionesJson(r)));
 
         // HU #11137 — SOAT. Este mapper producía una verificación de estado y NINGÚN campo, así que un
         // trámite consultado por Intempo emitía la tabla certificadora del SOAT entera en blanco. El

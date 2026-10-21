@@ -242,6 +242,30 @@ public sealed class IctPrendaResolverTests
         r.Motivo.Should().Be(IctPrendaResolver.MotivoGravamenNoPrendario);
     }
 
+    // HU #13776 AC6 / CF-10 — la señal única ahora cuenta dato prendario y limitaciones a la propiedad,
+    // pero el ICT sigue distinguiendo prenda de gravamen no prendario: solo-limitaciones o solo-prendario
+    // NO cambian la resolución frente a la de un RUNT negativo.
+    [Theory]
+    [InlineData("1", ProcedureFamily.Traspaso)]
+    [InlineData("2", ProcedureFamily.Traspaso)]
+    [InlineData("2", ProcedureFamily.Matriculas)]
+    [InlineData(null, ProcedureFamily.Traspaso)]
+    public void HU13776_AC6_SoloLimitacionesOPrendario_NoCambiaLaResolucionIct(string? operacion, ProcedureFamily familia)
+    {
+        var sinExtras = Resolver("negativa", operacion, familia);
+        List<ProcedureInstanceFieldValue> conExtras =
+        [
+            .. SenalRunt("negativa"),
+            Fv("runt_limitaciones_propiedad", null,
+                """[{"tipoLimitacion":"PRENDA","aFavorDe":"ACREEDOR DE PRUEBA S.A.S.","documento":"900000001"}]"""),
+            Fv("runt_prendario", "SI"),
+            .. Cuerpo(operacion),
+        ];
+
+        RuntGravamenSignal.Reporta(conExtras).Should().BeTrue("precondición: la señal única sí reporta gravamen");
+        IctPrendaResolver.Resolver(conExtras, familia).Should().BeEquivalentTo(sinExtras);
+    }
+
     [Fact]
     public void BanderaIlegible_NoSeTomaComoNegativa()
     {

@@ -86,4 +86,63 @@ public sealed class RuntGravamenSignalTests
         RuntGravamenSignal.ContarGarantias(json).Should().Be(3);
         RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_gravamenes", json: "[{}]"))).Should().BeFalse();
     }
+
+    // ── HU #13776 — señal única con dato prendario y limitaciones a la propiedad ─────────────────
+    // Datos ficticios (Ley 1581): acreedor «ACREEDOR DE PRUEBA S.A.S.», NIT 900000001.
+
+    private const string UnaLimitacion =
+        """[{"tipoLimitacion":"PRENDA","aFavorDe":"ACREEDOR DE PRUEBA S.A.S.","documento":"900000001"}]""";
+
+    [Fact]
+    public void HU13776_AC1_LimitacionesNoVacias_ReportaGravamen()
+    {
+        RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_limitaciones_propiedad", json: UnaLimitacion)))
+            .Should().BeTrue("una limitación a la propiedad «a favor de» es gravamen aunque las banderas digan NO");
+    }
+
+    [Fact]
+    public void HU13776_AC1_LimitacionesSoloEnValueText_ReportaGravamen()
+    {
+        RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_limitaciones_propiedad", text: UnaLimitacion)))
+            .Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("SI")]
+    [InlineData("SÍ")]
+    [InlineData(" si ")]
+    [InlineData("1")]
+    public void HU13776_AC2_PrendarioAfirmativoSinOtrasBanderas_ReportaGravamen(string prendario)
+    {
+        RuntGravamenSignal.Reporta([Fv("runt_prendario", prendario)]).Should().BeTrue();
+        RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_prendario", prendario))).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("NO", "[]")]
+    [InlineData("", "")]
+    [InlineData(null, null)]
+    [InlineData("N", "[{}]")]
+    [InlineData("NO", "[null, \"\", {}]")]
+    [InlineData("NO", "{roto")]
+    [InlineData("NO", "null")]
+    public void HU13776_AC3_PrendarioYLimitacionesNegativosOVacios_NoReporta(string? prendario, string? limitaciones)
+    {
+        RuntGravamenSignal.Reporta(BanderasNo(
+                Fv("runt_gravamenes", json: "[]"),
+                Fv("runt_prendario", prendario),
+                Fv("runt_limitaciones_propiedad", json: limitaciones)))
+            .Should().BeFalse();
+        RuntGravamenSignal.Reporta([]).Should().BeFalse("sin ningún dato no se inventa gravamen");
+    }
+
+    [Fact]
+    public void HU13776_Limitaciones_SoloCuentanElementosConDato()
+    {
+        RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_limitaciones_propiedad",
+                json: """[null, "", "  ", {}, {"x":null}, {"x":"  "}, []]""")))
+            .Should().BeFalse("ningún elemento trae dato");
+        RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_limitaciones_propiedad", json: """[null, "EMBARGO"]""")))
+            .Should().BeTrue();
+    }
 }
