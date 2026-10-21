@@ -185,6 +185,17 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
         ).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<string>> FindTakenCodesAsync(
+        Guid? tenantId, string targetEntityType, string prefix, CancellationToken ct)
+    {
+        var lowerPrefix = prefix.ToLowerInvariant();
+        var query = db.Roles.AsNoTracking().Where(r => r.DeletedAt == null && r.Code.ToLower().StartsWith(lowerPrefix));
+        query = tenantId is { } tenant
+            ? query.Where(r => r.TenantId == null || r.TenantId == tenant)
+            : query.Where(r => (r.TenantId == null && r.TargetEntityType == targetEntityType) || r.TenantId != null);
+        return await query.Select(r => r.Code.ToLower()).Distinct().ToListAsync(ct);
+    }
+
     public async Task<IReadOnlySet<string>> GetEnabledProductCodesAsync(Guid tenantId, CancellationToken ct)
     {
         var enabled = await db.Set<TenantProductEntity>().AsNoTracking()

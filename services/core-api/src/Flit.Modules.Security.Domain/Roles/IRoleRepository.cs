@@ -36,6 +36,14 @@ public interface IRoleRepository
     /// </summary>
     Task<bool> CodeTakenForTenantAsync(Guid tenantId, string code, CancellationToken ct);
 
+    /// <summary>
+    /// HU #13653: codes vigentes (en minúsculas) que empiezan por <paramref name="prefix"/> y chocarían con un rol nuevo
+    /// en el ámbito real de unicidad de <c>security.roles</c>. Con <paramref name="tenantId"/>: los globales (cualquier tipo
+    /// de entidad) y los propios del tenant. Sin tenant (rol global): los globales del mismo tipo de entidad y los de
+    /// cualquier tenant (el disparador <c>tr_roles_tenant_code_not_global</c> los compara). Los borrados no cuentan.
+    /// </summary>
+    Task<IReadOnlyList<string>> FindTakenCodesAsync(Guid? tenantId, string targetEntityType, string prefix, CancellationToken ct);
+
     /// <summary>Cambia nombre y descripción de un rol propio del tenant.</summary>
     Task UpdateDetailsAsync(Guid roleId, string name, string? description, CancellationToken ct);
 

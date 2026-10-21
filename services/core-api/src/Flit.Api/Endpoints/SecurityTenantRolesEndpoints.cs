@@ -190,7 +190,7 @@ public static class TenantRoleErrors
         InvalidTargetEntityTypeException => Json(StatusCodes.Status400BadRequest, "INVALID_TARGET_ENTITY_TYPE",
             "Una compañía solo puede crear roles de tipo COMPANY."),
         InvalidRoleInputException => Json(StatusCodes.Status400BadRequest, "INVALID_ROLE_INPUT",
-            "El código (2 a 50 caracteres: letras, números, punto, guion o guion bajo) y el nombre (hasta 100) son obligatorios."),
+            "Escribe un nombre para el rol (hasta 100 caracteres)."),
         InvalidRoleProductException => Json(StatusCodes.Status400BadRequest, "INVALID_ROLE_PRODUCT",
             "El producto del rol no es válido."),
         RolePermissionProductMismatchException => Json(StatusCodes.Status400BadRequest, "ROLE_PERMISSION_PRODUCT_MISMATCH",

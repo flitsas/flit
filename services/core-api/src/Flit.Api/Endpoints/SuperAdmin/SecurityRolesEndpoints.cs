@@ -175,7 +175,8 @@ internal static class SecurityRolesEndpoints
               AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Delete, "role", "ROLE", "id"));
     }
 
-    private sealed record CreateRoleRequest(string TargetEntityType, string Code, string Name, string? Description, string? ProductCode = null);
+    /// <summary>HU #13653: <c>Code</c> es opcional; sin él, el servidor lo genera a partir de <c>Name</c>.</summary>
+    private sealed record CreateRoleRequest(string TargetEntityType, string? Code, string Name, string? Description, string? ProductCode = null);
 
     private sealed record SetPermissionsRequest(List<Guid> PermissionIds);
 }
