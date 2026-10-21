@@ -62,6 +62,8 @@ public static class Program
         builder.Services.AddProteccionDocumentos(builder.Configuration);
         builder.Services.AddScoped<Modulos.Vehiculos.ServicioConfirmacionVehiculos>();
         builder.Services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Modulos.Consultas.EncoladorConsultasNulo>();
+        // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
+        builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();

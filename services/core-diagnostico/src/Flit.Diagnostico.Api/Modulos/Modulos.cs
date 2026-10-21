@@ -18,6 +18,7 @@ public static class Modulos
         Diagnosticos.DiagnosticosEndpoints.Map(api);
         Carga.CargaEndpoints.Map(api);
         Vehiculos.VehiculosEndpoints.Map(api);
+        Express.ExpressEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

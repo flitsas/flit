@@ -60,6 +60,21 @@ internal sealed partial class ServicioConfirmacionVehiculos(
     {
         db.ChangeTracker.Clear();
         await using var transaccion = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var confirmacion = await GuardarEnTransaccionAbiertaAsync(diagnosticoId, capturados, ct).ConfigureAwait(false);
+        await transaccion.CommitAsync(ct).ConfigureAwait(false);
+        return confirmacion;
+    }
+
+    /// <summary>
+    /// Revalida, guarda los válidos, deja el estimado en la cabecera y entrega la lista al encolador dentro de la transacción
+    /// que ya abrió quien llama (la confirmación del lote o el Express, HU #13753, que crea la cabecera en la misma); no
+    /// confirma ni revierte: eso lo decide quien abrió la transacción.
+    /// </summary>
+    internal async Task<ConfirmacionLote> GuardarEnTransaccionAbiertaAsync(Guid diagnosticoId, IReadOnlyList<VehiculoCapturado> capturados, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(capturados);
+        if (db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("La confirmación de vehículos exige una transacción abierta.");
         var cabecera = await db.Set<CabeceraDiagnostico>().SingleOrDefaultAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("El diagnóstico");
         if (cabecera.Estado != EstadoDiagnostico.Creado)
@@ -92,7 +107,6 @@ internal sealed partial class ServicioConfirmacionVehiculos(
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await encolador.EncolarAsync(
             cabecera.Id, [.. vehiculos.Select(v => new VehiculoAEncolar(v.Id, v.IdentificadorNorm, v.TipoIdentificador))], ct).ConfigureAwait(false);
-        await transaccion.CommitAsync(ct).ConfigureAwait(false);
         return new ConfirmacionLote(cabecera.Id, resultado, vehiculos, parametros.MostrarEstimado);
     }
 

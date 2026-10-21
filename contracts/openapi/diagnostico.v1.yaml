@@ -49,6 +49,10 @@ tags:
     description: >
       Confirmación de los vehículos del lote (MOD02, HU #13751): revalidación en servidor, documento del locatario
       cifrado y entrega de la lista limpia al motor de consultas. Campos en snake_case y códigos de la base.
+  - name: Express
+    description: >
+      Diagnóstico Express de un solo vehículo (MOD02, HU #13753): cabecera y vehículo en una transacción, con las mismas
+      reglas de la cabecera y de la confirmación, y el estimado de vista previa. Campos en snake_case y códigos de la base.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -588,6 +592,111 @@ paths:
           description: >
             `campo` = vehiculos. `code` = SIN_VALIDOS (ningún vehículo válido o lista vacía) o LIMITE_SUPERADO (los válidos
             superan limite_vehiculos_lote; el mensaje trae ambos números). No se guarda nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/express:
+    post:
+      tags: [Express]
+      operationId: crearDiagnosticoExpress
+      summary: Crea un diagnóstico Express de un solo vehículo (cabecera y vehículo en una transacción)
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13753, F02-H6, F02-C4/C12/C13, F01-C10). El backoffice FLIT no lo tiene
+        (R-6): 403. Primero revalida el vehículo con la regla de fila de la carga y de la confirmación: identificador
+        ausente (IDENTIFICADOR_REQUERIDO), que no es placa ni VIN (IDENTIFICADOR_INVALIDO), de más de 8 caracteres de placa
+        o 17 de VIN después de limpiar, nunca recortado (IDENTIFICADOR_DEMASIADO_LARGO), o documento del locatario mal
+        formado (TIPO_DOCUMENTO_INVALIDO, DOCUMENTO_INVALIDO, DOCUMENTO_INCOMPLETO): 422 con `campo` y no se crea nada.
+        Después, en una sola transacción, crea la cabecera en CREADO con es_express = true y las mismas reglas de
+        POST /diagnosticos (422 con su campo; 503 con CON_ANALISIS y el catálogo caído) y confirma el vehículo como
+        POST /diagnosticos/{id}/vehiculos (documento del locatario cifrado con origen DECLARADO_CLIENTE, estimado en la
+        cabecera, entrega al motor de consultas). Si algo falla no queda cabecera ni vehículo. Sin nombre (o solo
+        espacios) se autogenera «Express IDENTIFICADOR dd/mm/aaaa» con el identificador normalizado y la fecha de
+        Colombia; un nombre enviado se valida como en POST /diagnosticos (máximo 150).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpressEntrada"
+      responses:
+        "201":
+          description: Diagnóstico Express creado con su único vehículo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpressCreado"
+        "400":
+          description: Cuerpo que no es JSON válido.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.diagnosticos.crear (sin cuerpo; el backoffice FLIT, R-6); sin usuario (`code` = SIN_USUARIO),
+            sin compañía (`code` = SIN_EMPRESA) o compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            Regla del vehículo (`campo` = identificador, tipo_documento_locatario o documento_locatario) o de la cabecera
+            (los códigos de POST /diagnosticos). No se crea nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: "`code` = CATALOGO_NO_DISPONIBLE: CON_ANALISIS y el catálogo de tipos de trámite no está disponible. No se crea nada."
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar.
+              schema:
+                type: integer
+                example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/express/estimado:
+    post:
+      tags: [Express]
+      operationId: estimarDiagnosticoExpress
+      summary: Estimado de consultas por fuente del Express antes de lanzarlo (no persiste nada)
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13753, F01-C11). Endpoint nuevo frente al plan §6.1. Recibe el mismo
+        cuerpo que POST /express y no guarda nada. Con estimado_consultas = ANTES_DE_LANZAR en la configuración vigente de
+        la compañía del token responde mostrar_estimado = true y el estimado por fuente del alcance para un vehículo (las
+        fuentes del locatario cuentan 0 sin documento de locatario); con otro valor responde mostrar_estimado = false sin
+        estimado_consultas. Un código de fuente desconocido es 422 VALOR_FUERA_DE_CONJUNTO y un documento del locatario mal
+        formado es 422 con su campo. No valida el identificador ni las fuentes habilitadas (eso lo hace POST /express).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpressEntrada"
+      responses:
+        "200":
+          description: Estimado de vista previa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstimadoExpress"
+        "400":
+          description: Cuerpo que no es JSON válido.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear (el backoffice FLIT, R-6); sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: "`code` = VALOR_FUERA_DE_CONJUNTO (fuente desconocida) o error de forma del documento del locatario, con `campo`."
           content:
             application/json:
               schema:
@@ -1310,6 +1419,85 @@ components:
           type: string
           nullable: true
           description: Enmascarado («****» y los 4 últimos).
+
+    ExpressEntrada:
+      type: object
+      description: >
+        Cuerpo de POST /express y POST /express/estimado (HU #13753): la cabecera como en CabeceraEntrada, pero con el
+        nombre opcional, y el único vehículo con el documento del locatario opcional (tipo y número juntos).
+      required: [modo, alcance, identificador]
+      properties:
+        nombre:
+          type: string
+          nullable: true
+          maxLength: 150
+          description: Vacío o ausente se autogenera «Express IDENTIFICADOR dd/mm/aaaa».
+        modo:
+          $ref: "#/components/schemas/ModoDiagnostico"
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          description: Obligatorio con CON_ANALISIS; se descarta con SIMPLE.
+        alcance:
+          $ref: "#/components/schemas/Alcance"
+        identificador:
+          type: string
+          nullable: true
+          description: Placa o VIN tal como lo escribió el cliente.
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          description: CC, CE, NIT, PAS o TI.
+        documento_locatario:
+          type: string
+          nullable: true
+          description: "@pii:high Número del documento; se guarda cifrado y nunca vuelve en claro."
+      example:
+        identificador: ABC123
+        modo: SIMPLE
+        alcance:
+          por_vehiculo: [RUNT]
+          por_propietario: []
+          por_locatario: []
+
+    ExpressCreado:
+      type: object
+      required: [id, nombre, modo, es_express, estado, creado_en, vehiculo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        modo:
+          $ref: "#/components/schemas/ModoDiagnostico"
+        es_express:
+          type: boolean
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        creado_en:
+          type: string
+          format: date-time
+        vehiculo:
+          $ref: "#/components/schemas/VehiculoConfirmado"
+        estimado_consultas:
+          type: array
+          description: Solo con estimado_consultas = ANTES_DE_LANZAR en la copia de configuración.
+          items:
+            $ref: "#/components/schemas/EstimadoFuente"
+
+    EstimadoExpress:
+      type: object
+      required: [mostrar_estimado]
+      properties:
+        mostrar_estimado:
+          type: boolean
+          description: Verdadero con estimado_consultas = ANTES_DE_LANZAR en la configuración vigente de la compañía.
+        estimado_consultas:
+          type: array
+          description: Solo cuando mostrar_estimado es verdadero.
+          items:
+            $ref: "#/components/schemas/EstimadoFuente"
 
     ErrorRegla:
       type: object

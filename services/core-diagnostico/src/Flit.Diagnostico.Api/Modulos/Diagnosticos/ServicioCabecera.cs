@@ -26,7 +26,11 @@ public sealed class ServicioCabecera(
 
     private readonly ValidadorCabecera _validador = new(catalogo, disponibilidad.Disponible);
 
-    public async Task<CabeceraDiagnostico> CrearAsync(CabeceraEntradaDto entrada, CancellationToken ct)
+    /// <summary>
+    /// Crea la cabecera en CREADO. Con <paramref name="esExpress"/> la marca como captura Express (HU #13753): el Express la
+    /// crea dentro de su propia transacción, junto con su único vehículo.
+    /// </summary>
+    public async Task<CabeceraDiagnostico> CrearAsync(CabeceraEntradaDto entrada, CancellationToken ct, bool esExpress = false)
     {
         usuario.EmpresaPropia();
         var autor = Autor();
@@ -40,6 +44,7 @@ public sealed class ServicioCabecera(
             Nombre = solicitud.Nombre!.Trim(),
             Modo = solicitud.Modo,
             TipoTramiteCodigo = Tipo(solicitud),
+            EsExpress = esExpress,
             Alcance = [.. solicitud.Alcance.Fuentes],
             Configuracion = copia.ComoJson(),
             Estado = EstadoDiagnostico.Creado,
@@ -127,12 +132,14 @@ public sealed class ServicioCabecera(
         if (!CodigosDeEnum.TryLeer<ModoDiagnostico>(entrada.Modo, out var modo))
             throw FueraDeConjunto(CampoModo);
 
-        var alcance = new Alcance(
-            Fuentes(entrada.Alcance?.PorVehiculo, GrupoFuente.PorVehiculo),
-            Fuentes(entrada.Alcance?.PorPropietario, GrupoFuente.PorPropietario),
-            Fuentes(entrada.Alcance?.PorLocatario, GrupoFuente.PorLocatario));
-        return new SolicitudCabecera(entrada.Nombre, modo, entrada.TipoTramiteCodigo, alcance);
+        return new SolicitudCabecera(entrada.Nombre, modo, entrada.TipoTramiteCodigo, LeerAlcance(entrada.Alcance));
     }
+
+    /// <summary>Alcance del cuerpo en sus tres grupos (también lo lee el estimado del Express, HU #13753); un código desconocido es 422.</summary>
+    internal static Alcance LeerAlcance(AlcanceDto? alcance) => new(
+        Fuentes(alcance?.PorVehiculo, GrupoFuente.PorVehiculo),
+        Fuentes(alcance?.PorPropietario, GrupoFuente.PorPropietario),
+        Fuentes(alcance?.PorLocatario, GrupoFuente.PorLocatario));
 
     private static Fuente[] Fuentes(IReadOnlyList<string>? codigos, GrupoFuente grupo) =>
         [.. (codigos ?? []).Select(c => CodigosDeEnum.TryLeer<Fuente>(c, out var f) ? f : throw FueraDeConjunto(ValidadorCabecera.CampoGrupo(grupo))).Distinct()];
