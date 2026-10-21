@@ -278,6 +278,8 @@ services:
       # identidad a core-consultas, sin respaldo en proceso. core-api pide su token de servicio como svc-tramites
       # (SVC_TRAMITES_CLIENT_SECRET).
       Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
+      # HU #13762: deadline gRPC core-api → core-consultas (segundos). Debe ser ≥ timeout HTTP del proveedor (120).
+      Consultas__Remoto__DeadlineSegundos: ${CONSULTAS_REMOTO_DEADLINE_SEGUNDOS:-180}
       # HU #13350/#13348: Trámites publica sus eventos en flit.tramites (outbox del SDK) y recibe los avisos de Kyverum
       # de Consultas por el bus: el bus es obligatorio. Necesita el usuario tramites del broker
       # (deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE").
@@ -678,6 +680,8 @@ services:
       Ict__ServiceToken__ClientSecret: ${SVC_ICT_CLIENT_SECRET:-}
       # Epic #13316 (HU #13346/#13348): ICT consulta directo a core-consultas (svc-ict, producto ict), sin respaldo.
       CoreConsultas__Address: ${ICT_CORE_CONSULTAS_ADDRESS:-http://core-consultas:8084}
+      # HU #13762: mismo presupuesto gRPC que Trámites (core-api Consultas:Remoto:DeadlineSegundos).
+      CoreConsultas__DeadlineSegundos: ${CONSULTAS_REMOTO_DEADLINE_SEGUNDOS:-180}
       # File Manager: DONDE SUBE ICT los binarios de los adjuntos. Tiene que ser EXACTAMENTE la
       # misma URL que FileManager__BaseUrl de core-api (misma var FILE_MANAGER_BASE_URL): si difieren,
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador
