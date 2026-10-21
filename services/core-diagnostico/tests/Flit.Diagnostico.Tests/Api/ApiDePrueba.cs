@@ -1,0 +1,163 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text.Json;
+using Flit.Diagnostico.Api;
+using Flit.Platform.Sdk.Authentication;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
+using Npgsql;
+using Xunit;
+
+namespace Flit.Diagnostico.Tests.Api;
+
+/// <summary>
+/// La API de Diagnóstico de verdad (<c>Program.Build</c>) con tokens de producto firmados con una llave propia servida
+/// como JWKS (patrón de Comparendos). Con base: un Postgres real con una base efímera, migrada como al arrancar
+/// (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres se omite en local y falla en CI. Sin base: la cadena apunta a un
+/// puerto cerrado, para probar lo que no depende de la base o su ausencia.
+/// </summary>
+/// <example>
+/// <code>
+/// await using var api = await ApiDePrueba.ConBaseAsync();
+/// Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+/// var respuesta = await api.Cliente(api.Token()).GetAsync("/health/ready");
+/// </code>
+/// </example>
+public sealed class ApiDePrueba : IAsyncDisposable
+{
+    public const string Issuer = "https://hub.prueba/";
+    public const int GrpcPort = 5997;
+
+    /// <summary>Postgres inalcanzable: puerto 1 en loopback, con tiempo de espera corto.</summary>
+    public const string BaseInalcanzable = "Host=127.0.0.1;Port=1;Database=diagnostico_ausente;Username=nadie;Password=nada;Timeout=2";
+
+    private readonly RsaSecurityKey _llave = new(RSA.Create(2048)) { KeyId = "prueba-diagnostico" };
+    private bool _baseCreada;
+
+    private ApiDePrueba(string baseDeDatos) => BaseDeDatos = baseDeDatos;
+
+    /// <summary>Motivo para omitir la prueba (sin Postgres en local); null si la API está arriba.</summary>
+    public string? Omitir { get; private set; }
+
+    public WebApplication App { get; private set; } = null!;
+
+    /// <summary>Cadena de conexión de la base efímera (o de la inalcanzable).</summary>
+    public string BaseDeDatos { get; }
+
+    /// <summary>Crea una base efímera, arranca la API y aplica sus migraciones como al arrancar.</summary>
+    public static async Task<ApiDePrueba> ConBaseAsync()
+    {
+        var server = Environment.GetEnvironmentVariable("ConnectionStrings__Core") ?? $"Host=127.0.0.1;Port=5432;Username={Environment.UserName}";
+        var api = new ApiDePrueba(new NpgsqlConnectionStringBuilder(server) { Database = $"flit_dgn_{Guid.NewGuid():N}"[..30] }.ConnectionString);
+        try
+        {
+            await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = "postgres" }.ConnectionString);
+            await admin.OpenAsync();
+            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{new NpgsqlConnectionStringBuilder(api.BaseDeDatos).Database}\"", admin);
+            await create.ExecuteNonQueryAsync();
+            api._baseCreada = true;
+        }
+        catch (NpgsqlException ex) when (!string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            api.Omitir = $"Postgres no alcanzable: {ex.Message}";
+            return api;
+        }
+
+        api.App = api.Construir();
+        await Program.MigrateAsync(api.App);
+        await api.App.StartAsync();
+        return api;
+    }
+
+    /// <summary>Arranca la API con la base inalcanzable y sin migrar.</summary>
+    public static async Task<ApiDePrueba> SinBaseAsync()
+    {
+        var api = new ApiDePrueba(BaseInalcanzable);
+        api.App = api.Construir();
+        await api.App.StartAsync();
+        return api;
+    }
+
+    /// <summary>La configuración mínima con la que arranca el servicio.</summary>
+    public static Dictionary<string, string?> Configuracion(string baseDeDatos) => new()
+    {
+        ["ConnectionStrings:Servicio"] = baseDeDatos,
+        ["Servicio:MigrateOnStartup"] = "true",
+        ["Platform:ServiceClient:ClientSecret"] = "secreto-de-prueba",
+        ["Platform:ServiceClient:TokenEndpoint"] = "http://core-identity/connect/token",
+        ["Platform:Auth:JwksUri"] = "http://core-identity/.well-known/jwks.json",
+        ["Platform:Auth:Issuers:0"] = Issuer,
+        ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
+        [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
+
+    public HttpClient Anonimo() => App.GetTestClient();
+
+    public HttpClient Cliente(string token)
+    {
+        var client = App.GetTestClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    /// <summary>Token de producto firmado con la llave del JWKS de prueba (empresa y usuario ficticios).</summary>
+    public string Token(string audiencia = ServicioSettings.Codigo)
+    {
+        var claims = new List<Claim>
+        {
+            new("sub", Guid.NewGuid().ToString()),
+            new("email", "operador@empresa.test"),
+            new("tenant_id", Guid.NewGuid().ToString()),
+            new("company_name", "Empresa de prueba"),
+            new("role_code", "admin_diagnostico"),
+            new("permissions", "[]", JsonClaimValueTypes.JsonArray),
+        };
+        return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = Issuer,
+            Audience = audiencia,
+            Subject = new ClaimsIdentity(claims),
+            Expires = DateTime.UtcNow.AddMinutes(30),
+            SigningCredentials = new SigningCredentials(_llave, SecurityAlgorithms.RsaSha256),
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (App is not null)
+            await App.DisposeAsync();
+        if (!_baseCreada)
+            return;
+
+        NpgsqlConnection.ClearAllPools();
+        await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(BaseDeDatos) { Database = "postgres" }.ConnectionString);
+        await admin.OpenAsync();
+        await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{new NpgsqlConnectionStringBuilder(BaseDeDatos).Database}\" WITH (FORCE)", admin);
+        await drop.ExecuteNonQueryAsync();
+    }
+
+    private WebApplication Construir() => Program.Build([], b =>
+    {
+        b.WebHost.UseTestServer();
+        b.Configuration.AddInMemoryCollection(Configuracion(BaseDeDatos));
+        b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_llave));
+    });
+
+    private sealed class Jwks(RsaSecurityKey key) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var jwk = JsonWebKeyConverter.ConvertFromRSASecurityKey(new RsaSecurityKey(key.Rsa.ExportParameters(false)) { KeyId = key.KeyId });
+            jwk.Use = "sig";
+            jwk.Alg = SecurityAlgorithms.RsaSha256;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { keys = new[] { jwk } })) });
+        }
+    }
+}

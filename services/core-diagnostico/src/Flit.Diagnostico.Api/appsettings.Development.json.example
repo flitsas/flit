@@ -1,0 +1,24 @@
+{
+  // core-diagnostico en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado
+  // por git) y reemplaza cada CAMBIAR. Puertos de la ronda D0 (plan v2, RD-4): API 4029, gRPC interno 8087.
+  "Urls": "http://127.0.0.1:4029",
+  "Servicio": { "GrpcPort": 8087, "MigrateOnStartup": true },
+  "ConnectionStrings": {
+    // La misma base de core-api; el servicio usa su esquema propio «diagnostico» y lo migra al arrancar.
+    "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+  "Platform": {
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-diagnostico-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      // Usuario «diagnostico» con deploy/rabbitmq/usuario-de-servicio.sh (entregable P1 del plan v2).
+      "ConnectionString": "amqp://diagnostico:CAMBIAR@127.0.0.1:5672/flit"
+    }
+  }
+}

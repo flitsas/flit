@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package flit.diagnostico.v1;
+
+option csharp_namespace = "Flit.Diagnostico.Grpc.V1";
+
+// Diagnóstico Vehicular (HU #13721, F00.1-H1; ADR-0070). Lo que otros servicios de la suite pueden pedirle a
+// Diagnóstico por la red interna. Hoy solo el resumen de una empresa (para el hub y los reportes de plataforma); la
+// operación del producto va por su REST (/api/v1/diagnostico/*) con el token del usuario.
+//
+// Autenticación: token de servicio con `aud=diagnostico`; la empresa en la metadata `x-flit-tenant-id`. Se publica
+// cuando exista el primer consumidor y su scope en el contrato de plataforma (§3).
+service DiagnosticoService {
+  // Totales de diagnósticos de la empresa de la metadata.
+  rpc ObtenerResumenEmpresa(ObtenerResumenEmpresaRequest) returns (ObtenerResumenEmpresaResponse);
+}
+
+message ObtenerResumenEmpresaRequest {}
+
+message ObtenerResumenEmpresaResponse {
+  // Diagnósticos de la empresa que todavía tienen consultas en curso.
+  int32 en_proceso = 1;
+  // Diagnósticos de la empresa ya finalizados (completos o incompletos).
+  int32 finalizados = 2;
+}

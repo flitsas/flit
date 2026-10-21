@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    core-diagnostico (Diagnóstico Vehicular, HU #13721), generado con la plantilla flit-servicio (Epic #13316). Nace con el
+    SDK de plataforma: tokens por JWKS, gRPC con token de servicio, outbox e inbox en su esquema propio, salud REST y
+    grpc.health.v1. Guía: docs/suite/servicio-nuevo.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Diagnostico.Api</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
+    <ProjectReference Include="..\Flit.Diagnostico.Domain\Flit.Diagnostico.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Diagnostico.Grpc.Contracts\Flit.Diagnostico.Grpc.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Diagnostico.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pruebas de core-diagnostico (HU #13721, F00.1-H1): arranque con migraciones en el esquema propio, salud REST y gRPC,
+    autenticación del SDK y configuración. Program.Build real sobre un Postgres efímero (ConnectionStrings__Core).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Diagnostico.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Flit.Diagnostico.Api\Flit.Diagnostico.Api.csproj" />
+    <ProjectReference Include="..\..\src\Flit.Diagnostico.Domain\Flit.Diagnostico.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

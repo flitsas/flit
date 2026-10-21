@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flit.Diagnostico.Api/Flit.Diagnostico.Api.csproj" />
+    <Project Path="src/Flit.Diagnostico.Domain/Flit.Diagnostico.Domain.csproj" />
+    <Project Path="src/Flit.Diagnostico.Grpc.Contracts/Flit.Diagnostico.Grpc.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.Diagnostico.Tests/Flit.Diagnostico.Tests.csproj" />
+  </Folder>
+</Solution>

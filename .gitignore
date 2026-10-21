@@ -54,6 +54,7 @@ infra/secrets/
 services/core-consultas/**/appsettings.Development.json
 services/core-notificaciones/**/appsettings.Development.json
 services/core-comparendos/**/appsettings.Development.json
+services/core-diagnostico/**/appsettings.Development.json
 
 # Logs
 *.log
